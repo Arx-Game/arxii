@@ -1324,7 +1324,7 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   cached scene detail, and draws non-combatant personas as dimmed bystanders
   (`OccupantSummary.bystander`). `CombatRail` gained a GM tab (`CombatGMTab`: encounter
   controls + the combat `GMAdjudicationPanel` tabs), and the idle header panels fold
-  behind a "Scene tools" accordion (ADR-0272).
+  behind a "Scene tools" accordion (ADR-0274).
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
@@ -1379,6 +1379,21 @@ Social structures, organizations, reputation, and legend tracking.
 - **Models:** `Society`, `OrganizationType`, `Organization`, `OrganizationRank` (`can_resolve_appeals` #3293 — leader gate for appeal resolution; `can_declare_standing` #3290 — leader gate for standing declarations, alongside `can_invite`/`can_kick`/`can_manage_ranks`/`can_lead_rituals`), `OrganizationMembership`, `OrganizationMembershipOffer`, `OrganizationOffice` (#2239 — named portfolio: `slug`/`title`/`holder`/`feeds_check`), `OrganizationObligation` (#2428 — personal Golden Hare debt: `debtor` CharacterSheet → `creditor` Organization, `origin`/`state` TextChoices, never deleted; distinct from `currency.OrgObligation`'s org-to-org tithe/tax), `OrgAppeal` / `OrgAppealSignon` (#3293 — appeals to organizations: free-text IC ask, OPEN → GRANTED/DECLINED/WITHDRAWN, partial-unique one OPEN appeal per (org, petitioner); see ADR-0231 for the Appeal/Petition vocabulary split), `SocietyReputation`, `OrganizationReputation`, `StandingDeclaration` (#3290 — leader favor/disfavor audit row: `organization`/`target_persona`/`declared_by_persona` FKs, `direction` (`StandingDirection` FAVOR/DISFAVOR), `delta_applied`, `citation`, `game_week` FK (rate-limit key), `created_at`; unique per (organization, target_persona, game_week)), `LegendEntry`, `LegendSpread`, `LegendHonor` (#3466 — paid testimony that
   raises a deed's `base_value`), `LegendLevelCalibration` (#3466 — per-level honor Hare
   cost/value-added/title-threshold dials)
+- **`Vacancy` model (#3648, ADR-0273):** an opening on a staff-minted family's org
+  (`organization`, `name`, `description`, `importance`/`presumed_importance`,
+  `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
+  `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
+  `count_remaining` (blank = standing, always open), `trust_required`,
+  `allowed_upbringings`, `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
+  in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
+  installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
+  which Vacancy a membership was taken through.
+- **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
+  open (unless `require_open=False`, used by CG draft validation re-checking an
+  already-selected Vacancy), realm-matched, Upbringing-gated, trust-gated CG offer;
+  `take_vacancy(vacancy_id)`, locks and claims one opening inside the caller's
+  `transaction.atomic()`, raising `VacancyExhaustedError` if closed. Consumed by
+  `character_creation.services._bind_vacancy` at finalize.
 - **Office services** (`office_services.py`, #2239): `appoint_office` / `vacate_office` / `office_holder` / `holds_office`
 - **Obligation services** (`obligation_services.py`, #2428): `settle_obligation(obligation, token)` (redeems the Hare via `currency.redeem_favor_token`, flips `OWED` → `SETTLED`, stamps `settled_at`/`settled_by_token`; raises `ObligationNotOwedError` if not `OWED`) / `has_open_obligation(sheet, org)` (read-only gate for training/entrance flows)
 - **Standing declarations** (`standing_services.py`, #3290): `declare_standing(*, organization, target_persona, declared_by_persona, direction, citation)` — rank-gates on `can_declare_standing`, gates DISFAVOR through the #2170 antagonism-consent seam (the `hostile` `SocialConsentCategory`, the same one `world.secrets.services.accusation_permitted` consults for frame-job denounce), rate-limits to one declaration per (organization, target_persona) per IC `GameWeek`, applies the PLACEHOLDER `STANDING_DECLARATION_FAVOR_DELTA`/`STANDING_DECLARATION_DISFAVOR_DELTA` (`constants.py`) via the existing `bump_organization_reputation` (never a parallel writer), and mints the `StandingDeclaration` audit row. Typed errors: `NotAuthorizedToDeclareStandingError`, `InvalidStandingTargetError`, `StandingConsentBlockedError`, `StandingRateLimitedError`.
@@ -1484,7 +1499,15 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
 - **DRF:** `OrganizationSerializer.house` block + `/api/societies/organizations/{id}/feed/`
 - **Web:** `/orgs/:id` house section + House Tidings; **Telnet:** `sheet/house`
-- **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
+- **House creator (Phase D, CG-only):** `HouseTemplate` + `HouseClaim`; gates in `houses/creator.py` (`submit_house_claim`, `approve_house_claim`, `materialize_house_claim` at CG finalization, now built on the shared `build_family_org`); admin review; `/api/character-creation/house-titles/` + draft `house-claim` action
+- **The charter catalog is lore-repo content (#2875):** `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all carry `NaturalKeyMixin` (`name`) + `CreditedContent` and sit in `CONTENT_MODELS`, the same shape #2868 already gave `HouseAspectDefinition`/`HouseAspectOption` below. `world/seeds/houses.py` looks all four up via `authored_or_sample()` (#2875 Task 2) rather than inventing them with `get_or_create()`; the Crown organization and its Society (plain seeder-owned config, not `CONTENT_MODELS`) moved to `world.seeds.config_prerequisites._house_charter_anchors`, run before the content load so a content-repo row can FK them by name (ADR-0171). `SuccessionLaw` also carries a `description` field now (the writer's field, how the law shapes inheritance), and all four models have a registered `ModelAdmin` so the Workbench change link and backlog queue reach them. Authoring guide (what a charter holds, the Workbench/admin authoring path per ADR-0238, the liege/society code prerequisites, and what founding copies): "Authoring a realm's charter" in [houses.md](houses.md).
+- **`HouseTemplate` generalized past nobles (#3648, ADR-0273):** verbose name "Family
+  Template". `liege`/`default_succession_law` are now nullable (only a title-path
+  template needs them) and `org_type` (FK `OrganizationType`, required) and
+  `served_house_choices` (M2M `Organization`, blank, installation-specific:
+  `EXPORT_FIELD_EXCLUSIONS["societies.housetemplate"]`) are new. The Caretaker/crime
+  family/crew cases in [family-authoring-recipes.md](family-authoring-recipes.md)
+  use the same model as a noble charter.
 - **Regional flavor (#2079):** `HouseAspectDefinition`/`HouseAspectOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimAspect` picks → `OrganizationAspect`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseAspectOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
 - **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). Seeds: cluster `predators`. Details: [predators.md](predators.md)
@@ -2153,6 +2176,17 @@ Multi-stage character creation flow with draft system.
   none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
   new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
   the design decisions: ADR-0268, ADR-0269.
+- **Lineage stage: Family Templates and Vacancies (#3648, ADR-0273):**
+  `OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name
+  `upbringings`) names which Family Template(s) the name path offers;
+  `named_family_kind` is retired. `CharacterDraft.selected_vacancy`,
+  `served_house`, and `resolve_family_template()` back the family block; the
+  `GET .../vacancies/?draft=` endpoint (`vacancy_services.reachable_vacancies`)
+  serves the open, priced Vacancy rows; `_bind_vacancy` (in
+  `character_creation.services`) takes the Vacancy at finalize, before
+  `_bind_kinship_node`. See [character_creation.md](character_creation.md)'s
+  Lineage step section and [family-authoring-recipes.md](family-authoring-recipes.md)
+  recipes 10-12.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
@@ -6967,8 +7001,8 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   backing).
 - **Dramatic surge engine (#2013):** `apply_dramatic_surge(*, encounter, participant, amount,
   trigger_kind, subject_sheet=None, reason="", subject_opponent=None,
-  subject_phase_number=None)` (`world/combat/escalation.py`) — the one write
-  path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
+  subject_phase_number=None, subject_companion=None)` (`world/combat/escalation.py`) - the
+  one write path for every intensity surge, backed by `DramaticSurgeRecord` (dedup audit row;
   `SurgeTriggerKind`: ALLY_FALLEN / ALLY_PERIL / HATED_FOE / HIGH_STAKES / INTERFERENCE /
   GM_MANUAL / BOSS_PHASE / BOSS_ENRAGE / BOSS_BREAK). `reason` (#3387) persists onto the
   record as GM-stated provenance for a manual trigger only — every automatic leg leaves it
@@ -6987,7 +7021,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
   / `apply_boss_break_surge`, `world/combat/escalation.py` - fire from
   `check_and_advance_boss_phase` and `_assess_boss_break_bar`, magnitudes authored on
   `EscalationCurve.boss_{phase,enrage,break}_spike_intensity_amount`, deduped per boss per
-  phase (ADR-0250).
+  phase (ADR-0250). A companion-backed ALLY opponent's defeat emits
+  `CHARACTER_INCAPACITATED` from `apply_damage_to_opponent` (`_emit_companion_fall`, #3575)
+  and `apply_relationship_escalation_spike` qualifies the owner on `target_companion`;
+  `DramaticSurgeRecord.subject_companion` is the dedup subject. The peril leg never fires
+  for a companion (no opponent peril band).
 - **Effect-palette / allegiance / intangibility services (#1584):**
   - `combatants_hostile_to(actor) -> tuple[list[CombatParticipant], list[CombatOpponent]]` —
     returns the sets of `CombatParticipant`s and `CombatOpponent`s that are hostile to the
@@ -7264,7 +7302,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
     falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
     bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
-  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
     head for an NPC attack, `{actor}`/`{target}` required, spliced by
     `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
     in `combat/services.py`; blank = default sentence.
@@ -7350,7 +7388,7 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
     ritual_check_config.py`, same shape) — authored data; 0 is today's
     resolve-immediately behavior, unchanged for every existing row.
-  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0272): authored OUTCOME
     head for a technique, `{actor}`/`{target}` required, spliced by
     `render_action_outcome_narration(hit_text=, miss_text=)` from the PC resolution path
     (`_record_and_broadcast_pc_action`); blank = default sentence.
@@ -8281,7 +8319,9 @@ Track-based character-to-character regard, conditions, situational modifier gati
 writeup kudos/complaint feedback.
 
 - **Models:** `RelationshipCondition`, `RelationshipTrack` (+ `RelationshipTier`,
-  `HybridRelationshipType`), `CharacterRelationship`, `RelationshipTrackProgress`,
+  `HybridRelationshipType`), `CharacterRelationship` (#3575: `target` nullable +
+  `target_companion` FK to `Companion`, exactly one set; `target_name` property;
+  owner-only, active from creation via `companion_target_error`), `RelationshipTrackProgress`,
   `RelationshipUpdate` (temporary points + capacity), `RelationshipDevelopment`
   (permanent points, 7/week), `RelationshipCapstone` (permanent + capacity),
   `RelationshipChange` (track-to-track redistribution), `GrievanceOption` (#1429),
@@ -8299,8 +8339,11 @@ writeup kudos/complaint feedback.
   `world.magic`'s fraught pull term, see ADR-0110)
 - **Pattern:** `RelationshipCondition.gates_modifiers` (M2M to ModifierTarget) — conditions activate/deactivate situational modifiers
 - **Examples:** "Attracted To" gates Allure modifier, "Fears" gates Intimidation bonus
-- **Services:** `create_first_impression`, `create_development`, `create_capstone`,
+- **Services:** `create_first_impression(*, source, target=None, target_companion=None, ...)`,
+  `create_development`, `create_capstone`,
   `redistribute_points` (`services.py`) — the four positive relationship-building verbs;
+  `companion_target_error(source, companion) -> str` (#3575) - why `source` may not hold a
+  relationship toward `companion`, else `""`;
   `apply_relationship_bump(*, source, target, interaction, valence, source_emoji=None)`
   (#1699) — permanent ungated `BUMP_POINTS` (±1) onto the Regard/Friction system track
   (capstone write-shape: capacity + developed together), deduped per interaction;
@@ -8322,7 +8365,9 @@ writeup kudos/complaint feedback.
   `action.run()` (ADR-0001). Read serializers expose `kudos_count` + `viewer_has_kudosed`
   on every writeup row. No consent gate — these describe the caller's regard, they do not
   compel the target's behavior (ADR-0024). FK direction: feedback lives in relationships,
-  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014).
+  not on the kudos primitive (ADR-0010). No denormalized kudos count (ADR-0014). Both
+  surfaces accept a bonded companion as the target (#3575): web `target_companion_id`
+  (exactly one of it and `target_persona_id`), telnet by the companion's room-present name.
 - **Ambient bumps (#1699):** telnet `relationship plus|neg <name>` (aliases `rel/plus`,
   `rel/neg`) backfill-anchor to the target's most recent unacknowledged visible pose in
   the active scene; web valenced `ReactionEmoji` reactions bump the pose's author
@@ -8508,6 +8553,21 @@ Extensions to Evennia models for additional data storage.
   pipeline (see ADR-0146). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
   ROSTER / CG_STAGE / GAME_CLIENT, unique — → `art: Media | None`, `SET_NULL`) maps
   a named page slot to a background `Media` row; read via `GET /api/backgrounds/`.
+- **Bound player media uploads (#3164):** `Media.file_size_bytes` (nullable
+  `PositiveBigIntegerField`) records the upload backend's reported size;
+  `PlayerData.media_quota_bytes` (`PositiveBigIntegerField`, default
+  `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES` via a module-level callable so the
+  migration carries no literal) caps a player's total stored bytes across owned
+  `Media` rows. `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is a separate per-file cap.
+  `CloudinaryGalleryService.upload_image` enforces both before calling Cloudinary
+  (per-file cap first, then the quota check against the sum of the account's
+  existing `Media.file_size_bytes`, a null row counting as 0);
+  `player_data.account.is_staff` bypasses both. A successful upload sets
+  `Media.file_size_bytes` from the upload result's reported byte count.
+  `world.roster.serializers.media.MediaUploadSerializer` mirrors the per-file
+  check (same fixed message) so `POST /api/roster/media/` rejects an oversized
+  file before the service call; `MediaViewSet.create` validates through it and
+  maps the service's quota `ValidationError` to a 400 with its fixed message.
 - **Pattern:** Extend Evennia models without modifying library code
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)

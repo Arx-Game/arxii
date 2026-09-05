@@ -29,7 +29,7 @@ import {
   getFacets,
   getFacetTree,
   getFamilies,
-  getFamiliesWithOpenPositions,
+  getFamiliesWithOpenKinSlots,
   getClaimableTitles,
   getFamilySlots,
   getHouseClaim,
@@ -55,6 +55,7 @@ import {
   getTechniqueStyles,
   getTraditionPerspectives,
   getTraditions,
+  getVacancies,
   getWorshippedBeings,
   resubmitDraft,
   selectTradition,
@@ -80,7 +81,7 @@ export const characterCreationKeys = {
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
-  familiesWithOpenPositions: (areaId?: number) =>
+  familiesWithOpenKinSlots: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
   draft: () => [...characterCreationKeys.all, 'draft'] as const,
   canCreate: () => [...characterCreationKeys.all, 'can-create'] as const,
@@ -104,6 +105,9 @@ export const characterCreationKeys = {
   // Origin template catalog (guided origin-story flow, #2478)
   originTemplates: (beginningId: number) =>
     [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
+  // Vacancies reachable from the draft, priced for it (#3648)
+  vacancies: (draftId: number, organizationId?: number) =>
+    [...characterCreationKeys.all, 'vacancies', draftId, organizationId ?? null] as const,
   // Perspective entries (CG wizard perspective panels, #3281)
   beginningsPerspectives: (beginningId: number) =>
     [...characterCreationKeys.all, 'beginnings-perspectives', beginningId] as const,
@@ -333,10 +337,10 @@ export function useDraftCGPoints(draftId: number | undefined) {
 }
 
 // NEW: Family Tree hooks
-export function useFamiliesWithOpenPositions(areaId?: number) {
+export function useFamiliesWithOpenKinSlots(areaId?: number) {
   return useQuery({
-    queryKey: characterCreationKeys.familiesWithOpenPositions(areaId),
-    queryFn: () => getFamiliesWithOpenPositions(areaId),
+    queryKey: characterCreationKeys.familiesWithOpenKinSlots(areaId),
+    queryFn: () => getFamiliesWithOpenKinSlots(areaId),
   });
 }
 
@@ -455,6 +459,14 @@ export function useOriginTemplates(beginningId: number | null | undefined) {
     queryFn: () => getOriginTemplates(beginningId!),
     enabled: !!beginningId,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVacancies(draftId: number | undefined, organizationId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.vacancies(draftId ?? 0, organizationId),
+    queryFn: () => getVacancies(draftId as number, organizationId),
+    enabled: draftId !== undefined,
   });
 }
 

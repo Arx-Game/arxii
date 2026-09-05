@@ -97,8 +97,9 @@ definitions both tree builders share — never duplicate them.
 
 ## Surfaces
 
-- REST: `GET /api/roster/families/` (+`has_open_positions` and `area_id`
-  filters — `area_id` resolves through `StartingArea.realm`, matching
+- REST: `GET /api/roster/families/` (+`has_open_kin_slots` and `area_id`
+  filters (renamed from `has_open_positions`, #3648), `area_id` resolves through
+  `StartingArea.realm`, matching
   families with that realm or with no `origin_realm` at all),
   `families/:id/tree/` (viewer-filtered graph payload),
   `families/:id/slots/` (slot browser). The same `FamilyViewSet` is also
@@ -136,3 +137,5 @@ parentage pair, and a 2-life soul chain.
 #1884 houses: recognition rules + succession law query these facts
 (parentage kinds, `born_within_union`, memberships). #1985 estates. Dream
 sequences as past lives: designed hook on TEMPORARY personas/forms.
+#3648 Vacancies: a kin Vacancy links a `KinSlotPool` or appable `Kinsperson` and
+supplies the CG kin claim; #3620 (owner-defined slots) stays open.

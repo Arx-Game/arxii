@@ -79,7 +79,11 @@ Four ways to add points:
 
 ### Character Data
 - **CharacterRelationship** — Core relationship between two CharacterSheets. Tracks
-  active/pending status, deceit state, weekly development/change counters.
+  active/pending status, deceit state, weekly development/change counters. The target is
+  either a `CharacterSheet` (`target`) or, since #3575 (ADR-0272), a bonded `Companion`
+  (`target_companion`), exactly one set (two partial unique constraints plus the
+  `relationship_target_xor_companion` check). Read `target_name` rather than
+  `target.character` anywhere a row may be about a companion.
 - **RelationshipTrackProgress** — Capacity and developed_points per track per relationship.
   Temporary points derived from active updates. current_tier uses developed_points.
 - **RelationshipUpdate** — Adds temporary points + capacity. Has title, writeup, track,
@@ -108,7 +112,10 @@ ADR-0015 (no polymorphism).
   only; zero player-facing signal.
 
 ## Lifecycle
-1. **First Impression** — Unilateral, creates pending relationship with update + capacity
+1. **First Impression** — Unilateral, creates pending relationship with update + capacity.
+   Toward a bonded companion (#3575) the row is active from creation instead (the bind is
+   the consent), owner-only, no reciprocation step (`companion_target_error` gates who may
+   write it).
 2. **Reciprocation** — Other player's first impression activates both sides
 3. **Updates** — Unlimited, adds temporary + capacity (emotional spikes)
 4. **Development** — 7/week, solidifies temporary into permanent (up to capacity)
@@ -131,7 +138,10 @@ ADR-0015 (no polymorphism).
 - **`create_first_impression` / `create_development` / `create_capstone` / `redistribute_points`**
   (`services.py`) — the four positive relationship-building verbs. Each is wrapped by a
   corresponding Action in `actions/definitions/relationships.py` and reachable from both surfaces
-  below.
+  below. `create_first_impression` takes `target=None` or, since #3575, `target_companion=None`
+  (exactly one set) for a bonded-companion target.
+- **`companion_target_error(source, companion) -> str`** (#3575) - why `source` may not hold
+  a relationship toward `companion`, else `""` (not bonded to `source`, or already released).
 - **`give_writeup_kudos(*, giver_account, writeup) -> WriteupKudos`** (#1537) — the subject
   commends a writeup about them; raises `WriteupFeedbackError` subclasses (`WriteupNotSharedError`,
   `NotWriteupSubjectError`, `CannotCommendOwnWriteupError`, `AlreadyCommendedError`) each with a
@@ -196,7 +206,10 @@ The positive relationship-building loop is reachable from both web and telnet:
 
 `linked_scene` defaults to the caller's active scene in the current room when the target is
 co-located. **No consent gate** — these describe the caller's regard for another character; they do
-not compel or provoke the target's behavior (ADR-0024).
+not compel or provoke the target's behavior (ADR-0024). Both surfaces accept a bonded companion
+as the target (#3575): web `target_companion_id`, telnet by the companion's room-present name.
+Writeup kudos/complaints treat a companion-targeted writeup as subject-less (no controlling
+account to commend or complain on its behalf).
 
 ### Writeup feedback (#1537) [BUILT & WIRED]
 - **Web** — `RelationshipUpdateViewSet` POST `kudos` endpoint dispatches

@@ -162,6 +162,10 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "and settle your family: name your own, claim one, or carry none."
     ),
     "family_path_heading": "Your Family",
+    "family_template_heading": "Your Household",
+    "vacancy_heading": "Your Place in the Family",
+    "service_heading": "Service",
+    "served_house_heading": "Whom Your Family Served",
     "distinctions_heading": "Your Distinctions",
     "distinctions_intro": (
         "Distinctions are the advantages and disadvantages that make your character "

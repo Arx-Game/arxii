@@ -779,6 +779,33 @@ class AnchorLabelTests(TestCase):
         cap = self.capstone_thread.target_capstone
         self.assertIn(cap.title, label)
 
+    def test_track_anchor_label_names_a_companion_partner(self) -> None:
+        from world.companions.factories import CompanionFactory
+        from world.magic.constants import TargetKind
+        from world.magic.crossing.handlers import _anchor_label_for
+        from world.magic.factories import ThreadFactory
+        from world.relationships.factories import (
+            CharacterRelationshipFactory,
+            RelationshipTrackProgressFactory,
+        )
+
+        companion = CompanionFactory(owner=self.sheet, name="Ash")
+        relationship = CharacterRelationshipFactory(
+            source=self.sheet, target=None, target_companion=companion, is_pending=False
+        )
+        progress = RelationshipTrackProgressFactory(relationship=relationship)
+        thread = ThreadFactory(
+            owner=self.sheet,
+            resonance=self.resonance,
+            level=2,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+        )
+        label = _anchor_label_for(thread)
+        self.assertIn("Ash", label)
+        self.assertIn(progress.track.name, label)
+
 
 # ---------------------------------------------------------------------------
 # MANTLE crossing tests (#1992)

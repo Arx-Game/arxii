@@ -11,6 +11,11 @@ export type { GlimpseTagOption } from '@/magic/components/glimpse/glimpseTypes';
 import type { TechniqueEffectSummary } from '@/magic/types';
 export type { TechniqueEffectSummary } from '@/magic/types';
 
+// Reused for FamilyTemplate below: the house-claim template shape
+// (aspect_definitions/features) already generated from the backend schema,
+// extended rather than duplicated (#3648).
+import type { components } from '@/generated/api';
+
 export interface StartingArea {
   id: number;
   name: string;
@@ -76,6 +81,13 @@ export interface CGPointsBreakdown {
   }>;
 }
 
+/** Facts a character inherits from their family's Family Template (#3648). */
+export interface InheritedFacts {
+  aspects: { definition: string; option: string; description: string }[];
+  features: { name: string; slug: string; description: string }[];
+  liege_name: string;
+}
+
 export interface Family {
   id: number;
   name: string;
@@ -87,7 +99,19 @@ export interface Family {
   // #3261 — resolved nobiliary particles ('' when the family has none).
   born_particle: string;
   taken_in_particle: string;
+  /** Aspects/features/liege inherited from the family's Family Template (#3648). */
+  inherited: InheritedFacts;
 }
+
+/**
+ * A Family Template the name path builds from (#3648): the same shape a
+ * house-claim template uses (aspect_definitions, features), extended with
+ * the fields the Upbringing name path needs rather than duplicated.
+ */
+export type FamilyTemplate = components['schemas']['HouseTemplateOption'] & {
+  org_type: number;
+  served_house_choices: { id: number; name: string }[];
+};
 
 // Open app-in positions for a family (#2062 slot mountain).
 export interface KinSlot {
@@ -115,6 +139,26 @@ export interface KinSlotPool {
 export interface FamilySlots {
   slots: KinSlot[];
   pools: KinSlotPool[];
+}
+
+/** An opening on a staff family, priced for this draft (#3648). */
+export interface Vacancy {
+  id: number;
+  name: string;
+  description: string;
+  basis: 'kin' | 'retainer';
+  importance: number;
+  presumed_importance: number;
+  cost: number;
+  rank_name: string;
+  count_remaining: number | null;
+  organization: {
+    id: number;
+    name: string;
+    family: { id: number; name: string; influence: number } | null;
+  };
+  kin_pool: KinSlotPool | null;
+  kin_node: KinSlot | null;
 }
 
 // =============================================================================
@@ -347,6 +391,10 @@ export interface CharacterDraft {
   family_path: FamilyPath | '';
   claimed_kin_slot: number | null;
   claimed_kin_pool: number | null;
+  /** The Vacancy chosen on the name path, when the Upbringing offers one (#3648). */
+  selected_vacancy: number | null;
+  /** The house the chosen Vacancy's holder serves, when the vacancy allows a choice (#3648). */
+  served_house: number | null;
   defer_parents: boolean;
   /** Species id of the invented non-dominant parent when cross-species (#2815). */
   second_parent_species: number | null;
@@ -741,6 +789,13 @@ export interface DraftData {
   other_parent_gender_id?: number | null;
   // Goals for Final Touches stage
   goals?: DraftGoal[];
+  // The Family Template picked on the name path, when the Upbringing offers
+  // more than one (#3648); resolveFamilyTemplate() resolves the effective one.
+  // null clears the pick (the backend treats null as unset; undefined would
+  // be dropped by the JSON encoder and leave the prior pick untouched).
+  family_template_id?: number | null;
+  // Aspect picks for the chosen Family Template: definition id -> option ids (#3648).
+  family_aspect_picks?: Record<string, number[]>;
   [key: string]: unknown;
 }
 
@@ -767,6 +822,8 @@ export interface CharacterDraftUpdate {
   public_worship_id?: number | null;
   secret_worship_id?: number | null;
   second_parent_species_id?: number | null;
+  selected_vacancy_id?: number | null;
+  served_house_id?: number | null;
   draft_data?: Partial<DraftData>;
 }
 
@@ -892,7 +949,8 @@ export interface OriginTemplate {
   allows_name_family: boolean;
   allows_no_family: boolean;
   claimable_kind_ids: number[];
-  named_family_kind: number | null;
+  /** Family Templates offered on the name path (#3648; replaces named_family_kind). */
+  family_templates: FamilyTemplate[];
   slots: OriginTemplateSlot[];
 }
 
@@ -916,6 +974,14 @@ export function resolveFamilyPath(draft: CharacterDraft): FamilyPath | '' {
   const allowed = allowedFamilyPaths(t);
   if (allowed.length === 1) return allowed[0];
   return allowed.includes(draft.family_path as FamilyPath) ? (draft.family_path as FamilyPath) : '';
+}
+
+/** The Family Template in effect on the name path: the only one, else the stored pick. */
+export function resolveFamilyTemplate(draft: CharacterDraft): FamilyTemplate | null {
+  const offered = draft.selected_origin_template?.family_templates ?? [];
+  if (offered.length === 1) return offered[0];
+  const chosen = draft.draft_data.family_template_id;
+  return offered.find((t) => t.id === chosen) ?? null;
 }
 
 /** A pick-list choice's CG point cost, scaled by the claimed family's influence. */

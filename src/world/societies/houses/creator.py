@@ -158,6 +158,9 @@ def _validate_stylings(
         raise HousesServiceError(msg, user_message="Describe the house's lands.")
 
 
+# Module-private, but world.character_creation.validators._get_aspect_pick_errors
+# also calls it (#3648) - same cross-module pattern already used for
+# family_name_is_taken.
 def _validate_aspect_picks(*, template: HouseTemplate, aspect_picks: dict[int, list[int]]) -> None:
     """The catalog fence (#2079, ADR-0101): picks only, counted, from the template."""
     definitions = {d.pk: d for d in template.aspect_definitions.all()}
@@ -263,6 +266,77 @@ def reject_house_claim(claim: HouseClaim, *, reviewer: AccountDB, note: str = ""
     return claim
 
 
+def _claim_aspect_picks(claim: HouseClaim) -> dict[int, list[int]]:
+    picks: dict[int, list[int]] = {}
+    for picked in claim.aspects.all():
+        picks.setdefault(picked.definition_id, []).append(picked.option_id)
+    return picks
+
+
+def build_family_org(  # noqa: PLR0913 - keyword-only; one arg per package input
+    template: HouseTemplate,
+    name: str,
+    *,
+    description: str = "",
+    aspect_picks: dict[int, list[int]] | None = None,
+    served_house: Organization | None = None,
+    created_by: AccountDB | None = None,
+    origin_realm=None,
+    influence: int = 0,
+) -> tuple[Family, Organization]:
+    """Family + org + rank ladder + fealty + aspects + features, from a Family Template.
+
+    Shared by the noble title claim (which then seats the title, domain and
+    holdings) and the CG name path (which adds nothing more). ``aspect_picks``
+    is ``{definition_id: [option_id, ...]}``; ``served_house`` (else the
+    template's liege) receives the new org's fealty.
+    """
+    from world.roster.models import KinSlotPool  # noqa: PLC0415
+    from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
+
+    org_type = template.org_type or (template.liege.org_type if template.liege_id else None)
+    if org_type is None:
+        msg = f"template {template.pk} has no org_type and no liege to derive one from"
+        raise HousesServiceError(msg, user_message="That family template is not ready.")
+    family = Family.objects.create(
+        name=name,
+        kind=template.kind,
+        description=description,
+        is_playable=True,
+        influence=influence,
+        created_by_cg=created_by is not None,
+        created_by=created_by,
+        origin_realm=origin_realm,
+    )
+    org_name = f"House {name}" if template.kind.styles_as_house else name
+    org = Organization.objects.create(
+        name=org_name,
+        description=description,
+        society=template.society,
+        org_type=org_type,
+        family=family,
+        default_succession_law=template.default_succession_law,
+    )
+    ensure_default_rank_ladder(org)
+    liege = served_house or template.liege
+    if liege is not None:
+        swear_fealty(vassal=org, liege=liege)
+    for definition_id, option_ids in (aspect_picks or {}).items():
+        for option_id in option_ids:
+            OrganizationAspect.objects.create(
+                organization=org, definition_id=definition_id, option_id=option_id
+            )
+    for feature in template.features.all():
+        OrganizationFeature.objects.create(organization=org, feature=feature)
+    if template.starting_kin_slots:
+        KinSlotPool.objects.create(
+            family=family,
+            description=f"Kin of {org_name} (CG-defined)",
+            count_remaining=template.starting_kin_slots,
+        )
+    return family, org
+
+
 @transaction.atomic
 def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     """Build the full package at CG finalization (approved claims only).
@@ -274,50 +348,28 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
     no-op get.
     """
     from world.roster.constants import MembershipBasis  # noqa: PLC0415
-    from world.roster.models import KinSlotPool  # noqa: PLC0415
     from world.roster.services.kinship import add_membership, ensure_node_for_sheet  # noqa: PLC0415
-    from world.societies.membership_services import ensure_default_rank_ladder  # noqa: PLC0415
 
     if claim.status != HouseClaimStatus.APPROVED:
         msg = f"claim {claim.pk} is not approved"
         raise HousesServiceError(msg, user_message="That house is not approved.")
     template = claim.template
-    family = Family.objects.create(
-        name=claim.house_name,
-        kind=template.kind,
+    family, org = build_family_org(
+        template,
+        claim.house_name,
         description=claim.backstory,
-        is_playable=True,
+        aspect_picks=_claim_aspect_picks(claim),
     )
-    org_name = f"House {claim.house_name}" if template.kind.styles_as_house else claim.house_name
-    org = Organization.objects.create(
-        name=org_name,
-        description=claim.backstory,
-        words=claim.words,
-        colors=claim.colors,
-        sigil_description=claim.sigil_description,
-        society=template.society,
-        org_type=template.liege.org_type,
-        family=family,
-        default_succession_law=template.default_succession_law,
-        mercy_override=claim.mercy,
-        method_override=claim.method,
-        status_override=claim.status_principle,
-        change_override=claim.change,
-        allegiance_override=claim.allegiance,
-        power_override=claim.power,
-    )
-    ensure_default_rank_ladder(org)
-    swear_fealty(vassal=org, liege=template.liege)
-
-    # #2079 — the claim's picks become permanent identity facets; the
-    # template's cultural facts stamp onto the org (slug-anchored for
-    # future systems: a ledger UI checks the org has 'black-ledger').
-    for picked in claim.aspects.select_related("definition", "option"):
-        OrganizationAspect.objects.create(
-            organization=org, definition=picked.definition, option=picked.option
-        )
-    for feature in template.features.all():
-        OrganizationFeature.objects.create(organization=org, feature=feature)
+    org.words = claim.words
+    org.colors = claim.colors
+    org.sigil_description = claim.sigil_description
+    org.mercy_override = claim.mercy
+    org.method_override = claim.method
+    org.status_override = claim.status_principle
+    org.change_override = claim.change
+    org.allegiance_override = claim.allegiance
+    org.power_override = claim.power
+    org.save()
 
     # ``family`` is a forwarding property onto the sheet's true Profile
     # (#1270); a plain save() persists the profile first.
@@ -344,11 +396,5 @@ def materialize_house_claim(claim: HouseClaim, *, sheet: CharacterSheet):
         for kind in template.holdings.all():
             add_holding(domain=domain, kind=kind)
 
-    if template.starting_kin_slots:
-        KinSlotPool.objects.create(
-            family=family,
-            description=f"Kin of House {claim.house_name} (CG-defined, #1884)",
-            count_remaining=template.starting_kin_slots,
-        )
     sync_house_channel(org)
     return org

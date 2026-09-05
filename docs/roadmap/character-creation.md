@@ -1,5 +1,26 @@
 # Character Creation & Identity
 
+## Built (2026-09-05, #3648: Family Templates and Vacancies)
+
+Generalized the noble house-template pipeline to every family kind and gave a
+character a recorded place in a staff family. What was built: (1) `HouseTemplate`
+("Family Template") gains a required `org_type` and blank `served_house_choices`,
+with `liege`/`default_succession_law` now nullable, so a Caretaker household, a
+crime family, an Infernal noble house and a Reaver crew all author through the same
+model (`OriginTemplate.family_templates` M2M replaces the retired
+`named_family_kind`); (2) `Vacancy` (`world/societies/models.py`), a staff-authored
+opening on a family's org with two authored axes (`importance`,
+`presumed_importance`), flat-plus-per-influence pricing (ADR-0269 extended), and a
+blank `count_remaining` for a standing vacancy; kin versus retainer is derived from
+whether it links a `KinSlotPool`/`Kinsperson`; (3) the Lineage stage's family block
+resolves a Family Template on the name path (aspect picks, served house) and offers
+reachable Vacancies on any path via `GET .../vacancies/?draft=`, bound at finalize by
+`_bind_vacancy` before the kinship bind; (4) `build_family_org` is now the one
+builder both the noble title-claim path and the CG name path share. See ADR-0273,
+[character_creation.md](../systems/character_creation.md)'s Lineage step section,
+and [family-authoring-recipes.md](../systems/family-authoring-recipes.md) recipes
+10-12.
+
 ## Built (2026-09-04, #3540: character creation gets the Folio treatment)
 
 Folio treatment (#3540): interview shell, Origin / Attributes & Skills / Review

@@ -5,6 +5,8 @@ edges the requesting viewer is allowed to see (public record + truths they
 know) — never raw graph rows.
 """
 
+from django.core.exceptions import ObjectDoesNotExist
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.roster.constants import RelationshipType
@@ -30,6 +32,9 @@ class FamilySerializer(serializers.ModelSerializer):
     taken_in_particle = serializers.SerializerMethodField(
         help_text="Particle a married/adopted/legitimized member wears; '' when none."
     )
+    inherited = serializers.SerializerMethodField(
+        help_text="Aspects/features/liege a house materialized on this family carries (#3648)."
+    )
 
     class Meta:
         model = Family
@@ -43,6 +48,7 @@ class FamilySerializer(serializers.ModelSerializer):
             "origin_realm",
             "born_particle",
             "taken_in_particle",
+            "inherited",
         ]
         read_only_fields = ["id"]
 
@@ -55,6 +61,48 @@ class FamilySerializer(serializers.ModelSerializer):
         from world.societies.houses.services import resolve_particle  # noqa: PLC0415
 
         return resolve_particle(obj, taken_in=True)
+
+    @extend_schema_field(serializers.DictField())
+    def get_inherited(self, obj: Family) -> dict:
+        """Prefer the list view's batched grouping; fall back to a direct query.
+
+        ``FamilyViewSet.list()`` passes ``inherited_by_family`` (four flat
+        queries for the whole response) into context. Nested usage (e.g.
+        ``FamilyTreeSerializer.family``) never provides that key, since it is
+        one object, not a list - a direct lookup there is a bounded handful of
+        queries, not a loop.
+        """
+        grouping = self.context.get("inherited_by_family")
+        if grouping is not None:
+            return grouping.get(obj.id, {"aspects": [], "features": [], "liege_name": ""})
+        from world.societies.houses.services import house_for_family  # noqa: PLC0415
+
+        org = house_for_family(obj)
+        if org is None:
+            return {"aspects": [], "features": [], "liege_name": ""}
+        try:
+            liege = org.fealty
+        except ObjectDoesNotExist:
+            liege = None
+        return {
+            "aspects": [
+                {
+                    "definition": facet.definition.name,
+                    "option": facet.option.name,
+                    "description": facet.option.description,
+                }
+                for facet in org.aspects.select_related("definition", "option")
+            ],
+            "features": [
+                {
+                    "name": s.feature.name,
+                    "slug": s.feature.slug,
+                    "description": s.feature.description,
+                }
+                for s in org.features.select_related("feature")
+            ],
+            "liege_name": liege.liege.name if liege is not None else "",
+        }
 
 
 class KinspersonNodeSerializer(serializers.Serializer):
@@ -133,7 +181,9 @@ class KinRelationshipSerializer(serializers.Serializer):
 class KinSlotSerializer(serializers.ModelSerializer):
     """An open appable position (CG slot browser)."""
 
-    allowed_genders = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    allowed_genders = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="display_name"
+    )
 
     class Meta:
         model = Kinsperson
@@ -153,7 +203,9 @@ class KinSlotSerializer(serializers.ModelSerializer):
 class KinSlotPoolSerializer(serializers.ModelSerializer):
     """An open slot pool (CG slot browser)."""
 
-    allowed_genders = serializers.SlugRelatedField(many=True, read_only=True, slug_field="name")
+    allowed_genders = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="display_name"
+    )
     parent_names = serializers.SerializerMethodField()
 
     class Meta:

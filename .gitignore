@@ -74,6 +74,7 @@ nosetests.xml
 .env
 .env.*_backup
 .devcontainer/dev.env
+.devcontainer/docker-compose.local.yml
 
 # pnpm content-addressable store. pnpm-workspace.yaml in frontend/ makes pnpm
 # default its store path one level above the workspace root — i.e. here — when

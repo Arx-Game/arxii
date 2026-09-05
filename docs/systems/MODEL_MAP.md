@@ -1337,6 +1337,8 @@
   - selected_origin_template -> character_creation.OriginTemplate [FK] (nullable)
   - claimed_kin_slot -> roster.Kinsperson [FK] (nullable)
   - claimed_kin_pool -> roster.KinSlotPool [FK] (nullable)
+  - selected_vacancy -> societies.Vacancy [FK] (nullable)
+  - served_house -> societies.Organization [FK] (nullable)
   - second_parent_species -> species.Species [FK] (nullable)
   - selected_path -> classes.Path [FK] (nullable)
   - selected_tradition -> magic.Tradition [FK] (nullable)
@@ -1377,11 +1379,12 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - beginning -> character_creation.Beginnings [FK]
-  - named_family_kind -> roster.FamilyKind [FK] (nullable)
   - claimable_kinds -> roster.FamilyKind [M2M]
+  - family_templates -> societies.HouseTemplate [M2M]
 **Pointed to by:**
   - slots <- character_creation.OriginTemplateSlot
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
 
 ### OriginTemplateSlot
 **Foreign Keys:**
@@ -1418,6 +1421,7 @@
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`
 - `can_create_character(account: 'AbstractBaseUser | AnonymousUser') -> 'tuple[bool, str]' - Check if an account can create a new character.`
 - `claim_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser') -> 'None' - Claim a submitted application for staff review.`
+- `clear_family_selection(draft: 'CharacterDraft') -> 'None' - Clear everything anchored to the family path/Upbringing (#3648 review fix).`
 - `clear_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot') -> 'None' - Delete a slot answer and recompute state.`
 - `create_character_with_sheet(*, character_key: 'str', primary_persona_name: 'str', typeclass: 'str' = 'typeclasses.characters.Character', home: 'ObjectDB | None' = None, **sheet_kwargs: 'Any') -> 'tuple[ObjectDB, CharacterSheet, Persona]' - Atomically create a Character + CharacterSheet + PRIMARY Persona.`
 - `deny_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Deny an application.`
@@ -2356,6 +2360,7 @@
   - participant -> combat.CombatParticipant [FK]
   - subject_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - subject_opponent -> combat.CombatOpponent [FK] (nullable)
+  - subject_companion -> companions.Companion [FK] (nullable)
 
 ### DuelChallenge
 **Foreign Keys:**
@@ -2581,6 +2586,7 @@
 **Pointed to by:**
   - deployments <- companions.CompanionDeployment
   - orders <- companions.CompanionOrder
+  - relationships_as_companion_target <- relationships.CharacterRelationship
 
 ### CompanionAbility
 **Foreign Keys:**
@@ -7502,7 +7508,8 @@
 ### CharacterRelationship
 **Foreign Keys:**
   - source -> character_sheets.CharacterSheet [FK]
-  - target -> character_sheets.CharacterSheet [FK]
+  - target -> character_sheets.CharacterSheet [FK] (nullable)
+  - target_companion -> companions.Companion [FK] (nullable)
   - displayed_track -> relationships.RelationshipTrack [FK] (nullable)
   - displayed_tier -> relationships.RelationshipTier [FK] (nullable)
   - game_week -> game_clock.GameWeek [FK] (nullable)
@@ -7643,9 +7650,10 @@
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' - Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
 - `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters — the scene-end early clear (#1697).`
+- `companion_target_error(source: 'CharacterSheet', companion: 'Companion') -> 'str' - Why ``source`` may not hold a relationship toward ``companion``, else "" (#3575).`
 - `create_capstone(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipCapstone' - Record a capstone event — adds points to both capacity and developed_points.`
 - `create_development(*, relationship: 'CharacterRelationship', author: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', xp_awarded: 'int' = 0, visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'RelationshipDevelopment' - Add permanent (developed) points to a track, up to capacity.`
-- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet', title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
+- `create_first_impression(*, source: 'CharacterSheet', target: 'CharacterSheet | None' = None, target_companion: 'Companion | None' = None, title: 'str', writeup: 'str', track: 'RelationshipTrack', points: 'int', coloring: 'FirstImpressionColoring', visibility: 'UpdateVisibility', linked_scene: 'Scene | None' = None) -> 'CharacterRelationship' - Create a pending relationship with an initial update and track progress.`
 - `file_writeup_complaint(*, complainant_account: 'AccountDB', writeup, reason: 'str') -> 'WriteupComplaint' - File a bad-faith-RP complaint against a writeup for staff triage.`
 - `get_account_for_character(character: 'ObjectDB') -> 'AccountDB | None' - Get the account currently playing this character via roster tenure.`
 - `get_bond_combat_config() -> 'BondCombatConfig' - Get-or-create the BondCombatConfig singleton (pk=1).`
@@ -7800,7 +7808,6 @@
 ### FamilyKind
 **Pointed to by:**
   - families <- roster.Family
-  - named_in_templates <- character_creation.OriginTemplate
   - claimable_in_templates <- character_creation.OriginTemplate
   - particles <- societies.NobiliaryParticle
   - house_templates <- societies.HouseTemplate
@@ -7825,6 +7832,7 @@
   - allowed_genders -> character_sheets.Gender [M2M]
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
 
 ### Kinsperson
 **Foreign Keys:**
@@ -7845,6 +7853,7 @@
   - incarnations <- roster.SoulIncarnation
   - kin_slot_pools <- roster.KinSlotPool
   - drafts <- character_creation.CharacterDraft
+  - vacancies <- societies.Vacancy
   - titles_held <- societies.Title
   - pact_commitments <- societies.PactCommitment
   - betrothals_as_a <- societies.Betrothal
@@ -8835,6 +8844,9 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 
 ### HoldingKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - holdings <- societies.DomainHolding
   - house_templates <- societies.HouseTemplate
@@ -8875,6 +8887,9 @@
   - option -> societies.HouseAspectOption [FK]
 
 ### HouseFeature
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
   - organization_features <- societies.OrganizationFeature
@@ -8891,15 +8906,20 @@
 
 ### HouseTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - realm -> realms.Realm [FK]
   - kind -> roster.FamilyKind [FK]
   - society -> societies.Society [FK]
-  - liege -> societies.Organization [FK]
-  - default_succession_law -> societies.SuccessionLaw [FK]
+  - org_type -> societies.OrganizationType [FK]
+  - liege -> societies.Organization [FK] (nullable)
+  - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
+  - served_house_choices -> societies.Organization [M2M]
   - holdings -> societies.HoldingKind [M2M]
   - aspect_definitions -> societies.HouseAspectDefinition [M2M]
   - features -> societies.HouseFeature [M2M]
 **Pointed to by:**
+  - upbringings <- character_creation.OriginTemplate
   - claims <- societies.HouseClaim
 
 ### LegendContribution
@@ -9040,6 +9060,7 @@
   - gift_grants <- societies.OrganizationGiftGrant
   - membership_offers <- societies.OrganizationMembershipOffer
   - memberships <- societies.OrganizationMembership
+  - vacancies <- societies.Vacancy
   - offices <- societies.OrganizationOffice
   - appeals <- societies.OrgAppeal
   - reputations <- societies.OrganizationReputation
@@ -9131,6 +9152,7 @@
   - persona -> scenes.Persona [FK]
   - rank -> societies.OrganizationRank [FK] (nullable)
   - covert_secret -> secrets.Secret [FK] (nullable)
+  - vacancy -> societies.Vacancy [FK] (nullable)
 
 ### OrganizationMembershipOffer
 **Foreign Keys:**
@@ -9155,6 +9177,7 @@
   - organization -> societies.Organization [FK]
 **Pointed to by:**
   - memberships <- societies.OrganizationMembership
+  - vacancies <- societies.Vacancy
 
 ### OrganizationReputation
 **Foreign Keys:**
@@ -9164,6 +9187,7 @@
 ### OrganizationType
 **Pointed to by:**
   - organizations <- societies.Organization
+  - house_templates <- societies.HouseTemplate
 
 ### PactCommitment
 **Foreign Keys:**
@@ -9293,6 +9317,8 @@
 
 ### SuccessionLaw
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - chosen_heir -> roster.Kinsperson [FK] (nullable)
 **Pointed to by:**
   - houses_defaulting <- societies.Organization
@@ -9310,6 +9336,19 @@
   - coronation_ceremonies <- ceremonies.Ceremony
   - coronations <- ceremonies.Coronation
   - claims <- societies.HouseClaim
+
+### Vacancy
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - organization -> societies.Organization [FK]
+  - rank -> societies.OrganizationRank [FK] (nullable)
+  - kin_pool -> roster.KinSlotPool [FK] (nullable)
+  - kin_node -> roster.Kinsperson [FK] (nullable)
+  - allowed_upbringings -> character_creation.OriginTemplate [M2M]
+**Pointed to by:**
+  - drafts <- character_creation.CharacterDraft
+  - memberships <- societies.OrganizationMembership
 
 ### Service Functions
 - `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`

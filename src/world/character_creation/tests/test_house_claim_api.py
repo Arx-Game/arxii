@@ -34,6 +34,7 @@ class HouseClaimApiTests(TestCase):
             realm=cls.realm,
             kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=cls.crown.society,
+            org_type=cls.crown.org_type,
             liege=cls.crown,
             default_succession_law=cls.law,
         )

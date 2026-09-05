@@ -145,6 +145,17 @@ cloudinary.config(
     api_secret=env("CLOUDINARY_API_SECRET", default=""),
 )
 
+# Bound player media uploads (#3164). DEFAULT_PLAYER_MEDIA_QUOTA_BYTES seeds
+# PlayerData.media_quota_bytes for newly created rows (via a callable default,
+# so existing rows keep whatever quota they were given even if this setting
+# changes later). MAX_PLAYER_MEDIA_FILE_BYTES is a separate per-file cap
+# enforced independently of the account's remaining quota. Both are read by
+# CloudinaryGalleryService.upload_image; staff accounts bypass both checks.
+DEFAULT_PLAYER_MEDIA_QUOTA_BYTES = env.int(
+    "DEFAULT_PLAYER_MEDIA_QUOTA_BYTES", default=200 * 1024 * 1024
+)
+MAX_PLAYER_MEDIA_FILE_BYTES = env.int("MAX_PLAYER_MEDIA_FILE_BYTES", default=10 * 1024 * 1024)
+
 # Email configuration
 #
 # RESEND_API_KEY is always read into a real setting: ResendAPIEmailBackend

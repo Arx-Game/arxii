@@ -437,3 +437,14 @@ class OrgAppealState(models.TextChoices):
     GRANTED = "granted", "Granted"
     DECLINED = "declined", "Declined"
     WITHDRAWN = "withdrawn", "Withdrawn"
+
+
+# ---------------------------------------------------------------------------
+# Vacancy basis (#3648)
+#
+# ``Vacancy.basis`` is a derived property (kin link present or not), not a
+# stored field, so it is a plain string pair rather than a TextChoices.
+# ---------------------------------------------------------------------------
+
+VACANCY_BASIS_KIN = "kin"
+VACANCY_BASIS_RETAINER = "retainer"

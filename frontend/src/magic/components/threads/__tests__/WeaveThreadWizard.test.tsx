@@ -471,6 +471,70 @@ describe('WeaveThreadWizard', () => {
         expect.any(Object)
       );
     });
+
+    it('does not offer a companion-targeted relationship as a partner (#3575)', async () => {
+      vi.mocked(apiModule.apiFetch).mockImplementation((url: string) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/api/relationships/relationships/?source=')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                ...RELATIONSHIPS_RESPONSE,
+                {
+                  id: 21,
+                  source: 5,
+                  source_name: 'Me',
+                  target: null,
+                  target_companion: 7,
+                  target_name: 'Ash',
+                  is_active: true,
+                  is_pending: false,
+                  is_soul_tether: false,
+                  soul_tether_role: '',
+                  absolute_value: 10,
+                  developed_absolute_value: 10,
+                  affection: 5,
+                  updated_at: '2025-01-01T00:00:00Z',
+                },
+              ]),
+          } as Response);
+        }
+        if (urlStr.includes('/api/relationships/relationships/20/')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(RELATIONSHIP_DETAIL_RESPONSE),
+          } as Response);
+        }
+        if (urlStr.includes('/api/personas/?character_sheet=9')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(PERSONA_RESPONSE),
+          } as Response);
+        }
+        // Relationship 21 (companion-targeted) is filtered out before any detail
+        // or persona lookup, so nothing should hit that URL; fall through to a
+        // failure response that would fail the test if it were ever requested.
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response);
+      });
+
+      const summary = makeSummary({
+        weaving_eligibility: { RELATIONSHIP_TRACK: true },
+        weavable_relationship_track_ids: [7],
+      });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+
+      fireEvent.click(screen.getByTestId('kind-button-RELATIONSHIP_TRACK'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('wizard-step-2-partner')).toBeInTheDocument();
+        expect(screen.getByTestId('partner-option-9')).toHaveTextContent('Aria');
+      });
+      expect(screen.queryByTestId('partner-option-7')).not.toBeInTheDocument();
+      expect(screen.queryByText('Ash')).not.toBeInTheDocument();
+    });
   });
 
   describe('Step 3 — Resonance picker', () => {

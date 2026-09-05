@@ -38,6 +38,7 @@ import { useCharacterResonances, useWeaveThread } from '../../queries';
 import type { CharacterResonance, TargetKind, ThreadHubSummary } from '../../types';
 import { apiFetch } from '@/evennia_replacements/api';
 import { getMyOutboundRelationships, getRelationshipDetail } from '@/relationships/api';
+import type { CharacterRelationshipList } from '@/relationships/api';
 
 // ---------------------------------------------------------------------------
 // Local anchor-picker data types
@@ -200,9 +201,11 @@ async function resolvePrimaryPersonaId(characterSheetId: number): Promise<number
  * `track_progress` row among `weavable_relationship_track_ids` — the only
  * relationships that could possibly anchor a RELATIONSHIP_TRACK thread.
  * `track_progress` only exists on the detail retrieve (the list serializer
- * omits it), so this fetches one detail per outbound relationship. A partner
- * whose CharacterSheet has no resolvable Persona is dropped — there would be
- * no legal `target_persona_id` to submit for them.
+ * omits it), so this fetches one detail per outbound relationship. Companion-
+ * targeted relationships (#3575) are filtered out up front, since a companion
+ * has no persona to weave a thread with; a partner whose CharacterSheet has
+ * no resolvable Persona is dropped too, since there would be no legal
+ * `target_persona_id` to submit for them.
  */
 async function fetchRelationshipPartnerOptions(
   characterSheetId: number,
@@ -212,8 +215,12 @@ async function fetchRelationshipPartnerOptions(
   if (allowedTrackIds.size === 0) return [];
 
   const relationships = await getMyOutboundRelationships(characterSheetId);
+  // Companion bonds (#3575) have no persona to weave with; only character targets are partners.
+  const characterTargeted = relationships.filter(
+    (rel): rel is CharacterRelationshipList & { target: number } => rel.target != null
+  );
   const withQualifyingTracks = await Promise.all(
-    relationships.map(async (rel) => {
+    characterTargeted.map(async (rel) => {
       const detail = await getRelationshipDetail(rel.id);
       const qualifyingTracks = detail.track_progress
         .filter((tp) => allowedTrackIds.has(tp.track))

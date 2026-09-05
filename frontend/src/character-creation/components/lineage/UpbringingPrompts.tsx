@@ -19,13 +19,17 @@ interface Props {
   template: OriginTemplate;
   path: FamilyPath | '';
   influence: number;
+  /** 'any' renders prompts for every path; 'path' renders only this path's prompts. */
+  scope: 'any' | 'path';
 }
 
-export function UpbringingPrompts({ draft, template, path, influence }: Props) {
+export function UpbringingPrompts({ draft, template, path, influence, scope }: Props) {
   const updateDraft = useUpdateDraft();
   const texts = draft.draft_data.origin_slots ?? {};
   const picks = draft.draft_data.origin_choices ?? {};
-  const visible = template.slots.filter((s) => s.applies_to === 'any' || s.applies_to === path);
+  const visible = template.slots.filter((s) =>
+    scope === 'any' ? s.applies_to === 'any' : path !== '' && s.applies_to === path
+  );
   if (visible.length === 0) return null;
 
   const setText = (slotId: number, value: string) =>
