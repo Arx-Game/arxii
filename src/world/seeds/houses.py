@@ -139,6 +139,8 @@ def seed_houses_demo() -> None:
     Society/Organization/Title/SuccessionLaw all hang off ``realm`` via a
     required FK.
     """
+    from django.conf import settings  # noqa: PLC0415
+
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.realms.models import Realm  # noqa: PLC0415
@@ -162,7 +164,7 @@ def seed_houses_demo() -> None:
         create_domain,
         swear_fealty,
     )
-    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.models import Organization, Vacancy  # noqa: PLC0415
 
     seed_kinship_demo()
     seed_nobiliary_particles()
@@ -202,6 +204,17 @@ def seed_houses_demo() -> None:
     if not created:
         return
 
+    if settings.SEED_SAMPLE_CONTENT and house.family_id is not None:
+        Vacancy.objects.get_or_create(
+            organization=house,
+            name="Household guard PLACEHOLDER",
+            defaults={
+                "description": "PLACEHOLDER: stands a post, keeps the gate.",
+                "importance": 1,
+                "presumed_importance": 1,
+            },
+        )
+
     for kind in (
         RecognitionRuleKind.MATRILINEAL_AUTO_WEDLOCK,
         RecognitionRuleKind.MOTHER_OPTION_OUT_OF_WEDLOCK,
@@ -240,8 +253,6 @@ def seed_houses_demo() -> None:
 
 def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     """Phase D: a set-aside claimable barony + the realm's charter template."""
-    from django.conf import settings  # noqa: PLC0415
-
     from world.areas.constants import AreaLevel  # noqa: PLC0415
     from world.areas.models import Area  # noqa: PLC0415
     from world.roster.constants import NOBLE_KIND_NAME  # noqa: PLC0415
@@ -257,7 +268,6 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
         HouseTemplate,
         Title,
     )
-    from world.societies.models import Organization, Vacancy  # noqa: PLC0415
 
     noble_kind = ensure_family_kinds()[NOBLE_KIND_NAME]
     farmland = authored_or_sample(
@@ -323,19 +333,6 @@ def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:
     )
     if hearth is not None:
         template.features.add(hearth)
-
-    if settings.SEED_SAMPLE_CONTENT:
-        house_org = Organization.objects.filter(name=HOUSE_ORG_NAME).first()
-        if house_org is not None and house_org.family_id is not None:
-            Vacancy.objects.get_or_create(
-                organization=house_org,
-                name="Household guard PLACEHOLDER",
-                defaults={
-                    "description": "PLACEHOLDER: stands a post, keeps the gate.",
-                    "importance": 1,
-                    "presumed_importance": 1,
-                },
-            )
 
     seat_area, _ = Area.objects.get_or_create(
         name=CLAIMABLE_DOMAIN_NAME, defaults={"level": AreaLevel.REGION}
