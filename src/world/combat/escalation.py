@@ -359,7 +359,9 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     )
 
 
-def _active_companion_for(character: ObjectDB) -> Companion | None:  # noqa: OBJECTDB_PARAM - payload carries ObjectDB
+def _active_companion_for(  # noqa: OBJECTDB_PARAM - payload carries ObjectDB
+    character: ObjectDB,
+) -> Companion | None:
     """The bonded, unreleased ``Companion`` whose live object is ``character`` (#3575).
 
     None for any other object, so the surge legs treat sheetless non-companions
