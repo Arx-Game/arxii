@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { useUpdateDraft } from '../../queries';
+import { useUpdateDraft, useVacancies } from '../../queries';
 import { allowedFamilyPaths, resolveFamilyTemplate, Stage } from '../../types';
 import type {
   CGExplanations,
@@ -37,6 +37,9 @@ import {
 } from '../LineageStage';
 import { ChoiceRow, Field } from '../../folio';
 import { FamilyTemplateForm } from './FamilyTemplateForm';
+import { InheritedFactsPanel } from './InheritedFactsPanel';
+import { ServicePanel } from './ServicePanel';
+import { VacancyPicker } from './VacancyPicker';
 
 interface FamilyPathSectionProps {
   draft: CharacterDraft;
@@ -71,6 +74,9 @@ export function FamilyPathSection({
   const updateDraft = useUpdateDraft();
   const allowed = allowedFamilyPaths(template);
   const showPathPicker = allowed.length > 1;
+  const { data: vacancies } = useVacancies(draft.id);
+  const kinVacancyChosen =
+    vacancies?.some((v) => v.id === draft.selected_vacancy && v.basis === 'kin') ?? false;
 
   const setPath = (next: string) =>
     updateDraft.mutate({ draftId: draft.id, data: { family_path: next as FamilyPath } });
@@ -112,10 +118,15 @@ export function FamilyPathSection({
           template={template}
           families={families}
           familiesLoading={familiesLoading}
+          copy={copy}
         />
       )}
 
       {path === 'none' && <TarotNamingRitual draft={draft} />}
+
+      {path !== '' && !kinVacancyChosen && (
+        <ServicePanel draft={draft} heading={copy?.service_heading ?? 'Service'} />
+      )}
 
       {showInventedParents && <InventedParentsCard draft={draft} />}
     </section>
@@ -224,9 +235,16 @@ interface ClaimedFamilyPathProps {
   template: OriginTemplate;
   families: Family[] | undefined;
   familiesLoading: boolean;
+  copy: CGExplanations | undefined;
 }
 
-function ClaimedFamilyPath({ draft, template, families, familiesLoading }: ClaimedFamilyPathProps) {
+function ClaimedFamilyPath({
+  draft,
+  template,
+  families,
+  familiesLoading,
+  copy,
+}: ClaimedFamilyPathProps) {
   const updateDraft = useUpdateDraft();
 
   const handleFamilySelect = (familyId: string) => {
@@ -302,9 +320,45 @@ function ClaimedFamilyPath({ draft, template, families, familiesLoading }: Claim
         />
       )}
 
-      {draft.family && <KinSlotPicker draft={draft} familyId={draft.family.id} />}
+      {draft.family && (
+        <InheritedFactsPanel family={families?.find((f) => f.id === draft.family?.id)} />
+      )}
+      {draft.family && (
+        <ClaimVacancies draft={draft} organizationFamilyId={draft.family.id} copy={copy} />
+      )}
 
       {showHouseFounding && <HouseFoundingPanel draft={draft} />}
+    </div>
+  );
+}
+
+function ClaimVacancies({
+  draft,
+  organizationFamilyId,
+  copy,
+}: {
+  draft: CharacterDraft;
+  organizationFamilyId: number;
+  copy: CGExplanations | undefined;
+}) {
+  const updateDraft = useUpdateDraft();
+  const { data } = useVacancies(draft.id);
+  const kin = (data ?? []).filter(
+    (v) => v.basis === 'kin' && v.organization.family?.id === organizationFamilyId
+  );
+  if (kin.length === 0) return <KinSlotPicker draft={draft} familyId={organizationFamilyId} />;
+  return (
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-muted-foreground">
+        {copy?.vacancy_heading ?? 'Your place in the family'}
+      </Label>
+      <VacancyPicker
+        draft={draft}
+        vacancies={kin}
+        onPick={(id) =>
+          updateDraft.mutate({ draftId: draft.id, data: { selected_vacancy_id: id } })
+        }
+      />
     </div>
   );
 }

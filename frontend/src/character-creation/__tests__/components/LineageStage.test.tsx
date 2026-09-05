@@ -384,6 +384,70 @@ describe('LineageStage', () => {
         draft_data: { family_aspect_picks: { [charge.id]: [charge.options[0].id] } },
       });
     });
+
+    it('offers a Family Template choice row when the Upbringing offers more than one, and PATCHes on pick', async () => {
+      const secondTemplate = { ...mockFamilyTemplate, id: 402, name: 'Alternate Trust' };
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: {
+          ...mockUpbringingNamedWithTemplate,
+          family_templates: [mockFamilyTemplate, secondTemplate],
+        },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const option = await screen.findByRole('button', { name: mockFamilyTemplate.name });
+      expect(screen.getByRole('button', { name: secondTemplate.name })).toBeInTheDocument();
+      await userEvent.click(option);
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_template_id: mockFamilyTemplate.id },
+      });
+    });
+
+    it('choosing an already-chosen Family Template again PATCHes family_template_id with null', async () => {
+      const secondTemplate = { ...mockFamilyTemplate, id: 402, name: 'Alternate Trust' };
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: {
+          ...mockUpbringingNamedWithTemplate,
+          family_templates: [mockFamilyTemplate, secondTemplate],
+        },
+        draft_data: { family_template_id: mockFamilyTemplate.id },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const option = await screen.findByRole('button', { name: mockFamilyTemplate.name });
+      await userEvent.click(option);
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_template_id: null },
+      });
+    });
+
+    it('choosing a served house option PATCHes served_house_id', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingNamedWithTemplate,
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const houseChoice = mockFamilyTemplate.served_house_choices[0];
+      await userEvent.click(await screen.findByRole('button', { name: houseChoice.name }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        served_house_id: houseChoice.id,
+      });
+    });
   });
 
   describe('Page Header', () => {
