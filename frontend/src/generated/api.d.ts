@@ -32011,6 +32011,26 @@ export interface components {
      * @enum {string}
      */
     MediaTypeEnum: 'photo' | 'portrait' | 'gallery' | 'background' | 'illustration';
+    /**
+     * @description Validate a player's media upload before it reaches CloudinaryGalleryService.
+     *
+     *     The per-file size check here mirrors the service's own check (#3164) with the
+     *     same fixed message, so an oversized upload is rejected before the network call
+     *     instead of after; the quota check stays service-only since it needs a DB
+     *     aggregate over the player's existing media. Staff bypass the per-file check
+     *     here too, matching the service's staff bypass.
+     */
+    MediaUploadRequest: {
+      /** Format: binary */
+      image_file: string;
+      /** @default photo */
+      media_type: components['schemas']['MediaTypeEnum'];
+      /** @default  */
+      title: string;
+      /** @default  */
+      description: string;
+      created_by?: number | null;
+    };
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -72870,7 +72890,13 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MediaUploadRequest'];
+        'multipart/form-data': components['schemas']['MediaUploadRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['MediaUploadRequest'];
+      };
+    };
     responses: {
       201: {
         headers: {

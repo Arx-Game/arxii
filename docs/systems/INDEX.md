@@ -8457,6 +8457,10 @@ Extensions to Evennia models for additional data storage.
   existing `Media.file_size_bytes`, a null row counting as 0);
   `player_data.account.is_staff` bypasses both. A successful upload sets
   `Media.file_size_bytes` from the upload result's reported byte count.
+  `world.roster.serializers.media.MediaUploadSerializer` mirrors the per-file
+  check (same fixed message) so `POST /api/roster/media/` rejects an oversized
+  file before the service call; `MediaViewSet.create` validates through it and
+  maps the service's quota `ValidationError` to a 400 with its fixed message.
 - **Pattern:** Extend Evennia models without modifying library code
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)
