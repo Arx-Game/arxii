@@ -8,7 +8,7 @@ the org books — enough to walk the house page, sheet/house, succession
 derivation, and the feed on a dev DB.
 
 ``SuccessionLaw``, ``HoldingKind``, ``HouseTemplate`` and ``HouseFeature`` are
-authored content (#2875 — see ``docs/systems/houses.md``): this module looks
+authored content (#2875, see ``docs/systems/houses.md``): this module looks
 them up via ``authored_or_sample`` rather than inventing them with
 ``get_or_create``, so a real content universe's rows win and nothing here
 lands in the export. The Crown organization and its Society are plain
@@ -70,12 +70,12 @@ TEMPLATE_NAME = "Arx Barony Charter PLACEHOLDER"
 def _ensure_house_charter_anchors(realm) -> tuple:
     """Ensure the Crown org + its Society exist under ``realm`` (idempotent).
 
-    Neither model is in ``CONTENT_MODELS`` (#2875) — they are plain
-    seeder-owned config — but content-repo ``HouseTemplate``/``SuccessionLaw``
+    Neither model is in ``CONTENT_MODELS`` (#2875): they are plain
+    seeder-owned config, but content-repo ``HouseTemplate``/``SuccessionLaw``
     rows can FK the Crown and its Society by name, so both must exist before
     the content load resolves those fixtures. Called two ways: once from
     ``world.seeds.config_prerequisites._house_charter_anchors`` (before
-    ``load_content_first()``, with its own ``realm`` resolution — a no-op
+    ``load_content_first()``, with its own ``realm`` resolution, a no-op
     there on a database with no "Arx" realm authored yet), and again from
     ``seed_houses_demo`` after the content load, once ``realm`` is actually
     available (the self-healing gameplay-call-site pattern ADR-0171

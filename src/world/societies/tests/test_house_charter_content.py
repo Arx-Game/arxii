@@ -60,10 +60,13 @@ class HouseCharterSeederAuthoredOrSampleTests(TestCase):
     ``world.seeds.houses`` converted its ``SuccessionLaw``/``HoldingKind``/
     ``HouseTemplate``/``HouseFeature`` ``get_or_create`` calls to
     ``authored_or_sample`` (ADR-0171): a second press converges on the same
-    row instead of duplicating it, and a row that is already there — authored
-    or otherwise — is looked up, never rewritten (the ``authored_or_sample``
-    contract; ADR-0201 is the same "never clobber what is already there"
-    rule applied to the content-fixture loader).
+    row instead of duplicating it, and a row that is already there is looked
+    up, never rewritten. ``authored_or_sample`` leaves ANY existing row alone
+    regardless of credit, since its lookup is a plain filter with no
+    ``written_by`` check, so the uncredited pre-existing row this test
+    creates proves the same thing a credited (authored) one would (the
+    ``authored_or_sample`` contract; ADR-0201 is the same "never clobber what
+    is already there" rule applied to the content-fixture loader).
     """
 
     def test_seeding_twice_yields_one_charter_row_of_each_kind(self) -> None:

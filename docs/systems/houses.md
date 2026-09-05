@@ -132,7 +132,7 @@ play (ennoblement, new lands) is a separate future loop.
 `HouseAspectOption` below). `world/seeds/houses.py`'s `seed_houses_demo()` and
 `_seed_house_creator()` look all four up via `authored_or_sample()` rather
 than inventing them with `get_or_create()` (#2875 Task 2), mirroring the
-#2868 aspect-catalog migration referenced above — a real content universe's
+#2868 aspect-catalog migration referenced above: a real content universe's
 rows win and the PLACEHOLDER rows only appear under
 `ARXII_SEED_SAMPLE_CONTENT`. The Crown organization and its Society (plain
 seeder-owned config, neither in `CONTENT_MODELS`) moved to
