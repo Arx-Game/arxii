@@ -524,6 +524,9 @@ class ActionRegistryTests(TestCase):
             "start_domain_improvement",
             "appoint_domain_office",
             "vacate_domain_office",
+            # #696 gap 5 - garrison assignment.
+            "assign_garrison",
+            "relieve_garrison",
             # #696 gap 3 - earned area elevation.
             "declare_elevation",
             # #2222 — portal anchor install/dissolve.

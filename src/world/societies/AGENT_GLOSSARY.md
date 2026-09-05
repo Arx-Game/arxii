@@ -135,8 +135,12 @@ The alliance bound to a `Union` (`MarriagePact`, senior/junior house) that dies 
 _Avoid_: alliance object, treaty, marriage contract (contracts are a different system).
 
 **Domain**:
-An org-owned decoration on a DOMAIN-level `Area` — PLACEHOLDER civ stats plus `DomainHolding` rows that each materialize an `OrgIncomeStream`. Abstract by design; visitable grids are a later phase.
+An org-owned decoration on an `Area` (seeds use `AreaLevel.REGION`; no DOMAIN level exists), PLACEHOLDER civ stats (population/prosperity/unrest/defenses) plus `DomainHolding` rows that each materialize an `OrgIncomeStream`. Abstract by design; visitable grids are a later phase.
 _Avoid_: province model, land parcel, estate (that's buildings/dwellings).
+
+**Garrison Post** (`DomainGarrisonPost`, #696 gap 5):
+One `MilitaryUnit` posted to garrison a `Domain` (one post per unit, a `OneToOneField`). `effective_defenses(domain)` reads `Domain.defenses` plus `garrison_term(domain)`, a seam that returns 0 until the military side computes a real bonus off a domain's posts. `assign_garrison`/`relieve_garrison` gate on `can_administer_domain` and require the unit's `owner_org` to match the domain's.
+_Avoid_: garrison unit (the unit is a `MilitaryUnit`; the post is the link row), defense post.
 
 **Material Source** (`HoldingMaterialSource`, #2540 slice 2):
 One material-producing row on a `DomainHolding` — `material_category` + `quality` + `source_kind` (`MaterialSourceKind.BULK`/`GEM_MINE`, `world.items.constants`). Replaces the old flat `DomainHolding.mine_quality`/`common_gem_tier` fields so one holding can carry more than one production source, and so a non-gem bulk yield (farm, quarry) shares the exact same shape a gem mine used to hard-code. `GEM_MINE` sources still roll rare finds (`gems.mining.roll_gem_haul`); `BULK` sources produce flat value only. The weekly cycle (`items.materials_production.accrue_holding_materials`) iterates every source a holding carries, crediting the holding's `OrgIncomeStream` per category.

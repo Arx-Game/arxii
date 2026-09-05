@@ -12,16 +12,19 @@ from django.test import TestCase
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
+    AssignGarrisonAction,
+    RelieveGarrisonAction,
     StartDomainImprovementAction,
     VacateDomainOfficeAction,
 )
 from world.areas.factories import AreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
+from world.military.factories import MilitaryUnitFactory
 from world.projects.constants import ProjectKind
 from world.projects.models import Project
 from world.societies.factories import OrganizationFactory, OrganizationMembershipFactory
 from world.societies.houses.constants import DOMAIN_STEWARD_OFFICE
-from world.societies.houses.models import DomainHolding, HoldingKind
+from world.societies.houses.models import DomainGarrisonPost, DomainHolding, HoldingKind
 from world.societies.houses.services import create_domain
 from world.societies.office_services import holds_office
 
@@ -133,3 +136,60 @@ class DomainManagementActionTests(TestCase):
         self.assertFalse(
             holds_office(steward_sheet.primary_persona, self.org, DOMAIN_STEWARD_OFFICE)
         )
+
+
+class GarrisonActionTests(TestCase):
+    """#696 gap 5: AssignGarrisonAction / RelieveGarrisonAction dispatch."""
+
+    def setUp(self) -> None:
+        self.org = OrganizationFactory(name="House Westrock")
+        self.domain = create_domain(area=AreaFactory(), name="Westrock Vale", owner_org=self.org)
+        self.leader_sheet = CharacterSheetFactory()
+        self.leader = self.leader_sheet.character
+        OrganizationMembershipFactory(
+            organization=self.org, persona=self.leader_sheet.primary_persona, rank=1
+        )
+        self.outsider_sheet = CharacterSheetFactory()
+        self.outsider = self.outsider_sheet.character
+        self.unit = MilitaryUnitFactory(owner_org=self.org)
+
+    def test_assign_garrison_success(self) -> None:
+        result = AssignGarrisonAction().run(
+            actor=self.leader, domain_id=self.domain.pk, unit_id=self.unit.pk
+        )
+        self.assertTrue(result.success, result.message)
+        post = DomainGarrisonPost.objects.get(pk=result.data["post_id"])
+        self.assertEqual(post.domain, self.domain)
+        self.assertEqual(post.unit, self.unit)
+
+    def test_assign_garrison_rejected_for_outsider(self) -> None:
+        result = AssignGarrisonAction().run(
+            actor=self.outsider, domain_id=self.domain.pk, unit_id=self.unit.pk
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(DomainGarrisonPost.objects.filter(unit=self.unit).exists())
+
+    def test_assign_garrison_rejected_for_cross_org_unit(self) -> None:
+        other_org = OrganizationFactory(name="House Eastrock")
+        other_unit = MilitaryUnitFactory(owner_org=other_org)
+        result = AssignGarrisonAction().run(
+            actor=self.leader, domain_id=self.domain.pk, unit_id=other_unit.pk
+        )
+        self.assertFalse(result.success)
+        self.assertFalse(DomainGarrisonPost.objects.filter(unit=other_unit).exists())
+
+    def test_relieve_garrison_success(self) -> None:
+        AssignGarrisonAction().run(
+            actor=self.leader, domain_id=self.domain.pk, unit_id=self.unit.pk
+        )
+        result = RelieveGarrisonAction().run(actor=self.leader, unit_id=self.unit.pk)
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(DomainGarrisonPost.objects.filter(unit=self.unit).exists())
+
+    def test_relieve_garrison_rejected_for_outsider(self) -> None:
+        AssignGarrisonAction().run(
+            actor=self.leader, domain_id=self.domain.pk, unit_id=self.unit.pk
+        )
+        result = RelieveGarrisonAction().run(actor=self.outsider, unit_id=self.unit.pk)
+        self.assertFalse(result.success)
+        self.assertTrue(DomainGarrisonPost.objects.filter(unit=self.unit).exists())

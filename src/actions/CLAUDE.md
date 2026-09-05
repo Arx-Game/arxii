@@ -293,21 +293,26 @@ They do not use the command system, dispatchers, or handlers.
   `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
   `src/commands/crafting_station.py`) and the web `LabStationViewSet`
   (`/api/items/lab-stations/`);
-  `domains.py` (#2239) — four REGISTRY actions, all `target_type=SELF`,
+  `domains.py` (#2239, #696 gap 5) - six REGISTRY actions, all `target_type=SELF`,
   `category="domains"`, making the CG/seed-only domain services reachable in play:
   `AddDomainHoldingAction` (key `add_domain_holding`) and
-  `StartDomainImprovementAction` (`start_domain_improvement`) — thin over
+  `StartDomainImprovementAction` (`start_domain_improvement`) - thin over
   `houses.services.add_holding`/`start_domain_improvement`, gated on
   `can_administer_domain` (an org leader OR the `domain-steward` office holder);
   `AppointDomainOfficeAction` (`appoint_domain_office`) and
-  `VacateDomainOfficeAction` (`vacate_domain_office`) — leadership-only
-  (`is_org_leader`), thin over `societies.office_services`. Each resolves its
-  `domain_id`/`holding_kind_id`/`holder_persona_id` from a plain int (REST-safe,
-  no ObjectDB FKs). Shared by telnet `CmdDomain` (`domain <subverb>`,
-  `src/commands/domains.py`); a React domain panel is a separable follow-up (no
-  existing domain UI to extend). The office's `feeds_check` trait is declared but
-  not yet wired into the improvement check — see the `OrganizationOffice` note in
-  `world/societies/CLAUDE.md`;
+  `VacateDomainOfficeAction` (`vacate_domain_office`) - leadership-only
+  (`is_org_leader`), thin over `societies.office_services`; `AssignGarrisonAction`
+  (`assign_garrison`) and `RelieveGarrisonAction` (`relieve_garrison`) - thin over
+  `houses.services.assign_garrison`/`relieve_garrison`, gated on
+  `can_administer_domain` for the target domain (the service itself re-checks the
+  unit's `owner_org` matches). Each resolves its
+  `domain_id`/`holding_kind_id`/`holder_persona_id`/`unit_id` from a plain int
+  (REST-safe, no ObjectDB FKs). The first four are shared by telnet `CmdDomain`
+  (`domain <subverb>`, `src/commands/domains.py`); the garrison pair has no
+  `CmdDomain` subverb yet (REST/action dispatch only - telnet wiring is a
+  separable follow-up, same as the React domain panel). The office's
+  `feeds_check` trait is declared but not yet wired into the improvement check,
+  see the `OrganizationOffice` note in `world/societies/CLAUDE.md`;
   `areas.py` (#696 gap 3) - one REGISTRY action, `target_type=SELF`, `category="areas"`:
   `DeclareElevationAction` (key `declare_elevation`) - the earned, player-facing
   sibling of the warrant-gated staff `EditAreaAction` level edit

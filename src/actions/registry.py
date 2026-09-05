@@ -129,6 +129,8 @@ from actions.definitions.divorce import InitiateDivorceAction
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
+    AssignGarrisonAction,
+    RelieveGarrisonAction,
     StartDomainImprovementAction,
     TransferFoodAction,
     VacateDomainOfficeAction,
@@ -950,6 +952,9 @@ _ALL_ACTIONS: list[Action] = [
     StartDomainImprovementAction(),
     AppointDomainOfficeAction(),
     VacateDomainOfficeAction(),
+    # #696 gap 5 - post/relieve a MilitaryUnit garrisoning a domain.
+    AssignGarrisonAction(),
+    RelieveGarrisonAction(),
     # #696 gap 3 - earned area elevation, the player-facing sibling of the
     # warrant-gated staff EditAreaAction level edit.
     DeclareElevationAction(),

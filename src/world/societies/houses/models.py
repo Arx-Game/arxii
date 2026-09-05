@@ -299,6 +299,7 @@ class Domain(SharedMemoryModel):
     population = models.PositiveIntegerField(default=1000)
     prosperity = models.PositiveSmallIntegerField(default=50, help_text="0-100 PLACEHOLDER.")
     unrest = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
+    defenses = models.PositiveSmallIntegerField(default=10, help_text="0-100 PLACEHOLDER.")
 
     class Meta:
         ordering = ["name"]
@@ -323,6 +324,35 @@ class Domain(SharedMemoryModel):
         if open_crisis is not None:
             base *= open_crisis.income_factor
         return base
+
+
+class DomainGarrisonPost(SharedMemoryModel):
+    """One ``MilitaryUnit`` posted to garrison a domain (#696 gap 5).
+
+    A domain may hold several posts; the ``OneToOneField`` keeps a unit
+    posted to at most one domain at a time (relieve it before reposting
+    elsewhere). Combat semantics for what a garrison actually contributes are
+    TehomCD's - see ``houses.services.garrison_term``, the seam this table
+    feeds.
+    """
+
+    domain = models.ForeignKey(
+        Domain,
+        on_delete=models.CASCADE,
+        related_name="garrison_posts",
+    )
+    unit = models.OneToOneField(
+        "arxii.MilitaryUnit",
+        on_delete=models.CASCADE,
+        related_name="garrison_post",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["domain", "created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.unit_id} garrisons {self.domain.name}"
 
 
 class HoldingKind(SharedMemoryModel):

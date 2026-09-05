@@ -6423,6 +6423,7 @@
   - capabilities -> conditions.CapabilityType [M2M]
 **Pointed to by:**
   - battle_units <- battles.BattleUnit
+  - garrison_post <- societies.DomainGarrisonPost
   - capability_values <- military.MilitaryUnitCapability
   - armies <- military.Army
   - army_memberships <- military.ArmyMembership
@@ -8756,6 +8757,7 @@
   - food_transfers_out <- agriculture.FoodTransfer
   - food_transfers_in <- agriculture.FoodTransfer
   - seat_of <- societies.Title
+  - garrison_posts <- societies.DomainGarrisonPost
   - holdings <- societies.DomainHolding
   - improvement_details <- societies.DomainImprovementDetails
   - edicts <- societies.DomainEdict
@@ -8793,6 +8795,11 @@
   - kind -> societies.EdictKind [FK]
   - proclamation -> societies.Proclamation [FK] (nullable)
   - enacted_by -> scenes.Persona [FK]
+
+### DomainGarrisonPost
+**Foreign Keys:**
+  - domain -> societies.Domain [FK]
+  - unit -> military.MilitaryUnit [OneToOne]
 
 ### DomainHolding
 **Foreign Keys:**

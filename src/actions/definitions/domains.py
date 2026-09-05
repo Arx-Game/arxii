@@ -25,6 +25,7 @@ _MSG_NOT_AUTHORIZED = "You don't have standing to run this domain."
 _MSG_NOT_LEADER = "Only a house leader may appoint or vacate an office."
 _MSG_NO_HOLDING_KIND = "No such holding kind."
 _MSG_NO_HOLDER = "No such persona to appoint."
+_MSG_NO_UNIT = "No such military unit."
 
 
 def _resolve_active_persona(actor: ObjectDB) -> Any:
@@ -50,6 +51,15 @@ def _resolve_domain(domain_id: Any) -> Any:
     if isinstance(domain_id, Domain):
         return domain_id
     return Domain.objects.filter(pk=domain_id).select_related("owner_org").first()
+
+
+def _resolve_unit(unit_id: Any) -> Any:
+    """Resolve a ``MilitaryUnit`` from an int pk (REST) or pass an instance through."""
+    from world.military.models import MilitaryUnit  # noqa: PLC0415
+
+    if isinstance(unit_id, MilitaryUnit):
+        return unit_id
+    return MilitaryUnit.objects.filter(pk=unit_id).first()
 
 
 @dataclass
@@ -230,6 +240,95 @@ class VacateDomainOfficeAction(Action):
 
         vacate_office(organization=org, slug=DOMAIN_STEWARD_OFFICE)
         return ActionResult(success=True, message="The domain-steward office is vacated.")
+
+
+@dataclass
+class AssignGarrisonAction(Action):
+    """Post a military unit to garrison a domain (#696 gap 5).
+
+    Thin over ``houses.services.assign_garrison`` - gates on
+    ``can_administer_domain``, and the service itself re-checks the unit's
+    ``owner_org`` matches the domain's before creating the post. Combat
+    semantics for what a garrison contributes are TehomCD's; this only wires
+    the domain<->unit link.
+    """
+
+    key: str = "assign_garrison"
+    name: str = "Assign Garrison"
+    icon: str = "shield"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.societies.houses.services import (  # noqa: PLC0415
+            HousesServiceError,
+            assign_garrison,
+            can_administer_domain,
+        )
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        domain = _resolve_domain(kwargs.get("domain_id"))
+        if domain is None:
+            return ActionResult(success=False, message=_MSG_NO_DOMAIN)
+        if not can_administer_domain(persona, domain):
+            return ActionResult(success=False, message=_MSG_NOT_AUTHORIZED)
+        unit = _resolve_unit(kwargs.get("unit_id"))
+        if unit is None:
+            return ActionResult(success=False, message=_MSG_NO_UNIT)
+
+        try:
+            post = assign_garrison(domain=domain, unit=unit)
+        except HousesServiceError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+
+        return ActionResult(
+            success=True,
+            message=f"{unit.name} now garrisons {domain.name}.",
+            data={"post_id": post.pk},
+        )
+
+
+@dataclass
+class RelieveGarrisonAction(Action):
+    """Pull a military unit off garrison duty (#696 gap 5).
+
+    Thin over ``houses.services.relieve_garrison`` - gates on
+    ``can_administer_domain`` for the domain the unit currently garrisons.
+    """
+
+    key: str = "relieve_garrison"
+    name: str = "Relieve Garrison"
+    icon: str = "shield-off"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.societies.houses.models import DomainGarrisonPost  # noqa: PLC0415
+        from world.societies.houses.services import (  # noqa: PLC0415
+            can_administer_domain,
+            relieve_garrison,
+        )
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        unit = _resolve_unit(kwargs.get("unit_id"))
+        if unit is None:
+            return ActionResult(success=False, message=_MSG_NO_UNIT)
+        post = DomainGarrisonPost.objects.filter(unit=unit).select_related("domain").first()
+        if post is None:
+            return ActionResult(success=False, message="That unit isn't garrisoning anywhere.")
+        if not can_administer_domain(persona, post.domain):
+            return ActionResult(success=False, message=_MSG_NOT_AUTHORIZED)
+
+        domain_name = post.domain.name
+        relieve_garrison(unit=unit)
+        return ActionResult(
+            success=True,
+            message=f"{unit.name} is relieved from garrisoning {domain_name}.",
+        )
 
 
 @dataclass
