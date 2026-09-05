@@ -32,7 +32,9 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   `TANISTRY_ELECTION`) + ordering (`ELDEST`, `MOST_POWERFUL_GIFTED` — pluggable
   rater, PLACEHOLDER falls back to eldest) + `require_wedlock`/`enatic_tiebreak`.
   House default on `Organization.default_succession_law`; per-title override on
-  `Title.succession_law` (Imperial Tanistry).
+  `Title.succession_law` (Imperial Tanistry). **Authored content (#2875):**
+  carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
+  `CONTENT_MODELS`; the lore repo owns the realm succession vocabulary.
 - **`Title`** — first-class: name, tier (`TitleTier`:
   empire/kingdom/duchy/march/county/barony — #3091's six-step ladder), realm,
   house, holder (→ `Kinsperson`), seat domain, `is_claimable` (Phase D slots),
@@ -42,7 +44,10 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
   (population/prosperity/unrest). Abstract — no room grids yet.
 - **`HoldingKind`** / **`DomainHolding`** — authored holding vocabulary; each
   holding materializes an `OrgIncomeStream` (OneToOne) so collection, graft,
-  and settlement reuse the audited currency pipeline unchanged.
+  and settlement reuse the audited currency pipeline unchanged. `HoldingKind`
+  carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
+  `CONTENT_MODELS` (#2875); `DomainHolding` (the per-domain instance row)
+  stays play state, not content.
 - **`DomainImprovementDetails`** — per-kind details for `DOMAIN_IMPROVEMENT`
   projects.
 - **`DomainCrisisType`** / **`DomainCrisisTypeOption`** (#2238) — the authored
@@ -122,10 +127,29 @@ CG-only (Apostate ruling): a claim defines the house *retroactively* — the
 character has always been its representative. Founding a brand-new house in
 play (ennoblement, new lands) is a separate future loop.
 
+`SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all joined
+`CONTENT_MODELS` in #2875 (same shape as `HouseAspectDefinition`/
+`HouseAspectOption` below). `world/seeds/houses.py`'s `seed_houses_demo()` and
+`_seed_house_creator()` look all four up via `authored_or_sample()` rather
+than inventing them with `get_or_create()` (#2875 Task 2), mirroring the
+#2868 aspect-catalog migration referenced above: a real content universe's
+rows win and the PLACEHOLDER rows only appear under
+`ARXII_SEED_SAMPLE_CONTENT`. The Crown organization and its Society (plain
+seeder-owned config, neither in `CONTENT_MODELS`) moved to
+`world.seeds.config_prerequisites._house_charter_anchors`
+(`world.seeds.houses._ensure_house_charter_anchors`), run before the content
+load so a content-repo `HouseTemplate`/`SuccessionLaw` row can FK them by
+name (ADR-0171); `seed_houses_demo()` calls the same helper again once
+"Arx" is available, the self-healing gameplay-call-site pattern ADR-0171
+describes.
+
 - **`HouseTemplate`**: realm recipe, name-pattern regex (the realm's naming
   conventions as an automated gate), `kind` (FK `roster.FamilyKind`, #3617; the
   kind the founded family gets), per-axis principle ranges, society, liege,
-  succession law, holdings package, `starting_kin_slots`.
+  succession law, holdings package, `starting_kin_slots`. **Authored content
+  (#2875):** carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is
+  registered in `CONTENT_MODELS`; a realm's charter recipe is the lore repo's
+  to write.
 - **`HouseClaim`** — rides the `CharacterDraft` (dies with it); automated
   thematic gates run at `submit_house_claim` (claimable title, realm match,
   one live claim per title, name pattern + collision, backstory present,
@@ -143,6 +167,46 @@ play (ennoblement, new lands) is a separate future loop.
   the CG Lineage stage shows the "Define a House" panel to familyless
   drafts. Seeds: a set-aside claimable barony + charter template ride the
   `houses` cluster.
+
+## Authoring a realm's charter (#2875)
+
+A **charter** is a realm's recipe for the houses CG can define on its claimable
+titles: one `HouseTemplate` row plus the four catalogs it draws on.
+
+- **What a charter holds:** the `HouseTemplate` itself (name, name-pattern
+  regex, principle ranges, `starting_kin_slots`), its `default_succession_law`
+  (a `SuccessionLaw` row), its `holdings` (a set of `HoldingKind` rows
+  materialized on the seat domain at founding), its `features` (a set of
+  `HouseFeature` rows stamping structural cultural facts on every house of
+  this template, no player input), and its `aspect_definitions` (a set of
+  `HouseAspectDefinition` rows, each with its own `HouseAspectOption` catalog,
+  the required choices a founder answers at CG).
+- **Where it is authored:** all five models carry `NaturalKeyMixin` and
+  `CreditedContent` and sit in `CONTENT_MODELS`, so a charter is written the
+  same way as every other piece of authored content post-ADR-0238: in the
+  database, through Django admin or the Authoring Workbench
+  (`web/admin/authoring`), never through content-repo branches and PRs. There
+  is no fixture to hand-edit and no load path to run against a populated
+  database. `SuccessionLaw.description` is the writer's field on the
+  succession row (how the law shapes inheritance, in prose) - all five
+  models now have a registered `ModelAdmin`, so the Workbench's change link
+  and backlog queue reach every one of them.
+- **Code prerequisites, not authored rows:** a `HouseTemplate` FKs a `liege`
+  organization and a `society`, and neither is something the charter author
+  creates. Both are seeded ahead of any content load by
+  `world.seeds.config_prerequisites._house_charter_anchors`
+  (`world.seeds.houses._ensure_house_charter_anchors`), named by
+  `CROWN_ORG_NAME`/`SOCIETY_NAME` in `world/seeds/houses.py`. A charter
+  author picks the realm's existing Crown organization and Society by name;
+  they do not author new ones as part of the charter.
+- **Founding copies the charter, it does not reference it live:** CG
+  finalization's `materialize_house_claim` reads the approved `HouseClaim`'s
+  template and stamps a one-time copy into play state: a `Family`, an
+  `Organization` sworn to the template's `liege`, `OrganizationFeature` rows
+  for each template feature, `OrganizationAspect` rows for the founder's
+  picks, and the template's `holdings` package materialized on the title's
+  seat `Domain`. Editing the `HouseTemplate` after a house has founded off it
+  never changes that house; it only changes what the next founder sees.
 
 ## Regional flavor: aspects + features (#2079)
 
@@ -179,7 +243,10 @@ two shapes; see Recipe 7 in `docs/systems/family-authoring-recipes.md`.
   description) attaches via `HouseTemplate.features`; at CG it orients the
   founder ("a house of this charter keeps a Black Ledger"), in play it is the
   anchor future systems key off (`org.features` has slug `black-ledger` — data
-  row + slug, never a bespoke code path).
+  row + slug, never a bespoke code path). **Authored content (#2875):**
+  carries `NaturalKeyMixin` (`name`) + `CreditedContent` and is registered in
+  `CONTENT_MODELS`, the same shape as `HouseAspectDefinition`/
+  `HouseAspectOption` below.
 - **Shared stylings** — `Organization.words/colors/sigil_description`
   (org-level: gangs and guilds get them free), collected as required claim
   inputs alongside `lands_writeup`, which materializes onto the seat

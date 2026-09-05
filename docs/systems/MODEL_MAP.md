@@ -8835,6 +8835,9 @@
   - outcome_tier -> traits.CheckOutcome [FK]
 
 ### HoldingKind
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - holdings <- societies.DomainHolding
   - house_templates <- societies.HouseTemplate
@@ -8875,6 +8878,9 @@
   - option -> societies.HouseAspectOption [FK]
 
 ### HouseFeature
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - templates <- societies.HouseTemplate
   - organization_features <- societies.OrganizationFeature
@@ -8891,6 +8897,8 @@
 
 ### HouseTemplate
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - realm -> realms.Realm [FK]
   - kind -> roster.FamilyKind [FK]
   - society -> societies.Society [FK]
@@ -9293,6 +9301,8 @@
 
 ### SuccessionLaw
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - chosen_heir -> roster.Kinsperson [FK] (nullable)
 **Pointed to by:**
   - houses_defaulting <- societies.Organization
