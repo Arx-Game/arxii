@@ -1,18 +1,25 @@
 /**
- * OwnRelationshipsList (#2159) — `RelationshipPanel`'s own-sheet arm.
+ * OwnRelationshipsList (#2159): `RelationshipPanel`'s own-sheet arm.
  *
  * Lists the caller's outbound relationships (`CharacterRelationshipViewSet`,
- * `?source=<viewed CharacterSheet pk>` — already scoped server-side to the
+ * `?source=<viewed CharacterSheet pk>`, already scoped server-side to the
  * caller's own tenure-owned characters, see ADR-0117): target name and
  * affection up front, each row expandable into per-track points/tiers
- * (`track_progress`, fetched via the detail retrieve — the list serializer
+ * (`track_progress`, fetched via the detail retrieve; the list serializer
  * omits it) and the relationship's full history (Task 2's `?relationship=`
  * timeline arm), plus buttons opening `RelationshipWriteupDialog` in
- * development/capstone/redistribute modes.
+ * development/capstone/redistribute modes. A companion-targeted row
+ * (`target_companion` set, `target` null) opens that dialog with a companion
+ * target directly, bypassing the persona-resolution launcher below.
+ *
+ * `CompanionBondList` (#3575) mounts above the accordion, in every
+ * non-loading state, as the owner's entry point for writing a first
+ * impression/development about a bonded companion before any relationship
+ * row toward it exists yet.
  *
  * Row detail queries (`useRelationshipDetail`/`useRelationshipTimeline`) live
- * inside `AccordionContent`, which Radix only mounts once a row is expanded
- * — so this never fires N detail/timeline requests up front for N rows.
+ * inside `AccordionContent`, which Radix only mounts once a row is expanded,
+ * so this never fires N detail/timeline requests up front for N rows.
  */
 
 import { useState } from 'react';
@@ -50,6 +57,22 @@ interface DialogRequest {
   mode: RelationshipWriteupMode;
 }
 
+/**
+ * Narrows a relationship row to a `DialogTarget` without casting past the
+ * nullable `target`/`target_companion` pair (#3575): a companion-targeted row
+ * wins first, then a persona-targeted row, else `null` (a row with neither
+ * cannot exist by DB constraint, but the generated type doesn't know that).
+ */
+function dialogTargetFor(relationship: CharacterRelationshipList): DialogTarget | null {
+  if (relationship.target_companion != null) {
+    return { kind: 'companion', companionId: relationship.target_companion };
+  }
+  if (relationship.target != null) {
+    return { kind: 'sheet', characterSheetId: relationship.target };
+  }
+  return null;
+}
+
 export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListProps) {
   const {
     data: relationships = [],
@@ -74,16 +97,11 @@ export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListP
             <RelationshipRow
               key={relationship.id}
               relationship={relationship}
-              onOpenDialog={(mode) =>
-                setDialogRequest({
-                  target:
-                    relationship.target_companion != null
-                      ? { kind: 'companion', companionId: relationship.target_companion }
-                      : { kind: 'sheet', characterSheetId: relationship.target as number },
-                  targetName: relationship.target_name,
-                  mode,
-                })
-              }
+              onOpenDialog={(mode) => {
+                const target = dialogTargetFor(relationship);
+                if (target == null) return;
+                setDialogRequest({ target, targetName: relationship.target_name, mode });
+              }}
             />
           ))}
         </Accordion>
