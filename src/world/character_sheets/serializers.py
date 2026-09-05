@@ -51,6 +51,7 @@ from world.character_sheets.types import (
     StorySection,
     TechniqueEntry,
     ThemingSection,
+    VacancyRef,
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
@@ -283,6 +284,32 @@ def _resolve_birthday(sheet: CharacterSheet) -> str | None:
     return None
 
 
+def _resolve_vacancy(sheet: CharacterSheet, *, privileged: bool) -> VacancyRef | None:
+    """The held vacancy from the primary persona's active membership (#3648).
+
+    ``importance`` (the family's real reckoning) is withheld from a
+    non-privileged viewer, mirroring the age-axes leak-table pattern;
+    ``presumed_importance`` (what outsiders assume) always shows.
+    """
+    from world.societies.models import OrganizationMembership  # noqa: PLC0415
+
+    membership = (
+        OrganizationMembership.objects.filter(
+            persona__character_sheet=sheet, vacancy__isnull=False, left_at__isnull=True
+        )
+        .select_related("vacancy")
+        .first()
+    )
+    if membership is None:
+        return None
+    vacancy = membership.vacancy
+    return VacancyRef(
+        name=vacancy.name,
+        presumed_importance=vacancy.presumed_importance,
+        importance=vacancy.importance if privileged else None,
+    )
+
+
 def _build_identity(
     sheet: CharacterSheet,
     *,
@@ -339,6 +366,7 @@ def _build_identity(
         worship_sincere=worship_sincere,
         # #2994 — INTERNAL; owner/staff only, mirrors the age-axes leak-table pattern.
         current_mood=_id_name_or_null(sheet.current_mood) if privileged else None,
+        vacancy=_resolve_vacancy(sheet, privileged=privileged),
     )
 
 

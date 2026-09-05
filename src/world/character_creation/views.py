@@ -58,6 +58,7 @@ from world.character_creation.serializers import (
     CGOriginTemplateSerializer,
     CGPointBudgetSerializer,
     CGTechniqueOptionSerializer,
+    CGVacancySerializer,
     CharacterDraftCreateSerializer,
     CharacterDraftSerializer,
     ClaimableTitleSerializer,
@@ -107,6 +108,7 @@ from world.magic.models import (
 from world.magic.services.cg_catalog import get_gift_options, get_technique_options
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import FamilyKind
+from world.societies.models import Vacancy
 from world.species.models import Language, Species, SpeciesStatBonus
 from world.stories.pagination import StandardResultsSetPagination
 
@@ -662,7 +664,13 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 "slots",
                 queryset=OriginTemplateSlot.objects.order_by("sort_order"),
                 to_attr="cached_slots",
-            )
+            ),
+            # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
+            # prefetch, no ``to_attr`` - the nested serializer reads
+            # ``obj.family_templates.all()`` straight off the prefetch cache.
+            "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
+            "family_templates__features",  # noqa: PREFETCH_STRING
+            "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
         ).order_by("sort_order", "name")
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
@@ -682,6 +690,30 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         }
         serializer = self.get_serializer_class()(templates, many=True, context=context)
         return Response(serializer.data)
+
+
+class CGVacancyViewSet(viewsets.ReadOnlyModelViewSet):
+    """Openings the draft may take, priced for it (#3648). ``?draft=`` is required."""
+
+    serializer_class = CGVacancySerializer
+    permission_classes = [IsAuthenticated]
+    pagination_class = None  # ADR-0138: opt out of default paginator
+    filter_backends = [DjangoFilterBackend]
+    filterset_fields = ["organization"]
+
+    def get_queryset(self) -> QuerySet[Vacancy]:
+        from world.societies.vacancy_services import reachable_vacancies  # noqa: PLC0415
+
+        draft_id = self.request.query_params.get("draft")  # noqa: USE_FILTERSET
+        if not draft_id:
+            return Vacancy.objects.none()
+        drafts = CharacterDraft.objects.filter(pk=draft_id)
+        if not self.request.user.is_staff:
+            drafts = drafts.filter(account=self.request.user)
+        draft = drafts.first()
+        if draft is None:
+            return Vacancy.objects.none()
+        return reachable_vacancies(draft)
 
 
 class CanCreateCharacterView(APIView):

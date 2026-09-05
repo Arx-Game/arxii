@@ -43,7 +43,7 @@ from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.mechanics.constants import GOAL_CATEGORY_NAME
 from world.roster.models import Family, KinSlotPool, Kinsperson
-from world.roster.serializers import FamilySerializer
+from world.roster.serializers import FamilySerializer, KinSlotPoolSerializer, KinSlotSerializer
 from world.societies.houses.models import (
     HouseAspectDefinition,
     HouseAspectOption,
@@ -464,6 +464,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     slots = serializers.SerializerMethodField()
     claimable_kind_ids = serializers.SerializerMethodField()
+    family_templates = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplate
@@ -479,9 +480,20 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "allows_name_family",
             "allows_no_family",
             "claimable_kind_ids",
+            "family_templates",
             "slots",
         ]
         read_only_fields = fields
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_family_templates(self, obj: OriginTemplate) -> list[dict]:
+        """``FamilyTemplateSerializer`` is defined later in this module (near
+
+        ``HouseTemplateOptionSerializer``, which it extends) - resolved by name
+        at call time, not at class-definition time, so the forward reference
+        never raises ``NameError`` on import.
+        """
+        return FamilyTemplateSerializer(obj.family_templates.all(), many=True).data
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_claimable_kind_ids(self, obj: OriginTemplate) -> list[int]:
@@ -1346,6 +1358,64 @@ class HouseTemplateOptionSerializer(serializers.ModelSerializer):
             "aspect_definitions",
             "features",
         ]
+
+
+class FamilyTemplateSerializer(HouseTemplateOptionSerializer):
+    """A Family Template the name path offers (#3648)."""
+
+    served_house_choices = serializers.SerializerMethodField()
+
+    class Meta(HouseTemplateOptionSerializer.Meta):
+        fields = [*HouseTemplateOptionSerializer.Meta.fields, "org_type", "served_house_choices"]
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_served_house_choices(self, obj) -> list[dict]:
+        return [{"id": org.id, "name": org.name} for org in obj.served_house_choices.all()]
+
+
+class CGVacancySerializer(serializers.ModelSerializer):
+    """An opening reachable from the draft, priced for it (#3648)."""
+
+    basis = serializers.CharField(read_only=True)
+    cost = serializers.SerializerMethodField()
+    rank_name = serializers.CharField(source="rank.name", read_only=True, default="")
+    organization = serializers.SerializerMethodField()
+    kin_pool = KinSlotPoolSerializer(read_only=True, allow_null=True)
+    kin_node = KinSlotSerializer(read_only=True, allow_null=True)
+
+    class Meta:
+        model = Vacancy
+        fields = [
+            "id",
+            "name",
+            "description",
+            "basis",
+            "importance",
+            "presumed_importance",
+            "cost",
+            "rank_name",
+            "count_remaining",
+            "organization",
+            "kin_pool",
+            "kin_node",
+        ]
+        read_only_fields = fields
+
+    @extend_schema_field(serializers.IntegerField())
+    def get_cost(self, obj: Vacancy) -> int:
+        family = obj.organization.family
+        return obj.cost_for(family.influence if family is not None else 0)
+
+    @extend_schema_field(serializers.DictField())
+    def get_organization(self, obj: Vacancy) -> dict:
+        family = obj.organization.family
+        return {
+            "id": obj.organization_id,
+            "name": obj.organization.name,
+            "family": None
+            if family is None
+            else {"id": family.id, "name": family.name, "influence": family.influence},
+        }
 
 
 class ClaimableTitleSerializer(serializers.ModelSerializer):

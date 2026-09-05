@@ -4538,7 +4538,7 @@ paths:
         schema:
           type: string
       - in: query
-        name: has_open_positions
+        name: has_open_kin_slots
         schema:
           type: boolean
       - in: query
@@ -5311,6 +5311,52 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/PerspectiveEntry'
+          description: ''
+  /api/character-creation/vacancies/:
+    get:
+      operationId: character_creation_vacancies_list
+      description: Openings the draft may take, priced for it (#3648). ``?draft=``
+        is required.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGVacancy'
+          description: ''
+  /api/character-creation/vacancies/{id}/:
+    get:
+      operationId: character_creation_vacancies_retrieve
+      description: Openings the draft may take, priced for it (#3648). ``?draft=``
+        is required.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Vacancy.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGVacancy'
           description: ''
   /api/character-sheets/{id}/:
     get:
@@ -30538,7 +30584,7 @@ paths:
         schema:
           type: string
       - in: query
-        name: has_open_positions
+        name: has_open_kin_slots
         schema:
           type: boolean
       - in: query
@@ -42258,12 +42304,12 @@ components:
           items:
             type: integer
           readOnly: true
-        named_family_kind:
-          type: integer
+        family_templates:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
           readOnly: true
-          nullable: true
-          description: Kind a player-named family gets; required when naming is allowed
-            (#3617).
         slots:
           type: array
           items:
@@ -42275,11 +42321,11 @@ components:
       - allows_no_family
       - cg_point_cost
       - claimable_kind_ids
+      - family_templates
       - frame_narrative
       - id
       - is_active
       - name
-      - named_family_kind
       - slots
       - sort_order
       - trust_required
@@ -42358,6 +42404,71 @@ components:
       - id
       - is_tradition_technique
       - name
+    CGVacancy:
+      type: object
+      description: An opening reachable from the draft, priced for it (#3648).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Third daughter, Enforcer, Household guard.
+        description:
+          type: string
+          readOnly: true
+          description: Who fits here and what they do for the family.
+        basis:
+          type: string
+          readOnly: true
+        importance:
+          type: integer
+          readOnly: true
+          description: How much the family cares about the holder. 0 = would not notice.
+        presumed_importance:
+          type: integer
+          readOnly: true
+          description: What outsiders assume the family thinks of the holder.
+        cost:
+          type: integer
+          readOnly: true
+        rank_name:
+          type: string
+          readOnly: true
+          default: ''
+        count_remaining:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Openings left; blank = a standing vacancy that is always open.
+        organization:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        kin_pool:
+          allOf:
+          - $ref: '#/components/schemas/KinSlotPool'
+          readOnly: true
+          nullable: true
+        kin_node:
+          allOf:
+          - $ref: '#/components/schemas/KinSlot'
+          readOnly: true
+          nullable: true
+      required:
+      - basis
+      - cost
+      - count_remaining
+      - description
+      - id
+      - importance
+      - kin_node
+      - kin_pool
+      - name
+      - organization
+      - presumed_importance
+      - rank_name
     CanHonor:
       type: object
       description: |-
@@ -43744,6 +43855,12 @@ components:
         claimed_kin_pool:
           type: integer
           readOnly: true
+        selected_vacancy:
+          type: integer
+          readOnly: true
+        served_house:
+          type: integer
+          readOnly: true
         defer_parents:
           type: boolean
         second_parent_species:
@@ -43850,6 +43967,8 @@ components:
       - selected_path
       - selected_species
       - selected_tradition
+      - selected_vacancy
+      - served_house
       - stage_completion
       - stage_errors
       - starting_technique_picks
@@ -43946,6 +44065,14 @@ components:
           writeOnly: true
           nullable: true
         claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_vacancy_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        served_house_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -50772,9 +50899,16 @@ components:
           readOnly: true
           description: Particle a married/adopted/legitimized member wears; '' when
             none.
+        inherited:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          description: Aspects/features/liege a house materialized on this family
+            carries (#3648).
       required:
       - born_particle
       - id
+      - inherited
       - kind
       - name
       - taken_in_particle
@@ -53690,6 +53824,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/HouseStature'
           nullable: true
+        vacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyOffer'
       required:
       - aspects
       - domains
@@ -53699,6 +53837,7 @@ components:
       - open_crises
       - stature
       - titles
+      - vacancies
       - vassal_names
     HouseDomain:
       type: object
@@ -55433,6 +55572,101 @@ components:
           - $ref: '#/components/schemas/NullEnum'
       required:
       - label
+    KinSlot:
+      type: object
+      description: An open appable position (CG slot browser).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Display name for unbound nodes (sheet-bound nodes read the
+            sheet).
+        name_locked:
+          type: boolean
+          readOnly: true
+          description: Whether a claimant must keep the pre-authored name.
+        description:
+          type: string
+          readOnly: true
+          description: Blurb for described/NPC tiers.
+        age_min:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'Slot constraint: minimum age for a claimant.'
+        age_max:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'Slot constraint: maximum age for a claimant.'
+        allowed_genders:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        family:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Current primary surname family — a denorm maintained by the
+            membership services; FamilyMembership rows carry the history and basis.
+      required:
+      - age_max
+      - age_min
+      - allowed_genders
+      - description
+      - family
+      - id
+      - name
+      - name_locked
+    KinSlotPool:
+      type: object
+      description: An open slot pool (CG slot browser).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        family:
+          type: integer
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          description: Player-facing pool blurb, e.g. "children of the current nobles".
+        count_remaining:
+          type: integer
+          readOnly: true
+          description: Slots left in this pool; claiming decrements.
+        age_min:
+          type: integer
+          readOnly: true
+          nullable: true
+        age_max:
+          type: integer
+          readOnly: true
+          nullable: true
+        allowed_genders:
+          type: array
+          items:
+            type: string
+          readOnly: true
+        parent_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - age_max
+      - age_min
+      - allowed_genders
+      - count_remaining
+      - description
+      - family
+      - id
+      - parent_names
     Kind4adEnum:
       enum:
       - update
@@ -60299,6 +60533,14 @@ components:
         is_active:
           type: boolean
           readOnly: true
+        vacancy_name:
+          type: string
+          readOnly: true
+          default: ''
+        presumed_importance:
+          type: integer
+          readOnly: true
+          default: 0
       required:
       - id
       - is_active
@@ -60307,8 +60549,10 @@ components:
       - organization_name
       - persona
       - persona_name
+      - presumed_importance
       - rank
       - title
+      - vacancy_name
     OrganizationMembershipOffer:
       type: object
       properties:
@@ -66381,6 +66625,14 @@ components:
           writeOnly: true
           nullable: true
         claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_vacancy_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        served_house_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -81928,6 +82180,23 @@ components:
           type: integer
       required:
       - story
+    VacancyOffer:
+      type: object
+      description: An open vacancy, as the house block offers it (#3648).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        basis:
+          type: string
+        presumed_importance:
+          type: integer
+      required:
+      - basis
+      - id
+      - name
+      - presumed_importance
     ValenceEnum:
       enum:
       - 1

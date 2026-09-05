@@ -324,8 +324,8 @@ export async function getDraftCGPoints(draftId: number): Promise<CGPointsBreakdo
 }
 
 // NEW: Family Tree Management
-export async function getFamiliesWithOpenPositions(areaId?: number): Promise<Family[]> {
-  const params = new URLSearchParams({ has_open_positions: 'true' });
+export async function getFamiliesWithOpenKinSlots(areaId?: number): Promise<Family[]> {
+  const params = new URLSearchParams({ has_open_kin_slots: 'true' });
   if (areaId) {
     params.append('area_id', areaId.toString());
   }

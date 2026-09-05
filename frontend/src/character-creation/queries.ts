@@ -29,7 +29,7 @@ import {
   getFacets,
   getFacetTree,
   getFamilies,
-  getFamiliesWithOpenPositions,
+  getFamiliesWithOpenKinSlots,
   getClaimableTitles,
   getFamilySlots,
   getHouseClaim,
@@ -333,10 +333,10 @@ export function useDraftCGPoints(draftId: number | undefined) {
 }
 
 // NEW: Family Tree hooks
-export function useFamiliesWithOpenPositions(areaId?: number) {
+export function useFamiliesWithOpenKinSlots(areaId?: number) {
   return useQuery({
     queryKey: characterCreationKeys.familiesWithOpenPositions(areaId),
-    queryFn: () => getFamiliesWithOpenPositions(areaId),
+    queryFn: () => getFamiliesWithOpenKinSlots(areaId),
   });
 }
 
