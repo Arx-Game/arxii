@@ -475,7 +475,7 @@ export function OrgPageInner({
 
 /** Resolves this tab's browsing identity (#3479) to an ObjectDB pk for the
  * Board tab's post/remove affordance. Lives only in the route-level export
- * below — `OrgPageInner` itself stays redux-free. */
+ * below; `OrgPageInner` itself stays redux-free. */
 function useActiveCharacterId(): number | null {
   const { entry } = useBrowsingIdentity();
   return entry?.character_id ?? null;

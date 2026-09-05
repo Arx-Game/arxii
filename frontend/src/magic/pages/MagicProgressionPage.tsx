@@ -3,7 +3,7 @@
  *
  * Shows every progression stage the active persona has access to, rendered
  * as StageSection cards. The active character is this tab's browsing identity
- * (#3479) — never inferred from "the first row of some unordered list."
+ * (#3479), never inferred from "the first row of some unordered list."
  */
 
 import { Skeleton } from '@/components/ui/skeleton';

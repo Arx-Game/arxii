@@ -31,7 +31,7 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
-// Mock the Redux selector — #3479: useBrowsingIdentity() reads
+// Mock the Redux selector, #3479: useBrowsingIdentity() reads
 // `browsingEntryId` (id 1, matching the mocked roster entry above), not
 // `active` (a name) any more.
 vi.mock('@/store/hooks', () => ({

@@ -256,7 +256,7 @@ function setupHooks({
   // Seed the active session in Redux so useAppSelector returns a name (used
   // by the room-characters/action-dispatch reads that stay session-scoped),
   // AND this tab's browsing identity (#3479) so useBrowsingIdentity()
-  // resolves the same character — every call in this file passes either
+  // resolves the same character: every call in this file passes either
   // ACTIVE_NAME or null, matching the single roster entry's id (1) above.
   if (active) {
     store.dispatch(startSession(active));
@@ -418,6 +418,61 @@ describe('WardrobePage', () => {
       await user.click(screen.getByRole('button', { name: /^wear$/i }));
 
       expect(executeActionMock).toHaveBeenCalledWith(ACTIVE_NAME, 'equip', { target_id: 1011 });
+    });
+
+    it("#3479: a live session and this tab's browsing identity can diverge -- equip targets the live session, not the browsing character", async () => {
+      const user = userEvent.setup();
+      const aria = makeRosterEntry(); // id 1, name 'Aria', character_id 42
+      const bree = makeRosterEntry({ id: 2, name: 'Bree', character_id: 99 });
+      vi.mocked(rosterQueries.useMyRosterEntriesQuery).mockReturnValue(
+        stubQuery([aria, bree]) as unknown as ReturnType<
+          typeof rosterQueries.useMyRosterEntriesQuery
+        >
+      );
+      vi.mocked(outfitsHooks.useOutfits).mockReturnValue(stubQuery([]));
+      // Inventory is keyed by the resolved characterId, so this proves the
+      // page is displaying ARIA's wardrobe (42), not Bree's (99).
+      vi.mocked(inventoryHooks.useInventory).mockImplementation(
+        (characterId) =>
+          stubQuery(
+            characterId === 42 ? [makeItem(11, 'Silk Tunic')] : []
+          ) as unknown as ReturnType<typeof inventoryHooks.useInventory>
+      );
+      vi.mocked(inventoryHooks.useEquippedItems).mockReturnValue(
+        stubQuery([]) as unknown as ReturnType<typeof inventoryHooks.useEquippedItems>
+      );
+      vi.mocked(outfitsHooks.useCreateOutfit).mockReturnValue(stubMutation());
+      vi.mocked(outfitsHooks.useUpdateOutfit).mockReturnValue(
+        stubMutation() as unknown as ReturnType<typeof outfitsHooks.useUpdateOutfit>
+      );
+      vi.mocked(outfitsHooks.useDeleteOutfit).mockReturnValue(
+        stubMutation() as unknown as ReturnType<typeof outfitsHooks.useDeleteOutfit>
+      );
+      vi.mocked(outfitsHooks.useCreateOutfitSlot).mockReturnValue(
+        stubMutation() as unknown as ReturnType<typeof outfitsHooks.useCreateOutfitSlot>
+      );
+      vi.mocked(outfitsHooks.useDeleteOutfitSlot).mockReturnValue(
+        stubMutation() as unknown as ReturnType<typeof outfitsHooks.useDeleteOutfitSlot>
+      );
+
+      // This tab is LIVE in Bree's game session (has an open socket for her)
+      // but browsing Aria's wardrobe ambiently -- the two are allowed to
+      // diverge now that browsing identity is per-tab and separate from the
+      // live session (#3479 fix round 1).
+      store.dispatch(startSession('Bree'));
+      store.dispatch(setBrowsingIdentity(1)); // Aria's roster entry id
+
+      renderWithProviders(<WardrobePage />);
+
+      // Displays Aria's wardrobe, not Bree's.
+      expect(await screen.findByText('Silk Tunic')).toBeInTheDocument();
+
+      await openDetailPanel(user, 'Silk Tunic');
+      await user.click(screen.getByRole('button', { name: /^wear$/i }));
+
+      // But the WS action targets Bree -- the live-session character this
+      // tab actually has a socket for -- never Aria, the browsing character.
+      expect(executeActionMock).toHaveBeenCalledWith('Bree', 'equip', { target_id: 1011 });
     });
 
     it('dispatches unequip using game_object_id for an equipped item', async () => {

@@ -112,7 +112,7 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
     if (entry.id === entryId) return;
     // Write this tab's own browsing identity FIRST (#3479) so the picking
     // tab's UI (this docked highlight, every ambient page reading
-    // useBrowsingIdentity) updates immediately — it must not wait on the
+    // useBrowsingIdentity) updates immediately: it must not wait on the
     // select mutation's round trip or the account refetch it triggers.
     writeTabIdentity(entry.id);
     dispatch(setBrowsingIdentity(entry.id));

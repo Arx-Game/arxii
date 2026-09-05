@@ -11,7 +11,7 @@ export function TidingsPage() {
   // This route is NOT behind ProtectedRoute (Tidings is public), so a hard
   // reload lands here before `useAccountQuery`'s hydration effect has had a
   // chance to mirror the durable selection into this tab's browsing identity
-  // (#3479 — the id comes straight off `gameSlice.browsingEntryId`, no
+  // (#3479: the id comes straight off `gameSlice.browsingEntryId`, no
   // separate roster-query resolution step needed). `authLoading` covers that
   // hydration window.
   const { entryId: viewerEntryId } = useBrowsingIdentity();

@@ -14,7 +14,7 @@ import type { Thread, TargetKind } from '../types';
  *
  * Shows the active character's resonance balances and thread list grouped
  * by target_kind. The active character is this tab's browsing identity
- * (#3479) — never inferred from "the first row of some unordered list."
+ * (#3479), never inferred from "the first row of some unordered list."
  */
 export function ThreadHubPage() {
   const navigate = useNavigate();

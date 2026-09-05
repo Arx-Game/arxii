@@ -1,5 +1,5 @@
 /**
- * UnreadNarrativeBadge tests (#3412 hygiene fold-in; #3479 retarget) — the
+ * UnreadNarrativeBadge tests (#3412 hygiene fold-in; #3479 retarget): the
  * badge routes to this tab's browsing-identity character's sheet
  * (gameSlice.browsingEntryId) rather than always the first roster entry, and
  * no longer appends the dead `#messages` fragment.

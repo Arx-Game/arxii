@@ -62,23 +62,24 @@ import { useOutfits } from '../hooks/useOutfits';
 import type { ContainerAccessPolicy, ItemInstance } from '../types';
 
 export function WardrobePage() {
-  // This tab's browsing identity (#3479) drives both what's displayed AND
-  // which character the WS actions below dispatch to — Wardrobe is an
-  // ambient page (ADR-0247's do-not-touch list is `game/components/*`,
-  // `scenes/*`, `combat/*`, `battles/*`, the weather widget, CommandInput,
-  // PresencePanel; this page isn't on it), so it no longer reads
-  // `state.game.active`/`activeEntryId` at all.
-  const {
-    entryId: browsingEntryId,
-    name: activeCharacter,
-    entry: activeEntry,
-  } = useBrowsingIdentity();
+  // This tab's browsing identity (#3479) drives WHAT'S DISPLAYED (whose
+  // outfits/inventory), but NOT which character WS actions dispatch to.
+  // `useGameSocket().executeAction` looks up `sockets[characterName]`, a
+  // live-session socket that exists only for a character THIS TAB has
+  // puppeted (`startSession`) - it silently no-ops for any other name. So
+  // the browsing identity and this tab's live-session character
+  // (`state.game.active`) are read separately: the browsing identity drives
+  // display, `activeCharacter` (the live session name) stays the target for
+  // every `executeAction` call and the room-characters lookup below, exactly
+  // as ADR-0247 requires for live-session concerns.
+  const { entryId: browsingEntryId, entry: activeEntry } = useBrowsingIdentity();
+  const activeCharacter = useAppSelector((state) => state.game.active);
   const { isLoading: entriesLoading } = useMyRosterEntriesQuery();
   // #3412 review fix (#3479 update): this page is behind ProtectedRoute, so the
   // exposure window is narrow (a render or two before `useAccountQuery`'s
   // hydration effect mirrors the durable selection into this tab's browsing
   // identity, plus the shorter gap until the roster query resolves the full
-  // entry) — but it's real, and the fix is the same skeleton-not-empty-state
+  // entry), but it's real, and the fix is the same skeleton-not-empty-state
   // pattern as TidingsFeed/TidingsPage.
   const { isLoading: authLoading } = useAuthStatus();
   const isResolvingActiveCharacter = authLoading || (browsingEntryId != null && entriesLoading);

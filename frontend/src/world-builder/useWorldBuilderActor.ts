@@ -2,7 +2,7 @@
  * useWorldBuilderActor (#3283) — the account's acting character for staff
  * builder dispatch. Ownership (IsCharacterOwner), not puppeting, is what the
  * dispatch endpoint checks, so this prefers this tab's browsing identity
- * (#3479) but falls back to the account's first owned character — which
+ * (#3479) but falls back to the account's first owned character, which
  * makes a freshly minted staff builder character usable without entering
  * the game.
  */

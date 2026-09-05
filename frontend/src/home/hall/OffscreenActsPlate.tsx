@@ -2,7 +2,7 @@
  * "Offscreen Acts" plate (#3412 slice 3, task 4/5) — the Hall's link-out to
  * the things the docked character can still do without a live `/game`
  * session: write in the journal, log goal progress. Renders only when a
- * character is docked (#3479 `useBrowsingIdentity`'s `entryId`) — an account with nothing
+ * character is docked (#3479 `useBrowsingIdentity`'s `entryId`); an account with nothing
  * docked gets no plate at all, mirroring `CharactersBand`'s docked-card meta
  * line.
  *

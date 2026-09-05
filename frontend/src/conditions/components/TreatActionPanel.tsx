@@ -34,7 +34,7 @@ export function TreatActionPanel({ sceneId, targetPersonaId }: Props) {
   const [offeredRequestId, setOfferedRequestId] = useState<number | null>(null);
 
   // Resolve the helper's character ObjectDB pk + primary persona from this
-  // tab's browsing identity (#3479) — the same resolution ActionPanel and
+  // tab's browsing identity (#3479), the same resolution ActionPanel and
   // PersonaContextMenu perform.  characterId backs the X-Character-ID header
   // on the discovery fetch; initiatorPersonaId goes on the action-request body.
   const { entry: activeEntry } = useBrowsingIdentity();

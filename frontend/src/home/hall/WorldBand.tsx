@@ -34,7 +34,7 @@ function pad(n: number): string {
 function TimePlate() {
   const { data: clock } = useClockQuery();
   // Live-session room lookup stays keyed to THIS tab's own `active`/`sessions`
-  // (ADR-0247) — unrelated to browsing identity below.
+  // (ADR-0247), unrelated to browsing identity below.
   const { sessions, active } = useAppSelector((state) => state.game);
   const sessionRoomId = active ? (sessions[active]?.room?.id ?? null) : null;
   const { entryId: browsingEntryId } = useBrowsingIdentity();

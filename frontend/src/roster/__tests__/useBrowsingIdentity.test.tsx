@@ -1,5 +1,5 @@
 /**
- * useBrowsingIdentity tests (#3479) — resolves `gameSlice.browsingEntryId`
+ * useBrowsingIdentity tests (#3479): resolves `gameSlice.browsingEntryId`
  * against the roster-entries query into `{ entryId, name, entry }`.
  */
 import { render, screen } from '@testing-library/react';

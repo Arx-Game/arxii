@@ -6,7 +6,7 @@
  * account owns, not just one puppet; see `narrative/CLAUDE.md`).
  *
  * Routing (#3412 hygiene fold-in, #3479 update): clicking routes to this
- * tab's browsing-identity character's sheet — previously this always linked
+ * tab's browsing-identity character's sheet, previously this always linked
  * to `myEntries[0]`, so switching to an alt via the docked chip left the
  * badge pointing at the wrong sheet.
  * With no selection, falls back to the roster (an "account fallback": there

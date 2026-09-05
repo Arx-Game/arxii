@@ -17,7 +17,7 @@ vi.mock('@/roster/queries', () => ({
   useSelectCharacterMutation: () => ({ mutate: mockSelectMutate, isPending: false }),
   // useBrowsingIdentity() calls this internally; CharactersBand only reads
   // `entryId` off the hook (not `entry`/`name`), so an empty roster here is
-  // fine — the docked-highlight comparison is id-to-id straight off Redux.
+  // fine: the docked-highlight comparison is id-to-id straight off Redux.
   useMyRosterEntriesQuery: () => ({ data: [] }),
 }));
 
