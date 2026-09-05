@@ -292,6 +292,7 @@ describe('CombatTacticalMap', () => {
       intensity_modifier: null,
       control_modifier: null,
       current_position: { id: 101, name: 'North Wall' },
+      aftermath: null,
     },
     {
       id: 3,
@@ -310,6 +311,7 @@ describe('CombatTacticalMap', () => {
       intensity_modifier: null,
       control_modifier: null,
       current_position: { id: 101, name: 'North Wall' },
+      aftermath: null,
     },
   ];
   const overlayOpponents = [
