@@ -3,7 +3,7 @@
 from datetime import timedelta
 from unittest.mock import patch
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from django.utils import timezone
 import pytest
 
@@ -991,7 +991,6 @@ class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
             _block_if_participant_mid_audere_majora_crossing(encounter)
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class UpdateEncounterSettingsTests(TestCase):
     """Tests for update_encounter_settings (#3383, escalation curve tri-state #3552)."""
 

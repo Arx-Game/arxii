@@ -178,7 +178,7 @@ actions, backends, and service functions.
   `encounter stakes|risk|pace|timer|curve <value>` (#3383, `curve` #3552) all dispatch the
   single `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying
   exactly one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes`/
-  `escalation_curve` — the telnet face of the web `CombatEncounterViewSet.update_settings`
+  `escalation_curve` - the telnet face of the web `CombatEncounterViewSet.update_settings`
   PATCH action (`PATCH /api/combat/{id}/settings/`); both converge on
   `world.combat.services.update_encounter_settings`. `curve <name|none>` passes the raw name
   (or the literal `none`) through as `escalation_curve`; the action layer resolves it

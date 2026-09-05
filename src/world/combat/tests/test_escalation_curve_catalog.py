@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
@@ -11,7 +11,6 @@ from world.combat.factories import EscalationCurveFactory
 from world.gm.factories import GMProfileFactory
 
 
-@override_settings(SEED_SAMPLE_CONTENT=True)  # EscalationCurveFactory gates on #2698
 class EscalationCurveCatalogTests(TestCase):
     @classmethod
     def setUpTestData(cls) -> None:

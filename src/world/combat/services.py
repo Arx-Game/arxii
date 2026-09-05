@@ -11483,6 +11483,9 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
          Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
+       - After the resolution pass, a ``{name} holds back.`` line is broadcast
+         for every ACTIVE PC in the order with no declaration this round,
+         under TIMED and MANUAL pace only (#3552).
     4. Post-pass: resolve deferred RoundChallengeDeclarations in initiative
        order (reusing the round's resolution_order). Each participant's
        eligibility is re-validated via get_available_actions; ineligible
