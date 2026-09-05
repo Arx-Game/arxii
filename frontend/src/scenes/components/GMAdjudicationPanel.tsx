@@ -49,6 +49,12 @@
  * `run_beat` instantiates the selected one's authored session prep
  * (opponent lines / staged situation-challenge templates) into this scene,
  * setting `Scene.running_beat` (`actions/definitions/gm_story.py`).
+ *
+ * #3557 adds a `tabs` prop: during an active encounter SceneDetailPage mounts
+ * this panel twice, once in CombatRail's GM tab with COMBAT_GM_TOOL_TABS and
+ * once in the folded header with NON_COMBAT_GM_TOOL_TABS, so every lever has
+ * exactly one home while a fight is running. Tab bodies are single-sourced
+ * here; only the visible set differs per mount.
  */
 
 import { useEffect, useState } from 'react';
@@ -1398,25 +1404,116 @@ function RunBeatTab({ characterId }: { characterId: number }) {
 // Panel shell
 // ---------------------------------------------------------------------------
 
+/**
+ * Every tool tab, in header order. A mount site narrows this with the `tabs`
+ * prop (#3557): during an active encounter CombatRail's GM tab hosts
+ * COMBAT_GM_TOOL_TABS and the header panel hosts the rest, so each lever has
+ * exactly one home while a fight is running.
+ */
+export const GM_TOOL_TABS = [
+  'check',
+  'callforcheck',
+  'award',
+  'condition',
+  'situation',
+  'dramaticbeat',
+  'summon',
+  'grantitem',
+  'stage',
+  'traps',
+  'runbeat',
+] as const;
+
+export type GMToolTab = (typeof GM_TOOL_TABS)[number];
+
+/** The tools a GM reaches for mid-fight; CombatRail's GM tab mounts exactly these. */
+export const COMBAT_GM_TOOL_TABS: readonly GMToolTab[] = ['condition', 'dramaticbeat', 'traps'];
+
+/** What the header panel keeps while an encounter is active. */
+export const NON_COMBAT_GM_TOOL_TABS: readonly GMToolTab[] = GM_TOOL_TABS.filter(
+  (tab) => !COMBAT_GM_TOOL_TABS.includes(tab)
+);
+
+const TAB_LABELS: Record<GMToolTab, string> = {
+  check: 'Call Check',
+  callforcheck: 'Call For Check',
+  award: 'Award',
+  condition: 'Condition',
+  situation: 'Situation',
+  dramaticbeat: 'Dramatic Beat',
+  summon: 'Summon',
+  grantitem: 'Grant Item',
+  stage: 'Stage',
+  traps: 'Traps',
+  runbeat: 'Run Beat',
+};
+
 interface GMAdjudicationPanelProps {
   scene: SceneDetail | undefined;
+  /** Which tools this mount site hosts, in order. Defaults to every tab. */
+  tabs?: readonly GMToolTab[];
+  /** Card title; the rail's GM tab overrides it so the two mounts read differently. */
+  title?: string;
 }
 
-export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
+export function GMAdjudicationPanel({
+  scene,
+  tabs = GM_TOOL_TABS,
+  title = 'GM Tools',
+}: GMAdjudicationPanelProps) {
   const characterId = useActiveCharacterId();
   const [targetCharacterId, setTargetCharacterId] = useState<number | null>(null);
 
-  if (!scene?.viewer_can_gm || characterId === null) {
+  if (!scene?.viewer_can_gm || characterId === null || tabs.length === 0) {
     return null;
   }
 
   const personas = scene.personas ?? [];
   const runningRisk = scene.running_beat?.risk ?? null;
 
+  const renderTabBody = (tab: GMToolTab) => {
+    switch (tab) {
+      case 'check':
+        return (
+          <CallCheckTab
+            characterId={characterId}
+            targetCharacterId={targetCharacterId}
+            runningRisk={runningRisk}
+          />
+        );
+      case 'callforcheck':
+        return <CallForCheckTab characterId={characterId} personas={personas} />;
+      case 'award':
+        return <AwardTab characterId={characterId} targetCharacterId={targetCharacterId} />;
+      case 'condition':
+        return <ConditionTab characterId={characterId} targetCharacterId={targetCharacterId} />;
+      case 'situation':
+        return <SituationTab characterId={characterId} runningRisk={runningRisk} />;
+      case 'dramaticbeat':
+        return <DramaticBeatTab characterId={characterId} targetCharacterId={targetCharacterId} />;
+      case 'summon':
+        return <SummonTab characterId={characterId} targetCharacterId={targetCharacterId} />;
+      case 'grantitem':
+        return (
+          <GrantItemTab
+            characterId={characterId}
+            targetCharacterId={targetCharacterId}
+            personas={personas}
+          />
+        );
+      case 'stage':
+        return <StageTab characterId={characterId} targetCharacterId={targetCharacterId} />;
+      case 'traps':
+        return <TrapsTab characterId={characterId} />;
+      case 'runbeat':
+        return <RunBeatTab characterId={characterId} />;
+    }
+  };
+
   return (
     <Card data-testid="gm-adjudication-panel">
       <CardHeader>
-        <CardTitle className="text-base">GM Tools</CardTitle>
+        <CardTitle className="text-base">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <ParticipantPicker
@@ -1424,83 +1521,19 @@ export function GMAdjudicationPanel({ scene }: GMAdjudicationPanelProps) {
           targetCharacterId={targetCharacterId}
           onChange={setTargetCharacterId}
         />
-        <Tabs defaultValue="check">
+        <Tabs defaultValue={tabs[0]}>
           <TabsList>
-            <TabsTrigger value="check" data-testid="gm-tab-check">
-              Call Check
-            </TabsTrigger>
-            <TabsTrigger value="callforcheck" data-testid="gm-tab-callforcheck">
-              Call For Check
-            </TabsTrigger>
-            <TabsTrigger value="award" data-testid="gm-tab-award">
-              Award
-            </TabsTrigger>
-            <TabsTrigger value="condition" data-testid="gm-tab-condition">
-              Condition
-            </TabsTrigger>
-            <TabsTrigger value="situation" data-testid="gm-tab-situation">
-              Situation
-            </TabsTrigger>
-            <TabsTrigger value="dramaticbeat" data-testid="gm-tab-dramaticbeat">
-              Dramatic Beat
-            </TabsTrigger>
-            <TabsTrigger value="summon" data-testid="gm-tab-summon">
-              Summon
-            </TabsTrigger>
-            <TabsTrigger value="grantitem" data-testid="gm-tab-grantitem">
-              Grant Item
-            </TabsTrigger>
-            <TabsTrigger value="stage" data-testid="gm-tab-stage">
-              Stage
-            </TabsTrigger>
-            <TabsTrigger value="traps" data-testid="gm-tab-traps">
-              Traps
-            </TabsTrigger>
-            <TabsTrigger value="runbeat" data-testid="gm-tab-runbeat">
-              Run Beat
-            </TabsTrigger>
+            {tabs.map((tab) => (
+              <TabsTrigger key={tab} value={tab} data-testid={`gm-tab-${tab}`}>
+                {TAB_LABELS[tab]}
+              </TabsTrigger>
+            ))}
           </TabsList>
-          <TabsContent value="check">
-            <CallCheckTab
-              characterId={characterId}
-              targetCharacterId={targetCharacterId}
-              runningRisk={runningRisk}
-            />
-          </TabsContent>
-          <TabsContent value="callforcheck">
-            <CallForCheckTab characterId={characterId} personas={personas} />
-          </TabsContent>
-          <TabsContent value="award">
-            <AwardTab characterId={characterId} targetCharacterId={targetCharacterId} />
-          </TabsContent>
-          <TabsContent value="condition">
-            <ConditionTab characterId={characterId} targetCharacterId={targetCharacterId} />
-          </TabsContent>
-          <TabsContent value="situation">
-            <SituationTab characterId={characterId} runningRisk={runningRisk} />
-          </TabsContent>
-          <TabsContent value="dramaticbeat">
-            <DramaticBeatTab characterId={characterId} targetCharacterId={targetCharacterId} />
-          </TabsContent>
-          <TabsContent value="summon">
-            <SummonTab characterId={characterId} targetCharacterId={targetCharacterId} />
-          </TabsContent>
-          <TabsContent value="grantitem">
-            <GrantItemTab
-              characterId={characterId}
-              targetCharacterId={targetCharacterId}
-              personas={personas}
-            />
-          </TabsContent>
-          <TabsContent value="stage">
-            <StageTab characterId={characterId} targetCharacterId={targetCharacterId} />
-          </TabsContent>
-          <TabsContent value="traps">
-            <TrapsTab characterId={characterId} />
-          </TabsContent>
-          <TabsContent value="runbeat">
-            <RunBeatTab characterId={characterId} />
-          </TabsContent>
+          {tabs.map((tab) => (
+            <TabsContent key={tab} value={tab}>
+              {renderTabBody(tab)}
+            </TabsContent>
+          ))}
         </Tabs>
       </CardContent>
     </Card>

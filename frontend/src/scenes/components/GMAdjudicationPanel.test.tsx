@@ -785,3 +785,37 @@ test('Condition tab Remove mode lists active instances then dispatches gm_remove
     })
   );
 });
+
+test('renders only the tabs a mount site lists, first one active (#3557)', () => {
+  render(<GMAdjudicationPanel scene={makeScene()} tabs={['condition', 'dramaticbeat', 'traps']} />);
+  expect(screen.getByTestId('gm-tab-condition')).toBeInTheDocument();
+  expect(screen.getByTestId('gm-tab-dramaticbeat')).toBeInTheDocument();
+  expect(screen.getByTestId('gm-tab-traps')).toBeInTheDocument();
+  expect(screen.queryByTestId('gm-tab-check')).not.toBeInTheDocument();
+  expect(screen.queryByTestId('gm-tab-award')).not.toBeInTheDocument();
+  expect(screen.getByTestId('gm-tab-condition')).toHaveAttribute('data-state', 'active');
+});
+
+test('renders all eleven tabs in header order when tabs is omitted (#3557)', () => {
+  render(<GMAdjudicationPanel scene={makeScene()} />);
+  const triggers = screen.getAllByRole('tab');
+  expect(triggers.map((t) => t.getAttribute('data-testid'))).toEqual([
+    'gm-tab-check',
+    'gm-tab-callforcheck',
+    'gm-tab-award',
+    'gm-tab-condition',
+    'gm-tab-situation',
+    'gm-tab-dramaticbeat',
+    'gm-tab-summon',
+    'gm-tab-grantitem',
+    'gm-tab-stage',
+    'gm-tab-traps',
+    'gm-tab-runbeat',
+  ]);
+  expect(screen.getByTestId('gm-tab-check')).toHaveAttribute('data-state', 'active');
+});
+
+test('shows the mount site title when given (#3557)', () => {
+  render(<GMAdjudicationPanel scene={makeScene()} title="Fight Tools" />);
+  expect(screen.getByText('Fight Tools')).toBeInTheDocument();
+});
