@@ -608,15 +608,21 @@ def _narrate_gm_condition(
     Only called when a note was given: a note-less apply stays silent and the GM
     narrates with the composer if they want to. The target is named by the face they
     are presenting (#981), never ``target.key``, when they have one. A condition
-    others cannot see routes the line to the target alone. The direct text send is
-    the telnet companion; ``record_interaction`` reaches only web clients. A
-    sheetless target (a prop, an unsheeted NPC) is named by its key; a hidden
-    condition on one records nothing, since there is no bearer to tell.
+    others cannot see routes the line to the target alone. The WebSocket payload
+    goes to the room, or to the target alone when the condition is hidden or the GM
+    has no location; the plain-text send is the telnet companion. ``record_interaction``
+    is not used here because ``push_interaction`` returns early for a persona whose
+    character has no location, which the Narrator never has. A sheetless target (a
+    prop, an unsheeted NPC) is named by its key; a hidden condition on one records
+    nothing, since there is no bearer to tell.
     """
-    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode, InteractionVisibility  # noqa: PLC0415
     from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        _send_to_objects,
+        create_interaction,
         get_active_scene,
-        record_interaction,
     )
     from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
     from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -628,15 +634,35 @@ def _narrate_gm_condition(
 
     label = target_persona.name if target_persona is not None else target.key
     narration = f"{label} is now {template.name}. {note}"
-    record_interaction(
-        character=actor,
+    visible = template.is_visible_to_others
+    narrator = get_or_create_narrator_persona()
+    scene = get_active_scene(actor.location)
+    interaction = create_interaction(
+        persona=narrator,
         content=narration,
         mode=InteractionMode.OUTCOME,
-        scene=get_active_scene(actor.location),
-        persona=get_or_create_narrator_persona(),
-        receivers=None if template.is_visible_to_others else [target_persona],
+        scene=scene,
+        receivers=None if visible else [target_persona],
+        visibility=InteractionVisibility.DEFAULT
+        if visible
+        else InteractionVisibility.PERCEIVED_ONLY,
     )
-    room = actor.location if template.is_visible_to_others else None
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+        receiver_persona_ids=[target_persona.pk] if not visible and target_persona else None,
+    )
+
+    room = actor.location if visible else None
+    if room is not None:
+        _broadcast_to_location(room, payload)
+    else:
+        _send_to_objects([target], payload)
+
     if room is not None:
         room.msg_contents(narration)
     else:

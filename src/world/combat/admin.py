@@ -123,6 +123,8 @@ class ThreatPoolEntryInline(admin.TabularInline):
         "defense_check_type",
         "weight",
         "targeting_mode",
+        "hit_narration",
+        "miss_narration",
     ]
 
 

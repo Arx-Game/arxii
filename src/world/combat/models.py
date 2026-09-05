@@ -508,7 +508,7 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
 
         super().clean()
-        errors: dict[str, str] = {}
+        errors: dict[str, str | list[str]] = {}
         if self.is_lock_applying and self.clash_break_free_force is None:
             errors["clash_break_free_force"] = (
                 "clash_break_free_force is required when is_lock_applying=True."
@@ -517,10 +517,16 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["sustained_duration_rounds"] = (
                 "sustained_duration_rounds is required when is_sustained_attack=True."
             )
+        try:
+            validate_outcome_narration(self.hit_narration, "hit_narration")
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
+        try:
+            validate_outcome_narration(self.miss_narration, "miss_narration")
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
         if errors:
             raise ValidationError(errors)
-        validate_outcome_narration(self.hit_narration, "hit_narration")
-        validate_outcome_narration(self.miss_narration, "miss_narration")
 
     class Meta:
         # Backs ``NaturalKeyConfig.fields = ["pool", "name"]`` — without it the
