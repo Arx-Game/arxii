@@ -51,11 +51,13 @@ This script performs that rewrite:
    not-yet-committed primary key inside its own ``CREATE TABLE`` — this is
    ordinary SQL, not a cycle in the Django-migration sense; verified against
    the existing SCC/self-loop distinction, not assumed).
-6. ``ManyToManyField`` operations are *not* part of this FK-ordering problem
-   (they create a separate through-table and Django's autodetector always
-   defers them regardless of cycles) — they are kept as ``AddField`` ops,
-   unchanged in content, just moved after all ``CreateModel`` ops like the
-   cyclic FK/O2O fields.
+6. ``ManyToManyField`` ops with an auto-created through table inline like
+   FKs (ADR-0272): ``CreateModel`` creates the through table itself, so the
+   only ordering need is target-before-owner, and the M2M edges join the
+   same topological graph. An M2M with an explicit ``through=`` model stays a
+   deferred ``AddField`` (its through model has its own ``CreateModel`` with
+   FKs to both ends and must exist first), as does an M2M that is a back
+   edge of its cycle.
 7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are
    folded into their model's ``CreateModel`` ``options`` (``constraints`` /
    ``indexes`` / ``unique_together``) when every field they reference is on
@@ -160,6 +162,9 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATION_PATH = REPO_ROOT / "src" / "world" / "migrations" / "0001_initial.py"
 APP_LABEL = "arxii"
 SINGLE_VALUED_RELATION_TYPES = {"ForeignKey", "OneToOneField"}
+M2M_TYPE = "ManyToManyField"
+# Relations that impose "target before owner" on creation order.
+ORDERING_RELATION_TYPES = SINGLE_VALUED_RELATION_TYPES | {M2M_TYPE}
 DEFAULT_CHUNK_COUNT = 100
 _ARXII_DEP_RE = re.compile(rf'\("{APP_LABEL}",\s*"([^"]+)"\)')
 _CHUNK_PART_RE = re.compile(r"\d{4}_(initial_part_\d+|g\d+_part_\d+)")
@@ -233,6 +238,9 @@ class AddFieldOp:
         self.field_type: str = self.field_call.func.attr
         field_kwargs = _kwargs_dict(self.field_call)
         self.to: str | None = _const_str(field_kwargs.get("to"))
+        # An explicit through model is created by its own CreateModel (with FKs to
+        # both ends); the M2M that names it stays deferred so it never precedes it.
+        self.explicit_through: bool = self.field_type == M2M_TYPE and "through" in field_kwargs
 
 
 _TAIL_PAYLOAD_KW = {
@@ -459,7 +467,7 @@ def build_graph(create_models: dict[str, CreateModelOp], add_fields: list[AddFie
             if not isinstance(field_call, ast.Call):
                 continue
             ftype = field_call.func.attr
-            if ftype not in SINGLE_VALUED_RELATION_TYPES:
+            if ftype not in ORDERING_RELATION_TYPES:
                 continue
             fkwargs = _kwargs_dict(field_call)
             tkey = target_key(_const_str(fkwargs.get("to")))
@@ -468,7 +476,7 @@ def build_graph(create_models: dict[str, CreateModelOp], add_fields: list[AddFie
             edges.add((owner_key, tkey))
 
     for af in add_fields:
-        if af.field_type not in SINGLE_VALUED_RELATION_TYPES:
+        if af.field_type not in ORDERING_RELATION_TYPES or af.explicit_through:
             continue
         tkey = target_key(af.to)
         if tkey is None or tkey == af.model_key:
@@ -745,21 +753,22 @@ def _analyze(
     non_trivial_sccs = {s for s, members in scc_members.items() if len(members) > 1}
 
     deferred_field_count = 0
+    deferred_m2m_count = 0
     inlined_field_count = 0
+    inlined_m2m_count = 0
     self_ref_count = 0
 
-    # Fold every currently-deferred FK/O2O AddField into its owner's
-    # CreateModel unless it is a genuine intra-SCC-cycle edge; leave
-    # ManyToManyField AddField ops untouched (always deferred, matching
-    # Django's own convention — they build a separate through-table, not
-    # part of this FK ordering problem).
+    # Fold every currently-deferred relational AddField into its owner's
+    # CreateModel unless it is a back edge of its cycle's chosen order or an
+    # M2M with an explicit through model. Auto-through M2Ms inline like FKs:
+    # CreateModel creates the through table itself, so target-before-owner is
+    # the only ordering need and the topological order provides it.
     remaining_add_field_ops: list[AddFieldOp] = []
     for af in add_fields:
-        if af.field_type == "ManyToManyField":
-            # Always a separate through-table op; Django's own autodetector
-            # never inlines M2M into CreateModel either. Not part of the FK
-            # ordering problem this script solves - left untouched.
+        is_m2m = af.field_type == M2M_TYPE
+        if af.explicit_through:
             remaining_add_field_ops.append(af)
+            deferred_m2m_count += 1
             continue
 
         tkey = target_key(af.to)
@@ -769,9 +778,11 @@ def _analyze(
             # Self-referential FK/O2O: the table being created can reference
             # its own (not-yet-committed) rows in the same CREATE TABLE -
             # ordinary SQL, not a real ordering cycle. Always safe to inline.
+            # A self-referential auto-through M2M is the same.
             self_ref_count += 1
             owner_op.extra_field_entries.append(_field_entry_from_addfield(af))
             inlined_field_count += 1
+            inlined_m2m_count += is_m2m
             continue
 
         if (
@@ -781,11 +792,14 @@ def _analyze(
             and position[tkey] > position[af.model_key]
         ):
             # A back edge of the cycle's chosen order: the target is created
-            # after the owner, so this FK is one of the few that truly must
-            # stay deferred. Cycle edges whose target comes first inline like
-            # any other (the table exists by then).
+            # after the owner, so this relation is one of the few that truly
+            # must stay deferred. Cycle edges whose target comes first inline
+            # like any other (the table exists by then).
             remaining_add_field_ops.append(af)
-            deferred_field_count += 1
+            if is_m2m:
+                deferred_m2m_count += 1
+            else:
+                deferred_field_count += 1
             continue
 
         # Everything else: target is external/settings-based (tkey is None,
@@ -795,6 +809,7 @@ def _analyze(
         # inline either way.
         owner_op.extra_field_entries.append(_field_entry_from_addfield(af))
         inlined_field_count += 1
+        inlined_m2m_count += is_m2m
 
     deferred_by_model: dict[str, set[str]] = defaultdict(set)
     for af in remaining_add_field_ops:
@@ -810,7 +825,8 @@ def _analyze(
         "self_ref_inlined": self_ref_count,
         "inlined_total": inlined_field_count,
         "deferred_addfield_cycle": deferred_field_count,
-        "deferred_addfield_m2m": sum(1 for af in add_fields if af.field_type == "ManyToManyField"),
+        "deferred_addfield_m2m": deferred_m2m_count,
+        "inlined_m2m": inlined_m2m_count,
         "tail_ops_folded": folded_count,
         "tail_ops": len(tail_ops),
         "create_model_ops": len(create_order),

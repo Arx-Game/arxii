@@ -88,7 +88,7 @@ just verify-regeneration          # replay into a scratch DB, build a second fro
 What a regeneration does: snapshots the outgoing chain's names into
 `world/migrations/_generations.py` (generated, underscore-prefixed so Django's
 loader does not treat it as a migration), deletes every migration file, runs our
-`makemigrations` for a fresh initial, inlines FKs topologically and folds
+`makemigrations` for a fresh initial, inlines FKs and auto-through M2Ms topologically and folds
 constraints/indexes/`unique_together` into `CreateModel`
 (`tools/optimize_initial_migration.py`), chunks into 100 files (a chunk of pure
 `CreateModel`s subclasses `BatchedCreateModelMigration`, which renders the project

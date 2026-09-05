@@ -16,9 +16,11 @@ then three tails), every one carries `replaces` naming the whole previous
 generation (imported from the generated `world/migrations/_generations.py`), and
 the chain it produces is the schema's floor: one `CreateModel` per model in
 topological order with every non-cycle FK inlined
-(`tools/optimize_initial_migration.py`), each model's constraints, indexes and
-`unique_together` folded into its `CreateModel`, the cycle-breaking FKs and M2M
-throughs deferred (34 + 112 today), and three rendered tails for the raw SQL both
+(`tools/optimize_initial_migration.py`), auto-through M2M fields inlined the same
+way (`CreateModel` creates the through table itself), each model's constraints,
+indexes and `unique_together` folded into its `CreateModel`, only the back edges
+of each FK cycle and the explicit-`through` M2Ms deferred (14 + 19 today, where
+deferring every intra-cycle edge would have cost 82), and three rendered tails for the raw SQL both
 schema paths share (`tools/migration_tails.py`: partition rewrite, the
 database-only re-add of the columns the frozen partition SQL omits, materialized
 views). Every `RunPython` of the outgoing generation is dropped; nothing in a
