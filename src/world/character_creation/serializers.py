@@ -48,6 +48,7 @@ from world.societies.houses.models import (
     HouseTemplate,
     Title,
 )
+from world.societies.models import Organization, Vacancy
 from world.species.models import Language, Species
 from world.worship.models import WorshippedBeing
 from world.worship.serializers import WorshippedBeingRefSerializer
@@ -59,7 +60,13 @@ _UNSET = object()
 # Draft_data keys cleared when the selected Upbringing changes; mirrors
 # services.py's own ``_UPBRINGING_DRAFT_KEYS``, applied here for the
 # clear-selected-origin-template-to-None branch that services.py never sees.
-_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
+_UPBRINGING_DRAFT_KEYS = (
+    "origin_slots",
+    "origin_choices",
+    "new_family_name",
+    "family_template_id",
+    "family_aspect_picks",
+)
 
 
 class PerspectiveEntrySerializer(serializers.Serializer):
@@ -616,6 +623,23 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         required=False,
         allow_null=True,
     )
+    # Vacancy claim / served-house pick (#3648)
+    selected_vacancy_id = serializers.PrimaryKeyRelatedField(
+        queryset=Vacancy.objects.filter(is_active=True),
+        source="selected_vacancy",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    selected_vacancy = serializers.PrimaryKeyRelatedField(read_only=True)
+    served_house_id = serializers.PrimaryKeyRelatedField(
+        queryset=Organization.objects.all(),
+        source="served_house",
+        write_only=True,
+        required=False,
+        allow_null=True,
+    )
+    served_house = serializers.PrimaryKeyRelatedField(read_only=True)
     defer_parents = serializers.BooleanField(required=False)
     claimed_kin_slot = serializers.PrimaryKeyRelatedField(read_only=True)
     claimed_kin_pool = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -708,6 +732,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "claimed_kin_slot_id",
             "claimed_kin_pool",
             "claimed_kin_pool_id",
+            "selected_vacancy",
+            "selected_vacancy_id",
+            "served_house",
+            "served_house_id",
             "defer_parents",
             "second_parent_species",
             "second_parent_species_id",
@@ -925,6 +953,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             set_family_path(instance, path)
         else:
             instance.family_path = ""
+
+        vacancy = validated_data.get("selected_vacancy", _UNSET)
+        if vacancy is not _UNSET and vacancy is not None:
+            # A Vacancy supplies its own kin link; a manual claim would double it.
+            validated_data["claimed_kin_slot"] = None
+            validated_data["claimed_kin_pool"] = None
+        family = validated_data.get("family", _UNSET)
+        if family is not _UNSET and family != instance.family and instance.selected_vacancy_id:
+            validated_data.setdefault("selected_vacancy", None)
 
         incoming = validated_data.pop("draft_data", None)
         if incoming is not None:

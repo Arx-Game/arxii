@@ -158,6 +158,9 @@ def _validate_stylings(
         raise HousesServiceError(msg, user_message="Describe the house's lands.")
 
 
+# Module-private, but world.character_creation.validators._get_aspect_pick_errors
+# also calls it (#3648) - same cross-module pattern already used for
+# family_name_is_taken.
 def _validate_aspect_picks(*, template: HouseTemplate, aspect_picks: dict[int, list[int]]) -> None:
     """The catalog fence (#2079, ADR-0101): picks only, counted, from the template."""
     definitions = {d.pk: d for d in template.aspect_definitions.all()}

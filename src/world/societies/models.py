@@ -32,6 +32,8 @@ from world.checks.models import OutcomeTierAward
 from world.contributors.models import CreditedContent
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
+    VACANCY_BASIS_KIN,
+    VACANCY_BASIS_RETAINER,
     DeedKnowledgeSource,
     ObligationOrigin,
     ObligationState,
@@ -947,7 +949,9 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     @property
     def basis(self) -> str:
-        return "kin" if (self.kin_pool_id or self.kin_node_id) else "retainer"
+        return (
+            VACANCY_BASIS_KIN if (self.kin_pool_id or self.kin_node_id) else VACANCY_BASIS_RETAINER
+        )
 
     @property
     def is_open(self) -> bool:

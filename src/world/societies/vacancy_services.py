@@ -25,14 +25,22 @@ def _open_filter() -> Q:
     return Q(is_active=True) & (Q(count_remaining__isnull=True) | Q(count_remaining__gt=0))
 
 
-def reachable_vacancies(draft: CharacterDraft) -> QuerySet[Vacancy]:
-    """Open vacancies this draft may take: realm, Upbringing gate, trust."""
+def reachable_vacancies(draft: CharacterDraft, *, require_open: bool = True) -> QuerySet[Vacancy]:
+    """Open vacancies this draft may take: realm, Upbringing gate, trust.
+
+    ``require_open=False`` (``character_creation.validators``, #3648) drops the
+    availability filter while keeping every other gate: a vacancy closing
+    between pick and finalize is ``take_vacancy``'s ``VacancyExhaustedError``
+    graceful-degradation case, not a Lineage-stage validation failure.
+    """
     upbringing = draft.selected_origin_template
     if upbringing is None:
         return Vacancy.objects.none()
-    queryset = Vacancy.objects.filter(_open_filter()).filter(
+    queryset = Vacancy.objects.filter(
         Q(allowed_upbringings__isnull=True) | Q(allowed_upbringings=upbringing)
     )
+    if require_open:
+        queryset = queryset.filter(_open_filter())
     realm = draft.selected_area.realm if draft.selected_area else None
     if realm is not None:
         queryset = queryset.filter(

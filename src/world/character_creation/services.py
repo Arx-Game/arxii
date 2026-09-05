@@ -2703,7 +2703,13 @@ def assemble_origin_prose(sheet: CharacterSheet) -> str:
 # Upbringing / family-path selection services (#3617)
 # =============================================================================
 
-_UPBRINGING_DRAFT_KEYS = ("origin_slots", "origin_choices", "new_family_name")
+_UPBRINGING_DRAFT_KEYS = (
+    "origin_slots",
+    "origin_choices",
+    "new_family_name",
+    "family_template_id",
+    "family_aspect_picks",
+)
 
 
 def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> None:
@@ -2725,6 +2731,8 @@ def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> N
     draft.family = None
     draft.claimed_kin_slot = None
     draft.claimed_kin_pool = None
+    draft.selected_vacancy = None
+    draft.served_house = None
     for key in _UPBRINGING_DRAFT_KEYS:
         draft.draft_data.pop(key, None)
     draft.save()
@@ -2751,6 +2759,8 @@ def set_family_path(draft: CharacterDraft, path: str) -> None:
     draft.family = None
     draft.claimed_kin_slot = None
     draft.claimed_kin_pool = None
+    draft.selected_vacancy = None
+    draft.served_house = None
     draft.draft_data.pop("new_family_name", None)
     draft.save(
         update_fields=[
@@ -2758,6 +2768,8 @@ def set_family_path(draft: CharacterDraft, path: str) -> None:
             "family",
             "claimed_kin_slot",
             "claimed_kin_pool",
+            "selected_vacancy",
+            "served_house",
             "draft_data",
         ]
     )

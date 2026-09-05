@@ -52,7 +52,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
 
     def _named_draft(self):
         draft = self._create_base_draft(
-            new_family_name="The Cisternwrights",
+            new_family_name="Cisternwrights",
             family_aspect_picks={str(self.charge.id): [self.granaries.id]},
         )
         draft.selected_origin_template = self.upbringing
@@ -65,7 +65,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
         character = finalize_character(self._named_draft(), add_to_roster=True)
         sheet = character.sheet_data
 
-        family = Family.objects.get(name="The Cisternwrights")
+        family = Family.objects.get(name="Cisternwrights")
         assert family.influence == 0
         assert family.created_by_cg is True
         assert family.created_by == self.account
@@ -74,7 +74,7 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
 
         org = house_for_family(family)
         assert org is not None
-        assert org.name == "The Cisternwrights"
+        assert org.name == "Cisternwrights"
         assert org.org_type.name == "commoner_family"
         assert org.society == self.template.society
         assert OrganizationAspect.objects.filter(
@@ -88,4 +88,4 @@ class NamedFamilyMaterializeTest(FinalizationTestMixin, TestCase):
     def test_second_finalize_on_the_same_family_id_is_idempotent(self) -> None:
         draft = self._named_draft()
         finalize_character(draft, add_to_roster=True)
-        assert Family.objects.filter(name="The Cisternwrights").count() == 1
+        assert Family.objects.filter(name="Cisternwrights").count() == 1

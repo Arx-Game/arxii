@@ -6,6 +6,7 @@ human-readable error messages. An empty list means the stage is complete.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from rest_framework import serializers
@@ -21,6 +22,7 @@ from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
     from world.character_creation.models import CharacterDraft, OriginTemplate
+    from world.societies.houses.models import HouseTemplate
 
 
 def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
@@ -170,25 +172,19 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
         errors.append("Choose how your family fits your upbringing")
         return errors
     errors.extend(_get_family_path_errors(draft, path))
+    errors.extend(_get_vacancy_errors(draft, path))
     errors.extend(_get_prompt_errors(draft, template, path))
     return errors
 
 
 def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
-    from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
-
     template = draft.selected_origin_template
     if path == FamilyPath.NONE:
         if draft.draft_data.get("tarot_card_name"):
             return []
         return ["Select a tarot card for your surname"]
     if path == FamilyPath.NAMED:
-        name = str(draft.draft_data.get("new_family_name", "")).strip()
-        if not name:
-            return ["Name your family"]
-        if family_name_is_taken(name):
-            return ["A family by that name already exists"]
-        return []
+        return _get_named_path_errors(draft)
     family = draft.family
     if family is None:
         return ["Select a family"]
@@ -206,6 +202,30 @@ def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
     if realm_mismatch:
         return ["That family is not from your starting area"]
     return []
+
+
+def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
+    """Family Template pick, its naming pattern/aspect fence, and the served house (#3648)."""
+    from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
+
+    errors: list[str] = []
+    family_template = draft.resolve_family_template()
+    if family_template is None:
+        return ["Choose a family template"]
+    name = str(draft.draft_data.get("new_family_name", "")).strip()
+    if not name:
+        errors.append("Name your family")
+    elif not re.fullmatch(family_template.name_pattern, name):
+        errors.append("That name does not fit this family's naming conventions")
+    elif family_name_is_taken(name):
+        errors.append("A family by that name already exists")
+    errors.extend(_get_aspect_pick_errors(draft, family_template))
+    if (
+        draft.served_house_id is not None
+        and not family_template.served_house_choices.filter(pk=draft.served_house_id).exists()
+    ):
+        errors.append("That house is not one your family could have served")
+    return errors
 
 
 def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate, path: str) -> list[str]:
@@ -463,3 +483,73 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
         return ["Choose the stat and skill your magic rolls (your Anima Check)"]
 
     return []
+
+
+def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplate) -> list[str]:
+    from world.societies.houses.creator import _validate_aspect_picks  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+    raw = draft.draft_data.get("family_aspect_picks") or {}
+    try:
+        picks = {int(key): [int(value) for value in values] for key, values in raw.items()}
+    except (TypeError, ValueError):
+        return ["Your family's choices could not be read"]
+    try:
+        _validate_aspect_picks(template=family_template, aspect_picks=picks)
+    except HousesServiceError as exc:
+        return [exc.user_message]
+    return []
+
+
+def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
+    from world.societies.constants import (  # noqa: PLC0415
+        VACANCY_BASIS_KIN,
+        VACANCY_BASIS_RETAINER,
+    )
+    from world.societies.vacancy_services import reachable_vacancies  # noqa: PLC0415
+
+    reachable = reachable_vacancies(draft)
+    vacancy = draft.selected_vacancy
+    own_org_id = None
+    if path == FamilyPath.CLAIMED and draft.family_id is not None:
+        from world.societies.houses.services import house_for_family  # noqa: PLC0415
+
+        own_org = house_for_family(draft.family)
+        own_org_id = own_org.pk if own_org is not None else None
+        kin_offered = (
+            own_org_id is not None
+            and reachable.filter(organization_id=own_org_id)
+            .exclude(kin_pool__isnull=True, kin_node__isnull=True)
+            .exists()
+        )
+        if kin_offered and (
+            vacancy is None
+            or vacancy.organization_id != own_org_id
+            or vacancy.basis != VACANCY_BASIS_KIN
+        ):
+            return ["Choose your place in the family"]
+    if vacancy is None:
+        return []
+    errors: list[str] = []
+    # A vacancy that closed between pick and finalize is graceful-degradation
+    # territory (``take_vacancy``/``VacancyExhaustedError``), not a stage-blocking
+    # error - only a gate the player can't fix (wrong realm/upbringing/trust,
+    # or the vacancy was deactivated outright) belongs here.
+    reachable_any_state = reachable_vacancies(draft, require_open=False)
+    if not reachable_any_state.filter(pk=vacancy.pk).exists():
+        errors.append("That opening is not available to you")
+    if vacancy.basis == VACANCY_BASIS_KIN and (
+        path != FamilyPath.CLAIMED or vacancy.organization.family_id != draft.family_id
+    ):
+        errors.append("That place belongs to a family you are not joining")
+    if (
+        vacancy.basis == VACANCY_BASIS_RETAINER
+        and own_org_id is not None
+        and vacancy.organization_id == own_org_id
+    ):
+        errors.append("Choose your place in the family")
+    if vacancy.basis == VACANCY_BASIS_KIN and (
+        draft.claimed_kin_slot_id or draft.claimed_kin_pool_id
+    ):
+        errors.append("Your place in the family already covers your kin slot")
+    return errors

@@ -79,7 +79,13 @@ class VacancyFinalizeTest(FinalizationTestMixin, TestCase):
         assert vacancy.count_remaining is None
 
     def test_closed_vacancy_logs_and_continues_without_a_membership(self) -> None:
-        vacancy = VacancyFactory(organization=self.org, name="Heir", count_remaining=0)
+        # A kin vacancy in the claimed family, not a retainer one (#3648
+        # validators.py refuses a retainer post inside the family you are
+        # already joining - see test_vacancy_validation.py).
+        pool = KinSlotPoolFactory(family=self.family, description="an heir")
+        vacancy = VacancyFactory(
+            organization=self.org, name="Heir", kin_pool=pool, count_remaining=0
+        )
         with self.assertLogs("world.character_creation.services", level="WARNING"):
             character = finalize_character(self._claim_draft(vacancy), add_to_roster=True)
         sheet = character.sheet_data

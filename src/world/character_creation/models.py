@@ -1165,6 +1165,10 @@ class CharacterDraft(SharedMemoryModel):
                 pk__in=ids, slot__template=template, is_active=True
             ):
                 total += choice.cost_for(influence)
+        vacancy = self.selected_vacancy
+        if vacancy is not None:
+            family = vacancy.organization.family
+            total += vacancy.cost_for(family.influence if family is not None else 0)
         return total
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object

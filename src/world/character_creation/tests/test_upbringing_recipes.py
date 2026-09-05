@@ -64,7 +64,7 @@ class UpbringingRecipesTest(TestCase):
         draft = _draft(
             template,
             draft_data={
-                "new_family_name": "The Cisternwrights",
+                "new_family_name": "Cisternwrights",
                 "origin_slots": {str(slot.id): "The cisterns."},
             },
         )

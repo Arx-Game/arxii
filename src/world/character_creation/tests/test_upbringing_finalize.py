@@ -26,7 +26,7 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
     def test_named_family_is_created_and_bound(self) -> None:
         template = OriginTemplateFactory(beginning=self.beginnings)
         slot = OriginTemplateSlotFactory(template=template, name="Duty")
-        draft = self._create_base_draft(new_family_name="The Cisternwrights")
+        draft = self._create_base_draft(new_family_name="Cisternwrights")
         draft.selected_origin_template = template
         draft.draft_data["origin_slots"] = {str(slot.id): "We kept the cisterns."}
         draft.draft_data.pop("tarot_card_name", None)
@@ -35,7 +35,7 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        family = Family.objects.get(name="The Cisternwrights")
+        family = Family.objects.get(name="Cisternwrights")
         assert family.kind.name == COMMONER_KIND_NAME
         assert family.created_by_cg is True
         assert family.created_by == self.account
@@ -56,7 +56,7 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         the time ``_apply_sheet_demographics`` runs afterward.
         """
         template = OriginTemplateFactory(beginning=self.beginnings)
-        draft = self._create_base_draft(first_name="Cara", new_family_name="The Cisternwrights")
+        draft = self._create_base_draft(first_name="Cara", new_family_name="Cisternwrights")
         draft.selected_origin_template = template
         draft.draft_data.pop("tarot_card_name", None)
         draft.save()
@@ -64,8 +64,8 @@ class NamedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        assert character.db_key == "Cara The Cisternwrights"
-        assert sheet.family.name == "The Cisternwrights"
+        assert character.db_key == "Cara Cisternwrights"
+        assert sheet.family.name == "Cisternwrights"
 
 
 class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
@@ -147,13 +147,13 @@ class PathSwitchFinalizeTest(FinalizationTestMixin, TestCase):
         draft.save()
 
         set_family_path(draft, FamilyPath.NAMED)
-        draft.draft_data["new_family_name"] = "The Newcomers"
+        draft.draft_data["new_family_name"] = "Newcomers"
         draft.save(update_fields=["draft_data"])
 
         character = finalize_character(draft, add_to_roster=True)
         sheet = character.sheet_data
 
-        new_family = Family.objects.get(name="The Newcomers")
+        new_family = Family.objects.get(name="Newcomers")
         assert sheet.family == new_family
         assert sheet.family != claimed_family
 

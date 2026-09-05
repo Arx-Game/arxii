@@ -47,12 +47,14 @@ class LineagePathValidationTest(TestCase):
     def test_named_path_needs_a_name(self):
         draft = _draft_for(OriginTemplateFactory())  # name-only path
         assert get_lineage_errors(draft) == ["Name your family"]
-        draft.draft_data["new_family_name"] = "The Cisternwrights"
+        # A single capitalized word - the default Family Template's name_pattern
+        # (#3648) fullmatches ``[A-Z][a-z]{2,19}``.
+        draft.draft_data["new_family_name"] = "Cisternwrights"
         assert get_lineage_errors(draft) == []
 
     def test_named_path_rejects_a_taken_name(self):
-        FamilyFactory(name="The Millers")
-        draft = _draft_for(OriginTemplateFactory(), draft_data={"new_family_name": "the millers"})
+        FamilyFactory(name="millers")
+        draft = _draft_for(OriginTemplateFactory(), draft_data={"new_family_name": "Millers"})
         assert get_lineage_errors(draft) == ["A family by that name already exists"]
 
     def test_none_path_needs_a_tarot_card(self):
