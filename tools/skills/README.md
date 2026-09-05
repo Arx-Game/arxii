@@ -119,6 +119,14 @@ the deletion test, then produces a **markdown** report (no HTML/Mermaid — this
 a headless repo) of candidate refactors ranked Strong / Worth-exploring /
 Speculative. Flags conflicts with recorded ADRs.
 
+### demoing-a-feature
+
+For anything a player or staff member sees or operates: the spec is approved off
+a demo page (screens in order, drawn in the project's own visual grammar, every
+open fork as a control the reviewer answers, the rows finalize writes as the last
+screen), not off prose. Pairs with `review-artifacts` and `verify-against-code`.
+Trialled on #3660 for #3659.
+
 ### domain-glossary-and-adr
 
 Keeps the `AGENT_GLOSSARY.md` files and `docs/adr/` log current and used: read
