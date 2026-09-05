@@ -25,8 +25,8 @@ player- or staff-facing terms. State the outcome, not the implementation.
 
 Link the demo page (see the `demoing-a-feature` skill), then list its screens in
 order, one line each, in the user's words. Every user story below names one of
-these screens. Every working assumption the spec makes on an open fork is tagged
-`[ruling: <id>]` with the id of the control on the demo page.
+these screens. Every working assumption the spec makes on an open fork is listed
+as pending in Decisions; the reviewer answers in chat, not on the page.
 
 - Demo: <artifact URL>
 - Screen 1: <stage> · <what the user does>
