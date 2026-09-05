@@ -1004,15 +1004,51 @@ function MountedManeuvers({
   );
 }
 
+/**
+ * Standing warning that the guardian cannot pay their protective technique's
+ * next fire (#3574): the guard will fizzle (no roll, no charge, ally takes the
+ * hit) unless they hold the line into Soulfray. Rendered from the anima and
+ * fee the panel already has; hidden once consent is given.
+ */
+function GuardUnaffordableHint({
+  technique,
+  animaCurrent,
+  soulfrayAccepted,
+}: {
+  technique: PlayerAction | undefined;
+  animaCurrent: number | null;
+  soulfrayAccepted: boolean;
+}) {
+  const fee = technique?.reactive_anima_cost ?? null;
+  if (fee == null || animaCurrent == null || animaCurrent >= fee || soulfrayAccepted) {
+    return null;
+  }
+  return (
+    <p
+      className="rounded-md border border-amber-500/60 bg-amber-950/40 px-2 py-1.5 text-xs text-amber-200"
+      data-testid="guard-unaffordable-hint"
+    >
+      You cannot pay this technique's next fire (anima {animaCurrent}, fee {fee}). It will fizzle
+      unless you hold the line into Soulfray.
+    </p>
+  );
+}
+
 /** What this round's already-declared maneuver is, when there is one. */
 function DeclaredManeuverBadge({
   declaredManeuver,
   coveredAllyName,
   guardedAllyName,
+  guardTechnique,
+  animaCurrent,
+  guardSoulfrayAccepted,
 }: {
   declaredManeuver: string | null;
   coveredAllyName: string | null | undefined;
   guardedAllyName: string | null | undefined;
+  guardTechnique: PlayerAction | undefined;
+  animaCurrent: number | null;
+  guardSoulfrayAccepted: boolean;
 }) {
   if (declaredManeuver === 'flee') {
     return (
@@ -1036,11 +1072,18 @@ function DeclaredManeuverBadge({
   }
   if (declaredManeuver === 'interpose') {
     return (
-      <div
-        className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
-        data-testid="guard-declared-badge"
-      >
-        Guarding {guardedAllyName ?? 'any ally hit this round'}
+      <div className="space-y-1.5">
+        <div
+          className="rounded border border-violet-500/40 bg-violet-500/10 px-3 py-2 text-xs text-violet-300"
+          data-testid="guard-declared-badge"
+        >
+          Guarding {guardedAllyName ?? 'any ally hit this round'}
+        </div>
+        <GuardUnaffordableHint
+          technique={guardTechnique}
+          animaCurrent={animaCurrent}
+          soulfrayAccepted={guardSoulfrayAccepted}
+        />
       </div>
     );
   }
@@ -1237,6 +1280,12 @@ function GuardControl({
           </span>
         </label>
       )}
+
+      <GuardUnaffordableHint
+        technique={selectedGuardTechnique}
+        animaCurrent={animaCurrent}
+        soulfrayAccepted={guardSoulfrayAccepted}
+      />
 
       {isRedirectGuardTechnique && (
         <Select
@@ -2327,6 +2376,9 @@ export function YourTurn({
             declaredManeuver={declaredManeuver}
             coveredAllyName={coveredAllyName}
             guardedAllyName={guardedAllyName}
+            guardTechnique={selectedGuardTechnique}
+            animaCurrent={animaCurrent}
+            guardSoulfrayAccepted={guardSoulfrayAccepted}
           />
 
           {/* Flee button — only when not already declared a flee maneuver */}

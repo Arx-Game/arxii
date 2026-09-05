@@ -5427,7 +5427,8 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
     attempt to cap here; not consulted (documented v1 scope, #2638).
 
     Returns the catching Character on fire, or None (no eligible/budget-
-    exhausted guardian — the marker stays for explicit resolution).
+    exhausted guardian (who is told privately, #3574): the marker stays for
+    explicit resolution).
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -5455,6 +5456,11 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
 
     interposer = action.participant
     if interposer.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(
+            interposer.character_sheet.character,
+            participant.character_sheet.character,
+            cap=False,
+        )
         return None
 
     interposer.reactions_used += 1
@@ -9962,6 +9968,36 @@ def _try_interpose_for_opponent(
     _dispatch_interpose_action(action, pre_payload.target, pre_payload)
 
 
+def _narrate_reaction_declined(
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: object,
+    *,
+    cap: bool,
+) -> None:
+    """Tell a guardian, privately, why their armed guard did not fire (#3574).
+
+    ``cap=False``: the guardian's own ``REACTIONS_PER_ROUND`` budget is spent.
+    ``cap=True``: ``ABSORPTION_CAP_PER_MOMENT`` interceptors already answered
+    this payload. No room line either way: ADR-0161 chose a silent no-op so the
+    table never learns a guardian's budget, and this keeps that while the
+    guardian themselves stops guessing. ``protected`` is whatever the fire
+    seam holds (a participant character, an ally summon's objectdb, or the
+    Sent Flying victim) and is only ever stringified.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    if cap:
+        text = (
+            f"Enough hands have already answered that blow; your guard over {protected} stays down."
+        )
+    else:
+        text = (
+            f"You have already spent your reaction this round; "
+            f"{protected} takes the blow unguarded."
+        )
+    narrate_privately(interposer, text)
+
+
 def _dispatch_interpose_action(
     action: CombatRoundAction,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -9977,17 +10013,20 @@ def _dispatch_interpose_action(
 
     **Reaction economy (#2639), shared fire seam per F-10c:** declines with
     the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
-    untouched) when either budget is exhausted — the interposer has already
-    spent their ``REACTIONS_PER_ROUND`` reaction this round, or this specific
-    payload has already been answered by ``ABSORPTION_CAP_PER_MOMENT``
-    interceptors. Both counters increment together on an actual attempt
-    (readiness is free; only firing spends the budget), regardless of whether
-    the guardian's own roll then succeeds.
+    untouched), telling the guardian privately why (#3574), when either
+    budget is exhausted: the interposer has already spent their
+    ``REACTIONS_PER_ROUND`` reaction this round, or this specific payload has
+    already been answered by ``ABSORPTION_CAP_PER_MOMENT`` interceptors. Both
+    counters increment together on an actual attempt (readiness is free; only
+    firing spends the budget), regardless of whether the guardian's own roll
+    then succeeds.
     """
     participant = action.participant
     if participant.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=False)
         return
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=True)
         return
 
     participant.reactions_used += 1
@@ -10086,6 +10125,29 @@ def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs al
         )
 
 
+def _narrate_technique_interpose_fizzle(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+) -> None:
+    """Tell the guardian, then the room, that an unpaid protective technique fizzled (#3574).
+
+    Private line carries the why (anima); the room line never carries a number.
+    The mechanical no-op shape is unchanged: no roll, no charge, damage proceeds.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    narrate_privately(
+        interposer,
+        f"Your {technique.name} gutters for want of anima; {protected} takes the blow unguarded.",
+    )
+    _broadcast_commitment_line(
+        action.participant.encounter,
+        f"{interposer} reaches to shield {protected}, and the working fails to catch.",
+    )
+
+
 def _try_technique_interpose(
     action: CombatRoundAction,
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -10106,11 +10168,13 @@ def _try_technique_interpose(
        :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
        the same traversal :func:`~world.magic.services.targeting.protective_flavor`
        walks at declaration time, first protective-flavored template wins). Can't
-       pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
-       charged, and damage proceeds unchanged to ``_try_companion_defend`` as
-       today. **Unless** ``action.confirm_soulfray_risk`` (#3573) is set: a
-       consented guardian fires regardless of affordability, running the pool
-       into deficit and accruing Soulfray (point 3 below).
+       pay -> the reaction fizzles: NO roll, NO fatigue, NO anima charged,
+       damage proceeds unchanged to ``_try_companion_defend`` as today, and
+       the guardian and the room are told (#3574,
+       :func:`_narrate_technique_interpose_fizzle`). **Unless**
+       ``action.confirm_soulfray_risk`` (#3573) is set: a consented guardian
+       fires regardless of affordability, running the pool into deficit and
+       accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
        (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
        against the same authored difficulty as the mundane Interpose challenge
@@ -10184,7 +10248,9 @@ def _try_technique_interpose(
         anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
         if not _guardian_can_fire_technique_interpose(anima, cost, consented=consented):
             # Fizzle: no pool at all, or unaffordable and unconsented - no roll,
-            # no cost, damage proceeds.
+            # no cost, damage proceeds. Not silent (#3574): the guardian learns
+            # their save did not catch, and the table sees a working fail.
+            _narrate_technique_interpose_fizzle(action, interposer, protected, technique)
             return
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
@@ -10908,6 +10974,27 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
+def _narrate_upkeep_lapse(inst: ConditionInstance, encounter: CombatEncounter) -> None:
+    """Tell the payer, the bearer (when different) and the room that a ward lapsed (#3574).
+
+    Called immediately before the lapse ``inst.delete()`` so the names are
+    still resolvable. The payer rule is ``drain_reactive_upkeep``'s own:
+    ``source_character`` when set, else the bearer. Room line carries no
+    numbers; the private lines say only that the fee could not be met.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    bearer = inst.target
+    payer = inst.source_character or bearer
+    ward = inst.condition.name
+    if payer.pk == bearer.pk:
+        narrate_privately(payer, f"You cannot sustain {ward}; it lapses.")
+    else:
+        narrate_privately(payer, f"You cannot sustain {ward} on {bearer}; it lapses.")
+        narrate_privately(bearer, f"{payer}'s {ward} over you lapses.")
+    _broadcast_commitment_line(encounter, f"The {ward} over {bearer} gutters out.")
+
+
 def _debit_ally_paid_upkeep(
     inst: ConditionInstance, cost: int, *, encounter: CombatEncounter
 ) -> None:
@@ -10922,9 +11009,11 @@ def _debit_ally_paid_upkeep(
     payer = inst.source_character
     payer_anima = _get_anima(payer)
     if payer_anima is None:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         return
     if payer_anima.current < cost and not inst.soulfray_consented:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse - Trigger rows cascade via source_condition FK
         return
     _pay_upkeep(payer, payer_anima, cost, inst, encounter)
@@ -11002,6 +11091,7 @@ def _drain_participant_upkeep(
             # instead of clobbering it back to 0 (#3573 review fix).
             remaining = anima.current
         else:
+            _narrate_upkeep_lapse(inst, encounter)
             inst.delete()  # lapse — Trigger rows cascade via source_condition FK
     if remaining != anima.current:
         anima.current = remaining
@@ -11015,7 +11105,8 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     condition with ``upkeep_anima_per_round > 0``: spend that anima from the
     condition's payer's ``CharacterAnima`` pool. If the payer cannot pay in
     full, the condition lapses — its ``ConditionInstance`` row is deleted and
-    any ``Trigger`` rows on it cascade.
+    any ``Trigger`` rows on it cascade. The lapse is narrated to the payer, the
+    bearer and the room (#3574, ``_narrate_upkeep_lapse``).
 
     Payer rule (#2208): ``source_character`` pays when set — an ally ward
     strains its caster, never its bearer. Self-cast wards are unchanged
