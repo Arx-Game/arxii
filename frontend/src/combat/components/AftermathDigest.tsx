@@ -25,10 +25,18 @@ export interface AftermathDigestProps {
   title?: string;
 }
 
+/** Upper-cases the first letter only, matching render_aftermath_digest's telnet
+ * casing (BeatOutcome(...).label, e.g. "Success") - the raw API value the beat
+ * line otherwise prints is lower-case ("success").
+ */
+function capitalizeFirst(value: string): string {
+  return value.length > 0 ? value[0].toUpperCase() + value.slice(1) : value;
+}
+
 export function AftermathDigest({ digest, title }: AftermathDigestProps) {
   const { consequence, conditions, legend, beat, peril_round_active: perilRoundActive } = digest;
   const beatText = beat
-    ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${beat.outcome})`
+    ? `${beat.resolution_text || 'The beat is resolved'} (${beat.tier_name ?? 'ungraded'}, ${capitalizeFirst(beat.outcome)})`
     : null;
 
   return (

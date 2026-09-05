@@ -585,7 +585,7 @@ describe('CombatTurnPanel, aftermath digest (#3551)', () => {
     expect(screen.getByTestId('aftermath-conditions')).toBeInTheDocument();
     expect(screen.getByTestId('aftermath-legend')).toHaveTextContent('Held the Line (+3 legend)');
     expect(screen.getByTestId('aftermath-beat')).toHaveTextContent(
-      'The line holds. (Moderate, victory)'
+      'The line holds. (Moderate, Victory)'
     );
     expect(screen.getByTestId('aftermath-peril')).toHaveTextContent(
       'Your peril is not over: a scene round now tracks it.'

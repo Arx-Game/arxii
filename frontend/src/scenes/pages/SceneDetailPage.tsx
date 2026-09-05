@@ -68,13 +68,37 @@ export function SceneDetailPage() {
   // lingeringEncounterId remembers the last real encounterId and keeps the
   // rail mounted on it until CombatRail's onDismissOutcome fires.
   const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  // Dismissing the outcome banner before the poll drops the completed encounter
+  // (hasActiveEncounter still true) must hide the rail immediately rather than
+  // waiting up to 15s for the next poll (#3551 minor 4): the rail shows only
+  // while railEncounterId hasn't been dismissed; a new encounter gets a new id,
+  // so it reappears on its own.
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  // A route change (e.g. /scenes/1 -> /scenes/2) re-renders SceneDetailPage in
+  // place rather than remounting it (no `key` on the route), so scene 1's
+  // lingering/dismissed encounter state would otherwise survive onto scene 2's
+  // rail (#3551 important 1). One effect, keyed on both scene and encounter id,
+  // so the scene-change reset and the fresh-encounter set can never race: on a
+  // scene change the lingering/dismissed ids reset first, then (same pass) pick
+  // up the new scene's own active encounter if it already has one.
+  const prevSceneIdRef = useRef(sceneIdNum);
   useEffect(() => {
+    if (prevSceneIdRef.current !== sceneIdNum) {
+      prevSceneIdRef.current = sceneIdNum;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
     if (encounterId > 0) {
       setLingeringEncounterId(encounterId);
     }
-  }, [encounterId]);
+  }, [sceneIdNum, encounterId]);
   const railEncounterId = encounterId || lingeringEncounterId;
-  const showCombatRail = hasActiveEncounter || lingeringEncounterId > 0;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  const handleDismissOutcome = useCallback(() => {
+    setDismissedEncounterId(railEncounterId);
+    setLingeringEncounterId(0);
+  }, [railEncounterId]);
   // GM story rail fold-in (#3434): shares the right-rail column with the
   // combat rail. Mounted whenever the viewer can GM this scene at all --
   // GMStoryRail itself renders the "no beat running" fallback when
@@ -351,7 +375,11 @@ export function SceneDetailPage() {
             {showStoryRail && scene && <GMStoryRail scene={scene} />}
             {showCombatRail && (
               <>
-                {gmEncounterDetail?.is_gm && (
+                {/* Lifecycle controls (add-opponent/add-participant/settings) only
+                    make sense on a still-active fight, so hasActiveEncounter gates
+                    this separately from CombatRail itself, which keeps lingering
+                    after the encounter completes (#3551 important 2). */}
+                {hasActiveEncounter && gmEncounterDetail?.is_gm && (
                   <GMEncounterControls
                     sceneId={sceneIdNum}
                     encounter={gmEncounterDetail}
@@ -361,7 +389,7 @@ export function SceneDetailPage() {
                 <CombatRail
                   sceneId={sceneIdNum}
                   encounterId={railEncounterId}
-                  onDismissOutcome={() => setLingeringEncounterId(0)}
+                  onDismissOutcome={handleDismissOutcome}
                 />
               </>
             )}

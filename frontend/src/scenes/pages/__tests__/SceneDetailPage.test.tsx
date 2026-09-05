@@ -13,9 +13,9 @@
  */
 
 import type { ReactNode } from 'react';
-import { Routes, Route, MemoryRouter } from 'react-router-dom';
+import { Routes, Route, MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, vi, beforeEach, expect } from 'vitest';
-import { render, fireEvent } from '@testing-library/react';
+import { render, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -620,6 +620,126 @@ describe('SceneDetailPage', () => {
 
     fireEvent.click(getByTestId('combat-rail-dismiss-stub'));
 
+    expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
+  });
+
+  it('hides the rail immediately on dismiss, before the list poll drops the encounter (#3551 minor 4)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+
+    const { getByTestId, queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
+
+    // Dismiss before useEncounterForScene's own poll has dropped the completed
+    // encounter, so hasActiveEncounter is still true at click time.
+    fireEvent.click(getByTestId('combat-rail-dismiss-stub'));
+
+    expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
+  });
+
+  it('hides rail-side GM controls once the encounter completes, but keeps the rail lingering (#3551 important 2)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+    mockUseCombatEncounter.mockReturnValue({ data: { id: 7, is_gm: true } });
+
+    const queryClient = new QueryClient();
+    function wrap(ui: ReactNode) {
+      return (
+        <Provider store={store}>
+          <QueryClientProvider client={queryClient}>
+            <MemoryRouter initialEntries={['/scenes/1']}>{ui}</MemoryRouter>
+          </QueryClientProvider>
+        </Provider>
+      );
+    }
+    // A fresh <Routes>/<Route> element each call (not one `page` const reused
+    // for both render calls): react-router's useRoutes memoizes its rendered
+    // match on `children` identity, so reusing the same element reference
+    // across a rerender would silently skip SceneDetailPage's re-render
+    // entirely, so the mocked hook update below would never be observed.
+    function makePage() {
+      return (
+        <Routes>
+          <Route path="/scenes/:id" element={<SceneDetailPage />} />
+        </Routes>
+      );
+    }
+
+    const { getByTestId, rerender } = render(wrap(makePage()));
+
+    const railBefore = getByTestId('scene-detail-combat-rail');
+    expect(within(railBefore).getByTestId('gm-encounter-controls-stub')).toBeInTheDocument();
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
+
+    // The list poll drops the completed encounter (the rail lingers, previous
+    // test) but the GM lifecycle controls (add-opponent/settings) must not,
+    // since the backend has no COMPLETED guard on those actions. (The header's
+    // own "Start Encounter" GMEncounterControls now appears too and shares the
+    // same stub test id, so the assertion below is scoped to the rail column.)
+    mockUseEncounterForScene.mockReturnValue({
+      data: null,
+      isLoading: false,
+      isError: false,
+    });
+    rerender(wrap(makePage()));
+
+    const railAfter = getByTestId('scene-detail-combat-rail');
+    expect(within(railAfter).queryByTestId('gm-encounter-controls-stub')).not.toBeInTheDocument();
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
+  });
+
+  it('resets the lingering rail when the scene id changes (#3551 important 1)', () => {
+    mockUseEncounterForScene.mockReturnValue({
+      data: { id: 7 },
+      isLoading: false,
+      isError: false,
+    });
+
+    function NavigateToScene2() {
+      const navigate = useNavigate();
+      return (
+        <button type="button" data-testid="nav-to-scene-2" onClick={() => navigate('/scenes/2')}>
+          Go to scene 2
+        </button>
+      );
+    }
+
+    const { getByTestId, queryByTestId } = render(
+      <Provider store={store}>
+        <QueryClientProvider client={new QueryClient()}>
+          <MemoryRouter initialEntries={['/scenes/1']}>
+            <NavigateToScene2 />
+            <Routes>
+              <Route path="/scenes/:id" element={<SceneDetailPage />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>
+      </Provider>
+    );
+
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
+
+    // Scene 1's fight completed and the poll already dropped it before the
+    // player navigates away, so scene 1's rail is lingering at click time.
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
+
+    fireEvent.click(getByTestId('nav-to-scene-2'));
+
+    // /scenes/:id matches the same Route element on both scenes, so React
+    // reuses the SceneDetailPage instance instead of remounting it (#3551), so
+    // scene 1's lingering rail must not survive onto scene 2.
     expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
   });
 
