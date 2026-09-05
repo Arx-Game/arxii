@@ -1614,6 +1614,7 @@
   - recipe_knowledge <- items.CharacterRecipeKnowledge
   - expulsion_bars <- npc_services.ExpulsionBar
   - material_buckets <- items.MaterialBucket
+  - material_grants_received <- items.OrgMaterialLedgerEntry
   - vault_transits <- items.VaultTransit
   - trade_sessions_initiated <- items.TradeSession
   - trade_sessions_received <- items.TradeSession
@@ -4538,6 +4539,12 @@
 **Pointed to by:**
   - templates <- items.ItemTemplate
   - material_buckets <- items.MaterialBucket
+
+### OrgMaterialLedgerEntry
+**Foreign Keys:**
+  - organization -> societies.Organization [FK]
+  - material_category -> items.MaterialCategory [FK]
+  - counterparty_sheet -> character_sheets.CharacterSheet [FK] (nullable)
 
 ### OrgMaterialStock
 **Foreign Keys:**
@@ -9101,6 +9108,7 @@
   - regards_as_target <- npc_services.NpcRegard
   - hosted_stalls <- items.MarketStall
   - material_stocks <- items.OrgMaterialStock
+  - material_ledger_entries <- items.OrgMaterialLedgerEntry
   - item_vault <- items.OrganizationVault
   - ownership_records <- locations.LocationOwnership
   - tenancies <- locations.LocationTenancy

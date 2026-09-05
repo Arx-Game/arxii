@@ -26,6 +26,8 @@ _MSG_NOT_LEADER = "Only a house leader may appoint or vacate an office."
 _MSG_NO_HOLDING_KIND = "No such holding kind."
 _MSG_NO_HOLDER = "No such persona to appoint."
 _MSG_NO_UNIT = "No such military unit."
+_MSG_NO_ORG = "No such organization."
+_MSG_NO_MATERIAL_CATEGORY = "No such material category."
 
 
 def _resolve_active_persona(actor: ObjectDB) -> Any:
@@ -405,3 +407,125 @@ class TransferFoodAction(Action):
         if amount <= 0:
             return ActionResult(success=False, message="Amount must be positive.")
         return None
+
+
+def _resolve_org(organization_id: Any) -> Any:
+    """Resolve an ``Organization`` from an int pk (REST) or pass an instance through."""
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    if isinstance(organization_id, Organization):
+        return organization_id
+    return Organization.objects.filter(pk=organization_id).first()
+
+
+def _resolve_material_category(material_category_id: Any) -> Any:
+    """Resolve a ``MaterialCategory`` from an int pk (REST) or pass an instance through."""
+    from world.items.models import MaterialCategory  # noqa: PLC0415
+
+    if isinstance(material_category_id, MaterialCategory):
+        return material_category_id
+    return MaterialCategory.objects.filter(pk=material_category_id).first()
+
+
+@dataclass
+class GrantMaterialAction(Action):
+    """Grant house material stock to one chosen member (#696 gap 6).
+
+    The steward's discretionary sibling of the automatic materials allowance -
+    thin over ``items.services.org_materials.grant_material_stock`` (which gates on
+    ``can_steward_org`` and re-checks the recipient's active membership). Kwargs:
+    ``organization_id``, ``material_category_id``, ``amount``, ``recipient_sheet_id``.
+    Copies the shape of the shipped personal ``sell_materials`` action (#2540 slice 2).
+    """
+
+    key: str = "grant_materials"
+    name: str = "Grant Materials"
+    icon: str = "hand-heart"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+        from world.items.exceptions import ItemError  # noqa: PLC0415
+        from world.items.services.org_materials import grant_material_stock  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        organization = _resolve_org(kwargs.get("organization_id"))
+        if organization is None:
+            return ActionResult(success=False, message=_MSG_NO_ORG)
+        category = _resolve_material_category(kwargs.get("material_category_id"))
+        if category is None:
+            return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
+        amount = kwargs.get("amount")
+        if not isinstance(amount, int) or amount <= 0:
+            return ActionResult(success=False, message="Grant how much?")
+        recipient = CharacterSheet.objects.filter(pk=kwargs.get("recipient_sheet_id")).first()
+        if recipient is None:
+            return ActionResult(success=False, message="No such character to grant to.")
+        try:
+            entry = grant_material_stock(
+                organization=organization,
+                material_category=category,
+                value=amount,
+                to_sheet=recipient,
+                granted_by=persona,
+            )
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=f"You grant {amount} worth of {category.name} from the house stock.",
+            data={"ledger_entry_id": entry.pk},
+        )
+
+
+@dataclass
+class SetAskingPriceAction(Action):
+    """Set the house's asking price for a material category (#696 gap 6).
+
+    Thin over ``items.services.org_materials.set_asking_price`` (which gates on
+    ``can_steward_org`` and bounds the pct) - the rate the auto-sell liquidates
+    that category's excess at; 0 means never sell. Kwargs: ``organization_id``,
+    ``material_category_id``, ``pct``.
+    """
+
+    key: str = "set_asking_price"
+    name: str = "Set Asking Price"
+    icon: str = "badge-percent"
+    category: str = "domains"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(self, actor: ObjectDB, context: Any = None, **kwargs: Any) -> ActionResult:
+        from world.items.exceptions import ItemError  # noqa: PLC0415
+        from world.items.services.org_materials import set_asking_price  # noqa: PLC0415
+
+        persona = _resolve_active_persona(actor)
+        if persona is None:
+            return ActionResult(success=False, message=_MSG_NO_ACTIVE_CHARACTER)
+        organization = _resolve_org(kwargs.get("organization_id"))
+        if organization is None:
+            return ActionResult(success=False, message=_MSG_NO_ORG)
+        category = _resolve_material_category(kwargs.get("material_category_id"))
+        if category is None:
+            return ActionResult(success=False, message=_MSG_NO_MATERIAL_CATEGORY)
+        pct = kwargs.get("pct")
+        if not isinstance(pct, int):
+            return ActionResult(success=False, message="Set the price to what percent?")
+        try:
+            stock = set_asking_price(
+                organization=organization,
+                material_category=category,
+                pct=pct,
+                by=persona,
+            )
+        except ItemError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(
+            success=True,
+            message=(
+                f"The house's asking price for {category.name} is now {stock.asking_price_pct}%."
+            ),
+            data={"stock_id": stock.pk},
+        )

@@ -753,19 +753,31 @@ def is_org_leader(persona, organization: Organization) -> bool:
     ).exists()
 
 
-def can_administer_domain(persona, domain: Domain) -> bool:
-    """Whether ``persona`` may run ``domain`` in play (#2239).
+def can_steward_org(persona, organization) -> bool:
+    """Whether ``persona`` holds domain-stewardship standing over ``organization``.
 
-    Two paths: an org leader (a ``can_manage_ranks`` rank) always may; the holder
-    of the ``domain-steward`` office may too. The office is the delegation payoff —
-    a head can hand day-to-day domain running to a Minister without granting rank
-    authority over the whole house.
+    The org-level half of ``can_administer_domain`` (#696 gap 6 factored it out for
+    org-scoped stewardship acts like material grants, which have no single Domain to
+    hand that predicate): an org leader (a ``can_manage_ranks`` rank), or the holder
+    of the ``domain-steward`` office. The office is the delegation payoff - a head
+    can hand day-to-day running to a Minister without granting rank authority over
+    the whole house.
     """
     from world.societies.houses.constants import DOMAIN_STEWARD_OFFICE  # noqa: PLC0415
     from world.societies.office_services import holds_office  # noqa: PLC0415
 
-    org = domain.owner_org
-    return is_org_leader(persona, org) or holds_office(persona, org, DOMAIN_STEWARD_OFFICE)
+    return is_org_leader(persona, organization) or holds_office(
+        persona, organization, DOMAIN_STEWARD_OFFICE
+    )
+
+
+def can_administer_domain(persona, domain: Domain) -> bool:
+    """Whether ``persona`` may run ``domain`` in play (#2239).
+
+    Delegates to ``can_steward_org`` over the domain's owning org - same two paths
+    (org leader OR ``domain-steward`` office holder), anchored on a Domain.
+    """
+    return can_steward_org(persona, domain.owner_org)
 
 
 def garrison_term(domain: Domain) -> int:  # noqa: ARG001 - the seam's future param

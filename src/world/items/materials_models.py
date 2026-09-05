@@ -17,6 +17,8 @@ from __future__ import annotations
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from world.items.constants import DEFAULT_ASKING_PRICE_PCT, OrgMaterialLedgerKind
+
 _MATERIAL_CATEGORY_FK = "arxii.MaterialCategory"
 
 
@@ -122,6 +124,13 @@ class OrgMaterialStock(SharedMemoryModel):
         default=0,
         help_text="Collected material value the house holds, in coppers.",
     )
+    asking_price_pct = models.PositiveSmallIntegerField(
+        default=DEFAULT_ASKING_PRICE_PCT,
+        help_text=(
+            "The house-set liquidation rate (percent of material value) the auto-sell "
+            "pays for this category's excess (#696 gap 6). 0 means never sell."
+        ),
+    )
 
     class Meta:
         app_label = "arxii"
@@ -134,3 +143,45 @@ class OrgMaterialStock(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"org {self.organization_id} {self.material_category}: {self.value}"
+
+
+class OrgMaterialLedgerEntry(SharedMemoryModel):
+    """One append-only audit row for value moving out of an ``OrgMaterialStock`` (#696 gap 6).
+
+    The material analogue of ``OrgVaultEvent``: GRANT rows record a steward handing
+    stock value to one member's ``MaterialBucket`` (``counterparty_sheet`` is the
+    recipient); SALE rows record the auto-sell liquidating a category's excess into
+    the treasury (no counterparty - the market is the buyer). Visible to any active
+    member via the org-books API, same discovery posture as the vault ledger.
+    """
+
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.CASCADE,
+        related_name="material_ledger_entries",
+    )
+    material_category = models.ForeignKey(
+        _MATERIAL_CATEGORY_FK,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    kind = models.CharField(max_length=10, choices=OrgMaterialLedgerKind.choices)
+    value = models.PositiveBigIntegerField(
+        help_text="Material value moved (coppers of material value, not sale proceeds).",
+    )
+    counterparty_sheet = models.ForeignKey(
+        "arxii.CharacterSheet",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="material_grants_received",
+        help_text="The recipient of a GRANT; null for a SALE (the market bought it).",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        app_label = "arxii"
+        ordering = ("-created_at", "pk")
+
+    def __str__(self) -> str:
+        return f"org {self.organization_id} {self.kind} {self.value} of {self.material_category}"

@@ -527,6 +527,9 @@ class ActionRegistryTests(TestCase):
             # #696 gap 5 - garrison assignment.
             "assign_garrison",
             "relieve_garrison",
+            # #696 gap 6 - steward material grants + the house-set asking price.
+            "grant_materials",
+            "set_asking_price",
             # #696 gap 3 - earned area elevation.
             "declare_elevation",
             # #2222 — portal anchor install/dissolve.

@@ -5,6 +5,7 @@ from __future__ import annotations
 from rest_framework import serializers
 
 from world.currency.models import CharacterPurse
+from world.items.materials_models import OrgMaterialLedgerEntry
 from world.items.org_vault_models import OrgVaultEvent
 
 
@@ -38,3 +39,36 @@ class OrgVaultEventSerializer(serializers.ModelSerializer):
 
     def get_actor_persona_name(self, obj: OrgVaultEvent) -> str | None:
         return obj.actor_persona.name if obj.actor_persona_id else None
+
+
+class OrgMaterialLedgerEntrySerializer(serializers.ModelSerializer):
+    """One append-only material-ledger audit row (#696 gap 6) - the ``OrgVaultEvent``
+    analogue for the org's bulk material stock. Read-only; GRANT rows name the
+    recipient, SALE rows have none (the market bought the excess).
+
+    ``counterparty_sheet`` is SET_NULL on delete, so the display field falls back
+    to None rather than raising - a deleted sheet still leaves a legible audit row.
+    """
+
+    material_category_name = serializers.SerializerMethodField()
+    counterparty_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = OrgMaterialLedgerEntry
+        fields = [
+            "id",
+            "kind",
+            "material_category_name",
+            "value",
+            "counterparty_name",
+            "created_at",
+        ]
+        read_only_fields = fields
+
+    def get_material_category_name(self, obj: OrgMaterialLedgerEntry) -> str:
+        return obj.material_category.name
+
+    def get_counterparty_name(self, obj: OrgMaterialLedgerEntry) -> str | None:
+        if obj.counterparty_sheet_id is None:
+            return None
+        return obj.counterparty_sheet.character.key

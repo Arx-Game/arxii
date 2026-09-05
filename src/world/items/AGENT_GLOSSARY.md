@@ -82,8 +82,16 @@ A crafter's own stock of bulk material value, one row per (`CharacterSheet`, `Ma
 _Avoid_: gem bucket (gem-only, superseded), material stock (that's the org-level `Org Material Stock`), inventory (buckets hold no instances)
 
 **Org Material Stock** (`OrgMaterialStock`, #2540 slice 2):
-An organization's *collected* bulk material value, one row per (`Organization`, `MaterialCategory`) — the house-level pool members craft from and the Materials Allowance leg draws down. Filled only by an active collection dispatch landing a holding's uncollected `StreamMaterialPool`s (never a passive deposit, mirroring `Uncollected pool` in `currency`'s glossary); drained by the Materials Allowance and, above a PLACEHOLDER threshold, by the org-level material auto-sell (`auto_sell_excess_materials`) at the tail of `collect_and_distribute` — never the weekly cron directly.
+An organization's *collected* bulk material value, one row per (`Organization`, `MaterialCategory`) - the house-level pool members craft from and the Materials Allowance leg draws down. Filled only by an active collection dispatch landing a holding's uncollected `StreamMaterialPool`s (never a passive deposit, mirroring `Uncollected pool` in `currency`'s glossary); drained by the Materials Allowance, by discretionary Material Grants, and, above a PLACEHOLDER threshold, by the org-level material auto-sell (`auto_sell_excess_materials`) at the tail of `collect_and_distribute` - never the weekly cron directly.
 _Avoid_: org gem stock (gem-only, superseded), house stockpile, treasury (that's coin-only)
+
+**Asking Price** (`OrgMaterialStock.asking_price_pct`, #696 gap 6):
+The house-set per-category liquidation rate (percent of material value) the auto-sell pays for that category's excess - the ONE liquidation path's rate, riding the shipped `auto_sell_excess_materials` rather than a separate weekly merchant sale (dropped by ruling). Defaults to `DEFAULT_ASKING_PRICE_PCT` (the old fixed `MATERIAL_SALE_RATE_PCT`, 40% PLACEHOLDER); 0 means "never sell". Set by a steward via `set_asking_price` (gated on `can_steward_org`), bounded 0..`MAX_ASKING_PRICE_PCT`.
+_Avoid_: sale rate (that's the personal `MATERIAL_SALE_RATE_PCT`), sell price, demand curve (not built)
+
+**Material Grant** (`grant_material_stock` → `OrgMaterialLedgerEntry` GRANT row, #696 gap 6):
+A steward's discretionary hand-off of Org Material Stock value to ONE chosen member's Material Bucket - steward picks recipient and amount, unlike the Materials Allowance's automatic even split. Gated on `can_steward_org` (org leader OR `domain-steward` office holder); the recipient must hold an active membership. Every grant writes one GRANT `OrgMaterialLedgerEntry` (the `OrgVaultEvent` analogue for bulk material; auto-sales write SALE rows), member-readable via the org-books `material-ledger` endpoint.
+_Avoid_: allowance (that's the automatic even split), donation, gem grant (superseded gem-only framing)
 
 - **Market square** — a capital's transactional trade hub (#2066): NPC stock
   stalls (materials/reagents/necessities — pure sinks) + PC stalls of

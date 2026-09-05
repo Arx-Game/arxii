@@ -4564,15 +4564,33 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   int` (coppers minted to the treasury from the auto-sell leg, 0 when nothing sold)). Both entry
   points append one PLACEHOLDER report line ("raw materials were shared out to N members")
   only when `material_allowance.total_by_category` is non-empty.
-  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2) — the
-  org-level analogue of `market.sell_materials`: for each `OrgMaterialStock` row over the
-  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells `excess = value - threshold` at the market's
-  `MATERIAL_SALE_RATE_PCT` (imported from its market home, one rate constant, no duplicate) into
-  the treasury; rows read/debited under `select_for_update`, same locking discipline as the
+  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2;
+  asking price #696 gap 6) - the org-level analogue of `market.sell_materials`: for each
+  `OrgMaterialStock` row over the PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells
+  `excess = value - threshold` at the row's house-set `asking_price_pct` (#696 gap 6 - the ONE
+  liquidation path; the field defaults to the old fixed `MATERIAL_SALE_RATE_PCT` via
+  `DEFAULT_ASKING_PRICE_PCT`, so an unpriced stock liquidates exactly as before; 0 means never
+  sell) into the treasury, writing one SALE `OrgMaterialLedgerEntry` per category sold; rows
+  read/debited under `select_for_update`, same locking discipline as the
   allowance leg since both debit the same stock table. A category whose excess rounds to zero
   coppers is left alone; each category liquidates independently. Called ONLY from the end of
   `collect_and_distribute` — never the weekly cron directly (ADR-0081/ADR-0234: automatic gain
   is not automatic).
+- **Steward material grants + asking price (#696 gap 6):** `world.items.services.org_materials` -
+  `grant_material_stock(*, organization, material_category, value, to_sheet, granted_by)` (the
+  discretionary org-to-one-member sibling of the automatic allowance: gated on
+  `houses.services.can_steward_org` [org leader OR `domain-steward` office holder - the org-level
+  half of `can_administer_domain`, factored out], recipient must hold an active membership,
+  stock debited under `select_for_update` [`InsufficientMaterialStock` when short], recipient's
+  `MaterialBucket` credited via `credit_materials`, one GRANT `OrgMaterialLedgerEntry` written)
+  and `set_asking_price(*, organization, material_category, pct, by)` (same gate; pct bounded
+  0..PLACEHOLDER `MAX_ASKING_PRICE_PCT`; creates a zero-value stock row when the category has
+  none yet). `OrgMaterialLedgerEntry` (`world.items.materials_models`: organization,
+  material_category, kind GRANT/SALE, value, nullable `counterparty_sheet`, created_at) is the
+  append-only audit rail - the `OrgVaultEvent` analogue for bulk material. Actions
+  `GrantMaterialAction` (`grant_materials`) / `SetAskingPriceAction` (`set_asking_price`)
+  (`actions/definitions/domains.py`); member-only read at
+  `GET /api/currency/org-books/{org}/material-ledger/`.
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax

@@ -25,6 +25,7 @@ from world.items.models import (
     ItemTemplateProperty,
     MaterialBucket,
     MaterialCategory,
+    OrgMaterialLedgerEntry,
     OrgMaterialStock,
     OwnershipEvent,
     PendingRareFind,
@@ -94,9 +95,23 @@ class PendingRareFindAdmin(admin.ModelAdmin):
 
 @admin.register(OrgMaterialStock)
 class OrgMaterialStockAdmin(admin.ModelAdmin):
-    list_display = ["organization", "material_category", "value"]
+    list_display = ["organization", "material_category", "value", "asking_price_pct"]
     list_filter = ["material_category"]
     raw_id_fields = ["organization"]  # large Organization table
+
+
+@admin.register(OrgMaterialLedgerEntry)
+class OrgMaterialLedgerEntryAdmin(admin.ModelAdmin):
+    list_display = [
+        "organization",
+        "material_category",
+        "kind",
+        "value",
+        "counterparty_sheet",
+        "created_at",
+    ]
+    list_filter = ["kind", "material_category"]
+    raw_id_fields = ["organization", "counterparty_sheet"]  # large tables
 
 
 @admin.register(AccentLevel)

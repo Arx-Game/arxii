@@ -293,7 +293,7 @@ They do not use the command system, dispatchers, or handlers.
   `can_modify_room_features`. Shared by telnet `CmdLabStation` (`station <subverb>`,
   `src/commands/crafting_station.py`) and the web `LabStationViewSet`
   (`/api/items/lab-stations/`);
-  `domains.py` (#2239, #696 gap 5) - six REGISTRY actions, all `target_type=SELF`,
+  `domains.py` (#2239, #696 gaps 5+6) - eight REGISTRY actions, all `target_type=SELF`,
   `category="domains"`, making the CG/seed-only domain services reachable in play:
   `AddDomainHoldingAction` (key `add_domain_holding`) and
   `StartDomainImprovementAction` (`start_domain_improvement`) - thin over
@@ -305,12 +305,18 @@ They do not use the command system, dispatchers, or handlers.
   (`assign_garrison`) and `RelieveGarrisonAction` (`relieve_garrison`) - thin over
   `houses.services.assign_garrison`/`relieve_garrison`, gated on
   `can_administer_domain` for the target domain (the service itself re-checks the
-  unit's `owner_org` matches). Each resolves its
-  `domain_id`/`holding_kind_id`/`holder_persona_id`/`unit_id` from a plain int
+  unit's `owner_org` matches); `GrantMaterialAction` (`grant_materials`) and
+  `SetAskingPriceAction` (`set_asking_price`) (#696 gap 6) - thin over
+  `world.items.services.org_materials.grant_material_stock`/`set_asking_price`,
+  which themselves gate on `can_steward_org` (the org-level half of
+  `can_administer_domain`) and surface `ItemError.user_message` on refusal. Each
+  action resolves its
+  `domain_id`/`holding_kind_id`/`holder_persona_id`/`unit_id`/`organization_id`/
+  `material_category_id`/`recipient_sheet_id` from a plain int
   (REST-safe, no ObjectDB FKs). The first four are shared by telnet `CmdDomain`
-  (`domain <subverb>`, `src/commands/domains.py`); the garrison pair has no
-  `CmdDomain` subverb yet (REST/action dispatch only - telnet wiring is a
-  separable follow-up, same as the React domain panel). The office's
+  (`domain <subverb>`, `src/commands/domains.py`); the garrison and materials
+  pairs have no `CmdDomain` subverb yet (REST/action dispatch only - telnet
+  wiring is a separable follow-up, same as the React domain panel). The office's
   `feeds_check` trait is declared but not yet wired into the improvement check,
   see the `OrganizationOffice` note in `world/societies/CLAUDE.md`;
   `areas.py` (#696 gap 3) - one REGISTRY action, `target_type=SELF`, `category="areas"`:

@@ -30,7 +30,11 @@ from world.currency.models import (
     OrgIncomeStream,
     OrgObligation,
 )
-from world.currency.serializers import CharacterPurseSerializer, OrgVaultEventSerializer
+from world.currency.serializers import (
+    CharacterPurseSerializer,
+    OrgMaterialLedgerEntrySerializer,
+    OrgVaultEventSerializer,
+)
 from world.currency.services import (
     get_or_create_economics,
     get_or_create_purse,
@@ -180,6 +184,30 @@ class OrgBooksViewSet(viewsets.ViewSet):
             "item_instance", "actor_persona"
         )[:_RECENT_ROWS]
         return Response(OrgVaultEventSerializer(events, many=True).data)
+
+    @extend_schema(
+        responses={
+            200: OrgMaterialLedgerEntrySerializer(many=True),
+            403: OpenApiResponse(description="Not a member of the organization."),
+            404: OpenApiResponse(description="No such organization."),
+        },
+    )
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="material-ledger")
+    def material_ledger(self, request: Request, pk: str | None = None) -> Response:
+        """GET /org-books/{org_id}/material-ledger/ - the material grant/sale trail (#696).
+
+        Same membership gate and posture as ``vault-events``: visible to any active
+        member, since an audit trail gated behind the stewardship authority it
+        audits couldn't catch that authority's abuse. Newest first (the model's own
+        ``Meta.ordering``), capped at ``_RECENT_ROWS`` like the currency ledger.
+        """
+        from world.items.materials_models import OrgMaterialLedgerEntry  # noqa: PLC0415
+
+        organization = _require_member_org(request, pk)
+        entries = OrgMaterialLedgerEntry.objects.filter(organization=organization).select_related(
+            "material_category", "counterparty_sheet__character"
+        )[:_RECENT_ROWS]
+        return Response(OrgMaterialLedgerEntrySerializer(entries, many=True).data)
 
 
 def _require_member_org(request: Request, pk: str | None):

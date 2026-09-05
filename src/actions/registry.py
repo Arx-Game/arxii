@@ -130,7 +130,9 @@ from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
     AssignGarrisonAction,
+    GrantMaterialAction,
     RelieveGarrisonAction,
+    SetAskingPriceAction,
     StartDomainImprovementAction,
     TransferFoodAction,
     VacateDomainOfficeAction,
@@ -955,6 +957,9 @@ _ALL_ACTIONS: list[Action] = [
     # #696 gap 5 - post/relieve a MilitaryUnit garrisoning a domain.
     AssignGarrisonAction(),
     RelieveGarrisonAction(),
+    # #696 gap 6 - steward material grants + the house-set asking price.
+    GrantMaterialAction(),
+    SetAskingPriceAction(),
     # #696 gap 3 - earned area elevation, the player-facing sibling of the
     # warrant-gated staff EditAreaAction level edit.
     DeclareElevationAction(),

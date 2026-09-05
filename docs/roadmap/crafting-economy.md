@@ -28,6 +28,39 @@ tested. What remains is content/tuning, not code:
   `MATERIAL_SALE_RATE_PCT`/`MATERIAL_AUTO_SELL_THRESHOLD` — all functionally complete,
   none tuned against real play data.
 
+## Built (2026-09-05, #696 gap 6 - steward material grants + the house-set asking price)
+
+The discretionary layer over slice 2's automatic machinery: a steward chooses who gets house
+material and what rate the house liquidates at.
+
+- **`grant_material_stock(*, organization, material_category, value, to_sheet, granted_by)`**
+  (`world.items.services.org_materials`, `@transaction.atomic`) - the steward picks one member
+  and an amount, unlike `distribute_material_allowance`'s automatic even split. Gated on
+  `houses.services.can_steward_org` (org leader OR the `domain-steward` office holder - the
+  org-level half of `can_administer_domain`, factored out so org-scoped acts don't need a
+  Domain in hand); the recipient must hold an active membership. Debits `OrgMaterialStock`
+  under `select_for_update` (raises `InsufficientMaterialStock` when short - nothing moves),
+  credits the recipient's existing `MaterialBucket` via `credit_materials` (so the
+  crafting-spend path is unchanged), and writes one GRANT `OrgMaterialLedgerEntry`. Surfaced
+  via `GrantMaterialAction` (key `grant_materials`, `actions.definitions.domains`).
+- **The asking price replaces the fixed auto-sell rate** - `OrgMaterialStock.asking_price_pct`
+  (default `DEFAULT_ASKING_PRICE_PCT` = the old fixed 40%, so an unpriced stock liquidates
+  exactly as before). `auto_sell_excess_materials` now prices each category's excess at its
+  row's pct and writes one SALE `OrgMaterialLedgerEntry` per category sold; a pct of 0 means
+  "never sell" (the zero-copper guard skips the row). Ruled during planning: the asking price
+  RIDES the shipped auto-sell - ONE liquidation path; the separately designed weekly merchant
+  sale (demand curve on the cron) was DROPPED. Set via
+  `set_asking_price(*, organization, material_category, pct, by)` (same stewardship gate,
+  bounded 0..PLACEHOLDER `MAX_ASKING_PRICE_PCT`), surfaced via `SetAskingPriceAction`
+  (key `set_asking_price`).
+- **`OrgMaterialLedgerEntry`** (`world.items.materials_models`) - the append-only audit rail
+  (`OrgVaultEvent` analogue for bulk material): organization, material_category, kind
+  (GRANT/SALE), value (material value moved, not sale proceeds), nullable
+  `counterparty_sheet` (the grant recipient; null for sales). Member-only read at
+  `GET /api/currency/org-books/{org}/material-ledger/`, same any-active-member posture as
+  `vault-events` (an audit trail gated behind the authority it audits couldn't catch that
+  authority's abuse).
+
 ## Built (2026-08-26, #2540 slice 2 — personal + org material selling, Task 5)
 
 Closes the loop on the crafting draw: material value can now leave the economy as coppers on
