@@ -255,6 +255,35 @@ def _provisioning_rows() -> None:
     _ensure_quality_tiers()
 
 
+def _house_charter_anchors() -> None:
+    """The Crown org + its Society house-charter content FKs by name (#2875).
+
+    Content-repo ``HouseTemplate``/``SuccessionLaw`` rows can FK the seed
+    crown (``houses.CROWN_ORG_NAME``) and its Society by name, so both must
+    exist before the content load resolves those fixtures - same shape as
+    ``_technique_cast_rows``'s ``ActionTemplate``. ``Realm`` is itself
+    content-repo-owned (#2698): looked up rather than invented unless
+    ``SEED_SAMPLE_CONTENT`` is on, so a database with no "Arx" realm authored
+    yet makes this a no-op (a warning is already logged by
+    ``authored_or_sample``) rather than fabricate a realm to hang the crown
+    off. ``seed_houses_demo`` calls the same ensure helper again after the
+    content load - the self-healing gameplay-call-site pattern this ADR
+    describes - once "Arx" is actually available.
+    """
+    from world.realms.models import Realm  # noqa: PLC0415
+    from world.seeds.houses import _ensure_house_charter_anchors  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+
+    realm = authored_or_sample(
+        Realm,
+        {"description": "The default realm.", "crest_asset": "", "theme": ""},
+        name="Arx",
+    )
+    if realm is None:
+        return
+    _ensure_house_charter_anchors(realm)
+
+
 def _ships_rows() -> None:
     """The `speed` CapabilityType `materialize_ship_as_battle_vehicle` FKs by name.
 
@@ -283,6 +312,7 @@ CONFIG_PREREQUISITES: dict[str, Callable[[], None]] = {
     # FIRST: lore-repo Technique fixtures FK this ActionTemplate by natural key, and
     # load_world_content's deferred-retry loop cannot conjure config rows (#2474).
     "technique_cast": _technique_cast_rows,
+    "house_charter": _house_charter_anchors,
     "fatigue": _fatigue_rows,
     "fury": _fury_rows,
     "moon": _moon_rows,

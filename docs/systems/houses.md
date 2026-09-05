@@ -130,10 +130,18 @@ play (ennoblement, new lands) is a separate future loop.
 `SuccessionLaw`, `HoldingKind`, `HouseTemplate` and `HouseFeature` all joined
 `CONTENT_MODELS` in #2875 (same shape as `HouseAspectDefinition`/
 `HouseAspectOption` below). `world/seeds/houses.py`'s `seed_houses_demo()` and
-`_seed_house_creator()` still invent PLACEHOLDER rows for all four via raw
-`get_or_create()` rather than `authored_or_sample()`; that conversion is a
-separate follow-up pass (#2875's Task 2), mirroring the #2868 aspect-catalog
-migration referenced above.
+`_seed_house_creator()` look all four up via `authored_or_sample()` rather
+than inventing them with `get_or_create()` (#2875 Task 2), mirroring the
+#2868 aspect-catalog migration referenced above — a real content universe's
+rows win and the PLACEHOLDER rows only appear under
+`ARXII_SEED_SAMPLE_CONTENT`. The Crown organization and its Society (plain
+seeder-owned config, neither in `CONTENT_MODELS`) moved to
+`world.seeds.config_prerequisites._house_charter_anchors`
+(`world.seeds.houses._ensure_house_charter_anchors`), run before the content
+load so a content-repo `HouseTemplate`/`SuccessionLaw` row can FK them by
+name (ADR-0171); `seed_houses_demo()` calls the same helper again once
+"Arx" is available, the self-healing gameplay-call-site pattern ADR-0171
+describes.
 
 - **`HouseTemplate`**: realm recipe, name-pattern regex (the realm's naming
   conventions as an automated gate), `kind` (FK `roster.FamilyKind`, #3617; the
