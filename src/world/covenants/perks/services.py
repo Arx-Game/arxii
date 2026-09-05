@@ -335,7 +335,7 @@ def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet)
     Task 7, ruling 2): a disengaged vow says so out loud, at the exact moment
     it would have answered, instead of silently doing nothing.
 
-    Exact line: ``"your vow lies dormant — {perk.name} would have answered
+    Exact line: ``"your vow lies dormant - {perk.name} would have answered
     here"``. Delivered to the HOLDER only through
     ``world.scenes.interaction_services.narrate_privately``, never the room.
 
@@ -354,7 +354,7 @@ def announce_dormant_perks(dormant: list[FiredPerk], *, subject: CharacterSheet)
     for firing in dormant:
         narrate_privately(
             subject_character,
-            f"your vow lies dormant — {firing.perk.name} would have answered here",
+            f"your vow lies dormant - {firing.perk.name} would have answered here",
         )
 
 
