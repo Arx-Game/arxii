@@ -286,6 +286,48 @@ manage *args:
 migrate:
     uv run arx manage migrate
 
+# --- Migration chain regeneration (ADR-0272) ----------------------------------
+
+# Regenerate the arxii migration chain to its floor. Replaces Django's
+# squashmigrations (core_management overrides it). Worktree only, clean tree,
+# dev DB at the chain tip. Writes regeneration-report.md for the PR body.
+#   just regenerate-migrations
+regenerate-migrations:
+    uv run arx manage squashmigrations arxii
+
+# Prove a regenerated chain: replay it into a fresh scratch DB, build a second
+# from model state, assert the partition, diff the two schemas, print replay
+# time and peak RSS. SEQUENTIAL by design: a full replay is most of a 4 GiB
+# container on its own; never run it alongside anything else. Refuses if the
+# scratch DBs exist and never drops them; afterwards, by hand:
+#   psql "$MAINT_URL" -c 'DROP DATABASE arxii_regen_migrate' (and _models)
+# Plain `python` entry points on purpose: `arx` re-reads src/.env with
+# override, which would send the replay at the dev database.
+#   just verify-regeneration
+verify-regeneration:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    eval "$(just _testdb-url)"
+    PREFIX=${MAINT_URL%/postgres}
+    for db in arxii_regen_migrate arxii_regen_models; do
+        if psql "$MAINT_URL" -tAc "SELECT 1 FROM pg_database WHERE datname='${db}'" | grep -q 1; then
+            echo "verify-regeneration: ${db} already exists; drop it by hand first (this recipe never drops)." >&2
+            exit 1
+        fi
+        psql "$MAINT_URL" -v ON_ERROR_STOP=1 -c "CREATE DATABASE \"${db}\";"
+    done
+    echo "verify-regeneration: replaying the chain into arxii_regen_migrate"
+    DATABASE_URL="${PREFIX}/arxii_regen_migrate" uv run python tools/replay_timing.py
+    RELKIND=$(psql "${PREFIX}/arxii_regen_migrate" -tAc "SELECT relkind FROM pg_class WHERE relname='arxii_interaction'")
+    if [ "$RELKIND" != "p" ]; then
+        echo "verify-regeneration: arxii_interaction relkind='${RELKIND}', expected 'p' (partition lost: see #2982)" >&2
+        exit 1
+    fi
+    echo "verify-regeneration: building arxii_regen_models from model state"
+    DATABASE_URL="${PREFIX}/arxii_regen_models" uv run python tools/build_schema.py
+    uv run python tools/compare_schemas.py "${PREFIX}/arxii_regen_migrate" "${PREFIX}/arxii_regen_models"
+    echo "verify-regeneration: OK (empty schema diff)"
+
 # --- Prod data pull ------------------------------------------------------------
 
 # Fetch the LATEST prod DB dump (via the read-only `dev_reader` Object
