@@ -80,7 +80,7 @@ Four ways to add points:
 ### Character Data
 - **CharacterRelationship** — Core relationship between two CharacterSheets. Tracks
   active/pending status, deceit state, weekly development/change counters. The target is
-  either a `CharacterSheet` (`target`) or, since #3575 (ADR-0270), a bonded `Companion`
+  either a `CharacterSheet` (`target`) or, since #3575 (ADR-0272), a bonded `Companion`
   (`target_companion`), exactly one set (two partial unique constraints plus the
   `relationship_target_xor_companion` check). Read `target_name` rather than
   `target.character` anywhere a row may be about a companion.
