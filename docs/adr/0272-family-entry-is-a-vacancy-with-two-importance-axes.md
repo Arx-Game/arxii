@@ -18,13 +18,12 @@ Vacancy's family's influence (extending ADR-0269 to a second consumer), and set 
 capacity where blank means a standing vacancy. Kin versus retainer is derived from
 whether the Vacancy links a `KinSlotPool` or an appable `Kinsperson`. One Vacancy per
 character at CG. Vacancies are credited and authored in the database but are not
-corpus rows: they belong to one installation's family.
-
-Openness is enforced only at finalize, never at draft-time validation: `get_lineage_errors`
-calls `reachable_vacancies(draft, require_open=False)` when checking a previously
-selected Vacancy is still reachable, so a Vacancy that fills between pick and approval
-degrades gracefully through `take_vacancy`'s `VacancyExhaustedError` at finalize
-instead of blocking `require_draft_complete`'s re-validation on approval. A malformed
+corpus rows: they belong to one installation's family. Openness is enforced only at
+finalize, never at draft-time validation: `get_lineage_errors` calls
+`reachable_vacancies(draft, require_open=False)` when checking a previously selected
+Vacancy is still reachable, so a Vacancy that fills between pick and approval degrades
+gracefully through `take_vacancy`'s `VacancyExhaustedError` at finalize instead of
+blocking `require_draft_complete`'s re-validation on approval. A malformed
 `HouseTemplate.name_pattern` (a staff authoring error, not a player mistake) is a soft
 validation error ("tell staff"), never an uncaught `re.error`.
 
