@@ -1565,7 +1565,7 @@ Lore storage and character knowledge tracking.
 
 - **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`,
   `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
-  ADR-0270)
+  ADR-0272)
 - **Key Methods:** Character learning from starting choices or teaching; `services.
   file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing
 - **Visibility (ADR-0221):** entries are the only unit of secrecy; categories/subjects

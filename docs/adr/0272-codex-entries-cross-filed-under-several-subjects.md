@@ -1,4 +1,4 @@
-# ADR-0270: A codex entry cross-files under several subjects through a dedicated link table
+# ADR-0272: A codex entry cross-files under several subjects through a dedicated link table
 
 **Status:** Accepted (#2896). Related ADR-0221 (visibility), ADR-0238 (content durability).
 

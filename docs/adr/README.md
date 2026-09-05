@@ -318,5 +318,5 @@ treat those names as hints to confirm, not gospel.
 - [0267 - MFA secrets are encrypted at rest under a dedicated vault key](0267-mfa-secrets-encrypted-under-a-dedicated-vault-key.md) (#3591)
 - [0268 - Family standing is expressed through existing organisation mechanisms, and family kinds are rows](0268-family-standing-uses-existing-organisation-mechanisms-and-kinds-are-rows.md) (#3617; related ADR-0010, ADR-0101, ADR-0238, ADR-0251)
 - [0269 - Upbringings price standing as family influence times position](0269-upbringings-price-standing-as-family-influence-times-position.md) (#3617; related ADR-0268, ADR-0209)
-- [0270 - A codex entry cross-files under several subjects through a dedicated link table](0270-codex-entries-cross-filed-under-several-subjects.md) (#2896; related ADR-0221, ADR-0238)
+- [0270 - A codex entry cross-files under several subjects through a dedicated link table](0272-codex-entries-cross-filed-under-several-subjects.md) (#2896; related ADR-0221, ADR-0238)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

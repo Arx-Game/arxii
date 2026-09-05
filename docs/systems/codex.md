@@ -57,7 +57,7 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 ---
 
-## Filing an entry under a second subject (ADR-0270)
+## Filing an entry under a second subject (ADR-0272)
 
 `CodexEntry.subject` stays the entry's one canonical home: its detail page lives
 there, and it is the subject `resolve_codex_links` prefers when a wikilink could

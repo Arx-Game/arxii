@@ -35,7 +35,7 @@ function EntryCard({
   onClick: () => void;
 }) {
   // A filing puts the entry in this listing without moving its canonical home
-  // (see ADR-0270); gloss it here so the browser makes that clear.
+  // (see ADR-0272); gloss it here so the browser makes that clear.
   const filedFromElsewhere = subjectId !== undefined && entry.subject !== subjectId;
 
   return (

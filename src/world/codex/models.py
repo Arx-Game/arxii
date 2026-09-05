@@ -321,7 +321,7 @@ class CodexEntryFiling(NaturalKeyMixin, SharedMemoryModel):
     wikilink resolution is keyed off it. A filing cross-lists the entry under
     one additional subject's listing without moving it or duplicating its
     content - the entry is still fetched, edited, and rendered from the single
-    row on ``CodexEntry``. See ADR-0270 for why this stays a dedicated link
+    row on ``CodexEntry``. See ADR-0272 for why this stays a dedicated link
     table rather than a many-to-many on either side.
     """
 
