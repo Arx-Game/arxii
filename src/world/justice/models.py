@@ -711,9 +711,10 @@ class WitnessReactionTarget(SharedMemoryModel):
 
     Written when a public act opens its reaction window: the generic
     ReactionWindow can't carry kind-specific data, so this is the per-kind
-    "settlement target" (the SceneEntryEndorsement pattern). At scene close
-    the WITNESS handler reads it to resolve each reactor's chosen response
-    (approve, report, intervene) against the deed being witnessed.
+    "settlement target" (the SceneEntryEndorsement pattern). The WITNESS
+    handler reads it immediately on reaction (inside the reaction's own
+    transaction, not at scene close) to resolve the reactor's choice
+    (report, intervene, ignore) against the deed being witnessed.
     """
 
     window = models.OneToOneField(

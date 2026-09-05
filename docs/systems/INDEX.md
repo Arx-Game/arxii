@@ -1826,7 +1826,10 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
   #2378)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
   `accrue_heat`, `accrue_for_deed_knowledge` (evidence-disposal dampener), `heat_for`,
-  `associate_heat`, `tag_deed_crimes` (+ evidence generation), `heat_decay_tick`
+  `associate_heat`, `report_witnessed_crime` (the shared report core: `accrue_heat` +
+  a reputation sting; called by both `crime_watch.flag_crime` and the WITNESS
+  reaction handler's "report" choice, #2987), `tag_deed_crimes` (+ evidence
+  generation), `heat_decay_tick`
   (daily cron); accusation bridge (#1825): `record_accusation_crime`,
   `accrue_accusation_heat` (skips retracted claims), `file_criminal_accusation`
   (composes `secrets.mint_accusation` + claim + heat — justice→secrets, ADR-0010);
@@ -3201,8 +3204,12 @@ action consent flow, and a three-mode non-combat round framework.
   (`react-to-interaction`'s lazy-open kind, #911), `SPREAD_ASSIST` (Acclaim the Telling, sidecar
   `societies.SpreadAssistTarget` boosting a `LegendEntry`'s spread, #915), `WITNESS` (Witness a
   Public Act, sidecar `justice.WitnessReactionTarget` linking to the `LegendEntry` bystanders
-  react to, #2987). A kind needing per-window data beyond the generic `ReactionWindow` row
-  carries a 1:1 sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
+  react to, #2987 — hidden/`public=False` so reports stay anonymous; handler
+  `justice.reaction_kinds.WITNESS_KIND` resolves "report" immediately, on reaction,
+  as one `justice.report_witnessed_crime` call per `DeedCrimeTag` on the deed against
+  the deed-time actor persona; "intervene"/"ignore" have no mechanical effect). A
+  kind needing per-window data beyond the generic `ReactionWindow` row carries a 1:1
+  sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
   `ReactionWindow` itself.
 - **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)

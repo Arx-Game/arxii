@@ -12,3 +12,11 @@ def ready() -> None:
     from world.projects.services import register_kind_handler  # noqa: PLC0415
 
     register_kind_handler(ProjectKind.FRAME_JOB, resolve_frame_job)
+
+    # #2987 — register the WITNESS reaction kind so bystanders present at a
+    # scene-witnessed deed can report/intervene/ignore.
+    from world.justice.reaction_kinds import WITNESS_KIND  # noqa: PLC0415
+    from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+    from world.scenes.reaction_services import register_reaction_kind  # noqa: PLC0415
+
+    register_reaction_kind(ReactionWindowKind.WITNESS, WITNESS_KIND)

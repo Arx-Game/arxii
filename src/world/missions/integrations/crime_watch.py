@@ -46,21 +46,15 @@ def _deed_time_persona(line: MissionDeedRewardLine) -> Persona | None:
 def flag_crime(line: MissionDeedRewardLine, *, room: ObjectDB) -> None:
     """Mint the criminal consequences of one CRIME_WATCH line at ``room``.
 
-    Heat: :func:`world.justice.services.accrue_heat` against the deed-time
-    persona, judged by the law cascade at the report location (no law / out of
-    jurisdiction → silently nothing — legal there). Reputation: the enforcing
-    society's regard drops by the winning law's weight (established/primary
-    personas only). An unknown ``ref`` slug is an authoring gap — logged
-    loudly, never raised (the report must not crash on a typo).
+    Resolves the CrimeKind slug and the deed-time persona, then delegates the
+    heat + reputation core to
+    :func:`world.justice.services.report_witnessed_crime` (#2987) — the same
+    seam a WITNESS reaction window's "report" choice calls. An unknown
+    ``ref`` slug is an authoring gap — logged loudly, never raised (the report
+    must not crash on a typo).
     """
     from world.justice.models import CrimeKind  # noqa: PLC0415
-    from world.justice.services import (  # noqa: PLC0415
-        accrue_heat,
-        area_for_room,
-        enforcing_society_for,
-        law_for,
-    )
-    from world.societies.renown import bump_society_reputation  # noqa: PLC0415
+    from world.justice.services import report_witnessed_crime  # noqa: PLC0415
 
     kind = CrimeKind.objects.filter(slug=line.ref).first()
     if kind is None:
@@ -75,12 +69,4 @@ def flag_crime(line: MissionDeedRewardLine, *, room: ObjectDB) -> None:
             f"crime_watch.flag_crime: line pk={line.pk} has no resolvable persona — skipped."
         )
         return
-    area = area_for_room(room)
-    row = accrue_heat(persona=persona, crime_kind=kind, area=area, scale=1)
-    if row is None:
-        return  # legal here / out of jurisdiction — no consequence.
-    law = law_for(area, kind)
-    society = enforcing_society_for(law.area) if law is not None else None
-    if society is not None:
-        # PLACEHOLDER magnitude: the reputation sting mirrors the heat weight.
-        bump_society_reputation(persona, society, -law.heat_weight)
+    report_witnessed_crime(persona=persona, crime_kind=kind, room=room)

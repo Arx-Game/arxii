@@ -59,6 +59,12 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
 - `associate_heat(*, from_persona, to_persona)` — the outing/identification seam
   (copies warrants; the mask keeps its own). Callers: the mission-report
   association chance today; the #1334 secrets-outing writer later.
+- `report_witnessed_crime(*, persona, crime_kind, room) -> PersonaHeat | None` — the
+  shared report core (#2987): `accrue_heat` at `area_for_room(room)` then a
+  `bump_society_reputation` sting by the winning law's weight. Both live report
+  paths delegate here — `missions.integrations.crime_watch.flag_crime` and the
+  `world.justice.reaction_kinds` WITNESS handler's "report" choice — so a
+  scene-witnessed deed and a mission-reported deed are judged identically.
 - `tag_deed_crimes(deed, crime_kinds)` — idempotent tagging.
 - `heat_decay_tick()` — daily cron (`justice.heat_decay` in `game_clock/tasks.py`),
   decays toward zero and deletes cold rows. Magnitudes PLACEHOLDER.
@@ -87,6 +93,14 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    else active persona) at the report room + a `bump_society_reputation` sting.
    `ReportStyle.MOSTLY_ACCURATE` runs a dodge check (PROVISIONAL Persuasion) to
    skip both; reporting a masked run barefaced risks the association check.
+3. **Bystander report (#2987)** — the WITNESS reaction-window kind
+   (`world.justice.reaction_kinds.WITNESS_KIND`, registered `public=False` so
+   reports stay anonymous). A PC present at a scene-witnessed public deed may
+   choose "report", which resolves immediately (inside the reaction's own
+   transaction, not at scene close): one `report_witnessed_crime` call per
+   `DeedCrimeTag` on the deed, against the deed-time actor persona, at the
+   scene's location (falling back to the actor's own current room). "Intervene"
+   and "ignore" carry no mechanical effect — justice stays NPC-driven.
 
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds
