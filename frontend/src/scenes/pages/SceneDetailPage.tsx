@@ -204,6 +204,9 @@ export function SceneDetailPage() {
 
   // The foldable part of the header (#3557): rendered inline when idle, inside
   // the "Scene tools" accordion during an encounter. Same order as before.
+  // Folding remounts the subtree, so a local draft in SelfCheckPanel or
+  // TavernGameWidget is lost at the tick an encounter starts; accepted in
+  // ADR-0270. Prompts that need an answer never fold.
   const sceneTools = (
     <>
       {scene && <SceneLinesAndVeilsCard sceneId={id} />}

@@ -780,4 +780,75 @@ describe('CombatTacticalMap', () => {
     // Wanderer has no position: not drawn anywhere.
     expect(screen.queryByTitle('Wanderer (bystander)')).not.toBeInTheDocument();
   });
+
+  it('excludes an opponent with a scene persona from the bystanders by objectdb_id (#3557)', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(
+      makeScene({
+        personas: [
+          { id: 100, name: 'Rival Knight', persona_type: 'primary', character_sheet: 77 },
+          { id: 200, name: 'Onlooker', persona_type: 'primary', character_sheet: 20 },
+        ],
+        persona_positions: [
+          { persona_id: 100, position: { id: 101, name: 'North Wall' } },
+          { persona_id: 200, position: { id: 101, name: 'North Wall' } },
+        ],
+      })
+    );
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [],
+        opponents: [
+          {
+            id: 2,
+            objectdb_id: 77,
+            name: 'Rival Knight',
+            tier: 'mook',
+            health: 10,
+            max_health: 10,
+            soak_value: null,
+            probing_threshold: null,
+            current_phase: 0,
+            status: 'active',
+            active_conditions: [],
+            thumbnail_url: 'https://example.com/rival.png',
+            thumbnail_media_url: null,
+            current_position: { id: 101, name: 'North Wall' },
+            mirrors_participant_id: null,
+          },
+        ],
+        position_nodes: [
+          {
+            id: 101,
+            name: 'North Wall',
+            kind: 'feature',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+          },
+        ],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    const nodeEl = await screen.findByTestId('tactical-map-node-101');
+    await vi.waitFor(() => {
+      expect(within(nodeEl).getAllByTestId('occupant-avatar')).toHaveLength(2);
+    });
+    const avatars = within(nodeEl).getAllByTestId('occupant-avatar');
+    // Rival Knight is the opponent: drawn once, as a combatant, never as a bystander.
+    expect(avatars[0]).not.toHaveAttribute('data-bystander');
+    expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
+    expect(avatars[1]).toHaveAttribute('title', 'Onlooker (bystander)');
+    expect(screen.queryByTitle('Rival Knight (bystander)')).not.toBeInTheDocument();
+  });
 });
