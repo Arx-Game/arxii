@@ -143,11 +143,7 @@ def _parse_name_and_kwargs(rest: str) -> tuple[str, dict[str, str]]:
 
 def _active_companion_of(obj: Any) -> Companion | None:
     """The unreleased Companion whose live object is ``obj``, else None (#3575)."""
-    # GETATTR_LITERAL noqa: duck-typed search result (could be any ObjectDB subtype).
-    rows = getattr(obj, "companion_rows", None)  # noqa: GETATTR_LITERAL
-    if rows is None:
-        return None
-    return rows.filter(released_at__isnull=True).first()
+    return obj.companion_rows.filter(released_at__isnull=True).first()
 
 
 def _require_int(value: str | None, name: str) -> int:
