@@ -3214,9 +3214,21 @@ action consent flow, and a three-mode non-combat round framework.
   right after the deed's #1464 reach fork when the caller passed an
   `interaction`, the deed's room is publicly listed, and the deed carries a
   `justice.DeedCrimeTag`; a social-pose solo deed with no interaction opens
-  none. A kind needing per-window data beyond the generic `ReactionWindow` row
-  carries a 1:1 sidecar model (the `SceneEntryEndorsement` pattern) rather than
-  widening `ReactionWindow` itself.
+  none. Today only combat-aftermath deeds reach this: `world.combat.services
+  ._apply_aftermath_rules` sets `ResolutionContext.interaction`
+  (`world.checks.types`) to the encounter's already-created OUTCOME
+  interaction before its consequence pool fires `_legend_award`, which
+  forwards it through. The generic scene-action pipeline is a named gap
+  (see the comment at `world.scenes.action_services` line 931,
+  `_resolve_action_against_persona`): its result interaction is created
+  after `apply_resolution` runs, and its `ResolutionContext` never sets
+  `participants`, so a `LEGEND_AWARD` effect cannot fire there at all today.
+  Also unwired: no authored `LEGEND_AWARD` `ConsequenceEffect` carries crime
+  kinds, so the first live producer of a public, crime-tagged,
+  interaction-anchored deed needs that content authored. A kind needing
+  per-window data beyond the generic `ReactionWindow` row carries a 1:1
+  sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
+  `ReactionWindow` itself.
 - **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,

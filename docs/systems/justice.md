@@ -106,12 +106,29 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    separate call site: `societies.services.create_solo_deed` and
    `create_legend_event` both accept an `interaction` keyword and, right
    after the #1464 reach fork runs, call `open_witness_window` when all three
-   hold: the caller passed an `interaction` (a combat or action outcome
-   deed; a social-pose solo deed passes none and opens nothing), the deed's
-   room is publicly listed, and the deed carries at least one
-   `DeedCrimeTag`. This check is independent of the reach fork's own
-   scandal/containment judgment; an untagged or non-crime deed simply never
-   opens a window.
+   hold: the caller passed an `interaction`, the deed's room is publicly
+   listed, and the deed carries at least one `DeedCrimeTag`. This check is
+   independent of the reach fork's own scandal/containment judgment; an
+   untagged or non-crime deed simply never opens a window.
+
+   Today only combat-aftermath deeds can reach the window in production.
+   `ResolutionContext.interaction` (`world.checks.types`) carries the
+   interaction through to `_legend_award`, and only
+   `world.combat.services._apply_aftermath_rules` sets it: the encounter's
+   OUTCOME interaction already exists and `context.participants` is already
+   populated by the time its consequence pool fires. The generic scene-action
+   pipeline is a named gap, not wired: `world.scenes.action_services`
+   `_resolve_action_against_persona` builds its `ResolutionContext` (see the
+   comment at line 931) before its own result interaction exists, and never
+   populates `participants` at all, so a `LEGEND_AWARD` effect cannot fire
+   from a scene action today regardless of the interaction question.
+   Separately, no authored `LEGEND_AWARD` `ConsequenceEffect` carries
+   crime kinds yet (the model has no such field), so even a wired combat
+   deed cannot become crime-tagged through this pipeline alone; the first
+   live producer of a public, crime-tagged, interaction-anchored deed needs
+   that content authored (or a direct `create_solo_deed`/`create_legend_event`
+   caller that already passes both `crime_kinds=` and `interaction=`, neither
+   of which any caller does today).
 
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds
