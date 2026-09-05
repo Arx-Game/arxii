@@ -276,4 +276,33 @@ describe('useAccountQuery per-tab hydration (#3479)', () => {
     expect(store.getState().game.activeEntryId).toBe(3);
     expect(readTabIdentity()?.entryId).toBe(3);
   });
+
+  // #3479 review round 1 (Critical): sessionStorage is per-tab but survives
+  // a reload of that same tab; Redux does not. Before this fix, the "stored
+  // and still owned" branch returned early unconditionally, so a reload left
+  // a warm sessionStorage identity stranded next to a cold, un-hydrated
+  // Redux (`browsingEntryId`/`active`/`activeEntryId` all null) -- the tab
+  // rendered as if nothing were selected. This test deliberately seeds
+  // sessionStorage itself (no `beforeEach` here clears it after that seed)
+  // and never dispatches into Redux first, to reproduce that exact cold-
+  // Redux/warm-storage state.
+  it('resolves this tab identity from sessionStorage after a cold Redux reload', async () => {
+    writeTabIdentity(5);
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(5, 'Aria'), availableCharacter(8, 'Zara')],
+      // The account's durable default differs from the stored id -- the
+      // stored id must win regardless.
+      selected_entry_id: 8,
+      selected_entry: rosterEntry(8, 'Zara'),
+    });
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.browsingEntryId).toBe(5));
+    expect(store.getState().game.active).toBe('Aria');
+    expect(store.getState().game.activeEntryId).toBe(5);
+    expect(readTabIdentity()?.entryId).toBe(5);
+  });
 });

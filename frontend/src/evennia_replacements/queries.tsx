@@ -8,13 +8,14 @@ import {
   postRegister,
 } from './api';
 import { AccountData, LoginResult } from './types';
-import { useAppDispatch } from '@/store/hooks';
+import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
 import {
   resetGame,
   hydrateActiveCharacter,
   setBrowsingIdentity,
   clearBrowsingIdentity,
+  selectBrowsingEntryId,
 } from '@/store/gameSlice';
 import { readTabIdentity, writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -23,6 +24,11 @@ import { useNavigate } from 'react-router-dom';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
+  // Redux's own idea of this tab's browsing identity, read alongside
+  // sessionStorage below so a cold-Redux/warm-storage mismatch (a page
+  // reload: sessionStorage survives, Redux does not) can be detected and
+  // repaired instead of silently left un-hydrated (#3479 review round 1).
+  const reduxBrowsingEntryId = useAppSelector(selectBrowsingEntryId);
   const result = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
@@ -57,13 +63,31 @@ export function useAccountQuery() {
     const stored = readTabIdentity();
 
     if (stored !== null) {
+      // "Owned" here means "appears in the account's ACTIVE roster today"
+      // (`available_characters` -- same list the Hall picker docks avatars
+      // from), not literal FK ownership: a retired/archived entry drops out
+      // of this list even though the account row still technically exists.
+      // That is exactly the case this branch's fallthrough (clear + reseed)
+      // is for.
       const ownedIds = account?.available_characters.map((c) => c.id) ?? [];
       if (ownedIds.includes(stored.entryId)) {
-        // This tab already has a browsing identity it still owns -- leave
-        // `active`/`activeEntryId`/`browsingEntryId` exactly as they are.
-        // Never tears down a live session either way (selection isn't
-        // presence): a connected `sessions[active]` in this tab survives
-        // untouched, same as it always has.
+        // This tab already has a browsing identity it still owns. Gate the
+        // dispatch on REDUX's own state, not on storage presence alone
+        // (#3479 review round 1): after a hard reload, sessionStorage
+        // survives but Redux starts cold (`browsingEntryId`/`active` both
+        // null), so a bare early return here would leave the tab showing no
+        // selection at all despite a perfectly valid stored identity. Only
+        // when Redux is already in sync do we truly no-op -- that's what
+        // keeps a later refetch carrying a DIFFERENT account default from
+        // overwriting an already-hydrated tab (never tears down a live
+        // session either way; selection isn't presence).
+        if (reduxBrowsingEntryId !== stored.entryId) {
+          const ownedEntry = account?.available_characters.find((c) => c.id === stored.entryId);
+          dispatch(setBrowsingIdentity(stored.entryId));
+          if (ownedEntry) {
+            dispatch(hydrateActiveCharacter({ name: ownedEntry.name, entryId: stored.entryId }));
+          }
+        }
         return;
       }
       // The stored entry is no longer among this account's entries (e.g. the
@@ -82,7 +106,7 @@ export function useAccountQuery() {
       dispatch(clearBrowsingIdentity());
     }
     dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
-  }, [result.data, dispatch]);
+  }, [result.data, dispatch, reduxBrowsingEntryId]);
 
   return result;
 }
