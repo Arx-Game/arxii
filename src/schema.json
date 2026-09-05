@@ -29245,7 +29245,8 @@ paths:
 
         ``kind`` defaults to WITNESS (#2987's bystander-reaction menu); any
         registered ``ReactionWindowKind`` may be requested. Scoping mirrors
-        ``react_to_window``'s own eligibility exactly: the account must be a
+        ``react_to_window``'s eligibility (which additionally requires
+        ``scene.is_active`` at reaction time): the account must be a
         scene participant (a public scene is otherwise visible to anyone,
         but that alone never made a non-participant a bystander) AND the
         persona must be able to see the witnessed interaction
@@ -29253,6 +29254,22 @@ paths:
         deeds, and windows already reacted to are excluded. Never exposes a
         reactor list; the response carries only the window's identity and
         its live choices.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+        description: ReactionWindowKind to list (defaults to witness).
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number.
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Rows per page (default 50, max 200).
       tags:
       - reaction-windows
       security:

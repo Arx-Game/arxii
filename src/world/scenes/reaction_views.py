@@ -6,7 +6,7 @@ from http import HTTPMethod
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db.models import QuerySet
-from drf_spectacular.utils import extend_schema, inline_serializer
+from drf_spectacular.utils import OpenApiParameter, extend_schema, inline_serializer
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -172,14 +172,37 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
 
         return self._reaction_response(reaction, reaction.window_id)
 
-    @extend_schema(responses=_pending_paginated_response())
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="kind",
+                type=str,
+                required=False,
+                description="ReactionWindowKind to list (defaults to witness).",
+            ),
+            OpenApiParameter(
+                name="page",
+                type=int,
+                required=False,
+                description="Page number.",
+            ),
+            OpenApiParameter(
+                name="page_size",
+                type=int,
+                required=False,
+                description="Rows per page (default 50, max 200).",
+            ),
+        ],
+        responses=_pending_paginated_response(),
+    )
     @action(detail=False, methods=[HTTPMethod.GET])
     def pending(self, request: Request) -> Response:
         """Open windows of ``kind`` the caller's active persona can still react to.
 
         ``kind`` defaults to WITNESS (#2987's bystander-reaction menu); any
         registered ``ReactionWindowKind`` may be requested. Scoping mirrors
-        ``react_to_window``'s own eligibility exactly: the account must be a
+        ``react_to_window``'s eligibility (which additionally requires
+        ``scene.is_active`` at reaction time): the account must be a
         scene participant (a public scene is otherwise visible to anyone,
         but that alone never made a non-participant a bystander) AND the
         persona must be able to see the witnessed interaction
@@ -188,7 +211,7 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
         reactor list; the response carries only the window's identity and
         its live choices.
         """
-        # Kept off FilterSet: a single registry-lookup param, not a queryset filter.
+        # Custom-action param; FilterSets don't apply to detail=False actions.
         kind = request.query_params.get("kind", ReactionWindowKind.WITNESS)  # noqa: USE_FILTERSET
         valid_kinds = {value for value, _label in ReactionWindowKind.choices}
         if kind not in valid_kinds:
@@ -231,6 +254,9 @@ class ReactionWindowViewSet(viewsets.GenericViewSet):
         )
         # Persona-level perception (can_view_interaction) is Python-side, so
         # narrow to visible pks and re-filter: pagination stays on a QuerySet.
+        # can_view_interaction costs 1-2 queries per candidate window; bounded,
+        # since candidates are only the unsettled windows of scenes the caller
+        # participates in.
         visible_pks = [w.pk for w in candidates if can_view_interaction(w.interaction, persona)]
         visible = candidates.filter(pk__in=visible_pks)
 

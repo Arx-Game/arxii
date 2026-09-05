@@ -183,3 +183,26 @@ export async function postBribe(
   if (!res.ok) await throwApiError(res, 'The bribe approach failed');
   return res.json();
 }
+
+// ---------------------------------------------------------------------------
+// Witness reaction windows (#2987)
+// ---------------------------------------------------------------------------
+
+export type PendingReactionWindow = components['schemas']['PendingReactionWindow'];
+export type PaginatedPendingReactionWindowList =
+  components['schemas']['PaginatedPendingReactionWindowList'];
+
+/**
+ * GET /api/reaction-windows/pending/
+ *
+ * Open witness-kind reaction windows the caller's active persona can still
+ * react to (kind defaults to witness server-side). The payload is
+ * deliberately thin (window identity + choices): no reactor list, no
+ * counts - witness reactions stay anonymous end to end. Backend:
+ * ReactionWindowViewSet.pending (src/world/scenes/reaction_views.py).
+ */
+export async function getPendingWitnessWindows(): Promise<PaginatedPendingReactionWindowList> {
+  const res = await apiFetch('/api/reaction-windows/pending/');
+  if (!res.ok) throw new Error('Failed to load pending witness reactions');
+  return res.json() as Promise<PaginatedPendingReactionWindowList>;
+}

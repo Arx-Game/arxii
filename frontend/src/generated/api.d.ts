@@ -17962,7 +17962,8 @@ export interface paths {
      *
      *     ``kind`` defaults to WITNESS (#2987's bystander-reaction menu); any
      *     registered ``ReactionWindowKind`` may be requested. Scoping mirrors
-     *     ``react_to_window``'s own eligibility exactly: the account must be a
+     *     ``react_to_window``'s eligibility (which additionally requires
+     *     ``scene.is_active`` at reaction time): the account must be a
      *     scene participant (a public scene is otherwise visible to anyone,
      *     but that alone never made a non-participant a bystander) AND the
      *     persona must be able to see the witnessed interaction
@@ -71281,7 +71282,14 @@ export interface operations {
   };
   reaction_windows_pending_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description ReactionWindowKind to list (defaults to witness). */
+        kind?: string;
+        /** @description Page number. */
+        page?: number;
+        /** @description Rows per page (default 50, max 200). */
+        page_size?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;

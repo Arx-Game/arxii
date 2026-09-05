@@ -18,6 +18,7 @@ import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVei
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
+import { WitnessReactionOfferGate } from '@/justice/components/WitnessReactionOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
@@ -224,6 +225,7 @@ export function SceneDetailPage() {
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
+        {isActive && <WitnessReactionOfferGate personaId={personaId} />}
         {scene && <SceneLinesAndVeilsCard sceneId={id} />}
         {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
         {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
