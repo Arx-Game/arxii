@@ -94,7 +94,11 @@ class ReactionsPerRoundGateTests(TestCase):
         self.assertEqual(self.interposer.reactions_used, REACTIONS_PER_ROUND)
 
         payload_two = _payload()
-        _dispatch_interpose_action(self.action, self.protected, payload_two)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            _dispatch_interpose_action(self.action, self.protected, payload_two)
 
         self.interposer.refresh_from_db()
         # Budget exhausted: no second dispatch attempt, no further increment,
@@ -103,6 +107,11 @@ class ReactionsPerRoundGateTests(TestCase):
         self.assertEqual(mock_dispatch.call_count, 1)
         self.assertEqual(self.interposer.reactions_used, REACTIONS_PER_ROUND)
         self.assertEqual(payload_two.amount, 10)
+        # #3574: the guardian is told, privately only (ADR-0161 keeps the table blind).
+        private.assert_called_once()
+        self.assertEqual(private.call_args.args[0].pk, self.interposer.character_sheet.character.pk)
+        self.assertIn("already spent your reaction", private.call_args.args[1])
+        room.assert_not_called()
 
     @patch("world.combat.services.dispatch_interpose")
     def test_reset_next_round(self, mock_dispatch) -> None:
@@ -164,9 +173,16 @@ class AbsorptionCapPerMomentTests(TestCase):
         self.assertEqual(mock_dispatch.call_count, 2)
 
         # Cap reached: a third distinct interposer still declines on THIS payload.
-        _dispatch_interpose_action(action_three, self.protected, payload)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            _dispatch_interpose_action(action_three, self.protected, payload)
         self.assertEqual(payload.answers_consumed, ABSORPTION_CAP_PER_MOMENT)
         self.assertEqual(mock_dispatch.call_count, 2)
+        private.assert_called_once()
+        self.assertIn("already answered that blow", private.call_args.args[1])
+        room.assert_not_called()
 
     @patch("world.combat.services.dispatch_interpose")
     def test_cap_is_per_payload_not_global(self, mock_dispatch) -> None:

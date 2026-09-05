@@ -5408,7 +5408,8 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
     attempt to cap here; not consulted (documented v1 scope, #2638).
 
     Returns the catching Character on fire, or None (no eligible/budget-
-    exhausted guardian — the marker stays for explicit resolution).
+    exhausted guardian (who is told privately, #3574) — the marker stays for
+    explicit resolution).
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -5436,6 +5437,11 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
 
     interposer = action.participant
     if interposer.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(
+            interposer.character_sheet.character,
+            participant.character_sheet.character,
+            cap=False,
+        )
         return None
 
     interposer.reactions_used += 1
@@ -9891,6 +9897,36 @@ def _try_interpose_for_opponent(
     _dispatch_interpose_action(action, pre_payload.target, pre_payload)
 
 
+def _narrate_reaction_declined(
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: object,
+    *,
+    cap: bool,
+) -> None:
+    """Tell a guardian, privately, why their armed guard did not fire (#3574).
+
+    ``cap=False``: the guardian's own ``REACTIONS_PER_ROUND`` budget is spent.
+    ``cap=True``: ``ABSORPTION_CAP_PER_MOMENT`` interceptors already answered
+    this payload. No room line either way: ADR-0161 chose a silent no-op so the
+    table never learns a guardian's budget, and this keeps that while the
+    guardian themselves stops guessing. ``protected`` is whatever the fire
+    seam holds (a participant character, an ally summon's objectdb, or the
+    Sent Flying victim) and is only ever stringified.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    if cap:
+        text = (
+            f"Enough hands have already answered that blow; your guard over {protected} stays down."
+        )
+    else:
+        text = (
+            f"You have already spent your reaction this round; "
+            f"{protected} takes the blow unguarded."
+        )
+    narrate_privately(interposer, text)
+
+
 def _dispatch_interpose_action(
     action: CombatRoundAction,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -9906,17 +9942,20 @@ def _dispatch_interpose_action(
 
     **Reaction economy (#2639), shared fire seam per F-10c:** declines with
     the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
-    untouched) when either budget is exhausted — the interposer has already
-    spent their ``REACTIONS_PER_ROUND`` reaction this round, or this specific
-    payload has already been answered by ``ABSORPTION_CAP_PER_MOMENT``
-    interceptors. Both counters increment together on an actual attempt
-    (readiness is free; only firing spends the budget), regardless of whether
-    the guardian's own roll then succeeds.
+    untouched), telling the guardian privately why (#3574), when either
+    budget is exhausted — the interposer has already spent their
+    ``REACTIONS_PER_ROUND`` reaction this round, or this specific payload has
+    already been answered by ``ABSORPTION_CAP_PER_MOMENT`` interceptors. Both
+    counters increment together on an actual attempt (readiness is free; only
+    firing spends the budget), regardless of whether the guardian's own roll
+    then succeeds.
     """
     participant = action.participant
     if participant.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=False)
         return
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=True)
         return
 
     participant.reactions_used += 1
