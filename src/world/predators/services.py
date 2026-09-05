@@ -159,11 +159,16 @@ def _apply_robbery(band: PredatorBand) -> None:
     from world.currency.models import OrgIncomeStream  # noqa: PLC0415
     from world.societies.houses.models import Domain  # noqa: PLC0415
 
+    streams = list(OrgIncomeStream.objects.filter(organization=band.prey, active=True))
+    area_ids = {stream.area_id for stream in streams if stream.area_id is not None}
+    domain_by_area = {
+        domain.area_id: domain for domain in Domain.objects.filter(area_id__in=area_ids)
+    }
     skimmed = 0
-    for stream in OrgIncomeStream.objects.filter(organization=band.prey, active=True):
+    for stream in streams:
         pct = ROBBERY_SKIM_PCT
         if stream.area_id is not None:
-            domain = Domain.objects.filter(area_id=stream.area_id).first()
+            domain = domain_by_area.get(stream.area_id)
             if domain is not None:
                 pct = max(0, ROBBERY_SKIM_PCT - _defense_reduction(domain))
         cut = stream.uncollected_pool * pct // 100
