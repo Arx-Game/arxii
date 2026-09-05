@@ -102,6 +102,7 @@ const codexEntries: CodexEntryListItem[] = [
     known_by: [],
     art_url: null,
     perspective_of: null,
+    also_filed_under: [],
   },
 ];
 

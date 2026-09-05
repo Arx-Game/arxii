@@ -45,6 +45,13 @@ export interface CodexKnownBy {
   research_progress: number;
 }
 
+/** A subject an entry is filed under besides its canonical home (#2896). */
+export interface CodexAlsoFiledUnder {
+  subject_id: number;
+  name: string;
+  breadcrumb_path: BreadcrumbSegment[];
+}
+
 export interface CodexEntryListItem {
   id: number;
   name: string;
@@ -63,6 +70,8 @@ export interface CodexEntryListItem {
   art_url: string | null;
   /** Name of the culture whose take this entry is; null for canon entries. */
   perspective_of: string | null;
+  /** Other subjects this entry is filed under, besides its canonical `subject`. */
+  also_filed_under: CodexAlsoFiledUnder[];
 }
 
 export interface CodexLinkRef {

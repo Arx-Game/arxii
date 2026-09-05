@@ -115,6 +115,15 @@ is a `SharedMemoryModel`, and Django's prefetch bookkeeping stamps the result on
 instance itself, which would leak one request's filings onto the next request that
 reuses the same idmapper-cached instance under a different filter.
 
+**Frontend rendering.** `EntryDetail.tsx` (`frontend/src/codex/components/`) renders
+`also_filed_under` as a quiet "Also filed under:" line beneath the canonical
+breadcrumb, one link per filing (reusing `BreadcrumbLink`, extracted from
+`Breadcrumb.tsx` for this purpose), absent entirely when the entry carries no
+filings. `EntryGrid.tsx`, which lists a subject's entries, glosses a card with
+"Filed from {subject_name}" whenever the entry's canonical `subject` differs from
+the subject currently being browsed, so a filed entry's browser card discloses its
+real home.
+
 ---
 
 ## Perspective entries (#3277, #3281; ADR-0222, ADR-0224)

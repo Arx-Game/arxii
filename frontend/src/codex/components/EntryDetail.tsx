@@ -2,7 +2,7 @@ import { BookOpenCheck, Lock } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Breadcrumb } from './Breadcrumb';
+import { Breadcrumb, BreadcrumbLink } from './Breadcrumb';
 import { LoreSection, OOCSection } from './ContentSections';
 import type { CodexEntryDetail as CodexEntryDetailType } from '../types';
 
@@ -30,6 +30,20 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
     <Card>
       <CardHeader>
         <Breadcrumb items={breadcrumbItems} />
+        {entry.also_filed_under.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-1 gap-y-1 text-sm text-muted-foreground">
+            <span>Also filed under:</span>
+            {entry.also_filed_under.map((filing, index) => (
+              <span key={filing.subject_id} className="flex items-center gap-1">
+                {index > 0 && <span aria-hidden="true">,</span>}
+                <BreadcrumbLink
+                  label={filing.name}
+                  onClick={() => onNavigateBreadcrumb('subject', filing.subject_id)}
+                />
+              </span>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-2">
           <CardTitle>{entry.name}</CardTitle>
           {isUncovered && (

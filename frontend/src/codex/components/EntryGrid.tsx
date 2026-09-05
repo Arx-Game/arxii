@@ -5,20 +5,39 @@ import type { CodexEntryListItem } from '../types';
 
 interface EntryGridProps {
   entries: CodexEntryListItem[];
+  /** Subject currently being browsed; used to gloss entries filed here from elsewhere. */
+  subjectId?: number;
   onSelectEntry: (entryId: number) => void;
 }
 
-export function EntryGrid({ entries, onSelectEntry }: EntryGridProps) {
+export function EntryGrid({ entries, subjectId, onSelectEntry }: EntryGridProps) {
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
       {entries.map((entry) => (
-        <EntryCard key={entry.id} entry={entry} onClick={() => onSelectEntry(entry.id)} />
+        <EntryCard
+          key={entry.id}
+          entry={entry}
+          subjectId={subjectId}
+          onClick={() => onSelectEntry(entry.id)}
+        />
       ))}
     </div>
   );
 }
 
-function EntryCard({ entry, onClick }: { entry: CodexEntryListItem; onClick: () => void }) {
+function EntryCard({
+  entry,
+  subjectId,
+  onClick,
+}: {
+  entry: CodexEntryListItem;
+  subjectId?: number;
+  onClick: () => void;
+}) {
+  // A filing puts the entry in this listing without moving its canonical home
+  // (see ADR-0270); gloss it here so the browser makes that clear.
+  const filedFromElsewhere = subjectId !== undefined && entry.subject !== subjectId;
+
   return (
     <Card className="cursor-pointer transition-colors hover:bg-accent/50" onClick={onClick}>
       <CardHeader className="pb-2">
@@ -31,6 +50,9 @@ function EntryCard({ entry, onClick }: { entry: CodexEntryListItem; onClick: () 
             </Badge>
           )}
         </div>
+        {filedFromElsewhere && (
+          <p className="text-xs text-muted-foreground">Filed from {entry.subject_name}</p>
+        )}
       </CardHeader>
       <CardContent className="space-y-2">
         <p className="line-clamp-2 text-sm text-muted-foreground">{entry.summary}</p>

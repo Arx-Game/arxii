@@ -216,7 +216,7 @@ function SubjectView({
         <h2 className="text-xl font-semibold">{subject.name}</h2>
         {subject.description && <p className="mt-1 text-muted-foreground">{subject.description}</p>}
       </div>
-      <EntryGrid entries={entries} onSelectEntry={onSelectEntry} />
+      <EntryGrid entries={entries} subjectId={subjectId} onSelectEntry={onSelectEntry} />
     </div>
   );
 }
