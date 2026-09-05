@@ -107,6 +107,33 @@ class EntryKnowledgeMixin(serializers.Serializer):
     research_progress = serializers.SerializerMethodField()
     known_by = serializers.SerializerMethodField()
     perspective_of = serializers.SerializerMethodField()
+    also_filed_under = serializers.SerializerMethodField()
+
+    def get_also_filed_under(self, obj: CodexEntry) -> list[dict]:
+        """Other subjects this entry is cross-listed under, via a filing.
+
+        Reads ``context["filings_by_entry"]`` (the view builds it in one
+        flat query, joined to each filed subject and that subject's
+        breadcrumb cache), so this adds no query per entry. Each item
+        mirrors the shape of a breadcrumb entry: the filed subject's id,
+        name, and its own breadcrumb path, so the frontend can link
+        straight to that listing.
+        """
+        items = []
+        for filing in self.context.get("filings_by_entry", {}).get(obj.id, []):
+            subject = filing.subject
+            try:
+                breadcrumb_path = subject.breadcrumb_cache.breadcrumb_path
+            except ObjectDoesNotExist:
+                breadcrumb_path = subject.breadcrumb_path
+            items.append(
+                {
+                    "subject_id": subject.pk,
+                    "name": subject.name,
+                    "breadcrumb_path": breadcrumb_path,
+                }
+            )
+        return items
 
     def get_perspective_of(self, obj: CodexEntry) -> str | None:
         """Name of the culture whose take this entry is; None for canon entries.
@@ -166,6 +193,7 @@ class CodexEntryListSerializer(EntryKnowledgeMixin, serializers.ModelSerializer)
             "knowledge_status",
             "known_by",
             "perspective_of",
+            "also_filed_under",
             "art_url",
         ]
 
@@ -213,6 +241,7 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             "research_progress",
             "known_by",
             "perspective_of",
+            "also_filed_under",
             "art_url",
         ]
 

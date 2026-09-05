@@ -27,6 +27,7 @@ from world.codex.models import (
     BeginningsCodexGrant,
     CodexCategory,
     CodexEntry,
+    CodexEntryFiling,
     CodexSubject,
     TraditionCodexGrant,
 )
@@ -276,9 +277,32 @@ class CodexEntryViewSet(CodexVisibilityMixin, viewsets.ReadOnlyModelViewSet):
             return CodexEntryDetailSerializer
         return CodexEntryListSerializer
 
+    def _filings_by_entry(self, entry_ids: set[int]) -> dict[int, list[CodexEntryFiling]]:
+        """Map entry id -> its filing rows, each joined to its subject and breadcrumb.
+
+        One flat query, grouped in Python. Deliberately not a
+        ``prefetch_related`` attached to the ``CodexEntry`` instances: those
+        are ``SharedMemoryModel`` rows held in the idmapper identity map, and
+        Django's prefetch bookkeeping stamps the result onto the instance
+        itself (``_prefetched_objects_cache``) - a later request that reuses
+        the same cached instance under a different filter would see the
+        first request's filings instead of its own (see
+        feedback_prefetch_to_attr_leaks and ADR-0260).
+        """
+        if not entry_ids:
+            return {}
+        filings = CodexEntryFiling.objects.filter(entry_id__in=entry_ids).select_related(
+            "subject", "subject__breadcrumb_cache"
+        )
+        by_entry: dict[int, list[CodexEntryFiling]] = {}
+        for filing in filings:
+            by_entry.setdefault(filing.entry_id, []).append(filing)
+        return by_entry
+
     def get_serializer_context(self):
-        """Pass the knowledge map and reader characters to the serializers."""
+        """Pass the knowledge map, reader characters, and filing map to the serializers."""
         context = super().get_serializer_context()
         context["knowledge_by_entry"] = self._knowledge_by_entry()
         context["roster_entries"] = self._selected_roster_entries()
+        context["filings_by_entry"] = self._filings_by_entry(self._visible_entry_ids())
         return context

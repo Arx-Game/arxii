@@ -26735,6 +26735,19 @@ export interface components {
        *     serializes without it (e.g. featured lore).
        */
       readonly perspective_of: string | null;
+      /**
+       * @description Other subjects this entry is cross-listed under, via a filing.
+       *
+       *     Reads ``context["filings_by_entry"]`` (the view builds it in one
+       *     flat query, joined to each filed subject and that subject's
+       *     breadcrumb cache), so this adds no query per entry. Each item
+       *     mirrors the shape of a breadcrumb entry: the filed subject's id,
+       *     name, and its own breadcrumb path, so the frontend can link
+       *     straight to that listing.
+       */
+      readonly also_filed_under: {
+        [key: string]: unknown;
+      }[];
       readonly art_url: string | null;
     };
     /** @description Light serializer for entry lists. */
@@ -26769,6 +26782,19 @@ export interface components {
        *     serializes without it (e.g. featured lore).
        */
       readonly perspective_of: string | null;
+      /**
+       * @description Other subjects this entry is cross-listed under, via a filing.
+       *
+       *     Reads ``context["filings_by_entry"]`` (the view builds it in one
+       *     flat query, joined to each filed subject and that subject's
+       *     breadcrumb cache), so this adds no query per entry. Each item
+       *     mirrors the shape of a breadcrumb entry: the filed subject's id,
+       *     name, and its own breadcrumb path, so the frontend can link
+       *     straight to that listing.
+       */
+      readonly also_filed_under: {
+        [key: string]: unknown;
+      }[];
       readonly art_url: string | null;
     };
     CodexSubject: {

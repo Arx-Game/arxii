@@ -86,6 +86,35 @@ the entry or the subject CASCADEs and removes the filing row.
 `codex.codexentry`, so filings round-trip through the content export/import
 pipeline the same as the entries they point at.
 
+### API surface: listings and `also_filed_under`
+
+`CodexEntryViewSet`'s `?subject=<id>` filter (`CodexEntryFilter.filter_subject`,
+`world/codex/filters.py`) returns the union of the subject's canonical entries and
+entries filed under it (`Q(subject_id=value) | Q(filings__subject_id=value)`,
+`.distinct()`), so a filed entry appears once in the filed subject's listing rather
+than being duplicated or missing. Canonical entries sort first; filed entries follow
+in their filing's `sort_order`. Knowledge/visibility gating (`_visible_entry_ids`) is
+applied before the subject filter, so a filing never surfaces an entry the reader
+cannot otherwise see.
+
+Both `CodexEntryListSerializer` and `CodexEntryDetailSerializer` (via
+`EntryKnowledgeMixin`) expose `also_filed_under`, a list of every subject the entry
+is filed under besides its own:
+
+```json
+"also_filed_under": [
+  {"subject_id": 12, "name": "Rites of Passage", "breadcrumb_path": [...]}
+]
+```
+
+`breadcrumb_path` mirrors `subject_path`'s shape (the same `breadcrumb_cache`
+fallback pattern used elsewhere in the serializer). The view builds a flat
+`entry_id -> [CodexEntryFiling]` map in `get_serializer_context` (one query, grouped
+in Python) rather than `prefetch_related`-ing `CodexEntry.filings` directly: `CodexEntry`
+is a `SharedMemoryModel`, and Django's prefetch bookkeeping stamps the result onto the
+instance itself, which would leak one request's filings onto the next request that
+reuses the same idmapper-cached instance under a different filter.
+
 ---
 
 ## Perspective entries (#3277, #3281; ADR-0222, ADR-0224)

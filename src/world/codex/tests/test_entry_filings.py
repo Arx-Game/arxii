@@ -10,8 +10,14 @@ from django.core.exceptions import ValidationError
 from django.db import IntegrityError
 from django.test import TestCase
 
-from world.codex.factories import CodexEntryFactory, CodexEntryFilingFactory, CodexSubjectFactory
-from world.codex.models import CodexEntryFiling
+from world.codex.factories import (
+    CodexCategoryFactory,
+    CodexEntryFactory,
+    CodexEntryFilingFactory,
+    CodexSubjectFactory,
+)
+from world.codex.filters import CodexEntryFilter
+from world.codex.models import CodexEntry, CodexEntryFiling
 from world.codex.services import file_entry_under, unfile_entry
 
 
@@ -100,3 +106,52 @@ class CodexEntryFilingModelTests(TestCase):
         """String form names both the entry and the subject it's filed under."""
         filing = CodexEntryFilingFactory()
         assert str(filing) == f"{filing.entry} filed under {filing.subject}"
+
+
+class CodexEntryFilterSubjectTests(TestCase):
+    """Tests for CodexEntryFilter's subject filter (#2896).
+
+    These stay at the queryset/filter level rather than going through the API
+    client, so they exercise the OR-with-a-filing logic and its ordering
+    directly without touching CodexSubjectBreadcrumb (see the module
+    docstring).
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.category = CodexCategoryFactory()
+        cls.subject = CodexSubjectFactory(category=cls.category)
+        cls.other_subject = CodexSubjectFactory(category=cls.category)
+        cls.canonical_entry = CodexEntryFactory(subject=cls.subject, name="Canonical Entry")
+        cls.filed_entry = CodexEntryFactory(subject=cls.other_subject, name="Filed Entry")
+        cls.filing = file_entry_under(cls.filed_entry, cls.subject, sort_order=3)
+
+    def _filtered(self, subject_id: int) -> list[CodexEntry]:
+        filterset = CodexEntryFilter(
+            data={"subject": subject_id}, queryset=CodexEntry.objects.all()
+        )
+        return list(filterset.qs)
+
+    def test_subject_filter_includes_canonical_and_filed_entries(self):
+        """The subject's own entry and the entry filed under it both appear."""
+        results = self._filtered(self.subject.id)
+        assert self.canonical_entry in results
+        assert self.filed_entry in results
+        assert len(results) == 2
+
+    def test_subject_filter_returns_the_filed_entry_only_once(self):
+        """A filed entry never appears twice in its filed subject's listing."""
+        results = self._filtered(self.subject.id)
+        assert results.count(self.filed_entry) == 1
+
+    def test_subject_filter_orders_canonical_entries_before_filed_ones(self):
+        """Canonical entries sort ahead of filed entries in the same listing."""
+        results = self._filtered(self.subject.id)
+        assert results.index(self.canonical_entry) < results.index(self.filed_entry)
+
+    def test_subject_filter_does_not_leak_the_filed_entry_into_unrelated_subjects(self):
+        """A filed entry does not appear in a third, unrelated subject's listing."""
+        unrelated = CodexSubjectFactory(category=self.category)
+        results = self._filtered(unrelated.id)
+        assert self.filed_entry not in results
+        assert self.canonical_entry not in results

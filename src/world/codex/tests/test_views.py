@@ -533,9 +533,17 @@ class TestCodexTreeQueryCount(TestCase):
         # PlayerData query appears despite _selected_roster_entries() being read
         # three times in this one request.
         #   1. SELECT django_session
-        #   2. SELECT public CodexEntry ids
-        #   3. SELECT visible CodexEntry list (with perspective_of annotation)
-        with self.assertNumQueries(3):
+        #   2. SELECT public CodexEntry ids (visibility set, for get_queryset)
+        #   3. SELECT public CodexEntry ids again (visibility set, for the
+        #      filings map built in get_serializer_context - #2896: the
+        #      public-entry set is deliberately never cached, per
+        #      CodexVisibilityMixin's docstring, so this repeats the same
+        #      cheap query rather than memoizing it on the view)
+        #   4. SELECT CodexEntryFiling rows for those entries, joined to their
+        #      subject and that subject's breadcrumb cache (#2896, one query
+        #      regardless of entry count - see also_filed_under below)
+        #   5. SELECT visible CodexEntry list (with perspective_of annotation)
+        with self.assertNumQueries(5):
             response = self.client.get("/api/codex/entries/")
         assert response.status_code == status.HTTP_200_OK
         names = [e["name"] for e in response.data]
@@ -595,3 +603,117 @@ class TraditionPerspectiveAttributionTests(TestCase):
         response = self.client.get(f"/api/codex/entries/{self.entry.id}/")
         assert response.status_code == 200
         assert response.json()["perspective_of"] == "Emberwrights"
+
+
+class CodexEntryFilingListingTests(CodexAPITestCase):
+    """A filed entry appears in the filed subject's listing too (#2896)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        from world.codex.services import file_entry_under
+
+        cls.other_subject = CodexSubjectFactory(category=cls.category, name="Filing Other Subject")
+        cls.filed_entry = CodexEntryFactory(subject=cls.subject, name="Filed Entry", is_public=True)
+        cls.canonical_in_other = CodexEntryFactory(
+            subject=cls.other_subject, name="Canonical In Other", is_public=True
+        )
+        cls.filing = file_entry_under(cls.filed_entry, cls.other_subject, sort_order=1)
+
+    def test_filed_subject_listing_includes_the_filed_entry_once(self):
+        """The filed subject's listing gains the entry, without duplicating it."""
+        response = self.client.get(f"/api/codex/entries/?subject={self.other_subject.id}")
+        assert response.status_code == status.HTTP_200_OK
+        names = [e["name"] for e in response.data]
+        assert names.count("Filed Entry") == 1
+        assert "Canonical In Other" in names
+
+    def test_filed_subject_listing_orders_canonical_entries_first(self):
+        """Canonical entries sort ahead of filed ones in the filed subject's listing."""
+        response = self.client.get(f"/api/codex/entries/?subject={self.other_subject.id}")
+        names = [e["name"] for e in response.data]
+        assert names.index("Canonical In Other") < names.index("Filed Entry")
+
+    def test_home_subject_listing_still_shows_the_entry_once(self):
+        """The entry's own (canonical) subject listing is unaffected by the filing."""
+        response = self.client.get(f"/api/codex/entries/?subject={self.subject.id}")
+        names = [e["name"] for e in response.data]
+        assert names.count("Filed Entry") == 1
+
+    def test_detail_carries_also_filed_under(self):
+        """An entry's detail response lists every subject it is filed under."""
+        response = self.client.get(f"/api/codex/entries/{self.filed_entry.id}/")
+        assert response.status_code == status.HTTP_200_OK
+        also_filed = response.data["also_filed_under"]
+        assert len(also_filed) == 1
+        item = also_filed[0]
+        assert item["subject_id"] == self.other_subject.id
+        assert item["name"] == "Filing Other Subject"
+        assert item["breadcrumb_path"][-1]["name"] == "Filing Other Subject"
+
+    def test_list_serializer_also_carries_also_filed_under(self):
+        """The lighter list serializer exposes also_filed_under too, empty when unfiled."""
+        response = self.client.get("/api/codex/entries/")
+        listed = {e["id"]: e for e in response.data}
+        assert listed[self.filed_entry.id]["also_filed_under"][0]["subject_id"] == (
+            self.other_subject.id
+        )
+        assert listed[self.canonical_in_other.id]["also_filed_under"] == []
+
+    def test_reader_who_cannot_see_the_entry_does_not_see_it_via_the_filing(self):
+        """Knowledge gating applies to a filed entry the same as a canonical one."""
+        from world.codex.services import file_entry_under
+
+        restricted_entry = CodexEntryFactory(
+            subject=self.subject, name="Restricted Filed Entry", is_public=False
+        )
+        file_entry_under(restricted_entry, self.other_subject)
+
+        response = self.client.get(f"/api/codex/entries/?subject={self.other_subject.id}")
+        names = [e["name"] for e in response.data]
+        assert "Restricted Filed Entry" not in names
+
+
+class CodexEntryFilingQueryCountTests(TestCase):
+    """also_filed_under adds no per-row query as filings grow (#2896)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from world.codex.services import file_entry_under
+
+        cls.category = CodexCategoryFactory(name="QC Filing Category")
+        cls.subject = CodexSubjectFactory(category=cls.category, name="QC Filing Subject")
+        cls.other_subject = CodexSubjectFactory(category=cls.category, name="QC Filing Other")
+        cls.entries = []
+        for index in range(5):
+            entry = CodexEntryFactory(
+                subject=cls.subject, name=f"QC Filing Entry {index}", is_public=True
+            )
+            file_entry_under(entry, cls.other_subject, sort_order=index)
+            cls.entries.append(entry)
+
+    def setUp(self):
+        self.client = APIClient()
+
+    def test_subject_listing_query_count_constant_in_filed_entries(self):
+        """The filed subject's listing query count does not grow with N filings."""
+        warmup = self.client.get(f"/api/codex/entries/?subject={self.other_subject.id}")
+        assert warmup.status_code == status.HTTP_200_OK
+
+        # Steady-state queries for the filed-subject listing (#2896):
+        #   1. SELECT django_session
+        #   2. SELECT public CodexEntry ids (visibility set, for get_queryset)
+        #   3. SELECT public CodexEntry ids again (visibility set, for the
+        #      filings map built in get_serializer_context - the public-entry
+        #      set is deliberately never cached, so this repeats the query
+        #      rather than memoizing it on the view)
+        #   4. SELECT CodexEntryFiling rows for the visible entries, joined to
+        #      their subject and breadcrumb cache
+        #   5. SELECT visible+subject-filtered CodexEntry list (with the
+        #      canonical/filing ordering annotations)
+        with self.assertNumQueries(5):
+            response = self.client.get(f"/api/codex/entries/?subject={self.other_subject.id}")
+        assert response.status_code == status.HTTP_200_OK
+        names = [e["name"] for e in response.data]
+        for entry in self.entries:
+            assert entry.name in names
