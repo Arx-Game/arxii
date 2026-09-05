@@ -31964,7 +31964,7 @@ export interface components {
       available_points: number;
       stat_cap: number | null;
       matured_years: number;
-      next_milestone_year: number;
+      next_milestone_year: number | null;
       stats: components['schemas']['MaturationStatEntry'][];
     };
     /**

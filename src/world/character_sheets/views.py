@@ -173,20 +173,15 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
     @action(detail=True, methods=[HTTPMethod.GET], url_path="maturation")
     def maturation(self, request: Request, pk: int | None = None) -> Response:
         """The owner's Maturation Point panel state (#2756)."""
-        from world.progression.constants import (  # noqa: PLC0415
-            MATURATION_INTERVAL_YEARS,
-            MATURATION_START_YEAR,
-        )
         from world.progression.services.maturation import (  # noqa: PLC0415
             available_points,
-            milestone_count,
+            next_milestone_year,
             stat_cap_for,
         )
 
         sheet = self.get_object()
         self._check_ownership(sheet)
-        earned = milestone_count(sheet.matured_years)
-        next_milestone = MATURATION_START_YEAR + earned * MATURATION_INTERVAL_YEARS
+        next_milestone = next_milestone_year(sheet.matured_years)
         cap = stat_cap_for(sheet)
         stats = _spendable_stat_rows(sheet, cap)
         payload = MaturationStateSerializer(

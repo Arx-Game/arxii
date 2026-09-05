@@ -1,6 +1,7 @@
 """Maturation Point services (#2756).
 
-Deterministic milestones: one point per matured-year 21, 24, 27, ... A spend
+Deterministic milestones: one point per matured year in MATURATION_MILESTONES
+(24, 27, 30, then widening to 75; #3635). A spend
 is active iff its milestone_year <= the sheet's matured_years; reversal and
 re-aging are handled by :func:`sync_maturation_spends`, never by deleting
 spend rows.
@@ -11,7 +12,7 @@ from typing import TYPE_CHECKING
 from django.db import transaction
 
 from world.classes.services import stage_for_level
-from world.progression.constants import MATURATION_INTERVAL_YEARS, MATURATION_START_YEAR
+from world.progression.constants import MATURATION_MILESTONES
 from world.progression.exceptions import (
     MaturationCapReachedError,
     MaturationNoPointsError,
@@ -33,12 +34,13 @@ if TYPE_CHECKING:
 
 
 def milestone_count(matured_years: int) -> int:
-    """Milestones earned by ``matured_years``: 0 below 21, then one per 3 years."""
-    if matured_years < MATURATION_START_YEAR:
-        return 0
-    return (matured_years - (MATURATION_START_YEAR - MATURATION_INTERVAL_YEARS)) // (
-        MATURATION_INTERVAL_YEARS
-    )
+    """Milestones earned by ``matured_years``: the ``MATURATION_MILESTONES`` reached."""
+    return len(_milestone_years(matured_years))
+
+
+def next_milestone_year(matured_years: int) -> int | None:
+    """The first milestone still ahead of ``matured_years``, or None past the last."""
+    return next((year for year in MATURATION_MILESTONES if year > matured_years), None)
 
 
 def _earns_maturation(sheet: "CharacterSheet") -> bool:
@@ -59,7 +61,7 @@ def available_points(sheet: "CharacterSheet") -> int:
 
 
 def _milestone_years(matured_years: int) -> list[int]:
-    return list(range(MATURATION_START_YEAR, matured_years + 1, MATURATION_INTERVAL_YEARS))
+    return [year for year in MATURATION_MILESTONES if year <= matured_years]
 
 
 def stat_cap_for(sheet: "CharacterSheet") -> int | None:

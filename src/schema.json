@@ -55992,6 +55992,7 @@ components:
           type: integer
         next_milestone_year:
           type: integer
+          nullable: true
         stats:
           type: array
           items:

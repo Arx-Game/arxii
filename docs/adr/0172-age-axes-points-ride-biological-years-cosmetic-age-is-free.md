@@ -5,8 +5,9 @@
 Character age is three derivable axes — chronological (`ic_birth_year` against the
 game clock; null = unknowable, e.g. Sleepers), biological (`matured_years +
 withered_years`), and apparent (= biological; cosmetic overrides live in the
-appearance layer) — and the deterministic Maturation Point milestones (21, 24, 27,
-…) ride **biological matured years only**. A spend is active iff its milestone
+appearance layer) — and the deterministic Maturation Point milestones (retuned by
+#3635 to 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, with nothing after 75 and a
+one-CG-point cost for starting under 21) ride **biological matured years only**. A spend is active iff its milestone
 year ≤ current matured years, so freeze/reversal/catch-up reduce to one
 comparison. Withered (curse) years count toward decline and death but earn
 nothing: hostile aging is pure detriment. Glamours, disguises, and shapechange
