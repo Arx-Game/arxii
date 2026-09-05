@@ -69,6 +69,19 @@ interface GameState {
    * slice by id instead, without another full sweep.
    */
   activeEntryId: number | null;
+  /**
+   * This browser tab's own browsing identity (#3479) -- the `RosterEntry.id`
+   * mirrored from `store/browsingIdentity.ts`'s `sessionStorage`-backed
+   * per-tab store, once this tab has one. Distinct from `activeEntryId`:
+   * that field is set by `hydrateActiveCharacter` alongside `active` and
+   * still drives in-tab live-session focus (`GameWindow`'s tab strip,
+   * `GatefoldPage`'s ADR-0247 redirect); `browsingEntryId` exists so ambient
+   * (non-game) pages can read "who is this tab browsing as" without being
+   * coupled to whichever character this tab's game surface happens to have
+   * focused. `null` before this tab has been seeded (a hydration hasn't run
+   * yet, or the account has no durable default selection).
+   */
+  browsingEntryId: number | null;
 }
 
 // Module-scope monotonic id for session messages (see addSessionMessage).
@@ -78,6 +91,7 @@ const initialState: GameState = {
   sessions: {},
   active: null,
   activeEntryId: null,
+  browsingEntryId: null,
 };
 
 export const gameSlice = createSlice({
@@ -343,6 +357,18 @@ export const gameSlice = createSlice({
       state.active = name;
       state.activeEntryId = entryId;
     },
+    // Per-tab browsing identity (#3479). Seeded (or reseeded) by
+    // `useAccountQuery`'s hydration effect in `evennia_replacements/queries.tsx`
+    // only when this tab's `sessionStorage` store is empty or no longer owns
+    // its stored entry -- never on every account refetch, which is what let
+    // one tab's selection stomp another tab's `active` (see
+    // `store/browsingIdentity.ts`'s doc comment and the #3479 ledger).
+    setBrowsingIdentity: (state, action: PayloadAction<number>) => {
+      state.browsingEntryId = action.payload;
+    },
+    clearBrowsingIdentity: (state) => {
+      state.browsingEntryId = null;
+    },
   },
 });
 
@@ -365,4 +391,16 @@ export const {
   hydrateThreadTabs,
   resetGame,
   hydrateActiveCharacter,
+  setBrowsingIdentity,
+  clearBrowsingIdentity,
 } = gameSlice.actions;
+
+/**
+ * This tab's browsing identity (#3479) -- see `GameState.browsingEntryId`'s
+ * doc comment. Typed on a minimal shape (rather than importing `RootState`
+ * from `./store`) to avoid a circular import between the slice and the
+ * store that assembles it; `RootState`'s `game` field is structurally this
+ * shape, so `useAppSelector(selectBrowsingEntryId)` type-checks against it.
+ */
+export const selectBrowsingEntryId = (state: { game: GameState }): number | null =>
+  state.game.browsingEntryId;

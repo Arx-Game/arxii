@@ -10,7 +10,13 @@ import {
 import { AccountData, LoginResult } from './types';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
-import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
+import {
+  resetGame,
+  hydrateActiveCharacter,
+  setBrowsingIdentity,
+  clearBrowsingIdentity,
+} from '@/store/gameSlice';
+import { readTabIdentity, writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -36,20 +42,45 @@ export function useAccountQuery() {
     }
     const account = result.data;
     dispatch(setAccount(account));
-    // Reload survival (#3412): mirror the durable server-side selection into
-    // gameSlice on every successful account fetch — hard reload -> this
-    // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
-    // `gameSlice.active` stop degrading. #3412 review fix: this now mirrors
-    // BOTH directions — a `selected_entry` SETS active/activeEntryId, and its
-    // absence (including `account === null`, the logged-out/no-account case)
-    // CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)` + the
-    // account refetch it triggers) — see `hydrateActiveCharacter`'s own doc
-    // comment for why clearing the mirror is safe (never tears down a live
-    // session; selection isn't presence in either direction). `entry` is
+    // Reload survival (#3412) + per-tab browsing identity (#3479): mirror the
+    // durable server-side selection into gameSlice, but only SEED this tab's
+    // identity -- never overwrite it once this tab has one. Before #3479
+    // this ran unconditionally on every account refetch, which is exactly
+    // the cross-tab stomp bug: Tab A puppeting character X would have its
+    // `active` silently rewritten the moment Tab B's (or the Hall's)
+    // selection change invalidated the shared `['account']` query and Tab
+    // A's own refetch (e.g. on window focus) mirrored it in. `entry` is
     // hoisted out (rather than narrowing `account.selected_entry` inline) so
-    // the `account === null` case falls through the same `?? null` path
-    // instead of needing its own branch.
+    // the `account === null` case (logged out/no account) falls through the
+    // same `?? null` path instead of needing its own branch.
     const entry = account?.selected_entry ?? null;
+    const stored = readTabIdentity();
+
+    if (stored !== null) {
+      const ownedIds = account?.available_characters.map((c) => c.id) ?? [];
+      if (ownedIds.includes(stored.entryId)) {
+        // This tab already has a browsing identity it still owns -- leave
+        // `active`/`activeEntryId`/`browsingEntryId` exactly as they are.
+        // Never tears down a live session either way (selection isn't
+        // presence): a connected `sessions[active]` in this tab survives
+        // untouched, same as it always has.
+        return;
+      }
+      // The stored entry is no longer among this account's entries (e.g. the
+      // character was retired) -- treat this tab as fresh and reseed below.
+      clearTabIdentity();
+    }
+
+    // First hydration of this tab (or a stale identity just cleared above):
+    // seed from the account's durable default, same full-overwrite hydration
+    // this always did before #3479, plus writing this tab's own store so a
+    // later refetch in THIS tab hits the early return above instead.
+    if (entry) {
+      writeTabIdentity(entry.id);
+      dispatch(setBrowsingIdentity(entry.id));
+    } else {
+      dispatch(clearBrowsingIdentity());
+    }
     dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
   }, [result.data, dispatch]);
 

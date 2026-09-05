@@ -21,9 +21,39 @@ vi.mock('./api', () => ({
 
 import { fetchAccount } from './api';
 import { useAccountQuery } from './queries';
-import type { AccountData } from './types';
+import type { AccountData, AvailableCharacter } from './types';
+import type { MyRosterEntry } from '@/roster/types';
 import { store } from '@/store/store';
 import { resetGame, startSession, setSessionConnectionStatus } from '@/store/gameSlice';
+import { readTabIdentity, writeTabIdentity } from '@/store/browsingIdentity';
+
+function availableCharacter(id: number, name: string): AvailableCharacter {
+  return {
+    id,
+    name,
+    portrait_url: null,
+    character_type: 'PC',
+    roster_status: 'Active',
+    personas: [],
+    last_location: null,
+    currently_puppeted_in_session: false,
+  };
+}
+
+function rosterEntry(id: number, name: string): MyRosterEntry {
+  return {
+    id,
+    name,
+    character_id: id * 10,
+    profile_picture_url: null,
+    primary_persona_id: 1,
+    active_persona_id: 1,
+    unread_narrative_count: 0,
+    lifecycle_state: 'ALIVE',
+    roster_type: 'Active',
+    character_type: 'PC',
+  };
+}
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -58,10 +88,14 @@ describe('useAccountQuery hydration (#3412)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     store.dispatch(resetGame());
+    // #3479: hydration now branches on this tab's sessionStorage identity --
+    // each test is a fresh tab unless it seeds one itself.
+    sessionStorage.clear();
   });
 
   afterEach(() => {
     store.dispatch(resetGame());
+    sessionStorage.clear();
   });
 
   it('hydrates gameSlice.active/activeEntryId from selected_entry on a successful fetch', async () => {
@@ -154,5 +188,92 @@ describe('useAccountQuery hydration (#3412)', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     await waitFor(() => expect(store.getState().game.active).toBe('Aria'));
     expect(store.getState().game.sessions['Aria']).toBeUndefined();
+  });
+});
+
+// Per-tab browsing identity (#3479): `hydrateActiveCharacter` now seeds this
+// tab's `sessionStorage` identity only once, instead of unconditionally
+// re-mirroring the account's durable selection on every `['account']`
+// refetch -- the exact chokepoint that let one tab's selection stomp
+// another tab's `active` (see the #3479 ledger's `hydrateActiveCharacter` row).
+describe('useAccountQuery per-tab hydration (#3479)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    store.dispatch(resetGame());
+    sessionStorage.clear();
+  });
+
+  afterEach(() => {
+    store.dispatch(resetGame());
+    sessionStorage.clear();
+  });
+
+  it('seeds an empty tab from the account default', async () => {
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(7, 'Aria')],
+      selected_entry_id: 7,
+      selected_entry: rosterEntry(7, 'Aria'),
+    });
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.browsingEntryId).toBe(7));
+    expect(store.getState().game.active).toBe('Aria');
+    expect(store.getState().game.activeEntryId).toBe(7);
+    expect(readTabIdentity()?.entryId).toBe(7);
+  });
+
+  it('never overwrites a tab that already has an identity', async () => {
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(5, 'Aria'), availableCharacter(8, 'Zara')],
+      selected_entry_id: 5,
+      selected_entry: rosterEntry(5, 'Aria'),
+    });
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.browsingEntryId).toBe(5));
+    const seededTabId = readTabIdentity()?.tabId;
+
+    // A different default surfaces -- as if another tab (or the Hall) changed
+    // the account-wide selection and this tab's own refetch mirrored it in.
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(5, 'Aria'), availableCharacter(8, 'Zara')],
+      selected_entry_id: 8,
+      selected_entry: rosterEntry(8, 'Zara'),
+    });
+    await result.current.refetch();
+    await waitFor(() => expect(result.current.data?.selected_entry_id).toBe(8));
+
+    expect(store.getState().game.browsingEntryId).toBe(5);
+    expect(store.getState().game.active).toBe('Aria');
+    expect(store.getState().game.activeEntryId).toBe(5);
+    expect(readTabIdentity()?.entryId).toBe(5);
+    expect(readTabIdentity()?.tabId).toBe(seededTabId);
+  });
+
+  it('clears and reseeds when the stored id is no longer owned', async () => {
+    // Simulates a tab that already had an identity for a character the
+    // account no longer owns (e.g. retired) -- not among available_characters.
+    writeTabIdentity(99);
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(3, 'Nyx')],
+      selected_entry_id: 3,
+      selected_entry: rosterEntry(3, 'Nyx'),
+    });
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.browsingEntryId).toBe(3));
+    expect(store.getState().game.active).toBe('Nyx');
+    expect(store.getState().game.activeEntryId).toBe(3);
+    expect(readTabIdentity()?.entryId).toBe(3);
   });
 });
