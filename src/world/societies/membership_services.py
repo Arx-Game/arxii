@@ -19,6 +19,7 @@ from world.societies.exceptions import (
     CannotPromoteError,
     CrossOrganizationRankError,
     InvalidOrganizationPersonaError,
+    InvalidOrganizationRankError,
     NotAGenericOrganizationError,
     NotAuthorizedToInviteError,
     NotAuthorizedToKickError,
@@ -40,6 +41,7 @@ if TYPE_CHECKING:
         OrganizationMembership,
         OrganizationMembershipOffer,
         OrganizationRank,
+        Vacancy,
     )
 
 # Organization type name used to detect covenant-style organizations.
@@ -124,8 +126,11 @@ def _assert_higher_rank(
 def join_organization(
     organization: Organization,
     persona: Persona,
+    *,
+    rank: OrganizationRank | None = None,
+    vacancy: Vacancy | None = None,
 ) -> OrganizationMembership:
-    """Create a new active membership at the base rank for an organization."""
+    """Create a new active membership; base rank unless ``rank`` names a rung of this org."""
     from world.societies.models import OrganizationMembership  # noqa: PLC0415
 
     _assert_generic_organization(organization)
@@ -148,11 +153,12 @@ def join_organization(
     if org_join_blocked(joining_sheet=joining_sheet, member_sheets=member_sheets):
         raise OrganizationMemberBlockError
 
-    rank = base_rank_for_organization(organization)
+    if rank is not None and rank.organization_id != organization.pk:
+        raise InvalidOrganizationRankError
+    if rank is None:
+        rank = base_rank_for_organization(organization)
     membership = OrganizationMembership.objects.create(
-        organization=organization,
-        persona=persona,
-        rank=rank,
+        organization=organization, persona=persona, rank=rank, vacancy=vacancy
     )
     sync_covert_membership_secret(membership)
     return membership

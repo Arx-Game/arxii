@@ -223,6 +223,11 @@ def finalize_character(
     # claim rides the draft).
     _bind_house_claim(draft, sheet)
 
+    # Vacancy binding (#3648): take the chosen opening's kin claim and org
+    # membership before the kinship bind below, so a kin vacancy's node exists
+    # by the time the self-serve fallback looks.
+    _bind_vacancy(draft, sheet, primary_persona)
+
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
     # deletion (the claim FKs live on the draft).
@@ -315,6 +320,46 @@ def _grant_property_house_if_eligible(draft: CharacterDraft, persona: Persona) -
     from world.buildings.property_grant_services import grant_property_house  # noqa: PLC0415
 
     grant_property_house(persona, profile)
+
+
+def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet, primary_persona: Persona) -> None:
+    """Take the chosen Vacancy: kin claim (if any), then the org membership (#3648).
+
+    Runs before ``_bind_kinship_node`` so a kin vacancy's node exists by the time
+    the self-serve fallback looks. Best-effort at the finalize boundary: a race
+    to zero, or a kin pool exhausted moments earlier, logs and continues without
+    the membership rather than stranding approval.
+    """
+    from world.roster.services.kinship import (  # noqa: PLC0415
+        KinshipServiceError,
+        claim_appable_node,
+        mint_from_pool,
+    )
+    from world.societies.membership_services import join_organization  # noqa: PLC0415
+    from world.societies.vacancy_services import (  # noqa: PLC0415
+        VacancyExhaustedError,
+        take_vacancy,
+    )
+
+    if draft.selected_vacancy_id is None:
+        return
+    try:
+        with transaction.atomic():
+            vacancy = take_vacancy(draft.selected_vacancy_id)
+            if vacancy.kin_pool_id is not None:
+                node = mint_from_pool(vacancy.kin_pool, created_by=draft.account)
+                claim_appable_node(node=node, sheet=sheet)
+            elif vacancy.kin_node_id is not None:
+                claim_appable_node(node=vacancy.kin_node, sheet=sheet)
+            join_organization(
+                vacancy.organization, primary_persona, rank=vacancy.rank, vacancy=vacancy
+            )
+    except (VacancyExhaustedError, KinshipServiceError):
+        logger.exception(
+            "Vacancy %s could not be taken for draft %s; finalizing without it.",
+            draft.selected_vacancy_id,
+            draft.pk,
+        )
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -2491,7 +2536,7 @@ def finalize_gm_character(
     full_name = _build_character_full_name(draft)
 
     # Create Character + Sheet + Primary Persona atomically.
-    character, sheet, _primary = create_character_with_sheet(
+    character, sheet, primary_persona = create_character_with_sheet(
         character_key=full_name,
         primary_persona_name=full_name,
     )
@@ -2499,6 +2544,10 @@ def finalize_gm_character(
     # Populate sheet demographics and mechanics (shared helpers).
     _apply_sheet_demographics(sheet, draft)
     _apply_character_mechanics(character, draft)
+
+    # Vacancy binding (#3648): take the chosen opening's kin claim and org
+    # membership, mirroring the player finalize flow.
+    _bind_vacancy(draft, sheet, primary_persona)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).
