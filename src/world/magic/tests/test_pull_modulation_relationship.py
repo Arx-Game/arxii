@@ -513,3 +513,31 @@ class RelationshipBondModulationFraughtDevotionTests(TestCase):
 
         self.assertNotEqual(total_before, total_after)
         self.assertGreater(total_after, total_before)
+
+
+class CompanionTargetedThreadTests(TestCase):
+    """A thread woven on a companion-targeted track earns no bond term (#3575)."""
+
+    def test_modulation_passes_through_for_companion_bond(self) -> None:
+        from world.companions.factories import CompanionFactory
+
+        owner = CharacterSheetFactory()
+        companion = CompanionFactory(owner=owner)
+        relationship = CharacterRelationshipFactory(
+            source=owner, target=None, target_companion=companion, is_active=True, is_pending=False
+        )
+        progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=50)
+        thread = ThreadFactory(
+            owner=owner,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+            level=10,
+        )
+        effect = ThreadPullEffectFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=thread.resonance,
+            effect_kind=EffectKind.FLAT_BONUS,
+        )
+        live_target = CharacterSheetFactory().character
+        self.assertEqual(relationship_bond_modulation(thread, live_target, effect, 7), 7)

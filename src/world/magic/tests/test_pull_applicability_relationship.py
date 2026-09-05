@@ -144,6 +144,42 @@ class RelationshipNoStakeApplicabilityTests(TestCase):
         self.assertFalse(rows[0].applicable)
         self.assertEqual(rows[0].reason, InapplicabilityReason.RELATIONSHIP_NO_STAKE.value)
 
+    def test_companion_bond_thread_has_no_stake(self) -> None:
+        """A RELATIONSHIP_TRACK thread anchored on a companion-targeted bond has no
+        threaded person to have a stake in, so it is always no-stake (#3575)."""
+        from world.companions.factories import CompanionFactory
+
+        owner = CharacterSheetFactory()
+        companion = CompanionFactory(owner=owner)
+        relationship = CharacterRelationshipFactory(
+            source=owner,
+            target=None,
+            target_companion=companion,
+            is_active=True,
+            is_pending=False,
+        )
+        progress = RelationshipTrackProgressFactory(relationship=relationship, developed_points=0)
+        thread = ThreadFactory(
+            owner=owner,
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            target_relationship_track=progress,
+            target_trait=None,
+            level=10,
+        )
+        ThreadPullEffectFactory(
+            target_kind=TargetKind.RELATIONSHIP_TRACK,
+            resonance=thread.resonance,
+            effect_kind=EffectKind.FLAT_BONUS,
+        )
+        someone = CharacterSheetFactory()
+        context = _context(active_persona_for_sheet(someone).pk)
+
+        rows = compute_thread_applicability(owner, context)
+
+        self.assertEqual(len(rows), 1)
+        self.assertFalse(rows[0].applicable)
+        self.assertEqual(rows[0].reason, InapplicabilityReason.RELATIONSHIP_NO_STAKE.value)
+
 
 class RelationshipNoStakePrivacyTests(TestCase):
     """#1849 privacy gate: the indirect trigger must not leak X's hostility toward Y
