@@ -228,7 +228,7 @@ class WriteupComplaintAdmin(admin.ModelAdmin):
         writeup = obj.writeup
         if writeup is None:
             return "—"
-        return writeup.relationship.target
+        return writeup.relationship.target_name
 
 
 @admin.register(BondCombatConfig)

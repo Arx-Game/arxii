@@ -10,7 +10,13 @@ from django.utils import timezone
 from evennia.utils.create import create_object
 
 from typeclasses.companions import CompanionObject
-from world.combat.constants import OpponentStatus, ParticipantStatus, SurgeTriggerKind
+from world.combat.constants import (
+    CombatAllegiance,
+    OpponentStatus,
+    OpponentTier,
+    ParticipantStatus,
+    SurgeTriggerKind,
+)
 from world.combat.escalation import install_escalation_room_triggers
 from world.combat.factories import (
     CombatEncounterFactory,
@@ -20,7 +26,7 @@ from world.combat.factories import (
     wire_escalation_content,
 )
 from world.combat.models import DramaticSurgeRecord
-from world.combat.services import apply_damage_to_opponent
+from world.combat.services import add_opponent, apply_damage_to_opponent
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
 from world.companions.services import materialize_companion_as_combat_opponent
 from world.mechanics.constants import EngagementType
@@ -145,3 +151,26 @@ class CompanionFallSurgeTests(TestCase):
         self.encounter.save(update_fields=["escalation_curve"])
         self._fell()
         self.assertEqual(self._intensity(self.owner_sheet), 0)
+
+    def test_plain_summon_without_companion_row_emits_nothing(self):
+        self._bond(self.owner_sheet)
+        summon = add_opponent(
+            self.encounter,
+            name="Summon",
+            tier=OpponentTier.MOOK,
+            threat_pool=ThreatPoolFactory(),
+            max_health=20,
+            soak_value=0,
+        )
+        summon.allegiance = CombatAllegiance.ALLY
+        summon.summoned_by = self.owner_sheet
+        summon.save(update_fields=["allegiance", "summoned_by"])
+
+        apply_damage_to_opponent(summon, 100)
+        summon.refresh_from_db()
+        self.assertEqual(summon.status, OpponentStatus.DEFEATED)
+
+        self.assertEqual(self._intensity(self.owner_sheet), 0)
+        self.assertFalse(
+            DramaticSurgeRecord.objects.filter(trigger_kind=SurgeTriggerKind.ALLY_FALLEN).exists()
+        )
