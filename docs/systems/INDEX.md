@@ -6823,6 +6823,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
     `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
     break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+  - **Boss state on the opponent payload (#3552):** `OpponentSerializer` serves GM-only
+    (`_is_gm_or_staff`, `null` otherwise) `phase_count` (BOSS tier), `damage_multiplier`,
+    `break_bar_current` / `break_bar_threshold` / `vulnerability_rounds_remaining`,
+    `morale` / `max_morale` / `morale_state`; public `is_enraged` (phase > 1 and
+    multiplier > 1) and `is_wall_broken` (window open). `current_phase` was already public.
   - `ThreatPoolEntry.requires_steady` (bool, default False, #2015) — skipped when the
     opponent is faltering; lets designers author "weakened" entries.
   - `CombatOpponent.status` gains `OpponentStatus.REMOVED` (#3382) — a GM pull, distinct
@@ -7165,6 +7170,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     ACTIVE participant's round action is `is_ready=True`, calls `resolve_round` immediately
     instead of waiting for the TIMED game-clock sweep. Called from `ReadyAction.execute`
     after `toggle_action_ready`, only when the toggle landed on ready=True.
+  - `update_encounter_settings(..., escalation_curve=_UNSET)` (#3552) - tri-state curve
+    write (omitted / `None` clears + `remove_escalation_room_triggers` / curve sets); web
+    `PATCH /api/combat/{id}/settings/` and telnet `encounter curve <name|none>` converge here.
+  - `GET /api/combat/escalation-curves/` (`EscalationCurveViewSet`, `IsGMOrStaff`) - curve
+    catalog for the settings picker.
+  - `_narrate_phase_transition` / `_narrate_held_back` (`services.py`) - room lines for a
+    boss phase shift (authored `BossPhase.description` or generic; enrage line) and for a
+    PC skipped with no declaration under TIMED/MANUAL. Both `_dual_dispatch_combat_narration`.
 - **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
   `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
   rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
