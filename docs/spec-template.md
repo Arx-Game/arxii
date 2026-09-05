@@ -21,6 +21,18 @@ decision that already constrains this work.
 One or two paragraphs: the problem, who has it, and what "done" looks like in
 player- or staff-facing terms. State the outcome, not the implementation.
 
+### Walkthrough (required for anything player- or staff-facing)
+
+Link the demo page (see the `demoing-a-feature` skill), then list its screens in
+order, one line each, in the user's words. Every user story below names one of
+these screens. Every working assumption the spec makes on an open fork is tagged
+`[ruling: <id>]` with the id of the control on the demo page.
+
+- Demo: <artifact URL>
+- Screen 1: <stage> · <what the user does>
+- Screen 2: …
+- Screen N: what finalize writes (the rows table)
+
 ### User Stories
 
 A numbered list, extensive — one line each:

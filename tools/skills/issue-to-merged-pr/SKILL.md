@@ -153,6 +153,15 @@ Skip the design step when:
 
 When skipping, go straight to Implementation (claim `status:implementing`).
 
+**Player- or staff-facing work takes the architectural path, always (#3659).**
+If the issue touches anything a player or staff member sees or operates (a React
+surface, a CG stage, a telnet verb, an admin flow), the brainstorm is never
+classified bounded, the questions stage is not skipped, and the design stage
+produces a **demo page** before the spec is posted: use the `demoing-a-feature`
+skill. The spec links the demo at its top, every user story names a screen on it,
+and every open fork is a ruling on it cited by id; the reviewer prompt checks that
+coverage. The demo travels inside `status:spec-review`; there is no extra label.
+
 Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
 invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
 
