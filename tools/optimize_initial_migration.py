@@ -148,6 +148,7 @@ APP_LABEL = "arxii"
 SINGLE_VALUED_RELATION_TYPES = {"ForeignKey", "OneToOneField"}
 DEFAULT_CHUNK_COUNT = 100
 _ARXII_DEP_RE = re.compile(rf'\("{APP_LABEL}",\s*"([^"]+)"\)')
+_CHUNK_PART_RE = re.compile(r"\d{4}_(initial_part_\d+|g\d+_part_\d+)")
 
 
 def _require(condition: bool, message: str) -> None:
@@ -694,11 +695,46 @@ def _operation_costs(n_model_ops: int, n_tail_ops: int) -> list[int]:
     return [*range(1, n_model_ops + 1), *([n_model_ops] * n_tail_ops)]
 
 
-def rewrite_chunks(source: str, n_chunks: int) -> tuple[list[tuple[str, str]], dict]:
+GENERATIONS_IMPORT = "from world.migrations._generations import REPLACED\n"
+
+
+def chunk_name(generation: int | None, index: int) -> str:
+    """Name of chunk ``index`` (1-based).
+
+    ``generation=None`` is the #2906 shape (``0001_initial``, ``NNNN_initial_part_N``).
+    A stamped name (``0001_g2_initial``, ``NNNN_g2_part_N``) can never collide with an
+    earlier generation's, which is what lets production keep every old name
+    recorded forever (ADR-0272).
+    """
+    if generation is None:
+        return "0001_initial" if index == 1 else f"{index:04d}_initial_part_{index}"
+    if index == 1:
+        return f"{index:04d}_g{generation}_initial"
+    return f"{index:04d}_g{generation}_part_{index}"
+
+
+def _dependencies_source(tree: ast.Module) -> str:
+    """The original ``dependencies = [...]`` list, re-rendered from its AST."""
+    migration_class = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
+    )
+    for node in migration_class.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "dependencies" for t in node.targets
+        ):
+            return ast.unparse(node.value)
+    return "[]"
+
+
+def rewrite_chunks(
+    source: str, n_chunks: int, generation: int | None = None
+) -> tuple[list[tuple[str, str]], dict]:
     """Split `source` into `n_chunks` cost-weighted migration files.
 
     Returns `(files, stats)` where `files` is `[(migration_name, content),
-    ...]` in dependency-chain order (first is always "0001_initial").
+    ...]` in dependency-chain order (first is `chunk_name(generation, 1)`).
+    With ``generation`` set, every file is stamped and carries ``replaces``
+    (see `_render_chunk_files`).
     """
     tree = ast.parse(source)
     create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
@@ -718,52 +754,70 @@ def rewrite_chunks(source: str, n_chunks: int) -> tuple[list[tuple[str, str]], d
     boundaries = compute_chunk_boundaries(costs, n_chunks)
     groups = _split_by_boundaries(full_ops, boundaries)
 
-    files = _render_chunk_files(source, tree, groups)
+    files = _render_chunk_files(source, tree, groups, generation)
     stats = {**stats, "n_chunks": len(files), "chunk_sizes": [len(g) for g in groups]}
     return files, stats
 
 
 def _render_chunk_files(
-    source: str, tree: ast.Module, groups: list[list[ast.expr]]
+    source: str,
+    tree: ast.Module,
+    groups: list[list[ast.expr]],
+    generation: int | None = None,
 ) -> list[tuple[str, str]]:
     """Render each op group into a migration file's full source text.
 
-    Chunk 1 keeps `0001_initial`'s original header (imports, header comment,
-    `initial = True`, the original `dependencies` list) byte-identical via
-    the same source-slicing technique as `emit_source`, with only its
-    `operations` list shrunk to `groups[0]`. Chunks 2..N get a fresh minimal
-    header built from the original file's imports block (reused verbatim,
-    over-inclusive - `ruff check --fix` strips whatever a given chunk
-    doesn't need) and a `dependencies = [("arxii", <previous chunk>)]`.
+    Unstamped (``generation=None``, the #2906 shape): chunk 1 keeps
+    `0001_initial`'s original header (imports, header comment, `initial = True`,
+    the original `dependencies` list) byte-identical via the same source-slicing
+    technique as `emit_source`, with only its `operations` list shrunk to
+    `groups[0]`. Chunks 2..N get a fresh minimal header built from the original
+    file's imports block (reused verbatim, over-inclusive - `ruff check --fix`
+    strips whatever a given chunk doesn't need) and a
+    `dependencies = [("arxii", <previous chunk>)]`.
+
+    Stamped (``generation=G``, ADR-0272): every file gets the minimal header,
+    plus the ``REPLACED`` import and ``replaces = REPLACED``; chunk 1 keeps
+    ``initial = True`` and the original ``dependencies`` list (re-rendered from
+    its AST, so the swappable AUTH_USER_MODEL dependency survives).
     """
     ops_assign = _find_operations_assign(tree)
     lines = source.splitlines(keepends=True)
-
-    ops_list_node = ops_assign.value
-    start_line, start_col = ops_list_node.lineno, ops_list_node.col_offset
-    end_line, end_col = ops_list_node.end_lineno, ops_list_node.end_col_offset
-    before = "".join(lines[: start_line - 1]) + lines[start_line - 1][:start_col]
-    after = lines[end_line - 1][end_col:] + "".join(lines[end_line:])
 
     migration_class = next(
         n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
     )
     imports_block = "".join(lines[: migration_class.lineno - 1])
+    if generation is not None:
+        imports_block += GENERATIONS_IMPORT
+    replaces_line = "    replaces = REPLACED\n" if generation is not None else ""
 
-    files: list[tuple[str, str]] = [("0001_initial", before + _unparse_ops_list(groups[0]) + after)]
-
-    prev_name = "0001_initial"
-    for i, group in enumerate(groups[1:], start=2):
-        name = f"{i:04d}_initial_part_{i}"
-        content = (
+    def render(class_body_prefix: str, group: list[ast.expr]) -> str:
+        return (
             f"{imports_block}\n"
             "class Migration(migrations.Migration):\n"
-            "    dependencies = [\n"
-            f'        ("{APP_LABEL}", "{prev_name}"),\n'
-            "    ]\n\n"
+            f"{class_body_prefix}{replaces_line}"
             f"    operations = {_unparse_ops_list(group)}\n"
         )
-        files.append((name, content))
+
+    first_name = chunk_name(generation, 1)
+    if generation is None:
+        ops_list_node = ops_assign.value
+        start_line, start_col = ops_list_node.lineno, ops_list_node.col_offset
+        end_line, end_col = ops_list_node.end_lineno, ops_list_node.end_col_offset
+        before = "".join(lines[: start_line - 1]) + lines[start_line - 1][:start_col]
+        after = lines[end_line - 1][end_col:] + "".join(lines[end_line:])
+        first_content = before + _unparse_ops_list(groups[0]) + after
+    else:
+        first_prefix = f"    initial = True\n    dependencies = {_dependencies_source(tree)}\n"
+        first_content = render(first_prefix, groups[0])
+    files: list[tuple[str, str]] = [(first_name, first_content)]
+
+    prev_name = first_name
+    for i, group in enumerate(groups[1:], start=2):
+        name = chunk_name(generation, i)
+        prefix = f'    dependencies = [\n        ("{APP_LABEL}", "{prev_name}"),\n    ]\n\n'
+        files.append((name, render(prefix, group)))
         prev_name = name
 
     return files
@@ -791,7 +845,7 @@ def _discover_tail_migrations(migrations_dir: Path) -> list[Path]:
     return sorted(
         p
         for p in migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")
-        if p.name != "0001_initial.py" and "_initial_part_" not in p.name
+        if p.stem != chunk_name(None, 1) and not _CHUNK_PART_RE.match(p.stem)
     )
 
 
@@ -838,8 +892,8 @@ def _renumber_tail_migrations(migrations_dir: Path, last_chunk_name: str, n_chun
     return prev_name
 
 
-def _run_chunk_mode(source: str, n_chunks: int) -> int:
-    files, stats = rewrite_chunks(source, n_chunks)
+def _run_chunk_mode(source: str, n_chunks: int, generation: int | None = None) -> int:
+    files, stats = rewrite_chunks(source, n_chunks, generation)
 
     print("=== optimize_initial_migration chunk stats ===")
     for k, v in stats.items():
@@ -852,7 +906,9 @@ def _run_chunk_mode(source: str, n_chunks: int) -> int:
     # Discover the tail migrations (materialized views, later AlterFields,
     # ...) and the stale chunk artifacts from any previous run BEFORE
     # touching anything, so a rerun with a different N still works.
-    old_part_files = sorted(migrations_dir.glob("*_initial_part_*.py"))
+    old_part_files = sorted(
+        p for p in migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py") if _CHUNK_PART_RE.match(p.stem)
+    )
     tail_final_name = _renumber_tail_migrations(migrations_dir, files[-1][0], len(files))
 
     for p in old_part_files:
@@ -864,7 +920,7 @@ def _run_chunk_mode(source: str, n_chunks: int) -> int:
     max_migration_path.write_text(tail_final_name + "\n")
 
     print(
-        f"wrote {len(written)} chunk files (0001_initial.py .. "
+        f"wrote {len(written)} chunk files ({chunk_name(generation, 1)}.py .. "
         f"{files[-1][0]}.py) + renumbered tail migrations through "
         f"{tail_final_name}; max_migration.txt updated"
     )
@@ -900,6 +956,13 @@ def main() -> int:
             "with --check."
         ),
     )
+    parser.add_argument(
+        "--generation",
+        type=int,
+        default=None,
+        metavar="G",
+        help="stamp chunk names with generation G and add replaces = REPLACED (ADR-0272)",
+    )
     args = parser.parse_args()
     if args.chunks is not None and args.check:
         parser.error("--check and --chunks are mutually exclusive")
@@ -907,7 +970,7 @@ def main() -> int:
     source = MIGRATION_PATH.read_text()
 
     if args.chunks is not None:
-        return _run_chunk_mode(source, args.chunks)
+        return _run_chunk_mode(source, args.chunks, args.generation)
 
     new_source, stats = rewrite(source, check_only=args.check)
 
