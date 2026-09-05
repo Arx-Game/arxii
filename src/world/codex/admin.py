@@ -6,6 +6,7 @@ from world.codex.models import (
     CharacterCodexKnowledge,
     CodexCategory,
     CodexEntry,
+    CodexEntryFiling,
     CodexSubject,
     CodexTeachingOffer,
 )
@@ -60,9 +61,20 @@ class CodexSubjectAdmin(admin.ModelAdmin):
     entry_count.short_description = "Entries"
 
 
+class CodexEntryFilingInline(admin.TabularInline):
+    """Inline admin for an entry's secondary listings under other subjects."""
+
+    model = CodexEntryFiling
+    extra = 0
+    fields = ["subject", "sort_order"]
+    autocomplete_fields = ["subject"]
+
+
 @admin.register(CodexEntry)
 class CodexEntryAdmin(admin.ModelAdmin):
     """Admin interface for CodexEntry."""
+
+    inlines = [CodexEntryFilingInline]
 
     list_display = [
         "name",

@@ -144,6 +144,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # codex
         "codex.codexcategory",
         "codex.codexentry",
+        "codex.codexentryfiling",
         "codex.codexsubject",
         "codex.traditioncodexgrant",
         "codex.beginningscodexgrant",

@@ -9,6 +9,7 @@ from world.codex.models import (
     CharacterCodexKnowledge,
     CodexCategory,
     CodexEntry,
+    CodexEntryFiling,
     CodexSubject,
     CodexTeachingOffer,
     DistinctionCodexGrant,
@@ -62,6 +63,23 @@ class CodexEntryFactory(DjangoModelFactory):
     # Item pointer (#2540): override to point this entry at an item kind/instance.
     subject_item_template = None
     subject_item_instance = None
+
+
+class CodexEntryFilingFactory(DjangoModelFactory):
+    """Factory for creating CodexEntryFiling instances.
+
+    ``subject`` defaults to a fresh subject distinct from ``entry.subject``
+    (the canonical home) so the default construction never trips the
+    canonical-subject rejection in ``services.file_entry_under``.
+    """
+
+    class Meta:
+        model = CodexEntryFiling
+        django_get_or_create = ("entry", "subject")
+
+    entry = factory.SubFactory(CodexEntryFactory)
+    subject = factory.SubFactory(CodexSubjectFactory)
+    sort_order = factory.Sequence(lambda n: n)
 
 
 class CharacterCodexKnowledgeFactory(DjangoModelFactory):

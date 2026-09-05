@@ -313,6 +313,49 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
             raise ValidationError({"subject_item_instance": msg})
 
 
+class CodexEntryFiling(NaturalKeyMixin, SharedMemoryModel):
+    """A secondary listing of a CodexEntry under a subject other than its home.
+
+    ``CodexEntry.subject`` stays the entry's one canonical home: its detail
+    page lives there, and same-subject preference in ``resolve_codex_links``
+    wikilink resolution is keyed off it. A filing cross-lists the entry under
+    one additional subject's listing without moving it or duplicating its
+    content - the entry is still fetched, edited, and rendered from the single
+    row on ``CodexEntry``. See ADR-0270 for why this stays a dedicated link
+    table rather than a many-to-many on either side.
+    """
+
+    entry = models.ForeignKey(
+        CodexEntry,
+        on_delete=models.CASCADE,
+        related_name="filings",
+    )
+    subject = models.ForeignKey(
+        CodexSubject,
+        on_delete=models.CASCADE,
+        related_name="filed_entries",
+    )
+    sort_order = models.PositiveSmallIntegerField(
+        default=0,
+        help_text="Order for display within the filed subject's listing.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["entry", "subject"]
+        dependencies = [CODEX_ENTRY_MODEL, "arxii.CodexSubject"]
+
+    class Meta:
+        ordering = ["subject", "sort_order", "pk"]
+        unique_together = ["entry", "subject"]
+        verbose_name = "Codex Entry Filing"
+        verbose_name_plural = "Codex Entry Filings"
+
+    def __str__(self) -> str:
+        return f"{self.entry} filed under {self.subject}"
+
+
 class CharacterCodexKnowledge(RelatedCacheClearingMixin, SharedMemoryModel):
     """
     Tracks what a character knows or is learning.

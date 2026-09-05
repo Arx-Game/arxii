@@ -1563,8 +1563,11 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
 ### Codex
 Lore storage and character knowledge tracking.
 
-- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
-- **Key Methods:** Character learning from starting choices or teaching
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`,
+  `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
+  ADR-0270)
+- **Key Methods:** Character learning from starting choices or teaching; `services.
+  file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing
 - **Visibility (ADR-0221):** entries are the only unit of secrecy; categories/subjects
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`

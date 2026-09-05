@@ -57,6 +57,37 @@ its own entry *and* every ancestor's — see `docs/systems/species.md`.
 
 ---
 
+## Filing an entry under a second subject (ADR-0270)
+
+`CodexEntry.subject` stays the entry's one canonical home — its detail page lives
+there, and it is the subject `resolve_codex_links` prefers when a wikilink could
+match more than one entry. `CodexEntryFiling(entry, subject, sort_order)` is a
+separate cross-listing: it puts the entry in a second subject's listing without
+moving it or duplicating its `lore_content`/`mechanics_content`. An entry may have
+any number of filings, one per additional subject (unique on `(entry, subject)`);
+`sort_order` controls display position within that subject's listing, mirroring
+`CodexEntry.display_order` for the entry's own subject.
+
+`world.codex.services.file_entry_under(entry, subject, *, sort_order=0)` and
+`unfile_entry(entry, subject)` are the only sanctioned mutation path:
+
+- `file_entry_under` raises `ValidationError` when `subject` is the entry's own
+  `entry.subject` — that would duplicate the entry's canonical listing, not add a
+  second one. It is idempotent: filing the same `(entry, subject)` pair twice
+  returns the existing row rather than raising `IntegrityError`.
+- `unfile_entry` removes a filing if one exists and is a no-op otherwise.
+
+Both directions are navigable: `entry.filings` (all of an entry's cross-listings)
+and `subject.filed_entries` (all filings pointing at a subject). Deleting either
+the entry or the subject CASCADEs and removes the filing row.
+
+`CodexEntryFiling` carries `NaturalKeyMixin` on `(entry, subject)` and joins
+`CONTENT_MODELS` (`core_management/content_export.py`) right after
+`codex.codexentry`, so filings round-trip through the content export/import
+pipeline the same as the entries they point at.
+
+---
+
 ## Perspective entries (#3277, #3281; ADR-0222, ADR-0224)
 
 A `BeginningsCodexGrant` or `TraditionCodexGrant` row with `is_perspective=True`
@@ -238,7 +269,7 @@ All models registered with filters, search, and inline editing:
 
 - `CodexCategoryAdmin` - With inline subjects, shows subject count
 - `CodexSubjectAdmin` - With inline entries, filterable by category
-- `CodexEntryAdmin` - Full editing with fieldsets for content, costs, learning, prerequisites, and modifier type link; `filter_horizontal` for prerequisites
+- `CodexEntryAdmin` - Full editing with fieldsets for content, costs, learning, prerequisites, and modifier type link; `filter_horizontal` for prerequisites; inline `CodexEntryFilingInline` for the entry's secondary subject listings
 - `CharacterCodexKnowledgeAdmin` - Read-only debugging with status/progress fields
 - `CodexClueAdmin` - Clue management with autocomplete to entries
 - `CharacterClueKnowledgeAdmin` - Read-only debugging for found clues
