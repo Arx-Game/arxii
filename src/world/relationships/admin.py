@@ -96,9 +96,19 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
         "created_at",
     ]
     list_filter = ["is_active", "is_pending", "is_deceitful", "conditions"]
-    search_fields = ["source__character__db_key", "target__character__db_key"]
-    list_select_related = ["source", "source__character", "target", "target__character"]
-    raw_id_fields = ["source", "target"]
+    search_fields = [
+        "source__character__db_key",
+        "target__character__db_key",
+        "target_companion__name",
+    ]
+    list_select_related = [
+        "source",
+        "source__character",
+        "target",
+        "target__character",
+        "target_companion",
+    ]
+    raw_id_fields = ["source", "target", "target_companion"]
     filter_horizontal = ["conditions"]
     readonly_fields = ["created_at", "updated_at"]
 
@@ -111,7 +121,7 @@ class CharacterRelationshipAdmin(admin.ModelAdmin):
 
     @admin.display(description="Target")
     def target_name(self, obj):
-        return obj.target.character.db_key
+        return obj.target_name
 
     @admin.display(description="Conditions")
     def condition_count(self, obj):

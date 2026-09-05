@@ -25655,7 +25655,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship capstone event. */
     CapstoneWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -25665,7 +25666,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship capstone event. */
     CapstoneWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -26392,8 +26394,10 @@ export interface components {
       /** @description The character who holds this relationship */
       readonly source: number;
       readonly source_name: string;
-      /** @description The character this relationship is about */
-      readonly target: number;
+      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
+      readonly target: number | null;
+      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
+      readonly target_companion: number | null;
       readonly target_name: string;
       /** @description Whether this relationship is currently active */
       readonly is_active: boolean;
@@ -26424,8 +26428,10 @@ export interface components {
       /** @description The character who holds this relationship */
       readonly source: number;
       readonly source_name: string;
-      /** @description The character this relationship is about */
-      readonly target: number;
+      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
+      readonly target: number | null;
+      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
+      readonly target_companion: number | null;
       readonly target_name: string;
       /** @description Whether this relationship is currently active */
       readonly is_active: boolean;
@@ -27906,7 +27912,8 @@ export interface components {
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -27918,7 +27925,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -29576,7 +29584,8 @@ export interface components {
     FieldEnum: 'background' | 'personality';
     /** @description Serializer for creating a first impression. */
     FirstImpressionWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -29588,7 +29597,8 @@ export interface components {
     };
     /** @description Serializer for creating a first impression. */
     FirstImpressionWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -40982,7 +40992,8 @@ export interface components {
     RecordedProfileStatusEnum: 'commissioned' | 'recorded';
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       source_track_id: number;
       target_track_id: number;
       points: number;
@@ -40993,7 +41004,8 @@ export interface components {
     };
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       source_track_id: number;
       target_track_id: number;
       points: number;
@@ -71768,6 +71780,7 @@ export interface operations {
         page?: number;
         source?: number;
         target?: number;
+        target_companion?: number;
       };
       header?: never;
       path?: never;
