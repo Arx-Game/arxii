@@ -8446,6 +8446,14 @@ Extensions to Evennia models for additional data storage.
   pipeline (see ADR-0146). `PageBackground` (`slot: PageBackgroundSlot` — HOMEPAGE /
   ROSTER / CG_STAGE / GAME_CLIENT, unique — → `art: Media | None`, `SET_NULL`) maps
   a named page slot to a background `Media` row; read via `GET /api/backgrounds/`.
+- **Bound player media uploads (#3164):** `Media.file_size_bytes` (nullable
+  `PositiveBigIntegerField`) records the upload backend's reported size;
+  `PlayerData.media_quota_bytes` (`PositiveBigIntegerField`, default
+  `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES` via a module-level callable so the
+  migration carries no literal) caps a player's total stored bytes across owned
+  `Media` rows. `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is a separate per-file cap.
+  Quota/cap enforcement lives in `CloudinaryGalleryService.upload_image`
+  (staff accounts bypass both); see #3164 follow-up work for the check itself.
 - **Pattern:** Extend Evennia models without modifying library code
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)

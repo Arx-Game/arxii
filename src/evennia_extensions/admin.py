@@ -36,6 +36,7 @@ class PlayerDataAdmin(admin.ModelAdmin):
         "arx1_archive_access",
         "created_date",
         "profile_picture",
+        "media_quota_bytes",
     ]
     list_filter: ClassVar[list[str]] = [
         "hide_from_watch",
@@ -62,7 +63,7 @@ class PlayerDataAdmin(admin.ModelAdmin):
         ("Preferences", {"fields": ("karma", "hide_from_watch", "private_mode")}),
         (
             "Media Settings",
-            {"fields": ("profile_picture", "max_storage", "max_file_size")},
+            {"fields": ("profile_picture", "max_storage", "max_file_size", "media_quota_bytes")},
         ),
         ("Session Info", {"fields": ("last_login_ip",)}),
         (

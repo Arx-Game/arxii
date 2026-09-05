@@ -6,6 +6,7 @@ This app extends Evennia's core models rather than replacing them.
 from typing import Union
 
 from allauth.account.models import EmailAddress
+from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
 from django.utils import timezone
@@ -37,6 +38,16 @@ class MediaType(models.TextChoices):
     GALLERY = "gallery", "Gallery Image"
     BACKGROUND = "background", "Background"
     ILLUSTRATION = "illustration", "Illustration"
+
+
+def default_media_quota_bytes() -> int:
+    """Module-level callable default for ``PlayerData.media_quota_bytes``.
+
+    A callable keeps the migration free of the setting's literal value and
+    lets an existing row's quota stay put even if the setting changes later
+    (#3164): only newly created rows read the current setting.
+    """
+    return settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES
 
 
 def is_available_roster_entry(entry: RosterEntry) -> bool:
@@ -150,6 +161,12 @@ class PlayerData(RelatedCacheClearingMixin, SharedMemoryModel):
     max_file_size = models.PositiveIntegerField(
         default=0,
         help_text="Max upload size per file in KB",
+    )
+    media_quota_bytes = models.PositiveBigIntegerField(
+        default=default_media_quota_bytes,
+        help_text="Total bytes this player may store across all owned Media rows "
+        "(#3164). Seeded from settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES at creation; "
+        "editable per-account afterward without touching that setting.",
     )
 
     contributor = models.OneToOneField(
@@ -349,6 +366,12 @@ class Media(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="Cloudinary public ID for this media",
     )
     cloudinary_url = models.URLField(help_text="Full Cloudinary URL")
+    file_size_bytes = models.PositiveBigIntegerField(
+        null=True,
+        blank=True,
+        help_text="Bytes as reported by the upload backend; null for rows created "
+        "before #3164 or pasted by staff.",
+    )
     media_type = models.CharField(
         max_length=20,
         choices=MediaType.choices,
