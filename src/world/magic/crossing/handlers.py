@@ -349,12 +349,12 @@ def _anchor_label_for(thread: Thread) -> str:
     if kind == TargetKind.RELATIONSHIP_TRACK:
         track = thread.target_relationship_track
         if track is not None:
-            partner_name = track.relationship.target.character.db_key
+            partner_name = track.relationship.target_name
             return f"bond with {partner_name} ({track.track.name})"
     if kind == TargetKind.RELATIONSHIP_CAPSTONE:
         cap = thread.target_capstone
         if cap is not None:
-            partner_name = cap.relationship.target.character.db_key
+            partner_name = cap.relationship.target_name
             return f"capstone '{cap.title}' with {partner_name}"
     if kind == TargetKind.MANTLE and thread.target_mantle is not None:
         return thread.target_mantle.name
