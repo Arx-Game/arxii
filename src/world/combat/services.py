@@ -91,9 +91,11 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ELEVATION_ADVANTAGE_TARGET_NAME,
     ENEMY_LANE_CAP_PERCENT,
+    ENRAGE_NARRATION,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
+    HELD_BACK_NARRATION,
     INTERPOSE_BASE_FATIGUE_COST,
     JOUST_DECISIVE_MARGIN,
     LANCE_UNMOUNTED_PENALTY,
@@ -101,6 +103,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PACING_FLOOR_ROUND_PADDING,
     PENETRATION_CHECK_TYPE_NAME,
+    PHASE_SHIFT_NARRATION,
     REACTIONS_PER_ROUND,
     SENT_FLYING_IMPACT_FRACTION,
     SUSTAINED_BASE_ABSORPTION,
@@ -155,6 +158,7 @@ from world.combat.models import (
     EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     EngagementLock,
+    EscalationCurve,
     FleeConfig,
     FleeTierModifier,
     PendingOpponentAttack,
@@ -195,6 +199,10 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Tri-state sentinel for optional "leave unchanged" kwargs (#3552); mirrors
+# world/skills/services.py's _UNSET.
+_UNSET = object()
 
 
 # ---------------------------------------------------------------------------
@@ -1787,24 +1795,28 @@ def maybe_resolve_on_ready(encounter: CombatEncounter) -> RoundResolutionResult 
     return resolve_round(encounter)
 
 
-def update_encounter_settings(
+def update_encounter_settings(  # noqa: PLR0913 - keyword-only tri-state settings kwargs
     encounter: CombatEncounter,
     *,
     stakes_level: str | None = None,
     risk_level: str | None = None,
     pace_mode: str | None = None,
     pace_timer_minutes: int | None = None,
+    escalation_curve: EscalationCurve | None | object = _UNSET,
 ) -> CombatEncounter:
-    """GM-driven mid-encounter settings change (#3383).
+    """GM-driven mid-encounter settings change (#3383, curve #3552).
 
-    Any subset of the four fields may be given; omitted fields are left
-    unchanged. Applies decisions 5-6: entering TIMED while DECLARING resets
+    Any subset of the fields may be given; omitted fields are left unchanged.
+    ``escalation_curve`` is tri-state: omitted (``_UNSET``) leaves it alone,
+    ``None`` clears it and tears down the room spike triggers, a curve sets it
+    (the idempotent install in ``begin_declaration_phase`` picks it up next
+    round). Applies decisions 5-6 of #3383: entering TIMED while DECLARING resets
     round_started_at; every call ends with a maybe_resolve_on_ready check
     (a no-op unless pace_mode is now READY and status is DECLARING).
 
     Stakes/risk changes gate only future opponent spawns and read-live
     call sites (EncounterAftermathRule lookup at completion,
-    StakesEscalationModifier per-tick) — already-spawned CombatOpponent stat
+    StakesEscalationModifier per-tick) - already-spawned CombatOpponent stat
     blocks are never retroactively rescaled (decision 1).
     """
     update_fields = []
@@ -1825,11 +1837,18 @@ def update_encounter_settings(
     if pace_timer_minutes is not None:
         encounter.pace_timer_minutes = pace_timer_minutes
         update_fields.append("pace_timer_minutes")
+    if escalation_curve is not _UNSET:
+        encounter.escalation_curve = escalation_curve
+        update_fields.append("escalation_curve")
     if entering_timed:
         encounter.round_started_at = timezone.now()
         update_fields.append("round_started_at")
     if update_fields:
         encounter.save(update_fields=update_fields)
+    if escalation_curve is None:
+        from world.combat.escalation import remove_escalation_room_triggers  # noqa: PLC0415
+
+        remove_escalation_room_triggers(encounter)
     maybe_resolve_on_ready(encounter)
     return encounter
 
@@ -7423,6 +7442,9 @@ def check_and_advance_boss_phase(
       opponent's ``probing_threshold``.
     - A dramatic surge fires for every ACTIVE PC (#3445): BOSS_ENRAGE when the
       phase raises damage_multiplier, else BOSS_PHASE.
+    - The room is told (#3552): the phase's authored ``description`` when set,
+      else a generic shift line; an enraging transition adds an enrage line.
+      Not curve-gated, unlike the surge.
 
     Args:
         opponent: The boss opponent to check.
@@ -7447,6 +7469,9 @@ def check_and_advance_boss_phase(
             _apply_phase_transition(opponent, phase)
             _spawn_reinforcements(opponent.encounter, phase)
             _surge_on_phase_transition(opponent, phase, previous_multiplier)
+            _narrate_phase_transition(
+                opponent, phase, enraged=phase.damage_multiplier > previous_multiplier
+            )
             return phase
 
     return None
@@ -7470,6 +7495,28 @@ def _surge_on_phase_transition(
         opponent=opponent,
         enraged=phase.damage_multiplier > previous_multiplier,
     )
+
+
+def _narrate_phase_transition(
+    opponent: CombatOpponent,
+    phase: BossPhase,
+    *,
+    enraged: bool,
+) -> None:
+    """Tell the room a boss just changed phase (#3552).
+
+    The dramatic surge for the same transition is generic (ADR-0098 never names
+    the subject) and curve-gated, so until now a phase change was invisible at
+    the table. ``BossPhase.description`` is authored per phase for exactly this
+    moment (copied from ``CreaturePhaseTemplate`` at spawn) and had no reader.
+    Dual-dispatched so telnet sees the same line.
+    """
+    line = phase.description.strip() or PHASE_SHIFT_NARRATION.format(name=opponent.name)
+    _dual_dispatch_combat_narration(opponent.encounter, line)
+    if enraged:
+        _dual_dispatch_combat_narration(
+            opponent.encounter, ENRAGE_NARRATION.format(name=opponent.name)
+        )
 
 
 def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
@@ -8331,6 +8378,8 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
         interaction_result=interaction_result,
+        hit_text=technique.hit_narration,
+        miss_text=technique.miss_narration,
     )
     # Rendered unconditionally rather than under `if audience.concealed`: it is a pure
     # string build over data already in hand, and branching here would put the
@@ -8943,6 +8992,8 @@ def _resolve_npc_action(
         technique_name=npc_action.threat_entry.name,
         target_label=npc_target_label,
         outcome=outcome,
+        hit_text=npc_action.threat_entry.hit_narration,
+        miss_text=npc_action.threat_entry.miss_narration,
     )
     broadcast_action_outcome(encounter=opponent.encounter, narration=npc_narration)
 
@@ -8981,6 +9032,30 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
                 for npc_action in npc_actions.get(entity.pk, [])
             )
     return outcomes
+
+
+def _narrate_held_back(
+    encounter: CombatEncounter,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+    pc_actions: dict[int, CombatRoundAction],
+    sustaining_participant_ids: frozenset[int],
+) -> None:
+    """Name every PC the resolve loop skipped for having declared nothing (#3552).
+
+    Only under TIMED and MANUAL pace: READY cannot resolve until every ACTIVE
+    participant has readied a ``CombatRoundAction``, so a silent skip is
+    impossible there. A participant who declared a ``SustainedAction`` this
+    round is committing, not holding back.
+    """
+    if encounter.pace_mode not in (PaceMode.TIMED, PaceMode.MANUAL):
+        return
+    for entity_type, entity in resolution_order:
+        if entity_type != ENTITY_TYPE_PC or not isinstance(entity, CombatParticipant):
+            continue
+        if entity.pk in sustaining_participant_ids or entity.pk in pc_actions:
+            continue
+        name = str(entity.character_sheet.character)
+        _dual_dispatch_combat_narration(encounter, HELD_BACK_NARRATION.format(name=name))
 
 
 def _check_boss_transitions(
@@ -9241,8 +9316,9 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
 
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
     that interaction, before ephemeral-NPC cleanup) → counters → completion
-    event → cleanup. ABANDONED is administrative closure: skips aftermath and
-    counters but still narrates, emits, and cleans up.
+    event → cleanup → acute-peril scene-round hand-off → aftermath digest
+    (#3551). ABANDONED is administrative closure: skips aftermath and counters
+    but still narrates, emits, cleans up, and delivers the aftermath digest.
 
     Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
     flip with the aftermath/cleanup tail skipped — the double-completion guard
@@ -9271,6 +9347,10 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     cleanup_completed_encounter(encounter)
     _hand_off_acute_peril_to_scene_round(encounter)
 
+    from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
+
+    deliver_aftermath_digests(encounter)
+
 
 def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     """After combat ends, ensure any participant still Bleeding-Out or Plummeting is
@@ -9280,13 +9360,9 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     - Only PC participants (``CombatParticipant``), never NPC opponents.
     - Skip characters who are somehow still in another active encounter (paranoid guard).
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.combat.aftermath import has_acute_peril  # noqa: PLC0415
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
-
-    acute_condition_names = [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9295,12 +9371,7 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     )
     for participant in participants:
         sheet = participant.character_sheet
-        character = sheet.character
-        has_acute = ConditionInstance.objects.filter(
-            target=character,
-            condition__name__in=acute_condition_names,
-        ).exists()
-        if not has_acute:
+        if not has_acute_peril(sheet):
             continue
         # Paranoid guard: skip if the character is already in another active encounter.
         if resolve_combat_round_context(sheet) is not None:
@@ -11412,6 +11483,9 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
          Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
+       - After the resolution pass, a ``{name} holds back.`` line is broadcast
+         for every ACTIVE PC in the order with no declaration this round,
+         under TIMED and MANUAL pace only (#3552).
     4. Post-pass: resolve deferred RoundChallengeDeclarations in initiative
        order (reusing the round's resolution_order). Each participant's
        eligibility is re-validated via get_available_actions; ineligible
@@ -11589,6 +11663,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         offense_check_fn,
         sustaining_participant_ids=sustaining_participant_ids,
     )
+
+    # --- Held-back line (#3552): a PC in the order with nothing declared was
+    # skipped silently under TIMED/MANUAL. Say so, with the other OUTCOME lines.
+    _narrate_held_back(enc, resolution_order, pc_actions, sustaining_participant_ids)
 
     # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
     result.action_outcomes = _process_combo_outcomes(

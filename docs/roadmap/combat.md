@@ -220,6 +220,17 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   recompute seam). Flipping into TIMED mid-round resets `round_started_at` to a fresh window;
   flipping into READY calls the existing `maybe_resolve_on_ready` seam in the same call, so a
   round where everyone already readied up resolves immediately.
+- **Boss state, held-back line, curve write (#3552).** The engine tracked phase, enrage,
+  break bar and morale that nobody at the table could see. Built: GM-only readouts on the
+  opponent row (`OpponentSerializer` behind `_is_gm_or_staff`), player badges derived from
+  narrated state (`Phase n`, `Enraged`, `Wall broken`), a room line on every phase
+  transition (the never-read `BossPhase.description`, else generic, plus an enrage line;
+  not curve-gated, unlike the ADR-0098 surge which never names the boss), a
+  "holds back" OUTCOME line for a silent PC under TIMED/MANUAL, and the escalation curve
+  as a GM write on `update_encounter_settings` (web settings select fed by
+  `GET /api/combat/escalation-curves/`; telnet `encounter curve <name|none>`). Open:
+  an encounter-wide momentum indicator, and what "morale" should mean for a boss
+  (Tehom, 2026-09-04: reductive, inherited from battles; revisit).
 - **Ready-mode early resolution (#2120).** In `PaceMode.READY`, the round resolves the
   moment every ACTIVE participant is ready (`maybe_resolve_on_ready`, wired into
   `combat ready` / the web `ready` endpoint via `ReadyAction`); a lone ready participant
@@ -276,7 +287,7 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   **Combat layout (#3557, 2026-09-05):** during an encounter the page shows one map (the
   rail's, with dimmed bystanders merged from the scene), the GM's fight levers live in a
   rail GM tab (`CombatGMTab`), and the idle header stack folds behind a "Scene tools"
-  accordion; ADR-0270.
+  accordion; ADR-0272.
 - **Tactical map draws what the encounter already knows (#3555).** Engagement locks,
   cover and distance were in `EncounterDetail` but not on the map. Now: both sides of
   an engagement lock carry a `locked` glyph on their avatar and an animated link edge
@@ -386,6 +397,24 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   ever. Condition cleansing (dispel/severity-decay) stays unrestricted — only the HP mend is
   double-bounded. Unit/service-tier proven (vitals/conditions suites); no combat journey test
   yet — a wound→treat→attrition journey is fair game for the journeys list.
+- **Aftermath digest (#3551).** `complete_encounter`'s last step delivers a private,
+  per-participant summary of what the fight changed: a Narrator OUTCOME interaction
+  (PERCEIVED_ONLY, pushed only to that character) plus a telnet `character.msg`, built
+  by `build_aftermath_digest` (`world/combat/aftermath.py`) purely from rows the
+  completion seam already wrote (aftermath `ConsequenceOutcome`, conditions still held,
+  `LegendEntry`, `BeatCompletion`), never a new persisted row. ACTIVE and FLED
+  participants get one; REMOVED does not, but an ABANDONED (GM force-end) encounter
+  still delivers. Also on `ParticipantSerializer.aftermath` for the web client, gated
+  to the owner, scene GM, or staff on a COMPLETED encounter, with a SECRET beat's line
+  further gated to GM/staff. `SceneDetailPage`'s `lingeringEncounterId` keeps the combat
+  rail mounted long enough for the player to read and dismiss it.
+
+- **Authored technique / NPC-attack flavor in the round narration (#3554, ADR-0270):**
+  `hit_narration` / `miss_narration` on `Technique` and `ThreatPoolEntry` head the Narrator
+  OUTCOME line with the ledger still machine-appended; a GM's condition note broadcasts as
+  a Narrator line and is readable by the bearer. Proven by
+  `world.combat.tests.test_outcome_broadcast` and
+  `actions.tests.test_gm_adjudication_actions.GMApplyConditionActionTests`.
 
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 

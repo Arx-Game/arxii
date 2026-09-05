@@ -33,6 +33,7 @@ from world.combat.factories import (
     CombatEncounterFactory,
     CombatOpponentFactory,
     CombatParticipantFactory,
+    EscalationCurveFactory,
     ThreatPoolEntryFactory,
     ThreatPoolFactory,
 )
@@ -991,7 +992,7 @@ class BlockIfParticipantMidCrossingQueryScalingTests(TestCase):
 
 
 class UpdateEncounterSettingsTests(TestCase):
-    """Tests for update_encounter_settings (#3383)."""
+    """Tests for update_encounter_settings (#3383, escalation curve tri-state #3552)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -1131,3 +1132,27 @@ class UpdateEncounterSettingsTests(TestCase):
         self.encounter.refresh_from_db()
         self.assertEqual(self.encounter.pace_mode, PaceMode.READY)
         self.assertEqual(self.encounter.status, RoundStatus.DECLARING)
+
+    def test_sets_escalation_curve(self) -> None:
+        curve = EscalationCurveFactory()
+        update_encounter_settings(self.encounter, escalation_curve=curve)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.escalation_curve_id, curve.pk)
+
+    def test_omitted_curve_is_unchanged(self) -> None:
+        curve = EscalationCurveFactory()
+        self.encounter.escalation_curve = curve
+        self.encounter.save(update_fields=["escalation_curve"])
+        update_encounter_settings(self.encounter, stakes_level=StakesLevel.WORLD)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.escalation_curve_id, curve.pk)
+
+    def test_clearing_curve_removes_room_triggers(self) -> None:
+        curve = EscalationCurveFactory()
+        self.encounter.escalation_curve = curve
+        self.encounter.save(update_fields=["escalation_curve"])
+        with patch("world.combat.escalation.remove_escalation_room_triggers") as mock_remove:
+            update_encounter_settings(self.encounter, escalation_curve=None)
+        self.encounter.refresh_from_db()
+        self.assertIsNone(self.encounter.escalation_curve_id)
+        mock_remove.assert_called_once_with(self.encounter)

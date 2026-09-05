@@ -27,6 +27,8 @@ from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.conditions.models import ConditionTemplate
+
 
 _CATALOG_HINT = "No such check -- try `gm check find <term>`."
 
@@ -598,6 +600,75 @@ def _resolve_condition_bounds(kwargs: dict[str, Any]) -> tuple[int, int | None] 
     return severity, duration_rounds
 
 
+def _narrate_gm_condition(
+    actor: ObjectDB, target: ObjectDB, template: ConditionTemplate, note: str
+) -> None:
+    """Broadcast the GM's note as a Narrator OUTCOME line (#3554).
+
+    Only called when a note was given: a note-less apply stays silent and the GM
+    narrates with the composer if they want to. The target is named by the face they
+    are presenting (#981), never ``target.key``, when they have one. A condition
+    others cannot see routes the line to the target alone. The WebSocket payload
+    goes to the room, or to the target alone when the condition is hidden or the GM
+    has no location; the plain-text send is the telnet companion. ``record_interaction``
+    is not used here because ``push_interaction`` returns early for a persona whose
+    character has no location, which the Narrator never has. A sheetless target (a
+    prop, an unsheeted NPC) is named by its key; a hidden condition on one records
+    nothing, since there is no bearer to tell.
+    """
+    from world.scenes.constants import InteractionMode, InteractionVisibility  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        _send_to_objects,
+        create_interaction,
+        get_active_scene,
+    )
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    sheet = target.character_sheet
+    target_persona = active_persona_for_sheet(sheet) if sheet is not None else None
+    if target_persona is None and not template.is_visible_to_others:
+        return  # a hidden condition on a sheetless object has no bearer to tell
+
+    label = target_persona.name if target_persona is not None else target.key
+    narration = f"{label} is now {template.name}. {note}"
+    visible = template.is_visible_to_others
+    narrator = get_or_create_narrator_persona()
+    scene = get_active_scene(actor.location)
+    interaction = create_interaction(
+        persona=narrator,
+        content=narration,
+        mode=InteractionMode.OUTCOME,
+        scene=scene,
+        receivers=None if visible else [target_persona],
+        visibility=InteractionVisibility.DEFAULT
+        if visible
+        else InteractionVisibility.PERCEIVED_ONLY,
+    )
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+        receiver_persona_ids=[target_persona.pk] if not visible and target_persona else None,
+    )
+
+    room = actor.location if visible else None
+    if room is not None:
+        _broadcast_to_location(room, payload)
+    else:
+        _send_to_objects([target], payload)
+
+    if room is not None:
+        room.msg_contents(narration)
+    else:
+        target.msg(narration)
+
+
 @dataclass
 class GMApplyConditionAction(Action):
     """JUNIOR-tier GM action: apply an authored ``ConditionTemplate`` by fiat (#2118).
@@ -610,7 +681,8 @@ class GMApplyConditionAction(Action):
     ``template.default_duration_value``); the model defines no upper bound on
     either field, so Decision 5 is honored by failing loud on a non-positive
     value rather than silently clamping one. ``note`` is narration only (stored as
-    ``source_description``) -- it never becomes a mechanical effect. Gated on
+    ``source_description`` and, when given, broadcast as a Narrator OUTCOME line,
+    #3554) -- it never becomes a mechanical effect. Gated on
     ``IsSceneGMPrerequisite`` + ``MinimumGMLevelPrerequisite(GMLevel.JUNIOR)``.
     """
 
@@ -657,6 +729,9 @@ class GMApplyConditionAction(Action):
                 success=False,
                 message=f"{template.name} was not applied ({result.message}).",
             )
+
+        if note:
+            _narrate_gm_condition(actor, target, template, note)
 
         return ActionResult(success=True, message=f"{target.key} is now {template.name}.")
 

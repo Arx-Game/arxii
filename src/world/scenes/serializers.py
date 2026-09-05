@@ -369,6 +369,7 @@ class SceneDetailSerializer(SceneListSerializer):
     active_round = serializers.SerializerMethodField()
     declared_risk = serializers.SerializerMethodField()
     clock = serializers.SerializerMethodField()
+    art_url = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -386,6 +387,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "active_round",
             "declared_risk",
             "clock",
+            "art_url",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -514,6 +516,26 @@ class SceneDetailSerializer(SceneListSerializer):
         if risk is None or risk == RenownRisk.NONE:
             return None
         return risk
+
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_art_url(self, obj: Scene) -> str | None:
+        """The scene's room art (#3556): room thumbnail, then area-art cascade.
+
+        Delegates to ``world.locations.services.resolve_area_art`` -- the same
+        read side the world-builder uses (#3477). No separate authoring surface;
+        the cascade already resolves the image. Returns ``None`` when the scene
+        has no location or neither the room nor any ancestor area designates art.
+        """
+        if obj.location is None:
+            return None
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.locations.services import resolve_area_art  # noqa: PLC0415
+
+        try:
+            room_profile = obj.location.room_profile
+        except RoomProfile.DoesNotExist:
+            return None
+        return resolve_area_art(room_profile)
 
     @staticmethod
     def _resolve_declared_risk(obj: Scene) -> str | None:

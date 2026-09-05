@@ -71,6 +71,44 @@ export function SceneDetailPage() {
   const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
   const hasActiveEncounter = !encounterLoading && encounterListItem != null;
   const encounterId = encounterListItem?.id ?? 0;
+  // The scene's active-encounter list poll drops a completed encounter within
+  // 15s (useEncounterForScene), but the outcome banner and aftermath digest
+  // have to outlive that drop until the player dismisses them, otherwise the
+  // rail vanishes out from under whoever is still reading it (#3551).
+  // lingeringEncounterId remembers the last real encounterId and keeps the
+  // rail mounted on it until CombatRail's onDismissOutcome fires.
+  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  // Dismissing the outcome banner before the poll drops the completed encounter
+  // (hasActiveEncounter still true) must hide the rail immediately rather than
+  // waiting up to 15s for the next poll (#3551 minor 4): the rail shows only
+  // while railEncounterId hasn't been dismissed; a new encounter gets a new id,
+  // so it reappears on its own.
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  // A route change (e.g. /scenes/1 -> /scenes/2) re-renders SceneDetailPage in
+  // place rather than remounting it (no `key` on the route), so scene 1's
+  // lingering/dismissed encounter state would otherwise survive onto scene 2's
+  // rail (#3551 important 1). One effect, keyed on both scene and encounter id,
+  // so the scene-change reset and the fresh-encounter set can never race: on a
+  // scene change the lingering/dismissed ids reset first, then (same pass) pick
+  // up the new scene's own active encounter if it already has one.
+  const prevSceneIdRef = useRef(sceneIdNum);
+  useEffect(() => {
+    if (prevSceneIdRef.current !== sceneIdNum) {
+      prevSceneIdRef.current = sceneIdNum;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
+    if (encounterId > 0) {
+      setLingeringEncounterId(encounterId);
+    }
+  }, [sceneIdNum, encounterId]);
+  const railEncounterId = encounterId || lingeringEncounterId;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  const handleDismissOutcome = useCallback(() => {
+    setDismissedEncounterId(railEncounterId);
+    setLingeringEncounterId(0);
+  }, [railEncounterId]);
   // GM story rail fold-in (#3434): shares the right-rail column with the
   // combat rail. Mounted whenever the viewer can GM this scene at all --
   // GMStoryRail itself renders the "no beat running" fallback when
@@ -206,7 +244,7 @@ export function SceneDetailPage() {
   // the "Scene tools" accordion during an encounter. Same order as before.
   // Folding remounts the subtree, so a local draft in SelfCheckPanel or
   // TavernGameWidget is lost at the tick an encounter starts; accepted in
-  // ADR-0270. Prompts that need an answer never fold.
+  // ADR-0272. Prompts that need an answer never fold.
   const sceneTools = (
     <>
       {scene && <SceneLinesAndVeilsCard sceneId={id} />}
@@ -319,7 +357,7 @@ export function SceneDetailPage() {
       <div
         className={cn(
           'min-h-0 flex-1',
-          hasActiveEncounter || showStoryRail
+          showCombatRail || showStoryRail
             ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4'
             : 'flex flex-col'
         )}
@@ -381,19 +419,26 @@ export function SceneDetailPage() {
           )}
         </div>
 
-        {(hasActiveEncounter || showStoryRail) && (
+        {(showCombatRail || showStoryRail) && (
           <div
             ref={railRef}
             className="min-h-0 space-y-3 overflow-y-auto"
             data-testid="scene-detail-combat-rail"
           >
             {showStoryRail && scene && <GMStoryRail scene={scene} />}
-            {hasActiveEncounter && (
+            {showCombatRail && (
+              /* The rail lingers past the encounter's end so the aftermath digest
+                 and outcome banner stay readable (#3551), but the GM tab's levers
+                 only make sense on a still-active fight -- and once the fight is
+                 over the page-level GMEncounterControls is back, so leaving the tab
+                 on would give those levers two homes (ADR-0272). hasActiveEncounter
+                 gates the tab separately from the rail itself. */
               <CombatRail
                 sceneId={sceneIdNum}
-                encounterId={encounterId}
-                viewerCanGm={scene?.viewer_can_gm ?? false}
+                encounterId={railEncounterId}
+                viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
                 scene={scene}
+                onDismissOutcome={handleDismissOutcome}
               />
             )}
           </div>

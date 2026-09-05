@@ -766,6 +766,20 @@ class CGPointsCalculationTests(TestCase):
         draft.save(update_fields=["draft_data"])
         assert draft.calculate_cg_points_spent() == 30
 
+    def test_starting_under_twenty_one_costs_one_point(self):
+        """A starting age below 21 buys youth with one CG point (#3635)."""
+        draft = CharacterDraftFactory(selected_beginnings=None, age=18)
+        assert draft.calculate_cg_points_spent() == 1
+        entry = draft.calculate_cg_points_breakdown()[0]
+        assert entry["category"] == "age"
+        assert entry["cost"] == 1
+
+    def test_starting_at_twenty_one_or_older_costs_nothing(self):
+        """The under-21 cost lifts at 21 exactly (#3635)."""
+        for age in (21, 40):
+            draft = CharacterDraftFactory(selected_beginnings=None, age=age)
+            assert draft.calculate_cg_points_spent() == 0
+
     def test_remaining_accounts_for_spent(self):
         """Remaining = budget - spent."""
         from world.character_creation.models import CGPointBudget

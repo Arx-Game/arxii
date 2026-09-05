@@ -113,7 +113,7 @@ collapsible.
 Since #3557 the scene header above the pose log is minimal during an encounter: the
 scene title, battle links, and prompts that need an answer stay inline; the header map
 unmounts (the rail's Map tab is the one map, with bystanders); everything else folds
-behind a closed "Scene tools" accordion (ADR-0270).
+behind a closed "Scene tools" accordion (ADR-0272).
 
 ### Pose log rendering
 

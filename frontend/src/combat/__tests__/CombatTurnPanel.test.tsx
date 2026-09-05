@@ -13,7 +13,7 @@
  * - @/components/PersonaAvatar (stub)
  */
 
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, within, fireEvent } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import type { ReactNode } from 'react';
@@ -190,6 +190,7 @@ function makeParticipant(overrides: Partial<Participant> = {}): Participant {
     intensity_modifier: null,
     control_modifier: null,
     current_position: null,
+    aftermath: null,
     ...overrides,
   };
 }
@@ -540,6 +541,137 @@ describe('CombatTurnPanel — encounter outcome banner (#876)', () => {
     });
 
     expect(screen.getByRole('status')).toHaveTextContent('Abandoned');
+  });
+});
+
+describe('CombatTurnPanel, aftermath digest (#3551)', () => {
+  it('renders the digest sections and legend text, and dismisses via the banner button', () => {
+    const onDismissOutcome = vi.fn();
+    const aftermath = {
+      outcome: 'victory',
+      consequence: null,
+      conditions: [{ id: 7, name: 'Bleeding Out', icon: '🩸', color_hex: '#cc0000' }],
+      legend: [
+        { title: 'Held the Line', description: 'Stood fast against the tide.', base_value: 3 },
+      ],
+      beat: {
+        outcome: 'victory',
+        tier_name: 'Moderate',
+        resolution_text: 'The line holds.',
+      },
+      peril_round_active: true,
+    } as unknown as NonNullable<Participant['aftermath']>;
+
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      participants: [
+        makeParticipant({ id: 1, character_sheet_id: 100, character_name: 'Aerande', aftermath }),
+      ],
+    });
+
+    render(
+      <CombatTurnPanel
+        encounterId={1}
+        characterId={10}
+        characterSheetId={100}
+        onDismissOutcome={onDismissOutcome}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('aftermath-digest')).toBeInTheDocument();
+    expect(screen.queryByTestId('aftermath-consequence')).not.toBeInTheDocument();
+    expect(screen.getByTestId('aftermath-conditions')).toBeInTheDocument();
+    expect(screen.getByTestId('aftermath-legend')).toHaveTextContent('Held the Line (+3 legend)');
+    expect(screen.getByTestId('aftermath-beat')).toHaveTextContent(
+      'The line holds. (Moderate, Victory)'
+    );
+    expect(screen.getByTestId('aftermath-peril')).toHaveTextContent(
+      'Your peril is not over: a scene round now tracks it.'
+    );
+
+    fireEvent.click(screen.getByTestId('aftermath-dismiss'));
+    expect(onDismissOutcome).toHaveBeenCalledTimes(1);
+  });
+
+  it('renders no digest for a participant with a null aftermath', () => {
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      participants: [
+        makeParticipant({
+          id: 1,
+          character_sheet_id: 100,
+          character_name: 'Aerande',
+          aftermath: null,
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.queryByTestId('aftermath-digest')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('aftermath-dismiss')).not.toBeInTheDocument();
+  });
+
+  it('renders the consequence roulette and a character-name title for each of several digests', () => {
+    const aftermathWithConsequence = {
+      outcome: 'victory',
+      consequence: {
+        outcome_display: [
+          { label: 'Solid Hit', tier_name: 'moderate', weight: 1, is_selected: true },
+        ],
+        modifiers: [],
+        modifier_total: 0,
+        summary: 'A clean strike.',
+      },
+      conditions: [],
+      legend: [],
+      beat: null,
+      peril_round_active: false,
+    } as unknown as NonNullable<Participant['aftermath']>;
+
+    const secondAftermath = {
+      outcome: 'victory',
+      consequence: null,
+      conditions: [],
+      legend: [],
+      beat: null,
+      peril_round_active: false,
+    } as unknown as NonNullable<Participant['aftermath']>;
+
+    mockEncounter({
+      status: 'completed',
+      outcome: 'victory',
+      participants: [
+        makeParticipant({
+          id: 1,
+          character_sheet_id: 100,
+          character_name: 'Aerande',
+          aftermath: aftermathWithConsequence,
+        }),
+        makeParticipant({
+          id: 2,
+          character_sheet_id: 200,
+          character_name: 'Ravi',
+          aftermath: secondAftermath,
+        }),
+      ],
+    });
+
+    render(<CombatTurnPanel encounterId={1} characterId={10} characterSheetId={100} />, {
+      wrapper: createWrapper(),
+    });
+
+    expect(screen.getAllByTestId('aftermath-digest')).toHaveLength(2);
+    expect(screen.getByTestId('aftermath-consequence')).toBeInTheDocument();
+    expect(screen.getByTestId('outcome-roulette')).toBeInTheDocument();
+    // Titles only render once there's more than one digest to distinguish (#3551).
+    expect(screen.getByText('Aerande')).toBeInTheDocument();
+    expect(screen.getByText('Ravi')).toBeInTheDocument();
   });
 });
 

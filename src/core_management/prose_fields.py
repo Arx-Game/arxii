@@ -58,6 +58,8 @@ PROSE_FIELD_NAMES = frozenset(
         "mechanical_description",
         "mechanics_content",
         "narration_snippet",
+        "hit_narration",
+        "miss_narration",
         "narrative_prose",
         "observer_description",
         "outcome_text",

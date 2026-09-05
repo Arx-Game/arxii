@@ -48,6 +48,7 @@ from world.combat.models import (
     CreatureTemplate,
     DuelChallenge,
     EngagementLock,
+    EscalationCurve,
     ThreatPool,
 )
 from world.combat.permissions import (
@@ -66,6 +67,7 @@ from world.combat.serializers import (
     EncounterDetailSerializer,
     EncounterListSerializer,
     EncounterSettingsSerializer,
+    EscalationCurveSerializer,
     InterposeSerializer,
     JoinEncounterSerializer,
     OpponentDefaultsResponseSerializer,
@@ -244,6 +246,22 @@ class CreatureTemplateViewSet(ReadOnlyModelViewSet):
     pagination_class = StandardResultsSetPagination
 
 
+class EscalationCurveViewSet(ReadOnlyModelViewSet):
+    """Read-only escalation curve catalog for the GM settings picker (#3552).
+
+    Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+    name and description are authored encounter design a player should not
+    browse. ``?search=`` matches the name.
+    """
+
+    serializer_class = EscalationCurveSerializer
+    queryset = EscalationCurve.objects.all().order_by("name")
+    permission_classes = [IsGMOrStaff]
+    filter_backends = [SearchFilter]
+    search_fields = ["name"]
+    pagination_class = StandardResultsSetPagination
+
+
 class CombatEncounterViewSet(ModelViewSet):
     """ViewSet for combat encounter lifecycle and player actions."""
 
@@ -385,7 +403,14 @@ class CombatEncounterViewSet(ModelViewSet):
                     "character_sheet__fatigue",
                     "covenant_role",
                 )
-                .filter(status=ParticipantStatus.ACTIVE)
+                .filter(
+                    # Live fights only ever list ACTIVE rows; a COMPLETED encounter
+                    # also lists FLED rows, so ParticipantSerializer.aftermath can
+                    # reach a FLED participant's own digest (#3551 minor 3) -
+                    # deliver_aftermath_digests already sends that participant one.
+                    Q(status=ParticipantStatus.ACTIVE)
+                    | Q(status=ParticipantStatus.FLED, encounter__status=RoundStatus.COMPLETED)
+                )
                 .prefetch_related(
                     self._active_conditions_prefetch("character_sheet__character"),
                     # Pre-fill CharacterSheet.cached_payload_personas (a

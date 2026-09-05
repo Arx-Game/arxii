@@ -128,6 +128,12 @@ from `ThreatPoolEntry`. Deterministic clause assembly, omitting absent clauses. 
 post-#614: attack/defense *intent* phrasing and magic-vs-physical wording (axes not in the data
 yet).
 
+**Authored head (#3554, ADR-0270).** `render_action_outcome_narration` takes `hit_text` /
+`miss_text` from `Technique` or `ThreatPoolEntry`. When present, the authored line (with
+`{actor}` / `{target}` filled by literal replacement) replaces the head sentence only;
+" for N damage", the tail clauses and the suffix clauses are appended exactly as for the
+default head. `render_unattributed_action_narration` never receives them.
+
 ## Frontend
 
 - Regenerate API types so `InteractionMode` includes `outcome` (no nullable-persona change —

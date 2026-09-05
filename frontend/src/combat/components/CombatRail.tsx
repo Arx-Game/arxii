@@ -39,9 +39,17 @@ export interface CombatRailProps {
   viewerCanGm?: boolean;
   /** The scene detail the GM tools need (participants for the target picker). */
   scene?: SceneDetail;
+  /** Forwarded to CombatTurnPanel's outcome banner Dismiss button (#3551). */
+  onDismissOutcome?: () => void;
 }
 
-export function CombatRail({ sceneId, encounterId, viewerCanGm = false, scene }: CombatRailProps) {
+export function CombatRail({
+  sceneId,
+  encounterId,
+  viewerCanGm = false,
+  scene,
+  onDismissOutcome,
+}: CombatRailProps) {
   // Active character from Redux global state
   const activeCharacter = useAppSelector((state) => state.game.active);
 
@@ -128,6 +136,7 @@ export function CombatRail({ sceneId, encounterId, viewerCanGm = false, scene }:
             castPosition={castPosition}
             onCastPositionChange={setCastPosition}
             onPositionShapeChange={setFocusedPositionShape}
+            onDismissOutcome={onDismissOutcome}
           />
         </TabsContent>
         <TabsContent value="map" className="mt-2 min-h-0 flex-1 overflow-y-auto">
