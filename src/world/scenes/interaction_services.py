@@ -1012,6 +1012,61 @@ def record_whisper_interaction(
     return interaction
 
 
+# Rationale for the OBJECTDB_PARAM suppression below (kept above the def
+# since the inline form pushes the signature past 100 chars): any character,
+# PC or NPC-run, can be the one addressed here; the function just needs its
+# .location, .msg and the sheet lookup.
+def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB_PARAM
+    """Narrator-authored line addressed to ONE character, on both channels (#3574).
+
+    The single-recipient sibling of the room-wide combat narration
+    (``world.combat.services._dual_dispatch_combat_narration``). Extracted from
+    ``world.covenants.perks.services.announce_dormant_perks`` so every "tell
+    this one player something only they should know" caller shares one body:
+
+    - A Narrator-authored WHISPER-mode ``Interaction``, receiver-scoped to the
+      recipient's PRIMARY persona (``receivers=[persona], target_personas=[persona]``,
+      mirroring ``record_whisper_interaction``). Built via ``create_interaction``
+      directly with ``persona=narrator`` rather than ``record_whisper_interaction``,
+      which would attribute the line to the recipient whispering to themselves.
+    - The WS payload goes ONLY to ``character`` via ``_send_to_objects``, never
+      ``push_interaction`` (which resolves delivery off the WRITER persona's
+      location, and the Narrator has none).
+    - A direct ``character.msg(text)`` telnet companion (HARD telnet parity).
+
+    No-op when the character has no sheet or no primary persona.
+    """
+    try:
+        persona = character.sheet_data.primary_persona
+    except (AttributeError, ObjectDoesNotExist):
+        return
+
+    from world.scenes.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+
+    narrator = get_or_create_narrator_persona()
+    scene = get_active_scene(character.location)
+    interaction = create_interaction(
+        persona=narrator,
+        content=text,
+        mode=InteractionMode.WHISPER,
+        scene=scene,
+        receivers=[persona],
+        target_personas=[persona],
+    )
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+        receiver_persona_ids=[persona.pk],
+        target_persona_ids=[persona.pk],
+    )
+    _send_to_objects([character], payload)
+    character.msg(text)
+
+
 def mutter_fragment(text: str) -> str:
     """The room-audible fragment of a mutter (#905): random word leak.
 

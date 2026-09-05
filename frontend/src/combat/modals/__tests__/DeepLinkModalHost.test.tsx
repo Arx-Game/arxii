@@ -138,6 +138,29 @@ describe('DeepLinkModalHost', () => {
     expect(screen.getByText('Bleeding')).toBeInTheDocument();
   });
 
+  it('shows the condition source line when source_description is set', () => {
+    vi.mocked(useConditionInstance).mockReturnValue({
+      data: { ...conditionFixture, source_description: 'The wine was poisoned.' },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useConditionInstance>);
+    const { store } = renderHost();
+    act(() => {
+      store.dispatch(openDeepLink({ modal: 'condition', id: 7 }));
+    });
+    expect(screen.getByTestId('condition-modal-source')).toHaveTextContent(
+      'The wine was poisoned.'
+    );
+  });
+
+  it('omits the condition source line when source_description is blank', () => {
+    const { store } = renderHost();
+    act(() => {
+      store.dispatch(openDeepLink({ modal: 'condition', id: 7 }));
+    });
+    expect(screen.queryByTestId('condition-modal-source')).not.toBeInTheDocument();
+  });
+
   it('renders clash detail content on a clash deep link', () => {
     const { store } = renderHost();
     act(() => {

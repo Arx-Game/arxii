@@ -13,6 +13,7 @@
  */
 
 import { cn } from '@/lib/utils';
+import { AftermathDigest } from './AftermathDigest';
 
 const OUTCOME_STYLES: Record<string, { label: string; className: string }> = {
   victory: {
@@ -27,12 +28,27 @@ const OUTCOME_STYLES: Record<string, { label: string; className: string }> = {
   },
 };
 
-export interface EncounterOutcomeBannerProps {
-  outcome: string;
+export interface EncounterOutcomeDigestEntry {
+  participantId: number;
+  characterName: string;
+  digest: AftermathDigest;
 }
 
-export function EncounterOutcomeBanner({ outcome }: EncounterOutcomeBannerProps) {
+export interface EncounterOutcomeBannerProps {
+  outcome: string;
+  /** One aftermath digest per participant the viewer is allowed to see (#3551). */
+  digests?: EncounterOutcomeDigestEntry[];
+  /** Shown as a Dismiss button when provided, clearing the lingering rail (#3551). */
+  onDismiss?: () => void;
+}
+
+export function EncounterOutcomeBanner({
+  outcome,
+  digests,
+  onDismiss,
+}: EncounterOutcomeBannerProps) {
   const style = OUTCOME_STYLES[outcome] ?? OUTCOME_STYLES.abandoned;
+  const showTitles = (digests?.length ?? 0) > 1;
   return (
     <div className="flex flex-col items-center gap-3">
       <output
@@ -44,6 +60,29 @@ export function EncounterOutcomeBanner({ outcome }: EncounterOutcomeBannerProps)
       >
         {style.label}
       </output>
+
+      {digests && digests.length > 0 && (
+        <div className="w-full space-y-3">
+          {digests.map((entry) => (
+            <AftermathDigest
+              key={entry.participantId}
+              digest={entry.digest}
+              title={showTitles ? entry.characterName : undefined}
+            />
+          ))}
+        </div>
+      )}
+
+      {onDismiss && (
+        <button
+          type="button"
+          data-testid="aftermath-dismiss"
+          onClick={onDismiss}
+          className="rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
+        >
+          Dismiss
+        </button>
+      )}
     </div>
   );
 }

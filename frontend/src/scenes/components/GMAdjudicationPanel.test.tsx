@@ -163,6 +163,7 @@ function makeScene(overrides: Partial<SceneDetail> = {}): SceneDetail {
     running_beat: null,
     declared_risk: null,
     clock: null,
+    art_url: null,
     ...overrides,
   };
 }

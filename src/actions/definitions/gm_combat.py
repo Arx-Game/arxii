@@ -627,12 +627,21 @@ def _validate_encounter_settings_kwargs(
     """Validate + coerce ``UpdateEncounterSettingsAction`` kwargs.
 
     Returns the validated kwargs dict (``stakes_level``/``risk_level``/
-    ``pace_mode``/parsed-int ``pace_timer_minutes``) on success, or the
-    failure ``ActionResult`` to return immediately. Extracted from
-    ``execute()`` to keep its own argument/return-statement counts low
-    (PLR0913/PLR0911), mirroring ``_resolve_add_opponent_inputs``.
+    ``pace_mode``/parsed-int ``pace_timer_minutes``/resolved
+    ``escalation_curve``) on success, or the failure ``ActionResult`` to
+    return immediately. Extracted from ``execute()`` to keep its own
+    argument/return-statement counts low (PLR0913/PLR0911), mirroring
+    ``_resolve_add_opponent_inputs``.
+
+    ``escalation_curve`` is tri-state at the telnet/action boundary: a curve
+    name resolves case-insensitively to an ``EscalationCurve``, the literal
+    ``"none"`` resolves to ``None`` (clears it), and omitting the kwarg
+    passes ``update_encounter_settings``'s own ``_UNSET`` sentinel through
+    unchanged so the service leaves the field alone.
     """
     from world.combat.constants import PaceMode, RiskLevel, StakesLevel  # noqa: PLC0415
+    from world.combat.models import EscalationCurve  # noqa: PLC0415
+    from world.combat.services import _UNSET  # noqa: PLC0415
 
     stakes_level = kwargs.get("stakes_level")
     risk_level = kwargs.get("risk_level")
@@ -655,22 +664,36 @@ def _validate_encounter_settings_kwargs(
         if parsed_timer < 1:
             return ActionResult(success=False, message="Timer minutes must be at least 1.")
 
+    curve_arg = kwargs.get("escalation_curve")
+    resolved_curve: EscalationCurve | None | object = _UNSET
+    if curve_arg is not None:
+        curve_name = str(curve_arg).strip()
+        if curve_name.lower() == "none":  # noqa: STRING_LITERAL - telnet keyword, not an enum
+            resolved_curve = None
+        else:
+            resolved_curve = EscalationCurve.objects.filter(name__iexact=curve_name).first()
+            if resolved_curve is None:
+                return ActionResult(
+                    success=False, message=f"No escalation curve named '{curve_name}'."
+                )
+
     return {
         "stakes_level": stakes_level,
         "risk_level": risk_level,
         "pace_mode": pace_mode,
         "pace_timer_minutes": parsed_timer,
+        "escalation_curve": resolved_curve,
     }
 
 
 @dataclass
 class UpdateEncounterSettingsAction(Action):
-    """GM: change stakes/risk/pace/timer on a live encounter (#3383).
+    """GM: change stakes/risk/pace/timer/curve on a live encounter (#3383, #3552).
 
     Mirrors ``PauseEncounterAction``'s shape: resolve the active encounter via
     ``_active_encounter_for_gm``, then call ``update_encounter_settings`` with
-    whichever of the four kwargs was supplied. Telnet's four subverbs
-    (``stakes``/``risk``/``pace``/``timer``) each supply exactly one.
+    whichever of the five kwargs was supplied. Telnet's five subverbs
+    (``stakes``/``risk``/``pace``/``timer``/``curve``) each supply exactly one.
     """
 
     key: str = "update_encounter_settings"

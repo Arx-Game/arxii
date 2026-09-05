@@ -127,7 +127,8 @@ class MaturationStateSerializer(serializers.Serializer):
     available_points = serializers.IntegerField()
     stat_cap = serializers.IntegerField(allow_null=True)
     matured_years = serializers.IntegerField()
-    next_milestone_year = serializers.IntegerField()
+    # Null once the last milestone (75) is behind the character (#3635).
+    next_milestone_year = serializers.IntegerField(allow_null=True)
     stats = MaturationStatEntrySerializer(many=True)
 
 

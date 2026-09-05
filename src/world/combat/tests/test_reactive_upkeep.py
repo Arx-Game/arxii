@@ -40,10 +40,30 @@ class ReactiveUpkeepTests(TestCase):
         self.assertTrue(type(inst).objects.filter(pk=inst.pk).exists())
 
     def test_unaffordable_upkeep_lapses_condition(self) -> None:
-        """Unaffordable upkeep deletes the ConditionInstance (condition lapses)."""
-        enc, _char, inst = self._setup(anima_current=1, upkeep=3)
-        drain_reactive_upkeep(enc)
+        """Unaffordable upkeep deletes the ConditionInstance (condition lapses) and says so."""
+        enc, char, inst = self._setup(anima_current=1, upkeep=3)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            drain_reactive_upkeep(enc)
         self.assertFalse(type(inst).objects.filter(pk=inst.pk).exists())
+        # #3574: self-paid ward, so one private line (the payer is the bearer) + room.
+        private.assert_called_once()
+        self.assertEqual(private.call_args.args[0].pk, char.pk)
+        self.assertIn("cannot sustain", private.call_args.args[1])
+        room.assert_called_once()
+        self.assertIn(inst.condition.name, room.call_args.args[1])
+
+    def test_affordable_upkeep_says_nothing(self) -> None:
+        enc, _char, _inst = self._setup(anima_current=10, upkeep=3)
+        with (
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            drain_reactive_upkeep(enc)
+        private.assert_not_called()
+        room.assert_not_called()
 
     def test_consented_upkeep_holds_through_deficit_and_accrues(self) -> None:
         enc, char, inst = self._setup(anima_current=1, upkeep=3, consented=True)

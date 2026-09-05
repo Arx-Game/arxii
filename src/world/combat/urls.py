@@ -7,6 +7,7 @@ from world.combat.views import (
     CombatEncounterViewSet,
     CreatureTemplateViewSet,
     DuelChallengeViewSet,
+    EscalationCurveViewSet,
     ThreatPoolViewSet,
 )
 from world.combat.views_outcome_details import ActionOutcomeDetailsView
@@ -14,10 +15,11 @@ from world.combat.views_outcome_details import ActionOutcomeDetailsView
 router = DefaultRouter()
 # Register before the empty-prefix encounter route: the encounter detail regex
 # ``^(?P<pk>[^/.]+)/$`` would otherwise capture ``duel-challenges/``/``threat-pools/``/
-# ``creature-templates/`` as a pk.
+# ``creature-templates/``/``escalation-curves/`` as a pk.
 router.register("duel-challenges", DuelChallengeViewSet, basename="duel-challenge")
 router.register("threat-pools", ThreatPoolViewSet, basename="threat-pool")
 router.register("creature-templates", CreatureTemplateViewSet, basename="creature-template")
+router.register("escalation-curves", EscalationCurveViewSet, basename="escalation-curve")
 router.register("", CombatEncounterViewSet, basename="combat-encounter")
 
 app_name = "combat"
