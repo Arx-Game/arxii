@@ -55606,6 +55606,7 @@ components:
           type: array
           items:
             type: string
+            description: Display label (e.g., 'Male')
           readOnly: true
         family:
           type: integer
@@ -55652,6 +55653,7 @@ components:
           type: array
           items:
             type: string
+            description: Display label (e.g., 'Male')
           readOnly: true
         parent_names:
           type: array

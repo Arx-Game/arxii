@@ -141,11 +141,9 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = FamilyFilterSet
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Serialize with one batched ``inherited`` grouping, not one per row.
-
-        Mirrors ``CGOriginTemplateViewSet.list()`` (this ViewSet also opts out
-        of pagination, so there is no ``page`` branch to preserve).
-        """
+        # Serialize with one batched inherited grouping, not one per row. Mirrors
+        # CGOriginTemplateViewSet.list() (this ViewSet also opts out of pagination,
+        # so there is no page branch to preserve).
         families = list(self.filter_queryset(self.get_queryset()))
         context = {
             **self.get_serializer_context(),

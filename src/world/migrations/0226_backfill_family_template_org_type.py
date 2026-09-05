@@ -7,9 +7,7 @@ def forwards(apps, schema_editor):
     HouseTemplate = apps.get_model("arxii", "HouseTemplate")
     OriginTemplate = apps.get_model("arxii", "OriginTemplate")
     OrganizationType = apps.get_model("arxii", "OrganizationType")
-    for template in HouseTemplate.objects.filter(
-        org_type__isnull=True, liege__isnull=False
-    ):
+    for template in HouseTemplate.objects.filter(org_type__isnull=True, liege__isnull=False):
         template.org_type_id = template.liege.org_type_id
         template.save(update_fields=["org_type"])
     for upbringing in OriginTemplate.objects.filter(named_family_kind__isnull=False):
