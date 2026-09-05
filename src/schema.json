@@ -29720,6 +29720,10 @@ paths:
         name: target
         schema:
           type: integer
+      - in: query
+        name: target_companion
+        schema:
+          type: integer
       tags:
       - relationships
       security:
@@ -42484,6 +42488,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -42499,7 +42505,6 @@ components:
           default: shared
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -42509,6 +42514,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -42526,7 +42533,6 @@ components:
           default: shared
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -44169,8 +44175,16 @@ components:
           readOnly: true
         target:
           type: integer
-          description: The character this relationship is about
+          description: The character this relationship is about; null when target_companion
+            is set (#3575). Exactly one of target / target_companion is set.
           readOnly: true
+          nullable: true
+        target_companion:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The bonded companion this relationship is about (#3575); null
+            when target is set. Only the companion's owner may hold such a row.
         target_name:
           type: string
           readOnly: true
@@ -44227,6 +44241,7 @@ components:
       - source
       - source_name
       - target
+      - target_companion
       - target_name
       - track_progress
       - updated_at
@@ -44246,8 +44261,16 @@ components:
           readOnly: true
         target:
           type: integer
-          description: The character this relationship is about
+          description: The character this relationship is about; null when target_companion
+            is set (#3575). Exactly one of target / target_companion is set.
           readOnly: true
+          nullable: true
+        target_companion:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The bonded companion this relationship is about (#3575); null
+            when target is set. Only the companion's owner may hold such a row.
         target_name:
           type: string
           readOnly: true
@@ -44298,6 +44321,7 @@ components:
       - source
       - source_name
       - target
+      - target_companion
       - target_name
       - updated_at
     CharacterRequest:
@@ -47441,6 +47465,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -47459,7 +47485,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -47469,6 +47494,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -47489,7 +47516,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -50977,6 +51003,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -50996,7 +51024,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -51006,6 +51033,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -51027,7 +51056,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -71864,6 +71892,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         source_track_id:
           type: integer
         target_track_id:
@@ -71882,7 +71912,6 @@ components:
       required:
       - points
       - source_track_id
-      - target_persona_id
       - target_track_id
       - title
       - writeup
@@ -71892,6 +71921,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         source_track_id:
           type: integer
         target_track_id:
@@ -71912,7 +71943,6 @@ components:
       required:
       - points
       - source_track_id
-      - target_persona_id
       - target_track_id
       - title
       - writeup

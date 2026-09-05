@@ -226,7 +226,7 @@ export function CharacterCardDrawer({
               open={writeupOpen}
               onOpenChange={setWriteupOpen}
               mode={writeupMode}
-              targetPersonaId={persona.id}
+              target={{ kind: 'persona', personaId: persona.id }}
               targetName={persona.name}
             />
           </>
