@@ -9,6 +9,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 import pytest
 
+from evennia_extensions.factories import MediaFactory
 from evennia_extensions.models import Media, MediaType
 from world.roster.factories import (
     ArtistFactory,
@@ -190,6 +191,103 @@ class TestCloudinaryGalleryService(TestCase):
                     )
                 except ValidationError:
                     self.fail(f"Valid content type {content_type} was rejected")
+
+    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch("cloudinary.uploader.upload")
+    def test_upload_image_populates_file_size_bytes(self, mock_upload):
+        """Test that a successful upload records the backend-reported size."""
+        mock_upload.return_value = {
+            "public_id": "test/image_sized",
+            "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_sized.jpg",
+            "bytes": 12345,
+        }
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
+        )
+
+        media = CloudinaryGalleryService.upload_image(
+            player_data=self.tenure.player_data,
+            image_file=image_file,
+        )
+
+        assert media.file_size_bytes == 12345
+
+    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud", MAX_PLAYER_MEDIA_FILE_BYTES=1000)
+    @patch("cloudinary.uploader.upload")
+    def test_upload_image_rejects_file_over_per_file_cap(self, mock_upload):
+        """Test that a file larger than the per-file cap is rejected before upload."""
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"x" * 2000,
+            content_type="image/jpeg",
+        )
+
+        with pytest.raises(ValidationError) as cm:
+            CloudinaryGalleryService.upload_image(
+                player_data=self.tenure.player_data,
+                image_file=image_file,
+            )
+
+        assert "This file is larger than the per-file limit." in str(cm.value)
+        mock_upload.assert_not_called()
+
+    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
+    @patch("cloudinary.uploader.upload")
+    def test_upload_image_rejects_upload_exceeding_quota(self, mock_upload):
+        """Test that an upload pushing the player over quota is rejected before upload."""
+        player_data = self.tenure.player_data
+        player_data.media_quota_bytes = 1000
+        player_data.save()
+        MediaFactory(player_data=player_data, file_size_bytes=900)
+
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"x" * 200,
+            content_type="image/jpeg",
+        )
+
+        with pytest.raises(ValidationError) as cm:
+            CloudinaryGalleryService.upload_image(
+                player_data=player_data,
+                image_file=image_file,
+            )
+
+        assert "This upload would exceed your media quota." in str(cm.value)
+        mock_upload.assert_not_called()
+
+    @override_settings(
+        CLOUDINARY_CLOUD_NAME="test_cloud",
+        MAX_PLAYER_MEDIA_FILE_BYTES=1000,
+    )
+    @patch("cloudinary.uploader.upload")
+    def test_upload_image_staff_bypasses_quota_and_per_file_checks(self, mock_upload):
+        """Test that a staff account's uploads skip both the quota and per-file checks."""
+        mock_upload.return_value = {
+            "public_id": "test/image_staff",
+            "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_staff.jpg",
+            "bytes": 5000,
+        }
+        player_data = self.tenure.player_data
+        player_data.media_quota_bytes = 1
+        player_data.save()
+        player_data.account.is_staff = True
+        player_data.account.save()
+
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"x" * 2000,
+            content_type="image/jpeg",
+        )
+
+        media = CloudinaryGalleryService.upload_image(
+            player_data=player_data,
+            image_file=image_file,
+        )
+
+        assert media.file_size_bytes == 5000
+        mock_upload.assert_called_once()
 
     @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud")
     @patch("cloudinary.uploader.upload")

@@ -13,6 +13,7 @@ import cloudinary.uploader
 from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.core.files.uploadedfile import UploadedFile
+from django.db.models import Sum
 
 from evennia_extensions.models import Artist, Media, PlayerData
 from world.roster.models import RosterTenure, TenureMedia
@@ -83,6 +84,25 @@ class CloudinaryGalleryService:
 
         MediaScanService.scan_image(image_file)
 
+        if not player_data.account.is_staff:
+            # UploadedFile.size is typed as int | None upstream (a File wrapping a
+            # sizeless stream); an actual upload always reports a size, so treat a
+            # missing one as empty rather than widening every arithmetic use below.
+            incoming = image_file.size or 0
+            if incoming > settings.MAX_PLAYER_MEDIA_FILE_BYTES:
+                msg = "This file is larger than the per-file limit."
+                raise ValidationError(msg)
+
+            used = (
+                Media.objects.filter(player_data=player_data).aggregate(
+                    total=Sum("file_size_bytes"),
+                )["total"]
+                or 0
+            )
+            if used + incoming > player_data.media_quota_bytes:
+                msg = "This upload would exceed your media quota."
+                raise ValidationError(msg)
+
         if tenure:
             folder = cls.generate_tenure_folder(tenure)
         else:
@@ -107,6 +127,7 @@ class CloudinaryGalleryService:
                 player_data=player_data,
                 cloudinary_public_id=result["public_id"],
                 cloudinary_url=result["secure_url"],
+                file_size_bytes=result.get("bytes"),
                 media_type=media_type,
                 title=title,
                 description=description,
