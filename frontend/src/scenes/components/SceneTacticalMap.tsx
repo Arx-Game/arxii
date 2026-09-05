@@ -158,7 +158,7 @@ export function SceneTacticalMap({ sceneId }: Props) {
         }}
       >
         {(onGMPlace) => (
-          <div className="h-[320px] rounded-md border border-border">
+          <div className="h-[320px] overflow-hidden rounded-md border border-border">
             <TacticalMap
               nodes={positionNodes}
               edges={positionEdges}
@@ -166,6 +166,7 @@ export function SceneTacticalMap({ sceneId }: Props) {
               moveActions={moveActions}
               onDispatchMove={handleDispatchMove}
               onGMPlace={onGMPlace}
+              artUrl={scene.art_url}
             />
           </div>
         )}

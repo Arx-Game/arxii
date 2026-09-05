@@ -42003,6 +42003,7 @@ export interface components {
        */
       readonly declared_risk: string | null;
       readonly clock: components['schemas']['SceneClock'] | null;
+      readonly art_url: string | null;
     };
     /** @description Full scene representation with personas */
     SceneDetailRequest: {

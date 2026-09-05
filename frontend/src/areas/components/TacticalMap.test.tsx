@@ -346,4 +346,39 @@ describe('TacticalMap', () => {
     const open = screen.getByTestId('tactical-map-node-2');
     expect(within(open).queryByTestId('occupant-mark-cover')).not.toBeInTheDocument();
   });
+
+  // ---------------------------------------------------------------------------
+  // Room-art backdrop (#3556)
+  // ---------------------------------------------------------------------------
+
+  it('renders the room art as a backdrop when artUrl is present', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary')]}
+        edges={[]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+        artUrl="https://example.test/room-art.png"
+      />
+    );
+    const backdrop = screen.getByTestId('tactical-map-backdrop');
+    expect(backdrop).toHaveStyle({
+      backgroundImage: 'url(https://example.test/room-art.png)',
+    });
+  });
+
+  it('renders no backdrop when the room has no art', () => {
+    render(
+      <TacticalMap
+        nodes={[node(1, 'primary')]}
+        edges={[]}
+        occupantsByPosition={new Map()}
+        moveActions={[]}
+        onDispatchMove={vi.fn()}
+        artUrl={null}
+      />
+    );
+    expect(screen.queryByTestId('tactical-map-backdrop')).not.toBeInTheDocument();
+  });
 });
