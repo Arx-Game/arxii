@@ -73983,8 +73983,13 @@ components:
           - $ref: '#/components/schemas/SceneClock'
           nullable: true
           readOnly: true
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
       required:
       - active_round
+      - art_url
       - clock
       - date_started
       - declared_risk

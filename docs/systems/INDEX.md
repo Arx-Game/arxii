@@ -3258,6 +3258,12 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
   → the scene's PENDING `DecisiveCheckMarker.beat.risk` → `null`; `RenownRisk.NONE` also renders
   nothing. Web: `SceneHeader.tsx`'s `DeclaredRiskBadge`, beside the "In Combat" badge. See
   scenes.md's "Declared-risk badge" section.
+- **Room art backdrop (#3556):** `SceneDetailSerializer.art_url` - the scene room's resolved art
+  (`world.locations.services.resolve_area_art`: room thumbnail, then the nearest ancestor area's
+  art, #3477 cascade); `null` when nothing designates art anywhere. No new authoring surface.
+  Web (render-or-vanish, never a card): `SceneHeader.tsx` as a scrimmed banner behind the title,
+  and `TacticalMap.tsx`'s optional `artUrl` prop (wired only from `SceneTacticalMap.tsx`) as a
+  dimmed backdrop behind the position-node graph. See scenes.md's "Room art backdrop" section.
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **`BeatPredicateType.NPC_REGARD_AT_LEAST` (#3570):** a Beat gates on a named NPC's `NpcRegard` for the character, using `Beat.required_npc_sheet` (the NPC, FK → CharacterSheet, SET_NULL) + `required_standing` (shared with the faction predicate above); evaluator `_evaluate_npc_regard_at_least` reads `NpcRegard` from the NPC's primary persona toward the character's primary persona (missing row = 0, never `NPCStanding.affection` or the relationships affection track). Read-side complement to the Stakes Contract Engine's `NPC_FATE` `npc_regard_delta` writer and the structured-consequence `SHIFT_NPC_REGARD` pool effect (below); GROUP/GLOBAL scopes fall through to UNSATISFIED like the faction sibling (neither is in the ANY-member predicate set)
