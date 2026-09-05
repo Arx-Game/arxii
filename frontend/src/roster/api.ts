@@ -9,6 +9,7 @@ import type {
 } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { apiFetch } from '@/evennia_replacements/api';
+import { readErrorDetail } from '@/lib/errors';
 import { fetchAllPages } from '@/lib/pagination';
 
 export async function fetchRosterEntry(id: RosterEntryData['id']): Promise<RosterEntryData> {
@@ -69,7 +70,7 @@ export async function fetchPlayerMedia(): Promise<PlayerMedia[]> {
 export async function uploadPlayerMedia(form: FormData): Promise<PlayerMedia> {
   const res = await apiFetch('/api/roster/media/', { method: 'POST', body: form });
   if (!res.ok) {
-    throw new Error('Failed to upload media');
+    await readErrorDetail(res, 'Failed to upload media');
   }
   return res.json();
 }

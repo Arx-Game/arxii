@@ -31094,6 +31094,18 @@ paths:
       description: API viewset for managing player media.
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -56244,6 +56256,29 @@ components:
         * `gallery` - Gallery Image
         * `background` - Background
         * `illustration` - Illustration
+    MediaUploadRequest:
+      type: object
+      description: Validate a player's media upload before it reaches CloudinaryGalleryService.
+      properties:
+        image_file:
+          type: string
+          format: binary
+          pattern: (?:jpg|jpeg|png|gif|webp)$
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MediaTypeEnum'
+          default: photo
+        title:
+          type: string
+          default: ''
+        description:
+          type: string
+          default: ''
+        created_by:
+          type: integer
+          nullable: true
+      required:
+      - image_file
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.

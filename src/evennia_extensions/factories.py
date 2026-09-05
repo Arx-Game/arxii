@@ -200,6 +200,7 @@ class MediaFactory(factory.django.DjangoModelFactory):
     )
     media_type = "photo"
     title = factory.Sequence(lambda n: f"Test Media {n}")
+    file_size_bytes = None
 
 
 class PageBackgroundFactory(factory.django.DjangoModelFactory):
