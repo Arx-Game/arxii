@@ -1,10 +1,13 @@
 /**
- * Tests the #3412 wiring in GameTopBar's character-select handler: clicking
- * an avatar (alt, unplayed, or the currently-active one) fires the durable
- * server-side selection mutation ALONGSIDE the existing puppeting/session
- * dispatches — never replacing them. `useGameSocket` and
- * `useSelectCharacterMutation` are mocked so this stays a fast unit test
- * (real `connect()` opens a WebSocket and hits the network).
+ * Tests GameTopBar's character-select handler after #3479 decision 4
+ * (superseding the #3412 wiring this file used to pin down): clicking an
+ * avatar (alt, unplayed, or the currently-active one) is tab-local. It still
+ * performs the puppeting/session dispatches, and now ALSO writes this tab's
+ * browsing identity (sessionStorage + the gameSlice mirror), but it must
+ * NEVER fire the durable server-side selection mutation: only the Hall
+ * picker writes the account default (see CharactersBand.test.tsx, which
+ * asserts the mutation still fires there). `@/roster/queries` stays mocked
+ * precisely so a reintroduced `useSelectCharacterMutation` call is caught.
  */
 import { fireEvent, screen } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -28,6 +31,7 @@ import { GameTopBar } from './GameTopBar';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { resetGame, startSession, hydrateActiveCharacter } from '@/store/gameSlice';
+import { readTabIdentity } from '@/store/browsingIdentity';
 import type { MyRosterEntry } from '@/roster/types';
 
 const aria: MyRosterEntry = {
@@ -56,26 +60,29 @@ const bianca: MyRosterEntry = {
   character_type: 'PC',
 };
 
-describe('GameTopBar selection wiring (#3412)', () => {
+describe('GameTopBar selection wiring (#3479 decision 4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     store.dispatch(resetGame());
+    sessionStorage.clear();
   });
 
-  it('fires the select mutation with the roster entry id when clicking an unplayed character', () => {
+  it('clicking an unplayed character connects and writes the tab identity, never the account default', () => {
     renderWithProviders(<GameTopBar characters={[aria]} />);
 
     fireEvent.click(screen.getByText('Aria'));
 
-    expect(mutateMock).toHaveBeenCalledWith(1);
+    expect(mutateMock).not.toHaveBeenCalled();
     expect(connectMock).toHaveBeenCalledWith('Aria');
     expect(store.getState().game.active).toBe('Aria');
+    expect(store.getState().game.browsingEntryId).toBe(1);
+    expect(readTabIdentity()?.entryId).toBe(1);
   });
 
-  it('fires the select mutation when clicking an alt (already-sessioned) character', () => {
+  it('clicking an alt (already-sessioned) character switches the tab identity without the mutation', () => {
     store.dispatch(startSession('Bianca'));
     store.dispatch(startSession('Aria'));
 
@@ -83,11 +90,13 @@ describe('GameTopBar selection wiring (#3412)', () => {
 
     fireEvent.click(screen.getByTitle('Switch to Bianca'));
 
-    expect(mutateMock).toHaveBeenCalledWith(2);
+    expect(mutateMock).not.toHaveBeenCalled();
     expect(store.getState().game.active).toBe('Bianca');
+    expect(store.getState().game.browsingEntryId).toBe(2);
+    expect(readTabIdentity()?.entryId).toBe(2);
   });
 
-  it('the hydrated-but-disconnected active avatar is clickable and (re)selects/connects', () => {
+  it('the hydrated-but-disconnected active avatar is clickable and (re)connects without the mutation', () => {
     // Simulates reload hydration: `active` set with no live session yet.
     store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
 
@@ -95,7 +104,9 @@ describe('GameTopBar selection wiring (#3412)', () => {
 
     fireEvent.click(screen.getByTitle('Connect as Aria'));
 
-    expect(mutateMock).toHaveBeenCalledWith(1);
+    expect(mutateMock).not.toHaveBeenCalled();
     expect(connectMock).toHaveBeenCalledWith('Aria');
+    expect(store.getState().game.browsingEntryId).toBe(1);
+    expect(readTabIdentity()?.entryId).toBe(1);
   });
 });

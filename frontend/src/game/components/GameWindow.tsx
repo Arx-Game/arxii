@@ -10,8 +10,8 @@ import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setActiveSession } from '@/store/gameSlice';
-import { useSelectCharacterMutation } from '@/roster/queries';
+import { setActiveSession, setBrowsingIdentity } from '@/store/gameSlice';
+import { writeTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import { actingPersonaId } from '@/roster/persona';
@@ -120,7 +120,6 @@ export function GameWindow({
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
-  const selectCharacter = useSelectCharacterMutation();
 
   // #2165 per-tab scroll: remember each tab's scroll offset, restore on
   // switch, and stick to bottom while the reader is already at the bottom
@@ -196,11 +195,18 @@ export function GameWindow({
   const sessionNames = Object.keys(sessions);
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
-    // #3412 — persist the selection server-side ALONGSIDE the existing
-    // puppeting behavior below, never replacing it.
+    // #3479 decision 4 (supersedes the #3412 wiring that used to persist the
+    // selection server-side from here): a puppet-tab switch is tab-local. It
+    // updates THIS tab's browsing identity (sessionStorage + the gameSlice
+    // mirror) alongside the puppeting behavior below, but never writes the
+    // account's durable default selection: only the Hall picker calls
+    // useSelectCharacterMutation (home/hall/CharactersBand.tsx), so switching
+    // puppets here can no longer stomp another tab's identity through the
+    // account refetch that mutation triggers.
     const entryId = characters.find((c) => c.name === name)?.id;
     if (entryId !== undefined) {
-      selectCharacter.mutate(entryId);
+      writeTabIdentity(entryId);
+      dispatch(setBrowsingIdentity(entryId));
     }
     dispatch(setActiveSession(name));
     if (!sessions[name].isConnected) {

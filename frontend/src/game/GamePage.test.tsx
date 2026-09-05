@@ -75,9 +75,10 @@ vi.mock('@/roster/queries', () => ({
   // test suite isn't exercising the drawer's own identity resolution.
   useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
   useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
-  // #3412 — GameTopBar/GameWindow's select handlers call this alongside their
-  // existing puppeting dispatch; stub it out so those clicks don't hit the
-  // network. Not exercised directly by this suite's assertions.
+  // #3479 decision 4: GameTopBar/GameWindow's select handlers no longer call
+  // this (only the Hall picker writes the account default). The stub stays so
+  // this module mock exports the full surface and so a reintroduced call in
+  // either handler can't silently hit the network from this suite.
   useSelectCharacterMutation: vi.fn(() => ({ mutate: vi.fn() })),
 }));
 
