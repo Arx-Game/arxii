@@ -58,6 +58,7 @@ from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_PO
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from world.character_creation.questionnaire import BundledDistinction
     from world.skills.models import SkillPointBudget
     from world.societies.houses.models import HouseTemplate
 
@@ -1308,53 +1309,59 @@ class CharacterDraft(SharedMemoryModel):
         return next((row for row in offered if row.pk == int(chosen_id)), None)
 
     def visible_origin_slot_ids(self) -> set[int]:
-        """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
+        """Ids of this draft's Upbringing slots visible under the questionnaire rules (#3660).
 
-        A slot applies when ``applies_to`` is ANY or matches the resolved
-        path; a slot scoped to a path the draft is not currently on is
-        hidden, and its answer/choice must be ignored everywhere (pricing,
-        finalize persistence), mirroring ``validators._get_prompt_errors``.
+        Delegates to ``questionnaire.visible_slot_ids``: a slot applies when
+        ``applies_to`` is ANY or matches the resolved family path, and a
+        follow-up slot also needs its target shown and answered (and, for a
+        branching follow-up, one of the wanted answers picked). A slot hidden
+        by any of this must be ignored everywhere else (pricing, finalize
+        persistence), mirroring ``validators._get_prompt_errors``.
         """
-        template = self.selected_origin_template
-        if template is None:
-            return set()
-        path = self.resolve_family_path()
-        return {
-            slot_id
-            for slot_id, applies_to in template.slots.values_list("id", "applies_to")
-            if applies_to in (FamilyPath.ANY, path)
-        }
+        from world.character_creation.questionnaire import visible_slot_ids  # noqa: PLC0415
+
+        return visible_slot_ids(self)
 
     def calculate_upbringing_cost(self) -> int:
-        """Upbringing flat cost + each picked choice priced against the claimed family (#3617).
+        """Upbringing flat cost + each visible picked choice, priced per question (#3660).
 
-        Only choices on slots visible under the resolved family path are
-        priced: a choice on a slot the current path hides was answered
-        before a path switch and must not be charged for (#3617 review).
+        Only choices on slots visible under the questionnaire rules are
+        priced: a choice on a slot the current path/branch hides was
+        answered before a switch and must not be charged for (#3617 review).
+        A GROUP question prices against the influence of the family behind
+        its own anchor (which family need not be the claimed one); every
+        other question keeps the claim-path rule.
         """
+        from world.character_creation.questionnaire import (  # noqa: PLC0415
+            DraftAnswers,
+            question_influence,
+        )
+
         template = self.selected_origin_template
         if template is None:
             return 0
         path = self.resolve_family_path()
-        influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
-        visible_slot_ids = self.visible_origin_slot_ids()
-        picks = self.draft_data.get("origin_choices") or {}
-        ids = [
-            int(choice_id)
-            for slot_id, choice_id in picks.items()
-            if choice_id is not None and int(slot_id) in visible_slot_ids
-        ]
+        answers = DraftAnswers.from_draft(self)
+        visible = self.visible_origin_slot_ids()
+        picked = {sid: cid for sid, cid in answers.picks.items() if sid in visible}
         total = template.cg_point_cost
-        if ids:
-            for choice in OriginTemplateSlotChoice.objects.filter(
-                pk__in=ids, slot__template=template, is_active=True
-            ):
-                total += choice.cost_for(influence)
+        if picked:
+            choices = OriginTemplateSlotChoice.objects.filter(
+                pk__in=picked.values(), slot__template=template, is_active=True
+            ).select_related("slot")
+            for choice in choices:
+                total += choice.cost_for(question_influence(choice.slot, self, answers, path))
         vacancy = self.selected_vacancy
         if vacancy is not None:
             family = vacancy.organization.family
             total += vacancy.cost_for(family.influence if family is not None else 0)
         return total
+
+    def bundled_distinctions(self) -> list[BundledDistinction]:
+        """Distinctions granted by the Upbringing answers this draft has picked (#3660)."""
+        from world.character_creation.questionnaire import bundled_distinctions  # noqa: PLC0415
+
+        return bundled_distinctions(self)
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """
