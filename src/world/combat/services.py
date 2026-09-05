@@ -5829,6 +5829,40 @@ def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSh
     return True
 
 
+def _emit_companion_fall(opponent: CombatOpponent) -> None:
+    """Announce a bonded companion's defeat to the surge engine (#3575).
+
+    Only a companion-backed ALLY opponent (``summoned_by`` set, a live unreleased
+    ``Companion`` owning ``objectdb``) emits; a plain summon, a persona-backed NPC
+    and every ENEMY stay silent as before. Emits CHARACTER_INCAPACITATED, never
+    CHARACTER_KILLED: defeat is not death (#1873 resolves death at encounter end),
+    and the KILLED subscribers (asset loss, death deferral) are for people. Both
+    events reach ``relationship_spike_handler`` and dedup to one ALLY_FALLEN.
+    """
+    if opponent.allegiance != CombatAllegiance.ALLY or opponent.summoned_by_id is None:
+        return
+    if opponent.objectdb_id is None:
+        return
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    is_companion = Companion.objects.filter(
+        objectdb_id=opponent.objectdb_id, released_at__isnull=True
+    ).exists()
+    if not is_companion:
+        return
+    room = opponent.encounter.room
+    if room is None:
+        return
+    emit_event(
+        EventName.CHARACTER_INCAPACITATED,
+        CharacterIncapacitatedPayload(
+            character=opponent.objectdb,
+            source_event=EventName.DAMAGE_PRE_APPLY,
+        ),
+        location=room,
+    )
+
+
 def _is_vulnerable(opponent: CombatOpponent) -> bool:
     """Return True if the opponent's break-bar vulnerability window is active."""
     return opponent.vulnerability_rounds_remaining > 0
@@ -6098,6 +6132,9 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         _break_engagement_lock_on_defeat(opponent)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
+
+    if defeated:
+        _emit_companion_fall(opponent)
 
     # Achievement counters: see world.combat.achievement_counters. Wired in
     # a follow-up phase — keeping the source_sheet kwarg in place so the
