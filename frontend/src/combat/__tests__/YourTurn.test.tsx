@@ -2101,6 +2101,56 @@ describe('YourTurn - Guard Soulfray consent toggle (#3573)', () => {
     await selectGuardTechnique('Aegis Field');
     expect(screen.queryByTestId('guard-unaffordable-hint')).not.toBeInTheDocument();
   });
+
+  it('shows the unaffordable hint under the declared guard badge, not the control (#3574)', async () => {
+    setupMocks();
+    const protective = makeCastPlayerAction(35, 'Aegis Field', {
+      protective_flavor: 'barrier',
+      reactive_anima_cost: 8, // mock anima is 5
+    });
+    const encounter = makeEncounter({ status: 'declaring' });
+
+    const { rerender } = render(
+      <YourTurn {...defaultProps({ availableActions: [protective], encounter })} />,
+      { wrapper: createWrapper() }
+    );
+
+    await selectGuardTechnique('Aegis Field');
+    await userEvent.click(screen.getByTestId('guard-confirm-btn'));
+
+    // The mutation firing doesn't itself flip the server-derived maneuver -
+    // rerender with an encounter whose round action reflects the now-declared
+    // guard, the way the flee/cover "declared badge" tests construct theirs.
+    const declaredEncounter = makeEncounter({
+      status: 'declaring',
+      participants: [makeSelfParticipant(5)],
+      current_round_actions: [
+        {
+          participant: 5,
+          participant_name: 'Hero',
+          maneuver: 'interpose',
+          is_ready: false,
+          focused_ally_target: null,
+        },
+      ],
+    });
+
+    rerender(
+      <YourTurn
+        {...defaultProps({ availableActions: [protective], encounter: declaredEncounter })}
+      />
+    );
+
+    expect(screen.getByTestId('guard-declared-badge')).toBeInTheDocument();
+
+    const hint = screen.getByTestId('guard-unaffordable-hint');
+    expect(hint).toHaveTextContent(/cannot pay/i);
+    expect(hint).toHaveTextContent(/anima 5/);
+    expect(hint).toHaveTextContent(/fee 8/);
+
+    // The badge path rendered the hint, not the pre-declare control.
+    expect(screen.queryByTestId('guard-control')).not.toBeInTheDocument();
+  });
 });
 
 // ---------------------------------------------------------------------------
