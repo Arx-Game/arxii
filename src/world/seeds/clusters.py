@@ -112,6 +112,12 @@ def _seed_justice_laws() -> None:
     seed_baseline_area_laws()
 
 
+def _seed_area_elevation() -> None:
+    from world.areas.seeds import ensure_area_elevation_content  # noqa: PLC0415
+
+    ensure_area_elevation_content()
+
+
 def _seed_weather() -> None:
     from world.seeds.weather_content import seed_weather_content  # noqa: PLC0415
 
@@ -641,6 +647,9 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # the first press and break idempotency.
     "weather": _seed_weather,
     "justice_laws": _seed_justice_laws,
+    # Area elevation (#696 gap 3): the one PLACEHOLDER AreaElevationRequirement row
+    # (NEIGHBORHOOD) so the earned-elevation declaration is not inert on a fresh DB.
+    "area_elevation": _seed_area_elevation,
     "underworld": _seed_underworld,
     # Perception: the Concealed condition primitive (#1225) — the seam Stealth
     # witness-reduction (#1464) and forms disguise-piercing will apply/clear.
@@ -784,6 +793,7 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
     """
     from actions.models import ActionTemplate, ConsequencePool  # noqa: PLC0415
     from world.agriculture.models import CropType  # noqa: PLC0415
+    from world.areas.models import AreaElevationRequirement  # noqa: PLC0415
     from world.battles.models import BattleMapBlueprint, BattleUnitTemplate  # noqa: PLC0415
     from world.boundaries.models import ContentTheme  # noqa: PLC0415
     from world.buildings.models import (  # noqa: PLC0415
@@ -883,6 +893,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         "weather": [WeatherType],
         # Justice laws (#2862): the baseline law set that makes heat mint at all.
         "justice_laws": [AreaLaw],
+        # Area elevation (#696 gap 3): the one seeded threshold row (NEIGHBORHOOD).
+        "area_elevation": [AreaElevationRequirement],
         "underworld": [NeighborhoodTurf],
         # Investigation seeds the Search CheckType + Investigation skill (shared spine/skill
         # rows counted under "checks"); it still appears as a seeded cluster (#1705).

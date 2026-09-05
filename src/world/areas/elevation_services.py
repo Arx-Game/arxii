@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from world.currency.models import CharacterPurse, OrganizationTreasury
     from world.scenes.models import Persona
 
-# Bounded BFS depth for the descendant walk — there are only 9 AreaLevel rungs, so a
+# Bounded BFS depth for the descendant walk: there are only 9 AreaLevel rungs, so a
 # subtree can never be deeper than that; mirrors locations.services._AREA_ANCESTOR_WALK_CAP.
 _AREA_DESCENDANT_WALK_CAP = len(AreaLevel.choices)
 
@@ -42,7 +42,7 @@ def _declarer_holds_area(area: Area, *, declarer: Persona) -> bool:
     Either the row's holder is ``declarer``'s own persona, or the row's holder is an
     organization ``declarer`` can administer. "Can administer" reuses ``is_org_leader``
     (an active membership at an org-leadership rank) rather than
-    ``houses.services.can_administer_domain`` — that helper also accepts the
+    ``houses.services.can_administer_domain``, which also accepts the
     ``domain-steward`` office, but it takes a ``Domain`` instance, and a BUILDING-level
     area's effective owner need not be a ``Domain`` at all (any area can carry a
     ``LocationOwnership`` row). ``is_org_leader`` is the generic, Domain-free half of
@@ -63,10 +63,10 @@ def _building_descendants(area: Area) -> list[Area]:
 
     BUILDING is ``AreaLevel``'s floor, so a BUILDING area is always a leaf
     (``Area.clean()`` requires a strictly lower child level than its parent, and there
-    is no level below BUILDING) — this returns every leaf building in the subtree, not
+    is no level below BUILDING), this returns every leaf building in the subtree, not
     just direct children. Walks ``parent``/``children`` FKs directly, deliberately not
     the ``AreaClosure`` materialized view, so it works identically on the SQLite fast
-    tier — the same idiom as ``area_stat_total`` and ``effective_owner_for_area``.
+    tier, the same idiom as ``area_stat_total`` and ``effective_owner_for_area``.
     """
     result: list[Area] = []
     frontier = [area]
@@ -110,7 +110,7 @@ class ElevationEligibility:
 def elevation_eligibility(area: Area, *, declarer: Persona) -> ElevationEligibility:
     """Check ``declarer``'s standing to elevate ``area`` to its next level.
 
-    Reads are never mutating — safe to call for a read-only eligibility display; a
+    Reads are never mutating: safe to call for a read-only eligibility display; a
     real declaration re-checks inside ``declare_elevation``'s transaction.
     """
     target = next_level(area)
@@ -159,7 +159,7 @@ def declare_elevation(
 
     Re-checks eligibility inside the transaction (no stale read between a player's
     confirm and the write), then sinks ``cost_coppers`` through ``transfer`` with no
-    destination — a pure sink, mirroring ``items.market.services._pay``'s
+    destination, a pure sink, mirroring ``items.market.services._pay``'s
     seller-is-None branch. Raises ``ValidationError`` (carrying the refusal reasons)
     when ineligible; propagates ``transfer``'s own ``ValidationError`` on insufficient
     funds.

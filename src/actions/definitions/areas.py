@@ -1,4 +1,4 @@
-"""In-play area management actions (#696 gap 3) — the earned elevation declaration.
+"""In-play area management actions (#696 gap 3): the earned elevation declaration.
 
 ``EditAreaAction`` (``actions/definitions/world_builder.py``) is the warrant-gated
 staff/GM override that can set ``area.level`` directly; ``DeclareElevationAction`` is
@@ -56,7 +56,7 @@ def _resolve_elevation_source(persona: Any, organization_id: Any) -> Any | str:
 
     No ``organization_id`` spends from the declarer's own purse; naming one spends
     from that organization's treasury, gated on ``can_spend_treasury`` here at the
-    Action layer, never silently in the service — mirrors
+    Action layer, never silently in the service. Mirrors
     ``events._resolve_grandeur_source``.
     """
     from world.currency.services import (  # noqa: PLC0415
@@ -83,7 +83,7 @@ class DeclareElevationAction(Action):
 
     Kwargs: ``area_id``, optional ``organization_id`` (spend from that org's treasury
     instead of the declarer's own purse). Thin over
-    ``areas.elevation_services.declare_elevation`` — resolves the area and coin
+    ``areas.elevation_services.declare_elevation``: resolves the area and coin
     source, gates on the declarer being the area's effective owner (Task 1's
     ``effective_owner_for_area``), and lets the service's own re-check raise the
     detailed eligibility refusal.
