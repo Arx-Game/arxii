@@ -69,9 +69,22 @@ jobs:
           python-version: '3.13'
       - run: uv sync
       # Full replay: the whole point of this workflow. Runs every migration
-      # from every app's 0001 forward against a real empty Postgres.
+      # from every app's 0001 forward against a real empty Postgres. The wall
+      # time is the regeneration trigger (ADR-0272): past REPLAY_WARN_SECONDS,
+      # run `just regenerate-migrations` (#3656 for the mechanism). A warning,
+      # not a failure: red in this workflow means the chain is broken.
       - name: Replay the full migration chain
-        run: uv run arx manage migrate
+        env:
+          REPLAY_WARN_SECONDS: "1800"
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          uv run arx manage migrate
+          elapsed=$(( $(date +%s) - start ))
+          echo "Migration replay: ${elapsed}s (warn past ${REPLAY_WARN_SECONDS}s)" >> "$GITHUB_STEP_SUMMARY"
+          if [ "$elapsed" -gt "$REPLAY_WARN_SECONDS" ]; then
+            echo "::warning title=Migration chain regeneration due::Replay took ${elapsed}s (> ${REPLAY_WARN_SECONDS}s). Run just regenerate-migrations (ADR-0272)."
+          fi
       # Drift gate — NOT `arx manage makemigrations --check --dry-run`. That
       # command exits 1 on pre-existing phantom Evennia-library proxy-model
       # changes (harmless, filtered only at write time by our custom
