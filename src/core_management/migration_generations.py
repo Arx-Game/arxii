@@ -97,6 +97,57 @@ def parse_generations_source(source: str) -> GenerationsData:
     )
 
 
+@dataclass(frozen=True)
+class GenerationVerdict:
+    """Whether stock ``migrate`` may run; ``stranded_at`` is the last fully recorded generation."""
+
+    ok: bool
+    message: str = ""
+    stranded_at: int | None = None
+
+
+def _recovery(data: GenerationsData, stranded_at: int) -> str:
+    target = stranded_at + 1
+    sha = data.commits.get(target, "<unknown: COMMITS has no entry for it>")
+    return (
+        f"This database last fully recorded generation {stranded_at} of the arxii migration "
+        f"chain; the code is at generation {data.current}. Django cannot cross that gap "
+        f"(ADR-0272). Recovery: check out commit {sha} (the last commit at generation "
+        f"{target}), run `arx manage migrate` there, return here and run it again; repeat "
+        "until the gap closes. Set ARX_SKIP_GENERATION_GUARD=1 only if you know better."
+    )
+
+
+def classify_generation_state(recorded: set[str], data: GenerationsData) -> GenerationVerdict:
+    """Decide whether stock ``migrate`` may run against a database.
+
+    ``recorded`` is the set of arxii migration names in ``django_migrations``. A fresh
+    database (nothing recorded) and a database that fully recorded the previous
+    generation both proceed. Anything else is stranded: Django would either apply
+    nothing and exit 0 (partially recorded) or try to CREATE every table (a skipped
+    generation), so the verdict names where the database stands and how to move it.
+    """
+    if data.current <= 1 or not recorded:
+        return GenerationVerdict(ok=True)
+    highest_full = 0
+    for gen in sorted(data.generations):
+        names = data.generations[gen]
+        if names and all(name in recorded for name in names):
+            highest_full = gen
+    if highest_full == data.current - 1:
+        return GenerationVerdict(ok=True)
+    nxt = highest_full + 1
+    names = data.generations.get(nxt, [])
+    have = sum(1 for name in names if name in recorded)
+    if have:
+        detail = f"generation {nxt} is partially recorded ({have} of {len(names)} migrations)"
+    else:
+        detail = f"generation {nxt} was never recorded (a skipped generation)"
+    return GenerationVerdict(
+        ok=False, message=f"{detail}. {_recovery(data, highest_full)}", stranded_at=highest_full
+    )
+
+
 def load_generations(path: Path = GENERATIONS_PATH) -> GenerationsData:
     return parse_generations_source(path.read_text(encoding="utf-8"))
 
