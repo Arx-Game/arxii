@@ -12,6 +12,7 @@ from django.test import TestCase, override_settings
 
 from core.app_domains import credited_content_models
 from core_management.content_export import CONTENT_MODELS, export_to_content_repo
+from world.currency.constants import IncomeStreamKind
 from world.societies.houses.constants import SuccessionDerivation, SuccessionOrdering
 from world.societies.houses.models import (
     HoldingKind,
@@ -152,10 +153,13 @@ class HouseTemplateRoundTripTests(TestCase):
             ordering_rule=SuccessionOrdering.ELDEST,
         )
         holding_a = HoldingKind.objects.create(
-            name="Round Trip Farmland", stream_kind="farmland", base_gross=100
+            name="Round Trip Farmland",
+            stream_kind=IncomeStreamKind.DOMAIN_TAX,
+            base_gross=100,
         )
+        holding_a.full_clean()
         holding_b = HoldingKind.objects.create(
-            name="Round Trip Mine", stream_kind="mine", base_gross=200
+            name="Round Trip Mine", stream_kind=IncomeStreamKind.CRIME_KICKUP, base_gross=200
         )
         feature_a = HouseFeature.objects.create(
             name="Round Trip Black Ledger",
