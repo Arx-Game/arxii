@@ -50,6 +50,7 @@ function makeParticipant(id: number, name: string): Participant {
     intensity_modifier: null,
     control_modifier: null,
     current_position: null,
+    aftermath: null,
   };
 }
 

@@ -266,6 +266,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 10, name: 'North Gate' },
+          aftermath: null,
         },
       ],
       opponents: [
@@ -368,6 +369,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 10, name: 'North Gate' },
+          aftermath: null,
         },
       ],
       opponents: [
@@ -497,6 +499,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 10, name: 'North Gate' },
+          aftermath: null,
         },
       ],
       opponents: [
@@ -606,6 +609,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 10, name: 'North Gate' },
+          aftermath: null,
         },
         {
           id: 7,
@@ -624,6 +628,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 20, name: 'South Gate' },
+          aftermath: null,
         },
       ],
       opponents: [
@@ -691,6 +696,7 @@ describe('YourTurn — reach pre-filter (#532)', () => {
           intensity_modifier: null,
           control_modifier: null,
           current_position: { id: 10, name: 'North Gate' },
+          aftermath: null,
         },
       ],
     });

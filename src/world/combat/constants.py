@@ -5,6 +5,8 @@ TextChoices are defined here rather than in models.py to avoid circular
 import issues when serializers need to reference them.
 """
 
+from datetime import timedelta
+
 from django.db import models
 
 # Canonical physical/social/mental axis lives in actions.constants;
@@ -17,6 +19,15 @@ from world.gm.constants import GMLevel
 # #2051 — the combo invariant: combos are never solo. A combo definition must
 # have at least this many slots, each filled by a distinct PC-controlled action.
 COMBO_MIN_SLOTS: int = 2
+
+# Aftermath digest attribution window (#3551): the conclusion's rows (aftermath
+# ConsequenceOutcome, LegendEntry, BeatCompletion) all land inside complete_encounter's
+# own transaction, so this window's upper edge only has to exclude a later fight
+# in the same scene when a digest is rebuilt at read time. The same upper edge
+# also bounds the conditions lookup (build_aftermath_digest filters
+# applied_at__lt end), so a condition a later fight applies cannot bleed into
+# an earlier encounter's digest either.
+AFTERMATH_ATTRIBUTION_WINDOW = timedelta(minutes=1)
 
 
 # ---------------------------------------------------------------------------

@@ -28,9 +28,11 @@ export interface CombatRailProps {
   /** The scene this encounter belongs to — reserved for rail-level scene-scoped affordances. */
   sceneId: number;
   encounterId: number;
+  /** Forwarded to CombatTurnPanel's outcome banner Dismiss button (#3551). */
+  onDismissOutcome?: () => void;
 }
 
-export function CombatRail({ encounterId }: CombatRailProps) {
+export function CombatRail({ encounterId, onDismissOutcome }: CombatRailProps) {
   // Active character from Redux global state
   const activeCharacter = useAppSelector((state) => state.game.active);
 
@@ -111,6 +113,7 @@ export function CombatRail({ encounterId }: CombatRailProps) {
             castPosition={castPosition}
             onCastPositionChange={setCastPosition}
             onPositionShapeChange={setFocusedPositionShape}
+            onDismissOutcome={onDismissOutcome}
           />
         </TabsContent>
         <TabsContent value="map" className="mt-2 min-h-0 flex-1 overflow-y-auto">
