@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0222_holdingkind_reviewed_by_holdingkind_reviewed_on_and_more")
-    ]
+    dependencies = [("arxii", "0222_holdingkind_reviewed_by_holdingkind_reviewed_on_and_more")]
 
     operations = [
         migrations.RemoveConstraint(
@@ -78,12 +76,8 @@ class Migration(migrations.Migration):
             model_name="characterrelationship",
             constraint=models.CheckConstraint(
                 condition=models.Q(
-                    models.Q(
-                        ("target__isnull", False), ("target_companion__isnull", True)
-                    ),
-                    models.Q(
-                        ("target__isnull", True), ("target_companion__isnull", False)
-                    ),
+                    models.Q(("target__isnull", False), ("target_companion__isnull", True)),
+                    models.Q(("target__isnull", True), ("target_companion__isnull", False)),
                     _connector="OR",
                 ),
                 name="relationship_target_xor_companion",
