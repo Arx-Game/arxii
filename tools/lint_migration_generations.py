@@ -18,9 +18,11 @@ import re
 import sys
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MIGRATIONS_DIR = PROJECT_ROOT / "src" / "world" / "migrations"
+SRC_DIR = PROJECT_ROOT / "src"
+MIGRATIONS_DIR = SRC_DIR / "world" / "migrations"
 APP_LABEL = "arxii"
 _MIGRATION_FILE = re.compile(r"^\d{4}_.+\.py$")
+_MODULE_REF = re.compile(r"world\.migrations\.(\d{4}_[A-Za-z0-9_]+)")
 
 
 def _generations(migrations_dir: Path) -> dict[int, list[str]]:
@@ -62,13 +64,42 @@ def _arxii_dependencies(source: str) -> list[str]:
     return names
 
 
-def check_migrations(migrations_dir: Path = MIGRATIONS_DIR) -> list[str]:
-    """Failure messages for every migration whose name or dependency belongs to the past."""
+def check_module_references(src_dir: Path, owner: dict[str, int]) -> list[str]:
+    """Code outside the migrations package that names a replaced migration module.
+
+    A test that imports ``world.migrations.0207_...`` to exercise its RunPython
+    has no subject once a regeneration drops that file; it fails at import and
+    takes its whole test module with it (shard-6 on PR #3662).
+    """
+    failures: list[str] = []
+    for path in sorted(src_dir.rglob("*.py")):
+        if MIGRATIONS_DIR in path.parents:
+            continue
+        text = path.read_text(encoding="utf-8")
+        stale = [n for n in sorted(set(_MODULE_REF.findall(text))) if n in owner]
+        failures.extend(
+            f"{path}: references world.migrations.{name}, a generation-{owner[name]} "
+            "module that no longer exists. A dropped RunPython has no test subject; "
+            "delete the test or move the logic it exercises out of the migration."
+            for name in stale
+        )
+    return failures
+
+
+def check_migrations(
+    migrations_dir: Path = MIGRATIONS_DIR, src_dir: Path | None = None
+) -> list[str]:
+    """Failure messages for every migration whose name or dependency belongs to the past,
+    and for any module outside the package that still names a replaced migration."""
     generations = _generations(migrations_dir)
     if not generations:
         return []
     owner: dict[str, int] = {name: gen for gen, names in generations.items() for name in names}
     failures: list[str] = []
+    if src_dir is None and migrations_dir == MIGRATIONS_DIR:
+        src_dir = SRC_DIR
+    if src_dir is not None:
+        failures.extend(check_module_references(src_dir, owner))
     for path in sorted(migrations_dir.iterdir()):
         if not _MIGRATION_FILE.match(path.name):
             continue

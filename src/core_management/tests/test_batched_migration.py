@@ -35,9 +35,10 @@ class BatchedCreateModelMigrationTests(TransactionTestCase):
         self.created: list[str] = []
 
     def tearDown(self) -> None:
+        # Children first: on Postgres the parent cannot go while a FK still points at it.
         with connection.schema_editor() as editor:
-            for table in self.created:
-                editor.execute(f'DROP TABLE IF EXISTS "{table}"')
+            for table in reversed(self.created):
+                editor.execute(f'DROP TABLE IF EXISTS "{table}" CASCADE')
 
     def _apply(self, migration: migrations.Migration) -> ProjectState:
         with connection.schema_editor() as editor:

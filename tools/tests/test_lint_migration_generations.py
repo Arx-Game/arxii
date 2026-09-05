@@ -52,6 +52,22 @@ def test_dependency_on_a_replaced_name_fails(tmp_path: Path):
     assert "0222_holdingkind" in failures[0]
 
 
+def test_module_reference_to_a_replaced_migration_fails(tmp_path: Path):
+    mig = tmp_path / "migrations"
+    mig.mkdir()
+    (mig / "_generations.py").write_text(GEN_SOURCE)
+    _write(mig, "0001_g2_initial")
+    tests = tmp_path / "stories" / "tests"
+    tests.mkdir(parents=True)
+    (tests / "test_old.py").write_text(
+        'import importlib\n_m = importlib.import_module("world.migrations.0104_persona_title")\n'
+    )
+    failures = check_migrations(mig, src_dir=tmp_path)
+    assert len(failures) == 1
+    assert "test_old.py" in failures[0]
+    assert "0104_persona_title" in failures[0]
+
+
 def test_no_generations_module_means_nothing_to_check(tmp_path: Path):
     _write(tmp_path, "0001_initial")
     assert check_migrations(tmp_path) == []

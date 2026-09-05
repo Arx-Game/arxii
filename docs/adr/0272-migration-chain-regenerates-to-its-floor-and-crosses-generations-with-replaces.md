@@ -50,7 +50,9 @@ silently apply nothing and exit 0) and a skipped generation (Django would try to
 (`COMMITS` in `_generations.py`) as the recovery. A lint
 (`tools/lint_migration_generations.py`) refuses any migration whose name or
 dependency belongs to an earlier generation, since production records every
-applied name forever and would skip a repeat silently.
+applied name forever and would skip a repeat silently, and any module outside
+the package that still names a dropped migration (a test of a dropped
+`RunPython` has no subject left; two such tests went with generation 1).
 
 **Trigger:** regenerate when the nightly replay workflow reports more than 30
 minutes (it now records wall time and emits a warning past that), or before any
