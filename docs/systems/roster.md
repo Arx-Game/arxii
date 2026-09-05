@@ -407,7 +407,11 @@ shelf, not new player-made characters going through CG.
 
 ### Media (`/api/roster/media/`)
 - `GET /api/roster/media/` - List user's media (staff sees all)
-- `POST /api/roster/media/` - Upload image via Cloudinary
+- `POST /api/roster/media/` - Upload image via Cloudinary, validated by `MediaUploadSerializer`
+  (#3164): a 400 with a fixed message on a file over the per-file cap (`image_file`
+  never reaches the service) or on quota exceeded (the service's own check);
+  `multipart/form-data` request body (`image_file`, `media_type`, `title`, `description`,
+  `created_by`)
 - `POST /api/roster/media/{id}/associate_tenure/` - Link media to a tenure/gallery
 - `POST /api/roster/media/{id}/set_profile_picture/` - Set as account profile picture
 
@@ -433,7 +437,8 @@ shelf, not new player-made characters going through CG.
 ## Integration Points
 
 - **PlayerData** (`evennia_extensions.PlayerData`): Extends AccountDB with `player_data` reverse relation; tenures link to PlayerData, not AccountDB directly
-- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability — see ADR-0146); TenureMedia bridges to character tenures
+- **Media** (`evennia_extensions.Media`, renamed from `PlayerMedia` #2408): Actual media storage (player uploads and staff-authored art, derived by `player_data` nullability, see ADR-0146); TenureMedia bridges to character tenures. `file_size_bytes` (nullable, #3164) records the upload backend's reported size for player-uploaded rows; null for pre-#3164 rows and staff-pasted art. `PlayerData.media_quota_bytes` (default `settings.DEFAULT_PLAYER_MEDIA_QUOTA_BYTES`, per-account editable) caps the sum of a player's owned `Media.file_size_bytes`; `settings.MAX_PLAYER_MEDIA_FILE_BYTES` is the separate per-file cap. Both are enforced in `CloudinaryGalleryService.upload_image` (#3164) before the Cloudinary call: the per-file cap raises first, then the quota check against the sum of the account's existing `Media.file_size_bytes` (a null row counts as 0); `player_data.account.is_staff` skips both checks. A successful upload sets `Media.file_size_bytes` from the upload result's reported byte count.
+- **`MediaUploadSerializer`** (`world.roster.serializers.media`, #3164): validates an upload before `MediaViewSet.create` calls the service. `image_file` is required and `FileExtensionValidator`-checked against the extensions the service's content-type allowlist maps to (jpg, jpeg, png, gif, webp); `media_type` defaults to `photo`; `title`/`description` default to blank; `created_by` is an optional `Artist` id. `validate_image_file` rejects a file over `settings.MAX_PLAYER_MEDIA_FILE_BYTES` with the same fixed message the service raises ("This file is larger than the per-file limit."), so an oversized upload is rejected before the network call; staff bypass this check too, matching the service's staff bypass. The quota check stays service-only (it needs a DB aggregate). The serializer's `create()` calls `CloudinaryGalleryService.upload_image` and translates any `django.core.exceptions.ValidationError` it raises into a DRF 400 carrying the same fixed message ("This upload would exceed your media quota." for the quota case). `MediaViewSet` accepts `multipart/form-data` (and `application/x-www-form-urlencoded`, and JSON) for `create` alongside the project's JSON-only default, since `image_file` travels as a real file upload.
 - **Scenes System**: Personas reference characters via ObjectDB, which have `roster_entry` for identity resolution
 - **Character Creation**: `Family` and `FamilyMember` used during CG for family selection; families filtered by `origin_realm`
 

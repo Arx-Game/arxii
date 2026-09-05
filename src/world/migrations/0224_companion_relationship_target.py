@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0222_holdingkind_reviewed_by_holdingkind_reviewed_on_and_more")]
+    dependencies = [("arxii", "0223_remove_playerdata_max_file_size_and_more")]
 
     operations = [
         migrations.RemoveConstraint(
