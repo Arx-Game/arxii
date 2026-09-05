@@ -767,6 +767,29 @@ the effective risk - the player-visible half of the contract, at the same opt-in
 [stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section describes. Branch contents
 (what a WIN/LOSS/WITHDRAWAL actually does) are never part of the payload.
 
+### Room art backdrop (#3556)
+
+`SceneDetailSerializer.art_url` threads the scene room's art onto the scene page. No new
+authoring surface and no model change - it delegates straight to
+`world.locations.services.resolve_area_art` (the room's own `ObjectDisplayData.thumbnail`
+first, else the nearest ancestor area's `Area.art`, #3477), the same read side the
+world-builder already uses. `null` when the scene has no location or neither the room nor
+any ancestor area designates art.
+
+Web surfaces (both render-or-vanish - no image, no backdrop, never a card):
+
+- `SceneHeader.tsx` renders it as a full-bleed banner behind the title/badges
+  (`data-testid="scene-header-backdrop"`), scrimmed by a `bg-gradient-to-t
+  from-background via-background/85 to-background/40` overlay (theme tokens only) so
+  text stays legible over any art.
+- `TacticalMap.tsx` (`frontend/src/areas/components/`) takes an optional `artUrl` prop,
+  rendered as a dimmed backdrop (`data-testid="tactical-map-backdrop"`, `bg-background/70`
+  scrim) behind the node graph; `SceneTacticalMap.tsx` is the only caller that passes it
+  (`scene.art_url`). Position nodes already render on opaque `bg-card` boxes, so their
+  legibility is unaffected either way. The React Flow dot `<Background>` is skipped when a
+  backdrop is present (the dots and the art fought visually) and restored otherwise - so
+  `CombatTacticalMap.tsx`, which never passes `artUrl`, renders byte-identical to before.
+
 ### Lifecycle Actions
 
 **`StartSceneAction`** (`key="start_scene"`, `src/actions/definitions/scenes.py`)

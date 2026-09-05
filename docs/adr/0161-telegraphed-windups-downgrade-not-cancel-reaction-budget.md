@@ -34,7 +34,7 @@ fired them. Both gate + increment at `_dispatch_interpose_action`, the shared ta
 one seam, two counters, so a future third reaction type inherits both budgets for free.
 A declined reaction returns the SAME "did not fire" no-op shape an unaffordable or
 failed reaction already uses — no new UI state, no new error path.
-Amended by ADR-0270 (#3574): the no-op shape is unchanged, but the declined
+Amended by ADR-0271 (#3574): the no-op shape is unchanged, but the declined
 guardian is always told privately.
 
 **Standing defenses stay outside both budgets.** Absorb/reflect/blink are conditions

@@ -80,7 +80,7 @@ buffer.
   accrues Soulfray on every fire, so a caster can hold a ward for an ally past zero anima
   at their own soul's expense.
 
-## When a defense does not fire (#3574, ADR-0270)
+## When a defense does not fire (#3574, ADR-0271)
 
 Every reactive protection that fizzles, lapses or is declined keeps its mechanical
 no-op shape and narrates it. Private lines go through

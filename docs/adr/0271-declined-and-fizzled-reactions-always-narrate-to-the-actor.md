@@ -1,4 +1,4 @@
-# ADR-0270: Declined and fizzled reactions stay mechanical no-ops but always narrate to the actor
+# ADR-0271: Declined and fizzled reactions stay mechanical no-ops but always narrate to the actor
 
 **Date:** 2026-09-04
 **Status:** Accepted (amends ADR-0161)

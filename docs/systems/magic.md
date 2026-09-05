@@ -143,6 +143,14 @@ separate casting handler. When intensity exceeds control at runtime, effects bec
 unpredictable and anima cost spikes. If anima cost exceeds the character's pool, the
 excess deals damage to the caster.
 
+- **Authored outcome lines (#3554, ADR-0270):** `hit_narration` / `miss_narration`
+  (`TextField`, blank = default sentence). `{actor}` and `{target}` are required and are
+  filled by literal replacement. The authored text becomes the HEAD of the Narrator OUTCOME
+  line; the damage figure, tail clauses and suffix clauses stay machine-appended
+  (`render_action_outcome_narration(hit_text=, miss_text=)`). Admin-only authoring: the
+  player builder (`TechniqueDesignSerializer`) does not accept them. Validated by
+  `Technique.clean()` via `world.magic.narration.validate_outcome_narration`.
+
 ### Gift lineage — one thread reaches its ancestors' techniques (#2891, ADR-0192) [BUILT & WIRED]
 
 `Gift.parent` (self-FK, `on_delete=PROTECT`, `related_name="children"`) hangs a gift

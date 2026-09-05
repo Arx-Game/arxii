@@ -84,6 +84,13 @@ export interface TacticalMapProps {
   occupantsByPosition: Map<number, OccupantSummary[]>;
   /** Engagement locks to draw between positions (#3555). Omit for none. */
   links?: OccupantLink[];
+  /**
+   * The room's art (#3556), rendered as a dimmed backdrop behind the node
+   * graph so a fight reads as happening somewhere, not on a blank grid.
+   * Position nodes already render on opaque cards, so legibility holds
+   * regardless. Omit or pass null/undefined for no backdrop (render-or-vanish).
+   */
+  artUrl?: string | null;
   moveActions: PlayerAction[];
   onDispatchMove: (action: PlayerAction) => void;
   /**
@@ -128,6 +135,7 @@ export function TacticalMap({
   onDispatchMove,
   onPickPosition,
   onGMPlace,
+  artUrl,
 }: TacticalMapProps) {
   const moveActionByPositionId = useMemo(() => {
     const map = new Map<number, PlayerAction>();
@@ -223,7 +231,18 @@ export function TacticalMap({
   }, [edges, links]);
 
   return (
-    <div className="h-full w-full" data-testid="tactical-map">
+    <div className="relative h-full w-full" data-testid="tactical-map">
+      {artUrl && (
+        <div
+          className="pointer-events-none absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${artUrl})` }}
+          data-testid="tactical-map-backdrop"
+        >
+          {/* Scrim (#3556): dims the room art so edges/labels stay readable,
+              using the theme background token rather than a hardcoded color. */}
+          <div className="absolute inset-0 bg-background/70" />
+        </div>
+      )}
       <ReactFlowProvider>
         <ReactFlow
           nodes={flowNodes}
@@ -233,7 +252,7 @@ export function TacticalMap({
           nodesConnectable={false}
           fitView
         >
-          <Background gap={40} />
+          {!artUrl && <Background gap={40} />}
           <Controls showInteractive={false} />
         </ReactFlow>
       </ReactFlowProvider>

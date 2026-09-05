@@ -149,6 +149,12 @@ export interface SceneDetail extends SceneListItem {
    * viewer. null when the scene runs no beat or the beat has no clock.
    */
   clock: { size: number; filled: number } | null;
+  /**
+   * The scene's room art (#3556): the room's own thumbnail, falling back to
+   * the nearest ancestor area's art (the #3477 cascade). null when neither
+   * the room nor any ancestor area designates art.
+   */
+  art_url: string | null;
 }
 
 /** #3434 GM story rail - one authored opponent line on an ENCOUNTER beat. */

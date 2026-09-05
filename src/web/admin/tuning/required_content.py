@@ -1345,6 +1345,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="GameClock"),
         ),
         ContentDependency(
+            key="legend-level-calibration",
+            label="Legend level calibration (Rite of Honors)",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/societies/honors.py:343 honor_deed(); "
+                "world/achievements/services.py:352 maybe_grant_deed_title()"
+            ),
+            consequence=(
+                "honor_deed() and maybe_grant_deed_title() raise "
+                "LegendLevelCalibration.DoesNotExist for the honorer's or the deed's "
+                "level when it has no authored row - nobody can honor a deed and no "
+                "deed can grant a title until the curve is filled in."
+            ),
+            probe=AnyRowProbe(label="LegendLevelCalibration"),
+        ),
+        ContentDependency(
             key="character_creation.beginnings_have_upbringing",
             label="Beginnings without an Upbringing",
             tier=DependencyTier.REQUIRED,

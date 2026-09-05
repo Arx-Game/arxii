@@ -1976,7 +1976,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 - **Models:** `ExperiencePointsData`, `XPTransaction`, `CharacterXP`, `DevelopmentPoints`, `DevelopmentTransaction`, `KudosPointsData`, `KudosTransaction`, `CharacterUnlock`, `XPCostChart`, `XPCostEntry`, `CharacterPathHistory`, `PathIntent` (player's declared next-path preference — one per character sheet; FK to `CharacterSheet` + `Path`), `KudosDifficultyWeight` (staff-tunable band→multiplier for good-sport kudos; one row per `DifficultyChoice`), `WeeklySocialEngagement` (per-account weekly pending-kudos accumulator; `pending_points`, `granted`, `game_week` FK; `distinct_initiators` is a derived property counting child rows), `WeeklyEngagementInitiator` (child row recording each unique initiator toward a ledger; `UniqueConstraint(ledger, initiator_account)`),
   **Class-Level Advancement (#1352):** `AbstractClassLevelAdvancement` (abstract base shared by `ClassLevelAdvancement` and `AudereMajoraCrossing`; carries `scene`, `declaration_interaction`, `level_before`, `level_after`, `created_at`), `ClassLevelAdvancement` (within-tier Durance receipt — `character_sheet`, `character_class`, `officiant`, `ritual`, `witnesses` M2M → `scenes.Persona`),
   **Training Site (#1700):** `DuranceTrainingSite` (room + trainer-of-record pair; enables site-convened sessions — `room_profile` FK → `RoomProfile`, `officiant` FK → `CharacterSheet`, `training_path` FK → `Path` (nullable), `is_active`; unique `(room_profile, officiant)`),
-  **Maturation Points (#2756, ADR-0172):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
+  **Maturation Points (#2756, ADR-0172; milestones retuned by #3635 to `MATURATION_MILESTONES` = 24, 27, 30, 34, 38, 42, 47, 52, 58, 64, 75, none after; `next_milestone_year` null past 75; starting under 21 costs `UNDERAGE_CG_POINT_COST` in the CG breakdown):** `MaturationStatCap` (authored per-`PathStage` stat cap, seeded 5/6/11/16/21/25 per the #3001 ruling — `seed_maturation_stat_caps` in `progression/seeds.py`, previously never authored) + `MaturationSpend` (sheet FK, trait FK, `milestone_year`, `is_active` — active iff `milestone_year <= sheet.matured_years`; unique per (sheet, milestone_year)). Services in `progression/services/maturation.py`: `milestone_count` / `available_points` / `spend_maturation_point` (+1 display dot = +10 internal, stage-capped; caps are authored in display dots and convert at the comparison — ADR-0193) / `sync_maturation_spends` (reversal deactivates, re-aging reactivates — every `matured_years` writer outside the birthday tick must call it). Both writers also stamp a `traits.CharacterTraitChange` row (`source=MATURATION`, #3055) for each ±1 dot they apply
 
   **Level Stat Points (#3001, ADR-0205):** `LevelStatPointSpend` (sheet FK, trait FK, `level_granted` 2..N, `is_active`; unique per (sheet, level_granted)) — one point per class level past the first, balance derived (`level − 1` minus active spends, no grant hook). Services in `progression/services/stat_points.py`: `stat_points_earned` / `available_stat_points` / `spend_level_stat_point` (same `MaturationStatCap` stage cap) / `sync_level_stat_point_spends` (called from `apply_class_level_advance` so reversals refund). Both writers stamp `traits.CharacterTraitChange` rows (`source=LEVEL_STAT_POINT`, #3055). API: `GET /api/character-sheets/{id}/stat-points/` + `POST .../spend-stat-point/`; frontend `StatPointPanel` beside `MaturationPanel`
 - **Unlock Requirements** (all have `is_met_by_character(character) -> tuple[bool, str]`):
@@ -3262,6 +3262,12 @@ Player-driven narrative campaign system with hierarchical structure and task-gat
   → the scene's PENDING `DecisiveCheckMarker.beat.risk` → `null`; `RenownRisk.NONE` also renders
   nothing. Web: `SceneHeader.tsx`'s `DeclaredRiskBadge`, beside the "In Combat" badge. See
   scenes.md's "Declared-risk badge" section.
+- **Room art backdrop (#3556):** `SceneDetailSerializer.art_url` - the scene room's resolved art
+  (`world.locations.services.resolve_area_art`: room thumbnail, then the nearest ancestor area's
+  art, #3477 cascade); `null` when nothing designates art anywhere. No new authoring surface.
+  Web (render-or-vanish, never a card): `SceneHeader.tsx` as a scrimmed banner behind the title,
+  and `TacticalMap.tsx`'s optional `artUrl` prop (wired only from `SceneTacticalMap.tsx`) as a
+  dimmed backdrop behind the position-node graph. See scenes.md's "Room art backdrop" section.
 - **Authoring backbone enums:** `StoryScope.UNASSIGNED` (new default), `StoryMaturity` (PITCH/OUTLINE/PLOT — per-node authoring completeness on Story/Chapter/Episode), `BeatKind` (SITUATION/ENCOUNTER/TASK/REQUIREMENT), `ProgressStatus` (ACTIVE/WAITING_FOR_GM/RESTING/COMPLETED on the three Progress models; **not currently exposed to the frontend** — see stories.md follow-ups)
 - **`BeatPredicateType.FACTION_STANDING_AT_LEAST` (#1760):** a Beat gates on accumulated `SocietyReputation`/`OrganizationReputation.value` — `Beat.required_society`/`required_organization` (exactly one) + `required_standing`; evaluator `_evaluate_faction_standing_at_least` (`world.stories.services.beats`). Read-side complement to the Stakes Contract Engine's `FACTION` `subject_standing_delta` writer (below)
 - **`BeatPredicateType.NPC_REGARD_AT_LEAST` (#3570):** a Beat gates on a named NPC's `NpcRegard` for the character, using `Beat.required_npc_sheet` (the NPC, FK → CharacterSheet, SET_NULL) + `required_standing` (shared with the faction predicate above); evaluator `_evaluate_npc_regard_at_least` reads `NpcRegard` from the NPC's primary persona toward the character's primary persona (missing row = 0, never `NPCStanding.affection` or the relationships affection track). Read-side complement to the Stakes Contract Engine's `NPC_FATE` `npc_regard_delta` writer and the structured-consequence `SHIFT_NPC_REGARD` pool effect (below); GROUP/GLOBAL scopes fall through to UNSATISFIED like the faction sibling (neither is in the ANY-member predicate set)
@@ -6827,6 +6833,11 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     depletable resolve pool mirroring war-scale `BattleUnit.morale`. Derived state via
     `morale_state_for` (STEADY/FALTER/BREAK) drives `select_npc_actions` (falter weakens,
     break → FLED). `OpponentTierTemplate.has_morale` flags mindless tiers (resist, not immune).
+  - **Boss state on the opponent payload (#3552):** `OpponentSerializer` serves GM-only
+    (`_is_gm_or_staff`, `null` otherwise) `phase_count` (BOSS tier), `damage_multiplier`,
+    `break_bar_current` / `break_bar_threshold` / `vulnerability_rounds_remaining`,
+    `morale` / `max_morale` / `morale_state`; public `is_enraged` (phase > 1 and
+    multiplier > 1) and `is_wall_broken` (window open). `current_phase` was already public.
   - `ThreatPoolEntry.requires_steady` (bool, default False, #2015) — skipped when the
     opponent is faltering; lets designers author "weakened" entries.
   - `CombatOpponent.status` gains `OpponentStatus.REMOVED` (#3382) — a GM pull, distinct
@@ -7170,6 +7181,14 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     ACTIVE participant's round action is `is_ready=True`, calls `resolve_round` immediately
     instead of waiting for the TIMED game-clock sweep. Called from `ReadyAction.execute`
     after `toggle_action_ready`, only when the toggle landed on ready=True.
+  - `update_encounter_settings(..., escalation_curve=_UNSET)` (#3552) - tri-state curve
+    write (omitted / `None` clears + `remove_escalation_room_triggers` / curve sets); web
+    `PATCH /api/combat/{id}/settings/` and telnet `encounter curve <name|none>` converge here.
+  - `GET /api/combat/escalation-curves/` (`EscalationCurveViewSet`, `IsGMOrStaff`) - curve
+    catalog for the settings picker.
+  - `_narrate_phase_transition` / `_narrate_held_back` (`services.py`) - room lines for a
+    boss phase shift (authored `BossPhase.description` or generic; enrage line) and for a
+    PC skipped with no declaration under TIMED/MANUAL. Both `_dual_dispatch_combat_narration`.
 - **Key Services (`world/mechanics/succor_shared.py`, #1744):** `SUCCOR_CHALLENGE_NAME` +
   `apply_succor_outcome(result)` — domain-agnostic Succor pieces shared by combat and scene
   rounds (moved out of `world.combat` so `world.scenes` doesn't need a one-directional import
@@ -7239,6 +7258,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     formats as `WINDUP_NO_TARGET_LABEL` ("no one in particular"). Blank `windup_telegraph`
     falls back to `WINDUP_GENERIC_TELEGRAPH` ("`{opponent} begins something enormous,
     bearing down on {target}...`"). All three constants live in `world/combat/constants.py`.
+  - `ThreatPoolEntry.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+    head for an NPC attack, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the NPC resolution path
+    in `combat/services.py`; blank = default sentence.
   - `PendingOpponentAttack` (`world/combat/models.py`) — clones the deferred-then-reactive
     shape of `world.scenes.models.PendingSuddenHarm` (#1316) rather than importing it (that
     model is single-round out-of-combat; this one is multi-round, combat-native, with its
@@ -7321,6 +7344,10 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     default 0) / `RitualCheckConfig.sustained_rounds` (`world/magic/models/
     ritual_check_config.py`, same shape) — authored data; 0 is today's
     resolve-immediately behavior, unchanged for every existing row.
+  - `Technique.hit_narration` / `miss_narration` (#3554, ADR-0270): authored OUTCOME
+    head for a technique, `{actor}`/`{target}` required, spliced by
+    `render_action_outcome_narration(hit_text=, miss_text=)` from the PC resolution path
+    (`_record_and_broadcast_pc_action`); blank = default sentence.
   - **Declaration (technique):** `_validate_no_pending_sustained` (`world/combat/
     services.py`) raises `ValueError` in `declare_action` when the participant is still
     holding a not-yet-matured commitment (`resolves_round__gte round_number` — a row
@@ -7415,6 +7442,30 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     consumed components bought nothing. `PendingOpponentAttack` (the NPC mirror) has
     the same pre-existing gap, deliberately NOT fixed here — out of scope, no
     consumed-cost consequence.
+  - **Aftermath digest (#3551):** `deliver_aftermath_digests`, the last step
+    `complete_encounter` runs, sends one private Narrator OUTCOME interaction
+    (`PERCEIVED_ONLY`, pushed only to that character's persona) plus a `character.msg`
+    telnet line to every ACTIVE or FLED participant; REMOVED participants get nothing,
+    but an ABANDONED encounter still delivers (only the aftermath rules/pools/counters
+    step is skipped for ABANDONED, not delivery). `build_aftermath_digest`
+    (`world/combat/aftermath.py`) assembles the digest by reading, not writing: the
+    aftermath `ConsequenceOutcome` row, conditions still held that were applied during
+    the encounter (a condition cleared mid-fight leaves no row and is not reported,
+    since the pose log already narrated it), any `LegendEntry` rows created in the
+    window, and a `BeatCompletion` for the running story beat (skipped entirely when
+    the encounter carries a `scenario_deed`, since a scenario ENCOUNTER route has no
+    beat line). The consequence, legend and beat rows are scoped to `aftermath_window`,
+    `[completed_at, completed_at + AFTERMATH_ATTRIBUTION_WINDOW)`; the conditions
+    lookup is scoped to `[encounter.created_at, completed_at +
+    AFTERMATH_ATTRIBUTION_WINDOW)`, so the window's upper edge also keeps a later
+    fight's condition out of an earlier digest at read time. `render_aftermath_digest`
+    turns the digest into player text; the legend line ("Deed remembered: ...") only
+    ever reports an authored deed row, since legend settles at a story's end from its
+    outcomes, never per fight. `ParticipantSerializer.aftermath`
+    (`world/combat/serializers.py`) exposes the same digest over the API: null unless
+    the encounter is COMPLETED with a `completed_at` and the viewer passes
+    `_can_view_vitals` (owner, scene GM, or staff); the `beat` entry is additionally
+    null for a SECRET beat unless the viewer is GM or staff.
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's

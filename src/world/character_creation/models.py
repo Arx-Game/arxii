@@ -47,6 +47,7 @@ from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
+from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -1314,6 +1315,15 @@ class CharacterDraft(SharedMemoryModel):
                         "cost": cost,
                     }
                 )
+        if self.age is not None and self.age < MATURATION_UNDERAGE_YEAR:
+            # The youngest starts buy their youth with a thinner purse (#3635).
+            breakdown.append(
+                {
+                    "category": "age",
+                    "item": f"Starting under {MATURATION_UNDERAGE_YEAR}",
+                    "cost": UNDERAGE_CG_POINT_COST,
+                }
+            )
         if self.selected_species_id is not None:
             from world.species.services import total_species_gift_cost  # noqa: PLC0415
 
