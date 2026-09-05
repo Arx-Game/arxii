@@ -48,6 +48,7 @@ import type {
   Technique,
   TechniqueStyle,
   Tradition,
+  Vacancy,
   WorshippedBeingRef,
 } from './types';
 
@@ -467,6 +468,22 @@ export async function getOriginTemplates(beginningId: number): Promise<OriginTem
   const res = await apiFetch(`${BASE_URL}/origin-templates/?beginning=${beginningId}`);
   if (!res.ok) {
     throw new Error('Failed to load origin templates');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Vacancies (openings on a staff family, priced for the draft, #3648)
+// =============================================================================
+
+export async function getVacancies(draftId: number, organizationId?: number): Promise<Vacancy[]> {
+  const params = new URLSearchParams({ draft: String(draftId) });
+  if (organizationId !== undefined) {
+    params.set('organization', String(organizationId));
+  }
+  const res = await apiFetch(`${BASE_URL}/vacancies/?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error('Failed to load vacancies');
   }
   return res.json();
 }

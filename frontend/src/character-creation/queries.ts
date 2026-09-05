@@ -55,6 +55,7 @@ import {
   getTechniqueStyles,
   getTraditionPerspectives,
   getTraditions,
+  getVacancies,
   getWorshippedBeings,
   resubmitDraft,
   selectTradition,
@@ -104,6 +105,9 @@ export const characterCreationKeys = {
   // Origin template catalog (guided origin-story flow, #2478)
   originTemplates: (beginningId: number) =>
     [...characterCreationKeys.all, 'origin-templates', beginningId] as const,
+  // Vacancies reachable from the draft, priced for it (#3648)
+  vacancies: (draftId: number, organizationId?: number) =>
+    [...characterCreationKeys.all, 'vacancies', draftId, organizationId ?? null] as const,
   // Perspective entries (CG wizard perspective panels, #3281)
   beginningsPerspectives: (beginningId: number) =>
     [...characterCreationKeys.all, 'beginnings-perspectives', beginningId] as const,
@@ -455,6 +459,14 @@ export function useOriginTemplates(beginningId: number | null | undefined) {
     queryFn: () => getOriginTemplates(beginningId!),
     enabled: !!beginningId,
     staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useVacancies(draftId: number | undefined, organizationId?: number) {
+  return useQuery({
+    queryKey: characterCreationKeys.vacancies(draftId ?? 0, organizationId),
+    queryFn: () => getVacancies(draftId as number, organizationId),
+    enabled: draftId !== undefined,
   });
 }
 
