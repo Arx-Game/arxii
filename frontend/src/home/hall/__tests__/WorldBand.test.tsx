@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorldBand } from '../WorldBand';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { hydrateActiveCharacter, resetGame } from '@/store/gameSlice';
+import { setBrowsingIdentity, resetGame } from '@/store/gameSlice';
 import type { EventListItem } from '@/events/types';
 import type { Gemit } from '@/narrative/types';
 
@@ -180,7 +180,7 @@ describe('WorldBand', () => {
 
   it('renders the persona tidings digest plate ONLY when a character is docked', async () => {
     setDefaultMocks();
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<WorldBand />);
 
     await waitFor(() => {

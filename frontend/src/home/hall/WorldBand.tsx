@@ -19,6 +19,7 @@ import type { EventListItem, PaginatedResponse } from '@/events/types';
 import { useGemits } from '@/narrative/queries';
 import { TidingsFeed } from '@/tidings/components/TidingsFeed';
 import { useAppSelector } from '@/store/hooks';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useWeatherConditions } from '@/weather/queries';
 import { useClockQuery } from './queries';
 
@@ -32,13 +33,16 @@ function pad(n: number): string {
 
 function TimePlate() {
   const { data: clock } = useClockQuery();
-  const { sessions, active, activeEntryId } = useAppSelector((state) => state.game);
+  // Live-session room lookup stays keyed to THIS tab's own `active`/`sessions`
+  // (ADR-0247) — unrelated to browsing identity below.
+  const { sessions, active } = useAppSelector((state) => state.game);
   const sessionRoomId = active ? (sessions[active]?.room?.id ?? null) : null;
+  const { entryId: browsingEntryId } = useBrowsingIdentity();
   // With no live session room, the server resolves the docked character's own
   // room (durable selection, #3412) — weather only reads for someone who IS
   // somewhere, so the query stays off entirely with nothing docked.
   const { data: conditions } = useWeatherConditions(sessionRoomId, {
-    fallbackToSelection: activeEntryId != null,
+    fallbackToSelection: browsingEntryId != null,
   });
 
   return (
@@ -140,7 +144,7 @@ function TidingsDigestPlate({ viewerId }: { viewerId: number }) {
 }
 
 export function WorldBand() {
-  const dockedEntryId = useAppSelector((state) => state.game.activeEntryId);
+  const { entryId: dockedEntryId } = useBrowsingIdentity();
 
   return (
     <div className="space-y-4">

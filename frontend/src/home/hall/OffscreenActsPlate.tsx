@@ -2,7 +2,7 @@
  * "Offscreen Acts" plate (#3412 slice 3, task 4/5) — the Hall's link-out to
  * the things the docked character can still do without a live `/game`
  * session: write in the journal, log goal progress. Renders only when a
- * character is docked (`gameSlice.activeEntryId`) — an account with nothing
+ * character is docked (#3479 `useBrowsingIdentity`'s `entryId`) — an account with nothing
  * docked gets no plate at all, mirroring `CharactersBand`'s docked-card meta
  * line.
  *
@@ -36,7 +36,7 @@
  */
 import { Link } from 'react-router-dom';
 import { Plate, PlateHead } from '@/components/folio';
-import { useAppSelector } from '@/store/hooks';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import type { MyRosterEntry } from '@/roster/types';
 import { ALLOWED_LIFECYCLE_STATES } from '@/roster/lifecycleDisplay';
 
@@ -62,8 +62,8 @@ const DEGRADED_STATE_COPY: Record<string, string> = {
 const DEFAULT_DEGRADED_COPY = 'You cannot act in the world from here right now.';
 
 export function OffscreenActsPlate({ characters }: { characters: MyRosterEntry[] }) {
-  const activeEntryId = useAppSelector((state) => state.game.activeEntryId);
-  const docked = characters.find((entry) => entry.id === activeEntryId) ?? null;
+  const { entryId } = useBrowsingIdentity();
+  const docked = characters.find((entry) => entry.id === entryId) ?? null;
 
   if (!docked) return null;
 

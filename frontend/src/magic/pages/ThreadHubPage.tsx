@@ -1,9 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Button } from '@/components/ui/button';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useThreads, useThreadHubSummary, useCharacterResonances } from '../queries';
 import { ResonanceBalanceCard } from '../components/threads/ResonanceBalanceCard';
 import { ThreadCard } from '../components/threads/ThreadCard';
@@ -14,22 +13,16 @@ import type { Thread, TargetKind } from '../types';
  * Thread Hub page at /threads.
  *
  * Shows the active character's resonance balances and thread list grouped
- * by target_kind. The active character is the one currently selected in
- * the game UI (``state.game.active`` from Redux) resolved against the
- * user's roster entries — never inferred from "the first row of some
- * unordered list."
+ * by target_kind. The active character is this tab's browsing identity
+ * (#3479) — never inferred from "the first row of some unordered list."
  */
 export function ThreadHubPage() {
   const navigate = useNavigate();
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [] } = useMyRosterEntriesQuery();
-  // Resolve active character to a character_sheet pk. CharacterSheet
+  // Resolve the browsing character to a character_sheet pk. CharacterSheet
   // shares its pk with the underlying ObjectDB (character_id) via the
   // OneToOneField(primary_key=True).
-  const characterSheetId = useMemo(() => {
-    const entry = myEntries.find((e) => e.name === activeCharacterName);
-    return entry?.character_id ?? undefined;
-  }, [myEntries, activeCharacterName]);
+  const { entry } = useBrowsingIdentity();
+  const characterSheetId = entry?.character_id ?? undefined;
 
   const { data: threadsData, isLoading: threadsLoading } = useThreads();
   const { data: summary, isLoading: summaryLoading } = useThreadHubSummary(characterSheetId);

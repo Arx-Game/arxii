@@ -15,7 +15,7 @@ import { MemoryRouter } from 'react-router-dom';
 
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { startSession, setSessionRoom } from '@/store/gameSlice';
+import { startSession, setSessionRoom, setBrowsingIdentity } from '@/store/gameSlice';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import type { EquippedItem, ItemInstance, Outfit } from '../../types';
 import type { MyRosterEntry } from '@/roster/types';
@@ -253,9 +253,14 @@ function setupHooks({
     stubMutation() as unknown as ReturnType<typeof outfitsHooks.useDeleteOutfitSlot>
   );
 
-  // Seed the active session in Redux so useAppSelector returns a name.
+  // Seed the active session in Redux so useAppSelector returns a name (used
+  // by the room-characters/action-dispatch reads that stay session-scoped),
+  // AND this tab's browsing identity (#3479) so useBrowsingIdentity()
+  // resolves the same character — every call in this file passes either
+  // ACTIVE_NAME or null, matching the single roster entry's id (1) above.
   if (active) {
     store.dispatch(startSession(active));
+    store.dispatch(setBrowsingIdentity(1));
   }
 }
 
