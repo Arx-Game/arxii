@@ -113,6 +113,12 @@ chunks. This is a *starting model*, not a proven-optimal one - if measured
 per-chunk timings come out skewed, the boundaries should be adjusted from
 that data (see the Task 10 report for what was actually measured).
 
+With ``--generation G`` (ADR-0272) every chunk is stamped ``NNNN_gG_...``,
+carries ``replaces = replaced_slice(k, total)`` (the generated files partition
+the previous generation), and a chunk of pure ``CreateModel`` ops subclasses
+``core_management.batched_migration.BatchedCreateModelMigration`` so the
+project state is rendered once per chunk rather than once per model.
+
 Chunk 1 keeps ``0001_initial``'s exact header (imports, ``initial = True``,
 the original ``dependencies`` list including the swappable
 ``AUTH_USER_MODEL`` dependency) verbatim, shrunk to only its slice of
@@ -708,6 +714,8 @@ def _check_inline_relations(
 
 def _analyze(
     tree: ast.Module,
+    *,
+    fold: bool = True,
 ) -> tuple[dict[str, CreateModelOp], list[str], list[AddFieldOp], list[TailOp], dict]:
     """Parse, classify, and fold deferred ``AddField`` ops into ``CreateModel``.
 
@@ -791,7 +799,9 @@ def _analyze(
     deferred_by_model: dict[str, set[str]] = defaultdict(set)
     for af in remaining_add_field_ops:
         deferred_by_model[af.model_key].add(af.field_name)
-    tail_ops, folded_count = fold_tail_ops(create_models, tail_ops, deferred_by_model)
+    folded_count = 0
+    if fold:
+        tail_ops, folded_count = fold_tail_ops(create_models, tail_ops, deferred_by_model)
 
     stats = {
         "models": len(create_order),
@@ -809,9 +819,9 @@ def _analyze(
     return create_models, model_order, remaining_add_field_ops, tail_ops, stats
 
 
-def rewrite(source: str, check_only: bool) -> tuple[str, dict]:
+def rewrite(source: str, check_only: bool, *, fold: bool = True) -> tuple[str, dict]:
     tree = ast.parse(source)
-    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree, fold=fold)
 
     if check_only:
         return source, stats
@@ -1000,7 +1010,8 @@ def _operation_costs(n_model_ops: int, n_tail_ops: int) -> list[int]:
     return [*range(1, n_model_ops + 1), *([n_model_ops] * n_tail_ops)]
 
 
-GENERATIONS_IMPORT = "from world.migrations._generations import REPLACED\n"
+GENERATIONS_IMPORT = "from world.migrations._generations import replaced_slice\n"
+BATCHED_IMPORT = "from core_management.batched_migration import BatchedCreateModelMigration\n"
 
 
 def chunk_name(generation: int | None, index: int) -> str:
@@ -1032,17 +1043,25 @@ def _dependencies_source(tree: ast.Module) -> str:
 
 
 def rewrite_chunks(
-    source: str, n_chunks: int, generation: int | None = None
+    source: str,
+    n_chunks: int,
+    generation: int | None = None,
+    *,
+    fold: bool = True,
+    replaces_total: int | None = None,
 ) -> tuple[list[tuple[str, str]], dict]:
     """Split `source` into `n_chunks` cost-weighted migration files.
 
     Returns `(files, stats)` where `files` is `[(migration_name, content),
     ...]` in dependency-chain order (first is `chunk_name(generation, 1)`).
-    With ``generation`` set, every file is stamped and carries ``replaces``
-    (see `_render_chunk_files`).
+    With ``generation`` set, every file is stamped and carries
+    ``replaces = replaced_slice(k, replaces_total)`` (``replaces_total`` is the
+    number of generated files in the generation, chunks plus tails; it defaults
+    to the chunk count), and a chunk made only of ``CreateModel`` ops uses
+    ``BatchedCreateModelMigration`` (see `_render_chunk_files`).
     """
     tree = ast.parse(source)
-    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree, fold=fold)
     plan = RewritePlan(
         create_models=create_models,
         model_order=model_order,
@@ -1059,9 +1078,20 @@ def rewrite_chunks(
     boundaries = compute_chunk_boundaries(costs, n_chunks)
     groups = _split_by_boundaries(full_ops, boundaries)
 
-    files = _render_chunk_files(source, tree, groups, generation)
+    files = _render_chunk_files(
+        source, tree, groups, generation, replaces_total=replaces_total or len(groups)
+    )
     stats = {**stats, "n_chunks": len(files), "chunk_sizes": [len(g) for g in groups]}
     return files, stats
+
+
+def _is_pure_create_model(group: list[ast.expr]) -> bool:
+    return all(
+        isinstance(op, ast.Call)
+        and isinstance(op.func, ast.Attribute)
+        and op.func.attr == "CreateModel"
+        for op in group
+    )
 
 
 def _render_chunk_files(
@@ -1069,6 +1099,8 @@ def _render_chunk_files(
     tree: ast.Module,
     groups: list[list[ast.expr]],
     generation: int | None = None,
+    *,
+    replaces_total: int | None = None,
 ) -> list[tuple[str, str]]:
     """Render each op group into a migration file's full source text.
 
@@ -1082,9 +1114,13 @@ def _render_chunk_files(
     `dependencies = [("arxii", <previous chunk>)]`.
 
     Stamped (``generation=G``, ADR-0272): every file gets the minimal header,
-    plus the ``REPLACED`` import and ``replaces = REPLACED``; chunk 1 keeps
-    ``initial = True`` and the original ``dependencies`` list (re-rendered from
-    its AST, so the swappable AUTH_USER_MODEL dependency survives).
+    plus ``replaces = replaced_slice(k, replaces_total)`` so the generated files
+    partition the previous generation; chunk 1 keeps ``initial = True`` and the
+    original ``dependencies`` list (re-rendered from its AST, so the swappable
+    AUTH_USER_MODEL dependency survives). A chunk made only of ``CreateModel``
+    ops subclasses ``BatchedCreateModelMigration``, which renders the project
+    state once per chunk instead of once per model (the O(n^2) closure
+    re-render that dominates a replay).
     """
     ops_assign = _find_operations_assign(tree)
     lines = source.splitlines(keepends=True)
@@ -1093,14 +1129,19 @@ def _render_chunk_files(
         n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
     )
     imports_block = "".join(lines[: migration_class.lineno - 1])
-    if generation is not None:
-        imports_block += GENERATIONS_IMPORT
-    replaces_line = "    replaces = REPLACED\n" if generation is not None else ""
+    total = replaces_total or len(groups)
 
-    def render(class_body_prefix: str, group: list[ast.expr]) -> str:
+    def render(index: int, class_body_prefix: str, group: list[ast.expr]) -> str:
+        if generation is None:
+            imports, base, replaces_line = imports_block, "migrations.Migration", ""
+        else:
+            batched = _is_pure_create_model(group)
+            imports = imports_block + (BATCHED_IMPORT if batched else "") + GENERATIONS_IMPORT
+            base = "BatchedCreateModelMigration" if batched else "migrations.Migration"
+            replaces_line = f"    replaces = replaced_slice({index}, {total})\n"
         return (
-            f"{imports_block}\n"
-            "class Migration(migrations.Migration):\n"
+            f"{imports}\n"
+            f"class Migration({base}):\n"
             f"{class_body_prefix}{replaces_line}"
             f"    operations = {_unparse_ops_list(group)}\n"
         )
@@ -1115,14 +1156,14 @@ def _render_chunk_files(
         first_content = before + _unparse_ops_list(groups[0]) + after
     else:
         first_prefix = f"    initial = True\n    dependencies = {_dependencies_source(tree)}\n"
-        first_content = render(first_prefix, groups[0])
+        first_content = render(1, first_prefix, groups[0])
     files: list[tuple[str, str]] = [(first_name, first_content)]
 
     prev_name = first_name
     for i, group in enumerate(groups[1:], start=2):
         name = chunk_name(generation, i)
         prefix = f'    dependencies = [\n        ("{APP_LABEL}", "{prev_name}"),\n    ]\n\n'
-        files.append((name, render(prefix, group)))
+        files.append((name, render(i, prefix, group)))
         prev_name = name
 
     return files

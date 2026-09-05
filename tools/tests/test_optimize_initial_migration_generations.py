@@ -51,14 +51,38 @@ def test_chunk_names_are_stamped_with_the_generation():
     assert chunk_name(None, 37) == "0037_initial_part_37"
 
 
-def test_every_stamped_file_replaces_the_previous_generation():
-    files, _stats = rewrite_chunks(INITIAL, n_chunks=2, generation=2)
+def test_every_stamped_file_replaces_its_slice_of_the_previous_generation():
+    files, _stats = rewrite_chunks(INITIAL, n_chunks=2, generation=2, replaces_total=5)
     assert [name for name, _ in files] == ["0001_g2_initial", "0002_g2_part_2"]
-    for _name, content in files:
-        assert "from world.migrations._generations import REPLACED" in content
+    for index, (_name, content) in enumerate(files, start=1):
+        assert "from world.migrations._generations import replaced_slice" in content
         replaces = _assigned(_migration_class(content), "replaces")
-        assert isinstance(replaces, ast.Name)
-        assert replaces.id == "REPLACED"
+        assert isinstance(replaces, ast.Call)
+        assert ast.unparse(replaces) == f"replaced_slice({index}, 5)"
+
+
+_A_TO_B = (
+    "        migrations.AddField(\n"
+    '            model_name="a",\n'
+    '            name="b",\n'
+    '            field=models.ForeignKey(to="arxii.b", on_delete=models.CASCADE),\n'
+    "        ),\n"
+)
+# Insert into the operations list (the last "    ]" in the source), not into dependencies.
+CYCLIC = INITIAL.rsplit("    ]\n", 1)[0] + _A_TO_B + "    ]\n"
+
+
+def test_pure_create_model_chunks_use_the_batched_base():
+    # A <-> B is a cycle, so one FK stays a deferred AddField and lands in chunk 2.
+    files, stats = rewrite_chunks(CYCLIC, n_chunks=2, generation=2)
+    assert stats["deferred_addfield_cycle"] == 1
+    first, second = (_migration_class(content) for _name, content in files)
+    assert ast.unparse(first.bases[0]) == "BatchedCreateModelMigration"
+    assert (
+        "from core_management.batched_migration import BatchedCreateModelMigration" in files[0][1]
+    )
+    assert ast.unparse(second.bases[0]) == "migrations.Migration"
+    assert "BatchedCreateModelMigration" not in files[1][1]
 
 
 def test_first_chunk_keeps_initial_and_original_dependencies():
@@ -79,5 +103,6 @@ def test_first_chunk_keeps_initial_and_original_dependencies():
 def test_unstamped_output_is_unchanged():
     files, _stats = rewrite_chunks(INITIAL, n_chunks=2, generation=None)
     assert [name for name, _ in files] == ["0001_initial", "0002_initial_part_2"]
-    assert "REPLACED" not in files[0][1]
-    assert "REPLACED" not in files[1][1]
+    assert "replaced_slice" not in files[0][1]
+    assert "Batched" not in files[0][1]
+    assert "replaced_slice" not in files[1][1]

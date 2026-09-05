@@ -94,6 +94,13 @@ The same INSTALLED_APPS-order mechanism now carries two more commands:
   tries to CREATE every table), naming the commit to visit. `ARX_SKIP_GENERATION_GUARD=1`
   bypasses it. django-linear-migrations ships no `migrate`, so nothing is subclassed.
 
+- **`BatchedCreateModelMigration`** (`core_management/batched_migration.py`) is the base of
+  every generated chunk that holds only `CreateModel`s. It runs the chunk's state pass
+  without rendered apps, renders once, then runs the DDL, instead of Django re-rendering
+  the related-model closure after every model (the O(n^2) that dominates a replay:
+  12 chunks in 268 s stock, 29 s batched). Mixed chunks and `sqlmigrate` fall through
+  to stock `apply`; `tests/test_batched_migration.py` pins the contract.
+
 `tests/test_command_resolution.py` pins both resolutions, the same way it pins
 `makemigrations`. The generations data lives in the generated
 `world/migrations/_generations.py` (underscore-prefixed: Django's loader imports every

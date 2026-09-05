@@ -90,9 +90,13 @@ What a regeneration does: snapshots the outgoing chain's names into
 loader does not treat it as a migration), deletes every migration file, runs our
 `makemigrations` for a fresh initial, inlines FKs topologically and folds
 constraints/indexes/`unique_together` into `CreateModel`
-(`tools/optimize_initial_migration.py`), chunks into 100 files, renders the three
+(`tools/optimize_initial_migration.py`), chunks into 100 files (a chunk of pure
+`CreateModel`s subclasses `BatchedCreateModelMigration`, which renders the project
+state once per chunk instead of once per model: that re-render is where a replay's
+time goes), renders the three
 infrastructure tails from `build_schema.SQL_FILES` (`tools/migration_tails.py`),
-stamps every file `replaces = REPLACED`, rewrites `max_migration.txt`, prunes the
+stamps every file with its `replaced_slice` of the previous generation (the slices
+partition it, so a fresh replay records each old name once), rewrites `max_migration.txt`, prunes the
 filename-keyed lint lists, and writes `regeneration-report.md` (gitignored; paste
 it into the PR body). Every `RunPython` of the old chain is dropped: production
 already applied them and a fresh database has no rows for them.

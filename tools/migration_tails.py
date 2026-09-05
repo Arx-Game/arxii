@@ -20,6 +20,7 @@ inside that subtree. Django-free: the one Django-dependent input (the serialized
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass, field
 from pathlib import Path
 import re
 
@@ -34,7 +35,7 @@ _PREAMBLE = f"""from pathlib import Path
 from django.conf import settings
 {_BASE_IMPORTS}
 
-from world.migrations._generations import REPLACED
+from world.migrations._generations import replaced_slice
 
 _WORLD_DIR = Path(__file__).resolve().parent.parent
 
@@ -81,31 +82,37 @@ def tail_names(generation: int, first_number: int) -> tuple[str, str, str]:
     )
 
 
-def _module(
-    docstring: str,
-    depends_on: str,
-    operations: str,
-    *,
-    swappable: bool = False,
-    extra_imports: set[str] | None = None,
-) -> str:
-    deps = f'("{APP_LABEL}", "{depends_on}")'
-    if swappable:
+@dataclass(frozen=True)
+class _Header:
+    """What every tail shares: predecessor, ``replaced_slice`` position, extra imports."""
+
+    depends_on: str
+    replaces: tuple[int, int]  # (index, total) for replaced_slice, see _generations.py
+    swappable: bool = False
+    extra_imports: frozenset[str] = field(default_factory=frozenset)
+
+
+def _module(docstring: str, header: _Header, operations: str) -> str:
+    deps = f'("{APP_LABEL}", "{header.depends_on}")'
+    if header.swappable:
         deps += ", migrations.swappable_dependency(settings.AUTH_USER_MODEL)"
     extra = "".join(
-        f"{line}\n" for line in sorted(extra_imports or ()) if line not in _COVERED_IMPORTS
+        f"{line}\n" for line in sorted(header.extra_imports) if line not in _COVERED_IMPORTS
     )
+    index, total = header.replaces
     return (
         f'"""{docstring}"""\n\n'
         f"{extra}{_PREAMBLE}\n"
         "class Migration(migrations.Migration):\n"
-        "    replaces = REPLACED\n"
+        f"    replaces = replaced_slice({index}, {total})\n"
         f"    dependencies = [{deps}]\n\n"
         f"    operations = [\n{operations}    ]\n"
     )
 
 
-def render_matviews_tail(name: str, depends_on: str, entries: list[tuple[str, str, str]]) -> str:
+def render_matviews_tail(
+    name: str, depends_on: str, entries: list[tuple[str, str, str]], replaces: tuple[int, int]
+) -> str:
     """One ``RunSQL`` per ``(subpackage, filename, view_name)``."""
     ops = "".join(
         "        migrations.RunSQL(\n"
@@ -118,10 +125,12 @@ def render_matviews_tail(name: str, depends_on: str, entries: list[tuple[str, st
         f"{name}: the managed=False materialized views (ADR-0272 tail, rendered from\n"
         "tools/build_schema.py's SQL_FILES by arx manage squashmigrations; do not edit)."
     )
-    return _module(doc, depends_on, ops)
+    return _module(doc, _Header(depends_on, replaces), ops)
 
 
-def render_partition_sql_tail(name: str, depends_on: str, entries: list[tuple[str, str]]) -> str:
+def render_partition_sql_tail(
+    name: str, depends_on: str, entries: list[tuple[str, str]], replaces: tuple[int, int]
+) -> str:
     """One ``RunSQL`` per ``(subpackage, forward_filename)``, reverse paired by name."""
     ops = "".join(
         "        migrations.RunSQL(\n"
@@ -135,11 +144,15 @@ def render_partition_sql_tail(name: str, depends_on: str, entries: list[tuple[st
         "rendered from tools/build_schema.py's SQL_FILES by arx manage squashmigrations;\n"
         "SQL-only so the DDL/DML lint needs no grandfather entry; do not edit)."
     )
-    return _module(doc, depends_on, ops)
+    return _module(doc, _Header(depends_on, replaces), ops)
 
 
 def render_partition_columns_tail(
-    name: str, depends_on: str, addfield_sources: list[str], imports: set[str]
+    name: str,
+    depends_on: str,
+    addfield_sources: list[str],
+    imports: set[str],
+    replaces: tuple[int, int],
 ) -> str:
     """A database-only ``AddField`` per column the frozen partition SQL omits."""
     inner = "".join(f"                {src},\n" for src in addfield_sources)
@@ -158,4 +171,5 @@ def render_partition_columns_tail(
         "without them. Rendered from the live Interaction model by arx manage\n"
         "squashmigrations (ADR-0272 tail); do not edit."
     )
-    return _module(doc, depends_on, ops, swappable=True, extra_imports=imports)
+    header = _Header(depends_on, replaces, swappable=True, extra_imports=frozenset(imports))
+    return _module(doc, header, ops)

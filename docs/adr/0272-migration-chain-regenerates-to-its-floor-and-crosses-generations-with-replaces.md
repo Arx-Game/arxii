@@ -24,10 +24,23 @@ database-only re-add of the columns the frozen partition SQL omits, materialized
 views). Every `RunPython` of the outgoing generation is dropped; nothing in a
 generated chain produces rows.
 
+Every chunk made only of `CreateModel`s subclasses
+`core_management.batched_migration.BatchedCreateModelMigration`, which runs the
+chunk's `state_forwards` without rendered apps, renders the project state once,
+and only then runs the DDL. Stock `Migration.apply` re-renders the transitive
+closure of related models after every `CreateModel`; profiled on 2026-09-05 that
+was 248 of 259 seconds of a twelve-chunk partial replay, and the same twelve
+chunks under the batched base took 29 seconds. This, not the operation count, is
+where a fresh replay's time goes on a schema this connected.
+
 Databases cross generations with Django's own `replaces` semantics: a database
 that has the previous generation fully recorded treats the new one as applied and
 records it on its next real `migrate`, which the deploy role runs unconditionally
-on every deploy. No `--fake`, no row deletion, no schema touch. A `migrate`
+on every deploy. The generated files *partition* the previous generation
+(`replaced_slice(k, total)` in `_generations.py`, one interleaved slice per file)
+rather than each replacing all of it: Django records a replacing migration's
+`replaces` when it applies it, not its own name, so a shared list would insert
+every old name once per file (23,484 recorder rows on the first attempt). No `--fake`, no row deletion, no schema touch. A `migrate`
 override in `core_management` refuses the two states Django handles badly, before
 any schema is touched: a partially recorded previous generation (Django would
 silently apply nothing and exit 0) and a skipped generation (Django would try to
@@ -75,8 +88,11 @@ ADR-0083. What is kept from Django is the half that works: `replaces`, the loade
 the executor's `check_replacements`, the writer, and the custom `makemigrations`
 that produces the minimal fresh initial.
 
-**Rejected:** (a) a faster `Migration.apply` (#2978): measured 1.4% slower with a
-higher peak, and its 37-minute "baseline" was a run OOM-killed at migration 105.
+**Rejected:** (a) skipping the per-operation `ProjectState.clone` in
+`Migration.apply` (#2978): measured 1.4% slower with a higher peak, and its
+37-minute "baseline" was a run OOM-killed at migration 105; the clone was never
+the cost, the closure re-render was, and the batched base removes that for the
+one operation shape where no intermediate render is observable.
 (b) Moving the raw SQL out of migrations into a deploy-time step: changes
 production's schema contract (ADR-0083) for a modest simplification. (c) A hand
 `--fake` on production: a manual step against the only copy of the content

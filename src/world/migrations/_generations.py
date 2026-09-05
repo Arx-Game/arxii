@@ -6,8 +6,8 @@ incrementals that followed), snapshotted when generation ``n + 1`` was cut.
 ``COMMITS[n]`` is the last commit on ``main`` whose files were generation ``n``:
 a database stranded at generation ``n`` visits that commit to migrate forward.
 ``DEFERRED[n]`` is generation ``n``'s cycle-breaking ``AddField`` count, the baseline
-the next regeneration must not silently exceed. ``REPLACED`` is what every
-generated file of ``CURRENT`` replaces.
+the next regeneration must not silently exceed. ``REPLACED`` is the whole previous
+generation; each generated file of ``CURRENT`` replaces one ``replaced_slice`` of it.
 """
 
 CURRENT = 1
@@ -19,3 +19,13 @@ COMMITS: dict[int, str] = {}
 DEFERRED: dict[int, int] = {}
 
 REPLACED = [("arxii", name) for name in GENERATIONS.get(CURRENT - 1, [])]
+
+
+def replaced_slice(index: int, total: int) -> list[tuple[str, str]]:
+    """The slice of REPLACED that generated file ``index`` of ``total`` replaces.
+
+    The slices partition REPLACED, so a fresh replay records each old name once
+    (Django records a replacing migration's ``replaces``, not its own name) and a
+    database at the old tip still marks every generated file applied (ADR-0272).
+    """
+    return REPLACED[index - 1 :: total]

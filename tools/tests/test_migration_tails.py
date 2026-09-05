@@ -75,11 +75,13 @@ def test_matviews_tail_has_one_runsql_per_file_with_literal_read_sql_calls():
             ("areas", "areaclosure.sql", "areas_areaclosure"),
             ("codex", "subjectbreadcrumb.sql", "codex_subjectbreadcrumb"),
         ],
+        replaces=(103, 103),
     )
     assert _op_names(src) == ["RunSQL", "RunSQL"]
     assert '_read_sql("areas", "areaclosure.sql")' in src
     assert 'reverse_sql="DROP MATERIALIZED VIEW IF EXISTS areas_areaclosure;"' in src
-    assert "replaces = REPLACED" in src
+    assert "replaces = replaced_slice(103, 103)" in src
+    assert "from world.migrations._generations import replaced_slice" in src
     assert '("arxii", "0102_g2_partition_columns")' in src
     assert "def _read_sql" in src
 
@@ -92,8 +94,10 @@ def test_partition_sql_tail_pairs_forward_with_reverse():
             ("scenes", "partition_interaction_forward.sql"),
             ("combat", "interaction_fk_composites_forward.sql"),
         ],
+        replaces=(101, 103),
     )
     assert _op_names(src) == ["RunSQL", "RunSQL"]
+    assert "replaces = replaced_slice(101, 103)" in src
     assert '_read_sql("scenes", "partition_interaction_forward.sql")' in src
     assert '_read_sql("scenes", "partition_interaction_reverse.sql")' in src
     assert '_read_sql("combat", "interaction_fk_composites_reverse.sql")' in src
@@ -109,6 +113,7 @@ def test_partition_columns_tail_wraps_addfields_in_separate_database_and_state()
             "on_delete=django.db.models.deletion.SET_NULL, null=True))"
         ],
         {"import django.db.models.deletion", "from django.db import migrations, models"},
+        replaces=(102, 103),
     )
     assert _op_names(src) == ["SeparateDatabaseAndState"]
     assert "state_operations=[]" in src.replace(" ", "").replace("\n", "")
@@ -119,10 +124,10 @@ def test_partition_columns_tail_wraps_addfields_in_separate_database_and_state()
 
 def test_every_tail_is_valid_python():
     for src in (
-        render_matviews_tail("0103_g2_matviews", "0102_g2_partition_columns", []),
-        render_partition_sql_tail("0101_g2_partition_sql", "0100_g2_part_100", []),
+        render_matviews_tail("0103_g2_matviews", "0102_g2_partition_columns", [], (3, 3)),
+        render_partition_sql_tail("0101_g2_partition_sql", "0100_g2_part_100", [], (1, 3)),
         render_partition_columns_tail(
-            "0102_g2_partition_columns", "0101_g2_partition_sql", [], set()
+            "0102_g2_partition_columns", "0101_g2_partition_sql", [], set(), (2, 3)
         ),
     ):
         ast.parse(src)

@@ -73,6 +73,7 @@ class RegenerationOutcome:
 # Generation 1 was inlined by hand for #2906; ADR-0195 records its cycle floor.
 GENERATION_1_DEFERRED_BASELINE = 34
 DEFAULT_CHUNKS = 100
+TAIL_COUNT = 3  # partition SQL, partition columns, matviews
 CHUNK_SIZES_KEY = "chunk_sizes"  # the one inliner stat that is a list, kept out of prose
 
 
@@ -123,6 +124,15 @@ class Command(BaseCommand):
             )
             return
 
+        total_files = options["chunks"] + TAIL_COUNT
+        if len(outgoing) < total_files:
+            message = (
+                f"the outgoing generation has {len(outgoing)} migrations but this one would "
+                f"write {total_files}; every generated file must replace at least one old "
+                "name. Use fewer --chunks."
+            )
+            raise CommandError(message)
+
         head = git_head()
         for path in migration_files():
             path.unlink()
@@ -135,7 +145,9 @@ class Command(BaseCommand):
             raise CommandError(message)
         source = initial.read_text(encoding="utf-8")
 
-        files, stats = inliner.rewrite_chunks(source, options["chunks"], generation=new_gen)
+        files, stats = inliner.rewrite_chunks(
+            source, options["chunks"], generation=new_gen, replaces_total=total_files
+        )
         self._print_stats(stats)
         deferred = int(stats["deferred_addfield_cycle"])
         problem = deferred_verdict(baseline, deferred, options["accept_deferred"])
@@ -149,7 +161,7 @@ class Command(BaseCommand):
         for name, content in files:
             (MIGRATIONS_DIR / f"{name}.py").write_text(content, encoding="utf-8")
 
-        last_name = self._write_tails(tails, new_gen, files[-1][0])
+        last_name = self._write_tails(tails, new_gen, files[-1][0], total_files)
         (MIGRATIONS_DIR / "max_migration.txt").write_text(last_name + "\n", encoding="utf-8")
         write_generations(
             GenerationsData(
@@ -223,7 +235,7 @@ class Command(BaseCommand):
             return data.deferred[data.current]
         return GENERATION_1_DEFERRED_BASELINE if data.current == 1 else None
 
-    def _write_tails(self, tails: Any, new_gen: int, last_chunk: str) -> str:
+    def _write_tails(self, tails: Any, new_gen: int, last_chunk: str, total: int) -> str:
         sql_files = tails.read_sql_files(TOOLS_DIR / "build_schema.py")
         partition_entries = [
             (Path(f).parts[1], Path(f).name) for f in sql_files if f.endswith("_forward.sql")
@@ -241,9 +253,15 @@ class Command(BaseCommand):
         number = int(last_chunk[:4]) + 1
         p_sql, p_cols, m_views = tails.tail_names(new_gen, number)
         rendered = {
-            p_sql: tails.render_partition_sql_tail(p_sql, last_chunk, partition_entries),
-            p_cols: tails.render_partition_columns_tail(p_cols, p_sql, addfields, imports),
-            m_views: tails.render_matviews_tail(m_views, p_cols, matview_entries),
+            p_sql: tails.render_partition_sql_tail(
+                p_sql, last_chunk, partition_entries, (number, total)
+            ),
+            p_cols: tails.render_partition_columns_tail(
+                p_cols, p_sql, addfields, imports, (number + 1, total)
+            ),
+            m_views: tails.render_matviews_tail(
+                m_views, p_cols, matview_entries, (number + 2, total)
+            ),
         }
         for name, content in rendered.items():
             (MIGRATIONS_DIR / f"{name}.py").write_text(content, encoding="utf-8")

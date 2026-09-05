@@ -58,6 +58,17 @@ class RenderGenerationsModuleTests(SimpleTestCase):
         )
         assert parse_generations_source(source) == data
 
+    def test_replaced_slices_partition_the_previous_generation(self) -> None:
+        names = [f"{i:04d}_old_{i}" for i in range(1, 228)]
+        namespace = _exec(render_generations_module(current=2, generations={1: names}, commits={}))
+        replaced_slice = namespace["replaced_slice"]
+        total = 103
+        slices = [replaced_slice(i, total) for i in range(1, total + 1)]
+        assert all(slices), "every generated file must replace at least one old name"
+        flat = [name for chunk in slices for name in chunk]
+        assert len(flat) == len(set(flat)) == len(names)
+        assert set(flat) == {("arxii", n) for n in names}
+
     def test_previous_names_is_the_generation_before_current(self) -> None:
         data = GenerationsData(current=2, generations={1: ["0001_initial"]}, commits={})
         assert data.previous_names == ["0001_initial"]
