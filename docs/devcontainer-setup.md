@@ -522,7 +522,49 @@ just dc-test
 just dc-test world.magic --keepdb
 ```
 
+## Resource limits and host sizing
+
+Two host lockups (2026-08-31, 2026-09-05: 100% disk, near-full RAM, Docker daemon
+wedged so hard `docker ps` hung and Desktop couldn't quit) drove a layered defense.
+The principle throughout: a runaway workload should die as a **fast, visible OOM
+kill inside its container**, never degrade into VM-wide swap-thrash that saturates
+the shared NVMe and wedges the daemon.
+
+- **Per-container memory caps** (`docker-compose.yml`): `mem_limit` 4g on `app`,
+  1g on `db`, with `memswap_limit` equal so neither container swaps. Sized
+  against the 6GB VM cap below, leaving ~1GB for dockerd and the kernel.
+- **Throwaway-DB Postgres tuning** (`docker-compose.yml` `db.command`): `fsync`,
+  `synchronous_commit` and `full_page_writes` off, checkpoints stretched. The
+  container DB is test-only and wipe-safe (production lives elsewhere); default
+  full-durability settings were spending ~90s per checkpoint fsyncing 500+ files
+  during test-DB builds. Consequence: after an unclean stop this volume may be
+  unrecoverable — the fix is always `docker volume rm arxii-pgdata` and rebuild,
+  never repair.
+- **Host `~/.wslconfig`** (per-machine, not in the repo): `memory=6GB`,
+  `swap=1GB`, `autoMemoryReclaim=gradual` on the 16GB machine, so Windows keeps
+  10GB and doesn't page to the same disk as the WSL vhdx. Takes effect on the
+  next `wsl --shutdown`.
+- **Memory-aware test parallelism** (`src/cli/arx.py`): `--parallel` worker count
+  is derived from available memory, not `cpu_count()`. Note it reads
+  `/proc/meminfo` (VM-wide), not the cgroup limit, so a pileup OOMs the test run
+  inside `app` — the intended failure mode.
+
+Compose changes here need a container **recreate** to apply (`just dc-up` uses
+`--no-recreate`): run `docker compose --project-name arxii-devcontainer -f
+.devcontainer/docker-compose.yml up -d --force-recreate`, or bring the stack
+down and up.
+
 ## Troubleshooting
+
+**Docker daemon hung (docker ps blocks, Desktop won't quit)** — force-kill
+`Docker Desktop.exe` and `com.docker.backend.exe`, then `wsl --shutdown`,
+relaunch Docker Desktop, `just dc-up`. Named volumes (worktrees, pgdata, venvs)
+survive; containers showing `Exited (255)` is the unclean-shutdown signature,
+not corruption.
+
+**Postgres won't start after an unclean stop** — with `fsync=off` (see above)
+the pgdata volume has no crash-safety. Don't debug it: `docker volume rm
+arxii-pgdata` (stack down first), then `just dc-up` and re-run the bootstrap.
 
 **First `just dc-up` is slow** — expected. The image build bakes the entire toolchain.
 Subsequent starts skip the build and are much faster.
