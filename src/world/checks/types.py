@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from world.checks.models import CheckType, Consequence
     from world.mechanics.models import ChallengeApproach, ChallengeInstance
     from world.missions.models import MissionInstance
-    from world.scenes.models import Persona, Scene
+    from world.scenes.models import Interaction, Persona, Scene
     from world.stories.models import Beat, Story
     from world.traits.models import CheckOutcome, CheckRank, ResultChart
 
@@ -96,6 +96,13 @@ class ResolutionContext:
     # ASSET_STATUS effects transition THIS asset only, not every active asset
     # the resolved target character promotes. None on scene/stake paths.
     npc_asset: NPCAsset | None = None
+    # The Interaction the resolving act was recorded against, when the caller
+    # already created one before firing this context's consequence pool
+    # (#2987, e.g. combat's per-round OUTCOME interaction). LEGEND_AWARD reads
+    # this to open a WITNESS reaction window on a public, crime-tagged deed.
+    # None when no interaction exists yet at resolution time (e.g. the
+    # beat-completion path, whose ResolutionContext also carries scene=None).
+    interaction: Interaction | None = None
 
     @property
     def location(self) -> ObjectDB:

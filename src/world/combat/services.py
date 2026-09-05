@@ -9353,6 +9353,12 @@ def _apply_aftermath_rules(
     included) → apply_resolution → record_consequence_outcome anchored to the
     encounter OUTCOME interaction. Legend, when authored, rides LEGEND_AWARD
     consequences in the pool — context.participants carries the PC's persona.
+
+    context.interaction also carries the same OUTCOME interaction (#2987):
+    LEGEND_AWARD reads it to open a WITNESS reaction window when the deed
+    lands public and crime-tagged, so bystanders in the encounter's scene get
+    a report/intervene/ignore choice on the same event this aftermath fires
+    from.
     """
     from world.checks.consequence_resolution import (  # noqa: PLC0415
         apply_resolution,
@@ -9401,6 +9407,7 @@ def _apply_aftermath_rules(
                 character=character,
                 scene=encounter.scene,
                 participants=participants_ctx,
+                interaction=interaction,
             ),
         )
         _record_combat_consequence(

@@ -648,6 +648,12 @@ def _legend_award(
       1. ``effect.legend_description_template`` (if non-blank)
       2. ``context.beat.player_resolution_text`` (if beat present and non-blank)
       3. ``"Legendary deed"`` (generic fallback)
+
+    ``context.interaction`` (#2987), when the caller already created one
+    before this pool fired, is passed straight through to
+    ``create_legend_event`` so a public, crime-tagged entry can open a
+    WITNESS reaction window for bystanders. None on paths with no interaction
+    yet at resolution time (e.g. the beat-completion path).
     """
     from world.societies.constants import RISK_LEGEND_AWARDS  # noqa: PLC0415
     from world.societies.exceptions import LegendAwardParticipantMissingError  # noqa: PLC0415
@@ -688,6 +694,7 @@ def _legend_award(
         scene=context.scene,
         story=context.story,
         concealed=concealed,
+        interaction=context.interaction,
     )
     return AppliedEffect(
         effect_type=EffectType.LEGEND_AWARD,
