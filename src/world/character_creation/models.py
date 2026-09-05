@@ -614,6 +614,12 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="named_in_templates",
         help_text="Kind a player-named family gets; required when naming is allowed (#3617).",
     )
+    family_templates = models.ManyToManyField(
+        "arxii.HouseTemplate",
+        blank=True,
+        related_name="upbringings",
+        help_text="Family Templates the name path offers (#3648); one is auto-picked.",
+    )
 
     objects = OriginTemplateManager()
 
@@ -963,6 +969,22 @@ class CharacterDraft(SharedMemoryModel):
         blank=True,
         related_name="drafts",
         help_text="Slot pool a node is minted from at finalization.",
+    )
+    selected_vacancy = models.ForeignKey(
+        "arxii.Vacancy",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="drafts",
+        help_text="The Vacancy this character takes at finalization (#3648).",
+    )
+    served_house = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text="On the name path, the staff house the new family served (#3648).",
     )
     defer_parents = models.BooleanField(
         default=False,

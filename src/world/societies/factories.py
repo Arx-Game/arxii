@@ -36,6 +36,7 @@ from world.societies.models import (
     PhilosophicalArchetype,
     Society,
     SocietyReputation,
+    Vacancy,
 )
 
 
@@ -162,6 +163,17 @@ class OrganizationRankFactory(factory_django.DjangoModelFactory):
     organization = factory.SubFactory(OrganizationFactory)
     name = factory.Sequence(lambda n: f"Rank {n}")
     tier = factory.Sequence(lambda n: n + 1)
+
+
+class VacancyFactory(factory_django.DjangoModelFactory):
+    """An opening on a family org (#3648). Pass organization= with a family set."""
+
+    class Meta:
+        model = Vacancy
+
+    organization = factory.SubFactory(OrganizationFactory)
+    name = factory.Sequence(lambda n: f"Vacancy {n}")
+    description = "Someone the family needs."
 
 
 class OrganizationMembershipOfferFactory(factory_django.DjangoModelFactory):

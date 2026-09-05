@@ -131,6 +131,11 @@ class OriginTemplateFactory(factory_django.DjangoModelFactory):
     allows_name_family = True
     named_family_kind = factory.SubFactory(FamilyKindFactory, name=COMMONER_KIND_NAME)
 
+    @factory.post_generation
+    def family_templates(self, create, extracted, **kwargs):
+        if create and extracted:
+            self.family_templates.set(extracted)
+
 
 class OriginTemplateSlotFactory(factory_django.DjangoModelFactory):
     class Meta:
