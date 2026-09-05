@@ -68,13 +68,37 @@ If you reorder `INSTALLED_APPS`, read the "ORDER IS LOAD-BEARING" comment in `se
 
 Two modules, guarding different things — both run in the normal suite (`arx test core_management --sqlite`), neither needs a database:
 
-- **`tests/test_command_resolution.py`** — asserts Django actually resolves `makemigrations` to `core_management`, that the winner carries `EXCLUDED_APPS`, that it is still a django-linear-migrations subclass (so the sentinel survives), and that the reorder didn't shadow `squashmigrations`/`rebase_migration`/`create_max_migration_files`.
+- **`tests/test_command_resolution.py`** — asserts Django actually resolves `makemigrations` to `core_management`, that the winner carries `EXCLUDED_APPS`, that it is still a django-linear-migrations subclass (so the sentinel survives), and that the reorder didn't shadow `rebase_migration`/`create_max_migration_files` (`squashmigrations` and `migrate` are shadowed on purpose since #3656; see below).
 - **`tests/test_makemigrations_fix.py`** — unit-tests the filtering and dependency-rewriting logic against `Command.write_migration_files` directly.
 
 **Why the second one could not have caught #2885:** it imports the command class and exercises it, so it passes whether or not Django ever runs that class. That is precisely the blind spot the first module closes. A test that asserts on *behaviour of a class* is not a test that the class is *wired up*.
 
 Both were `@unittest.skip`ped until #2885, on the reasoning that they were demonstration rather than regression tests. See `tests/README.md`.
 
+
+## `squashmigrations` and `migrate` overrides (#3656, ADR-0272)
+
+The same INSTALLED_APPS-order mechanism now carries two more commands:
+
+- **`squashmigrations`** is *replaced*, not extended. `arx manage squashmigrations arxii`
+  (`just regenerate-migrations`) regenerates the whole chain to its FK-deferral floor and
+  hands every database across with Django's `replaces`; Django's optimizer cannot do this
+  (it never reorders `CreateModel` and is blocked by every index/constraint operation in
+  between). It takes the app label only and refuses ranges, other labels, the main
+  checkout, a dirty tree, and a database behind the tip. Django-free pieces live in
+  `tools/optimize_initial_migration.py` and `tools/migration_tails.py`; the bridge that
+  needs the app registry, the writer or a connection is `core_management/regeneration.py`.
+- **`migrate`** gains a generation guard (`core_management/migration_generations.py`): one
+  SELECT on `django_migrations` that refuses a database which recorded only part of the
+  previous generation (stock Django silently applies nothing) or skipped one (stock Django
+  tries to CREATE every table), naming the commit to visit. `ARX_SKIP_GENERATION_GUARD=1`
+  bypasses it. django-linear-migrations ships no `migrate`, so nothing is subclassed.
+
+`tests/test_command_resolution.py` pins both resolutions, the same way it pins
+`makemigrations`. The generations data lives in the generated
+`world/migrations/_generations.py` (underscore-prefixed: Django's loader imports every
+other module of a migrations package as a migration). Full workflow in
+`docs/evennia-quirks.md`, "Migration Chain Regeneration".
 
 ## Content export: additions are withheld by default (#2890, ADR-0191)
 
