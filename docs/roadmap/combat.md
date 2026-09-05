@@ -290,6 +290,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   `position_edges`, via the new `position_graph(room)` service) — unlike the
   ADJACENT-reach-only `position_adjacency`, this keeps impassable/gated edges so
   obstacles are visible. See [areas.md](../systems/areas.md#frontend-built--wired).
+  **Combat layout (#3557, 2026-09-05):** during an encounter the page shows one map (the
+  rail's, with dimmed bystanders merged from the scene), the GM's fight levers live in a
+  rail GM tab (`CombatGMTab`), and the idle header stack folds behind a "Scene tools"
+  accordion; ADR-0274.
 - **Tactical map draws what the encounter already knows (#3555).** Engagement locks,
   cover and distance were in `EncounterDetail` but not on the map. Now: both sides of
   an engagement lock carry a `locked` glyph on their avatar and an animated link edge
