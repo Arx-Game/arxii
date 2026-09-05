@@ -7,7 +7,7 @@
  * crafter's shop on the grid.
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -15,8 +15,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import {
   dispatchMarketAction,
   getMarketSquares,
@@ -26,12 +25,7 @@ import {
 } from './api';
 
 export function MarketPage() {
-  const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [] } = useMyRosterEntriesQuery();
-  const activeEntry = useMemo(
-    () => myEntries.find((entry) => entry.name === activeCharacter) ?? null,
-    [myEntries, activeCharacter]
-  );
+  const { entry: activeEntry } = useBrowsingIdentity();
   const characterId = activeEntry?.character_id ?? undefined;
 
   const { data: squares = [], isLoading } = useQuery({

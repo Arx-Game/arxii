@@ -20,9 +20,11 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
+// #3479: useBrowsingIdentity() reads `browsingEntryId` (id 1, matching the
+// mocked roster entry below), not `active` (a name) any more.
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
-    selector({ game: { active: 'GoalChar' }, auth: {} })
+    selector({ game: { browsingEntryId: 1 }, auth: {} })
   ),
 }));
 

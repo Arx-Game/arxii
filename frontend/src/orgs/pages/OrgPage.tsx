@@ -17,8 +17,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import {
   useOrganizationQuery,
   useHouseFeedQuery,
@@ -329,12 +328,8 @@ const DIRECTION_LABEL: Record<StandingDeclaration['direction'], string> = {
 function StandingSection({ orgId, orgName }: { orgId: number; orgName: string }) {
   const { data: declarations = [], isLoading } = useStandingDeclarationsQuery(orgId);
 
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const { entry } = useBrowsingIdentity();
+  const characterId = entry?.character_id ?? null;
   const { data: myMemberships = [] } = useOrganizationMembershipsQuery(true);
   const canDeclare = useMemo(
     () =>
@@ -478,16 +473,12 @@ export function OrgPageInner({
 // Page export
 // ---------------------------------------------------------------------------
 
-/** Resolves the active puppet's ObjectDB pk (redux `game.active` name -> roster
- * entry) for the Board tab's post/remove affordance. Lives only in the
- * route-level export below — `OrgPageInner` itself stays redux-free. */
+/** Resolves this tab's browsing identity (#3479) to an ObjectDB pk for the
+ * Board tab's post/remove affordance. Lives only in the route-level export
+ * below — `OrgPageInner` itself stays redux-free. */
 function useActiveCharacterId(): number | null {
-  const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [] } = useMyRosterEntriesQuery();
-  return useMemo(
-    () => myEntries.find((entry) => entry.name === activeCharacter)?.character_id ?? null,
-    [myEntries, activeCharacter]
-  );
+  const { entry } = useBrowsingIdentity();
+  return entry?.character_id ?? null;
 }
 
 export function OrgPage() {

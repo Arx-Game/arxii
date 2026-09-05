@@ -5,10 +5,10 @@
  * (account-wide — `MyNarrativeMessagesView` scopes to every character the
  * account owns, not just one puppet; see `narrative/CLAUDE.md`).
  *
- * Routing (#3412 hygiene fold-in): now that `gameSlice.active` is a durable,
- * hydration-safe selection, clicking routes to the SELECTED character's
- * sheet — previously this always linked to `myEntries[0]`, so switching to
- * an alt via the docked chip left the badge pointing at the wrong sheet.
+ * Routing (#3412 hygiene fold-in, #3479 update): clicking routes to this
+ * tab's browsing-identity character's sheet — previously this always linked
+ * to `myEntries[0]`, so switching to an alt via the docked chip left the
+ * badge pointing at the wrong sheet.
  * With no selection, falls back to the roster (an "account fallback": there
  * is no single character to deep-link to, so the count stays a grouped
  * account-wide total and the click just sends the player to pick one).
@@ -20,16 +20,15 @@ import { Link } from 'react-router-dom';
 import { Badge } from '@/components/ui/badge';
 import { useUnreadNarrativeCount } from '@/narrative/queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { useAppSelector } from '@/store/hooks';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 
 export function UnreadNarrativeBadge() {
   const count = useUnreadNarrativeCount();
   const { data: myEntries } = useMyRosterEntriesQuery();
-  const activeCharacterName = useAppSelector((state) => state.game.active);
+  const { entry: activeEntry } = useBrowsingIdentity();
 
   if (count === 0) return null;
 
-  const activeEntry = myEntries?.find((entry) => entry.name === activeCharacterName);
   const targetCharacterId = activeEntry?.id ?? myEntries?.[0]?.id;
   const to = targetCharacterId ? `/characters/${targetCharacterId}` : '/roster';
 

@@ -60,9 +60,11 @@ vi.mock('@/tasking/queries', () => ({
 }));
 
 // #3290 Standing section deps — gating the "Declare Standing" affordance.
+// #3479: useBrowsingIdentity() reads `browsingEntryId` (id 1, matching the
+// mocked roster entry below), not `active` (a name) any more.
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
-    selector({ game: { active: 'TestChar' } })
+    selector({ game: { browsingEntryId: 1 } })
   ),
 }));
 

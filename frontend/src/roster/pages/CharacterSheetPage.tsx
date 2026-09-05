@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router-dom';
-import { useAppSelector, useAccount } from '@/store/hooks';
+import { useAccount } from '@/store/hooks';
 import { useRosterEntryQuery, useMyRosterEntriesQuery } from '../queries';
+import { useBrowsingIdentity } from '../useBrowsingIdentity';
 import { useOrganizationByName } from '@/orgs/queries';
 import {
   CharacterPortrait,
@@ -66,9 +67,8 @@ export function CharacterSheetPage() {
   // id is the same fallback. Never fetch separately just to resolve this.
   const titlesPersonaId = viewedPersonaId ?? sheetPayload?.personas[0]?.id ?? null;
   // For the Secrets tab: IC knowledge scopes to the ACTIVE character (never the account), so
-  // resolve the active character's roster entry. Null when no character is active → no secrets.
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const viewerEntryId = myEntries?.find((e) => e.name === activeCharacterName)?.id ?? null;
+  // resolve this tab's browsing identity (#3479). Null when nothing is browsing → no secrets.
+  const { entryId: viewerEntryId } = useBrowsingIdentity();
   // For the Locations tab's Ships section: GET /api/ships/ships/ is server-scoped to the
   // account's ACTIVE persona, not the character being viewed, so only render it when the
   // viewed character IS the active character (an account can own several characters).

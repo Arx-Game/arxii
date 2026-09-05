@@ -1,10 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { HeartPulse } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useAppSelector } from '@/store/hooks';
 import { actingPersonaId } from '@/roster/persona';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { extractErrorMessage } from '@/lib/errors';
 import { useTreatmentCandidates } from '../queries';
 import { createActionRequest, TREAT_CONDITION_ACTION_KEY } from '@/scenes/actionQueries';
@@ -34,16 +33,11 @@ export function TreatActionPanel({ sceneId, targetPersonaId }: Props) {
   const queryClient = useQueryClient();
   const [offeredRequestId, setOfferedRequestId] = useState<number | null>(null);
 
-  // Resolve the helper's character ObjectDB pk + primary persona from the
-  // active roster entry — the same resolution ActionPanel and PersonaContextMenu
-  // perform.  characterId backs the X-Character-ID header on the discovery
-  // fetch; initiatorPersonaId goes on the action-request body.
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const activeEntry = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName) ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  // Resolve the helper's character ObjectDB pk + primary persona from this
+  // tab's browsing identity (#3479) — the same resolution ActionPanel and
+  // PersonaContextMenu perform.  characterId backs the X-Character-ID header
+  // on the discovery fetch; initiatorPersonaId goes on the action-request body.
+  const { entry: activeEntry } = useBrowsingIdentity();
   const characterId = activeEntry?.character_id ?? null;
   const initiatorPersonaId = actingPersonaId(activeEntry);
 
