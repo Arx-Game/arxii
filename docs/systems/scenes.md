@@ -1044,8 +1044,13 @@ owning `ObjectDB`'s pk) and sends that id directly as `target`.
   has no participant picker.
 
 **Wire-point:** rendered by `SceneDetailPage.tsx`, gated a second time at the mount
-site (`{scene?.viewer_can_gm && <GMAdjudicationPanel scene={scene} />}`) alongside
-`HighlightReel`.
+site (`{scene?.viewer_can_gm && <GMAdjudicationPanel scene={scene} tabs={...} />}`).
+Since #3557 the panel takes a `tabs` prop (`GM_TOOL_TABS`, `COMBAT_GM_TOOL_TABS`,
+`NON_COMBAT_GM_TOOL_TABS` exported alongside it) and mounts twice while an encounter
+is active: in `CombatRail`'s GM tab (`frontend/src/combat/components/CombatGMTab.tsx`)
+with Condition, Dramatic Beat and Traps, and in the header's folded "Scene tools"
+accordion with the other eight, so every lever has one home mid-fight. Idle, the
+header mounts all eleven. See ADR-0270.
 
 ---
 

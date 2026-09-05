@@ -318,4 +318,5 @@ treat those names as hints to confirm, not gospel.
 - [0267 - MFA secrets are encrypted at rest under a dedicated vault key](0267-mfa-secrets-encrypted-under-a-dedicated-vault-key.md) (#3591)
 - [0268 - Family standing is expressed through existing organisation mechanisms, and family kinds are rows](0268-family-standing-uses-existing-organisation-mechanisms-and-kinds-are-rows.md) (#3617; related ADR-0010, ADR-0101, ADR-0238, ADR-0251)
 - [0269 - Upbringings price standing as family influence times position](0269-upbringings-price-standing-as-family-influence-times-position.md) (#3617; related ADR-0268, ADR-0209)
+- [0270 - During an encounter the scene page has one map and one home per GM lever](0270-scene-page-combat-layout-one-map-one-home-per-lever.md) (#3557; related ADR-0127, ADR-0111)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

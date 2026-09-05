@@ -268,6 +268,10 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   text-list UI on the scene page; `CombatTacticalMap` mounts as a "Map" tab in
   `CombatRail`'s right rail (default tab stays "Your Turn") — `CombatRail` renders
   in-scene on `/scenes/:id` (#2197; the dedicated `CombatScenePage` route is gone).
+  **Combat layout (#3557, 2026-09-05):** during an encounter the page shows one map (the
+  rail's, with dimmed bystanders merged from the scene), the GM's fight levers live in a
+  rail GM tab (`CombatGMTab`), and the idle header stack folds behind a "Scene tools"
+  accordion; ADR-0270.
   Both `SceneDetail`
   and `EncounterDetail` now serve the full node+edge graph (`position_nodes`/
   `position_edges`, via the new `position_graph(room)` service) — unlike the

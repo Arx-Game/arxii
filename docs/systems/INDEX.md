@@ -1318,6 +1318,12 @@ consequence effects for graph mutation and flight), and Rampart living barriers
   `onPickPosition` cast-targeting hook; `SceneTacticalMap`/`CombatTacticalMap` both grew a
   "Place" toggle + target picker over the room's co-located participants/opponents/personas
   when a `gm_place_in_position` `PlayerAction` is available.
+  **#3557:** while an encounter is active `SceneDetailPage` unmounts `SceneTacticalMap`
+  and `CombatTacticalMap` is the page's only map; it takes `sceneId`, reads the page's
+  cached scene detail, and draws non-combatant personas as dimmed bystanders
+  (`OccupantSummary.bystander`). `CombatRail` gained a GM tab (`CombatGMTab`: encounter
+  controls + the combat `GMAdjudicationPanel` tabs), and the idle header panels fold
+  behind a "Scene tools" accordion (ADR-0270).
 - **Pattern:** Spatial obstacles reuse `mechanics.ChallengeInstance` — no parallel obstacle model;
   aerial edges mirror ground adjacency but are always passable/ungated (flight bypasses obstacles)
 - **Reactive fall consumer (built — #1228):** `begin_plummet` / `advance_plummet` /
