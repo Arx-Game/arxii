@@ -168,6 +168,43 @@ describes.
   drafts. Seeds: a set-aside claimable barony + charter template ride the
   `houses` cluster.
 
+## Authoring a realm's charter (#2875)
+
+A **charter** is a realm's recipe for the houses CG can define on its claimable
+titles: one `HouseTemplate` row plus the four catalogs it draws on.
+
+- **What a charter holds:** the `HouseTemplate` itself (name, name-pattern
+  regex, principle ranges, `starting_kin_slots`), its `default_succession_law`
+  (a `SuccessionLaw` row), its `holdings` (a set of `HoldingKind` rows
+  materialized on the seat domain at founding), its `features` (a set of
+  `HouseFeature` rows stamping structural cultural facts on every house of
+  this template, no player input), and its `aspect_definitions` (a set of
+  `HouseAspectDefinition` rows, each with its own `HouseAspectOption` catalog,
+  the required choices a founder answers at CG).
+- **Where it is authored:** all five models carry `NaturalKeyMixin` and
+  `CreditedContent` and sit in `CONTENT_MODELS`, so a charter is written the
+  same way as every other piece of authored content post-ADR-0238: in the
+  database, through Django admin or the Authoring Workbench
+  (`web/admin/authoring`), never through content-repo branches and PRs. There
+  is no fixture to hand-edit and no load path to run against a populated
+  database.
+- **Code prerequisites, not authored rows:** a `HouseTemplate` FKs a `liege`
+  organization and a `society`, and neither is something the charter author
+  creates. Both are seeded ahead of any content load by
+  `world.seeds.config_prerequisites._house_charter_anchors`
+  (`world.seeds.houses._ensure_house_charter_anchors`), named by
+  `CROWN_ORG_NAME`/`SOCIETY_NAME` in `world/seeds/houses.py`. A charter
+  author picks the realm's existing Crown organization and Society by name;
+  they do not author new ones as part of the charter.
+- **Founding copies the charter, it does not reference it live:** CG
+  finalization's `materialize_house_claim` reads the approved `HouseClaim`'s
+  template and stamps a one-time copy into play state: a `Family`, an
+  `Organization` sworn to the template's `liege`, `OrganizationFeature` rows
+  for each template feature, `OrganizationAspect` rows for the founder's
+  picks, and the template's `holdings` package materialized on the title's
+  seat `Domain`. Editing the `HouseTemplate` after a house has founded off it
+  never changes that house; it only changes what the next founder sees.
+
 ## Regional flavor: aspects + features (#2079)
 
 Two deliberately distinct concepts give each realm's (and each noble-type's)

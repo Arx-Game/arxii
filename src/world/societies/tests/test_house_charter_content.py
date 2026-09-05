@@ -5,12 +5,21 @@ shape as HouseAspectDefinition (#2079/#2868): a natural key, CreditedContent,
 and a CONTENT_MODELS registration, so the lore repo owns them going forward.
 """
 
+from pathlib import Path
+import tempfile
+
 from django.test import TestCase, override_settings
 
 from core.app_domains import credited_content_models
-from core_management.content_export import CONTENT_MODELS
+from core_management.content_export import CONTENT_MODELS, export_to_content_repo
 from world.societies.houses.constants import SuccessionDerivation, SuccessionOrdering
-from world.societies.houses.models import HoldingKind, HouseFeature, HouseTemplate, SuccessionLaw
+from world.societies.houses.models import (
+    HoldingKind,
+    HouseAspectDefinition,
+    HouseFeature,
+    HouseTemplate,
+    SuccessionLaw,
+)
 
 
 class HouseCharterContentRegistrationTests(TestCase):
@@ -100,4 +109,112 @@ class HouseCharterSeederAuthoredOrSampleTests(TestCase):
         self.assertFalse(authored.require_wedlock)
         self.assertEqual(
             SuccessionLaw.objects.filter(name="Veyrane Primogeniture PLACEHOLDER").count(), 1
+        )
+
+
+class HouseTemplateRoundTripTests(TestCase):
+    """A full charter recipe survives an export, wipe, and reload (#2875 Task 3).
+
+    Proves the ordering claim behind
+    ``config_prerequisites._house_charter_anchors``: a content-repo
+    ``HouseTemplate`` FKs the Crown organization and its Society by name, so
+    both must already exist in the database before the content load runs, or
+    the FK cannot resolve. This test builds those two anchors with the exact
+    helper the real load path calls (``_ensure_house_charter_anchors``) and
+    leaves them standing through the wipe, then deletes every row that IS
+    registered in ``CONTENT_MODELS`` (the charter itself, its succession law,
+    its holdings, its features, its aspect definitions) and reloads from the
+    export. The template comes back with every FK and M2M resolved against
+    the anchors that were never touched, which is what "code prerequisites
+    run before content load" means in practice.
+    """
+
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+
+    def test_house_template_round_trips_with_all_relations(self) -> None:
+        from core_management.content_fixtures import load_world_content
+        from world.character_creation.factories import RealmFactory
+        from world.roster.factories import FamilyKindFactory
+        from world.seeds.houses import _ensure_house_charter_anchors
+
+        realm = RealmFactory(name="Round Trip Realm")
+        # The prerequisite anchors: plain seeder-owned config, not in
+        # CONTENT_MODELS, so they are never wiped or reloaded below.
+        society, _org_type, crown = _ensure_house_charter_anchors(realm)
+        kind = FamilyKindFactory(name="Round Trip Family Kind")
+
+        law = SuccessionLaw.objects.create(
+            name="Round Trip Succession",
+            derivation=SuccessionDerivation.PRIMOGENITURE_WEDLOCK,
+            ordering_rule=SuccessionOrdering.ELDEST,
+        )
+        holding_a = HoldingKind.objects.create(
+            name="Round Trip Farmland", stream_kind="farmland", base_gross=100
+        )
+        holding_b = HoldingKind.objects.create(
+            name="Round Trip Mine", stream_kind="mine", base_gross=200
+        )
+        feature_a = HouseFeature.objects.create(
+            name="Round Trip Black Ledger",
+            slug="rt-black-ledger",
+            description="This house keeps a Black Ledger of every debt owed.",
+        )
+        feature_b = HouseFeature.objects.create(
+            name="Round Trip Open Hearth",
+            slug="rt-open-hearth",
+            description="This house's hearth is open to any traveler.",
+        )
+        aspect_a = HouseAspectDefinition.objects.create(
+            name="Round Trip Vice", prompt="Pick the house's founding vice."
+        )
+        aspect_b = HouseAspectDefinition.objects.create(
+            name="Round Trip Totem", prompt="Pick the house's founding totem."
+        )
+
+        template = HouseTemplate.objects.create(
+            name="Round Trip Charter",
+            realm=realm,
+            kind=kind,
+            society=society,
+            liege=crown,
+            default_succession_law=law,
+        )
+        template.holdings.add(holding_a, holding_b)
+        template.features.add(feature_a, feature_b)
+        template.aspect_definitions.add(aspect_a, aspect_b)
+
+        result = export_to_content_repo(self.root)
+        self.assertEqual(result.errors, [])
+
+        # Wipe only the CONTENT_MODELS rows, child-first: the template links
+        # to all four, so it goes first, then the four catalogs it referenced.
+        HouseTemplate.objects.filter(pk=template.pk).delete()
+        HouseAspectDefinition.objects.filter(pk__in=[aspect_a.pk, aspect_b.pk]).delete()
+        HouseFeature.objects.filter(pk__in=[feature_a.pk, feature_b.pk]).delete()
+        HoldingKind.objects.filter(pk__in=[holding_a.pk, holding_b.pk]).delete()
+        SuccessionLaw.objects.filter(pk=law.pk).delete()
+
+        world_result = load_world_content(self.root)
+        self.assertEqual(world_result.skipped, [])
+
+        reloaded = HouseTemplate.objects.get(name="Round Trip Charter")
+        self.assertEqual(reloaded.realm, realm)
+        self.assertEqual(reloaded.kind, kind)
+        self.assertEqual(reloaded.society, society)
+        self.assertEqual(reloaded.liege, crown)
+        self.assertEqual(reloaded.default_succession_law.name, "Round Trip Succession")
+        self.assertEqual(
+            {holding.name for holding in reloaded.holdings.all()},
+            {"Round Trip Farmland", "Round Trip Mine"},
+        )
+        self.assertEqual(
+            {feature.name for feature in reloaded.features.all()},
+            {"Round Trip Black Ledger", "Round Trip Open Hearth"},
+        )
+        self.assertEqual(
+            {aspect.name for aspect in reloaded.aspect_definitions.all()},
+            {"Round Trip Vice", "Round Trip Totem"},
         )
