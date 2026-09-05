@@ -29,13 +29,19 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
+    REPUTATION_SEED_MAX,
+    REPUTATION_SEED_MIN,
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
+    AnchorSource,
     ApplicationStatus,
     CommentType,
+    ConnectionKind,
     FamilyPath,
+    LifeStage,
+    QuestionKind,
     Stage,
     StartingAreaAccessLevel,
 )
@@ -709,6 +715,86 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Player may write a free-text answer (the 'other' box on a pick-list) (#3617).",
     )
+    kind = models.CharField(
+        max_length=10,
+        choices=QuestionKind.choices,
+        default=QuestionKind.TEXT,
+        help_text="What this question asks for (#3660).",
+    )
+    connection_kind = models.CharField(
+        max_length=20,
+        choices=ConnectionKind.choices,
+        blank=True,
+        default="",
+        help_text="What the tie was; a tag shown on the page and the sheet (#3660).",
+    )
+    life_stage = models.CharField(
+        max_length=20,
+        choices=LifeStage.choices,
+        blank=True,
+        default="",
+        help_text="When the tie was formed; a tag (#3660).",
+    )
+    anchor_source = models.CharField(
+        max_length=20,
+        choices=AnchorSource.choices,
+        blank=True,
+        default="",
+        help_text="Which groups a 'pick a group' question offers (#3660).",
+    )
+    anchor_org_type = models.ForeignKey(
+        "arxii.OrganizationType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the org type groups must have (#3660).",
+    )
+    anchor_society = models.ForeignKey(
+        "arxii.Society",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the society groups must belong to (#3660).",
+    )
+    anchor_orgs = models.ManyToManyField(
+        "arxii.Organization",
+        blank=True,
+        related_name="anchor_prompts",
+        help_text="LISTED source: the groups offered, in name order (#3660).",
+    )
+    exclude_covert = models.BooleanField(
+        default=True, help_text="POOL source: leave out covert org types (#3660)."
+    )
+    same_anchor_as = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependents",
+        help_text=(
+            "GROUP with SAME_AS: the earlier group question whose answer is this anchor. "
+            "PERSON: the group question this person belongs to (#3660)."
+        ),
+    )
+    follow_up_to = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="follow_ups",
+        help_text="Shown only once this earlier question is answered (#3660).",
+    )
+    shown_for_choices = models.ManyToManyField(
+        "arxii.OriginTemplateSlotChoice",
+        blank=True,
+        related_name="branching_prompts",
+        help_text=(
+            "With follow_up_to: shown only when the answer picked there is one of these; "
+            "empty means any answer (#3660)."
+        ),
+    )
 
     objects = OriginTemplateSlotManager()
 
@@ -724,6 +810,59 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def is_connection(self) -> bool:
+        return self.kind == QuestionKind.GROUP
+
+    def _clean_anchor_source(self, errors: dict[str, str]) -> None:
+        if self.kind == QuestionKind.GROUP:
+            if not self.anchor_source:
+                errors["anchor_source"] = "A 'pick a group' question needs a group source."
+            elif self.anchor_source == AnchorSource.POOL and not (
+                self.anchor_org_type_id or self.anchor_society_id
+            ):
+                errors["anchor_org_type"] = "A pool needs an org type, a society, or both."
+            elif self.anchor_source == AnchorSource.SAME_AS and self.same_anchor_as_id is None:
+                errors["same_anchor_as"] = "Name the earlier question whose group this reuses."
+        elif self.anchor_source:
+            errors["anchor_source"] = "Only a 'pick a group' question has a group source."
+
+    def _clean_same_anchor_as(self, errors: dict[str, str]) -> None:
+        if self.same_anchor_as_id is None:
+            return
+        target = self.same_anchor_as
+        if target.template_id != self.template_id or target.kind != QuestionKind.GROUP:
+            errors["same_anchor_as"] = "Must be a 'pick a group' question on this Upbringing."
+        elif target.sort_order >= self.sort_order:
+            errors["same_anchor_as"] = "Must be an earlier question."
+
+    def _clean_follow_up_to(self, errors: dict[str, str]) -> None:
+        if self.follow_up_to_id is None:
+            return
+        target = self.follow_up_to
+        if target.template_id != self.template_id or target.sort_order >= self.sort_order:
+            errors["follow_up_to"] = "Must be an earlier question on this Upbringing."
+
+    def _clean_shown_for_choices(self, errors: dict[str, str]) -> None:
+        if not self.pk or not self.shown_for_choices.exists():
+            return
+        if self.follow_up_to_id is None:
+            errors["shown_for_choices"] = "Branching answers need 'follow up to' set."
+        elif self.shown_for_choices.exclude(slot_id=self.follow_up_to_id).exists():
+            errors["shown_for_choices"] = (
+                "Every branching answer must belong to the follow-up question."
+            )
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        self._clean_anchor_source(errors)
+        self._clean_same_anchor_as(errors)
+        self._clean_follow_up_to(errors)
+        self._clean_shown_for_choices(errors)
+        if errors:
+            raise ValidationError(errors)
 
 
 class OriginTemplateSlotChoiceManager(NaturalKeyManager):
@@ -743,6 +882,21 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     cg_point_cost = models.IntegerField(default=0, help_text="Flat CG cost of this choice.")
     cost_per_influence = models.IntegerField(
         default=0, help_text="CG cost per point of the claimed family's influence."
+    )
+    grants_distinction = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="granting_choices",
+        help_text="Picking this answer grants the Distinction, bundled at no extra cost (#3660).",
+    )
+    reputation_seed = models.IntegerField(
+        default=0,
+        help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
+    )
+    trust_required = models.IntegerField(
+        default=0, help_text="Minimum trust to see this answer; staff always see it (#3660)."
     )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
@@ -765,6 +919,21 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     def cost_for(self, influence: int) -> int:
         """Price of this choice against a family of ``influence`` (#3617)."""
         return self.cg_point_cost + self.cost_per_influence * influence
+
+    def clean(self) -> None:
+        super().clean()
+        if self.reputation_seed and self.slot.kind != QuestionKind.GROUP:
+            raise ValidationError(
+                {"reputation_seed": "Only a group question's answer seeds an opinion."}
+            )
+        if not REPUTATION_SEED_MIN <= self.reputation_seed <= REPUTATION_SEED_MAX:
+            raise ValidationError(
+                {
+                    "reputation_seed": (
+                        f"Seed must be between {REPUTATION_SEED_MIN} and {REPUTATION_SEED_MAX}."
+                    )
+                }
+            )
 
 
 class CharacterOriginSlot(SharedMemoryModel):
@@ -794,6 +963,22 @@ class CharacterOriginSlot(SharedMemoryModel):
         blank=True,
         related_name="character_rows",
         help_text="The picked choice on a pick-list prompt; null for a pure write-in (#3617).",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="connection_rows",
+        help_text=(
+            "The anchor a group question resolved to, or the group a person belongs to (#3660)."
+        ),
+    )
+    figure_name = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="A 'name a person' answer: the person the player named (#3660).",
     )
 
     class Meta:
