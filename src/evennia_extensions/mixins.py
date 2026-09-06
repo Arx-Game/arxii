@@ -91,12 +91,17 @@ class RelatedCacheClearingMixin(CachedPropertiesMixin):
 
     @staticmethod
     def _clear_functools_caches(obj) -> None:
-        """Clear cached_property entries on an arbitrary object."""
+        """Clear cached_property entries on an arbitrary object.
 
-        for klass in obj.__class__.__mro__:
-            for name, attr in klass.__dict__.items():
-                if isinstance(attr, functools_cached_property):
-                    obj.__dict__.pop(name, None)
+        Delegates to the same implementation ``clear_cached_properties`` uses.
+        This used to walk the MRO for ``functools.cached_property`` alone, which
+        made ``related_cache_fields`` a no-op against the spelling this repo
+        actually mandates: a related object without its own
+        ``clear_cached_properties`` kept every Django ``cached_property`` it had
+        (#3673, found on ``OriginTemplate.questions``).
+        """
+
+        clear_django_cached_properties(obj)
 
     def _clear_caches_for_object(self, obj) -> None:
         """Clear caches on ``obj`` if supported."""

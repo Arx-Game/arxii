@@ -157,6 +157,26 @@ repos:
         # identity map loads once. See ADR-0261 and django_notes.md. Suppress
         # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
         # not a SharedMemoryModel.
+      - id: prefetch-to-attr
+        name: Reject to_attr prefetches; rows belong to a handler
+        entry: uv run python tools/lint_prefetch_to_attr.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/(evennia_extensions|web/admin/upbringing_builder)/.*\.py$
+        # #3673 / ADR-0263: `Prefetch(..., to_attr=...)` writes a plain attribute
+        # and Django skips a prefetch that already has one, so under the identity
+        # map the second request re-serves the first request's rows - deleted ones
+        # included, arriving with a null id. Rows a parent owns go behind a
+        # CachedRowsHandler (evennia_extensions/handlers.py).
+        #
+        # SCOPE WIDENS ONE APP AT A TIME, and this regex lists the surfaces whose
+        # rows already sit behind handlers. Everywhere else is held by the
+        # repo-wide `pattern:PREFETCH_TO_ATTR` ratchet in
+        # tools/noqa_ratchet_baseline.txt (343 grandfathered sites, count may only
+        # go down), so a NEW to_attr fails anywhere in src/ - this hook is the one
+        # that also says what to build instead. An app joins here when its rows
+        # have moved behind a handler and its count reaches zero.
       - id: view-memo
         name: Reject per-request memos on views and serializers
         entry: uv run python tools/lint_view_memo.py

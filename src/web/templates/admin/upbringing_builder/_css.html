@@ -154,4 +154,54 @@ light/dark selectors below, so the page follows the theme toggle.
   }
   #upbringing-builder-root .ub-rail p { font-size: 0.75rem; }
   #upbringing-builder-root .ub-rail .submit-row { margin: 10px; }
+
+  /* Field widths. Admin's own widths were drawn for a narrow change form. This
+     page runs a ~1050px main column beside the rail and every input sat at its
+     default inside it: a 170px Name that truncates the natural key it is part
+     of, a 309px Card text for the longest prose on the page, a 90px Claimable
+     kinds. A field fills the column it is in, capped so a line of prose stays a
+     readable measure rather than running the full width (#3673). */
+  #upbringing-builder-root .form-row .flex-container > input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 38rem;
+  }
+  /* Plain multi-selects only: an autocomplete's own select element is hidden and
+     sized by select2 from its container, so widening it here would do nothing on
+     the page and fight the widget off it. (No angle-bracketed tag names anywhere
+     in this file, comments included: it is a .html template, so SonarCloud's Web
+     analyzer parses one in a CSS comment as a real form control and fails the
+     gate with "add an id attribute to this input field" - #3674.) */
+  #upbringing-builder-root .form-row .flex-container > select[multiple]:not(.admin-autocomplete) {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 32rem;
+  }
+  #upbringing-builder-root .form-row .flex-container > textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 52rem;
+  }
+  /* The frame prose every character with this beginning shares is the longest
+     thing anyone writes here, and it is written once for the whole route. */
+  #upbringing-builder-root .form-row.field-frame_narrative .flex-container > textarea {
+    min-height: 15rem;
+  }
+
+  /* A row holding two or three fields lays them out as real columns, each with
+     its own help line beneath it. Admin sizes those boxes to their content and
+     separates them with a right margin, which at this width put Point cost's
+     help line directly above the Trust required label it belongs nowhere near,
+     and ran the three family-path help lines together into one sentence
+     (#3673). A flex basis and a column gap give each field a column instead. */
+  #upbringing-builder-root .form-row .form-multiline {
+    gap: 0 2rem;
+  }
+  #upbringing-builder-root .form-row .form-multiline > div {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  #upbringing-builder-root .form-row .form-multiline .fieldBox {
+    margin-right: 0;
+  }
 </style>
