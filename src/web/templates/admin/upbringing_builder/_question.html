@@ -1,55 +1,58 @@
 {% load upbringing_builder_tags %}
+{% comment %}
+One question, drawn as an admin panel: the `.module h2` header bar admin
+already styles, then the field rows Django's own fieldset template renders
+from `QUESTION_FIELDSETS`. Used for both a saved question and the
+`<template>` the "Add question" button clones, so a cloned row looks like a
+saved one (#3667).
+
+Takes `question_form`, and `question_number` (blank for the unsaved clone).
+{% endcomment %}
 <div class="module question-module">
-  {% for hidden in question_form.hidden_fields %}{{ hidden }}{% endfor %}
   <h2>
-    Question {{ forloop.counter }} &middot; {{ question_form.name }}
-    <span class="kind-chip">{{ question_form.instance.get_kind_display }}</span>
+    {% if question_number %}Question {{ question_number }}{% else %}New question{% endif %}
+    {% if question_form.instance.name %}&middot; {{ question_form.instance.name }}{% endif %}
+    {% if question_form.instance.pk %}
+    <span class="kind-chips">
+      <span class="kind-chip">{{ question_form.instance.get_kind_display }}</span>
+      <span class="kind-chip">{% if question_form.instance.is_required %}Required{% else %}Optional{% endif %}</span>
+    </span>
+    {% endif %}
   </h2>
 
-  {% if question_form.instance.kind == "text" %}
-  <p>The player writes a free-text answer.</p>
+  {% if not question_form.instance.pk %}
+  {% comment %}A question that is not saved yet has no chosen kind: the model
+  default would otherwise advertise this new row as a write-in answer.{% endcomment %}
+  {% elif question_form.instance.kind == "text" %}
+  <div class="description">A <b>write an answer</b> question takes the player's own prose and
+    links to nothing. Use it for what a character remembers rather than who they knew.</div>
   {% elif question_form.instance.kind == "pick" %}
-  <p>The player picks one priced answer from the list below.</p>
+  <div class="description">A <b>pick one answer</b> question offers lines you write, each with
+    a cost, and links to nothing. Use it when the answer is a fact about the character rather
+    than a tie to a group.</div>
   {% elif question_form.instance.kind == "group" %}
-  <p>The player picks a group and one priced stance toward it.</p>
+  <div class="description">A <b>pick a group</b> question links the character to a real
+    organization staff have written: a house, a crew, an order, a crime family. The player
+    chooses one from the list you define here, then says where they stand with it from the
+    answers you write below. Other systems can read the link back later: the group's opinion
+    of the character, a GM asking who is tied to a house.</div>
   {% elif question_form.instance.kind == "person" %}
-  <p>The player names someone of their own, optionally inside an earlier group question.</p>
+  <div class="description">A <b>name a person</b> question lets the player invent someone: a
+    name and a line about them. Tie it to an earlier group question and the person belongs to
+    that group, below its leaders, and this question only appears once that group is chosen.
+    If an answer elsewhere grants a Distinction that comes with a contact, the contact takes
+    this person's name.</div>
   {% endif %}
+
+  {% for hidden in question_form.hidden_fields %}{{ hidden }}{% endfor %}
 
   {% if question_form.non_field_errors %}
   <p class="errornote">{{ question_form.non_field_errors }}</p>
   {% endif %}
 
-  <p>
-    <label>Kind of question {{ question_form.kind }}</label>
-    <label>Required {{ question_form.is_required }}</label>
-    <label>Order {{ question_form.sort_order }}</label>
-    <label>Delete {{ question_form.DELETE }}</label>
-  </p>
-
-  <p><label>Question<br>{{ question_form.prompt }}</label></p>
-  <p><label>Example<br>{{ question_form.example }}</label></p>
-
-  <p>
-    <label>What the tie was {{ question_form.connection_kind }}</label>
-    <label>When {{ question_form.life_stage }}</label>
-  </p>
-  <p><label>Which groups can be picked {{ question_form.anchor_source }}</label></p>
-  <p>
-    <label>Type {{ question_form.anchor_org_type }}</label>
-    <label>Realm {{ question_form.anchor_society }}</label>
-  </p>
-  <p>
-    <label>Groups {{ question_form.anchor_orgs }}</label>
-    <label>Exclude covert groups {{ question_form.exclude_covert }}</label>
-  </p>
-  <p><label>Same group as / belongs to {{ question_form.same_anchor_as }}</label></p>
-  <p><label>Shown after {{ question_form.follow_up_to }}</label></p>
-  <p><label>Only for these answers {{ question_form.shown_for_choices }}</label></p>
-  <p>
-    <label>Only on family path {{ question_form.applies_to }}</label>
-    <label>Player may write in {{ question_form.allows_text }}</label>
-  </p>
+  {% for fieldset in question_form|question_fieldsets %}
+    {% include "admin/includes/fieldset.html" with heading_level=3 prefix="q" id_prefix=question_form.prefix id_suffix=forloop.counter0 %}
+  {% endfor %}
 
   {% if question_form.instance.pk %}
     {% if question_form.instance.kind == "pick" or question_form.instance.kind == "group" %}

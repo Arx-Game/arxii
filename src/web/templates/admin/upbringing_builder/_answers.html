@@ -1,5 +1,11 @@
 {% load i18n %}
 <div class="answers-wrapper" id="answers-{{ slot.pk }}">
+  <h3>Answers: where you stand with them</h3>
+  <div class="help">Each answer is a line the player can pick, with a cost. An answer
+    may grant a Distinction (the character gets it, no extra cost) and set the group's
+    starting opinion of the character (a number from -1000 to 1000; players see it as a
+    tier). The Distinction column is a search box: type to find one, there are
+    hundreds.</div>
   {{ formset.management_form }}
   {% if formset.non_form_errors %}
   <p class="errornote">{{ formset.non_form_errors }}</p>
@@ -56,7 +62,7 @@
       <td></td>
     </tr>
   </template>
-  <button type="button" class="add-answer-btn"
+  <button type="button" class="button add-answer-btn"
           data-prefix="{{ formset.prefix }}"
           data-target="answers-body-{{ slot.pk }}"
           data-template="empty-answer-template-{{ slot.pk }}">

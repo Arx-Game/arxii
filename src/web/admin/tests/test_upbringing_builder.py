@@ -1,5 +1,8 @@
 """The Upbringing Builder: one page for an Upbringing, its questions and answers (#3660)."""
 
+from pathlib import Path
+import re
+
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -354,3 +357,74 @@ class BuilderPreviewTest(BuilderTestCase):
         body = resp.content.decode()
         assert "House" in body
         assert "House Orisant" in body
+
+
+class BuilderStylingTest(BuilderTestCase):
+    """The page must draw itself with Django admin's CSS contract (#3667).
+
+    #3660 shipped the Builder rendering ``{{ form.as_div }}`` and hand-written
+    ``<p><label>`` rows inside panels that carried class hooks no stylesheet
+    defined. Admin's CSS targets ``fieldset.module.aligned``, ``div.form-row``
+    and ``div.help``; none of those appeared, so every field on the page fell
+    back to browser defaults on production while CI stayed green - the existing
+    tests only ever asserted that content was present, never that it was drawn.
+    """
+
+    #: Classes the builder templates may use without defining a rule, because
+    #: Django admin's own stylesheets already style them. Anything else the
+    #: markup carries is ours, and must have a rule on the page.
+    ADMIN_PROVIDED_CLASSES = frozenset(
+        {
+            "module",
+            "aligned",
+            "description",
+            "help",
+            "errornote",
+            "breadcrumbs",
+            "submit-row",
+            "button",
+            "default",
+            "tuning-panel",
+            "tuning-table",
+            "stat-tiles",
+            "stat-tile",
+            "stat-value",
+            "stat-label",
+        }
+    )
+
+    def _body(self) -> str:
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        assert resp.status_code == 200
+        return resp.content.decode()
+
+    def test_fields_render_through_admins_fieldset_contract(self):
+        body = self._body()
+        assert 'class="module aligned' in body, "fields are not in an admin fieldset"
+        assert "form-row" in body, "no admin form rows - labels will not align"
+        assert 'class="help"' in body, "field help text is not in admin's help markup"
+        assert 'class="submit-row"' in body, "the save buttons are not in a submit row"
+
+    def test_the_page_is_laid_out_two_column_with_the_rail_on_the_right(self):
+        body = self._body()
+        assert 'class="ub-columns"' in body
+        assert 'class="ub-rail"' in body
+        assert "grid-template-columns" in body, "the two-column shell has no rule"
+
+    def test_every_class_the_builder_emits_has_a_rule_on_the_page(self):
+        """The guard the original defect needed: a hook with no rule is the bug."""
+        template_dir = Path(__file__).resolve().parents[2] / "templates/admin/upbringing_builder"
+        emitted: set[str] = set()
+        for path in sorted(template_dir.glob("*.html")):
+            if path.name == "_preview.html":
+                continue  # a standalone document with its own <style>, not an admin page
+            markup = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", "", path.read_text(), flags=re.DOTALL)
+            for attr in re.findall(r'class="([^"]*)"', markup):
+                emitted.update(token for token in attr.split() if token)
+
+        body = self._body()
+        undefined = sorted(
+            token for token in emitted - self.ADMIN_PROVIDED_CLASSES if f".{token}" not in body
+        )
+        assert not undefined, f"class hooks with no CSS rule on the page: {undefined}"

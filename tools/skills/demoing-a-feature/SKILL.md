@@ -94,6 +94,20 @@ recommendation first, and in the spec's Decisions section as pending.
    recommendation first. Expect the reviewer to answer in chat and to widen the
    scenarios; rebuild the page from the feedback and republish to the same URL,
    then fold the answers into the spec and wait for `spec:approved`.
+8. **Before opening the PR, check the built thing against the demo.** Dispatch
+   the `demo-fidelity-reviewer` agent (`tools/agents/`) with the issue number; it
+   reads the demo, renders the built surface and reports screen by screen where
+   the two differ. This step is not optional and it is not satisfied by reading
+   your own templates: the demo is the approved design, and nothing else in the
+   pipeline ever compares it to the code. #3660 shipped the Upbringing Builder
+   with none of the demo's admin form rows, header chips, submit row or
+   right-hand rail, and none of its own class hooks defined; nineteen tests
+   passed and a human found it on production (#3667).
+
+   Where a finding is a class hook with no rule, fold in the mechanical guard as
+   well as the fix - a test that collects every class the surface's templates
+   emit and asserts each has a rule on the rendered page
+   (`BuilderStylingTest` in `web.admin.tests.test_upbringing_builder`).
 
 ## When the human is not in the room
 
@@ -115,6 +129,7 @@ line can carry; do not decide them silently either.
 | Placeholder copy that reads as authored lore | Mark it, deslop it, keep names out of content rows |
 | Screens with no "what is written" table | The last screen is the finalize row table; it feeds the ledger |
 | Deferring forks to "later" in prose | A fork is a ruling or a `needs-design` line, never a promise |
+| Building from the spec text and never re-opening the demo | The demo is the approved design; run `demo-fidelity-reviewer` against it before the PR |
 | Filing the demo's gaps as follow-up issues | Fold in or drop; file only separable scope with a stated reason |
 
 ## Trial record

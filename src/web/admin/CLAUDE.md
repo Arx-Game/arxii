@@ -457,7 +457,21 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   `web/templates/admin/upbringing_builder/`: `page.html` (the form, with a
   client-side script that clones "Add question"/"Add answer" formset rows - there is
   no saved row to fetch an HTMX fragment for until the whole route is saved),
-  `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`.
+  `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`,
+  `_css.html`.
+- **Rendering** - the page draws its fields through Django's own
+  `admin/includes/fieldset.html`, off `UPBRINGING_FIELDSETS`/`QUESTION_FIELDSETS` in
+  `forms.py` and the `upbringing_fieldsets`/`question_fieldsets` filters in
+  `web/admin/templatetags/upbringing_builder_tags.py`. That is where the label column,
+  the model's help lines, the checkbox rows, the required markers and the per-field
+  error markup come from, and a field left out of those tuples does not render at all.
+  `_css.html` adds only what admin has no class for: the two-column shell (route left,
+  live rail right), the question header chips, the live lines, the checks list and the
+  rail's stat rows. #3660 shipped `{{ form.as_div }}` and hand-written `<p><label>`
+  rows instead, which admin's stylesheet does not target, so the page rendered with
+  browser defaults on production (#3667). `BuilderStylingTest` is the guard: it asserts
+  the admin contract and that every class the templates emit has a rule on the
+  rendered page.
 - **URLs** (all superuser-only): `_upbringing_builder/new/` ->
   `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/<pk>/` ->
   `admin_upbringing_builder`, `_upbringing_builder/<pk>/review/` ->

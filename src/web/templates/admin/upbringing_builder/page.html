@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n %}
+{% load i18n upbringing_builder_tags %}
 
 {% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
 
@@ -20,6 +20,7 @@
 
 {% block content %}
 {% include "admin/tuning/_panel_css.html" %}
+{% include "admin/upbringing_builder/_css.html" %}
 <div id="upbringing-builder-root">
   <h1>Upbringing Builder</h1>
   <p>Author one Upbringing here, with every question and answer that hangs off it.</p>
@@ -28,43 +29,63 @@
     {% include "admin/upbringing_builder/_setup.html" %}
   {% else %}
 
-  <form method="post">
-    {% csrf_token %}
+  <div class="ub-columns">
+    <div class="ub-main">
+      <form method="post">
+        {% csrf_token %}
 
-    <div class="module" id="upbringing-module">
-      <h2>The Upbringing</h2>
-      <p>What the player sees for this Upbringing: its frame, its cost, and which
-        family paths it allows.</p>
-      {{ form.as_div }}
+        <div class="module" id="upbringing-module">
+          <h2>The Upbringing</h2>
+          <div class="description">An Upbringing is one route into a Beginning: how a
+            character was born and came to be standing where they stand when the Durance
+            starts. A Beginning can offer several. The player picks one card, then answers
+            this Upbringing's questions in order.</div>
+          {% if form.non_field_errors %}
+          <p class="errornote">{{ form.non_field_errors }}</p>
+          {% endif %}
+          {% for fieldset in form|upbringing_fieldsets %}
+            {% include "admin/includes/fieldset.html" with heading_level=3 prefix="upbringing" id_prefix=forloop.counter0 id_suffix=0 %}
+            {% if fieldset.name == "Family paths" %}
+            <div class="help ub-fieldset-note">Which family paths this route opens: claiming a
+              staff family (and an open place on it, if the family offers one), naming a new
+              powerless family from a Family Template, or none (the tarot surname). The family
+              block is asked in the middle of the questions, where Question order puts it.
+              Groups asked about below are ties, not the character's family.</div>
+            {% if live %}
+            <p class="live-line ub-fieldset-note">Open places reachable from this route today:
+              {{ live.open_places }}. Retainer places on staff families are offered through the
+              Service panel whatever the path.</p>
+            {% endif %}
+            {% endif %}
+          {% endfor %}
+        </div>
+
+        {{ questions.management_form }}
+        {% if questions.non_form_errors %}
+        <p class="errornote">{{ questions.non_form_errors }}</p>
+        {% endif %}
+        <div id="questions-list">
+          {% for question_form in questions.forms %}
+            {% include "admin/upbringing_builder/_question.html" with question_number=forloop.counter %}
+          {% endfor %}
+        </div>
+
+        <template id="empty-question-template">{% include "admin/upbringing_builder/_question.html" with question_form=questions.empty_form question_number="" %}</template>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+          <button type="button" class="button" id="add-question-btn">Add question</button>
+        </div>
+      </form>
     </div>
 
-    {{ questions.management_form }}
-    {% if questions.non_form_errors %}
-    <p class="errornote">{{ questions.non_form_errors }}</p>
+    {% if template.pk %}
+    <aside class="ub-rail">
+      {% include "admin/upbringing_builder/_rail.html" %}
+    </aside>
     {% endif %}
-    <div id="questions-list">
-      {% for question_form in questions.forms %}
-        {% include "admin/upbringing_builder/_question.html" %}
-      {% endfor %}
-    </div>
-
-    <template id="empty-question-template">{{ questions.empty_form.as_div }}</template>
-    <p><button type="button" id="add-question-btn">Add question</button></p>
-
-    <p>
-      <button type="submit" name="save">Save</button>
-      <button type="submit" name="save_continue">Save and continue editing</button>
-    </p>
-  </form>
-
-  {% if template.pk %}
-  <form method="post" action="{% url 'admin_upbringing_builder_review' template.pk %}">
-    {% csrf_token %}
-    <button type="submit">Mark reviewed</button>
-  </form>
-
-  {% include "admin/upbringing_builder/_rail.html" %}
-  {% endif %}
+  </div>
 
   {% endif %}
 </div>
@@ -95,17 +116,25 @@
     );
   }
 
+  // Both templates below hold a whole element - a question panel, an answers
+  // row - so the clone is the template's own first child rather than a
+  // wrapper this script styles by hand (#3667: the hand-built wrapper was how
+  // a cloned question ended up with different markup from a saved one).
+  function cloneFromTemplate(templateId, index) {
+    var tpl = document.getElementById(templateId);
+    var html = tpl.innerHTML.split("__prefix__").join(String(index));
+    var holder = document.createElement("div");
+    holder.innerHTML = html;
+    return holder.firstElementChild;
+  }
+
   var addQuestionBtn = document.getElementById("add-question-btn");
   if (addQuestionBtn) {
     addQuestionBtn.addEventListener("click", function () {
       var index = nextFormIndex("q");
-      var tpl = document.getElementById("empty-question-template");
-      var html = tpl.innerHTML.split("__prefix__").join(String(index));
-      var wrapper = document.createElement("div");
-      wrapper.className = "module question-module";
-      wrapper.innerHTML = html;
-      document.getElementById("questions-list").appendChild(wrapper);
-      announceFormsetAdded("q", wrapper);
+      var row = cloneFromTemplate("empty-question-template", index);
+      document.getElementById("questions-list").appendChild(row);
+      announceFormsetAdded("q", row);
     });
   }
 

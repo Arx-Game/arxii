@@ -29,3 +29,10 @@ Pair it with a mechanical check where one is possible: the agent catches the
 shape, the linter catches the instance. `reviewing-migrations` (skill) +
 `tools/lint_migration_ddl_dml.py` (hook) + `migration-reviewer` (agent) is the
 worked example.
+
+## Current agents
+
+| Agent | Dispatch it when | The defect it came from |
+|---|---|---|
+| `migration-reviewer` | A branch's diff touches `src/world/migrations/`, immediately after `arx manage makemigrations`, and when reviewing a PR that adds one. | A migration mixing schema and data operations broke the production converge (2026-09-04). CI only ever migrates an empty database. |
+| `demo-fidelity-reviewer` | Before opening the PR for any issue whose spec carries a demo link, and when reviewing such a PR. | The Upbringing Builder shipped with none of its approved demo's admin form rows, header chips, submit row or right-hand rail, and no CSS rule for any of its own class hooks (#3667). Nineteen tests passed; a human found it on production. |
