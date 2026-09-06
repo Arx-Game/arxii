@@ -121,8 +121,58 @@ In an escalating encounter, the companion's ALLY `CombatOpponent` reaching `DEFE
 emits `CHARACTER_INCAPACITATED`, and the owner surges once (`ALLY_FALLEN`) when their
 relationship has a `fuels_escalation_spikes` track at or above the curve's
 `spike_minimum_track_points`. The peril leg is inert for companions (no opponent peril
-band). `resolve_companion_defeat` (#1873 Decision 4) still has no production caller;
-wiring it at encounter end is a separate follow-up.
+band). That surge fires the instant the companion falls, mid-fight - a different moment
+in the fiction from what follows.
+
+### Resolving the defeat (#3652, #1873 Decision 4)
+
+When the fight ends, `resolve_companion_defeat(companion, risk_level)` decides what the
+fall actually cost. At LOW/MODERATE/HIGH risk it is a no-op - the companion's combat
+participation was ephemeral. At EXTREME or LETHAL risk it draws from the
+`companion_defeat` `ConsequencePool` (authored content, staff-tunable in admin - see
+below) and lands on one of three outcomes:
+
+- `companion_recover` - nothing happens. The companion walks it off.
+- `companion_stay_incapacitated` - the companion's `ObjectDB` receives the **Savaged**
+  condition (`world/companions/defeat_content.py`). `default_duration_type =
+  INGAME_TIME`, 72 IC hours, expiring itself through the sweep inside
+  `get_active_conditions` - nothing schedules a recovery and no heal verb has to exist.
+  `CompanionFitToFightPrerequisite` (`actions/prerequisites.py`) refuses `companion
+  fight` and `companion deploy` while it holds; the companion is still present,
+  poseable and rideable in every other respect.
+- `companion_die` - `release_companion` (unchanged).
+
+Two seams call it, one per scale, each after its own aftermath handling and before
+cleanup:
+
+- **Encounter scale**: `_resolve_companion_defeats` (`world/combat/services.py`),
+  called from `complete_encounter` right after `_apply_opponent_aftermath_pools`,
+  inside the `outcome != ABANDONED` branch (a GM closing a scene administratively does
+  not kill anyone's companion) and before `cleanup_completed_encounter` (the `die`
+  outcome deletes the companion's `ObjectDB`, so the deletion runs after cleanup's
+  sweeps have read it). It resolves each `DEFEATED` ALLY `CombatOpponent` with
+  `summoned_by` set to a live companion via `resolve_bonded_companion(opponent)`
+  (`world/companions/services.py`) - the one place that answers "is this ALLY opponent
+  someone's living companion," shared with the #3575 surge above.
+- **Battle scale**: `apply_companion_battle_outcome` (`world/companions/battle_wiring.py`),
+  registered on the battle-conclusion hook registry (mirroring
+  `world/ships/battle_wiring.py`). It resolves each `CompanionDeployment` whose vehicle's
+  `BattleUnitStatus` is `DESTROYED`.
+
+A `die` outcome at either scale calls `narrate_companion_loss(name, scene)`
+(`world/companions/services.py`): one Narrator OUTCOME interaction, persisted in the
+scene log and broadcast live to the room - the loss is public, the way the fall was.
+The encounter scale also writes a line into the owner's private aftermath digest
+(`AftermathDigest.companions_lost`, `world/combat/aftermath.py`); battles have no
+aftermath digest, so the public scene line is the only record there.
+
+The pool is authored content, not a constant compiled into a factory.
+`world.seeds.clusters._seed_companions` creates the `companion_defeat`
+`ConsequencePool` and resolves the `Savaged` `ConditionTemplate` (via
+`ensure_companion_defeat_conditions`) for a fresh database; in production both are rows
+staff tune in admin. Two `ContentDependency` sentinels in
+`web/admin/tuning/required_content.py` (`companion-defeat-pool`, `savaged-condition`)
+report either row missing rather than letting a defeat silently become a no-op.
 
 ## API
 
