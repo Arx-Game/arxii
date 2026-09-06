@@ -15,6 +15,8 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ObjectDoesNotExist
+from django.db import DatabaseError
 from evennia.accounts.models import AccountDB
 
 from world.character_creation.constants import AnchorSource, QuestionKind
@@ -90,11 +92,12 @@ def _open_places(template: OriginTemplate, user: AccountDB) -> int | str:
 
     Built on an unsaved ``CharacterDraft`` - never written to the database -
     the same shape ``reachable_vacancies`` expects from the guided flow. An
-    in-progress route with no ``beginning``/``starting_area`` set yet, or any
-    other failure inside ``reachable_vacancies``, degrades this one rail tile
-    rather than 500ing the whole Builder page (#3660 review Ruling I) - a
-    side tile must never take the page down, so this is deliberately as broad
-    as ``Exception``, logged rather than silently swallowed.
+    in-progress route with no ``beginning``/``starting_area`` set yet, a bad
+    queryset evaluation, or an odd ``account.trust`` all degrade this one
+    rail tile rather than 500ing the whole Builder page (#3660 review Ruling
+    I, amended): concrete exception classes only, never a blind catch-all
+    (the repo's broad-except ratchet count may only go down, so a new site
+    here is not allowed regardless of justification).
     """
     try:
         draft = CharacterDraft(
@@ -103,7 +106,7 @@ def _open_places(template: OriginTemplate, user: AccountDB) -> int | str:
             account=user,
         )
         return reachable_vacancies(draft).count()
-    except Exception as exc:  # noqa: BLE001 - BROAD_EXCEPT: a side tile must never sink the page
+    except (DatabaseError, ObjectDoesNotExist, AttributeError, ValueError, TypeError) as exc:
         logger.warning("Open places unavailable for Upbringing %s: %s", template.pk, exc)
         return OPEN_PLACES_UNAVAILABLE
 

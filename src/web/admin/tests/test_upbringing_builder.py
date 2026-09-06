@@ -242,23 +242,27 @@ class BuilderLiveTest(BuilderTestCase):
     def test_open_places_unavailable_on_error(self):
         from unittest.mock import patch
 
+        from django.db import DatabaseError
+
         from web.admin.upbringing_builder import live
 
         with patch(
             "web.admin.upbringing_builder.live.reachable_vacancies",
-            side_effect=RuntimeError("boom"),
+            side_effect=DatabaseError("boom"),
         ):
             panel = live.for_template(self.template, self.author)
         assert panel.open_places == live.OPEN_PLACES_UNAVAILABLE
 
     def test_page_still_renders_when_open_places_check_raises(self):
-        """Ruling I: a side tile must never take the whole Builder page down."""
+        """Ruling I (amended): a side tile must never take the whole Builder page down."""
         from unittest.mock import patch
+
+        from django.db import DatabaseError
 
         self.client.force_login(self.author)
         with patch(
             "web.admin.upbringing_builder.live.reachable_vacancies",
-            side_effect=RuntimeError("boom"),
+            side_effect=DatabaseError("boom"),
         ):
             resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
         assert resp.status_code == 200
