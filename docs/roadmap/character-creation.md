@@ -1,5 +1,14 @@
 # Character Creation & Identity
 
+## Built (2026-09-06, #3663: Misbegotten CG age ceiling grows with IC time)
+
+`Heritage.first_appeared_ic` (Misbegotten: 980 AS) anchors a computed CG age ceiling:
+`character_creation.services.age_bounds` composes the general cap, eternal youth and the
+whole IC years since the anchor (floor 18) against `get_ic_now()`; the serializer validates
+against it, the draft payload carries `age_min`/`age_max`, and the Appearance stage clamps
+to the payload and states "The first Misbegotten were born in 980 AS." A `HeritageAdmin`
+sets the date on production. The stage's hard-coded age constants are gone.
+
 ## Built (2026-09-06, #3660: formative connections)
 
 Upbringing prompts now carry entity-linked, life-stage-tagged connections instead of

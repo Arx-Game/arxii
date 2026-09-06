@@ -18,7 +18,7 @@ magic-cluster-seeded.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 from decimal import Decimal
 import logging
 from typing import TYPE_CHECKING
@@ -1998,14 +1998,15 @@ def _wire_composite_options() -> None:
 # Heritage
 # ---------------------------------------------------------------------------
 
-_HERITAGES: tuple[tuple[str, str, bool, bool, str], ...] = (
-    # (name, description, is_special, family_known, family_display)
+_HERITAGES: tuple[tuple[str, str, bool, bool, str, date | None], ...] = (
+    # (name, description, is_special, family_known, family_display, first_appeared_ic)
     (
         "Normal",
         "A standard upbringing with known family and origins.",
         False,
         True,
         "",
+        None,
     ),
     (
         "Sleeper",
@@ -2013,6 +2014,7 @@ _HERITAGES: tuple[tuple[str, str, bool, bool, str], ...] = (
         True,
         False,
         "Unknown",
+        None,
     ),
     (
         "Misbegotten",
@@ -2020,13 +2022,16 @@ _HERITAGES: tuple[tuple[str, str, bool, bool, str], ...] = (
         True,
         False,
         "Discoverable in play",
+        # The first Misbegotten were born in 980 AS (Dan, 2026-09-06, #3663); CG
+        # caps their age at the whole IC years elapsed since.
+        date(980, 1, 1),
     ),
 )
 
 
 def _seed_heritages() -> None:
     """Seed canonical Heritage rows for the Lineage stage of CG."""
-    for name, description, is_special, family_known, family_display in _HERITAGES:
+    for name, description, is_special, family_known, family_display, first_appeared in _HERITAGES:
         Heritage.objects.get_or_create(
             name=name,
             defaults={
@@ -2034,6 +2039,7 @@ def _seed_heritages() -> None:
                 "is_special": is_special,
                 "family_known": family_known,
                 "family_display": family_display,
+                "first_appeared_ic": first_appeared,
             },
         )
 

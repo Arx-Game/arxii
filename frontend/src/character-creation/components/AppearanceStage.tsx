@@ -34,11 +34,9 @@ interface AppearanceFormValues {
   description: string;
 }
 
-const AGE_MIN = 18;
-const AGE_MAX = 65;
-// Eternal-youth species (elves, vampires) lock their apparent age in the
-// early 20s (#2756) — mirrors the server-side cap.
-const AGE_MAX_ETERNAL_YOUTH = 29;
+// The age range comes from the draft payload (`age_min` / `age_max`, #3663):
+// the server composes the general cap, eternal youth (#2756) and the heritage's
+// first appearance, so the folio never has to know the rule.
 const AGE_DEFAULT = 22;
 
 const MONTH_NAMES = [
@@ -124,8 +122,9 @@ export function AppearanceStage({
   }, [onRegisterBeforeLeave, saveDescription]);
 
   const [localAge, setLocalAge] = useState(String(draft.age ?? AGE_DEFAULT));
-  // Eternal-youth species cap their age input (#2756); server enforces too.
-  const ageMax = draft.selected_species?.eternal_youth ? AGE_MAX_ETERNAL_YOUTH : AGE_MAX;
+  const ageMin = draft.age_min;
+  const ageMax = draft.age_max;
+  const heritage = draft.selected_beginnings?.heritage ?? null;
 
   // Auto-save default age on first visit when unset, so backend sees age != None
   useEffect(() => {
@@ -137,9 +136,7 @@ export function AppearanceStage({
 
   const commitAge = () => {
     const parsed = parseInt(localAge, 10);
-    const clamped = Number.isNaN(parsed)
-      ? AGE_DEFAULT
-      : Math.max(AGE_MIN, Math.min(ageMax, parsed));
+    const clamped = Number.isNaN(parsed) ? AGE_DEFAULT : Math.max(ageMin, Math.min(ageMax, parsed));
     setLocalAge(String(clamped));
     if (clamped !== draft.age) {
       updateDraft.mutate({
@@ -277,7 +274,13 @@ export function AppearanceStage({
       <Marginalia id="note-appearance">
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Age">
-          must be between {AGE_MIN} and {ageMax} years.
+          must be between {ageMin} and {ageMax} years.
+          {heritage?.first_appeared_ic_year != null && (
+            <>
+              {' '}
+              The first {heritage.name} were born in {heritage.first_appeared_ic_year} AS.
+            </>
+          )}
         </Note>
         {/* PLACEHOLDER: Apostate rewrite */}
         <Note lead="Birthday">
@@ -339,7 +342,7 @@ export function AppearanceStage({
         <input
           id="age"
           type="number"
-          min={AGE_MIN}
+          min={ageMin}
           max={ageMax}
           value={localAge}
           onChange={(e) => setLocalAge(e.target.value)}

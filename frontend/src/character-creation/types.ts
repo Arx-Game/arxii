@@ -25,6 +25,13 @@ export interface StartingArea {
   realm_theme: string;
 }
 
+/** The world fact behind a heritage's CG age ceiling (#3663). */
+export interface BeginningsHeritage {
+  name: string;
+  /** IC year the first of this heritage were born; null when the heritage has no anchor. */
+  first_appeared_ic_year: number | null;
+}
+
 export interface Beginnings {
   id: number;
   name: string;
@@ -35,6 +42,7 @@ export interface Beginnings {
   cg_point_cost: number;
   is_accessible: boolean;
   codex_entry_ids: number[];
+  heritage: BeginningsHeritage | null;
 }
 
 /**
@@ -416,6 +424,9 @@ export interface CharacterDraft {
   stats_budget: number;
   /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
   starting_technique_picks: number;
+  /** The age range CG accepts for this draft; the server composes every cap (#3663). */
+  age_min: number;
+  age_max: number;
   /** Distinctions the draft's visible, picked Upbringing answers grant (#3660). */
   bundled_distinctions: BundledDistinction[];
   /**

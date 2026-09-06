@@ -2091,7 +2091,10 @@ Character identity, appearance, demographics, and guise system.
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
   original on the first post-CG write; admin edits route through it via
-  `ProfileAdmin.save_model`), `Heritage`, `Gender`, `Pronouns`, `MoodOption`
+  `ProfileAdmin.save_model`), `Heritage` (`first_appeared_ic`, #3663: nullable IC date
+  the first of a heritage were born; `character_creation.services.age_bounds` caps CG
+  age at the whole IC years since, floor 18 — Misbegotten 980 AS; `HeritageAdmin` sets
+  it on production), `Gender`, `Pronouns`, `MoodOption`
 - **Mood (#2994):** `CharacterSheet.current_mood` — a sticky, nullable, INTERNAL declared
   state (`feel <state>` telnet / `SetMoodAction`, key `set_mood`). Silent by design: no room
   echo, no scene Interaction row, no look/appearance rendering, no mechanical effect. Owner/

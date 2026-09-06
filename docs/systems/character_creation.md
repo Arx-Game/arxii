@@ -88,7 +88,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 5 | Path | Path selected (`get_path_errors`) |
 | 6 | Gift | Tradition, gift, >=1 technique(s), gift resonance, and Anima Check stat/skill all selected and valid (`compute_magic_errors`, 5-branch return-first gate); renders the `GiftStage` funnel component (#2426 Task 10) |
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
-| 8 | Appearance | Age, height band, height inches, build all set |
+| 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
 | 10 | Final Touches | Always complete (goals are optional) |
 | 11 | Review | Never "complete" -- final submission step |
@@ -165,8 +165,24 @@ from world.character_creation.services import (
     deny_application,             # Staff: deny with 14-day soft-delete
     add_application_comment,      # Add message to thread
     finalize_magic_data,          # Link the draft's chosen catalog Gift/Techniques to the character
+    age_bounds,                   # AgeBounds(minimum, maximum, heritage_first_year) for a
+                                  #   (species, beginnings, ic_now); the one place the CG age rule lives
 )
 ```
+
+**CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
+tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
+when the chosen Beginnings' `Heritage.first_appeared_ic` is set, to the whole IC years
+elapsed since that date per `get_ic_now()` (floor `AGE_MIN`, 18). The first Misbegotten
+were born in 980 AS, so a Misbegotten is at most 20 at a 1000 AS launch and one year
+older per IC year; an environment with no `GameClock` row applies no heritage ceiling.
+`CharacterDraftSerializer.validate_age` reads the rule (species/Beginnings from the same
+request when it changes them, else the instance) and names the cap that bound; the draft
+payload carries read-only `age_min`/`age_max`, and `BeginningsSerializer` nests read-only
+`heritage: {name, first_appeared_ic_year}` (`HeritageAnchorSerializer`). The Appearance
+stage clamps to the payload and, when the year is present, adds the sentence "The first
+Misbegotten were born in 980 AS." after the range; nothing else is said at the cap. Existing
+characters keep their recorded age; only the CG ceiling moves.
 
 **`can_create_character` eligibility gates (#3046):** staff bypass all three
 checks. (1) Email verification is real: it reuses

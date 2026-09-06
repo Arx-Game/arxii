@@ -90,6 +90,15 @@ class Heritage(NaturalKeyMixin, SharedMemoryModel):
             "null and every viewer, including the player, sees 'Unknown' (#2756)."
         ),
     )
+    first_appeared_ic = models.DateField(
+        null=True,
+        blank=True,
+        help_text=(
+            "IC date the first of this heritage were born. When set, character "
+            "generation caps age at the whole IC years elapsed since (floor 18); "
+            "the appearance stage shows the year as a world fact (#3663)."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

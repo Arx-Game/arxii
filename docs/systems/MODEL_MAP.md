@@ -1427,6 +1427,7 @@
 
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' - Add a message comment to an application.`
+- `age_bounds(species: 'Species | None', beginnings: 'Beginnings | None', ic_now: 'datetime | None') -> 'AgeBounds' - The one place the CG age rule lives (#3663).`
 - `approve_application(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str' = '') -> 'None' - Approve an application and finalize the character.`
 - `assemble_origin_prose(sheet: 'CharacterSheet') -> 'str' - Compose the frame narrative + slot answers into prose.`
 - `calculate_weight(height_inches: 'int', build: 'Build') -> 'int' - Calculate weight in pounds from height and build.`

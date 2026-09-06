@@ -32,6 +32,12 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   decline and reduces max health −1 per point via the `max_health`
   ModifierTarget. Crossing the aging floor opens the **dying window**
   (`CharacterVitals.aging_death_ic_deadline`).
+- **Heritage first appearance** — `Heritage.first_appeared_ic` (#3663): the IC
+  date the first of a heritage were born; nobody of that heritage can be older
+  than the whole IC years elapsed since. Read only by CG's `age_bounds` (the
+  ceiling a draft may pick, floor 18); never touches a finalized sheet's axes.
+  The first Misbegotten were born in 980 AS. _Avoid_: heritage start date,
+  age cap field.
 
 ## Mood (#2994)
 

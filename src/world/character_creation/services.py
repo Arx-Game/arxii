@@ -8,7 +8,8 @@ draft management and character finalization.
 from __future__ import annotations
 
 from collections.abc import Iterable
-from datetime import timedelta
+from dataclasses import dataclass
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any, Final
 
@@ -22,6 +23,9 @@ from rest_framework import serializers
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
+    AGE_MAX,
+    AGE_MAX_ETERNAL_YOUTH,
+    AGE_MIN,
     PATH_OF_THE_CHOSEN_NAME,
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
@@ -49,6 +53,7 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.character_creation.models import (
+        Beginnings,
         DraftApplication,
         DraftApplicationComment,
     )
@@ -56,9 +61,54 @@ if TYPE_CHECKING:
     from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.societies.models import Organization
+    from world.species.models import Species
     from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AgeBounds:
+    """The age range character generation accepts for a draft (#3663).
+
+    ``heritage_first_year`` is the IC year the first of the draft's heritage were
+    born, for the appearance stage's world-fact line; None when the heritage
+    carries no anchor.
+    """
+
+    minimum: int
+    maximum: int
+    heritage_first_year: int | None
+
+
+def age_bounds(
+    species: Species | None, beginnings: Beginnings | None, ic_now: datetime | None
+) -> AgeBounds:
+    """The one place the CG age rule lives (#3663).
+
+    The ceiling is the general cap, tightened by the species' eternal youth
+    (#2756) and by the heritage's first appearance: nobody can be older than the
+    whole IC years elapsed since the first of their kind were born, floored at
+    ``AGE_MIN`` so there is always an adult to make. ``ic_now`` is an argument
+    rather than a clock read so the rule is testable without a ``GameClock``
+    row; callers pass ``get_ic_now()``, and an environment with no clock (dev,
+    tests) applies no heritage ceiling.
+    """
+    maximum = AGE_MAX
+    if species is not None and species.eternal_youth:
+        maximum = min(maximum, AGE_MAX_ETERNAL_YOUTH)
+    heritage = beginnings.heritage if beginnings is not None else None
+    first_appeared = heritage.first_appeared_ic if heritage is not None else None
+    if first_appeared is not None and ic_now is not None:
+        elapsed = ic_now.year - first_appeared.year
+        if (ic_now.month, ic_now.day) < (first_appeared.month, first_appeared.day):
+            elapsed -= 1
+        maximum = min(maximum, max(AGE_MIN, elapsed))
+    return AgeBounds(
+        minimum=AGE_MIN,
+        maximum=maximum,
+        heritage_first_year=first_appeared.year if first_appeared is not None else None,
+    )
 
 
 class CharacterCreationError(Exception):

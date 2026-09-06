@@ -13,6 +13,7 @@ import {
   mockCGExplanations,
   mockHeightBandAverage,
   mockHeightBandTall,
+  mockBeginnings,
   mockSpeciesHuman,
 } from '../fixtures';
 import { renderWithCharacterCreationProviders } from '../testUtils';
@@ -71,6 +72,40 @@ describe('AppearanceStage (folio)', () => {
           }),
         }),
       })
+    );
+  });
+
+  it('states the age range from the draft payload and the world fact behind it (#3663)', () => {
+    const misbegotten = createMockDraft({
+      ...draft,
+      age_min: 18,
+      age_max: 20,
+      selected_beginnings: {
+        ...mockBeginnings,
+        heritage: { name: 'Misbegotten', first_appeared_ic_year: 980 },
+      },
+    });
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} draft={misbegotten} />);
+    expect(screen.getByText(/must be between 18 and 20 years\./)).toBeInTheDocument();
+    expect(screen.getByText(/The first Misbegotten were born in 980 AS\./)).toBeInTheDocument();
+  });
+
+  it('says nothing about a heritage that has no anchor', () => {
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
+    expect(screen.getByText(/must be between 18 and 65 years\./)).toBeInTheDocument();
+    expect(screen.queryByText(/were born in/)).toBeNull();
+  });
+
+  it('clamps a typed age to the payload ceiling', async () => {
+    const user = userEvent.setup();
+    const misbegotten = createMockDraft({ ...draft, age: 19, age_min: 18, age_max: 20 });
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} draft={misbegotten} />);
+    const age = screen.getByLabelText('Age');
+    await user.clear(age);
+    await user.type(age, '30');
+    await user.tab();
+    expect(mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ age: 20 }) })
     );
   });
 });
