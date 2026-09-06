@@ -9354,10 +9354,12 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     """Single completion seam for round resolution and the GM end endpoint (#876).
 
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
-    that interaction, before ephemeral-NPC cleanup) → counters → completion
-    event → cleanup → acute-peril scene-round hand-off → aftermath digest
-    (#3551). ABANDONED is administrative closure: skips aftermath and counters
-    but still narrates, emits, cleans up, and delivers the aftermath digest.
+    that interaction, before ephemeral-NPC cleanup) → opponent aftermath pools
+    → companion defeat resolution (#3652) → counters → completion event →
+    cleanup → acute-peril scene-round hand-off → aftermath digest (#3551).
+    ABANDONED is administrative closure: skips aftermath, opponent pools,
+    companion defeats, and counters, but still narrates, emits, cleans up, and
+    delivers the aftermath digest.
 
     Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
     flip with the aftermath/cleanup tail skipped — the double-completion guard
@@ -9377,6 +9379,7 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     if outcome != EncounterOutcome.ABANDONED:
         _apply_aftermath_rules(encounter, outcome, interaction)
         _apply_opponent_aftermath_pools(encounter, outcome)
+        _resolve_companion_defeats(encounter)
         _increment_completion_counters(encounter, outcome)
 
     from world.combat.beat_wiring import install_encounter_beat_trigger  # noqa: PLC0415
@@ -9552,6 +9555,39 @@ def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: Encount
             pool=opponent.aftermath_pool,
             context=ResolutionContext(character=character, scene=encounter.scene),
         )
+
+
+def _resolve_companion_defeats(encounter: CombatEncounter) -> None:
+    """Resolve each defeated bonded companion's stakes-gated consequence (#3652).
+
+    #1873 Decision 4 put this at completion rather than at the defeat moment:
+    all round resolution finishes before consequences resolve, and a DEFEATED
+    companion is never re-targeted mid-resolution. Runs before
+    cleanup_completed_encounter because the die outcome destroys the
+    companion's ObjectDB, and the cleanup sweeps read opponent.objectdb.
+
+    Skipped for ABANDONED by its caller: administrative closure is not a fight,
+    and a GM ending a scene must not kill anyone's companion.
+    """
+    from world.companions.services import (  # noqa: PLC0415
+        narrate_companion_loss,
+        resolve_bonded_companion,
+        resolve_companion_defeat,
+    )
+
+    opponents = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.DEFEATED,
+        allegiance=CombatAllegiance.ALLY,
+        summoned_by__isnull=False,
+    ).select_related("objectdb")
+    for opponent in opponents:
+        companion = resolve_bonded_companion(opponent)
+        if companion is None:
+            continue
+        name = companion.name
+        if resolve_companion_defeat(companion, encounter.risk_level):
+            narrate_companion_loss(name, encounter.scene)
 
 
 def _increment_completion_counters(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
