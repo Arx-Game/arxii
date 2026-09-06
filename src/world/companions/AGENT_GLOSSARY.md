@@ -52,7 +52,7 @@ expiring itself through the sweep inside `get_active_conditions` - no heal verb
 exists or needs to. Gates only `companion fight` and `companion deploy`
 (`CompanionFitToFightPrerequisite`); a Savaged companion stays present,
 poseable, and rideable. Dispellable, not stackable.
-_Avoid_: wounded (a vitals `HEALTH_DESCRIPTORS` health-percentage tier name,
+_Avoid_: wounded (a vitals `WOUND_DESCRIPTIONS` health-percentage tier name,
 not this condition), injured (same collision risk, no defined term here).
 
 **Lance** (#1843):
