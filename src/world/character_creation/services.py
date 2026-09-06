@@ -2820,7 +2820,8 @@ def set_origin_slot(  # noqa: PLR0913 - one write path for every question kind (
     ``value`` (the post-CG write-in editor) leaves an existing tie/figure
     alone instead of silently clearing it (#3660 fix round 1, Controller
     Ruling F); finalize passes both explicitly, so it is unaffected. Pass
-    ``organization=None`` explicitly to clear an existing tie.
+    ``organization=None`` explicitly to clear an existing tie, and
+    ``figure_name=""`` explicitly to clear an existing person.
     """
     defaults: dict[str, object] = {"value": value, "choice": choice}
     if organization is not _KEEP:

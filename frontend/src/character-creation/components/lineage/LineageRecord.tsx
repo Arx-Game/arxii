@@ -1,6 +1,6 @@
 /**
  * Lineage record (#3660): a compact ledger of what the Lineage chapter has
- * cost so far — the chosen Upbringing, each answered priced question, any
+ * cost so far - the chosen Upbringing, each answered priced question, any
  * Distinctions those answers bundled for free, and the running CG tally.
  * Rendered at the end of LineageStage's content.
  */

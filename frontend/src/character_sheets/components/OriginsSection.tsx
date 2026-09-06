@@ -1,5 +1,5 @@
 /**
- * OriginsSection (#3660) — the sheet's origin-story ties, entity-linked and
+ * OriginsSection (#3660) - the sheet's origin-story ties, entity-linked and
  * life-stage-tagged.
  *
  * A card per `kind === 'group'` origin slot: the group (linked when it
@@ -54,7 +54,7 @@ export function OriginsSection({ story, background, isMyCharacter }: OriginsSect
             const tier = reputations?.find((rep) => rep.organization === row.organization_id);
             // `null === null` would otherwise attach every unanchored person row to every
             // unresolved card (an unresolved own-family/served-house anchor is a reachable
-            // backend state) — an unresolved card shows no person rows at all.
+            // backend state) - an unresolved card shows no person rows at all.
             const personRows =
               row.organization_id === null
                 ? []
