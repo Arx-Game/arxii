@@ -14,6 +14,7 @@ from world.character_creation.questionnaire import (
     DraftAnswers,
     anchor_for,
     bundled_distinctions,
+    derived_anchors,
     is_answered,
     resolve_groups,
     visible_slot_ids,
@@ -213,3 +214,65 @@ class AnchorlessGroupPricingTest(TestCase):
         draft.served_house = house
 
         assert draft.calculate_upbringing_cost() == 2 + 4
+
+
+class DerivedAnchorsTest(TestCase):
+    """Ruling L: the frontend can't derive OWN_FAMILY/SERVED_HOUSE orgs on its own."""
+
+    def test_own_family_with_a_house_resolves_to_that_organization(self):
+        family = FamilyFactory(influence=3)
+        org = OrganizationFactory(name="Hold", family=family)
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=False)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.OWN_FAMILY)
+        draft = _draft(template)
+        draft.family = family
+        draft.family_path = "claimed"
+
+        assert derived_anchors(draft) == {
+            slot.id: {"id": org.id, "name": "Hold", "influence": 3},
+        }
+
+    def test_own_family_with_no_house_resolves_to_none(self):
+        family = FamilyFactory(influence=0)
+        template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=False)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.OWN_FAMILY)
+        draft = _draft(template)
+        draft.family = family
+        draft.family_path = "claimed"
+
+        assert derived_anchors(draft) == {slot.id: None}
+
+    def test_served_house_resolves_from_the_drafts_served_house(self):
+        house_family = FamilyFactory(influence=4)
+        house = OrganizationFactory(name="House Ostrean", family=house_family)
+        template = OriginTemplateFactory(allows_name_family=False, allows_no_family=True)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.SERVED_HOUSE)
+        draft = _draft(template)
+        draft.served_house = house
+
+        assert derived_anchors(draft) == {
+            slot.id: {"id": house.id, "name": "House Ostrean", "influence": 4},
+        }
+
+    def test_served_house_unset_resolves_to_none(self):
+        template = OriginTemplateFactory(allows_name_family=False, allows_no_family=True)
+        slot = GroupPromptFactory(template=template, anchor_source=AnchorSource.SERVED_HOUSE)
+        draft = _draft(template)
+
+        assert derived_anchors(draft) == {slot.id: None}
+
+    def test_no_template_selected_returns_empty(self):
+        template = OriginTemplateFactory(allows_name_family=False, allows_no_family=True)
+        GroupPromptFactory(template=template, anchor_source=AnchorSource.OWN_FAMILY)
+        draft = CharacterDraftFactory(selected_origin_template=None)
+
+        assert derived_anchors(draft) == {}
+
+    def test_non_own_family_group_source_is_not_included(self):
+        template = OriginTemplateFactory(allows_name_family=False, allows_no_family=True)
+        listed = GroupPromptFactory(template=template, anchor_source=AnchorSource.LISTED)
+        org = OrganizationFactory(name="Listed House")
+        listed.anchor_orgs.add(org)
+        draft = _draft(template)
+
+        assert derived_anchors(draft) == {}

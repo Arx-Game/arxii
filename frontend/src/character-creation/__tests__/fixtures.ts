@@ -470,6 +470,47 @@ export const mockUpbringingConnections: OriginTemplate = {
   ],
 };
 
+/**
+ * An own-family GROUP question (#3660 ruling L): the server is the only side
+ * that can resolve the claimed family's house org, so this template's answer
+ * lives entirely in `CharacterDraft.derived_anchors`, keyed by this slot's id.
+ */
+export const mockUpbringingOwnFamilyGroup: OriginTemplate = {
+  id: 106,
+  name: 'Born to the House',
+  frame_narrative: 'You grew up under your family roof.',
+  is_active: true,
+  sort_order: 6,
+  cg_point_cost: 0,
+  trust_required: 0,
+  allows_claim_family: true,
+  allows_name_family: false,
+  allows_no_family: false,
+  claimable_kind_ids: [],
+  family_templates: [],
+  slots: [
+    {
+      id: 405,
+      name: 'own_house',
+      prompt: 'What did your house expect of you',
+      example: '',
+      sort_order: 1,
+      is_required: true,
+      applies_to: 'any',
+      allows_text: false,
+      kind: 'group',
+      connection_kind: 'raised_by',
+      life_stage: 'childhood',
+      anchor_source: 'own_family',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
+      choices: [],
+    },
+  ],
+};
+
 // =============================================================================
 // Family Templates (#3648) and the name-path Upbringing that offers one
 // =============================================================================
@@ -682,6 +723,7 @@ export const mockEmptyDraft: CharacterDraft = {
   stats_budget: 5,
   starting_technique_picks: 1,
   bundled_distinctions: [],
+  derived_anchors: {},
 };
 
 export const mockDraftWithArea: CharacterDraft = {

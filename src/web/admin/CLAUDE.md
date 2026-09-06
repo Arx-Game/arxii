@@ -482,9 +482,11 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   today (built on an unsaved `CharacterDraft`, never written to the database),
   authoring checks (`("ok"|"warn", text)`: a group question has a source, a
   `same_anchor_as`/`follow_up_to` points at an earlier question, a branch condition
-  has a follow-up target to gate it, a granted Distinction is active), and backlog
-  counts (questions, groups asked about, people named, answers, distinctions used,
-  cheapest/dearest/largest-refund cost spread over required questions).
+  has a follow-up target to gate it, a granted Distinction is active, an OWN_FAMILY
+  group question warns when a claimable family has no house org for it to resolve
+  through, #3660 fix round 2 ruling L), and backlog counts (questions, groups asked
+  about, people named, answers, distinctions used, cheapest/dearest/largest-refund
+  cost spread over required questions).
 - **What is authored here:** the Upbringing itself, its questions (including the
   `#3660` kind/connection/anchor/follow-up fields), and their answers (including
   `grants_distinction`/`reputation_seed`). **What is not:** a Vacancy - membership in

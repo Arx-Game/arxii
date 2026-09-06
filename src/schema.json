@@ -43967,6 +43967,13 @@ components:
             type: object
             additionalProperties: {}
           readOnly: true
+        derived_anchors:
+          type: object
+          additionalProperties:
+            allOf:
+            - $ref: '#/components/schemas/DerivedAnchor'
+            nullable: true
+          readOnly: true
       required:
       - build
       - bundled_distinctions
@@ -43974,6 +43981,7 @@ components:
       - cg_points_spent
       - claimed_kin_pool
       - claimed_kin_slot
+      - derived_anchors
       - family
       - has_existing_characters
       - height_band
@@ -47657,6 +47665,25 @@ components:
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
+    DerivedAnchor:
+      type: object
+      description: |-
+        An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+
+        No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+        display on an already-answered question, not a picker.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - id
+      - influence
+      - name
     DevelopmentWrite:
       type: object
       description: Serializer for creating a relationship development update.

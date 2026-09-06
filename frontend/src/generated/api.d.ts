@@ -26327,6 +26327,9 @@ export interface components {
       readonly bundled_distinctions: {
         [key: string]: unknown;
       }[];
+      readonly derived_anchors: {
+        [key: string]: components['schemas']['DerivedAnchor'] | null;
+      };
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -28028,6 +28031,17 @@ export interface components {
      * @enum {string}
      */
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
+    /**
+     * @description An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+     *
+     *     No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+     *     display on an already-answered question, not a picker.
+     */
+    DerivedAnchor: {
+      id: number;
+      name: string;
+      influence: number | null;
+    };
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWrite: {
       target_persona_id?: number;

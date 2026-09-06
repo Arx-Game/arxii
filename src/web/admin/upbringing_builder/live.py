@@ -26,6 +26,7 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.serializers import _batch_listed_groups, _batch_pool_groups
+from world.roster.models import Family
 from world.societies.vacancy_services import reachable_vacancies
 
 if TYPE_CHECKING:
@@ -189,6 +190,41 @@ def _distinction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
     return checks
 
 
+def _own_family_house_check(
+    template: OriginTemplate, slots: list[OriginTemplateSlot], position: dict[int, int]
+) -> list[tuple[str, str]]:
+    """OWN_FAMILY GROUP questions warn when a claimable family has no house (#3660 ruling L).
+
+    The own-family GROUP source resolves through ``house_for_family`` (the family's
+    first ``Organization``, ``questionnaire.resolve_groups``), so any playable family
+    this Upbringing's claim path can offer with no house at all leaves the question
+    unresolvable for whoever claims it. At most two queries regardless of how many
+    OWN_FAMILY questions the template has: the claimable families, and whether any of
+    them lacks a house.
+    """
+    own_family_slots = [
+        slot
+        for slot in slots
+        if slot.kind == QuestionKind.GROUP and slot.anchor_source == AnchorSource.OWN_FAMILY
+    ]
+    if not own_family_slots:
+        return []
+    claimable = Family.objects.filter(is_playable=True)
+    kind_ids = list(template.claimable_kinds.values_list("id", flat=True))
+    if kind_ids:
+        claimable = claimable.filter(kind_id__in=kind_ids)
+    if not claimable.filter(organizations__isnull=True).exists():
+        return []
+    return [
+        (
+            "warn",
+            f"Question {position[slot.pk] + 1}: some claimable families have no house; "
+            "the own-family group cannot resolve for them.",
+        )
+        for slot in own_family_slots
+    ]
+
+
 def _checks(
     template: OriginTemplate,
     slots: list[OriginTemplateSlot],
@@ -202,6 +238,7 @@ def _checks(
             checks.extend(_source_checks(slot, placeholder_counts))
         checks.extend(_link_checks(slot, position))
         checks.extend(_branch_check(slot, branch_slot_ids))
+    checks.extend(_own_family_house_check(template, slots, position))
     checks.extend(_distinction_checks(template))
     return checks
 

@@ -58,7 +58,7 @@ from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_PO
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
-    from world.character_creation.questionnaire import BundledDistinction
+    from world.character_creation.questionnaire import BundledDistinction, DerivedAnchor
     from world.skills.models import SkillPointBudget
     from world.societies.houses.models import HouseTemplate
 
@@ -1369,6 +1369,12 @@ class CharacterDraft(SharedMemoryModel):
         from world.character_creation.questionnaire import bundled_distinctions  # noqa: PLC0415
 
         return bundled_distinctions(self)
+
+    def derived_anchors(self) -> dict[int, DerivedAnchor | None]:
+        """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660)."""
+        from world.character_creation.questionnaire import derived_anchors  # noqa: PLC0415
+
+        return derived_anchors(self)
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """

@@ -25,6 +25,7 @@ import {
   mockUpbringingMultiPath,
   mockUpbringingNamed,
   mockUpbringingNamedWithTemplate,
+  mockUpbringingOwnFamilyGroup,
   mockUpbringingUnknown,
   mockVacancyKin,
   mockCGExplanations,
@@ -465,6 +466,37 @@ describe('LineageStage', () => {
 
       expect(
         await screen.findByText('Did your courier runs bring you to the Rouault')
+      ).toBeInTheDocument();
+    });
+
+    it('renders an own-family group question as a fact when derived_anchors resolves it', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithFamily,
+        selected_origin_template: mockUpbringingOwnFamilyGroup,
+        derived_anchors: { '405': { id: 9010, name: 'House Ostrean', gloss: '', influence: 5 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('What did your house expect of you')).toBeInTheDocument();
+      expect(screen.getByText('House Ostrean')).toBeInTheDocument();
+    });
+
+    it('shows the missing-group hint when an own-family question has nothing to resolve to', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithFamily,
+        selected_origin_template: mockUpbringingOwnFamilyGroup,
+        derived_anchors: { '405': null },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(
+        await screen.findByText('No group was found for your family yet. Tell staff.')
       ).toBeInTheDocument();
     });
   });

@@ -59,6 +59,14 @@ class DraftAnswers:
         )
 
 
+class DerivedAnchor(TypedDict):
+    """One OWN_FAMILY/SERVED_HOUSE GROUP question's resolved organization (#3660 ruling L)."""
+
+    id: int
+    name: str
+    influence: int | None
+
+
 class BundledDistinction(TypedDict):
     distinction_id: int
     name: str
@@ -353,3 +361,45 @@ def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
             )
         )
     return out
+
+
+def derived_anchors(draft: CharacterDraft) -> dict[int, DerivedAnchor | None]:
+    """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660 ruling L).
+
+    These two sources have no stored answer to read (``anchor_for`` derives them fresh
+    from the draft every time, see its own docstring), so the frontend cannot tell
+    "not yet resolved" from "resolved but I haven't fetched it" on its own - it needs
+    the server to hand back what it resolved to, or ``None`` when it didn't (a
+    claimable family with no house ``Organization``, or no ``served_house`` picked
+    yet). One flat query lists the qualifying slots; the resolution itself touches at
+    most two organizations (the draft's own family's house, and its served house),
+    each shared across every slot that reads from it.
+    """
+    template = draft.selected_origin_template
+    if template is None:
+        return {}
+    slots = list(
+        template.slots.filter(
+            kind=QuestionKind.GROUP,
+            anchor_source__in=(AnchorSource.OWN_FAMILY, AnchorSource.SERVED_HOUSE),
+        ).values_list("id", "anchor_source")
+    )
+    if not slots:
+        return {}
+    from world.societies.houses.services import house_for_family  # noqa: PLC0415
+
+    org_by_source: dict[str, Organization | None] = {
+        AnchorSource.OWN_FAMILY: house_for_family(draft.family),
+        AnchorSource.SERVED_HOUSE: draft.served_house,
+    }
+    return {slot_id: _derived_anchor_payload(org_by_source[source]) for slot_id, source in slots}
+
+
+def _derived_anchor_payload(org: Organization | None) -> DerivedAnchor | None:
+    if org is None:
+        return None
+    return DerivedAnchor(
+        id=org.id,
+        name=org.name,
+        influence=org.family.influence if org.family_id else None,
+    )

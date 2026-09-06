@@ -77,8 +77,12 @@ and PERSON (a free-text figure, optionally scoped to a GROUP question via
 `same_anchor_as`). `questionnaire.py` is the one seam every caller evaluates the
 questionnaire through - which questions show (`visible_slot_ids`/`is_shown`), which
 groups a question offers (`resolve_groups`), which organization an answer is about
-(`anchor_for`), what influence prices it (`question_influences`), and which
-Distinctions the picked answers bundle (`bundled_distinctions`). `models.py`,
+(`anchor_for`), what influence prices it (`question_influences`), which
+Distinctions the picked answers bundle (`bundled_distinctions`), and - for the two
+GROUP sources with no stored answer to read, OWN_FAMILY/SERVED_HOUSE - what each
+resolved to right now, or `None` when it has nothing to resolve to yet
+(`derived_anchors`, exposed on `CharacterDraftSerializer` since the frontend cannot
+derive either on its own; #3660 fix round 2, controller ruling L). `models.py`,
 `validators.py`, `serializers.py`, and `services.py` all read through it rather than
 re-deriving any of these rules, so they cannot drift apart. Finalize adds
 `_grant_connection_distinctions` (grants a picked answer's `grants_distinction`

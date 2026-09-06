@@ -19,6 +19,7 @@ from world.character_creation.models import (
 )
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionFactory
+from world.roster.factories import FamilyFactory, FamilyKindFactory
 from world.societies.factories import OrganizationFactory
 
 
@@ -225,6 +226,54 @@ class BuilderLiveTest(BuilderTestCase):
         )
         panel = live.for_template(self.template, self.author)
         assert any(kind == "warn" and "No source" in text for kind, text in panel.checks)
+
+    def test_own_family_group_with_a_houseless_claimable_family_is_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        OriginTemplateSlotFactory(
+            template=self.template,
+            sort_order=1,
+            kind=QuestionKind.GROUP,
+            anchor_source=AnchorSource.OWN_FAMILY,
+            name="Own family",
+        )
+        FamilyFactory(is_playable=True)  # no Organization behind it
+        panel = live.for_template(self.template, self.author)
+        assert any(
+            kind == "warn" and "own-family group cannot resolve" in text
+            for kind, text in panel.checks
+        )
+
+    def test_own_family_group_with_every_claimable_family_housed_is_not_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        OriginTemplateSlotFactory(
+            template=self.template,
+            sort_order=1,
+            kind=QuestionKind.GROUP,
+            anchor_source=AnchorSource.OWN_FAMILY,
+            name="Own family",
+        )
+        housed = FamilyFactory(is_playable=True)
+        OrganizationFactory(name="Its House", family=housed)
+        panel = live.for_template(self.template, self.author)
+        assert not any("own-family group cannot resolve" in text for _, text in panel.checks)
+
+    def test_own_family_check_narrows_to_claimable_kinds_when_set(self):
+        from web.admin.upbringing_builder import live
+
+        OriginTemplateSlotFactory(
+            template=self.template,
+            sort_order=1,
+            kind=QuestionKind.GROUP,
+            anchor_source=AnchorSource.OWN_FAMILY,
+            name="Own family",
+        )
+        offered_kind = FamilyKindFactory(name="Offered Kind")
+        self.template.claimable_kinds.add(offered_kind)
+        FamilyFactory(is_playable=True)  # a different (default) kind, houseless, but not offered
+        panel = live.for_template(self.template, self.author)
+        assert not any("own-family group cannot resolve" in text for _, text in panel.checks)
 
     def test_shown_for_choices_without_follow_up_is_a_warn_check(self):
         from web.admin.upbringing_builder import live

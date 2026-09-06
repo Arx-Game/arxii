@@ -418,6 +418,14 @@ export interface CharacterDraft {
   starting_technique_picks: number;
   /** Distinctions the draft's visible, picked Upbringing answers grant (#3660). */
   bundled_distinctions: BundledDistinction[];
+  /**
+   * OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id as a
+   * string, or `null` when that source has nothing to resolve to yet (#3660 ruling
+   * L). The frontend cannot derive these itself (no house org id for a claimed
+   * family, no served-house lookup without the offering Family Template), so the
+   * server hands back what it resolved.
+   */
+  derived_anchors: Record<string, OriginGroup | null>;
 }
 
 export interface Stats {
@@ -1076,8 +1084,13 @@ export function choiceCost(choice: OriginTemplateSlotChoice, influence: number):
  */
 /** Whether a GROUP question has an anchor to answer with, by anchor source (#3660). */
 function hasGroupAnchor(slot: OriginTemplateSlot, draft: CharacterDraft): boolean {
-  if (slot.anchor_source === 'own_family') return draft.family != null;
-  if (slot.anchor_source === 'served_house') return draft.served_house != null;
+  if (slot.anchor_source === 'own_family' || slot.anchor_source === 'served_house') {
+    // The server is the only side that can resolve these (ruling L): a claimable
+    // family with no house org, or no served house picked yet, must read as
+    // unanswered here too, not just at validation - `draft.family`/`served_house`
+    // being set is not the same thing as the org resolving.
+    return draft.derived_anchors[String(slot.id)] != null;
+  }
   return (draft.draft_data.origin_anchors?.[String(slot.id)] ?? null) != null;
 }
 
@@ -1152,17 +1165,14 @@ export function groupsFor(
       const found = groupsFor(target, template, draft).find((g) => g.id === anchorId);
       return found ? [found] : [];
     }
-    case 'served_house': {
-      const familyTemplate = resolveFamilyTemplate(draft);
-      const match = familyTemplate?.served_house_choices.find((c) => c.id === draft.served_house);
-      return match ? [{ id: match.id, name: match.name, gloss: '', influence: null }] : [];
+    case 'served_house':
+    case 'own_family': {
+      // Neither source has a stored answer to look up client-side: the server
+      // resolves the real org (a claimed family's house, or the served house
+      // pick) and hands it back on the draft (#3660 ruling L).
+      const anchor = draft.derived_anchors[String(slot.id)] ?? null;
+      return anchor ? [anchor] : [];
     }
-    case 'own_family':
-      // The real org id isn't known client-side; -1 lets the fact render while
-      // the server resolves the true anchor at PATCH/finalize time (#3660).
-      return draft.family
-        ? [{ id: -1, name: draft.family.name, gloss: '', influence: draft.family.influence }]
-        : [];
     default:
       return [];
   }

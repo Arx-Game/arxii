@@ -10,7 +10,7 @@
  * chosen group's own influence for a GROUP question).
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -173,7 +173,7 @@ function QuestionLabel({ slot }: { slot: OriginTemplateSlot }) {
 }
 
 // =============================================================================
-// TextOrPickQuestion — a write-in prompt or a priced pick-list, as before #3660
+// TextOrPickQuestion - a write-in prompt or a priced pick-list, as before #3660
 // =============================================================================
 
 interface TextOrPickProps {
@@ -244,7 +244,7 @@ function TextOrPickQuestion({
 }
 
 // =============================================================================
-// GroupQuestion — anchors the answer to a real Organization (#3660)
+// GroupQuestion - anchors the answer to a real Organization (#3660)
 // =============================================================================
 
 interface GroupQuestionProps {
@@ -283,7 +283,7 @@ function GroupQuestion({
   // A ref, not state: the guard must take effect the instant it's set, with
   // no render lag, or a re-render triggered by the PATCH itself (a new
   // onSetAnchor closure, a mutation-pending flip) can slip through before a
-  // state update commits and re-fire the auto-PATCH — an infinite loop.
+  // state update commits and re-fire the auto-PATCH - an infinite loop.
   const patchedRef = useRef(false);
 
   // A single-group list is shown as a fact; auto-PATCH it once, the first
@@ -305,6 +305,50 @@ function GroupQuestion({
       : (copy?.origin_group_hint ??
         'The group is real and staff wrote it. What you were to it is yours.');
 
+  let groupDisplay: ReactNode;
+  if (isDerivedAnchor && groups.length === 0) {
+    groupDisplay = (
+      <div
+        className="rounded-md border border-dashed p-2 text-sm text-muted-foreground"
+        data-testid={`origin-group-missing-${slot.id}`}
+      >
+        {copy?.origin_derived_group_missing ??
+          'No group was found for your family yet. Tell staff.'}
+      </div>
+    );
+  } else if (groups.length === 1) {
+    groupDisplay = (
+      <div className="rounded-md border p-2 text-sm" data-testid={`origin-group-fact-${slot.id}`}>
+        <span className="font-medium">{groups[0].name}</span>
+        {groups[0].gloss && (
+          <span className="block text-xs text-muted-foreground">{groups[0].gloss}</span>
+        )}
+      </div>
+    );
+  } else {
+    groupDisplay = (
+      <div className="grid gap-2 sm:grid-cols-2">
+        {groups.map((group) => (
+          <button
+            key={group.id}
+            type="button"
+            aria-pressed={anchorId === group.id}
+            onClick={() => onSetAnchor(anchorId === group.id ? null : group.id)}
+            className={cn(
+              'rounded-md border p-2 text-left text-sm transition-colors',
+              anchorId === group.id ? 'border-primary bg-primary/10' : 'hover:bg-muted/50'
+            )}
+          >
+            <span className="font-medium">{group.name}</span>
+            {group.gloss && (
+              <span className="block text-xs text-muted-foreground">{group.gloss}</span>
+            )}
+          </button>
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
       <QuestionLabel slot={slot} />
@@ -315,34 +359,7 @@ function GroupQuestion({
         <Badge variant="secondary">{LIFE_STAGE_LABELS[slot.life_stage] ?? slot.life_stage}</Badge>
         {!slot.is_required && <Badge variant="outline">Optional</Badge>}
       </div>
-      {groups.length === 1 ? (
-        <div className="rounded-md border p-2 text-sm" data-testid={`origin-group-fact-${slot.id}`}>
-          <span className="font-medium">{groups[0].name}</span>
-          {groups[0].gloss && (
-            <span className="block text-xs text-muted-foreground">{groups[0].gloss}</span>
-          )}
-        </div>
-      ) : (
-        <div className="grid gap-2 sm:grid-cols-2">
-          {groups.map((group) => (
-            <button
-              key={group.id}
-              type="button"
-              aria-pressed={anchorId === group.id}
-              onClick={() => onSetAnchor(anchorId === group.id ? null : group.id)}
-              className={cn(
-                'rounded-md border p-2 text-left text-sm transition-colors',
-                anchorId === group.id ? 'border-primary bg-primary/10' : 'hover:bg-muted/50'
-              )}
-            >
-              <span className="font-medium">{group.name}</span>
-              {group.gloss && (
-                <span className="block text-xs text-muted-foreground">{group.gloss}</span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
+      {groupDisplay}
       {slot.choices.length > 0 && (
         <div className="grid gap-2 sm:grid-cols-2">
           {slot.choices.map((choice) => {
@@ -391,7 +408,7 @@ function GroupQuestion({
 }
 
 // =============================================================================
-// PersonQuestion — names someone of the player's own (#3660)
+// PersonQuestion - names someone of the player's own (#3660)
 // =============================================================================
 
 interface PersonQuestionProps {

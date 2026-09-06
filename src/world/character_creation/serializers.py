@@ -424,7 +424,7 @@ def _gloss(description: str) -> str:
     """First line of ``description``, cut at a word boundary to <= 160 chars.
 
     No sentence-detection (a "St." abbreviation split on ". " was the bug this
-    replaced, #3660 ruling C) and no trailing ellipsis — just the last whole
+    replaced, #3660 ruling C) and no trailing ellipsis - just the last whole
     word that still fits. An empty description gives "".
     """
     first_line = description.split("\n", 1)[0].strip()
@@ -451,7 +451,7 @@ def _batch_listed_groups(
     """LISTED slots' offered groups: one query over the ``anchor_orgs`` M2M (#3660 ruling D).
 
     Every LISTED slot on the template shares this single query over the through
-    table (joined to ``Organization``), grouped by slot id in Python — never a
+    table (joined to ``Organization``), grouped by slot id in Python - never a
     per-slot ``slot.anchor_orgs.all()`` call.
     """
     slot_ids = [
@@ -539,6 +539,18 @@ class OriginGroupSerializer(serializers.Serializer):
     id = serializers.IntegerField()
     name = serializers.CharField()
     gloss = serializers.CharField(allow_blank=True)
+    influence = serializers.IntegerField(allow_null=True)
+
+
+class DerivedAnchorSerializer(serializers.Serializer):
+    """An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+
+    No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+    display on an already-answered question, not a picker.
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
     influence = serializers.IntegerField(allow_null=True)
 
 
@@ -921,6 +933,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # Distinctions the Upbringing answers grant, shown locked in the Distinctions
     # stage so a player can't also hand-pick one already bundled in (#3660).
     bundled_distinctions = serializers.SerializerMethodField()
+    # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
+    # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
+    derived_anchors = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -978,6 +993,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_budget",
             "starting_technique_picks",
             "bundled_distinctions",
+            "derived_anchors",
         ]
         read_only_fields = [
             "id",
@@ -991,6 +1007,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_budget",
             "starting_technique_picks",
             "bundled_distinctions",
+            "derived_anchors",
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
@@ -1045,6 +1062,16 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
         """Distinctions the Upbringing answers grant; shown locked in Distinctions (#3660)."""
         return list(obj.bundled_distinctions())
+
+    @extend_schema_field(serializers.DictField(child=DerivedAnchorSerializer(allow_null=True)))
+    def get_derived_anchors(self, obj: CharacterDraft) -> dict[str, dict | None]:
+        """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660).
+
+        JSON object keys are always strings, so a slot id that ``derived_anchors``
+        keys by ``int`` comes back here keyed by ``str`` - the frontend looks each
+        slot up by ``String(slot.id)``.
+        """
+        return {str(slot_id): anchor for slot_id, anchor in obj.derived_anchors().items()}
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""

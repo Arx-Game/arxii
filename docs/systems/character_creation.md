@@ -392,7 +392,14 @@ realm" (`pool`, filtered by `anchor_org_type`/`anchor_society`, `exclude_covert`
 frontend auto-fills it, as a SAME_AS question only ever offers the one group), "The
 house the character's family served" (`served_house`) and "The character's own
 family" (`own_family`): the last two need no `origin_anchors` entry at all, since
-`questionnaire.anchor_for` derives the group fresh from the draft every time.
+`questionnaire.anchor_for` derives the group fresh from the draft every time. The
+frontend has no way to derive either on its own (no house-org id for a claimed
+family, no served-house lookup without the offering Family Template), so
+`CharacterDraftSerializer.derived_anchors` (backed by `questionnaire.derived_anchors`)
+hands back what each such question resolved to, keyed by slot id, or `null` when it
+has nothing to resolve to yet (a claimable family with no house org, or no served
+house picked): the answered-ness check on both sides then agrees (#3660 fix round 2,
+controller ruling L).
 
 **Show-when rules (`is_shown`):** a prompt shows when its `applies_to` matches the
 resolved family path (or is `any`), AND (it has no `follow_up_to`, OR its `follow_up_to`
