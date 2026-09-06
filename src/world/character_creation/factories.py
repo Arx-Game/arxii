@@ -11,18 +11,24 @@ from world.character_creation.constants import (
     CommentType,
     ConnectionKind,
     LifeStage,
+    OfferArrival,
+    OfferChapter,
     QuestionKind,
+    TraditionState,
 )
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
     CharacterDraft,
+    DistinctionOffer,
     DraftApplication,
     DraftApplicationComment,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
+    SchoolingLine,
     StartingArea,
+    TraditionStateLine,
 )
 from world.realms.models import Realm
 from world.roster.constants import COMMONER_KIND_NAME
@@ -193,3 +199,31 @@ def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:
         allows_name_family=False,
         allows_no_family=True,
     )
+
+
+class TraditionStateLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = TraditionStateLine
+        django_get_or_create = ("state",)
+
+    state = TraditionState.LIVING_MASTERS
+    entry_line = factory.LazyAttribute(lambda o: f"{o.state} line")
+
+
+class SchoolingLineFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = SchoolingLine
+        django_get_or_create = ("rank",)
+
+    rank = 0
+    name = factory.LazyAttribute(lambda o: f"Schooling {o.rank}")
+    player_line = "A line."
+
+
+class DistinctionOfferFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = DistinctionOffer
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    chapter = OfferChapter.APPEARANCE
+    arrives_as = OfferArrival.CHOICE

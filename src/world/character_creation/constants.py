@@ -100,6 +100,38 @@ class Stage(models.IntegerChoices):
     REVIEW = 11, "Review"
 
 
+class TraditionState(models.TextChoices):
+    """How a tradition on a Beginning's slate reads at the tradition step (#3675).
+
+    Decides which standard line the entry prints and which drawback, if any,
+    picking it carries into the draft. Read by the tradition serializer, the
+    offers module, the Golden Hare obligation and tradition membership; never
+    matched by a tradition's name.
+    """
+
+    SELF_TAUGHT = "self_taught", "Self-taught"
+    TEACHERS_GONE = "teachers_gone", "Teachers gone"
+    LIVING_MASTERS = "living_masters", "Living masters"
+
+
+class OfferChapter(models.TextChoices):
+    """The CG chapter an offer line is shown in (#3675)."""
+
+    TRADITION_STEP = "tradition_step", "Gift, tradition step"
+    GLIMPSE = "glimpse", "Gift, the Glimpse"
+    LINEAGE = "lineage", "Lineage"
+    APPEARANCE = "appearance", "Appearance"
+    IDENTITY = "identity", "Identity"
+
+
+class OfferArrival(models.TextChoices):
+    """How an offered distinction arrives in the draft (#3675)."""
+
+    CHOICE = "choice", "A choice, priced"
+    BUNDLED = "bundled", "Bundled free with its opener"
+    CARRIED = "carried", "Carried by its opener"
+
+
 class StartingAreaAccessLevel(models.TextChoices):
     """Access levels for starting areas in character creation."""
 
