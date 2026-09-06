@@ -46,10 +46,23 @@ light/dark selectors below, so the page follows the theme toggle.
   #upbringing-builder-root .question-module > fieldset.module:last-child .form-row:last-child {
     border-bottom: none;
   }
-  #upbringing-builder-root .module h2 .kind-chip { float: right; }
+  /* The header bar puts the title left and the chip pair right, in the order
+     they are written. Floating each chip on its own reverses that pair (#3667
+     demo-fidelity review). */
+  #upbringing-builder-root .question-module > h2 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  #upbringing-builder-root .kind-chips {
+    display: inline-flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
   #upbringing-builder-root .kind-chip {
     display: inline-block;
-    margin-left: 0.5rem;
     padding: 0.05rem 0.45rem;
     border-radius: 2px;
     background: rgba(255, 255, 255, 0.18);
@@ -97,6 +110,14 @@ light/dark selectors below, so the page follows the theme toggle.
     opacity: 0.75;
   }
   #upbringing-builder-root .live-line a { color: inherit; }
+
+  /* A note that belongs to the fieldset above it, not to any one field in it:
+     admin's own .help sits inside a form row, so it needs the row's padding
+     back. */
+  #upbringing-builder-root .ub-fieldset-note {
+    padding: 0 10px 10px;
+    margin-top: 0;
+  }
 
   /* The rail */
   #upbringing-builder-root .ub-rail .module { margin-bottom: 1rem; }

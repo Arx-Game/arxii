@@ -36,13 +36,27 @@
 
         <div class="module" id="upbringing-module">
           <h2>The Upbringing</h2>
-          <div class="description">What the player sees for this Upbringing: its frame, its
-            cost, and which family paths it allows.</div>
+          <div class="description">An Upbringing is one route into a Beginning: how a
+            character was born and came to be standing where they stand when the Durance
+            starts. A Beginning can offer several. The player picks one card, then answers
+            this Upbringing's questions in order.</div>
           {% if form.non_field_errors %}
           <p class="errornote">{{ form.non_field_errors }}</p>
           {% endif %}
           {% for fieldset in form|upbringing_fieldsets %}
             {% include "admin/includes/fieldset.html" with heading_level=3 prefix="upbringing" id_prefix=forloop.counter0 id_suffix=0 %}
+            {% if fieldset.name == "Family paths" %}
+            <div class="help ub-fieldset-note">Which family paths this route opens: claiming a
+              staff family (and an open place on it, if the family offers one), naming a new
+              powerless family from a Family Template, or none (the tarot surname). The family
+              block is asked in the middle of the questions, where Question order puts it.
+              Groups asked about below are ties, not the character's family.</div>
+            {% if live %}
+            <p class="live-line ub-fieldset-note">Open places reachable from this route today:
+              {{ live.open_places }}. Retainer places on staff families are offered through the
+              Service panel whatever the path.</p>
+            {% endif %}
+            {% endif %}
           {% endfor %}
         </div>
 
