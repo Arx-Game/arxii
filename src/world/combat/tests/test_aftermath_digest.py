@@ -13,7 +13,12 @@ from world.checks.outcome_models import ConsequenceOutcome
 from world.checks.types import CheckResult
 from world.combat.aftermath import build_aftermath_digest, render_aftermath_digest
 from world.combat.beat_wiring import install_encounter_beat_trigger, wire_encounter_beat_triggers
-from world.combat.constants import EncounterOutcome, ParticipantStatus, RiskLevel
+from world.combat.constants import (
+    AFTERMATH_ATTRIBUTION_WINDOW,
+    EncounterOutcome,
+    ParticipantStatus,
+    RiskLevel,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -277,6 +282,30 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         companion = CompanionFactory(owner=sheet, name="Ashfoot")
         Companion.objects.filter(pk=companion.pk).update(
             released_at=encounter.completed_at - timedelta(minutes=1)
+        )
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.companions_lost, [])
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertNotIn("You lost", text)
+
+    def test_digest_excludes_companion_released_exactly_at_the_window_edge(self) -> None:
+        """The window's upper bound is exclusive: a companion released exactly at
+
+        completed_at + AFTERMATH_ATTRIBUTION_WINDOW belongs to whatever comes next
+        in the same scene, not this encounter (proves released_at__lt=end, not
+        __lte=end).
+        """
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+        sheet = participant.character_sheet
+
+        complete_encounter(encounter, outcome=EncounterOutcome.DEFEAT)
+        encounter.refresh_from_db()
+
+        companion = CompanionFactory(owner=sheet, name="Duskwing")
+        Companion.objects.filter(pk=companion.pk).update(
+            released_at=encounter.completed_at + AFTERMATH_ATTRIBUTION_WINDOW
         )
 
         digest = build_aftermath_digest(encounter, participant)
