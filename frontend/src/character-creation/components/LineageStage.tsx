@@ -50,6 +50,7 @@ import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
 import { FamilyTemplateForm } from './lineage/FamilyTemplateForm';
+import { LineageRecord } from './lineage/LineageRecord';
 
 interface LineageStageProps {
   draft: CharacterDraft;
@@ -150,6 +151,7 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               template={template}
               path={path}
               influence={influence}
+              copy={copy}
               scope="any"
             />
             <FamilyPathSection
@@ -165,8 +167,10 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               template={template}
               path={path}
               influence={influence}
+              copy={copy}
               scope="path"
             />
+            <LineageRecord draft={draft} template={template} path={path} />
           </>
         )}
       </div>
