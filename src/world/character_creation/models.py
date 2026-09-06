@@ -935,6 +935,10 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
                     )
                 }
             )
+        if self.slot.kind not in (QuestionKind.PICK, QuestionKind.GROUP):
+            raise ValidationError(
+                {"slot": "Answers belong only to a 'pick one answer' or 'pick a group' question."}
+            )
 
 
 class CharacterOriginSlot(SharedMemoryModel):

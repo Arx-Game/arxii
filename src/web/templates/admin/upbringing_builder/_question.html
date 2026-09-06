@@ -1,0 +1,73 @@
+{% load upbringing_builder_tags %}
+<div class="module question-module">
+  {% for hidden in question_form.hidden_fields %}{{ hidden }}{% endfor %}
+  <h2>
+    Question {{ forloop.counter }} &middot; {{ question_form.name }}
+    <span class="kind-chip">{{ question_form.instance.get_kind_display }}</span>
+  </h2>
+
+  {% if question_form.instance.kind == "text" %}
+  <p>The player writes a free-text answer.</p>
+  {% elif question_form.instance.kind == "pick" %}
+  <p>The player picks one priced answer from the list below.</p>
+  {% elif question_form.instance.kind == "group" %}
+  <p>The player picks a group and one priced stance toward it.</p>
+  {% elif question_form.instance.kind == "person" %}
+  <p>The player names someone of their own, optionally inside an earlier group question.</p>
+  {% endif %}
+
+  {% if question_form.non_field_errors %}
+  <p class="errornote">{{ question_form.non_field_errors }}</p>
+  {% endif %}
+
+  <p>
+    <label>Kind of question {{ question_form.kind }}</label>
+    <label>Required {{ question_form.is_required }}</label>
+    <label>Order {{ question_form.sort_order }}</label>
+    <label>Delete {{ question_form.DELETE }}</label>
+  </p>
+
+  <p><label>Question<br>{{ question_form.prompt }}</label></p>
+  <p><label>Example<br>{{ question_form.example }}</label></p>
+
+  <p>
+    <label>What the tie was {{ question_form.connection_kind }}</label>
+    <label>When {{ question_form.life_stage }}</label>
+  </p>
+  <p><label>Which groups can be picked {{ question_form.anchor_source }}</label></p>
+  <p>
+    <label>Type {{ question_form.anchor_org_type }}</label>
+    <label>Realm {{ question_form.anchor_society }}</label>
+  </p>
+  <p>
+    <label>Groups {{ question_form.anchor_orgs }}</label>
+    <label>Exclude covert groups {{ question_form.exclude_covert }}</label>
+  </p>
+  <p><label>Same group as / belongs to {{ question_form.same_anchor_as }}</label></p>
+  <p><label>Shown after {{ question_form.follow_up_to }}</label></p>
+  <p><label>Only for these answers {{ question_form.shown_for_choices }}</label></p>
+  <p>
+    <label>Only on family path {{ question_form.applies_to }}</label>
+    <label>Player may write in {{ question_form.allows_text }}</label>
+  </p>
+
+  {% if question_form.instance.pk %}
+    {% if question_form.instance.kind == "pick" or question_form.instance.kind == "group" %}
+      {% with slot_answers=answers|dict_get:question_form.instance.pk %}
+      {% include "admin/upbringing_builder/_answers.html" with slot=question_form.instance formset=slot_answers %}
+      {% endwith %}
+      {% if question_form.instance.kind == "group" %}
+        {% with matched=live.groups_by_slot|dict_get:question_form.instance.pk %}
+        {% if matched is not None %}
+        <p class="live-line">
+          Matches {{ matched|length }} group{{ matched|length|pluralize }} today:
+          {% for org in matched %}{{ org.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        </p>
+        {% endif %}
+        {% endwith %}
+      {% endif %}
+    {% endif %}
+  {% else %}
+    <p class="help">{{ new_question_answers_help }}</p>
+  {% endif %}
+</div>
