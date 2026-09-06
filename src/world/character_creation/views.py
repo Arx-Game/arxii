@@ -458,9 +458,11 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             else {}
         )
         # The three standard state lines and the standard schooling stances are
-        # shared by every tradition row in this response (#3675) — one query each,
+        # shared by every tradition row in this response (#3675), one query each,
         # not one per row.
-        context["state_lines"] = {sl.state: sl for sl in TraditionStateLine.objects.all()}
+        context["state_lines"] = {
+            sl.state: sl for sl in TraditionStateLine.objects.select_related("carries")
+        }
         context["schooling"] = schooling_rows()
         return context
 

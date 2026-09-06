@@ -699,7 +699,7 @@ class CGGlimpseTagEndpointTest(TestCase):
         """Prefetch guard: same query count with 2 tags (+offers) as with 6.
 
         ``GlimpseTag``/``DistinctionOffer`` are SharedMemoryModel (idmapper)
-        rows — once an instance is fetched with its prefetch populated,
+        rows, once an instance is fetched with its prefetch populated,
         re-fetching the *same* identity-mapped row skips the prefetch query
         entirely (a feature, not a bug: see the ``sharedmemory-model`` skill).
         That would make the second capture look artificially cheaper rather than

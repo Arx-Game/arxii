@@ -300,7 +300,7 @@ class SchoolingLineSerializer(serializers.Serializer):
 def schooling_rows() -> list[dict]:
     """The three standard schooling lines under a living tradition, priced and offer-linked.
 
-    Shared by every tradition whose slate entry is ``living_masters`` state (#3675) —
+    Shared by every tradition whose slate entry is ``living_masters`` state (#3675),
     not per-tradition data, so it is built once per request in
     ``TraditionViewSet.get_serializer_context`` (key ``"schooling"``) and read from
     there by every row's ``TraditionSerializer.get_schooling``. Also the fallback this
@@ -490,6 +490,28 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
         return obj.id in self.context.get("tradition_technique_ids", set())
 
 
+def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
+    """One ``DistinctionOffer`` shaped for embedding on a Glimpse tag or Upbringing
+    answer row (#3675). ``name`` falls back to the distinction's own name when the
+    offer's ``name`` is blank (per ``DistinctionOffer.name``'s help text). Shared by
+    ``CGGlimpseTagSerializer.get_offers`` (``with_arrival=False``, since a Glimpse
+    offer is always a priced choice) and
+    ``OriginTemplateSlotChoiceSerializer.get_offers`` (``with_arrival=True``, since a
+    Lineage answer's offer can arrive bundled, carried, or as a choice).
+    """
+    row = {
+        "offer_id": offer.id,
+        "distinction_id": offer.distinction_id,
+        "name": offer.name or offer.distinction.name,
+        "player_line": offer.player_line,
+        "cost_per_rank": offer.distinction.cost_per_rank,
+        "max_rank": offer.distinction.max_rank,
+    }
+    if with_arrival:
+        row["arrives_as"] = offer.arrives_as
+    return row
+
+
 class CGGlimpseTagOfferSerializer(serializers.Serializer):
     """A ``DistinctionOffer`` embedded on a glimpse tag row (#3675)."""
 
@@ -529,17 +551,7 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
     @extend_schema_field(CGGlimpseTagOfferSerializer(many=True))
     def get_offers(self, obj: GlimpseTag) -> list[dict]:
         rows = obj.cached_offers  # Prefetch(to_attr=...), select_related("distinction")
-        return [
-            {
-                "offer_id": offer.id,
-                "distinction_id": offer.distinction_id,
-                "name": offer.name or offer.distinction.name,
-                "player_line": offer.player_line,
-                "cost_per_rank": offer.distinction.cost_per_rank,
-                "max_rank": offer.distinction.max_rank,
-            }
-            for offer in rows
-        ]
+        return [_offer_row(offer, with_arrival=False) for offer in rows]
 
 
 _GLOSS_MAX_LEN = 160
@@ -713,18 +725,7 @@ class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
         ``Prefetch(to_attr=)`` on this SharedMemoryModel row (ADR-0263).
         """
         offers = self.context.get("offers_by_choice", {}).get(obj.id, [])
-        return [
-            {
-                "offer_id": offer.id,
-                "distinction_id": offer.distinction_id,
-                "name": offer.name or offer.distinction.name,
-                "player_line": offer.player_line,
-                "arrives_as": offer.arrives_as,
-                "cost_per_rank": offer.distinction.cost_per_rank,
-                "max_rank": offer.distinction.max_rank,
-            }
-            for offer in offers
-        ]
+        return [_offer_row(offer, with_arrival=True) for offer in offers]
 
 
 class OriginTemplateSlotSerializer(serializers.ModelSerializer):

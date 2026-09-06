@@ -199,8 +199,9 @@ class TraditionListLeakTests(TestCase):
         TraditionStateLineFactory(
             state=TraditionState.SELF_TAUGHT, entry_line="Self-taught", carries=drawback
         )
-        TraditionStateLineFactory(state=TraditionState.TEACHERS_GONE, entry_line="Teachers gone")
         TraditionStateLineFactory(state=TraditionState.LIVING_MASTERS, entry_line="Living masters")
+        # Deliberately no TraditionStateLine row for TEACHERS_GONE, to cover a
+        # slate line whose state has no standard line authored yet.
 
         training = DistinctionFactory(name="Tradition Training", cost_per_rank=1)
         SchoolingLineFactory(rank=0, name="Untrained", player_line="No training yet.")
@@ -217,6 +218,7 @@ class TraditionListLeakTests(TestCase):
         beginning = BeginningsFactory(name="StateLineBeginning")
         self_taught_tradition = TraditionFactory(name="SelfTaughtTradition")
         living_tradition = TraditionFactory(name="LivingTradition")
+        unlined_tradition = TraditionFactory(name="UnlinedTradition")
         BeginningTraditionFactory(
             beginning=beginning,
             tradition=self_taught_tradition,
@@ -227,6 +229,11 @@ class TraditionListLeakTests(TestCase):
             tradition=living_tradition,
             state=TraditionState.LIVING_MASTERS,
             own_wording="Raised in the watch-house",
+        )
+        BeginningTraditionFactory(
+            beginning=beginning,
+            tradition=unlined_tradition,
+            state=TraditionState.TEACHERS_GONE,
         )
 
         response = self.client.get(
@@ -247,6 +254,11 @@ class TraditionListLeakTests(TestCase):
         assert living_row["schooling"][1]["techniques"] == 2
         assert living_row["schooling"][1]["offer_id"] == offer.id
         assert living_row["schooling"][0]["offer_id"] is None
+        assert living_row["schooling"][2]["offer_id"] is None
+
+        unlined_row = rows[unlined_tradition.id]
+        assert unlined_row["state_line"] == ""
+        assert unlined_row["refund"] == 0
 
 
 class SelectTraditionTests(TestCase):
