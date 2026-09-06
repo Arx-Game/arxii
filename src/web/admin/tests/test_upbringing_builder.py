@@ -212,6 +212,47 @@ class BuilderSaveTest(BuilderTestCase):
         assert resp.status_code == 302
         assert OriginTemplateSlot.objects.get(pk=text_q.pk).prompt == "Where did you grow up"
 
+    def test_naming_path_saves_with_the_family_template_the_operator_just_picked(self):
+        """Reported from production: the name path could never be saved (#3673).
+
+        ``OriginTemplate.clean()`` asked ``self.family_templates.exists()`` - the
+        rows already in the database. A ModelForm runs the instance's
+        ``full_clean()`` in ``_post_clean()``, which is before ``save_m2m()``, so
+        the check read the state the operator was trying to change and rejected
+        every save of an Upbringing whose name path was being turned on. Ticking
+        the box and highlighting the one Family Template in the box failed
+        identically, because what was selected was never what got looked at.
+        """
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        self.client.force_login(self.author)
+        self.template.family_templates.clear()
+        charter = HouseTemplateFactory(name="Caretaker Household")
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(
+                allows_name_family="on",
+                family_templates=[str(charter.pk)],
+            ),
+        )
+        assert resp.status_code == 302, (
+            "the name path was refused with the Family Template the operator picked: "
+            f"{resp.context['form'].errors.as_text() if resp.context else resp.status_code}"
+        )
+        self.template.refresh_from_db()
+        assert list(self.template.family_templates.all()) == [charter]
+
+    def test_naming_path_is_still_refused_with_no_family_template_picked(self):
+        """The rule itself stands: it now reads what was submitted (#3673)."""
+        self.client.force_login(self.author)
+        self.template.family_templates.clear()
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(allows_name_family="on", family_templates=[]),
+        )
+        assert resp.status_code == 200
+        assert "family_templates" in resp.context["form"].errors
+
     def test_add_answer_row_saves_a_second_choice(self):
         """Ruling H: the client-cloned second row posts and saves like any other."""
         self.client.force_login(self.author)

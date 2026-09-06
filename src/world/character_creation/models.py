@@ -671,12 +671,14 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             return account_trust >= self.trust_required
         return True
 
-    def clean(self) -> None:
-        super().clean()
-        if self.allows_name_family and self.pk and not self.family_templates.exists():
-            raise ValidationError(
-                {"family_templates": "Offer at least one Family Template when naming is allowed."}
-            )
+    # No ``clean()`` for the name path's Family Template rule. A model's
+    # ``clean()`` can only read ``self.family_templates`` off the database, and a
+    # ModelForm runs ``full_clean()`` in ``_post_clean()`` - before
+    # ``save_m2m()`` - so the check read the state the operator was submitting a
+    # change to and refused every save that turned the name path on (#3673,
+    # reported from production). The rule is enforced where the submitted value
+    # exists, in ``UpbringingForm.clean()``, and a route already saved without
+    # one is flagged in the Builder's rail checks.
 
 
 class OriginTemplateSlotManager(NaturalKeyManager):
