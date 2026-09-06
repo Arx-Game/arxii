@@ -153,3 +153,6 @@ src/schema.json
 # shared across machines.
 tools/skills/workflow-friction-audit/secret-patterns.txt
 .plan.md
+
+# Written by `arx manage squashmigrations arxii` for the PR body (ADR-0276); never committed.
+regeneration-report.md

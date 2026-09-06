@@ -42,7 +42,8 @@ jobs:
     environment: prod        # gated: required-reviewer approval before run
     # Provisioning + converge; refuse to hang forever. 45 minutes could not fit
     # a first run: provisioning takes ~6 minutes and the initial migration adds
-    # ~80 (143 arxii migrations at ~30-35 s each on a 2-core box), so the guard
+    # a full migration replay on top (48 minutes on a dev box at 227 migrations
+    # before ADR-0276's regeneration; #3656 has the current figure), so the guard
     # fired every time before the database was built. Steady-state converges
     # apply no migrations and finish well inside 15 minutes; this ceiling only
     # has to cover the once-per-database first run.

@@ -60,8 +60,40 @@ class MakemigrationsResolutionTests(SimpleTestCase):
         assert isinstance(command, LinearMigrationsCommand)
 
     def test_linear_migrations_keeps_its_own_commands(self) -> None:
-        """Only ``makemigrations`` overlaps; the reorder must not shadow the rest."""
+        """``makemigrations`` and ``squashmigrations`` are ours on purpose; the rest must
+        not be shadowed by the reorder."""
         commands = get_commands()
 
-        for name in ("squashmigrations", "rebase_migration", "create_max_migration_files"):
+        for name in ("rebase_migration", "create_max_migration_files"):
             assert commands[name] == "django_linear_migrations", name
+
+
+class SquashmigrationsResolutionTests(SimpleTestCase):
+    def test_squashmigrations_resolves_to_core_management(self) -> None:
+        """Django's and django-linear-migrations' squash must both lose (ADR-0276)."""
+        assert get_commands()["squashmigrations"] == "core_management"
+
+    def test_range_arguments_are_refused(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("squashmigrations", "arxii", "0001_initial", "0002_x")
+
+    def test_other_app_labels_are_refused(self) -> None:
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+
+        with self.assertRaises(CommandError):
+            call_command("squashmigrations", "objects")
+
+
+class MigrateResolutionTests(SimpleTestCase):
+    def test_migrate_resolves_to_core_management(self) -> None:
+        """The generation guard (ADR-0276) only runs if our ``migrate`` wins resolution."""
+        assert get_commands()["migrate"] == "core_management"
+
+    def test_resolved_migrate_is_the_guarded_one(self) -> None:
+        command = load_command_class("core_management", "migrate")
+
+        assert hasattr(command, "GENERATION_GUARD_BYPASS_ENV")

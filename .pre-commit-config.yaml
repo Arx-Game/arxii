@@ -9,11 +9,6 @@ repos:
       - id: end-of-file-fixer
       - id: check-ast
       - id: check-added-large-files
-        # world/migrations/0001_initial.py is the single collapsed-app initial
-        # migration (#2906): one CreateModel per model across every former
-        # world.* sub-app, ~2.8MB by construction. It is the only migration
-        # that will ever be this size — later migrations are incremental.
-        exclude: ^src/world/migrations/0001_initial\.py$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
@@ -209,6 +204,12 @@ repos:
         language: system
         pass_filenames: false
         files: ^(src/world/scenes/(models\.py|sql/partition_interaction_.*\.sql))$
+      - id: lint-migration-generations
+        name: No migration reuses or depends on an earlier generation's name (ADR-0276)
+        entry: uv run python tools/lint_migration_generations.py
+        language: system
+        pass_filenames: false
+        files: ^src/world/migrations/.*\.py$
       - id: standalone-sql-wiring
         name: Enforce standalone SQL is wired into both schema paths
         entry: uv run python tools/check_standalone_sql_wiring.py
