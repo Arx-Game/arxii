@@ -53,11 +53,29 @@ class FamilySerializer(serializers.ModelSerializer):
         read_only_fields = ["id"]
 
     def get_born_particle(self, obj: Family) -> str:
+        """The born form: the list view's batched pair, else a direct resolve.
+
+        Same shape as ``get_inherited`` below. ``FamilyViewSet.list()`` puts
+        ``particles_by_family`` (three flat queries for the whole response)
+        in context; a family the grouping omits is housed nowhere, which is
+        the blank particle. Nested single-object use (e.g.
+        ``FamilyTreeSerializer.family``) never provides the key and falls
+        back to ``resolve_particle``, a bounded handful of queries for one
+        row rather than a loop.
+        """
+        grouping = self.context.get("particles_by_family")
+        if grouping is not None:
+            particles = grouping.get(obj.id)
+            return particles.born if particles is not None else ""
         from world.societies.houses.services import resolve_particle  # noqa: PLC0415
 
         return resolve_particle(obj)
 
     def get_taken_in_particle(self, obj: Family) -> str:
+        grouping = self.context.get("particles_by_family")
+        if grouping is not None:
+            particles = grouping.get(obj.id)
+            return particles.taken_in if particles is not None else ""
         from world.societies.houses.services import resolve_particle  # noqa: PLC0415
 
         return resolve_particle(obj, taken_in=True)
