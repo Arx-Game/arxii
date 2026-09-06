@@ -10,6 +10,7 @@ from evennia.utils.test_resources import EvenniaTestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.content import ensure_companion_content
+from world.companions.factories_combat import create_companion_defeat_pool
 from world.magic.specialization.services import grant_gift_to_character
 
 
@@ -17,6 +18,7 @@ class CompanionCombatBridgeE2ETests(EvenniaTestCase):
     def setUp(self) -> None:
         from evennia import create_object
 
+        create_companion_defeat_pool()
         self.room = create_object("typeclasses.rooms.Room", key="Combat Room")
         self.sheet = CharacterSheetFactory()
         self.owner = self.sheet.character

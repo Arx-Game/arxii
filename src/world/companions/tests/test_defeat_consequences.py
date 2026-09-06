@@ -4,10 +4,14 @@ from django.test import TestCase
 
 from world.combat.constants import RiskLevel
 from world.companions.factories import CompanionFactory
+from world.companions.factories_combat import create_companion_defeat_pool
 from world.companions.services import resolve_companion_defeat
 
 
 class CompanionDefeatConsequenceTests(TestCase):
+    def setUp(self) -> None:
+        create_companion_defeat_pool()
+
     def test_low_risk_defeat_leaves_companion_active(self):
         companion = CompanionFactory()
         died = resolve_companion_defeat(companion, RiskLevel.LOW)
@@ -64,3 +68,16 @@ class CompanionDefeatConsequenceTests(TestCase):
                 self.assertFalse(companion.is_active)
                 self.assertIsNotNone(companion.released_at)
         self.assertGreater(released_count, 0)
+
+
+class CompanionDefeatPoolIsAuthoredContentTests(TestCase):
+    def test_resolve_does_not_create_the_pool(self):
+        """An unseeded database gets no pool minted at draw time."""
+        from actions.models import ConsequencePool
+        from world.companions.factories_combat import COMPANION_DEFEAT_POOL_NAME
+
+        companion = CompanionFactory()
+        died = resolve_companion_defeat(companion, RiskLevel.LETHAL)
+
+        self.assertFalse(died)
+        self.assertFalse(ConsequencePool.objects.filter(name=COMPANION_DEFEAT_POOL_NAME).exists())

@@ -339,6 +339,11 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
     combat participation). At EXTREME/LETHAL: draws from the companion-defeat
     ConsequencePool; the ``die`` outcome calls ``release_companion``.
 
+    The pool is authored content, staff-tunable in admin, not minted here.
+    A fresh database gets it from ``world.seeds.clusters._seed_companions``;
+    its absence in production is reported by the ``companion-defeat-pool``
+    sentinel (Task 8, #3652) rather than crashing this completion seam.
+
     Args:
         companion: The persistent Companion whose bridged opponent was defeated.
         risk_level: The RiskLevel of the encounter/battle the companion fought in.
@@ -354,11 +359,14 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
         return False
 
     # Lethal stakes: consult the companion-defeat pool.
+    from actions.models import ConsequencePool  # noqa: PLC0415
     from world.companions.factories_combat import (  # noqa: PLC0415
-        create_companion_defeat_pool,
+        COMPANION_DEFEAT_POOL_NAME,
     )
 
-    pool = create_companion_defeat_pool()
+    pool = ConsequencePool.objects.filter(name=COMPANION_DEFEAT_POOL_NAME).first()
+    if pool is None:
+        return False
     consequences = pool.cached_consequences
     if not consequences:
         return False
