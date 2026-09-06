@@ -1,5 +1,5 @@
 """Constraints, indexes and unique_together fold into their model's CreateModel options
-unless they reference a field that is still deferred (ADR-0272, spec #3656 Design 2).
+unless they reference a field that is still deferred (ADR-0276, spec #3656 Design 2).
 
 Each folded operation is one fewer full-cost step in the replay; anything the
 resolver cannot prove safe stays in the tail, after the deferred AddFields.

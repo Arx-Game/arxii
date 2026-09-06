@@ -1,4 +1,4 @@
-"""``BatchedCreateModelMigration`` applies a chunk of CreateModels with one render (ADR-0272).
+"""``BatchedCreateModelMigration`` applies a chunk of CreateModels with one render (ADR-0276).
 
 Profiled 2026-09-05: stock ``Migration.apply`` spent 248 of 259 seconds of a partial
 replay re-rendering the related-model closure after every ``CreateModel``; the same

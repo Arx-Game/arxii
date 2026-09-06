@@ -286,7 +286,7 @@ manage *args:
 migrate:
     uv run arx manage migrate
 
-# --- Migration chain regeneration (ADR-0272) ----------------------------------
+# --- Migration chain regeneration (ADR-0276) ----------------------------------
 
 # Regenerate the arxii migration chain to its floor. Replaces Django's
 # squashmigrations (core_management overrides it). Worktree only, clean tree,

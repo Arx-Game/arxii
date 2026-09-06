@@ -1,5 +1,5 @@
 """Auto-through ManyToManyFields inline into their owner's CreateModel like FKs do
-(ADR-0272): CreateModel creates the through table itself, so the only ordering
+(ADR-0276): CreateModel creates the through table itself, so the only ordering
 need is target-before-owner, which the topological order already provides.
 Explicit ``through=`` models and back edges of a cycle stay deferred."""
 

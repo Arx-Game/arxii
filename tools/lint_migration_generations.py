@@ -1,6 +1,6 @@
 """No migration may reuse a name from, or depend on a name in, an earlier generation.
 
-Why (ADR-0272): production records every applied migration name forever. A new
+Why (ADR-0276): production records every applied migration name forever. A new
 file whose name is already recorded is silently treated as applied and skipped; a
 file that depends on a replaced name is remapped by Django's loader onto whichever
 replacing file it meets first and passes every other check. Both surface only
@@ -106,13 +106,13 @@ def check_migrations(
         if path.stem in owner:
             failures.append(
                 f"{path}: name {path.stem!r} already belongs to generation {owner[path.stem]}; "
-                "production has it recorded and would skip this file. Rename it (ADR-0272)."
+                "production has it recorded and would skip this file. Rename it (ADR-0276)."
             )
         stale = [d for d in _arxii_dependencies(path.read_text(encoding="utf-8")) if d in owner]
         failures.extend(
             f"{path}: depends on {dep!r}, a generation-{owner[dep]} name that no longer "
             "exists on disk (a straggler from before a regeneration). Regenerate on the "
-            "tip of main (ADR-0272)."
+            "tip of main (ADR-0276)."
             for dep in stale
         )
     return failures

@@ -1,4 +1,4 @@
-"""``migrate`` with the generation guard in front (ADR-0272).
+"""``migrate`` with the generation guard in front (ADR-0276).
 
 Wins resolution over Django's ``migrate`` because ``core_management`` is first in
 INSTALLED_APPS (see the ORDER IS LOAD-BEARING comment in ``server/conf/settings.py``);

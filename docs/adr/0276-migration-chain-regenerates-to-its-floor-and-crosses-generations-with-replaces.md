@@ -1,4 +1,4 @@
-# ADR-0272: The migration chain regenerates to its floor and crosses generations with `replaces`
+# ADR-0276: The migration chain regenerates to its floor and crosses generations with `replaces`
 
 **Date:** 2026-09-05
 **Status:** Accepted (amends ADR-0195; relates to ADR-0083, ADR-0237)

@@ -70,7 +70,7 @@ migrations plus whatever incrementals have landed since, not a single file).
 Squashing it by hand, or with Django's `squashmigrations`, is not the tool;
 regeneration is (next section).
 
-### Migration Chain Regeneration (ADR-0272)
+### Migration Chain Regeneration (ADR-0276)
 
 The chain grows by roughly 20 replay-minutes a month, and Django's
 `squashmigrations` cannot shrink it (its optimizer never reorders models and is

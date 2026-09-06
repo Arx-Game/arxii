@@ -1,4 +1,4 @@
-"""Django-dependent helpers for ``arx manage squashmigrations arxii`` (ADR-0272).
+"""Django-dependent helpers for ``arx manage squashmigrations arxii`` (ADR-0276).
 
 The Django-free half of the regeneration (topological inlining, constraint
 folding, tail templates) lives under ``tools/`` so it stays importable without a

@@ -205,7 +205,7 @@ repos:
         pass_filenames: false
         files: ^(src/world/scenes/(models\.py|sql/partition_interaction_.*\.sql))$
       - id: lint-migration-generations
-        name: No migration reuses or depends on an earlier generation's name (ADR-0272)
+        name: No migration reuses or depends on an earlier generation's name (ADR-0276)
         entry: uv run python tools/lint_migration_generations.py
         language: system
         pass_filenames: false

@@ -82,7 +82,7 @@ back from the creating command's own stdout.
   enqueueing, and fix a collision with `arx manage rebase_migration arxii`
   (resolve `max_migration.txt` to main's tip first), push, re-enqueue; see
   the `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the
-  full recipe. Never hand-renumber. A chain-regeneration PR (ADR-0272) collides
+  full recipe. Never hand-renumber. A chain-regeneration PR (ADR-0276) collides
   with every migration-bearing PR by construction: rerun `just
   regenerate-migrations` in a fresh worktree from the tip of `main` and
   force-push; never rebase it. Since

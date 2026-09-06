@@ -1,5 +1,5 @@
 """Generation-stamped chunks carry ``replaces`` and can never share a name with an
-older generation (ADR-0272). ``generation=None`` keeps the #2906 shape byte-for-byte."""
+older generation (ADR-0276). ``generation=None`` keeps the #2906 shape byte-for-byte."""
 
 from __future__ import annotations
 

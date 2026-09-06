@@ -43,7 +43,7 @@ This script performs that rewrite:
 5. Emit one ``CreateModel`` per model in that order, with every FK/O2O field
    inlined into it *unless* it is a back edge of its cycle: inside each
    non-trivial SCC the members are ordered by the Eades-Lin-Smyth
-   feedback-arc heuristic (``order_within_cycle``, ADR-0272) and only the FKs
+   feedback-arc heuristic (``order_within_cycle``, ADR-0276) and only the FKs
    whose target is created *later* stay deferred as ``AddField`` ops after
    every ``CreateModel`` (12 on the 2026-09-05 schema, where deferring every
    intra-cycle edge would have cost 82). Self-referential
@@ -52,7 +52,7 @@ This script performs that rewrite:
    ordinary SQL, not a cycle in the Django-migration sense; verified against
    the existing SCC/self-loop distinction, not assumed).
 6. ``ManyToManyField`` ops with an auto-created through table inline like
-   FKs (ADR-0272): ``CreateModel`` creates the through table itself, so the
+   FKs (ADR-0276): ``CreateModel`` creates the through table itself, so the
    only ordering need is target-before-owner, and the M2M edges join the
    same topological graph. An M2M with an explicit ``through=`` model stays a
    deferred ``AddField`` (its through model has its own ``CreateModel`` with
@@ -61,7 +61,7 @@ This script performs that rewrite:
 7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are
    folded into their model's ``CreateModel`` ``options`` (``constraints`` /
    ``indexes`` / ``unique_together``) when every field they reference is on
-   that model and not deferred (ADR-0272, #3656: each one is otherwise a
+   that model and not deferred (ADR-0276, #3656: each one is otherwise a
    full-cost step of the replay, ~800 of them). Anything the resolver cannot
    prove safe (positional expressions, a field that is a deferred cycle
    FK or M2M) is kept byte-for-byte and moved as a block to the very end, in
@@ -115,7 +115,7 @@ chunks. This is a *starting model*, not a proven-optimal one - if measured
 per-chunk timings come out skewed, the boundaries should be adjusted from
 that data (see the Task 10 report for what was actually measured).
 
-With ``--generation G`` (ADR-0272) every chunk is stamped ``NNNN_gG_...``,
+With ``--generation G`` (ADR-0276) every chunk is stamped ``NNNN_gG_...``,
 carries ``replaces = replaced_slice(k, total)`` (the generated files partition
 the previous generation), and a chunk of pure ``CreateModel`` ops subclasses
 ``core_management.batched_migration.BatchedCreateModelMigration`` so the
@@ -207,7 +207,7 @@ class CreateModelOp:
         self.bases_node = kwargs.get("bases")
         # Extra fields inlined by this script (AddField ops folded in).
         self.extra_field_entries: list[ast.Tuple] = []
-        # Tail ops folded into this model's ``options`` (ADR-0272).
+        # Tail ops folded into this model's ``options`` (ADR-0276).
         self.folded_constraints: list[ast.expr] = []
         self.folded_indexes: list[ast.expr] = []
         self.folded_unique_together: ast.expr | None = None
@@ -254,7 +254,7 @@ class TailOp:
     """AddConstraint / AddIndex / AlterUniqueTogether.
 
     Folded into the owning model's ``CreateModel`` options when every field the
-    operation references is already on that model (ADR-0272); otherwise kept
+    operation references is already on that model (ADR-0276); otherwise kept
     verbatim after the deferred ``AddField`` ops, exactly as before.
     """
 
@@ -1036,7 +1036,7 @@ def chunk_name(generation: int | None, index: int) -> str:
     ``generation=None`` is the #2906 shape (``0001_initial``, ``NNNN_initial_part_N``).
     A stamped name (``0001_g2_initial``, ``NNNN_g2_part_N``) can never collide with an
     earlier generation's, which is what lets production keep every old name
-    recorded forever (ADR-0272).
+    recorded forever (ADR-0276).
     """
     if generation is None:
         return "0001_initial" if index == 1 else f"{index:04d}_initial_part_{index}"
@@ -1129,7 +1129,7 @@ def _render_chunk_files(
     strips whatever a given chunk doesn't need) and a
     `dependencies = [("arxii", <previous chunk>)]`.
 
-    Stamped (``generation=G``, ADR-0272): every file gets the minimal header,
+    Stamped (``generation=G``, ADR-0276): every file gets the minimal header,
     plus ``replaces = replaced_slice(k, replaces_total)`` so the generated files
     partition the previous generation; chunk 1 keeps ``initial = True`` and the
     original ``dependencies`` list (re-rendered from its AST, so the swappable
@@ -1323,7 +1323,7 @@ def main() -> int:
         type=int,
         default=None,
         metavar="G",
-        help="stamp chunk names with generation G and add replaces = REPLACED (ADR-0272)",
+        help="stamp chunk names with generation G and add replaces = REPLACED (ADR-0276)",
     )
     args = parser.parse_args()
     if args.chunks is not None and args.check:

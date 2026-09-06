@@ -1,4 +1,4 @@
-"""The two database states Django's ``replaces`` handles badly (ADR-0272).
+"""The two database states Django's ``replaces`` handles badly (ADR-0276).
 
 Partially recorded: Django removes every replacing node, remaps onto files that no
 longer exist, and ``migrate`` exits 0 having done nothing. Skipped a generation:

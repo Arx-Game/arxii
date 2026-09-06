@@ -1,5 +1,5 @@
 """Inside a genuine FK cycle only the back edges of a good member order are deferred,
-not every edge (ADR-0272). A 3-cycle needs one deferred FK, not three."""
+not every edge (ADR-0276). A 3-cycle needs one deferred FK, not three."""
 
 from __future__ import annotations
 

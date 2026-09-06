@@ -1,4 +1,4 @@
-"""Render the infrastructure tail migrations a regenerated chain needs (ADR-0272).
+"""Render the infrastructure tail migrations a regenerated chain needs (ADR-0276).
 
 ``makemigrations`` only ever emits ``CreateModel``; the range partition on
 ``arxii_interaction``, its composite FKs and the five materialized views are raw
@@ -122,7 +122,7 @@ def render_matviews_tail(
         for sub, fname, view in entries
     )
     doc = (
-        f"{name}: the managed=False materialized views (ADR-0272 tail, rendered from\n"
+        f"{name}: the managed=False materialized views (ADR-0276 tail, rendered from\n"
         "tools/build_schema.py's SQL_FILES by arx manage squashmigrations; do not edit)."
     )
     return _module(doc, _Header(depends_on, replaces), ops)
@@ -140,7 +140,7 @@ def render_partition_sql_tail(
         for sub, fwd in entries
     )
     doc = (
-        f"{name}: the arxii_interaction range partition and composite FKs (ADR-0272 tail,\n"
+        f"{name}: the arxii_interaction range partition and composite FKs (ADR-0276 tail,\n"
         "rendered from tools/build_schema.py's SQL_FILES by arx manage squashmigrations;\n"
         "SQL-only so the DDL/DML lint needs no grandfather entry; do not edit)."
     )
@@ -169,7 +169,7 @@ def render_partition_columns_tail(
         "(POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py). Migration state\n"
         "already carries them from CreateModel; the partition rewrite rebuilt the table\n"
         "without them. Rendered from the live Interaction model by arx manage\n"
-        "squashmigrations (ADR-0272 tail); do not edit."
+        "squashmigrations (ADR-0276 tail); do not edit."
     )
     header = _Header(depends_on, replaces, swappable=True, extra_imports=frozenset(imports))
     return _module(doc, header, ops)

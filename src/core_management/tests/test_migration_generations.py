@@ -1,7 +1,7 @@
 """The generations module is generated, never hand-edited: prove the renderer round-trips.
 
 ``src/world/migrations/_generations.py`` is what every regenerated migration imports
-``REPLACED`` from (ADR-0272). It is written by ``render_generations_module`` and read
+``REPLACED`` from (ADR-0276). It is written by ``render_generations_module`` and read
 back by ``parse_generations_source`` without importing it, so the guard and the
 ``squashmigrations`` command can inspect it before Django is fully set up.
 """

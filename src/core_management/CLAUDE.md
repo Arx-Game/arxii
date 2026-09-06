@@ -76,7 +76,7 @@ Two modules, guarding different things — both run in the normal suite (`arx te
 Both were `@unittest.skip`ped until #2885, on the reasoning that they were demonstration rather than regression tests. See `tests/README.md`.
 
 
-## `squashmigrations` and `migrate` overrides (#3656, ADR-0272)
+## `squashmigrations` and `migrate` overrides (#3656, ADR-0276)
 
 The same INSTALLED_APPS-order mechanism now carries two more commands:
 

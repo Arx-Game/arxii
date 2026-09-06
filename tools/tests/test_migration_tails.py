@@ -1,4 +1,4 @@
-"""The three infrastructure tails a regenerated chain needs (ADR-0272, spec #3656 Design 4).
+"""The three infrastructure tails a regenerated chain needs (ADR-0276, spec #3656 Design 4).
 
 Rendered from ``tools/build_schema.py``'s ``SQL_FILES`` so the two schema paths cannot
 diverge, and shaped so ``tools/check_standalone_sql_wiring.py`` counts every

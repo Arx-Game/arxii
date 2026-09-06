@@ -2,7 +2,7 @@
 (POST_PARTITION_COLUMNS in tools/check_partition_sql_drift.py). Migration state
 already carries them from CreateModel; the partition rewrite rebuilt the table
 without them. Rendered from the live Interaction model by arx manage
-squashmigrations (ADR-0272 tail); do not edit."""
+squashmigrations (ADR-0276 tail); do not edit."""
 
 from pathlib import Path
 

@@ -1,6 +1,6 @@
 """Replay the migration chain against DATABASE_URL and report wall time + peak RSS.
 
-Used by ``just verify-regeneration`` and by hand when benchmarking (ADR-0272). Runs
+Used by ``just verify-regeneration`` and by hand when benchmarking (ADR-0276). Runs
 Django's ``migrate`` in-process so ``resource.getrusage`` sees the real peak; the
 numbers are what to compare against the 2026-09-05 baseline of the generation-1
 chain on a dev box: 48m06s and about 2.6 GB.

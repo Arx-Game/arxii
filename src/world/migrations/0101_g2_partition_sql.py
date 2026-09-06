@@ -1,4 +1,4 @@
-"""0101_g2_partition_sql: the arxii_interaction range partition and composite FKs (ADR-0272 tail,
+"""0101_g2_partition_sql: the arxii_interaction range partition and composite FKs (ADR-0276 tail,
 rendered from tools/build_schema.py's SQL_FILES by arx manage squashmigrations;
 SQL-only so the DDL/DML lint needs no grandfather entry; do not edit)."""
 

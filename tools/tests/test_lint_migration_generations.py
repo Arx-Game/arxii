@@ -1,5 +1,5 @@
 """No migration may reuse a name from, or depend on a name in, an earlier generation
-(ADR-0272). Production records every name forever, so a reused name is silently
+(ADR-0276). Production records every name forever, so a reused name is silently
 skipped and a stale dependency is silently remapped; both must die at commit time."""
 
 from __future__ import annotations

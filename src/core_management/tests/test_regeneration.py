@@ -1,4 +1,4 @@
-"""Django-dependent helpers of ``arx manage squashmigrations arxii`` (ADR-0272)."""
+"""Django-dependent helpers of ``arx manage squashmigrations arxii`` (ADR-0276)."""
 
 from __future__ import annotations
 

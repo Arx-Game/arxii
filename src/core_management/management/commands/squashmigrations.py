@@ -1,4 +1,4 @@
-"""``squashmigrations``, replaced (ADR-0272).
+"""``squashmigrations``, replaced (ADR-0276).
 
 Django's command concatenates a range and runs ``MigrationOptimizer``. That
 optimizer never reorders ``CreateModel`` and is blocked by every index/constraint
@@ -80,7 +80,7 @@ CHUNK_SIZES_KEY = "chunk_sizes"  # the one inliner stat that is a list, kept out
 class Command(BaseCommand):
     help = (
         "Regenerate the arxii migration chain to its floor and hand every database across "
-        "with replaces. Replaces Django's squashmigrations (ADR-0272)."
+        "with replaces. Replaces Django's squashmigrations (ADR-0276)."
     )
 
     def add_arguments(self, parser: CommandParser) -> None:
@@ -106,7 +106,7 @@ class Command(BaseCommand):
         if options["app_label"] != APP_LABEL or options["migration_range"]:
             message = (
                 f"This command regenerates the whole {APP_LABEL!r} chain and takes no range: "
-                f"`arx manage squashmigrations {APP_LABEL}` (ADR-0272)."
+                f"`arx manage squashmigrations {APP_LABEL}` (ADR-0276)."
             )
             raise CommandError(message)
         inliner = tools_module("optimize_initial_migration")
@@ -205,7 +205,7 @@ class Command(BaseCommand):
         if any(f"_g{new_gen}_" in p.stem for p in migration_files()):
             message = (
                 f"generation {new_gen} files already exist. A rerun starts from a fresh "
-                "worktree on the tip of main plus the tooling commits (ADR-0272)."
+                "worktree on the tip of main plus the tooling commits (ADR-0276)."
             )
             raise CommandError(message)
         if not GENERATIONS_PATH.exists():

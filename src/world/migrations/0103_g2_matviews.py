@@ -1,4 +1,4 @@
-"""0103_g2_matviews: the managed=False materialized views (ADR-0272 tail, rendered from
+"""0103_g2_matviews: the managed=False materialized views (ADR-0276 tail, rendered from
 tools/build_schema.py's SQL_FILES by arx manage squashmigrations; do not edit)."""
 
 from pathlib import Path

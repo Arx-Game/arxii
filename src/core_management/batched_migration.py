@@ -1,4 +1,4 @@
-"""A migration base that applies a chunk of ``CreateModel`` ops with one render (ADR-0272).
+"""A migration base that applies a chunk of ``CreateModel`` ops with one render (ADR-0276).
 
 Stock ``Migration.apply`` runs each operation's ``state_forwards`` against a
 project state whose ``apps`` are already rendered, so ``ProjectState.add_model``
