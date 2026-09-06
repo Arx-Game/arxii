@@ -100,6 +100,23 @@ collide**. Compare against main's tip before enqueueing; fix a collision with
 `arx manage rebase_migration arxii` (resolve the sentinel to main's tip first),
 push, re-enqueue. **Never hand-renumber.**
 
+A chain-regeneration PR (ADR-0276, `just regenerate-migrations`) has one more
+gate: **the commit it was cut from must already be deployed to production.** Its
+`_generations.py` snapshots every migration on `main` at the cut as the outgoing
+generation; one production has not recorded makes that generation partially
+recorded, and the `migrate` guard refuses the deploy (2026-09-06, `227 of 228`).
+Compare `COMMITS[N]` in `src/world/migrations/_generations.py` against the last
+successful "Stand up infra" run:
+
+```bash
+gh run list --workflow=standup.yml --status success --limit 1 --json headSha --jq '.[0].headSha'
+git merge-base --is-ancestor <COMMITS[N]> <that sha> && echo deployed
+```
+
+If it is not an ancestor, press the button before enqueueing. If the deploy has
+already failed, recovery is two presses of the button's `ref` input
+(`infra/README.md`, "Recovering a guard-refused database").
+
 ## 5. Prove it against real data
 
 CI proves the migration runs on an empty database. That is the case that cannot
@@ -143,4 +160,5 @@ connection to it; the `pg_dump` pipe above has no such problem.
 - [ ] No `create`/`get_or_create` of content rows
 - [ ] Every `RemoveField`/`DeleteModel` on authored content has a stated disposition
 - [ ] `max_migration.txt` matches main's tip
+- [ ] Regeneration PR only: `COMMITS[N]` is an ancestor of the last successful deploy
 - [ ] Ran against a database that has rows in the affected tables

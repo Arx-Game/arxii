@@ -23,6 +23,11 @@ file parses as YAML before handing it to Ansible — already a transitive depend
 
 - **Apply-only and safe to re-run.** It never runs `tofu destroy`, never restores data, never
   re-initialises an existing database. Pressing it twice is a no-op, not a reset.
+- **It deploys `main` unless told otherwise.** The `ref` input (branch, tag or commit SHA;
+  one path segment, since it also names `/opt/arxii/releases/<ref>`) exists for two cases:
+  rolling back to a tag, and recovering a database the migration generation guard refused
+  (ADR-0276) - see "Recovering a guard-refused database" below. A SHA works but forgoes the
+  shallow clone (Ansible only shallow-clones branches and tags) and logs a warning.
 - **SSH identity.** The very first converge (brand-new host) connects as `root` — Linode injects
   the operator's key there via cloud-init before `arxadmin` exists. That first run's `base` role
   creates a dedicated `arxadmin` sudo user and installs the admin key(s) there; `ssh_hardening`
@@ -255,7 +260,8 @@ ungenerated config.
 The deploy is idempotent: re-runs are safe and mostly no-ops. Per release,
 after the box itself is provisioned, the app_deploy role runs (in order):
 
-1. **Git checkout** the release ref into `/opt/arxii/releases/<ref>`.
+1. **Git checkout** the release ref (the `ref` input, `main` by default) into
+   `/opt/arxii/releases/<ref>`.
 2. **`uv sync --frozen --no-dev`** — rebuild the project venv from the
    locked `uv.lock` (no implicit resolution drift). Idempotent: a no-op
    if nothing changed.
@@ -306,6 +312,30 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    reload forever — the 2026-08-23 dead-DB-connection incident), the play
    falls back to a full `systemctl restart`: players drop on that path
    only, and the deploy still lands.
+
+### Recovering a guard-refused database (ADR-0276)
+
+`migrate` is wrapped by a generation guard. When a regenerated migration chain
+lands on `main` while production has not yet recorded every migration of the
+previous generation, the deploy fails at step 4 with `Migration generation guard:
+generation N is partially recorded (K of M migrations)` and names a commit. It
+happened on 2026-09-06: production sat at `0227`, `#3651` added `0228`, and the
+regeneration (#3662) was cut from that tip, so generation 1 was 227 of 228
+recorded. Django cannot cross that gap on its own and the `arxops` account
+cannot run `migrate` (it has no Postgres and no shell as the service user), so
+the button is the only migrate there is. Recovery is two presses:
+
+1. Press the button with `ref` = the commit the guard names (`COMMITS[N]` in
+   `src/world/migrations/_generations.py`, the last commit of the previous
+   generation). That deploy applies the missing migrations at the old chain.
+2. Press it again with `ref` = `main`. The previous generation is now fully
+   recorded, Django's `replaces` handling marks the new one applied, and the
+   deploy lands.
+
+Step 1 briefly runs the older commit in production; it is the code `main` was at
+a few hours earlier, so nothing rolls back that a player would notice. Prevent the
+whole thing by cutting a regeneration only from a commit production has already
+deployed (the rule in ADR-0276 and `docs/evennia-quirks.md`).
 
 What the button **does not** do (deliberately, by-design):
 - It does not load any game-content fixtures. The plan is to load those

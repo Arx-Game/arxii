@@ -18,6 +18,11 @@ on:
         description: "Dry run (print steps, change nothing)"
         type: boolean
         default: false
+      ref:
+        description: 'Git ref to deploy (branch, tag or commit SHA). Leave at main except to recover a database the migration generation guard refused (ADR-0276): press once with the commit the guard names, then once more with main.'
+        required: false
+        type: string
+        default: main
       run_content_refresh:
         description: 'Also refresh the private lore-repo checkout on this run (rare — this refreshes the checkout only, it does not load content into the database)'
         required: false
@@ -67,6 +72,12 @@ jobs:
           bash infra/scripts/standup.sh "${args[@]}"
         env:
           DRY_RUN: ${{ inputs.dry_run }}
+          # The release ref app_deploy checks out (`app_ref`). standup.sh
+          # validates the shape and writes it into the generated group_vars;
+          # an empty value (a `gh workflow run` that omits the input) means
+          # main. A commit SHA works but forgoes the shallow clone (Ansible's
+          # git module only shallow-clones branches and tags).
+          ARXII_APP_REF: ${{ inputs.ref }}
           # #3153: on-demand content-repo refresh — off by default; standup.sh
           # only appends `--tags all,content_repo` to the ansible-playbook
           # invocation when this arrives as the literal string "true".

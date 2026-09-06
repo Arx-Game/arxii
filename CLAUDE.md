@@ -85,7 +85,11 @@ back from the creating command's own stdout.
   full recipe. Never hand-renumber. A chain-regeneration PR (ADR-0276) collides
   with every migration-bearing PR by construction: rerun `just
   regenerate-migrations` in a fresh worktree from the tip of `main` and
-  force-push; never rebase it. Since
+  force-push; never rebase it. **Cut it only from a commit production has
+  already deployed** (the last green "Stand up infra" run's SHA): a migration
+  production has not recorded leaves the outgoing generation partially recorded
+  and the `migrate` guard refuses the next deploy (2026-09-06; recovery is two
+  presses of the button's `ref` input, `infra/README.md`). Since
   #2906 collapsed every first-party app into one (`arxii`), there is exactly
   one `max_migration.txt` sentinel repo-wide (`src/world/migrations/`), not
   one per app - any two branches that both add a model or field now land in

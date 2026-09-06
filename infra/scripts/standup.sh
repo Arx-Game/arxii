@@ -43,6 +43,9 @@ readonly SSH_WAIT_TIMEOUT_S=300
 readonly SSH_WAIT_INTERVAL_S=5
 
 DRY_RUN=0
+# Release ref to deploy; see preflight for the shape rule and standup.yml's
+# `ref` input for when to set it to anything but main.
+readonly APP_REF="${ARXII_APP_REF:-main}"
 
 log()  { printf '[standup] %s\n' "$*"; }
 fail() { printf '[standup] REFUSING: %s\n' "$*" >&2; exit 1; }
@@ -131,6 +134,16 @@ preflight() {
   for v in "${REQUIRED_BACKEND[@]}" "${REQUIRED_ARXII[@]}"; do
     [[ -n "${!v:-}" ]] || fail "required env '${v}' is missing/empty"
   done
+  # The release ref (standup.yml's `ref` input -> app_deploy's app_ref). It
+  # names the checkout on the box (/opt/arxii/releases/<ref>) as well as
+  # what git fetches, so it must be one path segment: no slash, no
+  # whitespace, no leading dash. Empty means main (a `gh workflow run` that
+  # omits the input arrives as ""). Deliberately unrestricted beyond shape:
+  # a commit SHA is what recovering a guard-refused database needs
+  # (ADR-0276), and a tag is what a rollback needs.
+  [[ "${APP_REF}" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] \
+      || fail "ARXII_APP_REF='${APP_REF}' is not a plain branch/tag/SHA name" \
+              "(one path segment: letters, digits, '.', '_', '-'; no slash)"
   # #3153: ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are deliberately NOT in
   # REQUIRED_ARXII (see that array's own comment) — they're only needed when
   # the operator opts into the content_repo refresh. But when they opt in,
@@ -171,7 +184,7 @@ main() {
     log "  4. wait for SSH (port 22) on the new host, up to ${SSH_WAIT_TIMEOUT_S}s"
     log "  5. probe ssh as arxadmin, else root -> resolved ansible_user"
     log "  6. generate ${INVENTORY} (0600)"
-    log "  7. generate ${GROUP_VARS_FILE} (0600) from tofu output + env; validate it parses as YAML"
+    log "  7. generate ${GROUP_VARS_FILE} (0600) from tofu output + env (app_ref=${APP_REF}); validate it parses as YAML"
     log "  8. unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY"
     log "  9. ansible-playbook -i '${INVENTORY}' '${ANSIBLE_DIR}/site.yml' (writer keys inline env)"
     log "No changes made."
@@ -313,6 +326,11 @@ offsite_r2_endpoint: "${r2_s3_endpoint}"
 # base — NEW var; authorized_keys are public, not sensitive. Consumed by a
 # base-role task (Task B) that provisions the arxadmin login user.
 admin_authorized_keys: ${authorized_keys_json}
+
+# app_deploy (roles/app_deploy/defaults/main.yml). The release ref, from
+# standup.yml's "ref" input; main on every ordinary press. Shape-checked in
+# preflight.
+app_ref: "${APP_REF}"
 EOF
 
   validate_generated_yaml "${GROUP_VARS_FILE}"   # lib.sh
@@ -323,7 +341,7 @@ EOF
   # `tofu output` again.
   unset LINODE_TOKEN CLOUDFLARE_API_TOKEN TF_STATE_S3_ACCESS_KEY TF_STATE_S3_SECRET_KEY
 
-  log "Converging host (idempotent)…"
+  log "Converging host (idempotent; app_ref=${APP_REF})…"
   # #3153: on-demand content-repo refresh. The content_repo role carries
   # site.yml's `never` tag, so it's skipped by default on every run; only
   # append `--tags all,content_repo` when the operator explicitly opted in
