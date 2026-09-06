@@ -442,7 +442,7 @@ read's shape for one answered slot (`kind`, `connection_kind`, `life_stage`,
 `organization_id`/`organization_name`, `figure_name`: blanked for a non-owner,
 non-staff viewer).
 
-See ADR-0275 for why this landed as an authored questionnaire rather than a
+See ADR-0276 for why this landed as an authored questionnaire rather than a
 generalised single-anchor/single-mentor model, and Recipes 13-15 in
 [family-authoring-recipes.md](family-authoring-recipes.md) for the authoring walkthrough.
 

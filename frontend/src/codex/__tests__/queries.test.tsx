@@ -125,6 +125,7 @@ describe('Codex Query Hooks', () => {
           known_by: [],
           art_url: null,
           perspective_of: null,
+          also_filed_under: [],
         },
         {
           id: 2,
@@ -145,6 +146,7 @@ describe('Codex Query Hooks', () => {
           known_by: [],
           art_url: null,
           perspective_of: null,
+          also_filed_under: [],
         },
       ];
       vi.mocked(api.getEntries).mockResolvedValue(mockEntries);
@@ -182,6 +184,7 @@ describe('Codex Query Hooks', () => {
           known_by: [],
           art_url: null,
           perspective_of: null,
+          also_filed_under: [],
         },
       ];
       vi.mocked(api.getEntries).mockResolvedValue(mockEntries);
@@ -217,6 +220,7 @@ describe('Codex Query Hooks', () => {
           known_by: [],
           art_url: null,
           perspective_of: null,
+          also_filed_under: [],
         },
       ];
       vi.mocked(api.getFeaturedEntries).mockResolvedValue(mockEntries);
@@ -258,6 +262,7 @@ describe('Codex Query Hooks', () => {
         research_progress: null,
         art_url: null,
         perspective_of: null,
+        also_filed_under: [],
       };
       vi.mocked(api.getEntry).mockResolvedValue(mockEntry);
 
@@ -310,6 +315,7 @@ describe('Codex Query Hooks', () => {
           known_by: [],
           art_url: null,
           perspective_of: null,
+          also_filed_under: [],
         },
       ];
       vi.mocked(api.searchEntries).mockResolvedValue(mockResults);

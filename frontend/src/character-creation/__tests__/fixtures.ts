@@ -1058,6 +1058,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     research_progress: null,
     art_url: null,
     perspective_of: null,
+    also_filed_under: [],
   };
 }
 

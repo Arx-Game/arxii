@@ -1593,8 +1593,11 @@ Time/effort resource economy with regeneration via cron. The most complete gate 
 ### Codex
 Lore storage and character knowledge tracking.
 
-- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`
-- **Key Methods:** Character learning from starting choices or teaching
+- **Models:** `CodexCategory`, `CodexSubject`, `CodexEntry`, `CharacterCodexKnowledge`,
+  `CodexEntryFiling` (secondary cross-listing of an entry under a second subject;
+  ADR-0275)
+- **Key Methods:** Character learning from starting choices or teaching; `services.
+  file_entry_under`/`unfile_entry` are the only sanctioned way to add/remove a filing
 - **Visibility (ADR-0221):** entries are the only unit of secrecy; categories/subjects
   with no visible entry in their subtree are hidden by every endpoint. Reader knowledge
   is the union across the account's characters (`?character=` narrows; `known_by`
@@ -2187,7 +2190,7 @@ Multi-stage character creation flow with draft system.
   `_bind_kinship_node`. See [character_creation.md](character_creation.md)'s
   Lineage step section and [family-authoring-recipes.md](family-authoring-recipes.md)
   recipes 10-12.
-- **Lineage stage: formative connections (#3660, ADR-0275):** an Upbringing
+- **Lineage stage: formative connections (#3660, ADR-0276):** an Upbringing
   prompt now has one of four `QuestionKind`s (text, pick, "pick a group", "name a
   person"); a group question ties the answer to a real `societies.Organization`
   (five `AnchorSource` rules: a pool, a named list, the same group as an earlier
@@ -2198,7 +2201,7 @@ Multi-stage character creation flow with draft system.
   Upbringing Builder (`src/web/admin/upbringing_builder/`); the character sheet's
   Origins panel (`OriginsSection.tsx`) shows the resulting ties, entity-linked and
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
-  kinds and connections" subsection and ADR-0275.
+  kinds and connections" subsection and ADR-0276.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)

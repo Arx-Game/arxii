@@ -151,7 +151,7 @@ the claimed family's influence; influence is 0 on the name and none paths) + the
 selected Vacancy's cost (flat + per-influence x the **Vacancy's** family's influence,
 ADR-0269 extended by ADR-0273). A "pick a group" question's per-influence instead
 multiplies the *chosen group's own* family's influence (0 when that group has no
-Family) - which family that is need not be the claimed one (ADR-0275). A Distinction
+Family) - which family that is need not be the claimed one (ADR-0276). A Distinction
 an answer grants adds nothing to that answer's cost; it is bundled free.
 
 ## Worked examples (illustrative names; not shipped content)

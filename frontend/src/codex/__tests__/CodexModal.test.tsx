@@ -69,6 +69,7 @@ function makeEntry(
     research_progress: null,
     art_url: artUrl,
     perspective_of: perspectiveOf,
+    also_filed_under: [],
   };
 }
 
