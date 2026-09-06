@@ -68,7 +68,7 @@ def reconcile_distinction_asset_grants(
     Args:
         character_distinction: The CharacterDistinction being reconciled.
         display_name: Overrides the grant's authored ``asset_display_name`` for
-            the spawned character key and persona name (#3660) — an Upbringing
+            the spawned character key and persona name (#3660): an Upbringing
             connection naming a specific figure (e.g. "The woman who asked
             twice") rather than the staff-authored placeholder ("A courier").
             ``None`` (the picked-Distinction path) keeps the authored name.

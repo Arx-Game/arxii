@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -1361,7 +1361,7 @@ def _create_distinction_modifiers_bulk(
 
     ``asset_names`` (#3660) maps a distinction id to the name a connection's
     named figure should give the distinction's granted ``NPCAsset``, overriding
-    the staff-authored ``asset_display_name`` — used by
+    the staff-authored ``asset_display_name``: used by
     ``_grant_connection_distinctions`` for bundled Distinctions; ``None`` (the
     picked-Distinction path) always uses the authored name.
     """
@@ -2768,6 +2768,19 @@ def finalize_gm_character(
 # =============================================================================
 
 
+class _Keep:
+    """Sentinel type for ``set_origin_slot``'s ``organization``/``figure_name`` kwargs
+    (#3660 fix round 1): distinguishes "caller didn't mention this field, leave
+    it alone" from "caller passed None/'', clear it." A plain ``None``/``""``
+    default would make every caller that omits these kwargs (the post-CG
+    write-in editor, ``character_sheets/views.py``) silently wipe an existing
+    group tie or named figure on every edit.
+    """
+
+
+_KEEP: Final = _Keep()
+
+
 def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
     """Recompute and persist ``origin_story_state`` from slot rows + prose.
 
@@ -2794,26 +2807,27 @@ def set_origin_slot(  # noqa: PLR0913 - one write path for every question kind (
     value: str,
     choice: OriginTemplateSlotChoice | None = None,
     *,
-    organization: Organization | None = None,
-    figure_name: str = "",
+    organization: Organization | None | _Keep = _KEEP,
+    figure_name: str | _Keep = _KEEP,
 ) -> None:
     """Upsert a character's answer (text, picked choice, anchor, person), then refresh state.
 
     Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``). ``organization`` and
     ``figure_name`` are the entity-linked/life-stage-tagged connection fields
     added in #3660: the group a GROUP question anchored to, or the group a
-    PERSON question's named figure belongs to.
+    PERSON question's named figure belongs to. Both default to the ``_KEEP``
+    sentinel rather than ``None``/``""``, so a caller that only ever edits
+    ``value`` (the post-CG write-in editor) leaves an existing tie/figure
+    alone instead of silently clearing it (#3660 fix round 1, Controller
+    Ruling F); finalize passes both explicitly, so it is unaffected. Pass
+    ``organization=None`` explicitly to clear an existing tie.
     """
-    CharacterOriginSlot.objects.update_or_create(
-        sheet=sheet,
-        slot=slot,
-        defaults={
-            "value": value,
-            "choice": choice,
-            "organization": organization,
-            "figure_name": figure_name,
-        },
-    )
+    defaults: dict[str, object] = {"value": value, "choice": choice}
+    if organization is not _KEEP:
+        defaults["organization"] = organization
+    if figure_name is not _KEEP:
+        defaults["figure_name"] = figure_name
+    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults=defaults)
     refresh_origin_story_state(sheet)
 
 
