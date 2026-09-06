@@ -41360,11 +41360,17 @@ components:
             type: integer
           description: Get codex entry IDs granted by this beginnings choice.
           readOnly: true
+        heritage:
+          allOf:
+          - $ref: '#/components/schemas/HeritageAnchor'
+          readOnly: true
+          nullable: true
       required:
       - allowed_species_ids
       - art_image
       - codex_entry_ids
       - description
+      - heritage
       - id
       - is_accessible
       - name
@@ -43961,6 +43967,12 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
+        age_min:
+          type: integer
+          readOnly: true
+        age_max:
+          type: integer
+          readOnly: true
         bundled_distinctions:
           type: array
           items:
@@ -43975,6 +43987,8 @@ components:
             nullable: true
           readOnly: true
       required:
+      - age_max
+      - age_min
       - build
       - bundled_distinctions
       - cg_points_remaining
@@ -53614,6 +53628,26 @@ components:
       - id
       - name
       - target_kind
+    HeritageAnchor:
+      type: object
+      description: |-
+        The world fact behind a heritage's CG age ceiling (#3663).
+
+        Nested read-only under Beginnings so the appearance stage can say "The first
+        Misbegotten were born in 980 AS." from data; the ceiling itself comes from
+        the draft's ``age_max``.
+      properties:
+        name:
+          type: string
+          readOnly: true
+          description: Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal')
+        first_appeared_ic_year:
+          type: integer
+          nullable: true
+          readOnly: true
+      required:
+      - first_appeared_ic_year
+      - name
     HiddenPresenceReportCreate:
       type: object
       description: |-

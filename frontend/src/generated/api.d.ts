@@ -25112,6 +25112,7 @@ export interface components {
       readonly is_accessible: boolean;
       /** @description Get codex entry IDs granted by this beginnings choice. */
       readonly codex_entry_ids: number[];
+      readonly heritage: components['schemas']['HeritageAnchor'] | null;
     };
     /** @description Serializer for Beginnings options. */
     BeginningsRequest: {
@@ -26324,6 +26325,8 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly age_min: number;
+      readonly age_max: number;
       readonly bundled_distinctions: {
         [key: string]: unknown;
       }[];
@@ -30814,6 +30817,18 @@ export interface components {
       readonly target_kind: string;
       /** Format: date-time */
       readonly found_at: string;
+    };
+    /**
+     * @description The world fact behind a heritage's CG age ceiling (#3663).
+     *
+     *     Nested read-only under Beginnings so the appearance stage can say "The first
+     *     Misbegotten were born in 980 AS." from data; the ceiling itself comes from
+     *     the draft's ``age_max``.
+     */
+    HeritageAnchor: {
+      /** @description Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal') */
+      readonly name: string;
+      readonly first_appeared_ic_year: number | null;
     };
     /**
      * @description #3288 — report the unseen presence in your current room.

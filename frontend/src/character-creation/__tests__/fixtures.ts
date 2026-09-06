@@ -46,6 +46,7 @@ export const mockBeginnings: Beginnings = {
   cg_point_cost: 0,
   is_accessible: true,
   codex_entry_ids: [],
+  heritage: null,
 };
 
 export const mockBeginningsUnknownFamily: Beginnings = {
@@ -58,6 +59,7 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   cg_point_cost: 0,
   is_accessible: true,
   codex_entry_ids: [],
+  heritage: null,
 };
 
 // =============================================================================
@@ -722,6 +724,8 @@ export const mockEmptyDraft: CharacterDraft = {
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,
+  age_min: 18,
+  age_max: 65,
   bundled_distinctions: [],
   derived_anchors: {},
 };

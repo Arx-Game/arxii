@@ -95,6 +95,7 @@ class HeritageAnchorSerializer(serializers.ModelSerializer):
     class Meta:
         model = Heritage
         fields = ["name", "first_appeared_ic_year"]
+        read_only_fields = ["name"]
 
     def get_first_appeared_ic_year(self, obj: Heritage) -> int | None:
         return obj.first_appeared_ic.year if obj.first_appeared_ic is not None else None

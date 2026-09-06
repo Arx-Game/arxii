@@ -71,6 +71,7 @@ const mockBeginnings: Beginnings = {
   cg_point_cost: 0,
   is_accessible: true,
   codex_entry_ids: [],
+  heritage: null,
 };
 
 function makeScene(overrides: Partial<SceneListItem> = {}): SceneListItem {
