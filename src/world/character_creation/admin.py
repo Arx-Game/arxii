@@ -180,10 +180,10 @@ class OriginTemplateSlotAdmin(admin.ModelAdmin):
 class CharacterOriginSlotAdmin(admin.ModelAdmin):
     """Read-only admin for character origin-slot answers (#2478)."""
 
-    list_display = ["sheet", "slot", "value", "choice"]
-    list_filter = ["slot__template__beginning__starting_area"]
-    search_fields = ["value"]
-    readonly_fields = ["sheet", "slot", "value", "choice"]
+    list_display = ["sheet", "slot", "organization", "figure_name", "choice", "value"]
+    list_filter = ["slot__template__beginning__starting_area", "slot__kind", "organization"]
+    search_fields = ["value", "figure_name", "organization__name"]
+    readonly_fields = ["sheet", "slot", "value", "choice", "organization", "figure_name"]
     autocomplete_fields = ["sheet"]
 
 

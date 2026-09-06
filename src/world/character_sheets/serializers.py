@@ -1067,18 +1067,23 @@ _STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — backgrou
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "origin_slots",
-        queryset=CharacterOriginSlot.objects.select_related("slot"),
+        queryset=CharacterOriginSlot.objects.select_related("slot", "choice", "organization"),
         to_attr="cached_origin_slots",
     ),
 )
 
 
-def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -> StorySection:
+def _build_story(
+    *, sheet: CharacterSheet, bio_profile: Profile | None = None, privileged: bool = False
+) -> StorySection:
     """Build the story section from the presented face's bio profile (#1270).
 
     ``bio_profile`` is the real ``true_profile`` for a revealed identity, a cover persona's own
     (fabricated) profile when presenting one, or None (empty story) — so a cover shows its own
     story and a bare anonymous figure shows nothing.
+
+    ``privileged`` gates ``figure_name`` (#3660): a named figure is the owner/staff's business,
+    never a foreign viewer's; a stranger sees the tie's kind/tag/group but not the name.
     """
     if bio_profile is None:
         return StorySection(
@@ -1094,7 +1099,7 @@ def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -
     raw_slots = (
         sheet.cached_origin_slots
         if hasattr(sheet, "cached_origin_slots")
-        else sheet.origin_slots.select_related("slot")
+        else sheet.origin_slots.select_related("slot", "choice", "organization")
     )
     origin_slots = [
         OriginSlotEntry(
@@ -1102,6 +1107,14 @@ def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -
             slot_name=row.slot.name,
             slot_prompt=row.slot.prompt,
             value=row.value,
+            kind=row.slot.kind,
+            connection_kind=row.slot.connection_kind,
+            life_stage=row.slot.life_stage,
+            choice_name=row.choice.name if row.choice_id else "",
+            choice_description=row.choice.description if row.choice_id else "",
+            organization_id=row.organization_id,
+            organization_name=row.organization.name if row.organization_id else "",
+            figure_name=row.figure_name if privileged else "",
         )
         for row in raw_slots
     ]
@@ -1426,7 +1439,7 @@ class CharacterSheetSerializer(serializers.Serializer):
             "distinctions": _build_distinctions(sheet, privileged=privileged),
             "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
-            "story": _build_story(sheet=sheet, bio_profile=bio_profile),
+            "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
             "goals": _build_goals(sheet) if show_goals else [],
             "personas": _build_personas(
                 sheet,

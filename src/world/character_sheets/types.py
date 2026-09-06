@@ -278,12 +278,27 @@ class StorySection(TypedDict):
 
 
 class OriginSlotEntry(TypedDict):
-    """A character's origin-story slot answer (#2478)."""
+    """A character's origin-story slot answer (#2478).
+
+    ``kind``/``connection_kind``/``life_stage`` mirror the prompt (#3660); ``choice_name``/
+    ``choice_description`` are the picked choice's own fields. ``organization_id``/
+    ``organization_name`` are the resolved anchor (a GROUP question's pick, or the group a
+    PERSON question's named figure belongs to). ``figure_name`` is blanked for a non-privileged
+    viewer (the foreign-viewer redaction; #3660) - it never leaves the owner/staff.
+    """
 
     slot_id: int
     slot_name: str
     slot_prompt: str
     value: str
+    kind: str
+    connection_kind: str
+    life_stage: str
+    choice_name: str
+    choice_description: str
+    organization_id: int | None
+    organization_name: str
+    figure_name: str
 
 
 class GoalEntry(TypedDict):
