@@ -244,6 +244,7 @@ describe('home query hooks', () => {
       known_by: [],
       art_url: null,
       perspective_of: null,
+      also_filed_under: [],
     };
 
     it('fetches featured codex entries', async () => {

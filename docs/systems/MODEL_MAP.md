@@ -2040,6 +2040,7 @@
   - consequence_effects <- checks.ConsequenceEffect
   - clues <- clues.Clue
   - unlocks <- codex.CodexEntry
+  - filings <- codex.CodexEntryFiling
   - character_knowledge <- codex.CharacterCodexKnowledge
   - teaching_offers <- codex.CodexTeachingOffer
   - beginnings_grants <- codex.BeginningsCodexGrant
@@ -2057,6 +2058,11 @@
   - species <- species.Species
   - mantle_level_gates <- items.MantleLevelDefinition
 
+### CodexEntryFiling
+**Foreign Keys:**
+  - entry -> codex.CodexEntry [FK]
+  - subject -> codex.CodexSubject [FK]
+
 ### CodexSubject
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
@@ -2070,6 +2076,7 @@
   - children <- codex.CodexSubject
   - breadcrumb_cache <- codex.CodexSubjectBreadcrumb
   - entries <- codex.CodexEntry
+  - filed_entries <- codex.CodexEntryFiling
 
 ### CodexSubjectBreadcrumb
 **Foreign Keys:**
@@ -2099,8 +2106,10 @@
   - entry -> codex.CodexEntry [FK]
 
 ### Service Functions
+- `file_entry_under(entry: 'CodexEntry', subject: 'CodexSubject', *, sort_order: 'int' = 0) -> 'CodexEntryFiling' - Cross-list ``entry`` in ``subject``'s listing, in addition to its home.`
 - `grant_codex_entry(roster_entry: 'RosterEntry', entry: 'CodexEntry', *, learned_from: 'RosterTenure | None' = None) -> 'tuple[CharacterCodexKnowledge, bool]' - Grant ``entry`` to ``roster_entry`` as fully KNOWN. Idempotent.`
 - `resolve_codex_links(content: 'str | None', subject: 'CodexSubject', roster_entries: 'Sequence[RosterEntry]') -> 'list[dict]' - Parse ``[[Entry Name]]`` wikilinks from content and resolve to link refs.`
+- `unfile_entry(entry: 'CodexEntry', subject: 'CodexSubject') -> 'None' - Remove ``entry``'s filing under ``subject``, if any. No-op otherwise.`
 
 
 ## world.combat
