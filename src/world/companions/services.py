@@ -362,6 +362,7 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
     from actions.models import ConsequencePool  # noqa: PLC0415
     from world.companions.factories_combat import (  # noqa: PLC0415
         COMPANION_DEFEAT_POOL_NAME,
+        COMPANION_STAY_INCAPACITATED_LABEL,
     )
 
     pool = ConsequencePool.objects.filter(name=COMPANION_DEFEAT_POOL_NAME).first()
@@ -387,9 +388,31 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
             if consequence.character_loss:
                 release_companion(companion)
                 return True
+            if consequence.label == COMPANION_STAY_INCAPACITATED_LABEL:
+                _apply_savaged(companion)
             return False
 
     return False
+
+
+def _apply_savaged(companion: Companion) -> None:
+    """Apply the Savaged condition to a companion that survived a mauling.
+
+    No-ops when the companion has no live object, or when the authored
+    ConditionTemplate is absent - the required-content sentinel reports the
+    missing row; a defeat must not crash the completion seam over it.
+    """
+    from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    if companion.objectdb is None:
+        return
+    try:
+        template = ConditionTemplate.get_by_name(SAVAGED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return
+    apply_condition(companion.objectdb, template)
 
 
 class PromoteSummonError(Exception):

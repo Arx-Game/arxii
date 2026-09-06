@@ -434,11 +434,15 @@ def _seed_survivability() -> None:
 
 
 def _seed_companions() -> None:
+    from world.companions.defeat_content import (  # noqa: PLC0415
+        ensure_companion_defeat_conditions,
+    )
     from world.companions.factories_combat import (  # noqa: PLC0415
         create_companion_defeat_pool,
     )
 
     create_companion_defeat_pool()
+    ensure_companion_defeat_conditions()
 
 
 def _seed_ceremonies() -> None:
