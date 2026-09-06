@@ -24218,6 +24218,15 @@ export interface components {
       readonly provocation_cap: number;
     };
     /**
+     * @description * `pool` - Every group of a type in a realm
+     *     * `listed` - Groups I name
+     *     * `same_as` - The same group as an earlier question
+     *     * `served_house` - The house the character's family served
+     *     * `own_family` - The character's own family
+     * @enum {string}
+     */
+    AnchorSourceEnum: 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
+    /**
      * @description Request serializer for POST /api/magic/applicable-pulls/.
      *
      *     ``character_sheet_id`` is required and must identify a CharacterSheet the
@@ -26315,6 +26324,9 @@ export interface components {
       /** @description Get total stat point budget (base + bonuses). */
       readonly stats_budget: number;
       readonly starting_technique_picks: number;
+      readonly bundled_distinctions: {
+        [key: string]: unknown;
+      }[];
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -27174,6 +27186,24 @@ export interface components {
      * @enum {string}
      */
     ConflictModeEnum: 'group_vote' | 'joint';
+    /**
+     * @description * `raised_by` - Raised by
+     *     * `taught_by` - Taught by
+     *     * `served` - Served
+     *     * `sailed_with` - Sailed with
+     *     * `owes` - Owes
+     *     * `sworn_to` - Sworn to
+     *     * `hunted_by` - Hunted by
+     * @enum {string}
+     */
+    ConnectionKindEnum:
+      | 'raised_by'
+      | 'taught_by'
+      | 'served'
+      | 'sailed_with'
+      | 'owes'
+      | 'sworn_to'
+      | 'hunted_by';
     /**
      * @description * `therefore` - Therefore
      *     * `but` - But
@@ -31995,6 +32025,14 @@ export interface components {
       is_visible_at_rest?: boolean;
     };
     /**
+     * @description * `childhood` - Childhood
+     *     * `youth` - Youth
+     *     * `at_the_glimpse` - At the Glimpse
+     *     * `since_the_glimpse` - Since the Glimpse
+     * @enum {string}
+     */
+    LifeStageEnum: 'childhood' | 'youth' | 'at_the_glimpse' | 'since_the_glimpse';
+    /**
      * @description Board row for a standing listener post.
      *
      *     The buzz meter is shown as-is: a suppressed post (phase 4) and an
@@ -34452,7 +34490,7 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
-    /** @description Slot prompt within an origin template (#2478, #3617). */
+    /** @description Slot prompt within an origin template (#2478, #3617, #3660). */
     OriginTemplateSlot: {
       readonly id: number;
       /** @description Slot name (part of natural key). */
@@ -34475,9 +34513,57 @@ export interface components {
       readonly applies_to: components['schemas']['AppliesToEnum'];
       /** @description Player may write a free-text answer (the 'other' box on a pick-list) (#3617). */
       readonly allows_text: boolean;
+      /**
+       * @description What this question asks for (#3660).
+       *
+       *     * `text` - Write an answer
+       *     * `pick` - Pick one answer
+       *     * `group` - Pick a group
+       *     * `person` - Name a person
+       */
+      readonly kind: components['schemas']['OriginTemplateSlotKindEnum'];
+      /**
+       * @description What the tie was; a tag shown on the page and the sheet (#3660).
+       *
+       *     * `raised_by` - Raised by
+       *     * `taught_by` - Taught by
+       *     * `served` - Served
+       *     * `sailed_with` - Sailed with
+       *     * `owes` - Owes
+       *     * `sworn_to` - Sworn to
+       *     * `hunted_by` - Hunted by
+       */
+      readonly connection_kind: components['schemas']['ConnectionKindEnum'];
+      /**
+       * @description When the tie was formed; a tag (#3660).
+       *
+       *     * `childhood` - Childhood
+       *     * `youth` - Youth
+       *     * `at_the_glimpse` - At the Glimpse
+       *     * `since_the_glimpse` - Since the Glimpse
+       */
+      readonly life_stage: components['schemas']['LifeStageEnum'];
+      /**
+       * @description Which groups a 'pick a group' question offers (#3660).
+       *
+       *     * `pool` - Every group of a type in a realm
+       *     * `listed` - Groups I name
+       *     * `same_as` - The same group as an earlier question
+       *     * `served_house` - The house the character's family served
+       *     * `own_family` - The character's own family
+       */
+      readonly anchor_source: components['schemas']['AnchorSourceEnum'];
+      /** @description GROUP with SAME_AS: the earlier group question whose answer is this anchor. PERSON: the group question this person belongs to (#3660). */
+      readonly same_anchor_as: number | null;
+      /** @description Shown only once this earlier question is answered (#3660). */
+      readonly follow_up_to: number | null;
+      readonly shown_for_choice_ids: number[];
+      readonly groups: {
+        [key: string]: unknown;
+      }[];
       readonly choices: components['schemas']['OriginTemplateSlotChoice'][];
     };
-    /** @description One priced answer on a pick-list Upbringing prompt (#3617). */
+    /** @description One priced answer on an Upbringing prompt (#3617, #3660). The seed stays server-side. */
     OriginTemplateSlotChoice: {
       readonly id: number;
       /** @description Choice label (part of natural key). */
@@ -34488,8 +34574,21 @@ export interface components {
       readonly cg_point_cost: number;
       /** @description CG cost per point of the claimed family's influence. */
       readonly cost_per_influence: number;
+      /** @description Minimum trust to see this answer; staff always see it (#3660). */
+      readonly trust_required: number;
+      readonly grants_distinction: {
+        [key: string]: unknown;
+      } | null;
       readonly sort_order: number;
     };
+    /**
+     * @description * `text` - Write an answer
+     *     * `pick` - Pick one answer
+     *     * `group` - Pick a group
+     *     * `person` - Name a person
+     * @enum {string}
+     */
+    OriginTemplateSlotKindEnum: 'text' | 'pick' | 'group' | 'person';
     /**
      * @description * `unsatisfied` - Unsatisfied
      *     * `success` - Success

@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import (
         CharacterDraft,
+        OriginTemplate,
         OriginTemplateSlot,
         OriginTemplateSlotChoice,
     )
@@ -98,9 +99,17 @@ def _resolve_same_as_group(slot: OriginTemplateSlot, answers: DraftAnswers) -> l
 
 
 def resolve_groups(
-    slot: OriginTemplateSlot, draft: CharacterDraft, answers: DraftAnswers
+    slot: OriginTemplateSlot, draft: CharacterDraft | OriginTemplate, answers: DraftAnswers
 ) -> list[Organization]:
-    """The groups a GROUP question offers this draft, in name order."""
+    """The groups a GROUP question offers this draft, in name order.
+
+    ``draft`` is widened to accept an ``OriginTemplate`` too: the template read API
+    (#3660) calls this for POOL and LISTED slots to list a question's offered groups
+    before any draft exists, and neither branch reads ``draft`` at all (POOL queries
+    ``Organization`` directly; LISTED reads ``slot.anchor_orgs``). Only SAME_AS,
+    SERVED_HOUSE and OWN_FAMILY touch ``draft.served_house``/``draft.family``, so a
+    template must never be passed for those three sources.
+    """
     from world.societies.houses.services import house_for_family  # noqa: PLC0415
 
     if slot.kind != QuestionKind.GROUP:
