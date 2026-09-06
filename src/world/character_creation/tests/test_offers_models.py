@@ -53,6 +53,24 @@ class OfferModelTests(TestCase):
         with self.assertRaises(ValidationError):
             offer.full_clean()
 
+    def test_tradition_step_offer_with_schooling_line_is_valid(self):
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.TRADITION_STEP,
+            arrives_as=OfferArrival.CHOICE,
+            schooling_line=SchoolingLineFactory(),
+        )
+        offer.full_clean()
+
+    def test_glimpse_offer_with_no_opener_is_invalid(self):
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.GLIMPSE,
+            arrives_as=OfferArrival.CHOICE,
+        )
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+
     def test_offer_name_defaults_to_distinction_name(self):
         offer = DistinctionOfferFactory(distinction=DistinctionFactory(name="Impoverished"))
         assert offer.name == "Impoverished"

@@ -2026,7 +2026,9 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One line of the standard schooling set under a living tradition (#3675).
 
     Rank 0 grants nothing; rank N grants ``grants`` at rank N. Price is derived:
-    ``grants.cost_per_rank * rank``.
+    ``grants.cost_per_rank * rank``. Staff author the three rows on the tradition
+    slate page; read by the tradition serializer to draw the stances under a
+    living tradition and by the offers module to open a Tradition Training offer.
     """
 
     rank = models.PositiveSmallIntegerField(unique=True)

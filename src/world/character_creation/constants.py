@@ -115,7 +115,11 @@ class TraditionState(models.TextChoices):
 
 
 class OfferChapter(models.TextChoices):
-    """The CG chapter an offer line is shown in (#3675)."""
+    """The CG chapter an offer line is shown in (#3675).
+
+    Staff pick it on the Distinction Builder; read by
+    ``world.character_creation.offers`` to decide which chapter shows the line.
+    """
 
     TRADITION_STEP = "tradition_step", "Gift, tradition step"
     GLIMPSE = "glimpse", "Gift, the Glimpse"
@@ -125,7 +129,11 @@ class OfferChapter(models.TextChoices):
 
 
 class OfferArrival(models.TextChoices):
-    """How an offered distinction arrives in the draft (#3675)."""
+    """How an offered distinction arrives in the draft (#3675).
+
+    Staff pick it per offer; read by ``offers.reconcile_offer_picks`` to decide
+    whether the pick is priced, free, or imposed.
+    """
 
     CHOICE = "choice", "A choice, priced"
     BUNDLED = "bundled", "Bundled free with its opener"
