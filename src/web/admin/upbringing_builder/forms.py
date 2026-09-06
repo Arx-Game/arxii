@@ -73,7 +73,7 @@ class QuestionForm(forms.ModelForm):
         }
         widgets = {
             "anchor_orgs": AutocompleteSelectMultiple(
-                OriginTemplateSlot._meta.get_field("anchor_orgs").remote_field,  # noqa: SLF001
+                OriginTemplateSlot._meta.get_field("anchor_orgs"),  # noqa: SLF001
                 admin.site,
             ),
         }
@@ -116,9 +116,7 @@ class AnswerForm(forms.ModelForm):
         }
         widgets = {
             "grants_distinction": AutocompleteSelect(
-                OriginTemplateSlotChoice._meta.get_field(  # noqa: SLF001
-                    "grants_distinction"
-                ).remote_field,
+                OriginTemplateSlotChoice._meta.get_field("grants_distinction"),  # noqa: SLF001
                 admin.site,
             ),
         }
