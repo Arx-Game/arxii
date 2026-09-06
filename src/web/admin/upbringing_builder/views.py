@@ -74,6 +74,22 @@ def _answer_formsets(
     return out
 
 
+def _question_numbers(template: OriginTemplate) -> dict[int, int]:
+    """Each saved question's display number on the page, keyed by pk.
+
+    A question that reuses an earlier question's group, or that only shows after
+    one, names that question in its header chip ("About the group from Question
+    1", "Branches off Question 1") the way the approved demo does. The number is
+    a position on this page, not a stored field, so the page has to carry the
+    mapping - the referenced question is any sibling, not necessarily the one
+    the template loop is currently on.
+    """
+    if not template.pk:
+        return {}
+    slots = OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "name")
+    return {slot.pk: number for number, slot in enumerate(slots, start=1)}
+
+
 @dataclass
 class _RouteForms:
     """The three form layers one route's page needs.
@@ -116,6 +132,7 @@ def _render_page(
             "new_question_answers_help": NEW_QUESTION_ANSWERS_HELP,
             "live": live.for_template(template, request.user) if template.pk else None,
             "rail": live.rail_counts(template) if template.pk else None,
+            "question_numbers": _question_numbers(template),
         },
     )
 

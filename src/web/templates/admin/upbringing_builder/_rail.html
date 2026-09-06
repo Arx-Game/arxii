@@ -48,15 +48,6 @@ are invalid HTML.
 </div>
 
 <div class="module">
-  <h2>Preview</h2>
-  <p>
-    <a href="{% url 'admin_upbringing_builder_preview' template.pk %}" target="_blank" rel="noopener">
-      Preview as the player sees it
-    </a>
-  </p>
-</div>
-
-<div class="module">
   <h2>Credit</h2>
   <div class="ub-stat">
     <span>Written by</span>
@@ -74,4 +65,13 @@ are invalid HTML.
       <input type="submit" value="Mark reviewed">
     </div>
   </form>
+</div>
+
+<div class="module">
+  <h2>Preview</h2>
+  <p>
+    <a href="{% url 'admin_upbringing_builder_preview' template.pk %}" target="_blank" rel="noopener">
+      Preview as the player sees it
+    </a>
+  </p>
 </div>

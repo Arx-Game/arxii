@@ -1,7 +1,20 @@
 {% extends "admin/base_site.html" %}
-{% load i18n upbringing_builder_tags %}
+{% load i18n static upbringing_builder_tags %}
 
 {% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css. `forms.css` -
+where `.form-row`, `.aligned label`, `.flex-container`, `.checkbox-row` and
+`.submit-row` are defined - is linked by `change_form.html`'s own extrastyle
+block, so a custom admin page extending `base_site.html` has to ask for it
+itself. Without it this page renders admin's markup with no rules behind it and
+every field falls back to browser defaults (#3667, second round).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
 
 {% block extrahead %}
 {{ block.super }}

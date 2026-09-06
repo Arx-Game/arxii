@@ -3,6 +3,8 @@
 from pathlib import Path
 import re
 
+from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -360,19 +362,33 @@ class BuilderPreviewTest(BuilderTestCase):
 
 
 class BuilderStylingTest(BuilderTestCase):
-    """The page must draw itself with Django admin's CSS contract (#3667).
+    """Every rule the page's layout needs must REACH the page (#3667).
 
-    #3660 shipped the Builder rendering ``{{ form.as_div }}`` and hand-written
-    ``<p><label>`` rows inside panels that carried class hooks no stylesheet
-    defined. Admin's CSS targets ``fieldset.module.aligned``, ``div.form-row``
-    and ``div.help``; none of those appeared, so every field on the page fell
-    back to browser defaults on production while CI stayed green - the existing
-    tests only ever asserted that content was present, never that it was drawn.
+    Two rounds of this defect, both invisible to a test that reads the response
+    body alone. #3660 shipped the Builder rendering ``{{ form.as_div }}`` inside
+    panels whose class hooks no stylesheet defined. The first fix converted the
+    markup to admin's own ``fieldset.module.aligned`` / ``div.form-row`` /
+    ``div.help`` - and the page still rendered with browser defaults on
+    production, because ``.form-row``, ``.aligned label``, ``.flex-container``,
+    ``.checkbox-row`` and ``.submit-row`` are defined in ``admin/css/forms.css``,
+    which Django links from ``change_form.html``'s ``extrastyle`` block and this
+    page never loaded.
+
+    Asserting a class NAME appears in the HTML proves nothing: it is satisfied by
+    markup nobody styles. Asserting the name appears in the page's reachable CSS
+    is not enough either - ``responsive.css`` (which ``base.html`` does link)
+    mentions every one of those names inside media queries, so that check passes
+    with the whole layout still missing. The stylesheet has to be named.
     """
 
-    #: Classes the builder templates may use without defining a rule, because
-    #: Django admin's own stylesheets already style them. Anything else the
-    #: markup carries is ours, and must have a rule on the page.
+    #: Stylesheets this page has to link for itself. ``admin/base.html`` links
+    #: ``base.css``, ``dark_mode.css`` and ``responsive.css``; ``forms.css`` is
+    #: linked by ``change_form.html`` only, so any custom admin page that renders
+    #: form rows has to ask for it in its own ``extrastyle`` block.
+    REQUIRED_STYLESHEETS = ("admin/css/base.css", "admin/css/forms.css")
+
+    #: Classes our own templates carry that Django admin already styles; the rest
+    #: of what they carry is ours, and must have a rule in CSS the page loads.
     ADMIN_PROVIDED_CLASSES = frozenset(
         {
             "module",
@@ -393,11 +409,58 @@ class BuilderStylingTest(BuilderTestCase):
         }
     )
 
+    #: A class the page's own script selects on and nothing styles. Named rather
+    #: than allowlisted loosely, so a genuine missing rule cannot hide here.
+    JS_ONLY_CLASSES = frozenset({"add-answer-btn"})
+
     def _body(self) -> str:
         self.client.force_login(self.author)
         resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
         assert resp.status_code == 200
         return resp.content.decode()
+
+    def _stylesheet_hrefs(self, body: str) -> list[str]:
+        hrefs = []
+        for tag in re.findall(r"<link[^>]*>", body):
+            if 'rel="stylesheet"' not in tag:
+                continue
+            match = re.search(r'href="([^"]+)"', tag)
+            if match is not None:
+                hrefs.append(match.group(1))
+        return hrefs
+
+    def _reachable_css(self, body: str) -> str:
+        """The page's inline ``<style>`` blocks plus every stylesheet it links.
+
+        Each ``<link>`` is resolved through the staticfiles finders and read off
+        disk. One that resolves to nothing is a failure in itself: the page is
+        asking for a stylesheet that will 404.
+        """
+        css = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", body, flags=re.DOTALL))
+        missing: list[str] = []
+        for href in self._stylesheet_hrefs(body):
+            if not href.startswith(settings.STATIC_URL):
+                continue  # an absolute URL elsewhere; nothing to read off disk
+            found = finders.find(href[len(settings.STATIC_URL) :])
+            if found is None:
+                missing.append(href)
+                continue
+            css += "\n" + Path(found).read_text()
+        assert not missing, f"the page links stylesheets that do not resolve: {missing}"
+        return css
+
+    def test_the_page_links_the_stylesheets_its_layout_needs(self):
+        """The guard the second round needed: correct markup, no stylesheet behind it."""
+        linked = self._stylesheet_hrefs(self._body())
+        missing = [
+            sheet
+            for sheet in self.REQUIRED_STYLESHEETS
+            if not any(href.endswith(sheet) for href in linked)
+        ]
+        assert not missing, (
+            f"the page does not link {missing}; its admin markup has no rules behind it. "
+            f"Linked: {linked}"
+        )
 
     def test_fields_render_through_admins_fieldset_contract(self):
         body = self._body()
@@ -412,8 +475,8 @@ class BuilderStylingTest(BuilderTestCase):
         assert 'class="ub-rail"' in body
         assert "grid-template-columns" in body, "the two-column shell has no rule"
 
-    def test_every_class_the_builder_emits_has_a_rule_on_the_page(self):
-        """The guard the original defect needed: a hook with no rule is the bug."""
+    def test_every_class_the_builder_emits_has_a_rule_that_reaches_the_page(self):
+        """The guard the first round needed, asked of the CSS rather than the HTML."""
         template_dir = Path(__file__).resolve().parents[2] / "templates/admin/upbringing_builder"
         emitted: set[str] = set()
         for path in sorted(template_dir.glob("*.html")):
@@ -423,8 +486,66 @@ class BuilderStylingTest(BuilderTestCase):
             for attr in re.findall(r'class="([^"]*)"', markup):
                 emitted.update(token for token in attr.split() if token)
 
-        body = self._body()
-        undefined = sorted(
-            token for token in emitted - self.ADMIN_PROVIDED_CLASSES if f".{token}" not in body
+        css = self._reachable_css(self._body())
+        ignored = self.ADMIN_PROVIDED_CLASSES | self.JS_ONLY_CLASSES
+        undefined = sorted(token for token in emitted - ignored if f".{token}" not in css)
+        assert not undefined, f"class hooks with no CSS rule reaching the page: {undefined}"
+
+
+class BuilderDemoFidelityTest(BuilderTestCase):
+    """Where a piece sits, not just that it is present (#3667 demo-fidelity review).
+
+    Every one of these was rendered on the page and read as content by the
+    earlier tests while sitting in the wrong place, or missing entirely, against
+    the design the demo approved. "Is the string in the body" cannot tell the
+    difference; each of these asks about position or about the piece itself.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.q2 = OriginTemplateSlotFactory(
+            template=cls.template,
+            sort_order=1,
+            name="Who looked after you",
+            kind=QuestionKind.PERSON,
+            same_anchor_as=cls.q1,
         )
-        assert not undefined, f"class hooks with no CSS rule on the page: {undefined}"
+        cls.q3 = OriginTemplateSlotFactory(
+            template=cls.template,
+            sort_order=2,
+            name="How you left",
+            kind=QuestionKind.TEXT,
+            follow_up_to=cls.q1,
+        )
+
+    def _body(self) -> str:
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        assert resp.status_code == 200
+        return resp.content.decode()
+
+    def test_the_live_match_line_sits_under_the_rule_it_reports_on(self):
+        """It used to trail the whole question, several screens from the field."""
+        body = self._body()
+        live_line = body.index("Matches 1 group today")
+        answers_table = body.index('class="tuning-table answers-table"')
+        rule_row = body.index("field-anchor_org_type")
+        assert rule_row < live_line < answers_table, (
+            "the live match line must sit between the type/realm row it reports on and "
+            "the answers table, not after the whole question"
+        )
+
+    def test_a_question_names_the_earlier_one_it_hangs_off(self):
+        # Compared against whitespace-collapsed markup, which is what a reader
+        # sees: the chip's number sits on its own line to stay inside the line
+        # limit, and the browser renders that as a single space.
+        text = re.sub(r"\s+", " ", self._body())
+        assert "About the group from Question 1" in text, "reused-anchor chip missing"
+        assert "Branches off Question 1" in text, "follow-up chip missing"
+
+    def test_the_rail_runs_route_checks_credit_preview(self):
+        body = self._body()
+        wanted = ("This route", "Checks", "Credit", "Preview")
+        order = [body.index(f"<h2>{name}</h2>") for name in wanted]
+        assert order == sorted(order), f"the rail's panels are out of the demo's order {wanted}"

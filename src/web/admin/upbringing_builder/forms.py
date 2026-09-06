@@ -152,17 +152,18 @@ UPBRINGING_FIELDSETS = (
 QUESTION_FIELDSETS = (
     (None, {"fields": ("kind", "name", "prompt", "example", "is_required")}),
     ("The tie", {"fields": (("connection_kind", "life_stage"),)}),
+    # Split at the type/realm boundary so the "Matches N groups today" live line
+    # can be emitted between the two, directly under the rule it reports on, the
+    # way `page.html` already places the open-places line under "Family paths"
+    # (#3667 demo-fidelity review). Nothing here is hand-written form markup:
+    # both halves still render through admin's own fieldset template.
     (
         "Which groups can be picked",
-        {
-            "fields": (
-                "anchor_source",
-                ("anchor_org_type", "anchor_society"),
-                "anchor_orgs",
-                "exclude_covert",
-                "same_anchor_as",
-            )
-        },
+        {"fields": ("anchor_source", ("anchor_org_type", "anchor_society"))},
+    ),
+    (
+        None,
+        {"fields": ("anchor_orgs", "exclude_covert", "same_anchor_as")},
     ),
     (
         "When this question is shown",

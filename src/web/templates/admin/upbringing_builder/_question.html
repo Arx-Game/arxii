@@ -16,6 +16,13 @@ Takes `question_form`, and `question_number` (blank for the unsaved clone).
     <span class="kind-chips">
       <span class="kind-chip">{{ question_form.instance.get_kind_display }}</span>
       <span class="kind-chip">{% if question_form.instance.is_required %}Required{% else %}Optional{% endif %}</span>
+      {% if question_form.instance.same_anchor_as_id %}
+      <span class="kind-chip">About the group from Question
+        {{ question_numbers|dict_get:question_form.instance.same_anchor_as_id }}</span>
+      {% elif question_form.instance.follow_up_to_id %}
+      <span class="kind-chip">Branches off Question
+        {{ question_numbers|dict_get:question_form.instance.follow_up_to_id }}</span>
+      {% endif %}
     </span>
     {% endif %}
   </h2>
@@ -52,6 +59,18 @@ Takes `question_form`, and `question_number` (blank for the unsaved clone).
 
   {% for fieldset in question_form|question_fieldsets %}
     {% include "admin/includes/fieldset.html" with heading_level=3 prefix="q" id_prefix=question_form.prefix id_suffix=forloop.counter0 %}
+    {% if fieldset.name == "Which groups can be picked" and question_form.instance.kind == "group" %}
+      {% with matched=live.groups_by_slot|dict_get:question_form.instance.pk %}
+      {% if matched is not None %}
+      <p class="live-line ub-fieldset-note">
+        Matches {{ matched|length }} group{{ matched|length|pluralize }} today:
+        {% for org in matched %}
+        <a href="{% url 'admin:arxii_organization_change' org.pk %}">{{ org.name }}</a>{% if not forloop.last %}, {% endif %}
+        {% endfor %}
+      </p>
+      {% endif %}
+      {% endwith %}
+    {% endif %}
   {% endfor %}
 
   {% if question_form.instance.pk %}
@@ -59,18 +78,6 @@ Takes `question_form`, and `question_number` (blank for the unsaved clone).
       {% with slot_answers=answers|dict_get:question_form.instance.pk %}
       {% include "admin/upbringing_builder/_answers.html" with slot=question_form.instance formset=slot_answers %}
       {% endwith %}
-      {% if question_form.instance.kind == "group" %}
-        {% with matched=live.groups_by_slot|dict_get:question_form.instance.pk %}
-        {% if matched is not None %}
-        <p class="live-line">
-          Matches {{ matched|length }} group{{ matched|length|pluralize }} today:
-          {% for org in matched %}
-          <a href="{% url 'admin:arxii_organization_change' org.pk %}">{{ org.name }}</a>{% if not forloop.last %}, {% endif %}
-          {% endfor %}
-        </p>
-        {% endif %}
-        {% endwith %}
-      {% endif %}
     {% endif %}
   {% else %}
     <p class="help">{{ new_question_answers_help }}</p>
