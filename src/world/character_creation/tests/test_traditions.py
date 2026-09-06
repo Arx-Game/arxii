@@ -4,11 +4,13 @@ from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
-from world.character_creation.constants import TraditionState
+from world.character_creation.constants import OfferChapter, TraditionState
 from world.character_creation.factories import (
     BeginningsFactory,
     BeginningTraditionFactory,
     CharacterDraftFactory,
+    DistinctionOfferFactory,
+    SchoolingLineFactory,
     TraditionStateLineFactory,
 )
 from world.character_creation.models import Beginnings, BeginningTradition
@@ -188,6 +190,63 @@ class TraditionListLeakTests(TestCase):
             f"Expected zero Beginnings-as-primary-table queries on repeat request "
             f"(SharedMemoryModel cache hit), got: {primary_tables}"
         )
+
+    def test_rows_carry_state_line_refund_and_schooling(self):
+        """Tradition rows print their slate state's line, carried refund, and
+        schooling stances (#3675).
+        """
+        drawback = DistinctionFactory(name="Unbound Drawback", cost_per_rank=-75)
+        TraditionStateLineFactory(
+            state=TraditionState.SELF_TAUGHT, entry_line="Self-taught", carries=drawback
+        )
+        TraditionStateLineFactory(state=TraditionState.TEACHERS_GONE, entry_line="Teachers gone")
+        TraditionStateLineFactory(state=TraditionState.LIVING_MASTERS, entry_line="Living masters")
+
+        training = DistinctionFactory(name="Tradition Training", cost_per_rank=1)
+        SchoolingLineFactory(rank=0, name="Untrained", player_line="No training yet.")
+        rank_one = SchoolingLineFactory(
+            rank=1, name="Apprentice", player_line="Some training.", grants=training
+        )
+        SchoolingLineFactory(
+            rank=2, name="Journeyman", player_line="More training.", grants=training
+        )
+        offer = DistinctionOfferFactory(
+            chapter=OfferChapter.TRADITION_STEP, schooling_line=rank_one, distinction=training
+        )
+
+        beginning = BeginningsFactory(name="StateLineBeginning")
+        self_taught_tradition = TraditionFactory(name="SelfTaughtTradition")
+        living_tradition = TraditionFactory(name="LivingTradition")
+        BeginningTraditionFactory(
+            beginning=beginning,
+            tradition=self_taught_tradition,
+            state=TraditionState.SELF_TAUGHT,
+        )
+        BeginningTraditionFactory(
+            beginning=beginning,
+            tradition=living_tradition,
+            state=TraditionState.LIVING_MASTERS,
+            own_wording="Raised in the watch-house",
+        )
+
+        response = self.client.get(
+            "/api/character-creation/traditions/", {"beginning_id": beginning.id}
+        )
+        assert response.status_code == status.HTTP_200_OK
+        rows = {r["id"]: r for r in response.data}
+
+        self_row = rows[self_taught_tradition.id]
+        assert self_row["refund"] == -75
+        assert self_row["state_line"] == "Self-taught"
+        assert self_row["schooling"] == []
+
+        living_row = rows[living_tradition.id]
+        assert living_row["own_wording"] == "Raised in the watch-house"
+        assert living_row["state_line"] == "Raised in the watch-house"
+        assert living_row["schooling"][1]["price"] == 1
+        assert living_row["schooling"][1]["techniques"] == 2
+        assert living_row["schooling"][1]["offer_id"] == offer.id
+        assert living_row["schooling"][0]["offer_id"] is None
 
 
 class SelectTraditionTests(TestCase):

@@ -2,9 +2,15 @@
 
 from django.test import TestCase
 
-from world.character_creation.constants import AnchorSource, QuestionKind
+from world.character_creation.constants import (
+    AnchorSource,
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
+)
 from world.character_creation.factories import (
     CharacterDraftFactory,
+    DistinctionOfferFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -85,8 +91,12 @@ class ConnectionValidationTest(TestCase):
 
     def test_bundled_distinction_cannot_also_be_picked(self):
         kept = DistinctionFactory(name="Kept Close")
-        granting = OriginTemplateSlotChoiceFactory(
-            slot=self.q1, name="Courier", grants_distinction=kept
+        granting = OriginTemplateSlotChoiceFactory(slot=self.q1, name="Courier")
+        DistinctionOfferFactory(
+            distinction=kept,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=granting,
+            arrives_as=OfferArrival.BUNDLED,
         )
         draft = _draft(
             self.template,

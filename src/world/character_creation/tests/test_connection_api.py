@@ -4,8 +4,14 @@ from django.test.utils import CaptureQueriesContext
 from evennia.accounts.models import AccountDB
 from rest_framework.test import APIClient
 
-from world.character_creation.constants import AnchorSource, QuestionKind
+from world.character_creation.constants import (
+    AnchorSource,
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
+)
 from world.character_creation.factories import (
+    DistinctionOfferFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -30,7 +36,13 @@ class OriginTemplateConnectionReadTest(TestCase):
         cls.q1.anchor_orgs.add(cls.org)
         cls.kept = DistinctionFactory(name="Kept Close", cost_per_rank=15)
         cls.choice = OriginTemplateSlotChoiceFactory(
-            slot=cls.q1, name="Courier", grants_distinction=cls.kept, reputation_seed=200
+            slot=cls.q1, name="Courier", reputation_seed=200
+        )
+        cls.offer = DistinctionOfferFactory(
+            distinction=cls.kept,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=cls.choice,
+            arrives_as=OfferArrival.BUNDLED,
         )
         cls.q2 = OriginTemplateSlotFactory(
             template=cls.template,
@@ -60,12 +72,17 @@ class OriginTemplateConnectionReadTest(TestCase):
             }
         ]
         choice = q1["choices"][0]
-        assert choice["grants_distinction"] == {
-            "id": self.kept.id,
-            "name": "Kept Close",
-            "cost_per_rank": 15,
-            "secret_by_default": False,
-        }
+        assert choice["offers"] == [
+            {
+                "offer_id": self.offer.id,
+                "distinction_id": self.kept.id,
+                "name": "Kept Close",
+                "player_line": "",
+                "arrives_as": "bundled",
+                "cost_per_rank": 15,
+                "max_rank": self.kept.max_rank,
+            }
+        ]
         assert "reputation_seed" not in choice
         q2 = slots[self.q2.id]
         assert q2["kind"] == "person"

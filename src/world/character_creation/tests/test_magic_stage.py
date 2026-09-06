@@ -11,8 +11,9 @@ from world.character_creation.constants import (
     SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_TRADITION_NAME,
+    OfferChapter,
 )
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import CharacterDraftFactory, DistinctionOfferFactory
 from world.character_creation.services import (
     _finalize_academy_entrance_obligation,
     finalize_magic_data,
@@ -25,7 +26,6 @@ from world.fatigue.models import FatiguePool
 from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import (
     GiftFactory,
-    GlimpseTagDistinctionSuggestionFactory,
     GlimpseTagFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
@@ -648,16 +648,30 @@ class CGGlimpseTagEndpointTest(TestCase):
         # Meta.ordering = ["axis", "sort_order", "name"] — CONSEQUENCE < TONE alphabetically.
         assert slugs == [consequence_a.slug, tone_a.slug, tone_b.slug]
 
-    def test_embeds_suggested_distinctions(self):
+    def test_embeds_offers(self):
         tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-x")
         distinction = DistinctionFactory(name="Fated")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=distinction)
+        offer = DistinctionOfferFactory(
+            distinction=distinction,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag,
+            player_line="A line.",
+        )
 
         response = self.client.get("/api/character-creation/glimpse-tags/")
 
         assert response.status_code == status.HTTP_200_OK
         row = next(r for r in response.data if r["slug"] == "tone-x")
-        assert row["suggested_distinctions"] == [{"id": distinction.id, "name": "Fated"}]
+        assert row["offers"] == [
+            {
+                "offer_id": offer.id,
+                "distinction_id": distinction.id,
+                "name": "Fated",
+                "player_line": "A line.",
+                "cost_per_rank": distinction.cost_per_rank,
+                "max_rank": distinction.max_rank,
+            }
+        ]
 
     def test_axis_filter(self):
         GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-only")
@@ -682,10 +696,10 @@ class CGGlimpseTagEndpointTest(TestCase):
         )
 
     def test_query_count_constant_as_tags_grow(self):
-        """Prefetch guard: same query count with 2 tags (+suggestions) as with 6.
+        """Prefetch guard: same query count with 2 tags (+offers) as with 6.
 
-        ``GlimpseTag``/``GlimpseTagDistinctionSuggestion`` are SharedMemoryModel
-        (idmapper) rows — once an instance is fetched with its prefetch populated,
+        ``GlimpseTag``/``DistinctionOffer`` are SharedMemoryModel (idmapper)
+        rows — once an instance is fetched with its prefetch populated,
         re-fetching the *same* identity-mapped row skips the prefetch query
         entirely (a feature, not a bug: see the ``sharedmemory-model`` skill).
         That would make the second capture look artificially cheaper rather than
@@ -695,7 +709,8 @@ class CGGlimpseTagEndpointTest(TestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        from world.magic.models import GlimpseTag, GlimpseTagDistinctionSuggestion
+        from world.character_creation.models import DistinctionOffer
+        from world.magic.models import GlimpseTag
 
         url = "/api/character-creation/glimpse-tags/"
 
@@ -706,8 +721,12 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc-a")
         tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc-b")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_a, distinction=DistinctionFactory())
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_b, distinction=DistinctionFactory())
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
 
         with CaptureQueriesContext(connection) as small:
             response = self.client.get(url)
@@ -715,10 +734,12 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         for i in range(4):
             tag = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug=f"qc-extra-{i}")
-            GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=DistinctionFactory())
+            DistinctionOfferFactory(
+                distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
+            )
 
         GlimpseTag.flush_instance_cache()
-        GlimpseTagDistinctionSuggestion.flush_instance_cache()
+        DistinctionOffer.flush_instance_cache()
 
         with CaptureQueriesContext(connection) as big:
             response = self.client.get(url)

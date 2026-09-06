@@ -44,11 +44,13 @@ from world.character_creation.models import (
     BeginningTradition,
     CGPointBudget,
     CharacterDraft,
+    DistinctionOffer,
     DraftApplication,
     DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     StartingArea,
+    TraditionStateLine,
 )
 from world.character_creation.offers import closed_for, offers_for, reconcile_offer_picks
 from world.character_creation.serializers import (
@@ -76,6 +78,7 @@ from world.character_creation.serializers import (
     SpeciesSerializer,
     StartingAreaSerializer,
     TraditionSerializer,
+    schooling_rows,
 )
 from world.character_creation.services import (
     CharacterCreationError,
@@ -103,7 +106,6 @@ from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.models import (
     Gift,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     Technique,
     Tradition,
 )
@@ -136,6 +138,25 @@ def _claimable_kind_ids_by_template(templates: list[OriginTemplate]) -> dict[int
     ).values_list("claimable_in_templates", "id")
     for template_id, kind_id in rows:
         grouping[template_id].append(kind_id)
+    return grouping
+
+
+def _offers_by_choice(templates: list[OriginTemplate]) -> dict[int, list[DistinctionOffer]]:
+    """One flat query for every Lineage ``DistinctionOffer`` across ``templates`` (#3675).
+
+    Grouped by ``OriginTemplateSlotChoice`` id in Python, mirroring
+    ``_claimable_kind_ids_by_template``. Bounded to exactly one query regardless of
+    how many templates are being listed - see ``CGOriginTemplateViewSet.list()``.
+    """
+    grouping: dict[int, list[DistinctionOffer]] = defaultdict(list)
+    if not templates:
+        return grouping
+    rows = DistinctionOffer.objects.filter(
+        origin_choice__slot__template__in=[t.pk for t in templates],
+        is_active=True,
+    ).select_related("distinction")
+    for offer in rows:
+        grouping[offer.origin_choice_id].append(offer)
     return grouping
 
 
@@ -436,6 +457,11 @@ class TraditionViewSet(viewsets.ReadOnlyModelViewSet):
             if beginning is not None
             else {}
         )
+        # The three standard state lines and the standard schooling stances are
+        # shared by every tradition row in this response (#3675) — one query each,
+        # not one per row.
+        context["state_lines"] = {sl.state: sl for sl in TraditionStateLine.objects.all()}
+        context["schooling"] = schooling_rows()
         return context
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
@@ -617,9 +643,11 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     def get_queryset(self) -> QuerySet[GlimpseTag]:
         return GlimpseTag.objects.filter(is_active=True).prefetch_related(
             Prefetch(
-                "distinction_suggestions",
-                queryset=GlimpseTagDistinctionSuggestion.objects.select_related("distinction"),
-                to_attr="cached_distinction_suggestions",
+                "distinction_offers",
+                queryset=DistinctionOffer.objects.filter(is_active=True).select_related(
+                    "distinction"
+                ),
+                to_attr="cached_offers",
             )
         )
 
@@ -676,19 +704,20 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         ).order_by("sort_order", "name")
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Serialize with one batched ``claimable_kind_ids`` query, not one per row.
+        """Serialize with one batched ``claimable_kind_ids`` + offers query, not one per row.
 
         Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
         so there is no ``page`` branch to preserve) but materializes the
-        queryset once and passes a template-id -> kind-id grouping into the
-        serializer context (no per-request memo on ``self`` - ADR-0260; the
-        grouping is a plain argument, not state stashed on the view or
-        serializer instance).
+        queryset once and passes a template-id -> kind-id grouping and a
+        choice-id -> offers grouping into the serializer context (no per-request
+        memo on ``self`` - ADR-0260; each grouping is a plain argument, not state
+        stashed on the view or serializer instance).
         """
         templates = list(self.filter_queryset(self.get_queryset()))
         context = {
             **self.get_serializer_context(),
             "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
+            "offers_by_choice": _offers_by_choice(templates),
         }
         serializer = self.get_serializer_class()(templates, many=True, context=context)
         return Response(serializer.data)
