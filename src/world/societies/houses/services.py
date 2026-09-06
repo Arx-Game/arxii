@@ -11,7 +11,7 @@ create opportunities on top of it; nothing gates on a head being online.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -120,18 +120,111 @@ def resolve_particle(family: Family | None, *, taken_in: bool = False) -> str:
     realm = realm_for_house(house)
     if realm is None:
         return ""
-    rank = house_tier_rank(house)
-    rows = [
-        row
-        for row in NobiliaryParticle.objects.filter(realm=realm, kind=family.kind)
-        if TITLE_TIER_RANK.get(row.tier_floor, 0) <= rank
-    ]
-    row = max(rows, key=lambda r: TITLE_TIER_RANK.get(r.tier_floor, 0), default=None)
+    row = _band_row(
+        list(NobiliaryParticle.objects.filter(realm=realm, kind=family.kind)),
+        house_tier_rank(house),
+    )
     if row is None:
         return ""
     if taken_in and row.taken_in_particle:
         return row.taken_in_particle
     return row.particle
+
+
+def _band_row(rows: list[NobiliaryParticle], rank: int) -> NobiliaryParticle | None:
+    """The applicable band among ``rows``: highest ``tier_floor`` <= ``rank``.
+
+    Shared by ``resolve_particle`` and ``particles_for_families`` so the
+    band rule has one home; ``rows`` are one realm x kind's particles.
+    """
+    applicable = [row for row in rows if TITLE_TIER_RANK.get(row.tier_floor, 0) <= rank]
+    return max(applicable, key=lambda r: TITLE_TIER_RANK.get(r.tier_floor, 0), default=None)
+
+
+@dataclass(frozen=True)
+class FamilyParticles:
+    """The born and taken-in particles a family's members wear (#3261)."""
+
+    born: str
+    taken_in: str
+
+
+@dataclass(frozen=True)
+class _HouseRef:
+    """A family's house org and the realm it sits in (realm None = none)."""
+
+    org_id: int
+    realm_id: int | None
+
+
+def _house_refs_by_family(family_ids: list[int]) -> dict[int, _HouseRef]:
+    """One query: each family's house org plus that house's realm.
+
+    Lowest pk per family mirrors ``house_for_family``'s
+    (unordered-by-default) ``family.organizations.first()`` - a family has at
+    most one org in practice - so a house whose society is null yields a ref
+    with no realm rather than falling through to a second org.
+    """
+    refs: dict[int, _HouseRef] = {}
+    for org_id, family_id, realm_id in (
+        Organization.objects.filter(family_id__in=family_ids)
+        .order_by("family_id", "pk")
+        .values_list("pk", "family_id", "society__realm_id")
+    ):
+        refs.setdefault(family_id, _HouseRef(org_id=org_id, realm_id=realm_id))
+    return refs
+
+
+def _rank_by_org(org_ids: list[int]) -> dict[int, int]:
+    """One query: each house's highest held title rank (``house_tier_rank``)."""
+    ranks: dict[int, int] = {}
+    for org_id, tier in Title.objects.filter(house_id__in=org_ids).values_list("house_id", "tier"):
+        ranks[org_id] = max(ranks.get(org_id, 0), TITLE_TIER_RANK.get(tier, 0))
+    return ranks
+
+
+def particles_for_families(families: Sequence[Family]) -> dict[int, FamilyParticles]:
+    """``resolve_particle`` for a whole page of families at once (#3654).
+
+    Three flat queries regardless of how many families are passed - the
+    house orgs (carrying their realm), the titles those houses hold, and the
+    realms' ``NobiliaryParticle`` rows - grouped in Python, where the
+    per-family path costs about six. Band resolution is the same
+    ``_band_row`` ``resolve_particle`` uses.
+
+    A family with no house, a house outside any realm, or no applicable band
+    is absent from the mapping; a caller reads absence as "" (the bare name
+    ``resolve_particle`` returns). Deliberately not ``prefetch_related`` or
+    ``Prefetch(to_attr=...)`` - neither is reliable on these
+    SharedMemoryModel instances (see the ``sharedmemory-model`` skill).
+    """
+    if not families:
+        return {}
+    refs = _house_refs_by_family([family.pk for family in families])
+    if not refs:
+        return {}
+    ranks = _rank_by_org([ref.org_id for ref in refs.values()])
+
+    rows_by_band: dict[tuple[int, int], list[NobiliaryParticle]] = {}
+    for row in NobiliaryParticle.objects.filter(
+        realm_id__in={ref.realm_id for ref in refs.values() if ref.realm_id is not None},
+        kind_id__in={family.kind_id for family in families},
+    ):
+        rows_by_band.setdefault((row.realm_id, row.kind_id), []).append(row)
+
+    resolved: dict[int, FamilyParticles] = {}
+    for family in families:
+        ref = refs.get(family.pk)
+        if ref is None or ref.realm_id is None:
+            continue
+        rows = rows_by_band.get((ref.realm_id, family.kind_id), [])
+        row = _band_row(rows, ranks.get(ref.org_id, 0))
+        if row is not None:
+            resolved[family.pk] = FamilyParticles(
+                born=row.particle,
+                taken_in=row.taken_in_particle or row.particle,
+            )
+    return resolved
 
 
 def _join_name_pieces(pieces: list[str]) -> str:

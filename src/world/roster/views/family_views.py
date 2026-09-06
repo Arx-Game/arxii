@@ -141,13 +141,18 @@ class FamilyViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = FamilyFilterSet
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        # Serialize with one batched inherited grouping, not one per row. Mirrors
+        # Serialize with batched groupings, not one lookup per row. Mirrors
         # CGOriginTemplateViewSet.list() (this ViewSet also opts out of pagination,
         # so there is no page branch to preserve).
+        from world.societies.houses.services import particles_for_families  # noqa: PLC0415
+
         families = list(self.filter_queryset(self.get_queryset()))
         context = {
             **self.get_serializer_context(),
             "inherited_by_family": _inherited_by_family(families),
+            # #3654: born/taken-in particles batched the same way, three flat
+            # queries instead of ~six per housed family (resolve_particle).
+            "particles_by_family": particles_for_families(families),
         }
         serializer = self.get_serializer_class()(families, many=True, context=context)
         return Response(serializer.data)
