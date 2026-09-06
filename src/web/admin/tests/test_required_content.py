@@ -790,3 +790,61 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
             "Nothing missing. Every required content dependency resolved against this database.",
             body,
         )
+
+
+class TestSavagedConditionDeclaration(TestCase):
+    """`savaged-condition` (#3652): `_apply_savaged()` resolves via `get_by_name`,
+    case-insensitively, so the probe matches that."""
+
+    def test_missing_on_an_empty_database(self) -> None:
+        probe = _probe_for("savaged-condition")
+        result = probe.resolve(frozenset())
+        self.assertFalse(result.present)
+
+    def test_present_once_the_condition_exists(self) -> None:
+        from world.companions.defeat_content import SAVAGED_CONDITION_NAME
+
+        probe = _probe_for("savaged-condition")
+        ConditionTemplateFactory(name=SAVAGED_CONDITION_NAME)
+        result = probe.resolve(frozenset({SAVAGED_CONDITION_NAME}))
+        self.assertTrue(result.present)
+
+
+class TestCompanionDefeatPoolProbe(TestCase):
+    """`companion-defeat-pool` (#3652): a `CustomProbe`, not a name-only probe,
+    because `resolve_companion_defeat` treats an entry-less pool as absent
+    (`if not consequences: return False`) - the exact false-green shape the
+    `Surrounded` composite probe above exists to avoid."""
+
+    def test_missing_on_an_empty_database(self) -> None:
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePool" in m for m in result.missing))
+
+    def test_missing_when_the_pool_exists_but_has_no_entries(self) -> None:
+        """A bare pool row with no ConsequencePoolEntry is a silent no-op, not a
+        working pool - a name-only probe would report this present."""
+        from actions.factories import ConsequencePoolFactory
+        from world.companions.factories_combat import COMPANION_DEFEAT_POOL_NAME
+
+        ConsequencePoolFactory(name=COMPANION_DEFEAT_POOL_NAME)
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePoolEntry" in m for m in result.missing))
+
+    def test_missing_when_every_entry_is_excluded(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.companions.factories_combat import COMPANION_DEFEAT_POOL_NAME
+
+        pool = ConsequencePoolFactory(name=COMPANION_DEFEAT_POOL_NAME)
+        ConsequencePoolEntryFactory(pool=pool, is_excluded=True)
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+
+    def test_present_once_the_seeded_pool_exists(self) -> None:
+        from world.companions.factories_combat import create_companion_defeat_pool
+
+        create_companion_defeat_pool()
+        result = rc._probe_companion_defeat_pool()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())

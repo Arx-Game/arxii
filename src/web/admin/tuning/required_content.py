@@ -500,6 +500,34 @@ def _probe_battle_outcome_mappings() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_companion_defeat_pool() -> ProbeResult:
+    """The pool AND its entries - an empty pool draws nothing.
+
+    Consumer: `world/companions/services.py:335 resolve_companion_defeat()`, whose
+    guard is `if not consequences: return False`, so a bare pool row with no
+    ConsequencePoolEntry is a silent no-op, not a working pool.
+    """
+    from actions.models import ConsequencePool  # noqa: PLC0415
+    from world.companions.factories_combat import (  # noqa: PLC0415
+        COMPANION_DEFEAT_POOL_NAME,
+    )
+
+    pool = ConsequencePool.objects.filter(name=COMPANION_DEFEAT_POOL_NAME).first()
+    if pool is None:
+        return ProbeResult(
+            present=False,
+            missing=(f"ConsequencePool {COMPANION_DEFEAT_POOL_NAME!r}",),
+            detail=f"No {COMPANION_DEFEAT_POOL_NAME!r} ConsequencePool row.",
+        )
+    if not pool.entries.filter(is_excluded=False).exists():
+        return ProbeResult(
+            present=False,
+            missing=(f"ConsequencePoolEntry rows for {COMPANION_DEFEAT_POOL_NAME!r}",),
+            detail="The pool exists but has no entries, so every draw is a no-op.",
+        )
+    return ProbeResult(present=True)
+
+
 def _beginnings_without_upbringing() -> ProbeResult:
     """Every active `Beginnings` row has at least one active `OriginTemplate`.
 
@@ -543,6 +571,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
     from world.combat.interpose_content import INTERPOSE_CHALLENGE_NAME  # noqa: PLC0415
     from world.combat.sent_flying_content import SENT_FLYING_CONDITION_NAME  # noqa: PLC0415
     from world.companions.content import BIND_ATTEMPT_CHECK_NAME  # noqa: PLC0415
+    from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
     from world.companions.mount_content import (  # noqa: PLC0415
         MOUNTED_CONDITION_NAME,
         UNHORSED_CONDITION_NAME,
@@ -700,6 +729,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
             probe=NamedRowsProbe(
                 label="ConditionTemplate", names=(CHARM_CONDITION_NAME,), case_insensitive=True
+            ),
+        ),
+        ContentDependency(
+            key="savaged-condition",
+            label="Savaged condition template",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/companions/services.py:398 _apply_savaged()",
+            consequence=(
+                "A companion drawn the stay_incapacitated outcome walks away "
+                "unmarked, so that draw is indistinguishable from recovering "
+                "and the pool's three tiers collapse to two."
+            ),
+            probe=NamedRowsProbe(
+                label="ConditionTemplate",
+                names=(SAVAGED_CONDITION_NAME,),
+                case_insensitive=True,
             ),
         ),
         ContentDependency(
@@ -1218,6 +1263,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "authors the missing row."
             ),
             probe=CustomProbe(fn=_probe_battle_outcome_mappings),
+        ),
+        ContentDependency(
+            key="companion-defeat-pool",
+            label="Companion defeat consequence pool",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/companions/services.py:335 resolve_companion_defeat()",
+            consequence=(
+                "A companion defeated at EXTREME or LETHAL risk is silently "
+                "unharmed: it never dies, never comes out savaged, and the "
+                "stakes its owner acknowledged mean nothing."
+            ),
+            probe=CustomProbe(fn=_probe_companion_defeat_pool),
         ),
         ContentDependency(
             key="capability-power-bridges",
