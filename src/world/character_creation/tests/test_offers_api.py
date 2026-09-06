@@ -88,6 +88,32 @@ class OffersEndpointTests(TestCase):
         )
         assert resp.status_code == status.HTTP_400_BAD_REQUEST
 
+    def test_sync_merges_two_offers_for_the_same_distinction(self):
+        offer_a = DistinctionOfferFactory(
+            distinction=self.scar, chapter=OfferChapter.APPEARANCE, name="Old Wound"
+        )
+        offer_b = DistinctionOfferFactory(
+            distinction=self.scar, chapter=OfferChapter.APPEARANCE, name="Battle Mark"
+        )
+        url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
+        resp = self.client.put(
+            url,
+            {
+                "distinctions": [
+                    {"id": self.scar.id, "rank": 1, "offer_id": offer_a.id},
+                    {"id": self.scar.id, "rank": 2, "offer_id": offer_b.id},
+                ]
+            },
+            format="json",
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        self.draft.refresh_from_db()
+        (entry,) = self.draft.draft_data["distinctions"]
+        assert entry["rank"] == 2
+        assert set(entry["offer_ids"]) == {offer_a.id, offer_b.id}
+        assert len(entry["sources"]) == 2
+        assert entry["cost"] == self.scar.cost_per_rank * 2
+
 
 class SelectTraditionCarriesTests(TestCase):
     @classmethod
@@ -126,3 +152,21 @@ class SelectTraditionCarriesTests(TestCase):
         self.client.post(url, {"tradition_id": None}, format="json")
         self.draft.refresh_from_db()
         assert self.draft.draft_data.get("distinctions", []) == []
+
+    def test_destroying_the_carried_drawback_entry_is_reverted_by_reconcile(self):
+        self.client.post(
+            f"/api/character-creation/drafts/{self.draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
+        )
+        self.draft.refresh_from_db()
+        (held,) = self.draft.draft_data["distinctions"]
+        assert held["distinction_id"] == self.drawback.id
+
+        resp = self.client.delete(
+            f"/api/distinctions/drafts/{self.draft.id}/distinctions/{self.drawback.id}/"
+        )
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+        self.draft.refresh_from_db()
+        (entry,) = self.draft.draft_data["distinctions"]
+        assert entry["distinction_id"] == self.drawback.id

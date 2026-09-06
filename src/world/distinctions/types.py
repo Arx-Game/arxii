@@ -61,8 +61,15 @@ def build_distinction_entry(
     and by ``world.character_creation.offers`` when a ``DistinctionOffer`` is
     the source (#3675): the cost is ``0`` when the offer arrives ``bundled`` or
     ``carried``, since that pick isn't paid for out of CG points.
+
+    ``offer_ids``/``sources``/``arrivals`` are kept in lockstep by ``offer``
+    alone (never by whether ``source`` happens to be a non-empty string) — an
+    APPEARANCE/IDENTITY CHOICE offer has no opener, so ``source`` is routinely
+    ``""``, and a length mismatch between the three lists would blow up the
+    ``zip(..., strict=True)`` in ``offers._drop_vanished_sources``.
     """
-    arrival = offer.arrives_as if offer is not None else ""
+    has_offer = offer is not None
+    arrival = offer.arrives_as if has_offer else ""
     free = arrival in ("bundled", "carried")
     return DraftDistinctionEntry(
         distinction_id=distinction.id,
@@ -72,9 +79,9 @@ def build_distinction_entry(
         rank=rank,
         cost=0 if free else distinction.calculate_total_cost(rank),
         notes=notes,
-        offer_ids=[offer.id] if offer is not None else [],
-        sources=[source] if source else [],
-        arrivals=[arrival] if arrival else [],
+        offer_ids=[offer.id] if has_offer else [],
+        sources=[source] if has_offer else [],
+        arrivals=[arrival] if has_offer else [],
     )
 
 

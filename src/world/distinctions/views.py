@@ -18,6 +18,7 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
+from world.character_creation.constants import OfferArrival
 from world.character_creation.models import CharacterDraft, DistinctionOffer
 from world.character_creation.offers import opener_label, reconcile_offer_picks, visible_offers
 from world.codex.models import DistinctionCodexGrant
@@ -224,14 +225,20 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         Called by ``_validate_distinction_for_add`` and ``sync``. Raises when the
         id isn't an int (carried sources are string keys a client never sends),
-        or when the offer isn't visible to this draft or names a different
-        distinction.
+        when the offer isn't visible to this draft or names a different
+        distinction, or when the offer doesn't arrive as a CHOICE (a client may
+        never pick a BUNDLED or CARRIED offer directly — those are applied only
+        by ``reconcile_offer_picks``).
         """
         if not isinstance(offer_id, int):
             raise ValidationError({"detail": f"{distinction.name} requires an offer_id."})
         visible = visible_offers(draft)
         offer = visible.get(offer_id)
-        if offer is None or offer.distinction_id != distinction.id:
+        if (
+            offer is None
+            or offer.distinction_id != distinction.id
+            or offer.arrives_as != OfferArrival.CHOICE
+        ):
             hidden = (
                 DistinctionOffer.objects.filter(pk=offer_id)
                 .select_related("glimpse_tag", "origin_choice", "schooling_line")
@@ -387,6 +394,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
+        reconcile_offer_picks(draft)
 
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -457,6 +465,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
 
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
+        reconcile_offer_picks(draft)
 
         return Response({"removed": remove_id, "added": new_entry})
 
