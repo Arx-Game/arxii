@@ -10,7 +10,7 @@
  * chosen group's own influence for a GROUP question).
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
@@ -274,7 +274,10 @@ function GroupQuestion({
   onSetAnchor,
   onSetText,
 }: GroupQuestionProps) {
-  const groups = groupsFor(slot, template, draft);
+  // groupsFor reads slot/template/draft (SAME_AS/SERVED_HOUSE/OWN_FAMILY allocate a
+  // fresh array per call); memoized on those so the auto-PATCH effect below only
+  // re-runs when one of them actually changes, not on every unrelated re-render.
+  const groups = useMemo(() => groupsFor(slot, template, draft), [slot, template, draft]);
   const isDerivedAnchor =
     slot.anchor_source === 'own_family' || slot.anchor_source === 'served_house';
   // A ref, not state: the guard must take effect the instant it's set, with

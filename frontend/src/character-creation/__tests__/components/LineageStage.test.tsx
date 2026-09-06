@@ -469,6 +469,37 @@ describe('LineageStage', () => {
     });
   });
 
+  describe('LineageRecord (#3660)', () => {
+    it('shows a plain pick answer as "choice · cost", with no group and no double separator', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithUpbringing,
+        family: mockNobleFamily,
+        draft_data: { origin_choices: { '202': 301 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('A private tutor · 2 pts')).toBeInTheDocument();
+    });
+
+    it('shows a group answer as "choice · group · cost"', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingConnections,
+        family_path: 'none',
+        draft_data: { origin_anchors: { '401': 9001 }, origin_choices: { '401': 502 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('Courier · House Orisant · 10 pts')).toBeInTheDocument();
+    });
+  });
+
   describe('Family Template (name path)', () => {
     it('clicking a Family Template aspect option PATCHes family_aspect_picks', async () => {
       const draft = createMockDraft({

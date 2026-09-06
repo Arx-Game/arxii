@@ -43,7 +43,8 @@ export function LineageRecord({ draft, template, path }: Props) {
       const group = slot.kind === 'group' ? chosenGroupForSlot(slot, template, draft) : null;
       const influence = questionInfluence(slot, group, draft, path);
       const cost = choiceCost(choice, influence);
-      return { key: slot.id, line: `${choice.name} · ${group?.name ?? ''}`, cost };
+      const line = group ? `${choice.name} · ${group.name}` : choice.name;
+      return { key: slot.id, line, cost };
     })
     .filter((row): row is { key: number; line: string; cost: number } => row !== null);
 
