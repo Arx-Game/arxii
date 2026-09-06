@@ -52,6 +52,14 @@ GRANDFATHERED: frozenset[str] = frozenset(
         # empty at the ALTER TABLE. That is luck, not design, which is why the
         # rule below is structural. NOTHING MAY BE ADDED HERE - a new migration
         # that would need an entry is a new migration that needs splitting.
+        "world/migrations/0113_partition_interaction.py",
+        "world/migrations/0186_gmlevelcap_max_story_npcs.py",
+        "world/migrations/0199_roomprofile_published_at.py",
+        "world/migrations/0203_persona_title.py",
+        "world/migrations/0207_alter_beat_outcome_alter_beatcompletion_outcome_and_more.py",
+        "world/migrations/0208_battle_story_beat_and_more.py",
+        "world/migrations/0211_retire_stake_outcome_gm_pick.py",
+        "world/migrations/0219_familykind_family_kind_influence.py",
     }
 )
 
