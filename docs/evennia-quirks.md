@@ -117,7 +117,13 @@ migrate` there, come back, repeat. A dev database behind the old tip therefore
 migrates to the tip **before** pulling a regenerated `main`.
 
 Rules for the regeneration PR: run it from a worktree on the tip of `main` with a
-clean tree and the dev database at the tip; commit the tooling and the generated
+clean tree and the dev database at the tip, **and only once production has
+deployed that tip** (compare the last successful "Stand up infra" run's SHA; if
+`main` carries a migration production has not recorded, press the button first).
+The snapshot is every migration on `main` at the cut, so a migration production
+lacks leaves it partially recorded and the guard refuses the next deploy (it did
+on 2026-09-06, `227 of 228`; recovery is two button presses, `infra/README.md`
+"Recovering a guard-refused database"). Commit the tooling and the generated
 output separately; if `main` moves before it is enqueued, regenerate again from a
 fresh worktree (cherry-pick the tooling commits, run the recipe, force-push),
 never rebase. Review the inliner's `--check` counts (`deferred_addfield_cycle`

@@ -47,6 +47,9 @@ class ClassifyGenerationStateTests(SimpleTestCase):
         assert verdict.stranded_at == 0
         assert "2 of 3" in verdict.message
         assert "sha1" in verdict.message
+        # Production has no shell into the app user; the button is its only migrate.
+        assert "Stand up infra" in verdict.message
+        assert "`ref`" in verdict.message
 
     def test_skipped_generation_refuses_and_names_the_missing_one(self) -> None:
         verdict = classify_generation_state(set(GEN1), _data(current=3))

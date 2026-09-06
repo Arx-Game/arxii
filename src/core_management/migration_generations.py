@@ -142,9 +142,11 @@ def _recovery(data: GenerationsData, stranded_at: int) -> str:
     return (
         f"This database last fully recorded generation {stranded_at} of the arxii migration "
         f"chain; the code is at generation {data.current}. Django cannot cross that gap "
-        f"(ADR-0276). Recovery: check out commit {sha} (the last commit at generation "
-        f"{target}), run `arx manage migrate` there, return here and run it again; repeat "
-        "until the gap closes. Set ARX_SKIP_GENERATION_GUARD=1 only if you know better."
+        f"(ADR-0276). Recovery: migrate at commit {sha} (the last commit at generation "
+        f"{target}) first, then here again; repeat until the gap closes. Locally that is "
+        "`git checkout <commit>` + `arx manage migrate`; on production it is the Stand up "
+        "infra button with its `ref` input set to that commit, then pressed again with "
+        "main. Set ARX_SKIP_GENERATION_GUARD=1 only if you know better."
     )
 
 

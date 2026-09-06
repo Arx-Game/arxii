@@ -205,6 +205,14 @@ echo "== CI button shape =="
 chk   "standup.yml is workflow_dispatch"      "grep -q 'workflow_dispatch' .github/workflows/standup.yml"
 chk   "standup.yml uses the gated prod env"   "grep -q 'environment: prod' .github/workflows/standup.yml"
 chk   "standup.yml invokes the shared script" "grep -q 'infra/scripts/standup.sh' .github/workflows/standup.yml"
+# ADR-0276 recovery lever: a database the generation guard refuses has to
+# migrate at an older commit first, and the button is the only way to run
+# migrate on prod. Three files must agree: the workflow input, the env var
+# standup.sh reads, and the group_vars line app_deploy consumes.
+chk   "standup.yml exposes a deploy ref input"        "grep -q '^      ref:' .github/workflows/standup.yml"
+chk   "standup.yml hands the ref to standup.sh"       "grep -q 'ARXII_APP_REF: \${{ inputs.ref }}' .github/workflows/standup.yml"
+chk   "standup.sh writes app_ref into group_vars"     "grep -q '^app_ref: \"\${APP_REF}\"' infra/scripts/standup.sh"
+chk   "standup.sh shape-checks the ref (one path segment)" "grep -q 'APP_REF.*=~' infra/scripts/standup.sh"
 
 echo "== #2236 cross-file CONTRACT checks (regression guards) =="
 # These exist because the #2236 audit found the 23 single-file grep checks
