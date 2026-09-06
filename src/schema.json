@@ -51004,8 +51004,8 @@ components:
             in character creation and (#1884) to resolve the nobiliary particle
         born_particle:
           type: string
-          readOnly: true
           description: Nobiliary particle a born member wears (#3261); '' when none.
+          readOnly: true
         taken_in_particle:
           type: string
           readOnly: true
