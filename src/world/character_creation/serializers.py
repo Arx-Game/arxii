@@ -20,6 +20,7 @@ from world.character_creation.models import (
     CGExplanation,
     CGPointBudget,
     CharacterDraft,
+    CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
@@ -711,6 +712,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    # Distinctions the Upbringing answers grant, shown locked in the Distinctions
+    # stage so a player can't also hand-pick one already bundled in (#3660).
+    bundled_distinctions = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -767,6 +771,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "bundled_distinctions",
         ]
         read_only_fields = [
             "id",
@@ -779,6 +784,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "bundled_distinctions",
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
@@ -828,6 +834,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
         return obj.calculate_stat_budget()
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
+        """Distinctions the Upbringing answers grant; shown locked in Distinctions (#3660)."""
+        return list(obj.bundled_distinctions())
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""
@@ -996,6 +1007,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
+        self._validate_origin_anchors(value)
+        self._validate_origin_figures(value)
         self._validate_new_family_name(value)
         self._validate_family_aspect_picks(value)
 
@@ -1020,6 +1033,49 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if choice_id is not None and not isinstance(choice_id, int):
                 msg = "origin_choices values must be an integer choice id or null"
                 raise serializers.ValidationError({"origin_choices": msg})
+
+    def _validate_origin_anchors(self, data: dict) -> None:
+        """``origin_anchors`` maps a str slot id to an organization id, or null (#3660)."""
+        anchors = data.get("origin_anchors")
+        if anchors is None:
+            return
+        if not isinstance(anchors, dict):
+            raise serializers.ValidationError(
+                {"origin_anchors": "origin_anchors must be a dictionary"}
+            )
+        for slot_id, org_id in anchors.items():
+            if not isinstance(slot_id, str):
+                raise serializers.ValidationError(
+                    {"origin_anchors": "origin_anchors keys must be strings"}
+                )
+            if org_id is not None and not isinstance(org_id, int):
+                raise serializers.ValidationError(
+                    {
+                        "origin_anchors": (
+                            "origin_anchors values must be an integer organization id or null"
+                        )
+                    }
+                )
+
+    def _validate_origin_figures(self, data: dict) -> None:
+        """``origin_figures`` maps a str slot id to a person's name, at most 120 chars (#3660)."""
+        figures = data.get("origin_figures")
+        if figures is None:
+            return
+        if not isinstance(figures, dict):
+            raise serializers.ValidationError(
+                {"origin_figures": "origin_figures must be a dictionary"}
+            )
+        max_length = CharacterOriginSlot._meta.get_field("figure_name").max_length  # noqa: SLF001
+        for slot_id, name in figures.items():
+            if not isinstance(slot_id, str) or not isinstance(name, str):
+                raise serializers.ValidationError(
+                    {"origin_figures": "origin_figures must map strings to strings"}
+                )
+            if len(name) > max_length:
+                raise serializers.ValidationError(
+                    {"origin_figures": f"A person's name is at most {max_length} characters"}
+                )
 
     def _validate_new_family_name(self, data: dict) -> None:
         """``new_family_name`` must fit ``Family.name``'s column width (#3617)."""

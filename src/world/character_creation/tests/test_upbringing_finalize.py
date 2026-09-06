@@ -3,7 +3,7 @@
 from django.test import TestCase
 from evennia.accounts.models import AccountDB
 
-from world.character_creation.constants import FamilyPath
+from world.character_creation.constants import FamilyPath, QuestionKind
 from world.character_creation.factories import (
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -82,7 +82,11 @@ class ClaimedFamilyFinalizeTest(FinalizationTestMixin, TestCase):
             allows_claim_family=True,
         )
         slot = OriginTemplateSlotFactory(
-            template=template, name="Role", prompt="Your place in it?", allows_text=False
+            template=template,
+            name="Role",
+            prompt="Your place in it?",
+            kind=QuestionKind.PICK,
+            allows_text=False,
         )
         head = OriginTemplateSlotChoiceFactory(
             slot=slot, name="Head of the family", cost_per_influence=3

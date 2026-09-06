@@ -15,13 +15,23 @@ from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    AnchorSource,
     FamilyPath,
+    QuestionKind,
     Stage,
 )
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft, OriginTemplate
+    from evennia.accounts.models import AccountDB
+
+    from world.character_creation.models import (
+        CharacterDraft,
+        OriginTemplate,
+        OriginTemplateSlot,
+        OriginTemplateSlotChoice,
+    )
+    from world.character_creation.questionnaire import DraftAnswers
     from world.societies.houses.models import HouseTemplate
 
 
@@ -173,7 +183,7 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
         return errors
     errors.extend(_get_family_path_errors(draft, path))
     errors.extend(_get_vacancy_errors(draft, path))
-    errors.extend(_get_prompt_errors(draft, template, path))
+    errors.extend(_get_prompt_errors(draft, template))
     return errors
 
 
@@ -234,34 +244,80 @@ def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
-def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate, path: str) -> list[str]:
-    from collections import defaultdict  # noqa: PLC0415
+def _account_trust(account: AccountDB) -> int:
+    """The trust an unstaffed account reads against a trust-gated answer (#3660).
 
+    Mirrors ``CGOriginTemplateViewSet.get_queryset``: staff bypass entirely, and a
+    missing ``trust`` attribute (an account type that doesn't carry one) reads as 0.
+    """
+    if account.is_staff:
+        return 0
+    try:
+        return account.trust
+    except AttributeError:
+        return 0
+
+
+def _slot_prompt_error(
+    slot: OriginTemplateSlot,
+    draft: CharacterDraft,
+    answers: DraftAnswers,
+    choices_by_slot: dict[int, dict[int, OriginTemplateSlotChoice]],
+    choice_ids_by_slot: dict[int, set[int]],
+) -> str | None:
+    """The single blocking error for one shown question, or ``None`` (#3617, #3660)."""
+    from world.character_creation.questionnaire import (  # noqa: PLC0415
+        is_answered,
+        resolve_groups,
+    )
+
+    account = draft.account
+    picked_id = answers.picks.get(slot.id)
+    if picked_id is not None:
+        picked = choices_by_slot.get(slot.id, {}).get(picked_id)
+        if picked is None:
+            return f"Invalid choice for {slot.name}"
+        if not account.is_staff and picked.trust_required > _account_trust(account):
+            return f"That answer is not available to you for {slot.name}"
+    offered_sources = (AnchorSource.POOL, AnchorSource.LISTED, AnchorSource.SAME_AS)
+    if (
+        slot.kind == QuestionKind.GROUP
+        and slot.anchor_source in offered_sources
+        and slot.id in answers.anchors
+    ):
+        offered = {org.pk for org in resolve_groups(slot, draft, answers)}
+        if answers.anchors[slot.id] not in offered:
+            return f"That group is not offered for {slot.name}"
+    if slot.is_required and not is_answered(slot, draft, answers, choice_ids_by_slot):
+        return f"{slot.name} is required"
+    return None
+
+
+def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate) -> list[str]:
+    """Every shown question answered as its kind requires (#3617, #3660).
+
+    ``visible_slot_ids`` resolves the draft's family path itself, so this needs no
+    ``path`` argument the way ``_get_family_path_errors``/``_get_vacancy_errors`` do.
+    """
     from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+    from world.character_creation.questionnaire import (  # noqa: PLC0415
+        DraftAnswers,
+        visible_slot_ids,
+    )
 
-    errors: list[str] = []
-    texts = draft.draft_data.get("origin_slots") or {}
-    picks = draft.draft_data.get("origin_choices") or {}
-    slots = list(template.slots.order_by("sort_order"))
-    choices_by_slot: dict[int, list] = defaultdict(list)
+    answers = DraftAnswers.from_draft(draft)
+    shown = visible_slot_ids(draft)
+    slots = [s for s in template.slots.order_by("sort_order", "id") if s.id in shown]
+    choices_by_slot: dict[int, dict[int, OriginTemplateSlotChoice]] = {}
     for choice in OriginTemplateSlotChoice.objects.filter(slot__template=template, is_active=True):
-        choices_by_slot[choice.slot_id].append(choice)
-    for slot in slots:
-        if slot.applies_to not in (FamilyPath.ANY, path):
-            continue
-        active_choices = choices_by_slot.get(slot.id, [])
-        choice_id = picks.get(str(slot.id))
-        text = str(texts.get(str(slot.id), "")).strip()
-        picked = None
-        if choice_id is not None:
-            picked = next((c for c in active_choices if c.id == int(choice_id)), None)
-            if picked is None:
-                errors.append(f"Invalid choice for {slot.name}")
-                continue
-        answered = picked is not None or (slot.allows_text and bool(text))
-        if slot.is_required and not answered:
-            errors.append(f"{slot.name} is required")
-    return errors
+        choices_by_slot.setdefault(choice.slot_id, {})[choice.id] = choice
+    choice_ids_by_slot = {sid: set(cs) for sid, cs in choices_by_slot.items()}
+    return [
+        error
+        for slot in slots
+        if (error := _slot_prompt_error(slot, draft, answers, choices_by_slot, choice_ids_by_slot))
+        is not None
+    ]
 
 
 def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
@@ -269,6 +325,12 @@ def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
     errors: list[str] = []
     if not draft.draft_data.get("traits_complete", False):
         errors.append("Confirm your distinction selections")
+    picked_ids = {d.get("distinction_id") for d in draft.draft_data.get("distinctions", [])}
+    errors.extend(
+        f"{bundled['name']} is already granted by your Upbringing"
+        for bundled in draft.bundled_distinctions()
+        if bundled["distinction_id"] in picked_ids
+    )
     remaining = draft.calculate_cg_points_remaining()
     if remaining < 0:
         errors.append(f"CG points over budget by {abs(remaining)}")

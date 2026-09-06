@@ -3,7 +3,7 @@
 from django.test import TestCase
 from rest_framework import serializers
 
-from world.character_creation.constants import FamilyPath, Stage
+from world.character_creation.constants import FamilyPath, QuestionKind, Stage
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
@@ -125,7 +125,9 @@ class PromptValidationTest(TestCase):
 
     def test_pick_list_accepts_a_choice_and_rejects_a_foreign_one(self):
         template = OriginTemplateFactory()
-        slot = OriginTemplateSlotFactory(template=template, name="Role", allows_text=False)
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", kind=QuestionKind.PICK, allows_text=False
+        )
         mine = OriginTemplateSlotChoiceFactory(slot=slot)
         foreign = OriginTemplateSlotChoiceFactory()
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
@@ -136,7 +138,9 @@ class PromptValidationTest(TestCase):
 
     def test_pick_list_without_text_rejects_a_text_only_answer(self):
         template = OriginTemplateFactory()
-        slot = OriginTemplateSlotFactory(template=template, name="Role", allows_text=False)
+        slot = OriginTemplateSlotFactory(
+            template=template, name="Role", kind=QuestionKind.PICK, allows_text=False
+        )
         OriginTemplateSlotChoiceFactory(slot=slot)
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
         draft.draft_data["origin_slots"] = {str(slot.id): "Something else"}
