@@ -24,7 +24,7 @@ def apply_companion_battle_outcome(battle) -> None:
     )
 
     deployments = CompanionDeployment.objects.filter(battle=battle).select_related(
-        "companion", "vehicle__unit"
+        "companion__owner__character", "vehicle__unit"
     )
     for deployment in deployments:
         if deployment.vehicle.unit.status != BattleUnitStatus.DESTROYED:
@@ -33,5 +33,7 @@ def apply_companion_battle_outcome(battle) -> None:
         if companion.released_at is not None:
             continue
         name = companion.name
+        owner_character = companion.owner.character
         if resolve_companion_defeat(companion, battle.risk_level):
-            narrate_companion_loss(name, battle.scene)
+            fallback_recipients = [owner_character] if owner_character is not None else []
+            narrate_companion_loss(name, battle.scene, fallback_recipients=fallback_recipients)

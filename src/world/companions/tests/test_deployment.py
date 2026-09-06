@@ -1,8 +1,11 @@
 """Tests for CompanionDeployment model (#1873)."""
 
+from unittest import mock
+
 from django.test import TestCase
 from django.utils import timezone
 
+from evennia_extensions.factories import ObjectDBFactory
 from world.battles.constants import BattleOutcome, BattleUnitStatus
 from world.battles.factories import BattleFactory, BattleVehicleFactory
 from world.battles.services import conclude_battle
@@ -11,6 +14,8 @@ from world.companions.battle_wiring import apply_companion_battle_outcome
 from world.companions.factories import CompanionFactory
 from world.companions.factories_combat import COMPANION_DIE_LABEL, create_companion_defeat_pool
 from world.companions.models import CompanionDeployment
+from world.companions.services import narrate_companion_loss
+from world.scenes.factories import SceneFactory
 
 
 class CompanionDeploymentTests(TestCase):
@@ -153,6 +158,49 @@ class ApplyCompanionBattleOutcomeTests(TestCase):
 
         companion.refresh_from_db()
         self.assertIsNotNone(companion.released_at)
+
+    def test_battle_death_delivers_loss_to_owner(self):
+        """Critical finding (final review): battle scenes are location-less
+        (ADR-0081), so the room-broadcast path narrate_companion_loss uses at
+        encounter scale reaches nobody here - the owner must be told directly.
+        """
+        battle = BattleFactory(risk_level=RiskLevel.LETHAL)
+        deployment = self._deploy(battle=battle, status=BattleUnitStatus.DESTROYED)
+        owner_character = deployment.companion.owner.character
+
+        with (
+            mock.patch("world.scenes.interaction_services._send_to_objects") as send_to_objects,
+            mock.patch.object(owner_character, "msg") as owner_msg,
+        ):
+            apply_companion_battle_outcome(battle)
+
+        self.assertTrue(send_to_objects.called)
+        sent_recipients = list(send_to_objects.call_args.args[0])
+        self.assertIn(owner_character, sent_recipients)
+        self.assertTrue(owner_msg.called)
+        msg_text = owner_msg.call_args.args[0]
+        self.assertIn(deployment.companion.name, msg_text)
+
+    def test_encounter_death_still_broadcasts_to_room_only(self):
+        """Encounter scale (has a room) must not change and must not also
+        deliver to the owner directly - that would double-deliver.
+        """
+        room = ObjectDBFactory(
+            db_key="ApplyCompanionBattleOutcomeRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = SceneFactory(location=room)
+        companion = CompanionFactory()
+        owner_character = companion.owner.character
+
+        with (
+            mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast,
+            mock.patch("world.scenes.interaction_services._send_to_objects") as send_to_objects,
+        ):
+            narrate_companion_loss(companion.name, scene, fallback_recipients=[owner_character])
+
+        self.assertTrue(broadcast.called)
+        self.assertFalse(send_to_objects.called)
 
     def test_conclude_battle_is_idempotent_against_the_hook(self):
         battle = BattleFactory(risk_level=RiskLevel.LETHAL)

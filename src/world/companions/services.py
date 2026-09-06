@@ -435,7 +435,7 @@ def resolve_bonded_companion(opponent: CombatOpponent) -> Companion | None:
     ).first()
 
 
-def narrate_companion_loss(companion_name: str, scene) -> None:
+def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=None) -> None:
     """Tell the scene that a companion died.
 
     Takes a scene rather than an encounter because both completion seams use
@@ -444,8 +444,15 @@ def narrate_companion_loss(companion_name: str, scene) -> None:
     the scene's room so the loss lands as a moment rather than something read
     back later. Mirrors the non-concealed branch of broadcast_action_outcome
     (there is no concealment concept here - a companion dying is public).
-    When scene or scene.location is None, the line is still persisted but not
-    broadcast rather than raising.
+
+    Battles build their backing scene with location=None by design (ADR-0081)
+    - there is no room to broadcast to. When scene.location is None and
+    fallback_recipients (a list of character ObjectDBs) is given, the same
+    payload is delivered straight to those recipients instead, plus a plain
+    character.msg(text) for telnet - the same websocket-plus-msg pairing
+    deliver_aftermath_digests uses (world/combat/aftermath.py). When
+    scene.location is None and no fallback_recipients are given, the line is
+    still persisted but not delivered anywhere, rather than raising.
     """
     if scene is None:
         return
@@ -455,6 +462,7 @@ def narrate_companion_loss(companion_name: str, scene) -> None:
     from world.scenes.interaction_services import (  # noqa: PLC0415
         _broadcast_to_location,
         _build_interaction_payload,
+        _send_to_objects,
         create_interaction,
     )
 
@@ -467,9 +475,6 @@ def narrate_companion_loss(companion_name: str, scene) -> None:
     )
 
     room = scene.location
-    if room is None:
-        return
-
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=narrator,
@@ -478,7 +483,17 @@ def narrate_companion_loss(companion_name: str, scene) -> None:
         timestamp=interaction.timestamp.isoformat(),
         scene_id=interaction.scene_id,
     )
-    _broadcast_to_location(room, payload)
+
+    if room is not None:
+        _broadcast_to_location(room, payload)
+        return
+
+    if not fallback_recipients:
+        return
+
+    _send_to_objects(fallback_recipients, payload)
+    for character in fallback_recipients:
+        character.msg(interaction.content)
 
 
 class PromoteSummonError(Exception):
