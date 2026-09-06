@@ -6300,7 +6300,7 @@ paths:
       - in: query
         name: subject
         schema:
-          type: number
+          type: integer
       tags:
       - codex
       security:
@@ -45222,11 +45222,27 @@ components:
             Reads the queryset annotation; falls back to None where a caller
             serializes without it (e.g. featured lore).
           readOnly: true
+        also_filed_under:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Other subjects this entry is cross-listed under, via a filing.
+
+            Reads ``context["filings_by_entry"]`` (the view builds it in one
+            flat query, joined to each filed subject and that subject's
+            breadcrumb cache), so this adds no query per entry. Each item
+            mirrors the shape of a breadcrumb entry: the filed subject's id,
+            name, and its own breadcrumb path, so the frontend can link
+            straight to that listing.
+          readOnly: true
         art_url:
           type: string
           nullable: true
           readOnly: true
       required:
+      - also_filed_under
       - art_url
       - id
       - knowledge_status
@@ -45306,11 +45322,27 @@ components:
             Reads the queryset annotation; falls back to None where a caller
             serializes without it (e.g. featured lore).
           readOnly: true
+        also_filed_under:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Other subjects this entry is cross-listed under, via a filing.
+
+            Reads ``context["filings_by_entry"]`` (the view builds it in one
+            flat query, joined to each filed subject and that subject's
+            breadcrumb cache), so this adds no query per entry. Each item
+            mirrors the shape of a breadcrumb entry: the filed subject's id,
+            name, and its own breadcrumb path, so the frontend can link
+            straight to that listing.
+          readOnly: true
         art_url:
           type: string
           nullable: true
           readOnly: true
       required:
+      - also_filed_under
       - art_url
       - id
       - knowledge_status

@@ -9,8 +9,10 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from django.core.exceptions import ValidationError
+
 from world.codex.constants import CodexKnowledgeStatus
-from world.codex.models import CharacterCodexKnowledge, CodexEntry
+from world.codex.models import CharacterCodexKnowledge, CodexEntry, CodexEntryFiling
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -93,6 +95,40 @@ def grant_codex_entry(
         )
         roster_entry.character_sheet.stats.increment(stat_def)
     return knowledge, newly_known
+
+
+def file_entry_under(
+    entry: CodexEntry,
+    subject: CodexSubject,
+    *,
+    sort_order: int = 0,
+) -> CodexEntryFiling:
+    """Cross-list ``entry`` in ``subject``'s listing, in addition to its home.
+
+    ``subject`` must not be ``entry.subject`` (the entry's canonical home) -
+    filing an entry under its own home is a no-op mistake, not data, so it
+    raises ``ValidationError`` instead of silently succeeding or creating a
+    row that duplicates the entry's own listing.
+
+    Idempotent: filing the same ``(entry, subject)`` pair twice returns the
+    existing row rather than raising ``IntegrityError``. A filing is a link,
+    not an event - a second caller wanting the same cross-listing gets the
+    same row, not a conflict.
+    """
+    if subject.pk == entry.subject_id:
+        msg = "Cannot file an entry under its own canonical subject."
+        raise ValidationError(msg)
+    filing, _ = CodexEntryFiling.objects.get_or_create(
+        entry=entry,
+        subject=subject,
+        defaults={"sort_order": sort_order},
+    )
+    return filing
+
+
+def unfile_entry(entry: CodexEntry, subject: CodexSubject) -> None:
+    """Remove ``entry``'s filing under ``subject``, if any. No-op otherwise."""
+    CodexEntryFiling.objects.filter(entry=entry, subject=subject).delete()
 
 
 def resolve_codex_links(
