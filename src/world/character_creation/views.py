@@ -137,6 +137,31 @@ def _claimable_kind_ids_by_template(templates: list[OriginTemplate]) -> dict[int
     return grouping
 
 
+def _slots_by_template(
+    templates: list[OriginTemplate],
+) -> dict[int, list[OriginTemplateSlot]]:
+    """One flat query for every question across ``templates``, grouped in Python.
+
+    This replaces a ``Prefetch(..., to_attr="cached_slots")``. ``to_attr`` writes
+    a plain attribute onto the instance, Django skips a prefetch that already has
+    one, and ``OriginTemplate`` is identity-mapped - so the attribute set by one
+    request answered the next one too, and a question deleted in between was
+    still served (with a null id, because ``Collector.delete()`` nulls the pk on
+    the shared instance it deleted). A query per request cannot go stale; the
+    grouping reaches the serializer as an argument, never as state on the view
+    (ADR-0260, ADR-0263). #3673.
+    """
+    grouping: dict[int, list[OriginTemplateSlot]] = defaultdict(list)
+    if not templates:
+        return grouping
+    rows = OriginTemplateSlot.objects.filter(template_id__in=[t.pk for t in templates]).order_by(
+        "sort_order"
+    )
+    for slot in rows:
+        grouping[slot.template_id].append(slot)
+    return grouping
+
+
 class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
     """ViewSet for listing starting areas."""
 
@@ -648,8 +673,15 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         intervening ORM-level M2M write happens on the same cached instance -
         the same staleness class ADR-0263 documents for ``to_attr``, just via
         ``instance._prefetched_objects_cache`` instead of a bare attribute name.
-        The existing ``cached_slots`` prefetch below is the one already-shipped
-        ``to_attr`` exception, kept as-is rather than touched by this task.
+        Slots are grouped the same way, and for the same reason. They used to be
+        a ``Prefetch(..., to_attr="cached_slots")`` - the one already-shipped
+        ``to_attr`` exception - and it shipped a production bug: ``to_attr``
+        writes a plain attribute into the instance ``__dict__``, Django skips a
+        prefetch whose ``to_attr`` is already set, and the identity map hands the
+        same instance to the next request. So a second GET re-served the first
+        GET's slot list, including questions deleted in between, which serialize
+        with ``"id": null`` because ``Collector.delete()`` nulls the pk on the
+        instances it deleted and those are the shared cached ones (#3673).
         """
         user = self.request.user
         qs = OriginTemplate.objects.filter(is_active=True)
@@ -660,11 +692,6 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 trust = 0
             qs = qs.filter(trust_required__lte=trust)
         return qs.prefetch_related(
-            Prefetch(
-                "slots",
-                queryset=OriginTemplateSlot.objects.order_by("sort_order"),
-                to_attr="cached_slots",
-            ),
             # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
             # prefetch, no ``to_attr`` - the nested serializer reads
             # ``obj.family_templates.all()`` straight off the prefetch cache.
@@ -687,6 +714,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         context = {
             **self.get_serializer_context(),
             "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),
+            "slots_by_template": _slots_by_template(templates),
         }
         serializer = self.get_serializer_class()(templates, many=True, context=context)
         return Response(serializer.data)
