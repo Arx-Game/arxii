@@ -73,6 +73,58 @@ class BuilderGetTest(BuilderTestCase):
         assert "Add answer" in body
 
 
+class BuilderAutocompleteWidgetsTest(BuilderTestCase):
+    """The Builder's autocomplete widgets' AJAX calls (#3670 regression).
+
+    Both ``QuestionForm.anchor_orgs`` and ``AnswerForm.grants_distinction`` are
+    built with ``Autocomplete(Select|SelectMultiple)(<field>, admin.site)``. Each
+    widget must be constructed from the **forward** field itself, not its
+    ``.remote_field`` (the reverse relation on the target model) - the reverse
+    relation has no ``get_limit_choices_to()``, so a request built off it 500s
+    inside Django's own ``AutocompleteJsonView`` (Sentry ARX2-C, filed as #3670).
+    """
+
+    def test_anchor_orgs_widget_points_the_ajax_call_at_the_forward_field(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert 'data-app-label="arxii"' in body
+        assert 'data-model-name="origintemplateslot"' in body
+        assert 'data-field-name="anchor_orgs"' in body
+
+    def test_anchor_orgs_autocomplete_endpoint_returns_matching_organizations(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(
+            "/admin/autocomplete/",
+            {"app_label": "arxii", "model_name": "origintemplateslot", "field_name": "anchor_orgs"},
+        )
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert any(r["text"].startswith("House Orisant") for r in results)
+
+    def test_grants_distinction_widget_points_the_ajax_call_at_the_forward_field(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert 'data-model-name="origintemplateslotchoice"' in body
+        assert 'data-field-name="grants_distinction"' in body
+
+    def test_grants_distinction_autocomplete_endpoint_returns_matching_distinctions(self):
+        DistinctionFactory(name="Kept Close")
+        self.client.force_login(self.author)
+        resp = self.client.get(
+            "/admin/autocomplete/",
+            {
+                "app_label": "arxii",
+                "model_name": "origintemplateslotchoice",
+                "field_name": "grants_distinction",
+            },
+        )
+        assert resp.status_code == 200
+        results = resp.json()["results"]
+        assert any(r["text"].startswith("Kept Close") for r in results)
+
+
 class BuilderSaveTest(BuilderTestCase):
     def _post_data(self, **overrides):
         data = {
