@@ -425,7 +425,7 @@ export interface CharacterDraft {
    * family, no served-house lookup without the offering Family Template), so the
    * server hands back what it resolved.
    */
-  derived_anchors: Record<string, OriginGroup | null>;
+  derived_anchors: Record<string, DerivedAnchor | null>;
 }
 
 export interface Stats {
@@ -956,6 +956,17 @@ export type QuestionKind = 'text' | 'pick' | 'group' | 'person';
 /** Which groups a 'group' question offers, or '' for a non-group question (#3660). */
 export type AnchorSource = '' | 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
 
+/**
+ * An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+ * Mirrors the generated `DerivedAnchor` schema - no `gloss`, unlike `OriginGroup`,
+ * since this backs a fact card, not a picker.
+ */
+export interface DerivedAnchor {
+  id: number;
+  name: string;
+  influence: number | null;
+}
+
 /** One group a GROUP question offers, for the frontend picker (#3660). */
 export interface OriginGroup {
   id: number;
@@ -1169,9 +1180,11 @@ export function groupsFor(
     case 'own_family': {
       // Neither source has a stored answer to look up client-side: the server
       // resolves the real org (a claimed family's house, or the served house
-      // pick) and hands it back on the draft (#3660 ruling L).
+      // pick) and hands it back on the draft (#3660 ruling L). A DerivedAnchor
+      // carries no gloss (it backs a fact card, not a picker), so it maps into
+      // the OriginGroup shape with an empty one.
       const anchor = draft.derived_anchors[String(slot.id)] ?? null;
-      return anchor ? [anchor] : [];
+      return anchor ? [{ ...anchor, gloss: '' }] : [];
     }
     default:
       return [];

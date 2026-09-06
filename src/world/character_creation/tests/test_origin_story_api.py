@@ -283,7 +283,7 @@ class PostCGOriginSlotAPITest(TestCase):
         """A value-only edit via the API keeps an existing tie/named figure (#3660 fix round 1).
 
         The post-CG write-in editor (this endpoint) never sends ``organization``/
-        ``figure_name`` at all — ``set_origin_slot`` must not wipe them just
+        ``figure_name`` at all - ``set_origin_slot`` must not wipe them just
         because the caller didn't mention them.
         """
         from world.character_creation.factories import OriginTemplateSlotFactory

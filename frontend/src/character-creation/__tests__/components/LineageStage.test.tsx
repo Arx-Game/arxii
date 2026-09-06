@@ -473,7 +473,7 @@ describe('LineageStage', () => {
       const draft = createMockDraft({
         ...mockDraftWithFamily,
         selected_origin_template: mockUpbringingOwnFamilyGroup,
-        derived_anchors: { '405': { id: 9010, name: 'House Ostrean', gloss: '', influence: 5 } },
+        derived_anchors: { '405': { id: 9010, name: 'House Ostrean', influence: 5 } },
       });
       const queryClient = createTestQueryClient();
       renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {

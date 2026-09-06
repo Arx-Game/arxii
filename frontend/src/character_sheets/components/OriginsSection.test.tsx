@@ -54,7 +54,7 @@ function makeStory(): CharacterSheetStory {
         choice_description: '',
         organization_id: null,
         // The serializer guarantees organization_name is "" whenever organization_id is
-        // null (#3660 review) — an unresolved anchor is a reachable backend state (e.g. an
+        // null (#3660 review) - an unresolved anchor is a reachable backend state (e.g. an
         // unresolved own-family/served-house question), and the card falls back to slot_name.
         organization_name: '',
         figure_name: '',
@@ -120,7 +120,7 @@ describe('OriginsSection', () => {
     expect(screen.getByText('Raised by')).toBeInTheDocument();
     expect(screen.getByText('Childhood')).toBeInTheDocument();
     // The unresolved-organization row has no id to link to, no org name to show, and a
-    // blank stage badge — its card title falls back to the slot's own name.
+    // blank stage badge - its card title falls back to the slot's own name.
     expect(screen.getByText('Who did you serve?')).toBeInTheDocument();
     expect(screen.getByText('Served')).toBeInTheDocument();
   });
