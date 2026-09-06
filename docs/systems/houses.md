@@ -75,7 +75,10 @@ streams→treasury spine, and marriage pacts fire coded commitments. Lives in
 
 `full_display_name(person, degree=, title_suffix=)` (the universal name
 renderer, #3261 — canon grammar `[style] First [ne Birth] [particle Family][,
-titles]`; particle band via `resolve_particle` + `house_tier_rank`),
+titles]`; particle band via `resolve_particle` + `house_tier_rank`, both
+sharing `_band_row` with `particles_for_families` - the list-endpoint batch
+that resolves a whole page's born/taken-in pair in three flat queries,
+#3654),
 `name_alias_forms` / `sync_name_aliases` (derived-name Evennia aliases under
 the `derived_name` category so every degree form matches in telnet — called
 explicitly from `add_membership`/`end_membership` primary writes and CG

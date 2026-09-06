@@ -105,7 +105,12 @@ definitions both tree builders share — never duplicate them.
   `families/:id/slots/` (slot browser). The same `FamilyViewSet` is also
   mounted at `GET /api/character-creation/families/` (`character_creation/
   urls.py:38`) for the CG Lineage stage, producing two operation ids for one
-  ViewSet. (#3003) `kin/tree/<character_id>/`
+  ViewSet. The list serializes from two batched groupings passed through
+  serializer context - `_inherited_by_family` (#3648) and
+  `houses.services.particles_for_families` (#3654, three flat queries where
+  the per-row `resolve_particle` cost about six per housed family); nested
+  single-object use of `FamilySerializer` still takes the per-object path.
+  (#3003) `kin/tree/<character_id>/`
   (viewer-filtered graph payload centred on one character — delegates to
   `kin_tree_for_sheet`) and `kin/relationship/?a=&b=` (viewer-derived
   `RelationshipType` label between two characters, or `null` — delegates to
