@@ -30640,6 +30640,13 @@ export interface components {
       readonly content: string;
       readonly heat: number;
     };
+    /** @description The Distinction a choice bundles at no extra cost (#3660 ruling E). */
+    GrantedDistinction: {
+      id: number;
+      name: string;
+      cost_per_rank: number;
+      secret_by_default: boolean;
+    };
     /** @description A preset grievance swing offered to a wronged character (#1429). */
     GrievanceOption: {
       readonly id: number;
@@ -34490,6 +34497,13 @@ export interface components {
      * @enum {string}
      */
     OriginEnum: 'authored' | 'story' | 'player';
+    /** @description One group a GROUP question offers, for the frontend picker (#3660 ruling E). */
+    OriginGroup: {
+      id: number;
+      name: string;
+      gloss: string;
+      influence: number | null;
+    };
     /** @description Slot prompt within an origin template (#2478, #3617, #3660). */
     OriginTemplateSlot: {
       readonly id: number;
@@ -34558,9 +34572,7 @@ export interface components {
       /** @description Shown only once this earlier question is answered (#3660). */
       readonly follow_up_to: number | null;
       readonly shown_for_choice_ids: number[];
-      readonly groups: {
-        [key: string]: unknown;
-      }[];
+      readonly groups: components['schemas']['OriginGroup'][];
       readonly choices: components['schemas']['OriginTemplateSlotChoice'][];
     };
     /** @description One priced answer on an Upbringing prompt (#3617, #3660). The seed stays server-side. */
@@ -34576,9 +34588,7 @@ export interface components {
       readonly cost_per_influence: number;
       /** @description Minimum trust to see this answer; staff always see it (#3660). */
       readonly trust_required: number;
-      readonly grants_distinction: {
-        [key: string]: unknown;
-      } | null;
+      readonly grants_distinction: components['schemas']['GrantedDistinction'] | null;
       readonly sort_order: number;
     };
     /**

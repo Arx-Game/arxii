@@ -26,7 +26,6 @@ if TYPE_CHECKING:
 
     from world.character_creation.models import (
         CharacterDraft,
-        OriginTemplate,
         OriginTemplateSlot,
         OriginTemplateSlotChoice,
     )
@@ -99,16 +98,15 @@ def _resolve_same_as_group(slot: OriginTemplateSlot, answers: DraftAnswers) -> l
 
 
 def resolve_groups(
-    slot: OriginTemplateSlot, draft: CharacterDraft | OriginTemplate, answers: DraftAnswers
+    slot: OriginTemplateSlot, draft: CharacterDraft, answers: DraftAnswers
 ) -> list[Organization]:
     """The groups a GROUP question offers this draft, in name order.
 
-    ``draft`` is widened to accept an ``OriginTemplate`` too: the template read API
-    (#3660) calls this for POOL and LISTED slots to list a question's offered groups
-    before any draft exists, and neither branch reads ``draft`` at all (POOL queries
-    ``Organization`` directly; LISTED reads ``slot.anchor_orgs``). Only SAME_AS,
-    SERVED_HOUSE and OWN_FAMILY touch ``draft.served_house``/``draft.family``, so a
-    template must never be passed for those three sources.
+    Stays the draft-time resolver only (validation, pricing, finalize; #3660
+    ruling D). The template read API (``CGOriginTemplateSerializer.get_slots``)
+    lists a POOL/LISTED slot's offered groups before any draft exists, with its
+    own batched queries (``_batch_pool_groups``/``_batch_listed_groups`` in
+    ``serializers.py``) rather than calling this once per slot.
     """
     from world.societies.houses.services import house_for_family  # noqa: PLC0415
 

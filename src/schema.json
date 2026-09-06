@@ -53202,6 +53202,24 @@ components:
       - content
       - heat
       - id
+    GrantedDistinction:
+      type: object
+      description: The Distinction a choice bundles at no extra cost (#3660 ruling
+        E).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cost_per_rank:
+          type: integer
+        secret_by_default:
+          type: boolean
+      required:
+      - cost_per_rank
+      - id
+      - name
+      - secret_by_default
     GrievanceOption:
       type: object
       description: A preset grievance swing offered to a wronged character (#1429).
@@ -60868,6 +60886,25 @@ components:
         * `authored` - Authored (canonical, exported)
         * `story` - GM Story (never exported)
         * `player` - Player-built (never exported)
+    OriginGroup:
+      type: object
+      description: One group a GROUP question offers, for the frontend picker (#3660
+        ruling E).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gloss:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - gloss
+      - id
+      - influence
+      - name
     OriginTemplateSlot:
       type: object
       description: 'Slot prompt within an origin template (#2478, #3617, #3660).'
@@ -60977,8 +61014,7 @@ components:
         groups:
           type: array
           items:
-            type: object
-            additionalProperties: {}
+            $ref: '#/components/schemas/OriginGroup'
           readOnly: true
         choices:
           type: array
@@ -61032,8 +61068,8 @@ components:
           readOnly: true
           description: Minimum trust to see this answer; staff always see it (#3660).
         grants_distinction:
-          type: object
-          additionalProperties: {}
+          allOf:
+          - $ref: '#/components/schemas/GrantedDistinction'
           nullable: true
           readOnly: true
         sort_order:
