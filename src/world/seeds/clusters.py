@@ -433,6 +433,18 @@ def _seed_survivability() -> None:
     seed_survivability_content()
 
 
+def _seed_companions() -> None:
+    from world.companions.defeat_content import (  # noqa: PLC0415
+        ensure_companion_defeat_conditions,
+    )
+    from world.companions.factories_combat import (  # noqa: PLC0415
+        create_companion_defeat_pool,
+    )
+
+    create_companion_defeat_pool()
+    ensure_companion_defeat_conditions()
+
+
 def _seed_ceremonies() -> None:
     from world.ceremonies.seeds import seed_ceremony_types  # noqa: PLC0415
 
@@ -695,6 +707,12 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # After "kudos" (shares the KudosSourceCategory model) and "checks" (the
     # outcome spine); both idempotent either way.
     "survivability": _seed_survivability,
+    # Companions: the companion_defeat ConsequencePool the encounter/battle
+    # completion seams draw from at EXTREME/LETHAL risk (#3652). Without this
+    # cluster a defeated companion never dies, is never savaged, and lethal
+    # stakes are silently a no-op for companion owners. After "survivability"
+    # (shares the ConsequencePool/CheckOutcome spine); idempotent either way.
+    "companions": _seed_companions,
     # Ceremony types: Funeral/Blessing/Sermon/Seance CeremonyType rows (#2289/#2393).
     # Without this cluster, opening ANY ceremony fails with "not recognized" on a
     # fresh database — no other seed or migration ever creates these rows.
@@ -1027,6 +1045,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # staged condition + foundational CapabilityTypes + dream room (#2287).
         # Represented by ConsequencePool (the tier pools).
         "survivability": [ConsequencePool],
+        # Companions: the companion_defeat ConsequencePool (#3652).
+        "companions": [ConsequencePool],
         # Ceremony types: the four authored CeremonyType rows (#2289/#2393).
         "ceremonies": [CeremonyType],
         # Market: the PLACEHOLDER capital square (#2066).

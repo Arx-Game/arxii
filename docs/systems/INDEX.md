@@ -5172,6 +5172,21 @@ companion. Full detail: [companions.md](companions.md).
   CompanionArchetypeViewSet}` — read endpoints are read-only; write endpoints
   (`bind`/`release`/`fight`/`deploy`/`order`/`emote`) converge on
   `action.run()` via `PuppetActorMixin`, mounted at `/api/companions/`.
+- **Defeat resolution (#3652, #1873 Decision 4):** `resolve_companion_defeat`
+  is now called at both completion seams - `_resolve_companion_defeats`
+  (`world.combat.services`, inside `complete_encounter`) and
+  `apply_companion_battle_outcome` (`world.companions.battle_wiring`, on the
+  battle-conclusion hook registry). At EXTREME/LETHAL risk it draws from the
+  authored `companion_defeat` `ConsequencePool` (seeded by
+  `world.seeds.clusters._seed_companions` for a fresh database, staff-tunable
+  in admin) between three outcomes: no effect, the **Savaged** condition
+  (blocks `companion fight`/`companion deploy` via
+  `CompanionFitToFightPrerequisite` for 72 IC hours, then self-expires), or
+  `release_companion`. A death is narrated publicly
+  (`narrate_companion_loss`) and named in the owner's private aftermath
+  digest. `resolve_bonded_companion(opponent)` is the shared "is this ALLY
+  opponent someone's living companion" resolver, also used by the #3575
+  surge. Full detail: [companions.md](companions.md#bond-with-the-owner-3575-adr-0272).
 - **Cross-app dependencies:** `world.character_sheets`, `world.magic`
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`
@@ -7527,7 +7542,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (`world/combat/serializers.py`) exposes the same digest over the API: null unless
     the encounter is COMPLETED with a `completed_at` and the viewer passes
     `_can_view_vitals` (owner, scene GM, or staff); the `beat` entry is additionally
-    null for a SECRET beat unless the viewer is GM or staff.
+    null for a SECRET beat unless the viewer is GM or staff. `AftermathDigest
+    .companions_lost` (#3652) names any companion the sheet lost in the
+    encounter's `aftermath_window`, read from `Companion.released_at`;
+    `render_aftermath_digest` emits one line when the list is non-empty. See
+    "Companion defeat resolution" below for what wrote that release.
+  - **Companion defeat resolution (#3652, #1873 Decision 4):**
+    `_resolve_companion_defeats(encounter)` runs inside `complete_encounter`'s
+    `outcome != ABANDONED` branch, right after `_apply_opponent_aftermath_pools`
+    and before `cleanup_completed_encounter` (the `die` outcome deletes the
+    companion's `ObjectDB`, so the deletion must run after cleanup's own
+    sweeps have read it). It resolves each DEFEATED ALLY `CombatOpponent` with
+    `summoned_by` set to a live `Companion` via
+    `resolve_bonded_companion(opponent)` (`world.companions.services`) and
+    calls `resolve_companion_defeat`; see the Companions section above for the
+    three outcomes and the battle-scale twin
+    (`apply_companion_battle_outcome`).
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's

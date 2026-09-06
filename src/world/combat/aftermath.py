@@ -123,6 +123,18 @@ def build_aftermath_digest(
         beat_completion is not None and beat_completion.beat.visibility != BeatVisibility.SECRET
     )
 
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    companions_lost = list(
+        Companion.objects.filter(
+            owner=sheet,
+            released_at__gte=start,
+            released_at__lt=end,
+        )
+        .order_by("pk")
+        .values_list("name", flat=True)
+    )
+
     return AftermathDigest(
         outcome=encounter.outcome,
         consequence=consequence,
@@ -131,6 +143,7 @@ def build_aftermath_digest(
         beat_completion=beat_completion,
         beat_visible_to_player=beat_visible_to_player,
         peril_round_active=has_acute_peril(sheet),
+        companions_lost=companions_lost,
     )
 
 
@@ -148,6 +161,9 @@ def render_aftermath_digest(digest: AftermathDigest, *, include_secret_beat: boo
     if digest.conditions:
         condition_labels = [c.condition.name for c in digest.conditions]
         lines.append(f"You carry out of the fight: {join_labels(condition_labels)}.")
+
+    if digest.companions_lost:
+        lines.append(f"You lost {join_labels(digest.companions_lost)}.")
 
     lines.extend(
         f"Deed remembered: {entry.title} (+{entry.base_value} legend)."

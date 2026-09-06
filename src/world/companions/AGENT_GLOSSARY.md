@@ -44,6 +44,17 @@ bonus** — it exists purely to gate the CHARGE/JOUST combat maneuvers (see
 dismount triggers: voluntary, encounter exit, and companion defeat.
 _Avoid_: riding (as the state name — "Mounted" is the condition), saddled
 
+**Savaged** (#3652):
+The `companion_stay_incapacitated` outcome of `resolve_companion_defeat` made
+real: a companion that survived a lethal mauling holds the seeded "Savaged"
+`ConditionTemplate` on its `ObjectDB`. `INGAME_TIME` duration, 72 IC hours,
+expiring itself through the sweep inside `get_active_conditions` - no heal verb
+exists or needs to. Gates only `companion fight` and `companion deploy`
+(`CompanionFitToFightPrerequisite`); a Savaged companion stays present,
+poseable, and rideable. Dispellable, not stackable.
+_Avoid_: wounded (a vitals `WOUND_DESCRIPTIONS` health-percentage tier name,
+not this condition), injured (same collision risk, no defined term here).
+
 **Lance** (#1843):
 The `GearArchetype.LANCE` weapon archetype — a `WEAPON_ARCHETYPES` member
 required to declare JOUST and to double CHARGE's bonuses. Wielding a Lance
