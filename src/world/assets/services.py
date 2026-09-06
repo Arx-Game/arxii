@@ -48,7 +48,9 @@ def draw_clue_from_pool(pool: CluePool, roster_entry: RosterEntry) -> Clue | Non
 
 
 @transaction.atomic
-def reconcile_distinction_asset_grants(character_distinction: CharacterDistinction) -> None:
+def reconcile_distinction_asset_grants(
+    character_distinction: CharacterDistinction, *, display_name: str | None = None
+) -> None:
     """Reconcile a ``CharacterDistinction`` into starting NPCAssets.
 
     Intended to be called at grant time whenever a character gains a distinction
@@ -65,6 +67,11 @@ def reconcile_distinction_asset_grants(character_distinction: CharacterDistincti
 
     Args:
         character_distinction: The CharacterDistinction being reconciled.
+        display_name: Overrides the grant's authored ``asset_display_name`` for
+            the spawned character key and persona name (#3660) — an Upbringing
+            connection naming a specific figure (e.g. "The woman who asked
+            twice") rather than the staff-authored placeholder ("A courier").
+            ``None`` (the picked-Distinction path) keeps the authored name.
     """
     from world.assets.constants import AssetAcquisitionSource  # noqa: PLC0415
     from world.assets.models import DistinctionAssetGrant, NPCAsset  # noqa: PLC0415
@@ -85,9 +92,10 @@ def reconcile_distinction_asset_grants(character_distinction: CharacterDistincti
         ).exists():
             continue
 
+        name = display_name or grant.asset_display_name
         _character, _sheet, asset_persona = create_character_with_sheet(
-            character_key=grant.asset_display_name,
-            primary_persona_name=grant.asset_display_name,
+            character_key=name,
+            primary_persona_name=name,
         )
         # NOTE: Evennia allows duplicate ObjectDB keys. Two PCs taking the
         # same Distinction will each spawn an NPC with the same character_key.
