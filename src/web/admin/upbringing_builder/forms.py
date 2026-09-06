@@ -124,6 +124,54 @@ class AnswerForm(forms.ModelForm):
         }
 
 
+#: How the Builder groups the Upbringing form's fields into admin fieldsets.
+#: Rendered through Django admin's own ``admin/includes/fieldset.html`` (#3667),
+#: so the page inherits admin's label column, help lines, checkbox rows,
+#: required markers and error markup instead of re-inventing them - #3660
+#: shipped ``{{ form.as_div }}``, which admin's stylesheet does not target at
+#: all. A field left out of these tuples does not render, so both tuples list
+#: every editable field of their form.
+UPBRINGING_FIELDSETS = (
+    (None, {"fields": ("beginning", "name", "frame_narrative")}),
+    ("Cost", {"fields": (("cg_point_cost", "trust_required"),)}),
+    (
+        "Family paths",
+        {
+            "fields": (
+                ("allows_claim_family", "allows_name_family", "allows_no_family"),
+                "claimable_kinds",
+                "family_templates",
+            )
+        },
+    ),
+    ("On the picker", {"fields": (("is_active", "sort_order"),)}),
+)
+
+#: The same, for one question. Grouped as the approved demo groups them: what
+#: the question is, the tie it records, which groups it offers, when it shows.
+QUESTION_FIELDSETS = (
+    (None, {"fields": ("kind", "name", "prompt", "example", "is_required")}),
+    ("The tie", {"fields": (("connection_kind", "life_stage"),)}),
+    (
+        "Which groups can be picked",
+        {
+            "fields": (
+                "anchor_source",
+                ("anchor_org_type", "anchor_society"),
+                "anchor_orgs",
+                "exclude_covert",
+                "same_anchor_as",
+            )
+        },
+    ),
+    (
+        "When this question is shown",
+        {"fields": ("follow_up_to", "shown_for_choices", "applies_to")},
+    ),
+    ("Order", {"fields": (("sort_order", "allows_text"), "DELETE")}),
+)
+
+
 QuestionFormSet = inlineformset_factory(
     OriginTemplate,
     OriginTemplateSlot,

@@ -1,5 +1,6 @@
 {% load i18n %}
 <div class="answers-wrapper" id="answers-{{ slot.pk }}">
+  <h3>Answers: where you stand with them</h3>
   {{ formset.management_form }}
   {% if formset.non_form_errors %}
   <p class="errornote">{{ formset.non_form_errors }}</p>
@@ -56,7 +57,7 @@
       <td></td>
     </tr>
   </template>
-  <button type="button" class="add-answer-btn"
+  <button type="button" class="button add-answer-btn"
           data-prefix="{{ formset.prefix }}"
           data-target="answers-body-{{ slot.pk }}"
           data-template="empty-answer-template-{{ slot.pk }}">

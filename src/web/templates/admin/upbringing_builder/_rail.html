@@ -1,44 +1,39 @@
 {% load i18n %}
-<div class="tuning-panel" id="upbringing-rail">
-  <h2>Live</h2>
-
-  <div class="stat-tiles">
-    <div class="stat-tile">
-      <span class="stat-value">{{ rail.questions }}</span>
-      <span class="stat-label">Questions</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-value">{{ rail.groups_asked_about }}</span>
-      <span class="stat-label">Groups asked about</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-value">{{ rail.people_named }}</span>
-      <span class="stat-label">People named</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-value">{{ rail.answers }}</span>
-      <span class="stat-label">Answers</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-value">{{ live.total_placeholders }}</span>
-      <span class="stat-label">Placeholders</span>
-    </div>
-    <div class="stat-tile">
-      <span class="stat-value">{{ live.open_places }}</span>
-      <span class="stat-label">Open places today</span>
-    </div>
+{% comment %}
+The live rail: what this route adds up to right now, what the page can check
+about it, and who is credited. Three admin panels rather than one, so each has
+its own `.module h2` header bar and the rail column reads as a stack (#3667).
+Sits outside the main form - "Mark reviewed" is its own POST and nested forms
+are invalid HTML.
+{% endcomment %}
+<div class="module">
+  <h2>This route</h2>
+  <div class="ub-stat"><span>Questions</span><b>{{ rail.questions }}</b></div>
+  <div class="ub-stat"><span>Groups asked about</span><b>{{ rail.groups_asked_about }}</b></div>
+  <div class="ub-stat"><span>People the player names</span><b>{{ rail.people_named }}</b></div>
+  <div class="ub-stat"><span>Answers written</span><b>{{ rail.answers }}</b></div>
+  <div class="ub-stat"><span>Placeholders</span><b>{{ live.total_placeholders }}</b></div>
+  <div class="ub-stat"><span>Open places today</span><b>{{ live.open_places }}</b></div>
+  <div class="ub-stat">
+    <span>Distinctions used</span>
+    <b>{% if rail.distinctions_used %}{{ rail.distinctions_used }}{% else %}None yet{% endif %}</b>
   </div>
+  <div class="ub-stat">
+    <span>Cheapest complete answer</span>
+    <b>{{ rail.cheapest_complete_answer }} point{{ rail.cheapest_complete_answer|pluralize }}</b>
+  </div>
+  <div class="ub-stat">
+    <span>Dearest</span>
+    <b>{{ rail.dearest_complete_answer }} point{{ rail.dearest_complete_answer|pluralize }}</b>
+  </div>
+  <div class="ub-stat">
+    <span>Largest refund on the cheapest route</span>
+    <b>{{ rail.largest_refund }} point{{ rail.largest_refund|pluralize }}</b>
+  </div>
+</div>
 
-  <p>Distinctions used:
-    {% if rail.distinctions_used %}{{ rail.distinctions_used }}{% else %}None yet{% endif %}
-  </p>
-  <p>
-    Cheapest complete answer: {{ rail.cheapest_complete_answer }} point{{ rail.cheapest_complete_answer|pluralize }}.
-    Dearest: {{ rail.dearest_complete_answer }} point{{ rail.dearest_complete_answer|pluralize }}.
-    Largest refund on the cheapest route: {{ rail.largest_refund }} point{{ rail.largest_refund|pluralize }}.
-  </p>
-
-  <h3>Checks</h3>
+<div class="module">
+  <h2>Checks</h2>
   {% if live.checks %}
   <ul class="upbringing-checks">
     {% for kind, text in live.checks %}
@@ -50,20 +45,33 @@
   {% else %}
   <p>Nothing to flag yet.</p>
   {% endif %}
+</div>
 
+<div class="module">
+  <h2>Preview</h2>
   <p>
     <a href="{% url 'admin_upbringing_builder_preview' template.pk %}" target="_blank" rel="noopener">
       Preview as the player sees it
     </a>
   </p>
+</div>
 
-  <h3>Credit</h3>
-  <p>Written by:
-    {% if template.written_by %}{{ template.written_by.name }} on {{ template.written_on }}
-    {% else %}Not yet written{% endif %}
-  </p>
-  <p>Reviewed by:
-    {% if template.reviewed_by %}{{ template.reviewed_by.name }} on {{ template.reviewed_on }}
-    {% else %}Not yet reviewed{% endif %}
-  </p>
+<div class="module">
+  <h2>Credit</h2>
+  <div class="ub-stat">
+    <span>Written by</span>
+    <b>{% if template.written_by %}{{ template.written_by.name }} on {{ template.written_on }}
+      {% else %}Not yet written{% endif %}</b>
+  </div>
+  <div class="ub-stat">
+    <span>Reviewed by</span>
+    <b>{% if template.reviewed_by %}{{ template.reviewed_by.name }} on {{ template.reviewed_on }}
+      {% else %}Not yet reviewed{% endif %}</b>
+  </div>
+  <form method="post" action="{% url 'admin_upbringing_builder_review' template.pk %}">
+    {% csrf_token %}
+    <div class="submit-row">
+      <input type="submit" value="Mark reviewed">
+    </div>
+  </form>
 </div>

@@ -1,0 +1,136 @@
+{% comment %}
+The Upbringing Builder's own stylesheet (#3667).
+
+The page is a custom admin page, so its structure comes from Django admin's own
+CSS contract - `fieldset.module.aligned`, `div.form-row`, `div.help`,
+`.submit-row`, `.module h2` - and this sheet adds only what admin has no class
+for: the two-column shell, the question header chips, the live lines, the
+checks list and the rail's stat rows. #3660 shipped the page with none of this
+and no admin classes either, so every field fell back to browser defaults.
+
+Every colour is an admin CSS variable, or a token defined against admin's own
+light/dark selectors below, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #upbringing-builder-root {
+    --ub-ok: #2f7a3f;
+    --ub-warn: #b4541b;
+  }
+  @media (prefers-color-scheme: dark) {
+    #upbringing-builder-root { --ub-ok: #8fb89a; --ub-warn: #d8a06a; }
+  }
+  html[data-theme="light"] #upbringing-builder-root { --ub-ok: #2f7a3f; --ub-warn: #b4541b; }
+  html[data-theme="dark"] #upbringing-builder-root { --ub-ok: #8fb89a; --ub-warn: #d8a06a; }
+
+  /* The shell: the route on the left, the live rail on the right. The rail is
+     a sibling of the form, not a child of it - it carries its own "Mark
+     reviewed" form and nested forms are invalid HTML. */
+  #upbringing-builder-root .ub-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #upbringing-builder-root .ub-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #upbringing-builder-root .ub-main { min-width: 0; }
+
+  /* A question is one admin panel: its own h2 header bar, then the field rows
+     admin's fieldset template renders. The nested fieldsets exist to group
+     those rows under subheadings, so they contribute no second panel. */
+  #upbringing-builder-root .question-module > fieldset.module {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  #upbringing-builder-root .question-module > fieldset.module:last-child .form-row:last-child {
+    border-bottom: none;
+  }
+  #upbringing-builder-root .module h2 .kind-chip { float: right; }
+  #upbringing-builder-root .kind-chip {
+    display: inline-block;
+    margin-left: 0.5rem;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    text-transform: none;
+    white-space: nowrap;
+  }
+
+  /* Answers sit inside their question's panel as a tabular block, the way an
+     admin inline does. */
+  #upbringing-builder-root .answers-wrapper { padding: 10px; }
+  #upbringing-builder-root .answers-wrapper h3 { margin-top: 0; padding-left: 0; }
+  #upbringing-builder-root .answers-table { width: 100%; }
+  #upbringing-builder-root .answers-table th {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--body-quiet-color);
+  }
+  #upbringing-builder-root .answers-table td input[type="text"],
+  #upbringing-builder-root .answers-table td input[type="number"] {
+    width: 100%;
+    min-width: 4rem;
+    box-sizing: border-box;
+  }
+  #upbringing-builder-root .answers-table td { vertical-align: top; }
+
+  /* A live line is computed by the page from the rows it is editing - how many
+     groups a rule matches today, how many of those are placeholders - never
+     authored copy. It reads as a distinct kind of small text so an author does
+     not mistake it for help. */
+  #upbringing-builder-root .live-line {
+    margin: 0.25rem 0 0;
+    padding-left: 0;
+    font-size: 0.75rem;
+    color: var(--ub-ok);
+  }
+  #upbringing-builder-root .live-line::before {
+    content: "\25CF  live";
+    margin-right: 0.4rem;
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+  #upbringing-builder-root .live-line a { color: inherit; }
+
+  /* The rail */
+  #upbringing-builder-root .ub-rail .module { margin-bottom: 1rem; }
+  #upbringing-builder-root .ub-stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #upbringing-builder-root .ub-stat:last-child { border-bottom: none; }
+  #upbringing-builder-root .ub-stat b {
+    color: var(--link-fg);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  #upbringing-builder-root .upbringing-checks {
+    margin: 0;
+    padding: 8px 10px 8px 10px;
+    list-style: none;
+  }
+  #upbringing-builder-root .upbringing-check {
+    margin: 0 0 0.35rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #upbringing-builder-root .upbringing-check:last-child { margin-bottom: 0; }
+  #upbringing-builder-root .upbringing-check--ok { border-left-color: var(--ub-ok); }
+  #upbringing-builder-root .upbringing-check--warn {
+    border-left-color: var(--ub-warn);
+    color: var(--ub-warn);
+  }
+  #upbringing-builder-root .ub-rail p { font-size: 0.75rem; }
+  #upbringing-builder-root .ub-rail .submit-row { margin: 10px; }
+</style>
