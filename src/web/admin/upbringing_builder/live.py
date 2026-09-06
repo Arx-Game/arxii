@@ -263,7 +263,7 @@ def _checks(
 
 def for_template(template: OriginTemplate, user: AccountDB) -> LivePanel:
     """The full right-rail live panel for ``template``: matches, checks, open places."""
-    slots = list(template.slots.order_by("sort_order", "id"))
+    slots = template.questions.rows
     groups_by_slot = _matched_groups(slots)
     placeholder_counts = _placeholder_counts(groups_by_slot)
     return LivePanel(

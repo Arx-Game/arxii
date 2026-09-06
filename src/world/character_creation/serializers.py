@@ -745,12 +745,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        grouping = self.context.get("slots_by_template")
-        slots = (
-            grouping.get(obj.id, [])
-            if grouping is not None
-            else list(obj.slots.order_by("sort_order"))
-        )
+        slots = obj.questions.rows
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:

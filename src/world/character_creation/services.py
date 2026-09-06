@@ -1363,9 +1363,9 @@ def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -
     answers = DraftAnswers.from_draft(draft)
     visible = draft.visible_origin_slot_ids()
     person_by_group_slot: dict[int, str] = {}
-    for slot in draft.selected_origin_template.slots.filter(
-        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
-    ):
+    for slot in draft.selected_origin_template.questions:
+        if slot.kind != QuestionKind.PERSON or slot.same_anchor_as_id is None:
+            continue
         name = answers.figures.get(slot.id)
         if name and slot.id in visible:
             person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
