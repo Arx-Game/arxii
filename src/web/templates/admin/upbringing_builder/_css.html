@@ -166,9 +166,12 @@ light/dark selectors below, so the page follows the theme toggle.
     min-width: 0;
     max-width: 38rem;
   }
-  /* Plain multi-selects only: an autocomplete's <select> is hidden and sized by
-     select2 from its own container, so widening it here would do nothing on the
-     page and fight the widget off it. */
+  /* Plain multi-selects only: an autocomplete's own select element is hidden and
+     sized by select2 from its container, so widening it here would do nothing on
+     the page and fight the widget off it. (No angle-bracketed tag names anywhere
+     in this file, comments included: it is a .html template, so SonarCloud's Web
+     analyzer parses one in a CSS comment as a real form control and fails the
+     gate with "add an id attribute to this input field" - #3674.) */
   #upbringing-builder-root .form-row .flex-container > select[multiple]:not(.admin-autocomplete) {
     flex: 1 1 auto;
     min-width: 0;
