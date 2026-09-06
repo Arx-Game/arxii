@@ -13,7 +13,9 @@ Path** (claim, name, or none), **Family Kind** (`FamilyKind` row), **Influence**
 (`Family.influence`), **Family Template** (`HouseTemplate` row; the type a named
 family is built from), **Vacancy** (an opening on a staff family's org; see Recipes
 11-12). The code keeps the `OriginTemplate*` and `HouseTemplate` names (Decision 4 on
-#3617; #3648).
+#3617; #3648). **Connection**, **Anchor**, **Stance**, **Follow-up**, and **Question
+kind** (Recipes 13-15, #3660) are canonical in `world/roster/AGENT_GLOSSARY.md`; use
+those terms, not the `_Avoid_` synonyms listed there.
 
 ## Recipe 1: an Upbringing for a beginning
 Admin > Societies > Family Templates > Add: kind, `org_type` (resolves against the
@@ -62,7 +64,9 @@ on staff-authored houses. Do not: add a boolean per fact.
 ## Recipe 8: servants of a powerful family
 Superseded by Recipes 11 and 12 (#3648): a claim-path role priced by influence is now a
 kin or retainer **Vacancy** on the staff family's org, not a pick-list prompt. See
-those recipes below.
+those recipes below. A narrative-only acknowledgment of service, with no rank and no
+membership row, is instead a "Pick a group" question tagged **served** (Recipe 13) - a
+real membership still needs a Vacancy.
 
 ## Recipe 9: a new family kind (the Humble, a merchant house, a clan)
 Admin > Roster > Family Kinds > Add. Tick "styles as house" if its orgs should be named
@@ -100,11 +104,55 @@ is always open, never decremented. A retainer Vacancy is reachable from any fami
 path (via the Service panel) as long as it is not the draft's own claimed family's
 org, the realm matches, the Upbringing is allowed, and trust is met.
 
+## Recipe 13: a group tie and a person inside it
+Character Creation > Upbringings > a row > "Open in Upbringing Builder". Add a
+question: set **Kind of question** (`kind`) to "Pick a group" (`group`), **What the
+tie was** (`connection_kind`) and **When** (`life_stage`), then **Which groups can be
+picked** (`anchor_source`): "Groups I name" (`listed`) plus **Groups** (`anchor_orgs`)
+to name one or more real Organizations, "Every group of a type in a realm" (`pool`)
+with an org type and/or society, "The same group as an earlier question" (`same_as`)
+pointing **Same group as / belongs to** (`same_anchor_as`) at an earlier "pick a
+group" question, or the two draft-derived sources ("The house the character's family
+served" / "The character's own family"), which need no group named at all - the
+Builder resolves those from the draft. Add its Answers (the group's stances): each an
+**Answer** (name), **Cost** / **Per point of influence** (priced against the resolved
+group's own family, 0 if it has none), and optionally **Grants distinction** and
+**Group's opinion** (`reputation_seed`, -1000 to 1000). Add a second question with
+**Kind of question** "Name a person" (`person`) and **Same group as / belongs to**
+pointing at the group question, so the named figure belongs to it; leave it not
+Required if the tie can stand with no name given. Save. The right rail's Checks
+confirm the group question "has a group source" and flag any placeholder groups a
+pool still matches.
+
+## Recipe 14: a question shown only for certain answers to an earlier one
+On the same page, add a question and set **Shown after** (`follow_up_to`) to the
+earlier question. Leave **Only for these answers** (`shown_for_choices`) empty to
+show it for any answer to that question, or tick the specific answers that should
+reveal it - every ticked answer must belong to the "Shown after" question, enforced
+by the row's own clean rule. The right rail's Checks warn when a question only shows
+for certain answers but has no "Shown after" target set, and confirm when "Shown
+after" / "Same group as / belongs to" each point at an earlier question.
+
+## Recipe 15: an answer that grants a Distinction and sets the group's opinion
+On a "Pick a group" or "Pick one answer" question's Answer, set **Grants distinction**
+to an authored Distinction: picking that answer grants it at character creation for
+no extra Cost - the grant never adds to the priced answer's own Cost, and a player can
+no longer also hand-pick the same Distinction in the Distinctions stage. On a "Pick a
+group" question's Answer, set **Group's opinion** (`reputation_seed`) to seed that
+group's opinion of the character at finalize (positive or negative, -1000 to 1000; 0
+seeds nothing). If a "Name a person" question is anchored to the same group (Recipe
+13), that named figure becomes the granted Distinction's spawned NPC's display name
+in place of the staff-authored placeholder. The right rail's "Distinctions used" tile
+lists every Distinction the route grants and flags one that has since gone inactive.
+
 ## Pricing at a glance
 Cost of an Upbringing = its flat cost + for each picked choice (flat + per-influence x
 the claimed family's influence; influence is 0 on the name and none paths) + the
 selected Vacancy's cost (flat + per-influence x the **Vacancy's** family's influence,
-ADR-0269 extended by ADR-0273).
+ADR-0269 extended by ADR-0273). A "pick a group" question's per-influence instead
+multiplies the *chosen group's own* family's influence (0 when that group has no
+Family) - which family that is need not be the claimed one (ADR-0275). A Distinction
+an answer grants adds nothing to that answer's cost; it is bundled free.
 
 ## Worked examples (illustrative names; not shipped content)
 

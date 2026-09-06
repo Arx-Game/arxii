@@ -440,6 +440,60 @@ If an agent is asked about any of these topics, this is the system:
 - "the row editor for credited content"
 - "reference search across the content database / staff docs / Arx I dump"
 
+## Upbringing Builder (#3660)
+
+**Purpose:** author a whole Upbringing route (the `OriginTemplate`, every
+`OriginTemplateSlot` question, and every `OriginTemplateSlotChoice` answer hanging
+off it) on one admin page, in one transaction, rather than the stock admin's separate
+change forms and inlines for each. Pattern mirrors the Authoring Workbench above:
+`superuser_required`, the contributor gate, plain Django forms, `base_site.html`.
+
+- **Files** - `web/admin/upbringing_builder/`: `views.py` (`upbringing_builder`,
+  `upbringing_builder_preview`, `upbringing_builder_review`), `forms.py`
+  (`UpbringingForm`, `QuestionFormSet`, `AnswerFormSet` via `inlineformset_factory`,
+  `answer_formset_for` for the per-question `a<slot.pk>`-prefixed formset), `live.py`
+  (the right rail: `for_template` -> `LivePanel`, `rail_counts`), `credit.py`
+  (`stamp_written`, `stamp_reviewed`). Templates in
+  `web/templates/admin/upbringing_builder/`: `page.html` (the form, with a
+  client-side script that clones "Add question"/"Add answer" formset rows - there is
+  no saved row to fetch an HTMX fragment for until the whole route is saved),
+  `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`.
+- **URLs** (all superuser-only): `_upbringing_builder/new/` ->
+  `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/<pk>/` ->
+  `admin_upbringing_builder`, `_upbringing_builder/<pk>/review/` ->
+  `admin_upbringing_builder_review` (POST), `_upbringing_builder/<pk>/preview/` ->
+  `admin_upbringing_builder_preview` (read-only, the questionnaire the way
+  `CGOriginTemplateSerializer` hands it to a player, picking a GROUP question's first
+  offered group for display since there is no real draft here).
+- **Gate** - `@superuser_required`, then `current_contributor(request.user)`; an
+  unlinked operator sees the setup guidance (`_setup.html`) instead and nothing is
+  saved, mirroring the Workbench's own gate.
+- **Credit** - a POST that validates saves the whole route (`UpbringingForm`,
+  `QuestionFormSet`, every question's `AnswerFormSet`) inside one
+  `transaction.atomic()` block, then `stamp_written` credits every row on the route
+  (the template, every slot, every choice) to the operator's linked contributor in
+  the same request - no separate "save" then "credit" step, unlike the Workbench's
+  prose editor. "Mark reviewed" (`upbringing_builder_review`) is a separate POST that
+  stamps `reviewed_by`/`reviewed_on` on every row and never touches authorship or
+  unsaved edits.
+- **Right rail (`live.py`)** - live-match lines for a POOL/LISTED group question
+  (SAME_AS/SERVED_HOUSE/OWN_FAMILY need a draft to resolve against and stay empty
+  here), a placeholder-group count, how many open Vacancies this route can reach
+  today (built on an unsaved `CharacterDraft`, never written to the database),
+  authoring checks (`("ok"|"warn", text)`: a group question has a source, a
+  `same_anchor_as`/`follow_up_to` points at an earlier question, a branch condition
+  has a follow-up target to gate it, a granted Distinction is active), and backlog
+  counts (questions, groups asked about, people named, answers, distinctions used,
+  cheapest/dearest/largest-refund cost spread over required questions).
+- **What is authored here:** the Upbringing itself, its questions (including the
+  `#3660` kind/connection/anchor/follow-up fields), and their answers (including
+  `grants_distinction`/`reputation_seed`). **What is not:** a Vacancy - membership in
+  a staff family is still authored on the `Organization`/`Vacancy` admin page
+  (Recipes 11-12 in `family-authoring-recipes.md`), not on this one.
+- Deliberate no-ADR for the page-layout/formset decisions: recorded in the approved
+  #3660 spec review, the same precedent #3019 set above; ADR-0275 covers the
+  questionnaire model itself.
+
 ## Game Tuning & Game Ops Dashboards (#1221)
 
 **Purpose:** Two superuser-only, admin-hosted HTMX dashboards linked from the Game Setup

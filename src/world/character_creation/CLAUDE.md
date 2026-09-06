@@ -46,7 +46,7 @@ Character creation is a multi-stage process that guides players through creating
 - Can override starting room (e.g., Sleeper Wake Room)
 - Has CG point cost and trust requirements
 
-### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648)
+### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648, #3660)
 Full model shape, family-path resolution, pricing, and the authoring recipes live in
 `docs/systems/character_creation.md`'s Lineage step section and
 `docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
@@ -68,6 +68,30 @@ Not required at CG submit (mirrors #2427 Glimpse); finish-later via
 `OriginStoryEditorDialog` (`set-origin-slot`/`clear-origin-slot` sheet API actions -
 `choice_id` there is staff-only, since a costed pick is set at character creation).
 `CharacterSheet.origin_story_state` caches NOT_STARTED/SLOTS_ONLY/COMPLETE.
+
+**Formative connections (#3660).** `OriginTemplateSlot.kind` (`QuestionKind`) adds two
+kinds to the original TEXT/PICK shapes: GROUP (`anchor_source` resolves which real
+`societies.Organization`s the answer may name: a pool, a named list, the same group an
+earlier GROUP question resolved to, the served house, or the character's own family)
+and PERSON (a free-text figure, optionally scoped to a GROUP question via
+`same_anchor_as`). `questionnaire.py` is the one seam every caller evaluates the
+questionnaire through - which questions show (`visible_slot_ids`/`is_shown`), which
+groups a question offers (`resolve_groups`), which organization an answer is about
+(`anchor_for`), what influence prices it (`question_influences`), and which
+Distinctions the picked answers bundle (`bundled_distinctions`). `models.py`,
+`validators.py`, `serializers.py`, and `services.py` all read through it rather than
+re-deriving any of these rules, so they cannot drift apart. Finalize adds
+`_grant_connection_distinctions` (grants a picked answer's `grants_distinction`
+through the same `CharacterDistinction` write path a hand-picked Distinction uses,
+naming the granted `NPCAsset` after a PERSON question's figure when one is anchored to
+the granting group) and `_seed_connection_reputation` (each picked GROUP answer's
+non-zero `reputation_seed` bumps the resolved anchor's `OrganizationReputation`).
+`set_origin_slot(sheet, slot, value, choice, *, organization=_KEEP, figure_name=_KEEP)`
+defaults `organization`/`figure_name` to a `_KEEP` sentinel, not `None`/`""`: a caller
+that only edits `value` (the post-CG write-in editor) leaves an existing tie/figure
+alone rather than silently clearing it; finalize always passes both explicitly. Staff
+author a whole route (Upbringing, questions, answers) on one page, the Upbringing
+Builder - see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section.
 
 ### CGExplanation
 - Key-value table: each row has `key`, `text`, and `help_text` fields

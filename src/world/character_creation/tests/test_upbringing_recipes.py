@@ -1,4 +1,5 @@
-"""One test per authoring recipe in docs/systems/family-authoring-recipes.md (#3617, #3648).
+"""One test per authoring recipe in docs/systems/family-authoring-recipes.md
+(#3617, #3648, #3660).
 
 Each test authors ONLY the rows the recipe names, through the same models staff
 use in admin. Recipes 1, 2, 3, 9, 10, 11 and 12 build an Upbringing and assert on
@@ -7,22 +8,35 @@ recipes 4 through 7 have no CG surface of their own and instead assert
 directly on the houses/societies rows the recipe names (``FealtyEdge``,
 ``OrgPact``, ``OrganizationAspect``/``OrganizationFeature``). Recipe 8 (a
 claim-path role pick-list priced by influence) is folded into 11 and 12, which
-cover the same ground through a Vacancy instead. If a recipe stops working,
-this file says which one.
+cover the same ground through a Vacancy instead. Recipes 13 through 15 cover
+the questionnaire kinds added in #3660 (a group tie plus a person inside it, a
+follow-up shown only for one answer, and an answer that bundles a Distinction
+and seeds an opinion) and assert on ``visible_slot_ids``/``bundled_distinctions``
+in addition to the surfaces above. If a recipe stops working, this file says
+which one.
 """
 
 from django.test import TestCase
 from django.utils import timezone
 
-from world.character_creation.constants import FamilyPath
+from world.character_creation.constants import (
+    AnchorSource,
+    ConnectionKind,
+    FamilyPath,
+    LifeStage,
+    QuestionKind,
+)
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
+    GroupPromptFactory,
     OriginTemplateFactory,
+    OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
     make_unknown_upbringing,
 )
 from world.character_creation.validators import get_lineage_errors
+from world.distinctions.factories import DistinctionFactory
 from world.roster.constants import CRIME_KIND_NAME, NOBLE_KIND_NAME
 from world.roster.factories import FamilyFactory, FamilyKindFactory
 from world.societies.factories import OrganizationFactory
@@ -251,3 +265,111 @@ class UpbringingRecipesTest(TestCase):
         assert get_lineage_errors(draft) == []
         assert draft.calculate_upbringing_cost() == 0
         assert thug.is_open
+
+    def test_recipe_13_group_and_person_questions(self):
+        """Recipe 13: a route with a group question, a person in that group, and a follow-up."""
+        template = OriginTemplateFactory(
+            beginning=BeginningsFactory(name="les Ouwoux"),
+            name="Born to a Household",
+            allows_name_family=False,
+            allows_no_family=True,
+        )
+        house = OrganizationFactory(name="House Orisant")
+        q1 = GroupPromptFactory(
+            template=template,
+            sort_order=0,
+            name="House",
+            connection_kind=ConnectionKind.SERVED,
+            life_stage=LifeStage.CHILDHOOD,
+        )
+        q1.anchor_orgs.add(house)
+        livery = OriginTemplateSlotChoiceFactory(slot=q1, name="Livery at table")
+        who = OriginTemplateSlotFactory(
+            template=template,
+            sort_order=1,
+            name="Who",
+            kind=QuestionKind.PERSON,
+            same_anchor_as=q1,
+            follow_up_to=q1,
+            is_required=False,
+        )
+        left = GroupPromptFactory(
+            template=template,
+            sort_order=2,
+            name="How you left",
+            anchor_source=AnchorSource.SAME_AS,
+            same_anchor_as=q1,
+            follow_up_to=q1,
+        )
+        quietly = OriginTemplateSlotChoiceFactory(slot=left, name="Quietly", reputation_seed=-50)
+        draft = _draft(
+            template,
+            draft_data={
+                "tarot_card_name": "The Lamp",
+                # SAME_AS still needs its own origin_anchors entry (the frontend
+                # auto-fills it from the single group `left` resolves to):
+                # anchor_for only auto-derives OWN_FAMILY/SERVED_HOUSE (#3660).
+                "origin_anchors": {str(q1.id): house.id, str(left.id): house.id},
+                "origin_choices": {str(q1.id): livery.id, str(left.id): quietly.id},
+                "origin_figures": {str(who.id): "Tessaline"},
+            },
+        )
+        assert get_lineage_errors(draft) == []
+        assert draft.calculate_upbringing_cost() == 0
+
+    def test_recipe_14_branch_off_an_answer(self):
+        """Recipe 14: a question shown only for certain answers to an earlier one."""
+        template = OriginTemplateFactory(
+            beginning=BeginningsFactory(name="Kitchen or Court"),
+            allows_name_family=False,
+            allows_no_family=True,
+        )
+        house = OrganizationFactory(name="House Verrine")
+        q1 = GroupPromptFactory(template=template, sort_order=0, name="Role")
+        q1.anchor_orgs.add(house)
+        scullery = OriginTemplateSlotChoiceFactory(slot=q1, name="Scullery")
+        livery = OriginTemplateSlotChoiceFactory(slot=q1, name="Livery")
+        q3 = GroupPromptFactory(template=template, sort_order=2, name="Extra", follow_up_to=q1)
+        q3.shown_for_choices.add(livery)
+        draft = _draft(
+            template,
+            draft_data={
+                "tarot_card_name": "The Wheel",
+                "origin_anchors": {str(q1.id): house.id},
+                "origin_choices": {str(q1.id): scullery.id},
+            },
+        )
+        assert q3.id not in draft.visible_origin_slot_ids()
+        draft.draft_data["origin_choices"] = {str(q1.id): livery.id}
+        assert q3.id in draft.visible_origin_slot_ids()
+
+    def test_recipe_15_answer_with_grant_and_opinion(self):
+        """Recipe 15: an answer that grants a Distinction and sets the group's opinion."""
+        template = OriginTemplateFactory(
+            beginning=BeginningsFactory(name="Kept by the House"),
+            allows_name_family=False,
+            allows_no_family=True,
+        )
+        house = OrganizationFactory(name="House Aurelian")
+        q1 = GroupPromptFactory(template=template, sort_order=0, name="Standing")
+        q1.anchor_orgs.add(house)
+        kept_close = DistinctionFactory(name="Kept Close")
+        favored = OriginTemplateSlotChoiceFactory(
+            slot=q1,
+            name="Favored ward",
+            cg_point_cost=10,
+            grants_distinction=kept_close,
+            reputation_seed=200,
+        )
+        draft = _draft(
+            template,
+            draft_data={
+                "tarot_card_name": "The Sun",
+                "origin_anchors": {str(q1.id): house.id},
+                "origin_choices": {str(q1.id): favored.id},
+            },
+        )
+        assert get_lineage_errors(draft) == []
+        assert draft.calculate_upbringing_cost() == 10
+        bundled = draft.bundled_distinctions()
+        assert bundled[0]["name"] == "Kept Close"

@@ -648,7 +648,7 @@
 - `draw_clue_from_pool(pool: 'CluePool', roster_entry: 'RosterEntry') -> 'Clue | None' - Draw a weighted random clue from the pool, excluding held clues (#2293).`
 - `extract_asset(asset: 'NPCAsset', extractor) -> 'int' - Pull a recruited NPC out of their public job (#2827 phase 3).`
 - `introduce_asset(*, introducer_persona: 'Persona', ally_persona: 'Persona', asset: 'NPCAsset') -> 'NPCAsset' - Introduce an owned asset to a co-present ally, creating co-ownership (#2295).`
-- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction') -> 'None' - Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
+- `reconcile_distinction_asset_grants(character_distinction: 'CharacterDistinction', *, display_name: 'str | None' = None) -> 'None' - Reconcile a ``CharacterDistinction`` into starting NPCAssets.`
 - `transfer_asset_to_org(asset: 'NPCAsset', organization) -> 'NPCAsset' - Convert a personally-held asset row into an org-held one (#2820 phase 2).`
 - `transition_asset_status(asset: 'NPCAsset', new_status: 'str', *, reason: 'str' = AssetTransitionReason.CONSEQUENCE) -> 'None' - Transition an NPCAsset's status, enforcing the legal-transition matrix.`
 - `transition_assets_for_dead_character(dead_character) -> 'None' - Transition all ACTIVE assets belonging to a dead character to LOST.`
@@ -1355,6 +1355,7 @@
   - sheet -> character_sheets.CharacterSheet [FK]
   - slot -> character_creation.OriginTemplateSlot [FK]
   - choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
+  - organization -> societies.Organization [FK] (nullable)
 
 ### DraftApplication
 **Foreign Keys:**
@@ -1391,7 +1392,15 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - template -> character_creation.OriginTemplate [FK]
+  - anchor_org_type -> societies.OrganizationType [FK] (nullable)
+  - anchor_society -> societies.Society [FK] (nullable)
+  - same_anchor_as -> character_creation.OriginTemplateSlot [FK] (nullable)
+  - follow_up_to -> character_creation.OriginTemplateSlot [FK] (nullable)
+  - anchor_orgs -> societies.Organization [M2M]
+  - shown_for_choices -> character_creation.OriginTemplateSlotChoice [M2M]
 **Pointed to by:**
+  - dependents <- character_creation.OriginTemplateSlot
+  - follow_ups <- character_creation.OriginTemplateSlot
   - choices <- character_creation.OriginTemplateSlotChoice
   - character_rows <- character_creation.CharacterOriginSlot
 
@@ -1400,7 +1409,9 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - slot -> character_creation.OriginTemplateSlot [FK]
+  - grants_distinction -> distinctions.Distinction [FK] (nullable)
 **Pointed to by:**
+  - branching_prompts <- character_creation.OriginTemplateSlot
   - character_rows <- character_creation.CharacterOriginSlot
 
 ### StartingArea
@@ -1436,7 +1447,7 @@
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' - Resubmit a draft application after revisions.`
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
-- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None) -> 'None' - Upsert a character's answer (text and/or picked choice), then refresh state.`
+- `set_origin_slot(sheet: 'CharacterSheet', slot: 'OriginTemplateSlot', value: 'str', choice: 'OriginTemplateSlotChoice | None' = None, *, organization: 'Organization | None | _Keep' = <world.character_creation.services._Keep object>, figure_name: 'str | _Keep' = <world.character_creation.services._Keep object>) -> 'None' - Upsert a character's answer (text, picked choice, anchor, person), then refresh state.`
 - `submit_draft_for_review(draft: 'CharacterDraft', *, submission_notes: 'str' = '') -> 'DraftApplication' - Submit a character draft for staff review.`
 - `unsubmit_draft(application: 'DraftApplication') -> 'None' - Un-submit a draft application, returning it to editable state.`
 - `withdraw_draft(application: 'DraftApplication') -> 'None' - Withdraw a draft application.`
@@ -3466,6 +3477,7 @@
   - reward_definitions <- achievements.RewardDefinition
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
+  - granting_choices <- character_creation.OriginTemplateSlotChoice
   - codex_grants <- codex.DistinctionCodexGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
   - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
@@ -9055,6 +9067,8 @@
   - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
+  - anchor_prompts <- character_creation.OriginTemplateSlot
+  - connection_rows <- character_creation.CharacterOriginSlot
   - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank
   - gift_grants <- societies.OrganizationGiftGrant
@@ -9186,6 +9200,7 @@
 
 ### OrganizationType
 **Pointed to by:**
+  - anchor_pool_prompts <- character_creation.OriginTemplateSlot
   - organizations <- societies.Organization
   - house_templates <- societies.HouseTemplate
 
@@ -9259,6 +9274,7 @@
 **Pointed to by:**
   - dominant_areas <- areas.Area
   - connected_beginnings <- character_creation.Beginnings
+  - anchor_pool_prompts <- character_creation.OriginTemplateSlot
   - organizations <- societies.Organization
   - reputations <- societies.SocietyReputation
   - known_legend_entries <- societies.LegendEntry

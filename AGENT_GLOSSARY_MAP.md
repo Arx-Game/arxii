@@ -37,7 +37,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
   Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
-  Served house. Character Creation has no glossary file of its own.
+  Served house, and (#3660) Connection, Anchor, Stance, Follow-up, Question kind. Character
+  Creation has no glossary file of its own.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
