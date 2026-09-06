@@ -490,3 +490,62 @@ class BuilderStylingTest(BuilderTestCase):
         ignored = self.ADMIN_PROVIDED_CLASSES | self.JS_ONLY_CLASSES
         undefined = sorted(token for token in emitted - ignored if f".{token}" not in css)
         assert not undefined, f"class hooks with no CSS rule reaching the page: {undefined}"
+
+
+class BuilderDemoFidelityTest(BuilderTestCase):
+    """Where a piece sits, not just that it is present (#3667 demo-fidelity review).
+
+    Every one of these was rendered on the page and read as content by the
+    earlier tests while sitting in the wrong place, or missing entirely, against
+    the design the demo approved. "Is the string in the body" cannot tell the
+    difference; each of these asks about position or about the piece itself.
+    """
+
+    @classmethod
+    def setUpTestData(cls):
+        super().setUpTestData()
+        cls.q2 = OriginTemplateSlotFactory(
+            template=cls.template,
+            sort_order=1,
+            name="Who looked after you",
+            kind=QuestionKind.PERSON,
+            same_anchor_as=cls.q1,
+        )
+        cls.q3 = OriginTemplateSlotFactory(
+            template=cls.template,
+            sort_order=2,
+            name="How you left",
+            kind=QuestionKind.TEXT,
+            follow_up_to=cls.q1,
+        )
+
+    def _body(self) -> str:
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        assert resp.status_code == 200
+        return resp.content.decode()
+
+    def test_the_live_match_line_sits_under_the_rule_it_reports_on(self):
+        """It used to trail the whole question, several screens from the field."""
+        body = self._body()
+        live_line = body.index("Matches 1 group today")
+        answers_table = body.index('class="tuning-table answers-table"')
+        rule_row = body.index("field-anchor_org_type")
+        assert rule_row < live_line < answers_table, (
+            "the live match line must sit between the type/realm row it reports on and "
+            "the answers table, not after the whole question"
+        )
+
+    def test_a_question_names_the_earlier_one_it_hangs_off(self):
+        # Compared against whitespace-collapsed markup, which is what a reader
+        # sees: the chip's number sits on its own line to stay inside the line
+        # limit, and the browser renders that as a single space.
+        text = re.sub(r"\s+", " ", self._body())
+        assert "About the group from Question 1" in text, "reused-anchor chip missing"
+        assert "Branches off Question 1" in text, "follow-up chip missing"
+
+    def test_the_rail_runs_route_checks_credit_preview(self):
+        body = self._body()
+        wanted = ("This route", "Checks", "Credit", "Preview")
+        order = [body.index(f"<h2>{name}</h2>") for name in wanted]
+        assert order == sorted(order), f"the rail's panels are out of the demo's order {wanted}"
