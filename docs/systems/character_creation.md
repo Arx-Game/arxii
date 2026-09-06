@@ -261,9 +261,15 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/families/` - Playable families, filterable by `area_id`
   and `kind=` (one or more `FamilyKind` ids, #3617)
 - `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for a beginning,
-  trust-filtered; each row carries its `slots` (prefetched) and `claimable_kind_ids`, batched
-  with one flat query grouped in Python and passed through serializer context rather than a
-  per-instance `.claimable_kinds.all()` or a bare `prefetch_related` (ADR-0263; #3617). Each
+  trust-filtered; each row carries its `slots` and `claimable_kind_ids`. The questions come
+  from `OriginTemplate.questions`, the `CachedRowsHandler` that owns them for every consumer
+  (this serializer, the questionnaire resolver, the draft validators, the finalize service,
+  the Builder rail); the view batches them for the page with `UpbringingQuestionsHandler.prime()`
+  and never prefetches them. `claimable_kind_ids` is batched with one flat query grouped in
+  Python and passed through serializer context, rather than a per-instance
+  `.claimable_kinds.all()`. Neither uses a `to_attr` or bare-string prefetch: both go stale on
+  an identity-mapped row, and a question deleted in between used to come back with a null id
+  (ADR-0263, ADR-0278; #3617, #3673). Each
   slot (`OriginTemplateSlotSerializer`) carries `kind`, `connection_kind`, `life_stage`,
   `anchor_source`, `same_anchor_as`, `follow_up_to`, `shown_for_choice_ids`, and `groups` (the
   offered `Organization`s for a POOL/LISTED slot, batched across the whole template; empty for
