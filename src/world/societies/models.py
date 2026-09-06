@@ -29,8 +29,11 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.checks.models import OutcomeTierAward
+from world.contributors.models import CreditedContent
 from world.societies.constants import (
     COMMON_KNOWLEDGE_MULTIPLIER,
+    VACANCY_BASIS_KIN,
+    VACANCY_BASIS_RETAINER,
     DeedKnowledgeSource,
     ObligationOrigin,
     ObligationState,
@@ -790,6 +793,14 @@ class OrganizationMembership(SharedMemoryModel):
             "(having been a member remains a secret). NULL for overt orgs."
         ),
     )
+    vacancy = models.ForeignKey(
+        "arxii.Vacancy",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="memberships",
+        help_text="The CG Vacancy this membership was minted from (#3648); null otherwise.",
+    )
 
     class Meta:
         verbose_name = "Organization Membership"
@@ -840,6 +851,131 @@ class OrganizationMembership(SharedMemoryModel):
         if self.rank is None:
             return ""
         return self.organization.get_rank_title(self.rank.tier)
+
+
+class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """An opening on a staff-minted family's organization (#3648).
+
+    Staff mark places a character may enter the family through at CG: what the
+    holder does, how much the family cares (``importance``), what outsiders
+    assume (``presumed_importance``), and the price. A Vacancy that points into
+    the kinship tree (``kin_pool`` or ``kin_node``) is a kin vacancy; one with no
+    kin link is a retainer vacancy. A blank ``count_remaining`` is a standing
+    vacancy: always open, never decremented. Authored in the database; not a
+    corpus row because it belongs to one installation's family (ADR-0273).
+    """
+
+    organization = models.ForeignKey(
+        Organization,
+        on_delete=models.CASCADE,
+        related_name="vacancies",
+        help_text="The staff family's organization this opening belongs to.",
+    )
+    name = models.CharField(max_length=120, help_text="Third daughter, Enforcer, Household guard.")
+    description = models.TextField(
+        blank=True, help_text="Who fits here and what they do for the family."
+    )
+    importance = models.PositiveSmallIntegerField(
+        default=0, help_text="How much the family cares about the holder. 0 = would not notice."
+    )
+    presumed_importance = models.PositiveSmallIntegerField(
+        default=0, help_text="What outsiders assume the family thinks of the holder."
+    )
+    cg_point_cost = models.IntegerField(default=0, help_text="Flat CG cost.")
+    cost_per_influence = models.IntegerField(
+        default=0, help_text="CG cost per point of the family's influence (ADR-0269)."
+    )
+    rank = models.ForeignKey(
+        OrganizationRank,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="vacancies",
+        help_text="Rung the membership gets; blank = the organization's base rank.",
+    )
+    kin_pool = models.ForeignKey(
+        "arxii.KinSlotPool",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="vacancies",
+        help_text="Kin vacancy backed by a slot pool ('a cousin could fit here').",
+    )
+    kin_node = models.ForeignKey(
+        "arxii.Kinsperson",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="vacancies",
+        help_text="Kin vacancy backed by one appable person.",
+    )
+    count_remaining = models.PositiveSmallIntegerField(
+        null=True,
+        blank=True,
+        help_text="Openings left; blank = a standing vacancy that is always open.",
+    )
+    trust_required = models.IntegerField(
+        default=0, help_text="Minimum trust to see and take this opening."
+    )
+    allowed_upbringings = models.ManyToManyField(
+        "arxii.OriginTemplate",
+        blank=True,
+        related_name="vacancies",
+        help_text="Upbringings that may take this opening; empty = any that can reach the org.",
+    )
+    is_active = models.BooleanField(default=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["organization", "name"]
+        dependencies = ["arxii.Organization"]
+
+    class Meta:
+        verbose_name = "Vacancy"
+        verbose_name_plural = "Vacancies"
+        ordering = ["organization", "sort_order", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["organization", "name"], name="unique_vacancy_name"),
+            models.CheckConstraint(
+                condition=~(models.Q(kin_pool__isnull=False) & models.Q(kin_node__isnull=False)),
+                name="vacancy_at_most_one_kin_link",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.organization}: {self.name}"
+
+    @property
+    def basis(self) -> str:
+        return (
+            VACANCY_BASIS_KIN if (self.kin_pool_id or self.kin_node_id) else VACANCY_BASIS_RETAINER
+        )
+
+    @property
+    def is_open(self) -> bool:
+        return self.is_active and (self.count_remaining is None or self.count_remaining > 0)
+
+    def cost_for(self, influence: int) -> int:
+        """Price against a family of ``influence`` (ADR-0269)."""
+        return self.cg_point_cost + self.cost_per_influence * influence
+
+    def clean(self) -> None:
+        super().clean()
+        if self.kin_pool_id and self.kin_node_id:
+            raise ValidationError(
+                {"kin_pool": "A vacancy links to a slot pool or an appable person, not both."}
+            )
+        family_id = self.organization.family_id if self.organization_id else None
+        if family_id is None:
+            raise ValidationError({"organization": "Vacancies belong to a family's organization."})
+        if self.kin_pool_id and self.kin_pool.family_id != family_id:
+            raise ValidationError({"kin_pool": "The slot pool must belong to this family."})
+        if self.kin_node_id and self.kin_node.family_id != family_id:
+            raise ValidationError({"kin_node": "The appable person must belong to this family."})
+        if self.rank_id and self.rank.organization_id != self.organization_id:
+            raise ValidationError({"rank": "The rank must belong to this vacancy's organization."})
 
 
 class OrganizationOffice(SharedMemoryModel):

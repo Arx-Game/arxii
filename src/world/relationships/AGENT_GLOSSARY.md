@@ -59,3 +59,7 @@ _Avoid_: default track, generic track (in code — "system track" is canonical),
 **AffectionShift** (automatic affection shift, #1697):
 A social action's built-in regard consequence — the generic, valence-signed SHIFT_AFFECTION effect: on success, the TARGET's relationship toward the actor moves on the Regard/Friction system tracks (Flirt +5, Seduce +50, PLACEHOLDER; future consent-gated offensive actions carry negative amounts). One shift per (relationship, scene, effect) — the first success of a given action per scene per pair shifts, repeats no-op while conditions still refresh. Distinct from a Bump (the actor's own one-keystroke write) — a shift is done TO you by someone else's action, the grievance precedent generalized.
 _Avoid_: seduction bonus, auto-rep, per-action affection (it is per-scene-deduped), conflating with Bump.
+
+**Companion target** (#3575, ADR-0272):
+A `CharacterRelationship` whose `target_companion` is set (and `target` null): the bonded owner's regard toward their own `Companion`. Owner-only, active from creation (the bind is the consent), one row per companion per source, kept after release. Read `target_name` rather than `target.character` anywhere a row may be about a companion.
+_Avoid_: pet bond, companion relationship model (there is no separate model), giving the companion a sheet.

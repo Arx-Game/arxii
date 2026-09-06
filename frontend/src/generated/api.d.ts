@@ -3568,6 +3568,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-creation/vacancies/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Openings the draft may take, priced for it (#3648). ``?draft=`` is required. */
+    get: operations['character_creation_vacancies_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/character-creation/vacancies/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Openings the draft may take, priced for it (#3648). ``?draft=`` is required. */
+    get: operations['character_creation_vacancies_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/character-sheets/{id}/': {
     parameters: {
       query?: never;
@@ -25557,8 +25591,9 @@ export interface components {
       /** @description Player has no family; the tarot surname ritual applies (#3617). */
       readonly allows_no_family: boolean;
       readonly claimable_kind_ids: number[];
-      /** @description Kind a player-named family gets; required when naming is allowed (#3617). */
-      readonly named_family_kind: number | null;
+      readonly family_templates: {
+        [key: string]: unknown;
+      }[];
       readonly slots: components['schemas']['OriginTemplateSlot'][];
     };
     /** @description Serializer for CG point budget configuration. */
@@ -25595,6 +25630,29 @@ export interface components {
       /** @description True when this technique came from the tradition's special technique set. */
       readonly is_tradition_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
+    };
+    /** @description An opening reachable from the draft, priced for it (#3648). */
+    CGVacancy: {
+      readonly id: number;
+      /** @description Third daughter, Enforcer, Household guard. */
+      readonly name: string;
+      /** @description Who fits here and what they do for the family. */
+      readonly description: string;
+      readonly basis: string;
+      /** @description How much the family cares about the holder. 0 = would not notice. */
+      readonly importance: number;
+      /** @description What outsiders assume the family thinks of the holder. */
+      readonly presumed_importance: number;
+      readonly cost: number;
+      /** @default  */
+      readonly rank_name: string;
+      /** @description Openings left; blank = a standing vacancy that is always open. */
+      readonly count_remaining: number | null;
+      readonly organization: {
+        [key: string]: unknown;
+      };
+      readonly kin_pool: components['schemas']['KinSlotPool'] | null;
+      readonly kin_node: components['schemas']['KinSlot'] | null;
     };
     /**
      * @description Eligibility preview computed by ``_compute_can_honor`` — never persisted.
@@ -25655,7 +25713,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship capstone event. */
     CapstoneWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -25665,7 +25724,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship capstone event. */
     CapstoneWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -26209,6 +26269,8 @@ export interface components {
       family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       readonly claimed_kin_slot: number;
       readonly claimed_kin_pool: number;
+      readonly selected_vacancy: number;
+      readonly served_house: number;
       defer_parents?: boolean;
       readonly second_parent_species: number;
       readonly height_band: components['schemas']['HeightBand'];
@@ -26299,6 +26361,8 @@ export interface components {
       family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
+      selected_vacancy_id?: number | null;
+      served_house_id?: number | null;
       defer_parents?: boolean;
       second_parent_species_id?: number | null;
       height_band_id?: number | null;
@@ -26392,8 +26456,10 @@ export interface components {
       /** @description The character who holds this relationship */
       readonly source: number;
       readonly source_name: string;
-      /** @description The character this relationship is about */
-      readonly target: number;
+      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
+      readonly target: number | null;
+      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
+      readonly target_companion: number | null;
       readonly target_name: string;
       /** @description Whether this relationship is currently active */
       readonly is_active: boolean;
@@ -26424,8 +26490,10 @@ export interface components {
       /** @description The character who holds this relationship */
       readonly source: number;
       readonly source_name: string;
-      /** @description The character this relationship is about */
-      readonly target: number;
+      /** @description The character this relationship is about; null when target_companion is set (#3575). Exactly one of target / target_companion is set. */
+      readonly target: number | null;
+      /** @description The bonded companion this relationship is about (#3575); null when target is set. Only the companion's owner may hold such a row. */
+      readonly target_companion: number | null;
       readonly target_name: string;
       /** @description Whether this relationship is currently active */
       readonly is_active: boolean;
@@ -27932,7 +28000,8 @@ export interface components {
     DeliveryEnum: 'pose' | 'whisper' | 'table_talk' | 'mutter';
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -27944,7 +28013,8 @@ export interface components {
     };
     /** @description Serializer for creating a relationship development update. */
     DevelopmentWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -29477,6 +29547,10 @@ export interface components {
       readonly born_particle: string;
       /** @description Particle a married/adopted/legitimized member wears; '' when none. */
       readonly taken_in_particle: string;
+      /** @description Aspects/features/liege a house materialized on this family carries (#3648). */
+      readonly inherited: {
+        [key: string]: unknown;
+      };
     };
     /** @description Serializer for a family's authored kind (#3617). */
     FamilyKind: {
@@ -29602,7 +29676,8 @@ export interface components {
     FieldEnum: 'background' | 'personality';
     /** @description Serializer for creating a first impression. */
     FirstImpressionWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -29614,7 +29689,8 @@ export interface components {
     };
     /** @description Serializer for creating a first impression. */
     FirstImpressionWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       track_id: number;
       points: number;
       title: string;
@@ -30837,6 +30913,7 @@ export interface components {
       features: components['schemas']['HouseFeatureFacet'][];
       open_crises: components['schemas']['HouseCrisis'][];
       stature: components['schemas']['HouseStature'] | null;
+      vacancies: components['schemas']['VacancyOffer'][];
     };
     HouseDomain: {
       name: string;
@@ -31707,6 +31784,36 @@ export interface components {
     KinRelationship: {
       label: (components['schemas']['LabelEnum'] | components['schemas']['NullEnum']) | null;
     };
+    /** @description An open appable position (CG slot browser). */
+    KinSlot: {
+      readonly id: number;
+      /** @description Display name for unbound nodes (sheet-bound nodes read the sheet). */
+      readonly name: string;
+      /** @description Whether a claimant must keep the pre-authored name. */
+      readonly name_locked: boolean;
+      /** @description Blurb for described/NPC tiers. */
+      readonly description: string;
+      /** @description Slot constraint: minimum age for a claimant. */
+      readonly age_min: number | null;
+      /** @description Slot constraint: maximum age for a claimant. */
+      readonly age_max: number | null;
+      readonly allowed_genders: string[];
+      /** @description Current primary surname family — a denorm maintained by the membership services; FamilyMembership rows carry the history and basis. */
+      readonly family: number | null;
+    };
+    /** @description An open slot pool (CG slot browser). */
+    KinSlotPool: {
+      readonly id: number;
+      readonly family: number;
+      /** @description Player-facing pool blurb, e.g. "children of the current nobles". */
+      readonly description: string;
+      /** @description Slots left in this pool; claiming decrements. */
+      readonly count_remaining: number;
+      readonly age_min: number | null;
+      readonly age_max: number | null;
+      readonly allowed_genders: string[];
+      readonly parent_names: string[];
+    };
     /**
      * @description * `update` - update
      *     * `development` - development
@@ -32121,6 +32228,18 @@ export interface components {
      * @enum {string}
      */
     MediaTypeEnum: 'photo' | 'portrait' | 'gallery' | 'background' | 'illustration';
+    /** @description Validate a player's media upload before it reaches CloudinaryGalleryService. */
+    MediaUploadRequest: {
+      /** Format: binary */
+      image_file: string;
+      /** @default photo */
+      media_type: components['schemas']['MediaTypeEnum'];
+      /** @default  */
+      title: string;
+      /** @default  */
+      description: string;
+      created_by?: number | null;
+    };
     /** @description Minimal read-only representation of a mentor persona. */
     MentorPersona: {
       readonly id: number;
@@ -34236,6 +34355,10 @@ export interface components {
        */
       exiled_at?: string | null;
       readonly is_active: boolean;
+      /** @default  */
+      readonly vacancy_name: string;
+      /** @default 0 */
+      readonly presumed_importance: number;
     };
     OrganizationMembershipOffer: {
       readonly id: number;
@@ -38002,6 +38125,8 @@ export interface components {
       family_path?: components['schemas']['FamilyPathEnum'] | components['schemas']['BlankEnum'];
       claimed_kin_slot_id?: number | null;
       claimed_kin_pool_id?: number | null;
+      selected_vacancy_id?: number | null;
+      served_house_id?: number | null;
       defer_parents?: boolean;
       second_parent_species_id?: number | null;
       height_band_id?: number | null;
@@ -41008,7 +41133,8 @@ export interface components {
     RecordedProfileStatusEnum: 'commissioned' | 'recorded';
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWrite: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       source_track_id: number;
       target_track_id: number;
       points: number;
@@ -41019,7 +41145,8 @@ export interface components {
     };
     /** @description Serializer for redistributing relationship points between tracks. */
     RedistributeWriteRequest: {
-      target_persona_id: number;
+      target_persona_id?: number;
+      target_companion_id?: number;
       source_track_id: number;
       target_track_id: number;
       points: number;
@@ -46051,6 +46178,13 @@ export interface components {
     UserStoryMuteCreateRequest: {
       story: number;
     };
+    /** @description An open vacancy, as the house block offers it (#3648). */
+    VacancyOffer: {
+      id: number;
+      name: string;
+      basis: string;
+      presumed_importance: number;
+    };
     /**
      * @description * `1` - Positive
      *     * `0` - Neutral
@@ -50418,7 +50552,7 @@ export interface operations {
     parameters: {
       query?: {
         area_id?: string;
-        has_open_positions?: boolean;
+        has_open_kin_slots?: boolean;
         kind?: number[];
       };
       header?: never;
@@ -51087,6 +51221,49 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PerspectiveEntry'][];
+        };
+      };
+    };
+  };
+  character_creation_vacancies_list: {
+    parameters: {
+      query?: {
+        organization?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGVacancy'][];
+        };
+      };
+    };
+  };
+  character_creation_vacancies_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        /** @description A unique integer value identifying this Vacancy. */
+        id: number;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CGVacancy'];
         };
       };
     };
@@ -71794,6 +71971,7 @@ export interface operations {
         page?: number;
         source?: number;
         target?: number;
+        target_companion?: number;
       };
       header?: never;
       path?: never;
@@ -72532,7 +72710,7 @@ export interface operations {
     parameters: {
       query?: {
         area_id?: string;
-        has_open_positions?: boolean;
+        has_open_kin_slots?: boolean;
         kind?: number[];
       };
       header?: never;
@@ -73067,7 +73245,13 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['MediaUploadRequest'];
+        'multipart/form-data': components['schemas']['MediaUploadRequest'];
+        'application/x-www-form-urlencoded': components['schemas']['MediaUploadRequest'];
+      };
+    };
     responses: {
       201: {
         headers: {

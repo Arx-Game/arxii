@@ -3,19 +3,22 @@
  * (#2006), mounted as a rail tab in CombatRail alongside CombatTurnPanel
  * (CombatRail renders in-scene on /scenes/:id — #2197).
  *
- * Occupants are built from participants'/opponents' current_position (not
- * persona_positions — combat encounters track position on the participant/
- * opponent row directly). Click-to-move reuses the same single-hop
- * move_to_position/take_position PlayerActions the scene view uses.
+ * Occupants are built from participants'/opponents' current_position, plus
+ * (#3557) non-combatant scene personas from the scene's persona_positions,
+ * drawn dimmed as bystanders: during an encounter this is the page's only
+ * map. Click-to-move reuses the same single-hop move_to_position/
+ * take_position PlayerActions the scene view uses.
  */
 
 import { useMemo } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { isDispatchFailure } from '../types';
 import type { EncounterDetail, RoundActionTyped } from '../types';
 import { useAvailableActionsQuery } from '@/scenes/actionQueries';
+import { fetchScene, sceneKeys } from '@/scenes/queries';
+import type { SceneDetail } from '@/scenes/types';
 import { TacticalMap } from '@/areas/components/TacticalMap';
 import { GMPlacementControls } from '@/areas/components/GMPlacementControls';
 import type { OccupantLink } from '@/areas/components/TacticalMap';
@@ -24,6 +27,13 @@ import type { PlayerAction } from '@/scenes/actionTypes';
 import type { PositionTargetShape } from '@/actions/types';
 
 export interface CombatTacticalMapProps {
+  /**
+   * The scene this encounter belongs to (#3557). The map reads the page's own
+   * cached scene detail (same `sceneKeys.detail` key SceneDetailPage fetches)
+   * to draw non-combatant personas as bystanders; during an encounter this is
+   * the page's only map, so onlookers must not vanish from the room.
+   */
+  sceneId: number;
   encounterId: number;
   characterId: number;
   /**
@@ -102,13 +112,52 @@ function buildLockLinks(encounter: EncounterDetail): OccupantLink[] {
   return links;
 }
 
+/**
+ * Non-combatant scene personas at their persona position (#3557): everyone in
+ * `scene.personas` whose character is neither a participant (by
+ * `character_sheet_id`) nor an opponent (by `objectdb_id`). A persona with no
+ * character or no position is skipped.
+ */
+function buildBystanders(
+  encounter: EncounterDetail,
+  scene: SceneDetail | undefined
+): Map<number, OccupantSummary[]> {
+  const map = new Map<number, OccupantSummary[]>();
+  if (!scene) return map;
+  const combatantIds = new Set<number>();
+  for (const p of encounter.participants ?? []) {
+    if (p.character_sheet_id != null) combatantIds.add(p.character_sheet_id);
+  }
+  for (const o of encounter.opponents ?? []) {
+    if (o.objectdb_id != null) combatantIds.add(o.objectdb_id);
+  }
+  const personaById = new Map((scene.personas ?? []).map((p) => [p.id, p]));
+  for (const pp of scene.persona_positions ?? []) {
+    if (pp.position === null) continue;
+    const persona = personaById.get(pp.persona_id);
+    if (!persona || persona.character_sheet == null) continue;
+    if (combatantIds.has(persona.character_sheet)) continue;
+    const occupants = map.get(pp.position.id) ?? [];
+    occupants.push({ name: persona.name, bystander: true });
+    map.set(pp.position.id, occupants);
+  }
+  return map;
+}
+
 export function CombatTacticalMap({
+  sceneId,
   encounterId,
   characterId,
   positionShape = 'none',
   onPickPosition,
 }: CombatTacticalMapProps) {
   const { data: encounter } = useCombatEncounter(encounterId);
+
+  const { data: scene } = useQuery<SceneDetail>({
+    queryKey: sceneKeys.detail(sceneId),
+    queryFn: () => fetchScene(String(sceneId)),
+    enabled: sceneId > 0,
+  });
 
   const { data: actionsData } = useAvailableActionsQuery(characterId, {
     refetchInterval: 10_000,
@@ -130,6 +179,14 @@ export function CombatTacticalMap({
 
   const { mutateAsync: dispatchAction } = useDispatchPlayerAction(characterId);
   const queryClient = useQueryClient();
+
+  // Both sources feed this one map (#3557): combatants from the encounter,
+  // bystanders from the scene. A bystander viewing the page moves through this
+  // map too, so a move or a GM placement refreshes both.
+  const refreshMapSources = () => {
+    queryClient.invalidateQueries({ queryKey: combatKeys.encounter(encounterId) }).catch(() => {});
+    queryClient.invalidateQueries({ queryKey: sceneKeys.detail(sceneId) }).catch(() => {});
+  };
 
   const occupantsByPosition = useMemo(() => {
     const map = new Map<number, OccupantSummary[]>();
@@ -159,8 +216,11 @@ export function CombatTacticalMap({
         map.set(opponent.current_position.id, occupants);
       }
     }
+    for (const [positionId, bystanders] of buildBystanders(encounter, scene)) {
+      map.set(positionId, [...(map.get(positionId) ?? []), ...bystanders]);
+    }
     return map;
-  }, [encounter]);
+  }, [encounter, scene]);
 
   const lockLinks = useMemo(() => (encounter ? buildLockLinks(encounter) : []), [encounter]);
 
@@ -179,9 +239,7 @@ export function CombatTacticalMap({
           toast.error(result.message ?? 'Move rejected.');
           return;
         }
-        queryClient
-          .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
-          .catch(() => {});
+        refreshMapSources();
       })
       .catch((err: unknown) => {
         toast.error(err instanceof Error ? err.message : 'Move failed.');
@@ -217,9 +275,7 @@ export function CombatTacticalMap({
         targets={placeTargets}
         dispatchAction={dispatchAction}
         onPlaced={() => {
-          queryClient
-            .invalidateQueries({ queryKey: combatKeys.encounter(encounterId) })
-            .catch(() => {});
+          refreshMapSources();
         }}
       >
         {(onGMPlace) => (

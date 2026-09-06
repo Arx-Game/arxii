@@ -8,6 +8,7 @@ Note: Realm admin is in the `realms` app.
 
 from django.contrib import admin
 
+from world.contributors.admin import CREDIT_FIELDSET
 from world.societies.models import (
     CovenantLegendCredit,
     GangTurfDetails,
@@ -36,6 +37,7 @@ from world.societies.models import (
     SocietyReputation,
     SpreadingConfig,
     StandingDeclaration,
+    Vacancy,
 )
 
 # =============================================================================
@@ -221,6 +223,27 @@ class OrganizationTypeAdmin(admin.ModelAdmin):
     )
 
 
+class VacancyInline(admin.TabularInline):
+    """#3648: the openings a staff family offers at CG."""
+
+    model = Vacancy
+    extra = 0
+    fields = (
+        "name",
+        "importance",
+        "presumed_importance",
+        "cg_point_cost",
+        "cost_per_influence",
+        "count_remaining",
+        "kin_pool",
+        "kin_node",
+        "rank",
+        "is_active",
+        "sort_order",
+    )
+    raw_id_fields = ("kin_pool", "kin_node", "rank")
+
+
 @admin.register(Organization)
 class OrganizationAdmin(admin.ModelAdmin):
     """Admin interface for Organization management.
@@ -239,7 +262,12 @@ class OrganizationAdmin(admin.ModelAdmin):
     search_fields = ["name", "description", "society__name"]
     ordering = ["society", "name"]
     raw_id_fields = ["tradition"]
-    inlines = [OrganizationRankInline, OrganizationMembershipInline, OrganizationGiftGrantInline]
+    inlines = [
+        OrganizationRankInline,
+        OrganizationMembershipInline,
+        OrganizationGiftGrantInline,
+        VacancyInline,
+    ]
 
     fieldsets = (
         (None, {"fields": ("name", "society", "org_type", "tradition", "description")}),
@@ -278,6 +306,45 @@ class OrganizationAdmin(admin.ModelAdmin):
         return obj.memberships.count()
 
     member_count.short_description = "Members"
+
+
+@admin.register(Vacancy)
+class VacancyAdmin(admin.ModelAdmin):
+    """#3648: openings on staff families, with the two importance axes and price."""
+
+    list_display = (
+        "name",
+        "organization",
+        "basis",
+        "importance",
+        "presumed_importance",
+        "cg_point_cost",
+        "cost_per_influence",
+        "count_remaining",
+        "is_active",
+    )
+    list_filter = ("is_active", "organization__family__kind")
+    search_fields = ("name", "description", "organization__name")
+    filter_horizontal = ("allowed_upbringings",)
+    raw_id_fields = ("organization", "kin_pool", "kin_node", "rank")
+    fieldsets = (
+        (None, {"fields": ("organization", "name", "description", "is_active", "sort_order")}),
+        ("Standing", {"fields": ("importance", "presumed_importance")}),
+        (
+            "Price and gate",
+            {
+                "fields": (
+                    "cg_point_cost",
+                    "cost_per_influence",
+                    "count_remaining",
+                    "trust_required",
+                    "allowed_upbringings",
+                )
+            },
+        ),
+        ("What the holder becomes", {"fields": ("rank", "kin_pool", "kin_node")}),
+        CREDIT_FIELDSET,
+    )
 
 
 @admin.register(OrganizationMembership)
@@ -731,24 +798,45 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
     HouseFeature,
     HouseTemplate,
+    SuccessionLaw,
 )
+
+
+@admin.register(SuccessionLaw)
+class SuccessionLawAdmin(admin.ModelAdmin):
+    """#2875 - the house charter's succession vocabulary (a `HouseTemplate` FK)."""
+
+    list_display = ("name", "derivation", "ordering_rule", "require_wedlock")
+    list_filter = ("derivation", "ordering_rule", "require_wedlock")
+    search_fields = ("name", "description")
+
+
+@admin.register(HoldingKind)
+class HoldingKindAdmin(admin.ModelAdmin):
+    """#2875 - the authorable catalog of domain holdings (a `HouseTemplate` M2M)."""
+
+    list_display = ("name", "stream_kind", "base_gross")
+    list_filter = ("stream_kind",)
+    search_fields = ("name", "description")
 
 
 @admin.register(HouseTemplate)
 class HouseTemplateAdmin(admin.ModelAdmin):
     """#1884 Phase D — realm recipes for CG-defined houses."""
 
-    list_display = ("name", "realm", "kind", "liege", "starting_kin_slots")
-    list_select_related = ("realm", "liege")
+    list_display = ("name", "realm", "kind", "org_type", "liege", "starting_kin_slots")
+    list_select_related = ("realm", "liege", "org_type")
     list_filter = ("realm", "kind")
     search_fields = ("name",)
-    filter_horizontal = ("holdings", "aspect_definitions", "features")
+    filter_horizontal = ("holdings", "aspect_definitions", "features", "served_house_choices")
+    autocomplete_fields = ("org_type",)
 
 
 class HouseAspectOptionInline(admin.TabularInline):

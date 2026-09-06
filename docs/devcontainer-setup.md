@@ -522,7 +522,71 @@ just dc-test
 just dc-test world.magic --keepdb
 ```
 
+## Resource limits and host sizing
+
+Everything in this section is **per-machine**. A 16GB laptop needs caps that a
+big workstation must not inherit, so none of the actual numbers are committed —
+the repo only carries the mechanism.
+
+**The mechanism:** `devcontainer.json` merges
+`.devcontainer/docker-compose.local.yml` (gitignored) on top of the shared
+`docker-compose.yml`. `sync-env.sh` generates a no-op default when the file is
+absent; `just dc-up` runs it automatically. If you use the VS Code path, run
+`bash .devcontainer/sync-env.sh` once before the first "Reopen in Container"
+(same requirement `dev.env` already imposes). Changes to it need a container
+**recreate**: `docker compose -p arxii-devcontainer down`, then `just dc-up`
+(`dc-up` alone uses `--no-recreate`).
+
+**Why it exists:** two host lockups on a 16GB/one-NVMe laptop (2026-08-31,
+2026-09-05: 100% disk, near-full RAM, Docker daemon wedged so hard `docker ps`
+hung and Desktop couldn't quit). The defense principle: a runaway workload
+should die as a **fast, visible OOM kill inside its container**, never degrade
+into VM-wide swap-thrash that saturates the disk and wedges the daemon. On a
+machine with plenty of headroom, leave the local file as the no-op default.
+
+What the constrained laptop runs in its `docker-compose.local.yml`:
+
+```yaml
+services:
+  app:
+    # In-container OOM kill instead of VM-wide thrash. memswap_limit ==
+    # mem_limit forbids container swap (fast OOM over slow thrash). Sized
+    # against a 6GB .wslconfig VM cap, leaving ~1GB for dockerd/kernel.
+    mem_limit: 4g
+    memswap_limit: 4g
+  db:
+    # Throwaway-DB durability trade: this DB is test-only and wipe-safe
+    # (production lives elsewhere); full-durability defaults spent ~90s per
+    # checkpoint fsyncing 500+ files during test-DB builds. Consequence:
+    # after an unclean stop the volume may be unrecoverable — always
+    # `docker volume rm arxii-pgdata` + rebuild, never repair.
+    command: postgres -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c checkpoint_timeout=30min -c max_wal_size=2GB
+    mem_limit: 1g
+    memswap_limit: 1g
+```
+
+Paired host-side pieces on that machine (also per-machine, never in the repo):
+
+- **`~/.wslconfig`** (Windows): `memory=6GB`, `swap=1GB`,
+  `autoMemoryReclaim=gradual`, so Windows keeps 10GB and doesn't page to the
+  same disk as the WSL vhdx. Takes effect on the next `wsl --shutdown`.
+- **Memory-aware test parallelism** (`src/cli/arx.py`, this part IS shared):
+  `--parallel` worker count derives from available memory, not `cpu_count()`.
+  It reads `/proc/meminfo` (VM-wide), not the cgroup limit, so a worker pileup
+  OOMs the test run inside `app` — the intended failure mode.
+
 ## Troubleshooting
+
+**Docker daemon hung (docker ps blocks, Desktop won't quit)** — force-kill
+`Docker Desktop.exe` and `com.docker.backend.exe`, then `wsl --shutdown`,
+relaunch Docker Desktop, `just dc-up`. Named volumes (worktrees, pgdata, venvs)
+survive; containers showing `Exited (255)` is the unclean-shutdown signature,
+not corruption.
+
+**Postgres won't start after an unclean stop** — if your machine-local override
+sets `fsync=off` (see above), the pgdata volume has no crash-safety. Don't debug
+it: `docker volume rm arxii-pgdata` (stack down first), then `just dc-up` and
+re-run the bootstrap.
 
 **First `just dc-up` is slow** — expected. The image build bakes the entire toolchain.
 Subsequent starts skip the build and are much faster.

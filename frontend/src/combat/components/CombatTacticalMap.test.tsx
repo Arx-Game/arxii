@@ -44,12 +44,19 @@ vi.mock('sonner', () => ({
   },
 }));
 
+vi.mock('@/scenes/queries', async () => {
+  const actual = await vi.importActual<typeof import('@/scenes/queries')>('@/scenes/queries');
+  return { ...actual, fetchScene: vi.fn() };
+});
+
 import { combatKeys, useCombatEncounter, useDispatchPlayerAction } from '../queries';
 import { fetchAvailableActions } from '@/scenes/actionQueries';
 import { toast } from 'sonner';
 import { CombatTacticalMap } from './CombatTacticalMap';
 import type { EncounterDetail } from '../types';
 import { makeGMPlaceAction } from '@/test/utils/playerActionFixtures';
+import { fetchScene, sceneKeys } from '@/scenes/queries';
+import type { SceneDetail } from '@/scenes/types';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -128,6 +135,31 @@ function makeEncounter(overrides: Partial<EncounterDetail>): EncounterDetail {
   return { ...BASE_ENCOUNTER, ...overrides } as EncounterDetail;
 }
 
+function makeScene(overrides: Partial<SceneDetail>): SceneDetail {
+  return {
+    id: 1,
+    name: 'Test Scene',
+    description: '',
+    date_started: '2026-01-01T00:00:00Z',
+    location: { id: 10, name: 'Room' },
+    participants: [],
+    is_active: true,
+    is_owner: false,
+    viewer_can_gm: false,
+    personas: [],
+    positions: [],
+    position_adjacency: [],
+    persona_positions: [],
+    active_round: null,
+    position_nodes: [],
+    position_edges: [],
+    running_beat: null,
+    declared_risk: null,
+    clock: null,
+    ...overrides,
+  } as SceneDetail;
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -145,6 +177,7 @@ describe('CombatTacticalMap', () => {
       previous: null,
       results: [],
     });
+    vi.mocked(fetchScene).mockResolvedValue(makeScene({}));
   });
 
   it('renders the tactical map with the encounter position graph', () => {
@@ -192,7 +225,9 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.getByTestId('tactical-map')).toBeInTheDocument();
     expect(screen.getByTestId('tactical-map-node-101')).toBeInTheDocument();
@@ -272,7 +307,9 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     const node = screen.getByTestId('tactical-map-node-101');
     expect(within(node).getByAltText('Aerande')).toBeInTheDocument();
@@ -397,7 +434,9 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     const wall = screen.getByTestId('tactical-map-node-101');
     expect(within(wall).getByTestId('occupant-mark-locked')).toHaveAttribute(
@@ -434,7 +473,9 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     const wall = screen.getByTestId('tactical-map-node-101');
     expect(within(wall).getByTestId('occupant-mark-covering')).toHaveAttribute(
@@ -515,7 +556,9 @@ describe('CombatTacticalMap', () => {
     const { Wrapper, queryClient } = createWrapperWithClient();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: Wrapper });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: Wrapper,
+    });
 
     return { invalidateSpy };
   }
@@ -533,6 +576,7 @@ describe('CombatTacticalMap', () => {
       expect(toast.error).toHaveBeenCalledWith('Blocked.');
     });
     expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: combatKeys.encounter(7) });
+    expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: sceneKeys.detail(1) });
   });
 
   it('invalidates the encounter query on a success:true move', async () => {
@@ -548,6 +592,21 @@ describe('CombatTacticalMap', () => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(7) });
     });
     expect(toast.error).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the scene query as well as the encounter on a success:true move (#3557)', async () => {
+    const mockMutateAsync = vi.fn(() =>
+      Promise.resolve({ backend: 'registry', deferred: false, success: true })
+    );
+    const { invalidateSpy } = renderWithMoveAction(mockMutateAsync);
+
+    const centerNode = await screen.findByTestId('tactical-map-node-102');
+    fireEvent.click(centerNode);
+
+    await vi.waitFor(() => {
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: combatKeys.encounter(7) });
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: sceneKeys.detail(1) });
   });
 
   // ---------------------------------------------------------------------------
@@ -628,7 +687,9 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     await user.click(await screen.findByTestId('gm-place-toggle'));
     await user.click(screen.getByTestId('gm-place-target-select'));
@@ -657,8 +718,172 @@ describe('CombatTacticalMap', () => {
       isError: false,
     } as unknown as ReturnType<typeof useCombatEncounter>);
 
-    render(<CombatTacticalMap encounterId={7} characterId={10} />, { wrapper: createWrapper() });
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
 
     expect(screen.queryByTestId('gm-place-toggle')).not.toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------------
+  // Bystanders (#3557): non-combatant scene personas drawn dimmed alongside
+  // combatants, from the page's own cached scene detail.
+  // ---------------------------------------------------------------------------
+
+  it('draws a non-combatant scene persona as a dimmed bystander (#3557)', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(
+      makeScene({
+        personas: [
+          { id: 100, name: 'Aerande', persona_type: 'primary', character_sheet: 10 },
+          { id: 200, name: 'Onlooker', persona_type: 'primary', character_sheet: 20 },
+          { id: 300, name: 'Wanderer', persona_type: 'primary', character_sheet: 30 },
+        ],
+        persona_positions: [
+          { persona_id: 100, position: { id: 101, name: 'North Wall' } },
+          { persona_id: 200, position: { id: 101, name: 'North Wall' } },
+          { persona_id: 300, position: null },
+        ],
+      })
+    );
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [
+          {
+            id: 1,
+            character_sheet_id: 10,
+            character_name: 'Aerande',
+            status: 'active',
+            health: 10,
+            max_health: 10,
+            character_status: null,
+            available_strain: null,
+            fatigue: null,
+            active_conditions: [],
+            thumbnail_url: null,
+            thumbnail_media_url: null,
+            escalation_level: null,
+            intensity_modifier: null,
+            control_modifier: null,
+            aftermath: null,
+            current_position: { id: 101, name: 'North Wall' },
+          },
+        ],
+        opponents: [],
+        position_nodes: [
+          {
+            id: 101,
+            name: 'North Wall',
+            kind: 'feature',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+          },
+        ],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    const nodeEl = await screen.findByTestId('tactical-map-node-101');
+    await vi.waitFor(() => {
+      expect(within(nodeEl).getAllByTestId('occupant-avatar')).toHaveLength(2);
+    });
+    const avatars = within(nodeEl).getAllByTestId('occupant-avatar');
+    // Aerande is a participant: drawn once, as a combatant, never as a bystander.
+    expect(avatars[0]).not.toHaveAttribute('data-bystander');
+    expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
+    expect(avatars[1]).toHaveAttribute('title', 'Onlooker (bystander)');
+    // Wanderer has no position: not drawn anywhere.
+    expect(screen.queryByTitle('Wanderer (bystander)')).not.toBeInTheDocument();
+  });
+
+  it('excludes an opponent with a scene persona from the bystanders by objectdb_id (#3557)', async () => {
+    vi.mocked(fetchScene).mockResolvedValue(
+      makeScene({
+        personas: [
+          { id: 100, name: 'Rival Knight', persona_type: 'primary', character_sheet: 77 },
+          { id: 200, name: 'Onlooker', persona_type: 'primary', character_sheet: 20 },
+        ],
+        persona_positions: [
+          { persona_id: 100, position: { id: 101, name: 'North Wall' } },
+          { persona_id: 200, position: { id: 101, name: 'North Wall' } },
+        ],
+      })
+    );
+    vi.mocked(useCombatEncounter).mockReturnValue({
+      data: makeEncounter({
+        participants: [],
+        opponents: [
+          {
+            id: 2,
+            objectdb_id: 77,
+            name: 'Rival Knight',
+            tier: 'mook',
+            health: 10,
+            max_health: 10,
+            soak_value: null,
+            probing_threshold: null,
+            current_phase: 0,
+            phase_count: null,
+            damage_multiplier: null,
+            break_bar_current: null,
+            break_bar_threshold: null,
+            vulnerability_rounds_remaining: null,
+            morale: null,
+            max_morale: null,
+            morale_state: null,
+            is_enraged: false,
+            is_wall_broken: false,
+            status: 'active',
+            active_conditions: [],
+            thumbnail_url: 'https://example.com/rival.png',
+            thumbnail_media_url: null,
+            current_position: { id: 101, name: 'North Wall' },
+            mirrors_participant_id: null,
+          },
+        ],
+        position_nodes: [
+          {
+            id: 101,
+            name: 'North Wall',
+            kind: 'feature',
+            elevation_anchor_id: null,
+            layout_x: null,
+            layout_y: null,
+            rampart_element: null,
+            rampart_integrity: null,
+            rampart_max_integrity: null,
+            rampart_crack_state: null,
+          },
+        ],
+        position_edges: [],
+      }),
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCombatEncounter>);
+
+    render(<CombatTacticalMap sceneId={1} encounterId={7} characterId={10} />, {
+      wrapper: createWrapper(),
+    });
+
+    const nodeEl = await screen.findByTestId('tactical-map-node-101');
+    await vi.waitFor(() => {
+      expect(within(nodeEl).getAllByTestId('occupant-avatar')).toHaveLength(2);
+    });
+    const avatars = within(nodeEl).getAllByTestId('occupant-avatar');
+    // Rival Knight is the opponent: drawn once, as a combatant, never as a bystander.
+    expect(avatars[0]).not.toHaveAttribute('data-bystander');
+    expect(avatars[1]).toHaveAttribute('data-bystander', 'true');
+    expect(avatars[1]).toHaveAttribute('title', 'Onlooker (bystander)');
+    expect(screen.queryByTitle('Rival Knight (bystander)')).not.toBeInTheDocument();
   });
 });

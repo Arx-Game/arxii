@@ -311,7 +311,7 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
     """Full serializer for CharacterRelationship detail view."""
 
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
-    target_name = serializers.CharField(source="target.character.db_key", read_only=True)
+    target_name = serializers.CharField(read_only=True)
     track_progress = RelationshipTrackProgressSerializer(
         source="cached_track_progress", many=True, read_only=True
     )
@@ -327,6 +327,7 @@ class CharacterRelationshipSerializer(serializers.ModelSerializer):
             "source",
             "source_name",
             "target",
+            "target_companion",
             "target_name",
             "is_active",
             "is_pending",
@@ -346,7 +347,7 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
     """Lightweight serializer for CharacterRelationship list view."""
 
     source_name = serializers.CharField(source="source.character.db_key", read_only=True)
-    target_name = serializers.CharField(source="target.character.db_key", read_only=True)
+    target_name = serializers.CharField(read_only=True)
     absolute_value = serializers.IntegerField(read_only=True)
     developed_absolute_value = serializers.IntegerField(read_only=True)
     affection = serializers.IntegerField(read_only=True)
@@ -358,6 +359,7 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
             "source",
             "source_name",
             "target",
+            "target_companion",
             "target_name",
             "is_active",
             "is_pending",
@@ -371,10 +373,28 @@ class CharacterRelationshipListSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
-class FirstImpressionWriteSerializer(serializers.Serializer):
+class RelationshipTargetWriteSerializer(serializers.Serializer):
+    """Shared target choice for the four write verbs (#3575).
+
+    Exactly one of ``target_persona_id`` (a Persona pk, resolved to its
+    CharacterSheet) or ``target_companion_id`` (a bonded Companion pk) is required.
+    """
+
+    target_persona_id = serializers.IntegerField(required=False)
+    target_companion_id = serializers.IntegerField(required=False)
+
+    def validate(self, attrs):
+        has_persona = attrs.get("target_persona_id") is not None
+        has_companion = attrs.get("target_companion_id") is not None
+        if has_persona == has_companion:
+            msg = "Provide exactly one of target_persona_id or target_companion_id."
+            raise serializers.ValidationError(msg)
+        return attrs
+
+
+class FirstImpressionWriteSerializer(RelationshipTargetWriteSerializer):
     """Serializer for creating a first impression."""
 
-    target_persona_id = serializers.IntegerField()
     track_id = serializers.IntegerField()
     points = serializers.IntegerField(min_value=0)
     title = serializers.CharField()
@@ -391,10 +411,9 @@ class FirstImpressionWriteSerializer(serializers.Serializer):
     )
 
 
-class DevelopmentWriteSerializer(serializers.Serializer):
+class DevelopmentWriteSerializer(RelationshipTargetWriteSerializer):
     """Serializer for creating a relationship development update."""
 
-    target_persona_id = serializers.IntegerField()
     track_id = serializers.IntegerField()
     points = serializers.IntegerField(min_value=0)
     title = serializers.CharField()
@@ -407,10 +426,9 @@ class DevelopmentWriteSerializer(serializers.Serializer):
     )
 
 
-class CapstoneWriteSerializer(serializers.Serializer):
+class CapstoneWriteSerializer(RelationshipTargetWriteSerializer):
     """Serializer for creating a relationship capstone event."""
 
-    target_persona_id = serializers.IntegerField()
     track_id = serializers.IntegerField()
     points = serializers.IntegerField(min_value=0)
     title = serializers.CharField()
@@ -422,10 +440,9 @@ class CapstoneWriteSerializer(serializers.Serializer):
     )
 
 
-class RedistributeWriteSerializer(serializers.Serializer):
+class RedistributeWriteSerializer(RelationshipTargetWriteSerializer):
     """Serializer for redistributing relationship points between tracks."""
 
-    target_persona_id = serializers.IntegerField()
     source_track_id = serializers.IntegerField()
     target_track_id = serializers.IntegerField()
     points = serializers.IntegerField(min_value=0)

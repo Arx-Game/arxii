@@ -19,6 +19,7 @@ from world.roster.factories import (
     KinSlotPoolFactory,
     KinspersonFactory,
 )
+from world.societies.factories import OrganizationFactory, VacancyFactory
 
 
 class UpbringingListTest(TestCase):
@@ -44,7 +45,6 @@ class UpbringingListTest(TestCase):
         assert row["allows_claim_family"]
         assert row["allows_name_family"]
         assert not row["allows_no_family"]
-        assert row["named_family_kind"] == self.template.named_family_kind_id
         slot = row["slots"][0]
         assert slot["applies_to"] == FamilyPath.ANY
         assert slot["allows_text"] is False
@@ -144,6 +144,14 @@ class DraftUpbringingPatchTest(TestCase):
         res = self.client.patch(self.url, {"selected_origin_template_id": other.id}, format="json")
         assert res.status_code == 400
 
+    def test_patch_refuses_a_malformed_family_aspect_picks(self):
+        """A garbage payload gets a 400, not a 500 (#3648 review)."""
+        res = self.client.patch(
+            self.url, {"draft_data": {"family_aspect_picks": "garbage"}}, format="json"
+        )
+        assert res.status_code == 400
+        assert "family_aspect_picks" in res.json()["draft_data"]
+
     def test_changing_upbringing_clears_downstream_keys(self):
         self.client.patch(
             self.url, {"selected_origin_template_id": self.template.id}, format="json"
@@ -174,6 +182,34 @@ class DraftUpbringingPatchTest(TestCase):
         assert draft.family is None
         assert draft.claimed_kin_slot is None
         assert draft.claimed_kin_pool is None
+
+    def test_clearing_the_upbringing_also_clears_the_vacancy_and_served_house(self):
+        """A PATCH that nulls the Upbringing must drop a stale Vacancy pick too (#3648 review).
+
+        Otherwise ``calculate_upbringing_cost()`` keeps pricing a Vacancy the
+        player is no longer tied to any Upbringing for.
+        """
+        self.client.patch(
+            self.url, {"selected_origin_template_id": self.template.id}, format="json"
+        )
+        family = FamilyFactory(influence=5)
+        org = OrganizationFactory(family=family)
+        vacancy = VacancyFactory(organization=org, cg_point_cost=5)
+        draft = CharacterDraft.objects.get(pk=self.draft.pk)
+        draft.selected_vacancy = vacancy
+        draft.served_house = org
+        draft.save(update_fields=["selected_vacancy", "served_house"])
+        assert draft.calculate_upbringing_cost() > 0
+
+        res = self.client.patch(self.url, {"selected_origin_template_id": None}, format="json")
+        assert res.status_code == 200, res.json()
+        assert res.json()["selected_vacancy"] is None
+        assert res.json()["served_house"] is None
+
+        draft.refresh_from_db()
+        assert draft.selected_vacancy is None
+        assert draft.served_house is None
+        assert draft.calculate_upbringing_cost() == 0
 
     def test_patching_the_same_family_path_is_a_noop(self):
         self.client.patch(

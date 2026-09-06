@@ -169,6 +169,7 @@ describe('OrgPageInner', () => {
             description: 'The sealed record of schemes, enemies, and prey.',
           },
         ],
+        vacancies: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -230,6 +231,7 @@ describe('OrgPageInner', () => {
             ],
           },
         ],
+        vacancies: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({
@@ -272,6 +274,7 @@ describe('OrgPageInner', () => {
           realm_rank: 2,
           realm_cohort_size: 11,
         },
+        vacancies: [],
       },
     };
     mockedUseOrganizationQuery.mockReturnValue({

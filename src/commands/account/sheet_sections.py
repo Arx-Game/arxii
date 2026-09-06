@@ -191,7 +191,7 @@ def _render_relationships_section(command: Command) -> list[str]:
     viewer = _viewer_sheet(command)
     relationships = (
         CharacterRelationship.objects.filter(source=viewer)
-        .select_related("target__character")
+        .select_related("target__character", "target_companion")
         .prefetch_related(
             Prefetch(
                 "track_progress",
@@ -209,7 +209,7 @@ def _format_relationships(relationships: list) -> list[str]:
         return ["You have no relationships recorded."]
     lines = ["|wYour relationships:|n"]
     for relationship in relationships:
-        target = relationship.target.character.db_key
+        target = relationship.target_name
         affection = relationship.affection
         tone = _affection_tone(affection)
         status = " (pending)" if relationship.is_pending else ""

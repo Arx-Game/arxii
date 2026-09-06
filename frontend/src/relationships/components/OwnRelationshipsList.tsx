@@ -1,18 +1,25 @@
 /**
- * OwnRelationshipsList (#2159) — `RelationshipPanel`'s own-sheet arm.
+ * OwnRelationshipsList (#2159): `RelationshipPanel`'s own-sheet arm.
  *
  * Lists the caller's outbound relationships (`CharacterRelationshipViewSet`,
- * `?source=<viewed CharacterSheet pk>` — already scoped server-side to the
+ * `?source=<viewed CharacterSheet pk>`, already scoped server-side to the
  * caller's own tenure-owned characters, see ADR-0117): target name and
  * affection up front, each row expandable into per-track points/tiers
- * (`track_progress`, fetched via the detail retrieve — the list serializer
+ * (`track_progress`, fetched via the detail retrieve; the list serializer
  * omits it) and the relationship's full history (Task 2's `?relationship=`
  * timeline arm), plus buttons opening `RelationshipWriteupDialog` in
- * development/capstone/redistribute modes.
+ * development/capstone/redistribute modes. A companion-targeted row
+ * (`target_companion` set, `target` null) opens that dialog with a companion
+ * target directly, bypassing the persona-resolution launcher below.
+ *
+ * `CompanionBondList` (#3575) mounts above the accordion, in every
+ * non-loading state, as the owner's entry point for writing a first
+ * impression/development about a bonded companion before any relationship
+ * row toward it exists yet.
  *
  * Row detail queries (`useRelationshipDetail`/`useRelationshipTimeline`) live
- * inside `AccordionContent`, which Radix only mounts once a row is expanded
- * — so this never fires N detail/timeline requests up front for N rows.
+ * inside `AccordionContent`, which Radix only mounts once a row is expanded,
+ * so this never fires N detail/timeline requests up front for N rows.
  */
 
 import { useState } from 'react';
@@ -31,6 +38,7 @@ import {
   useRelationshipDetail,
   useRelationshipTimeline,
 } from '../queries';
+import { CompanionBondList } from './CompanionBondList';
 import { RelationshipWriteupDialog } from './RelationshipWriteupDialog';
 import type { RelationshipWriteupMode } from './RelationshipWriteupDialog';
 import type { CharacterRelationshipList } from '../api';
@@ -39,43 +47,78 @@ export interface OwnRelationshipsListProps {
   characterSheetId?: number;
 }
 
+type DialogTarget =
+  | { kind: 'sheet'; characterSheetId: number }
+  | { kind: 'companion'; companionId: number };
+
 interface DialogRequest {
-  targetCharacterSheetId: number;
+  target: DialogTarget;
   targetName: string;
   mode: RelationshipWriteupMode;
 }
 
+/**
+ * Narrows a relationship row to a `DialogTarget` without casting past the
+ * nullable `target`/`target_companion` pair (#3575): a companion-targeted row
+ * wins first, then a persona-targeted row, else `null` (a row with neither
+ * cannot exist by DB constraint, but the generated type doesn't know that).
+ */
+function dialogTargetFor(relationship: CharacterRelationshipList): DialogTarget | null {
+  if (relationship.target_companion != null) {
+    return { kind: 'companion', companionId: relationship.target_companion };
+  }
+  if (relationship.target != null) {
+    return { kind: 'sheet', characterSheetId: relationship.target };
+  }
+  return null;
+}
+
 export function OwnRelationshipsList({ characterSheetId }: OwnRelationshipsListProps) {
-  const { data: relationships = [], isLoading } = useMyOutboundRelationships(characterSheetId);
+  const {
+    data: relationships = [],
+    isLoading,
+    refetch,
+  } = useMyOutboundRelationships(characterSheetId);
   const [dialogRequest, setDialogRequest] = useState<DialogRequest | null>(null);
 
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Loading relationships…</p>;
   }
 
-  if (relationships.length === 0) {
-    return <p className="text-sm text-muted-foreground">No outbound relationships yet.</p>;
-  }
-
   return (
     <div>
-      <Accordion type="multiple">
-        {relationships.map((relationship) => (
-          <RelationshipRow
-            key={relationship.id}
-            relationship={relationship}
-            onOpenDialog={(mode) =>
-              setDialogRequest({
-                targetCharacterSheetId: relationship.target,
-                targetName: relationship.target_name,
-                mode,
-              })
-            }
-          />
-        ))}
-      </Accordion>
+      <CompanionBondList relationships={relationships} onWritten={() => refetch()} />
 
-      {dialogRequest && (
+      {relationships.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No outbound relationships yet.</p>
+      ) : (
+        <Accordion type="multiple">
+          {relationships.map((relationship) => (
+            <RelationshipRow
+              key={relationship.id}
+              relationship={relationship}
+              onOpenDialog={(mode) => {
+                const target = dialogTargetFor(relationship);
+                if (target == null) return;
+                setDialogRequest({ target, targetName: relationship.target_name, mode });
+              }}
+            />
+          ))}
+        </Accordion>
+      )}
+
+      {dialogRequest && dialogRequest.target.kind === 'companion' && (
+        <RelationshipWriteupDialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setDialogRequest(null);
+          }}
+          mode={dialogRequest.mode}
+          target={{ kind: 'companion', companionId: dialogRequest.target.companionId }}
+          targetName={dialogRequest.targetName}
+        />
+      )}
+      {dialogRequest && dialogRequest.target.kind === 'sheet' && (
         <TargetPersonaDialogLauncher
           request={dialogRequest}
           onOpenChange={(open) => {
@@ -198,7 +241,8 @@ function TargetPersonaDialogLauncher({
   request: DialogRequest;
   onOpenChange: (open: boolean) => void;
 }) {
-  const { data: personas = [] } = useCharacterPersonasQuery(request.targetCharacterSheetId);
+  const characterSheetId = request.target.kind === 'sheet' ? request.target.characterSheetId : null;
+  const { data: personas = [] } = useCharacterPersonasQuery(characterSheetId);
   const targetPersonaId =
     personas.find((p) => p.persona_type === 'primary')?.id ?? personas[0]?.id ?? null;
 
@@ -211,7 +255,7 @@ function TargetPersonaDialogLauncher({
       open
       onOpenChange={onOpenChange}
       mode={request.mode}
-      targetPersonaId={targetPersonaId}
+      target={{ kind: 'persona', personaId: targetPersonaId }}
       targetName={request.targetName}
     />
   );

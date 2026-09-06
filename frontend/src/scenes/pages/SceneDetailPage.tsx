@@ -30,15 +30,25 @@ import { PendingActionAttachments } from '../components/PendingActionAttachments
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
-import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
+import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
 import { ScenarioCard } from '../components/ScenarioCard';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
-import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
+import {
+  GMAdjudicationPanel,
+  GM_TOOL_TABS,
+  NON_COMBAT_GM_TOOL_TABS,
+} from '../components/GMAdjudicationPanel';
 import { SelfCheckPanel } from '../components/SelfCheckPanel';
 import { CheckCallPromptCard } from '../components/CheckCallPromptCard';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -105,11 +115,6 @@ export function SceneDetailPage() {
   // scene.running_beat is null, so the grid doesn't collapse the moment a
   // GM's beat finishes.
   const showStoryRail = !!scene?.viewer_can_gm;
-  // Full encounter detail (carries is_gm) for the GM controls panel (#3067) —
-  // shares the combatKeys.encounter(encounterId) cache with CombatTurnPanel's
-  // own useCombatEncounter call inside CombatRail, so this doesn't double-fetch.
-  // Reads railEncounterId so it keeps resolving the lingering encounter too.
-  const { data: gmEncounterDetail } = useCombatEncounter(railEncounterId);
 
   // Scroll the rail into view the moment an encounter first appears
   // (none -> active transition) so a player mid-pose notices combat starting.
@@ -235,6 +240,55 @@ export function SceneDetailPage() {
   });
   const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
 
+  // The foldable part of the header (#3557): rendered inline when idle, inside
+  // the "Scene tools" accordion during an encounter. Same order as before.
+  // Folding remounts the subtree, so a local draft in SelfCheckPanel or
+  // TavernGameWidget is lost at the tick an encounter starts; accepted in
+  // ADR-0272. Prompts that need an answer never fold.
+  const sceneTools = (
+    <>
+      {scene && <SceneLinesAndVeilsCard sceneId={id} />}
+      {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
+      {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
+      {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
+      {/* One map during a fight: the rail's CombatTacticalMap draws the room
+          with bystanders, so the header map unmounts (Set the Stage rides on
+          it and is unavailable mid-fight by design; it returns with the map). */}
+      {!hasActiveEncounter && <SceneTacticalMap sceneId={id} />}
+      <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
+      {/* GM "Start Encounter" affordance (#3067), only while no encounter is
+          active; the active-encounter controls live in the rail's GM tab. */}
+      {!encounterLoading && !hasActiveEncounter && (
+        <GMEncounterControls
+          sceneId={sceneIdNum}
+          encounter={null}
+          viewerCanGm={scene?.viewer_can_gm ?? false}
+        />
+      )}
+      {scene && <LinkedStoriesPanel sceneId={id} />}
+      {/* #3295 scene check invocation. The call-answer prompt keeps this slot
+          when idle; during a fight it renders inline above the accordion. */}
+      {isActive && !hasActiveEncounter && (
+        <div className="mt-2">
+          <CheckCallPromptCard />
+        </div>
+      )}
+      {isActive && (
+        <div className="mt-2">
+          <SelfCheckPanel />
+        </div>
+      )}
+      {scene?.viewer_can_gm && (
+        <div className="mt-2">
+          <GMAdjudicationPanel
+            scene={scene}
+            tabs={hasActiveEncounter ? NON_COMBAT_GM_TOOL_TABS : GM_TOOL_TABS}
+          />
+        </div>
+      )}
+    </>
+  );
+
   return (
     <div className="flex h-full flex-col">
       <div className="shrink-0 px-4 pt-4">
@@ -263,44 +317,43 @@ export function SceneDetailPage() {
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
-        {scene && <SceneLinesAndVeilsCard sceneId={id} />}
-        {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
-        {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
-        {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
-        <SceneTacticalMap sceneId={id} />
-        <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
-        {/* GM "Start Encounter" affordance (#3067) — only while no encounter is
-            active; the active-encounter controls mount in the combat rail below. */}
-        {!encounterLoading && !hasActiveEncounter && (
-          <GMEncounterControls
-            sceneId={sceneIdNum}
-            encounter={null}
-            viewerCanGm={scene?.viewer_can_gm ?? false}
-          />
-        )}
-        {scene && <LinkedStoriesPanel sceneId={id} />}
-        {/* #3295 — scene check invocation: self-check picker (any player),
-            pending call-answer prompts, and the GM's Call For Check tab. */}
-        {isActive && (
-          <div className="mt-2">
-            <CheckCallPromptCard />
-          </div>
-        )}
-        {isActive && (
-          <div className="mt-2">
-            <SelfCheckPanel />
-          </div>
-        )}
-        {scene?.viewer_can_gm && (
-          <div className="mt-2">
-            <GMAdjudicationPanel scene={scene} />
-          </div>
+        {/* #3557 combat layout. Everything above this line either needs an
+            answer (consent, sineating, soul-tether, flourish) or is the scene's
+            identity; it stays inline in both shapes. Below: while an encounter
+            is active the header map yields to the rail's map (one map, with
+            bystanders), the pending check-call prompt stays inline, and the
+            rest of the stack folds behind one closed "Scene tools" accordion so
+            the feed and composer sit under the title. Idle renders today's
+            stack unchanged. */}
+        {hasActiveEncounter ? (
+          <>
+            {isActive && (
+              <div className="mt-2">
+                <CheckCallPromptCard />
+              </div>
+            )}
+            <Accordion
+              type="single"
+              collapsible
+              className="mt-2"
+              data-testid="scene-tools-accordion"
+            >
+              <AccordionItem value="scene-tools" className="border-b-0">
+                <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
+                  Scene tools
+                </AccordionTrigger>
+                <AccordionContent>{sceneTools}</AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </>
+        ) : (
+          sceneTools
         )}
       </div>
 
-      {/* Combat rail fold-in (#2197): a two-column C-frame grid (mirroring the
-          former CombatScenePage) while an active encounter exists; a plain
-          single column otherwise. */}
+      {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active
+          encounter exists (or the GM story rail is shown); single column
+          otherwise. The rail's GM tab (#3557) hosts the encounter controls. */}
       <div
         className={cn(
           'min-h-0 flex-1',
@@ -374,24 +427,19 @@ export function SceneDetailPage() {
           >
             {showStoryRail && scene && <GMStoryRail scene={scene} />}
             {showCombatRail && (
-              <>
-                {/* Lifecycle controls (add-opponent/add-participant/settings) only
-                    make sense on a still-active fight, so hasActiveEncounter gates
-                    this separately from CombatRail itself, which keeps lingering
-                    after the encounter completes (#3551 important 2). */}
-                {hasActiveEncounter && gmEncounterDetail?.is_gm && (
-                  <GMEncounterControls
-                    sceneId={sceneIdNum}
-                    encounter={gmEncounterDetail}
-                    viewerCanGm={scene?.viewer_can_gm ?? false}
-                  />
-                )}
-                <CombatRail
-                  sceneId={sceneIdNum}
-                  encounterId={railEncounterId}
-                  onDismissOutcome={handleDismissOutcome}
-                />
-              </>
+              /* The rail lingers past the encounter's end so the aftermath digest
+                 and outcome banner stay readable (#3551), but the GM tab's levers
+                 only make sense on a still-active fight -- and once the fight is
+                 over the page-level GMEncounterControls is back, so leaving the tab
+                 on would give those levers two homes (ADR-0272). hasActiveEncounter
+                 gates the tab separately from the rail itself. */
+              <CombatRail
+                sceneId={sceneIdNum}
+                encounterId={railEncounterId}
+                viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
+                scene={scene}
+                onDismissOutcome={handleDismissOutcome}
+              />
             )}
           </div>
         )}

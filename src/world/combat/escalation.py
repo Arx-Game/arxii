@@ -30,6 +30,7 @@ if TYPE_CHECKING:
         EscalationCurve,
     )
     from world.combat.types import PerformCheckFn
+    from world.companions.models import Companion
 
 logger = logging.getLogger(__name__)
 
@@ -281,6 +282,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     reason: str = "",
     subject_opponent: CombatOpponent | None = None,
     subject_phase_number: int | None = None,
+    subject_companion: Companion | None = None,
 ) -> DramaticSurgeBeat | None:
     """Write one dramatic-surge event (#2013): the shared seam every trigger leg uses.
 
@@ -301,6 +303,9 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     instead of ``subject_sheet``, and dedups on that tuple - one surge per boss
     per phase, so a multi-phase boss surges at each transition while the #2642
     re-break loop cannot repeat itself.
+
+    A companion fall (#3575) passes ``subject_companion`` and dedups on
+    (encounter, participant, trigger_kind, subject_companion).
     """
     from world.combat.models import (  # noqa: PLC0415
         CombatEncounter as _CombatEncounter,
@@ -325,6 +330,7 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
         subject_sheet=subject_sheet,
         subject_opponent=subject_opponent,
         subject_phase_number=subject_phase_number,
+        subject_companion=subject_companion,
         defaults={
             "amount": amount,
             "round_number": encounter.round_number,
@@ -353,6 +359,17 @@ def apply_dramatic_surge(  # noqa: PLR0913 - keyword-only surge fields, cohesive
     )
 
 
+def _active_companion_for(  # noqa: OBJECTDB_PARAM - payload carries ObjectDB
+    character: ObjectDB,
+) -> Companion | None:
+    """The bonded, unreleased ``Companion`` whose live object is ``character`` (#3575).
+
+    None for any other object, so the surge legs treat sheetless non-companions
+    (a GM character, a summon) as nothing to surge for.
+    """
+    return character.companion_rows.filter(released_at__isnull=True).first()
+
+
 def apply_relationship_escalation_spike(
     *,
     fallen_character: ObjectDB,  # noqa: OBJECTDB_PARAM — payload carries ObjectDB
@@ -368,14 +385,23 @@ def apply_relationship_escalation_spike(
     A survivor only spikes for the encounter their engagement is sourced to
     (same guard as ``apply_escalation_tick``), so co-located escalating
     encounters cannot double-dip a single fall.
+
+    A bonded companion (#3575) has no sheet: when ``fallen_character`` is a live
+    ``CompanionObject`` the bond is read from ``CharacterRelationship.target_companion``
+    (same track flag, same point floor) and the record's subject is the companion.
+    The ALLY_PERIL leg never fires for a companion: acute peril is BLEED_OUT on the
+    participant vitals path, and an opponent goes ACTIVE to DEFEATED with no peril band.
     """
     from world.combat.models import CombatEncounter, CombatParticipant  # noqa: PLC0415
     from world.relationships.models import CharacterRelationship  # noqa: PLC0415
     from world.scenes.constants import RoundStatus  # noqa: PLC0415
 
     fallen_sheet = fallen_character.character_sheet
+    fallen_companion = None
     if fallen_sheet is None:
-        return
+        fallen_companion = _active_companion_for(fallen_character)
+        if fallen_companion is None:
+            return
 
     encounters = CombatEncounter.objects.filter(
         room=room,
@@ -384,24 +410,25 @@ def apply_relationship_escalation_spike(
 
     for encounter in encounters:
         curve = encounter.escalation_curve
-        participants = (
-            CombatParticipant.objects.filter(
-                encounter=encounter,
-                status=ParticipantStatus.ACTIVE,
-            )
-            .exclude(character_sheet=fallen_sheet)
-            .select_related("character_sheet__character")
-        )
+        participants = CombatParticipant.objects.filter(
+            encounter=encounter,
+            status=ParticipantStatus.ACTIVE,
+        ).select_related("character_sheet__character")
+        if fallen_sheet is not None:
+            participants = participants.exclude(character_sheet=fallen_sheet)
         for participant in participants:
-            qualifies = CharacterRelationship.objects.filter(
+            bond = CharacterRelationship.objects.filter(
                 source=participant.character_sheet,
-                target=fallen_sheet,
                 is_active=True,
                 is_pending=False,
                 track_progress__track__fuels_escalation_spikes=True,
                 track_progress__developed_points__gte=curve.spike_minimum_track_points,
-            ).exists()
-            if not qualifies:
+            )
+            if fallen_companion is not None:
+                bond = bond.filter(target_companion=fallen_companion)
+            else:
+                bond = bond.filter(target=fallen_sheet)
+            if not bond.exists():
                 continue
             apply_dramatic_surge(
                 encounter=encounter,
@@ -409,6 +436,7 @@ def apply_relationship_escalation_spike(
                 amount=curve.spike_intensity_amount,
                 trigger_kind=SurgeTriggerKind.ALLY_FALLEN,
                 subject_sheet=fallen_sheet,
+                subject_companion=fallen_companion,
             )
 
 

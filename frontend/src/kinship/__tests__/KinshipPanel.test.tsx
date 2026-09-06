@@ -108,6 +108,7 @@ describe('KinshipPanel', () => {
         kind: { id: 1, name: 'Noble', styles_as_house: true },
         born_particle: '',
         taken_in_particle: '',
+        inherited: { aspects: [], features: [], liege_name: '' },
       },
       nodes: [
         { id: 2, name: 'Aria' },

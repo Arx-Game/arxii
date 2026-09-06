@@ -138,6 +138,15 @@ class HouseStatureSerializer(serializers.Serializer):
     realm_cohort_size = serializers.IntegerField(allow_null=True)
 
 
+class VacancyOfferSerializer(serializers.Serializer):
+    """An open vacancy, as the house block offers it (#3648)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    basis = serializers.CharField()
+    presumed_importance = serializers.IntegerField()
+
+
 class HouseDetailSerializer(serializers.Serializer):
     """The house block of an org payload (#1884) — null for non-family orgs."""
 
@@ -150,6 +159,7 @@ class HouseDetailSerializer(serializers.Serializer):
     features = HouseFeatureFacetSerializer(many=True)
     open_crises = HouseCrisisSerializer(many=True)
     stature = HouseStatureSerializer(allow_null=True)
+    vacancies = VacancyOfferSerializer(many=True)
 
 
 class OrganizationSerializer(serializers.ModelSerializer):
@@ -212,6 +222,19 @@ class OrganizationSerializer(serializers.ModelSerializer):
             ],
             "open_crises": _house_open_crises(obj),
             "stature": _house_stature_payload(obj),
+            # Reads the prefetched ``vacancies`` relation (OrganizationViewSet
+            # queryset, #3648) - filtered in Python, not a per-org ``.filter()``
+            # query, mirroring the aspects/features pattern above.
+            "vacancies": [
+                {
+                    "id": vacancy.id,
+                    "name": vacancy.name,
+                    "basis": vacancy.basis,
+                    "presumed_importance": vacancy.presumed_importance,
+                }
+                for vacancy in obj.vacancies.all()
+                if vacancy.is_open
+            ],
         }
         return HouseDetailSerializer(payload).data
 
@@ -222,6 +245,10 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
     rank = OrganizationRankSerializer(read_only=True)
     title = serializers.CharField(source="get_title", read_only=True)
     is_active = serializers.SerializerMethodField()
+    vacancy_name = serializers.CharField(source="vacancy.name", read_only=True, default="")
+    presumed_importance = serializers.IntegerField(
+        source="vacancy.presumed_importance", read_only=True, default=0
+    )
 
     class Meta:
         model = OrganizationMembership
@@ -237,6 +264,8 @@ class OrganizationMembershipSerializer(serializers.ModelSerializer):
             "left_at",
             "exiled_at",
             "is_active",
+            "vacancy_name",
+            "presumed_importance",
         ]
 
     def get_is_active(self, obj: OrganizationMembership) -> bool:

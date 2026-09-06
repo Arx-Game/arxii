@@ -66,7 +66,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         from world.roster.models import Family
 
         template = OriginTemplateFactory(beginning=self.beginnings)
-        draft = self._draft(new_family_name="The Cisternwrights")
+        draft = self._draft(new_family_name="Cisternwrights")
         draft.selected_origin_template = template
         draft.draft_data.pop("tarot_card_name", None)
         draft.save()
@@ -78,9 +78,9 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         entry = RosterEntry.objects.get(pk=response.data["roster_entry_id"])
-        family = Family.objects.get(name="The Cisternwrights")
+        family = Family.objects.get(name="Cisternwrights")
         character = ObjectDB.objects.get(pk=entry.character_sheet.pk)
-        self.assertEqual(character.db_key, "Aurelius The Cisternwrights")
+        self.assertEqual(character.db_key, "Aurelius Cisternwrights")
         self.assertEqual(entry.character_sheet.family, family)
 
     def test_non_owner_of_the_table_is_forbidden(self) -> None:

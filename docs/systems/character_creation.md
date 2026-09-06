@@ -312,18 +312,46 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
 
-## Lineage step (#3617)
+## Lineage step (#3617, #3648)
 
 Per-beginning Upbringings replaced the old single family-known/orphan split: each
 `OriginTemplate` carries its own CG cost, trust gate, and choice of family paths
 (claim a staff-authored family, name a new one, or none), with typed prompts
 (`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
-authored underneath it. Family standing (kind, influence, subordination, patronage,
-culture-specific facts) is expressed through the existing organisation mechanisms
-rather than bespoke fields: see the authoring recipes in
-[family-authoring-recipes.md](family-authoring-recipes.md) and the design record in
-ADR-0268 (family standing uses existing organisation mechanisms; kinds are rows) and
-ADR-0269 (Upbringings price standing as family influence x position).
+authored underneath it. See the authoring recipes in
+[family-authoring-recipes.md](family-authoring-recipes.md), ADR-0268 (family standing
+uses existing organisation mechanisms), ADR-0269 (Upbringings price standing as
+family influence x position), and ADR-0273 (family entry is a Vacancy).
+
+**Page order:** Upbringing picker, `scope: 'any'` prompts, the family block (path
+picker when the Upbringing allows more than one path, then the path body), then
+`scope: 'path'` prompts.
+
+**Name path:** pick a Family Template (`draft.resolve_family_template()`; the sole
+offered template, else `draft_data.family_template_id`), name the family (checked
+against `HouseTemplate.name_pattern`, a full-match regex; a malformed pattern is a
+staff authoring bug and surfaces as a soft "tell staff" error, never an uncaught
+`re.error`), answer the template's aspect picks (`draft_data.family_aspect_picks`,
+fenced by `houses.creator._validate_aspect_picks`), and optionally declare a served
+house from `family_template.served_house_choices`.
+
+**Claim path:** claiming a staff family with an open kin Vacancy requires taking one
+(`_get_vacancy_errors`); the Service panel (a retainer Vacancy) is available on any
+resolved path except when a kin Vacancy is already chosen.
+
+**Vacancies:** `GET /api/character-creation/vacancies/?draft=<id>[&organization=<id>]`
+returns the open, reachable, per-draft-priced `Vacancy` rows (bare list) via
+`vacancy_services.reachable_vacancies`. Validation re-checks an already-selected
+Vacancy with `require_open=False`: openness is enforced only at finalize by
+`take_vacancy`, so a Vacancy filled between pick and staff approval degrades
+through `VacancyExhaustedError` instead of blocking re-validation on approval.
+Pricing adds `vacancy.cost_for(<the Vacancy's family's influence>)` (ADR-0269
+extended to a second consumer).
+
+**Finalize order:** `_materialize_named_family` (name path) before the character is
+named, then `_bind_vacancy` (takes the Vacancy, claims/mints its kin link, joins the
+org) before `_bind_kinship_node`, so a kin Vacancy's node exists when the self-serve
+kinship fallback looks. `finalize_gm_character` mirrors both calls for GM drafts.
 
 ## Seeded content + Game Setup hub
 
@@ -335,7 +363,7 @@ from world.seeds.character_creation import seed_character_creation_dev
 seed_character_creation_dev()  # idempotent: get_or_create, never overwrites edits
 ```
 
-**`Species`, `Gender`, `HeightBand`/`Build`, `FormTrait`/`FormTraitOption`/`SpeciesFormTrait`, `Distinction`/`DistinctionCategory`/`DistinctionEffect`, and `CGExplanation` are all `CONTENT_MODELS` — content-repo-owned (#2698, ADR-0168).** Each is looked up via `world.seeds.sample_content.authored_or_sample()` and invented only when `SEED_SAMPLE_CONTENT` (`ARXII_SEED_SAMPLE_CONTENT`, default off) is on — a maintainer clone with a real content repo gets nothing from this seeder for these models; a contentless third-party clone gets a sample "Human"/"Khati" `Species`, the four `Gender` rows, an `average_band`/`average_build`, the appearance `FormTrait`/`FormTraitOption`/`SpeciesFormTrait` set, and the seeded `Distinction`s below. `_seed_cg_explanations()` (#2162) is the same shape: most of `CG_EXPLANATION_COPY`'s 28 keys already have an authored counterpart, but the five `*_lore_intro`/`path_lore_durance` keys don't yet — those five are skipped (logged) until authored, or invented under `SEED_SAMPLE_CONTENT`. Unlike the pre-#2698 `update_or_create` shape, a staff edit to an already-seeded `CGExplanation` row now survives a re-run, same as every other content row.
+**`Species`, `Gender`, `HeightBand`/`Build`, `FormTrait`/`FormTraitOption`/`SpeciesFormTrait`, `Distinction`/`DistinctionCategory`/`DistinctionEffect`, and `CGExplanation` are all `CONTENT_MODELS`, content-repo-owned (#2698, ADR-0168).** Each is looked up via `world.seeds.sample_content.authored_or_sample()` and invented only when `SEED_SAMPLE_CONTENT` (`ARXII_SEED_SAMPLE_CONTENT`, default off) is on: a maintainer clone with a real content repo gets nothing from this seeder for these models; a contentless third-party clone gets a sample "Human"/"Khati" `Species`, the four `Gender` rows, an `average_band`/`average_build`, the appearance `FormTrait`/`FormTraitOption`/`SpeciesFormTrait` set, and the seeded `Distinction`s below. `_seed_cg_explanations()` (#2162) is the same shape: most keys in `CG_EXPLANATION_COPY` already have an authored counterpart, but the five `*_lore_intro`/`path_lore_durance` keys don't yet; those five are skipped (logged) until authored, or invented under `SEED_SAMPLE_CONTENT`. Unlike the pre-#2698 `update_or_create` shape, a staff edit to an already-seeded `CGExplanation` row now survives a re-run, same as every other content row.
 
 `Realm`/`StartingArea`/`Beginnings`/`TarotCard`/`Path` are *not* `CONTENT_MODELS`, but are still open-ended world content rather than config — `_seed_sample_cg_world()` and the tail of `seed_character_creation_dev()` gate them behind `SEED_SAMPLE_CONTENT` too (an earlier #2698 slice), for the same reason: seeding a "Commoner"/"Noble"/"Arx City" here is indistinguishable from authored content once `export_to_content_repo` runs. What always seeds unconditionally regardless of the flag: the 12 stat `Trait` rows (content-repo-owned too, `authored_or_sample`'d), and the two `Roster` rows ("Available"/"Active Characters") — genuine config with no content-repo equivalent.
 

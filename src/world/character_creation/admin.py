@@ -156,8 +156,7 @@ class OriginTemplateAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "beginning__starting_area"]
     search_fields = ["name", "frame_narrative"]
     ordering = ["beginning", "sort_order", "name"]
-    filter_horizontal = ["claimable_kinds"]
-    autocomplete_fields = ["named_family_kind"]
+    filter_horizontal = ["claimable_kinds", "family_templates"]
     inlines = [OriginTemplateSlotInline]
 
 

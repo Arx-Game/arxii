@@ -108,6 +108,22 @@ pattern-mirrors `LanguageSelector.tsx`) shown only when `CompanionSerializer
 .is_present` is true for at least one bonded companion — never offered for
 an absent one.
 
+## Bond with the owner (#3575, ADR-0272)
+
+A companion has no `CharacterSheet`, so the owner's bond toward it is a
+`CharacterRelationship` whose `target_companion` points at the `Companion` row
+(`target` is null on such rows). Only the bonded owner may hold one and it is active
+from creation; writes toward a released companion are refused, and the rows survive
+release (the `Companion` row is never hard-deleted). All four relationship verbs accept
+the companion target on web (`target_companion_id`) and telnet (the companion's name).
+
+In an escalating encounter, the companion's ALLY `CombatOpponent` reaching `DEFEATED`
+emits `CHARACTER_INCAPACITATED`, and the owner surges once (`ALLY_FALLEN`) when their
+relationship has a `fuels_escalation_spikes` track at or above the curve's
+`spike_minimum_track_points`. The peril leg is inert for companions (no opponent peril
+band). `resolve_companion_defeat` (#1873 Decision 4) still has no production caller;
+wiring it at encounter end is a separate follow-up.
+
 ## API
 
 `world.companions.views.{CompanionViewSet, CompanionArchetypeViewSet}` —

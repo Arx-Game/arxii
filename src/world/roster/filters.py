@@ -45,7 +45,7 @@ class RosterEntryFilterSet(django_filters.FilterSet):
 class FamilyFilterSet(django_filters.FilterSet):
     """Filter families by open positions and/or starting area."""
 
-    has_open_positions = django_filters.BooleanFilter(method="filter_has_open_positions")
+    has_open_kin_slots = django_filters.BooleanFilter(method="filter_has_open_kin_slots")
     area_id = django_filters.CharFilter(method="filter_by_area")
     kind = django_filters.ModelMultipleChoiceFilter(
         field_name="kind", queryset=FamilyKind.objects.all()
@@ -53,9 +53,9 @@ class FamilyFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = Family
-        fields = ["has_open_positions", "area_id", "kind"]
+        fields = ["has_open_kin_slots", "area_id", "kind"]
 
-    def filter_has_open_positions(
+    def filter_has_open_kin_slots(
         self, queryset: QuerySet[Family], name: str, value: bool
     ) -> QuerySet[Family]:
         if value:

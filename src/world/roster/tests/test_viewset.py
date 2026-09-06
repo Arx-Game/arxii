@@ -5,7 +5,9 @@ Tests for roster API viewsets.
 from unittest.mock import patch
 
 from allauth.account.models import EmailAddress
-from django.test import TestCase
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.files.uploadedfile import SimpleUploadedFile
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIClient
 
@@ -289,36 +291,124 @@ class TestMediaViewSet(TestCase):
         assert len(response.data["results"]) == 2
         assert response.data["next"] is not None
 
-    @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
+    @patch("world.roster.serializers.media.CloudinaryGalleryService.upload_image")
     def test_create_media(self, mock_upload):
         mock_media = MediaFactory(player_data=self.player)
         mock_upload.return_value = mock_media
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
+        )
         url = "/api/roster/media/"
-        response = self.client.post(url, {"media_type": "photo"}, format="json")
+        response = self.client.post(
+            url,
+            {"media_type": "photo", "image_file": image_file},
+            format="multipart",
+        )
         assert response.status_code == 201
         assert response.data["id"] == mock_media.id
 
-    @patch("world.roster.views.media_views.CloudinaryGalleryService.upload_image")
+    @patch("world.roster.serializers.media.CloudinaryGalleryService.upload_image")
     def test_create_media_with_artist(self, mock_upload):
         artist = ArtistFactory()
         mock_media = MediaFactory(player_data=self.player, created_by=artist)
         mock_upload.return_value = mock_media
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
+        )
         url = "/api/roster/media/"
         response = self.client.post(
             url,
-            {"media_type": "photo", "created_by": artist.id},
-            format="json",
+            {"media_type": "photo", "created_by": artist.id, "image_file": image_file},
+            format="multipart",
         )
         assert response.status_code == 201
-        mock_upload.assert_called_with(
-            player_data=self.player,
-            image_file=None,
-            media_type="photo",
-            title="",
-            description="",
-            created_by=artist,
-        )
+        mock_upload.assert_called_once()
+        upload_kwargs = mock_upload.call_args.kwargs
+        assert upload_kwargs["player_data"] == self.player
+        assert upload_kwargs["media_type"] == "photo"
+        assert upload_kwargs["title"] == ""
+        assert upload_kwargs["description"] == ""
+        assert upload_kwargs["created_by"] == artist
+        assert upload_kwargs["image_file"].name == "test.jpg"
         assert response.data["created_by"]["id"] == artist.id
+
+    def test_create_media_requires_image_file(self):
+        """No image_file means the serializer never reaches the service."""
+        url = "/api/roster/media/"
+        response = self.client.post(url, {"media_type": "photo"}, format="multipart")
+        assert response.status_code == 400
+        assert "image_file" in response.data
+
+    @patch("world.roster.serializers.media.CloudinaryGalleryService.upload_image")
+    def test_create_media_rejects_oversized_file_before_service(self, mock_upload):
+        """An oversized file is rejected by the serializer; the service is never called."""
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"x" * 2000,
+            content_type="image/jpeg",
+        )
+        url = "/api/roster/media/"
+        with override_settings(MAX_PLAYER_MEDIA_FILE_BYTES=1000):
+            response = self.client.post(
+                url,
+                {"media_type": "photo", "image_file": image_file},
+                format="multipart",
+            )
+        assert response.status_code == 400
+        assert "This file is larger than the per-file limit." in str(response.data)
+        mock_upload.assert_not_called()
+
+    @patch("world.roster.serializers.media.CloudinaryGalleryService.upload_image")
+    def test_create_media_quota_exceeded_returns_fixed_message(self, mock_upload):
+        """The service's quota ValidationError maps to a 4xx with the fixed message."""
+        mock_upload.side_effect = DjangoValidationError(
+            "This upload would exceed your media quota.",
+        )
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"fake image content",
+            content_type="image/jpeg",
+        )
+        url = "/api/roster/media/"
+        response = self.client.post(
+            url,
+            {"media_type": "photo", "image_file": image_file},
+            format="multipart",
+        )
+        assert response.status_code == 400
+        assert "This upload would exceed your media quota." in str(response.data)
+
+    @override_settings(CLOUDINARY_CLOUD_NAME="test_cloud", MAX_PLAYER_MEDIA_FILE_BYTES=1000)
+    @patch("cloudinary.uploader.upload")
+    def test_create_media_staff_uploads_over_quota_succeeds(self, mock_cloudinary_upload):
+        """Staff bypass both the serializer's per-file check and the service's quota check."""
+        mock_cloudinary_upload.return_value = {
+            "public_id": "test/image_staff",
+            "secure_url": "https://res.cloudinary.com/test/image/upload/test/image_staff.jpg",
+            "bytes": 2000,
+        }
+        self.player.media_quota_bytes = 1
+        self.player.save()
+        self.player.account.is_staff = True
+        self.player.account.save()
+
+        image_file = SimpleUploadedFile(
+            "test.jpg",
+            b"x" * 2000,
+            content_type="image/jpeg",
+        )
+        url = "/api/roster/media/"
+        response = self.client.post(
+            url,
+            {"media_type": "photo", "image_file": image_file},
+            format="multipart",
+        )
+        assert response.status_code == 201
+        mock_cloudinary_upload.assert_called_once()
 
     def test_associate_tenure(self):
         gallery = TenureGalleryFactory(tenure=self.tenure)

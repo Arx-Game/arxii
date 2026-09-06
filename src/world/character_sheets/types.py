@@ -33,6 +33,19 @@ class PronounsData(TypedDict):
     possessive: str
 
 
+class VacancyRef(TypedDict):
+    """The character's held vacancy, as the identity section presents it (#3648).
+
+    ``importance`` (the family's real reckoning) is owner/staff only, mirroring
+    the age-axes leak-table pattern; ``presumed_importance`` (what outsiders
+    assume) is always shown.
+    """
+
+    name: str
+    presumed_importance: int
+    importance: int | None
+
+
 class IdentitySection(TypedDict):
     """The identity section of the character sheet API response."""
 
@@ -64,6 +77,8 @@ class IdentitySection(TypedDict):
     # #2994 — internal declared mood; owner/staff only, always None for other
     # viewers (never rendered to observers, per the spec's inward-only ruling).
     current_mood: IdNameRef | None
+    # #3648 - the character's held vacancy, if any active membership carries one.
+    vacancy: VacancyRef | None
 
 
 class FormTraitEntry(TypedDict):

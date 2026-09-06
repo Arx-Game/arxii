@@ -303,7 +303,14 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "roster.npcstatlinepreset",
         # skills
         "skills.skill",
-        # societies
+        # societies - house charter (#2875): dependencies listed before
+        # dependents for readability, not because the loader needs it -
+        # unresolved natural keys retry across passes and this set is
+        # unordered.
+        "societies.successionlaw",
+        "societies.holdingkind",
+        "societies.housefeature",
+        "societies.housetemplate",
         "societies.houseaspectdefinition",
         "societies.houseaspectoption",
         # species
@@ -401,6 +408,9 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # #3056: live story/installation state, not content — same rationale as
     # npcrole.faction_affiliation above.
     "npc_services.missionofferdetails": frozenset({"source_beat", "target_project"}),
+    # #3648: which staff houses a Family Template lists as served is installation
+    # state (those orgs are not corpus rows), same rationale as faction_affiliation.
+    "societies.housetemplate": frozenset({"served_house_choices"}),
 }
 
 

@@ -15,6 +15,7 @@
 import type { ReactNode } from 'react';
 import { Routes, Route, MemoryRouter, useNavigate } from 'react-router-dom';
 import { describe, it, vi, beforeEach, expect } from 'vitest';
+import userEvent from '@testing-library/user-event';
 import { render, fireEvent, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
@@ -169,23 +170,17 @@ const mockUseEncounterForScene = vi.fn(
   })
 );
 
-// GMEncounterControls' gate reads useCombatEncounter's full detail (is_gm) —
-// stub it too (default: no data) so it never falls through to the real
-// useQuery mock above, which eagerly calls any non-'scene' queryFn for real
-// (an uncaught /api/combat/<id>/ fetch that jsdom can't resolve, #3067).
-const mockUseCombatEncounter = vi.fn((): { data: { id: number; is_gm: boolean } | undefined } => ({
-  data: undefined,
-}));
-
 vi.mock('@/combat/queries', async (importOriginal) => {
   // SceneTacticalMap (rendered in the header) also pulls real hooks (e.g.
   // useDispatchPlayerAction) from this module — preserve everything else and
-  // only override useEncounterForScene/useCombatEncounter.
+  // only override useEncounterForScene. (#3557: the page no longer calls
+  // useCombatEncounter itself; CombatRail's own GM tab fetches encounter
+  // detail, and CombatRail is stubbed below, so this mock doesn't need to
+  // override useCombatEncounter any more.)
   const actual = await importOriginal<typeof import('@/combat/queries')>();
   return {
     ...actual,
     useEncounterForScene: () => mockUseEncounterForScene(),
-    useCombatEncounter: () => mockUseCombatEncounter(),
   };
 });
 
@@ -193,13 +188,20 @@ vi.mock('@/combat/components/CombatRail', () => ({
   CombatRail: ({
     sceneId,
     encounterId,
+    viewerCanGm,
     onDismissOutcome,
   }: {
     sceneId: number;
     encounterId: number;
+    viewerCanGm?: boolean;
     onDismissOutcome?: () => void;
   }) => (
-    <div data-testid="combat-rail-stub" data-scene-id={sceneId} data-encounter-id={encounterId}>
+    <div
+      data-testid="combat-rail-stub"
+      data-scene-id={sceneId}
+      data-encounter-id={encounterId}
+      data-viewer-can-gm={String(viewerCanGm ?? false)}
+    >
       CombatRail [{encounterId}]
       {onDismissOutcome && (
         <button type="button" data-testid="combat-rail-dismiss-stub" onClick={onDismissOutcome}>
@@ -363,7 +365,7 @@ vi.mock('../../components/SpeakerQueueBar', () => ({
 }));
 
 vi.mock('../../components/ConsentPrompt', () => ({
-  ConsentPrompt: () => <div data-testid="consent-prompt">ConsentPrompt</div>,
+  ConsentPrompt: () => <div data-testid="consent-prompt-stub">ConsentPrompt</div>,
 }));
 
 vi.mock('@/boundaries/components/SceneLinesAndVeilsCard', () => ({
@@ -373,8 +375,28 @@ vi.mock('@/boundaries/components/SceneLinesAndVeilsCard', () => ({
 }));
 
 vi.mock('../../components/HighlightReel', () => ({
-  HighlightReel: () => <div data-testid="highlight-reel">HighlightReel</div>,
+  HighlightReel: () => <div data-testid="highlight-reel-stub">HighlightReel</div>,
 }));
+
+vi.mock('../../components/SceneTacticalMap', () => ({
+  SceneTacticalMap: () => <div data-testid="scene-tactical-map-stub" />,
+}));
+
+vi.mock('../../components/CheckCallPromptCard', () => ({
+  CheckCallPromptCard: () => <div data-testid="check-call-prompt-stub" />,
+}));
+
+vi.mock('../../components/GMAdjudicationPanel', async () => {
+  const actual = await vi.importActual<typeof import('../../components/GMAdjudicationPanel')>(
+    '../../components/GMAdjudicationPanel'
+  );
+  return {
+    ...actual,
+    GMAdjudicationPanel: ({ tabs }: { tabs?: readonly string[] }) => (
+      <div data-testid="gm-adjudication-panel-stub" data-tabs={(tabs ?? []).join(',')} />
+    ),
+  };
+});
 
 vi.mock('@/rituals/components/RitualProposedChip', () => ({
   RitualProposedChip: () => <div data-testid="ritual-proposed-chip">RitualProposedChip</div>,
@@ -421,7 +443,6 @@ describe('SceneDetailPage', () => {
       isLoading: false,
       isError: false,
     });
-    mockUseCombatEncounter.mockReturnValue({ data: undefined });
     // Reset roster entries to default (empty) by default.
     mockUseMyRosterEntriesQuery.mockReturnValue({ data: [], isLoading: false, isError: false });
     // Reset the mocked game.active selector to default (no active character).
@@ -646,13 +667,23 @@ describe('SceneDetailPage', () => {
     expect(queryByTestId('combat-rail-stub')).not.toBeInTheDocument();
   });
 
-  it('hides rail-side GM controls once the encounter completes, but keeps the rail lingering (#3551 important 2)', () => {
+  it('closes the rail GM tab once the encounter completes, but keeps the rail lingering (#3551 important 2)', () => {
+    // #3557/ADR-0272 moved the GM lifecycle levers off the rail column and into
+    // CombatRail's own GM tab, so the invariant this test protects -- the levers
+    // go away when the fight ends, while the rail lingers for the aftermath --
+    // is now expressed as the tab being closed (viewerCanGm false on the rail).
+    mockSceneData = {
+      id: '1',
+      name: 'Test Scene',
+      is_active: true,
+      description: '',
+      viewer_can_gm: true,
+    };
     mockUseEncounterForScene.mockReturnValue({
       data: { id: 7 },
       isLoading: false,
       isError: false,
     });
-    mockUseCombatEncounter.mockReturnValue({ data: { id: 7, is_gm: true } });
 
     const queryClient = new QueryClient();
     function wrap(ui: ReactNode) {
@@ -680,14 +711,17 @@ describe('SceneDetailPage', () => {
     const { getByTestId, rerender } = render(wrap(makePage()));
 
     const railBefore = getByTestId('scene-detail-combat-rail');
-    expect(within(railBefore).getByTestId('gm-encounter-controls-stub')).toBeInTheDocument();
+    expect(within(railBefore).getByTestId('combat-rail-stub')).toHaveAttribute(
+      'data-viewer-can-gm',
+      'true'
+    );
     expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
 
     // The list poll drops the completed encounter (the rail lingers, previous
-    // test) but the GM lifecycle controls (add-opponent/settings) must not,
-    // since the backend has no COMPLETED guard on those actions. (The header's
-    // own "Start Encounter" GMEncounterControls now appears too and shares the
-    // same stub test id, so the assertion below is scoped to the rail column.)
+    // test) but the GM lifecycle levers (add-opponent/settings) must not, since
+    // the backend has no COMPLETED guard on those actions -- and the header's
+    // own "Start Encounter" GMEncounterControls is back by then, so leaving the
+    // tab open would give those levers two homes (ADR-0272).
     mockUseEncounterForScene.mockReturnValue({
       data: null,
       isLoading: false,
@@ -696,7 +730,10 @@ describe('SceneDetailPage', () => {
     rerender(wrap(makePage()));
 
     const railAfter = getByTestId('scene-detail-combat-rail');
-    expect(within(railAfter).queryByTestId('gm-encounter-controls-stub')).not.toBeInTheDocument();
+    expect(within(railAfter).getByTestId('combat-rail-stub')).toHaveAttribute(
+      'data-viewer-can-gm',
+      'false'
+    );
     expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-encounter-id', '7');
   });
 
@@ -799,6 +836,91 @@ describe('SceneDetailPage', () => {
 
     expect(mockCommandInput).toHaveBeenCalledWith(
       expect.objectContaining({ speakingAs: undefined })
+    );
+  });
+
+  // -------------------------------------------------------------------------
+  // #3557 combat layout: one map, GM levers in the rail, idle panels folded.
+  // -------------------------------------------------------------------------
+
+  function renderCombat(sceneOverrides: Record<string, unknown> = {}) {
+    mockSceneData = {
+      id: '1',
+      name: 'Test Scene',
+      is_active: true,
+      description: '',
+      viewer_can_gm: true,
+      ...sceneOverrides,
+    };
+    mockUseEncounterForScene.mockReturnValue({ data: { id: 7 }, isLoading: false, isError: false });
+    return renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+  }
+
+  it('unmounts the header map while an encounter is active (#3557)', () => {
+    const { queryByTestId } = renderCombat();
+    expect(queryByTestId('scene-tactical-map-stub')).not.toBeInTheDocument();
+  });
+
+  it('keeps the header map when no encounter is active (#3557)', () => {
+    const { getByTestId, queryByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+    expect(getByTestId('scene-tactical-map-stub')).toBeInTheDocument();
+    expect(queryByTestId('scene-tools-accordion')).not.toBeInTheDocument();
+    expect(getByTestId('check-call-prompt-stub')).toBeInTheDocument();
+  });
+
+  it('folds the idle panels behind a closed Scene tools accordion during a fight (#3557)', async () => {
+    const user = userEvent.setup();
+    const { getByTestId, queryByTestId } = renderCombat();
+    expect(getByTestId('scene-tools-accordion')).toBeInTheDocument();
+    expect(queryByTestId('highlight-reel-stub')).not.toBeInTheDocument();
+    expect(queryByTestId('gm-adjudication-panel-stub')).not.toBeInTheDocument();
+    await user.click(getByTestId('scene-tools-trigger'));
+    expect(getByTestId('highlight-reel-stub')).toBeInTheDocument();
+    expect(getByTestId('gm-adjudication-panel-stub')).toHaveAttribute(
+      'data-tabs',
+      'check,callforcheck,award,situation,summon,grantitem,stage,runbeat'
+    );
+  });
+
+  it('keeps prompts inline, outside the accordion, during a fight (#3557)', () => {
+    const { getByTestId } = renderCombat();
+    expect(getByTestId('consent-prompt-stub')).toBeInTheDocument();
+    expect(getByTestId('check-call-prompt-stub')).toBeInTheDocument();
+  });
+
+  it('passes viewerCanGm to the rail and mounts no encounter controls of its own (#3557)', () => {
+    const { getByTestId, queryByTestId } = renderCombat();
+    expect(getByTestId('combat-rail-stub')).toHaveAttribute('data-viewer-can-gm', 'true');
+    expect(queryByTestId('gm-encounter-controls-stub')).not.toBeInTheDocument();
+  });
+
+  it('gives the header panel every tab when no encounter is active (#3557)', () => {
+    mockSceneData = {
+      id: '1',
+      name: 'Test Scene',
+      is_active: true,
+      description: '',
+      viewer_can_gm: true,
+    };
+    const { getByTestId } = renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+    expect(getByTestId('gm-adjudication-panel-stub')).toHaveAttribute(
+      'data-tabs',
+      'check,callforcheck,award,condition,situation,dramaticbeat,summon,grantitem,stage,traps,runbeat'
     );
   });
 });

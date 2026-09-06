@@ -12,6 +12,7 @@ from actions.definitions.relationships import (
 )
 from actions.tests.utils import ActionTestCase
 from world.character_sheets.models import CharacterSheet
+from world.companions.factories import CompanionFactory
 from world.relationships.factories import RelationshipTrackFactory
 from world.relationships.models import (
     CharacterRelationship,
@@ -475,3 +476,94 @@ class SelfTargetGuardTests(ActionTestCase):
         )
         self.assertFalse(result.success)
         self.assertIn("yourself", result.message.lower())
+
+
+class CompanionTargetActionTests(ActionTestCase):
+    def setUp(self):
+        super().setUp()
+        self.companion = CompanionFactory(owner=self.actor_sheet, name="Ash")
+        self.track = RelationshipTrackFactory()
+
+    def _impress(self, **overrides):
+        kwargs = {
+            "actor": self.actor,
+            "target_companion": self.companion,
+            "track": self.track,
+            "points": 3,
+            "title": "Ash at the gate",
+            "writeup": "It did not flinch.",
+        }
+        kwargs.update(overrides)
+        return CreateFirstImpressionAction().run(**kwargs)
+
+    def test_first_impression_toward_own_companion(self):
+        result = self._impress()
+        self.assertTrue(result.success, result.message)
+        self.assertIn("Ash", result.message)
+        relationship = CharacterRelationship.objects.get(pk=result.data["relationship_id"])
+        self.assertEqual(relationship.target_companion, self.companion)
+        self.assertFalse(relationship.is_pending)
+
+    def test_first_impression_toward_someone_elses_companion_is_refused(self):
+        stranger_companion = CompanionFactory(name="Not Yours")
+        result = self._impress(target_companion=stranger_companion)
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "That companion is not bonded to you.")
+
+    def test_development_and_capstone_toward_companion(self):
+        self._impress()
+        dev = CreateDevelopmentAction().run(
+            actor=self.actor,
+            target_companion=self.companion,
+            track=self.track,
+            points=2,
+            title="Held the line",
+            writeup="Stood between me and the blade.",
+        )
+        self.assertTrue(dev.success, dev.message)
+        cap = CreateCapstoneAction().run(
+            actor=self.actor,
+            target_companion=self.companion,
+            track=self.track,
+            points=4,
+            title="Bled for me",
+            writeup="It nearly died.",
+        )
+        self.assertTrue(cap.success, cap.message)
+        relationship = CharacterRelationship.objects.get(
+            source=self.actor_sheet, target_companion=self.companion
+        )
+        progress = RelationshipTrackProgress.objects.get(
+            relationship=relationship, track=self.track
+        )
+        self.assertEqual(progress.developed_points, 6)
+
+    def test_redistribute_toward_companion(self):
+        other_track = RelationshipTrackFactory()
+        self._impress()
+        CreateCapstoneAction().run(
+            actor=self.actor,
+            target_companion=self.companion,
+            track=self.track,
+            points=4,
+            title="Bled for me",
+            writeup="It nearly died.",
+        )
+        result = RedistributePointsAction().run(
+            actor=self.actor,
+            target_companion=self.companion,
+            source_track=self.track,
+            target_track=other_track,
+            points=2,
+            title="Shifting",
+            writeup="Less awe, more trust.",
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertIn("Ash", result.message)
+
+    def test_no_target_at_all_is_refused(self):
+        result = CreateFirstImpressionAction().run(
+            actor=self.actor, track=self.track, points=3, title="x", writeup="y"
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.message, "No target selected.")

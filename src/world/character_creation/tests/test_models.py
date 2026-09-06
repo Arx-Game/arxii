@@ -815,3 +815,15 @@ class CharacterDraftGMFieldsTest(TestCase):
         assert draft.target_table == table
         assert draft.story_title == "The Blade's Edge"
         assert draft.story_description == "A tale of..."
+
+
+class OriginTemplateCleanTest(TestCase):
+    def test_name_path_requires_a_family_template(self):
+        from django.core.exceptions import ValidationError
+
+        from world.character_creation.factories import OriginTemplateFactory
+
+        template = OriginTemplateFactory(allows_name_family=True, family_templates=[])
+        template.family_templates.clear()
+        with self.assertRaises(ValidationError):
+            template.clean()

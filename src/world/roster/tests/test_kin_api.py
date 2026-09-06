@@ -11,7 +11,7 @@ service — ADR-0097's viewer-aware gating must survive the view/serializer.
 from __future__ import annotations
 
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -260,3 +260,93 @@ class FamilySerializerParticleTests(APITestCase):
         data = FamilySerializer(family).data
         self.assertEqual(data["born_particle"], "")
         self.assertEqual(data["taken_in_particle"], "")
+
+
+class FamilyListInheritedQueryCountTests(APITestCase):
+    """The families list batches the ``inherited`` lookup (#3648).
+
+    ``FamilySerializer.get_inherited`` used to call ``house_for_family`` (a
+    fresh query per row) plus three more (``fealty``, ``aspects``,
+    ``features``) whenever a house existed - up to 4N queries for N housed
+    families. ``FamilyViewSet.list()`` now passes a batched grouping through
+    serializer context instead, computed by
+    ``world.roster.views.family_views._inherited_by_family`` in four flat
+    queries regardless of page size.
+
+    The query-count assertion targets ``_inherited_by_family`` directly
+    rather than the full ``GET /api/roster/families/`` response:
+    ``FamilySerializer.born_particle``/``taken_in_particle``
+    (``resolve_particle``, pre-existing #3261 code, untouched by this fix)
+    carry their own separate per-row N+1 - a house/title lookup plus a
+    ``NobiliaryParticle`` query, run twice per row - that would make a full
+    endpoint-level equality assertion conflate two different defects. A
+    second test below checks content correctness through the real endpoint.
+    """
+
+    def _housed_family(self, name: str, *, kind) -> Family:
+        from world.societies.factories import OrganizationFactory
+        from world.societies.houses.models import (
+            FealtyEdge,
+            HouseAspectDefinition,
+            HouseAspectOption,
+            HouseFeature,
+            OrganizationAspect,
+            OrganizationFeature,
+        )
+
+        family = FamilyFactory(name=name, kind=kind)
+        org = OrganizationFactory(name=f"House {name}", family=family)
+        definition = HouseAspectDefinition.objects.create(
+            name=f"Virtue {name}", prompt="Which virtue did your house cling to?"
+        )
+        option = HouseAspectOption.objects.create(definition=definition, name=f"Option {name}")
+        OrganizationAspect.objects.create(organization=org, definition=definition, option=option)
+        feature = HouseFeature.objects.create(
+            name=f"Feature {name}",
+            slug=f"feature-{name.lower()}",
+            description="A cultural feature.",
+        )
+        OrganizationFeature.objects.create(organization=org, feature=feature)
+        liege_org = OrganizationFactory(name=f"Liege of {name}")
+        FealtyEdge.objects.create(vassal=org, liege=liege_org)
+        return family
+
+    def test_query_count_does_not_grow_with_family_count(self) -> None:
+        """One housed family costs the same query count as three."""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        from world.roster.factories import FamilyKindFactory
+        from world.roster.views.family_views import _inherited_by_family
+
+        one_kind = FamilyKindFactory(name="Onefolk")
+        one_family = self._housed_family("Onehouse", kind=one_kind)
+
+        three_kind = FamilyKindFactory(name="Threefolk")
+        three_families = [self._housed_family(f"Threehouse{i}", kind=three_kind) for i in range(3)]
+
+        with CaptureQueriesContext(connection) as ctx_one:
+            grouping_one = _inherited_by_family([one_family])
+        with CaptureQueriesContext(connection) as ctx_three:
+            grouping_three = _inherited_by_family(three_families)
+
+        self.assertEqual(len(ctx_one.captured_queries), len(ctx_three.captured_queries))
+        # Sanity: the batched grouping actually carries content, not empty stubs.
+        self.assertEqual(len(grouping_one[one_family.pk]["aspects"]), 1)
+        self.assertEqual(grouping_three[three_families[0].pk]["liege_name"], "Liege of Threehouse0")
+        self.assertEqual(grouping_three[three_families[2].pk]["liege_name"], "Liege of Threehouse2")
+
+    def test_inherited_renders_through_the_families_endpoint(self) -> None:
+        """Content correctness through the real endpoint for the batched path."""
+        from world.roster.factories import FamilyKindFactory
+
+        kind = FamilyKindFactory(name="Contentfolk")
+        self._housed_family("Contenthouse", kind=kind)
+        client = APIClient()
+        client.force_authenticate(AccountFactory())
+        res = client.get(f"/api/roster/families/?kind={kind.id}")
+        self.assertEqual(res.status_code, status.HTTP_200_OK)
+        row = res.json()[0]
+        self.assertEqual(row["inherited"]["aspects"][0]["definition"], "Virtue Contenthouse")
+        self.assertEqual(row["inherited"]["features"][0]["name"], "Feature Contenthouse")
+        self.assertEqual(row["inherited"]["liege_name"], "Liege of Contenthouse")
