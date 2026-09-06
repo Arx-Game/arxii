@@ -43,14 +43,28 @@ production (#3667).
 
 ## Findings to hunt, in priority order
 
-**1. A class hook with no rule.** The single highest-yield check, and the shape
-that produced #3667. Collect every class the changed templates/components emit,
-subtract the ones the host framework already styles, and confirm each remaining
-one has a rule that reaches the page. Report the list. Two ways this hides: an
-inline `<style>` partial that covers a *different* page's classes (the Builder
-included `admin/tuning/_panel_css.html`, which styles `.tuning-panel` and
-`.stat-tile` and nothing of the Builder's own), and a stylesheet that exists but
-is never linked.
+**1. A rule that does not reach the page.** The single highest-yield check, and
+the shape that produced both rounds of #3667. **Reaching the page is the whole
+question - never settle for a class name appearing in the markup, and never for
+the name appearing somewhere in the CSS.** Render the page, collect its inline
+`<style>` blocks and resolve every `<link rel="stylesheet">` off disk, and ask
+whether the rule is in *that* corpus. Three ways this hides:
+
+- An inline `<style>` partial that covers a *different* page's classes. The
+  Builder included `admin/tuning/_panel_css.html`, which styles `.tuning-panel`
+  and `.stat-tile` and nothing of the Builder's own.
+- **A stylesheet the framework links only from a template you did not extend.**
+  `.form-row`, `.aligned label`, `.flex-container`, `.checkbox-row` and
+  `.submit-row` live in `admin/css/forms.css`, which Django links from
+  `change_form.html`'s `extrastyle` block. A custom admin page extending
+  `admin/base_site.html` gets `base.css`, `dark_mode.css` and `responsive.css`
+  and must link `forms.css` itself. This is what made the *first* fix for #3667
+  ship correct admin markup that still rendered with browser defaults.
+- **A name-presence check passing on a decoy.** `responsive.css` *is* linked by
+  `base.html` and mentions `.form-row`, `.aligned`, `.flex-container`,
+  `.checkbox-row` and `.submit-row` inside media queries, so "is the name in the
+  reachable CSS" answers yes while every base layout rule is absent. Name the
+  stylesheet that has to be loaded, not the class.
 
 **2. The surface ignores its host's CSS contract.** A custom Django admin page
 gets its layout from `fieldset.module.aligned`, `div.form-row`, `div.help`,

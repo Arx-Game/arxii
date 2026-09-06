@@ -459,6 +459,15 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   no saved row to fetch an HTMX fragment for until the whole route is saved),
   `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`,
   `_css.html`.
+- **Stylesheets** - the page links `admin/css/forms.css` itself, in its own
+  `extrastyle` block. `admin/base.html` links only `base.css`, `dark_mode.css` and
+  `responsive.css`; `forms.css` - where `.form-row`, `.aligned label`,
+  `.flex-container`, `.checkbox-row` and `.submit-row` are defined - is linked by
+  `change_form.html`. Any custom admin page that renders form rows has the same
+  obligation, and without it admin's markup has no rules behind it (#3667). Do not
+  test this by looking for the class name: `responsive.css` mentions every one of
+  those names in media queries, so the name-presence check passes with the layout
+  entirely absent. `BuilderStylingTest` names the stylesheet instead.
 - **Rendering** - the page draws its fields through Django's own
   `admin/includes/fieldset.html`, off `UPBRINGING_FIELDSETS`/`QUESTION_FIELDSETS` in
   `forms.py` and the `upbringing_fieldsets`/`question_fieldsets` filters in
