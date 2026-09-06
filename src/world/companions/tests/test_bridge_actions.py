@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.test import TestCase
+from django.utils import timezone
 from evennia.utils.create import create_object
 
 from actions.definitions.companions import (
@@ -17,8 +20,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.companions.defeat_content import SAVAGED_CONDITION_NAME
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
 from world.companions.models import Companion
-from world.conditions.models import ConditionCategory, ConditionTemplate
-from world.conditions.services import apply_condition
+from world.conditions.constants import DurationType
+from world.conditions.models import ConditionCategory, ConditionInstance, ConditionTemplate
+from world.conditions.services import apply_condition, has_condition
 
 
 class BridgeActionRegistrationTests(TestCase):
@@ -140,5 +144,69 @@ class CompanionFitToFightPrerequisiteTests(TestCase):
             companion_id=self.companion.pk,
             text="pads in a slow circle.",
         )
+
+        self.assertTrue(result.success, result.message)
+
+
+class SavagedExpirySweepTests(TestCase):
+    """Spec Testing item (final review, minor finding): a Savaged instance whose
+    expires_at has passed is swept on read and the companion may fight again.
+
+    Unlike CompanionFitToFightPrerequisiteTests' setUp, this template is built
+    with default_duration_type=INGAME_TIME (mirroring defeat_content.py's
+    authored row) - the sweep inside get_active_conditions only ever fires for
+    that duration type (world/conditions/services.py), so a ROUNDS-typed test
+    template (the default) would never exercise it.
+    """
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.owner = self.sheet.character
+        self.archetype = CompanionArchetypeFactory()
+        self.companion = _present_companion(owner=self.sheet, archetype=self.archetype)
+
+        category = ConditionCategory.objects.create(
+            name="Companion Injury", description="Test category text."
+        )
+        self.savaged = ConditionTemplate.objects.create(
+            name=SAVAGED_CONDITION_NAME,
+            category=category,
+            description="Test description text.",
+            default_duration_type=DurationType.INGAME_TIME,
+            default_duration_value=72,
+        )
+
+    def test_expired_savaged_instance_is_swept_and_fight_is_allowed_again(self):
+        apply_condition(self.companion.objectdb, self.savaged)
+        self.assertTrue(has_condition(self.companion.objectdb, self.savaged))
+
+        instance = ConditionInstance.objects.get(
+            target=self.companion.objectdb, condition=self.savaged
+        )
+        instance.expires_at = timezone.now() - timedelta(hours=1)
+        instance.save(update_fields=["expires_at"])
+
+        self.assertFalse(has_condition(self.companion.objectdb, self.savaged))
+        self.assertFalse(
+            ConditionInstance.objects.filter(
+                target=self.companion.objectdb, condition=self.savaged
+            ).exists()
+        )
+
+        from world.combat.constants import RiskLevel
+        from world.combat.factories import CombatEncounterFactory
+        from world.combat.models import CombatParticipant, ParticipantStatus
+
+        room = create_object("typeclasses.rooms.Room", key="Fight Room")
+        self.owner.location = room
+        self.owner.save()
+        encounter = CombatEncounterFactory(room=room, risk_level=RiskLevel.LOW)
+        CombatParticipant.objects.create(
+            encounter=encounter,
+            character_sheet=self.sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+        result = CompanionFightAction().run(actor=self.owner, companion_id=self.companion.pk)
 
         self.assertTrue(result.success, result.message)
