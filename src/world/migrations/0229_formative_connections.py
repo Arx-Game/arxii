@@ -6,7 +6,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0227_family_templates_contract"),
+        ("arxii", "0228_codex_entry_filing"),
     ]
 
     operations = [
