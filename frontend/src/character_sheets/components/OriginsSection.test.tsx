@@ -3,7 +3,8 @@
  *
  * Covers: one card per `kind === 'group'` row (name/link, tie + stage badges, tier badge),
  * the person rows scoped to that card's organization, blank `figure_name` hiding the person
- * for a foreign viewer, and the prose rendered after the cards.
+ * for a foreign viewer, an unresolved (`organization_id: null`) card falling back to the slot
+ * name and never collecting unanchored person rows, and the prose rendered after the cards.
  */
 
 import { screen } from '@testing-library/react';
@@ -52,7 +53,10 @@ function makeStory(): CharacterSheetStory {
         choice_name: '',
         choice_description: '',
         organization_id: null,
-        organization_name: 'Unmoored',
+        // The serializer guarantees organization_name is "" whenever organization_id is
+        // null (#3660 review) — an unresolved anchor is a reachable backend state (e.g. an
+        // unresolved own-family/served-house question), and the card falls back to slot_name.
+        organization_name: '',
         figure_name: '',
       },
       {
@@ -115,8 +119,9 @@ describe('OriginsSection', () => {
     expect(guildLink).toHaveAttribute('href', '/orgs/5');
     expect(screen.getByText('Raised by')).toBeInTheDocument();
     expect(screen.getByText('Childhood')).toBeInTheDocument();
-    // The unresolved-organization row has no id to link to and a blank stage badge.
-    expect(screen.getByText('Unmoored')).toBeInTheDocument();
+    // The unresolved-organization row has no id to link to, no org name to show, and a
+    // blank stage badge — its card title falls back to the slot's own name.
+    expect(screen.getByText('Who did you serve?')).toBeInTheDocument();
     expect(screen.getByText('Served')).toBeInTheDocument();
   });
 
@@ -152,6 +157,34 @@ describe('OriginsSection', () => {
     );
 
     expect(screen.queryByText('Old Mira')).not.toBeInTheDocument();
+  });
+
+  it('never attaches an unanchored person row to an unresolved (null-organization) card', () => {
+    const story = makeStory();
+    story.origin_slots = [
+      ...story.origin_slots,
+      {
+        slot_id: 6,
+        slot_name: 'Who else did you know?',
+        slot_prompt: 'Who else did you know?',
+        value: 'We never spoke of home.',
+        kind: 'person',
+        connection_kind: 'sailed_with',
+        life_stage: 'youth',
+        choice_name: '',
+        choice_description: '',
+        organization_id: null,
+        organization_name: '',
+        figure_name: 'Quiet Ansel',
+      },
+    ];
+    renderWithProviders(
+      <OriginsSection story={story} background={story.background} isMyCharacter />
+    );
+
+    // The unanchored person shares organization_id: null with the unresolved "Who did you
+    // serve?" card; a naive `===` match would attach it there. It must appear nowhere.
+    expect(screen.queryByText('Quiet Ansel')).not.toBeInTheDocument();
   });
 
   it('renders the prose after the cards, and never renders text/pick rows as cards', () => {

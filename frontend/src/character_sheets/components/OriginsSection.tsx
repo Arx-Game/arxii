@@ -52,12 +52,18 @@ export function OriginsSection({ story, background, isMyCharacter }: OriginsSect
         <div className="grid gap-3 pb-2 sm:grid-cols-2" data-testid="origin-group-cards">
           {groupRows.map((row) => {
             const tier = reputations?.find((rep) => rep.organization === row.organization_id);
-            const personRows = story.origin_slots.filter(
-              (candidate) =>
-                candidate.kind === 'person' &&
-                candidate.organization_id === row.organization_id &&
-                candidate.figure_name !== ''
-            );
+            // `null === null` would otherwise attach every unanchored person row to every
+            // unresolved card (an unresolved own-family/served-house anchor is a reachable
+            // backend state) — an unresolved card shows no person rows at all.
+            const personRows =
+              row.organization_id === null
+                ? []
+                : story.origin_slots.filter(
+                    (candidate) =>
+                      candidate.kind === 'person' &&
+                      candidate.organization_id === row.organization_id &&
+                      candidate.figure_name !== ''
+                  );
             const tie = tieLabel(row);
             const stage = stageLabel(row);
             return (
