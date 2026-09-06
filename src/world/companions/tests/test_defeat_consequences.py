@@ -172,3 +172,34 @@ class SavagedOutcomeTests(TestCase):
         companion.refresh_from_db()
         self.assertFalse(companion.is_active)
         self.assertIsNone(companion.objectdb)
+
+
+class EnsureCompanionDefeatConditionsAuthoredContentTests(TestCase):
+    """The production branch: the authored row already exists, sampling is off.
+
+    ensure_companion_defeat_conditions() must find the staff-authored row via
+    authored_or_sample() and leave it untouched - neither duplicating it nor
+    overwriting its text. No @override_settings here: SEED_SAMPLE_CONTENT
+    defaults False, and that default-off state is exactly the branch this
+    test exists to cover, since it is the one that runs in production.
+    """
+
+    def test_finds_the_authored_row_and_leaves_it_untouched(self):
+        from world.conditions.models import ConditionCategory, ConditionTemplate
+
+        authored_description = "Torn open by something with claws it never saw coming."
+        category = ConditionCategory.objects.create(
+            name="Companion Injury",
+            description="Staff-authored category text that must survive.",
+        )
+        ConditionTemplate.objects.create(
+            name=SAVAGED_CONDITION_NAME,
+            category=category,
+            description=authored_description,
+        )
+
+        ensure_companion_defeat_conditions()
+
+        self.assertEqual(ConditionTemplate.objects.filter(name=SAVAGED_CONDITION_NAME).count(), 1)
+        template = ConditionTemplate.objects.get(name=SAVAGED_CONDITION_NAME)
+        self.assertEqual(template.description, authored_description)
