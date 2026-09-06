@@ -33,16 +33,18 @@ from world.character_creation.models import (
     StartingArea,
 )
 from world.character_creation.services import (
+    age_bounds,
     clear_family_selection,
     select_origin_template,
     set_family_path,
 )
 from world.character_creation.types import StageValidationErrors
-from world.character_sheets.models import DAYS_IN_MONTH, Gender, Pronouns
+from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
 from world.distinctions.models import Distinction
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
+from world.game_clock.services import get_ic_now
 from world.magic.models import Gift, GlimpseTag, Technique, Tradition
 from world.magic.serializers import TechniqueEffectSummarySerializer
 from world.mechanics.constants import GOAL_CATEGORY_NAME
@@ -80,10 +82,29 @@ class PerspectiveEntrySerializer(serializers.Serializer):
     subject_name = serializers.CharField(source="subject.name")
 
 
+class HeritageAnchorSerializer(serializers.ModelSerializer):
+    """The world fact behind a heritage's CG age ceiling (#3663).
+
+    Nested read-only under Beginnings so the appearance stage can say "The first
+    Misbegotten were born in 980 AS." from data; the ceiling itself comes from
+    the draft's ``age_max``.
+    """
+
+    first_appeared_ic_year = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Heritage
+        fields = ["name", "first_appeared_ic_year"]
+
+    def get_first_appeared_ic_year(self, obj: Heritage) -> int | None:
+        return obj.first_appeared_ic.year if obj.first_appeared_ic is not None else None
+
+
 class BeginningsSerializer(serializers.ModelSerializer):
     """Serializer for Beginnings options."""
 
     allowed_species_ids = serializers.SerializerMethodField()
+    heritage = HeritageAnchorSerializer(read_only=True, allow_null=True)
     is_accessible = serializers.SerializerMethodField()
     art_image = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
@@ -110,6 +131,7 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "cg_point_cost",
             "is_accessible",
             "codex_entry_ids",
+            "heritage",
         ]
         # Note: social_rank intentionally NOT included (staff-only)
 
@@ -930,6 +952,11 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    # The age range CG accepts for this draft: the general cap tightened by
+    # eternal youth and by the heritage's first appearance (#3663). The
+    # appearance stage clamps to these instead of knowing the rule.
+    age_min = serializers.SerializerMethodField()
+    age_max = serializers.SerializerMethodField()
     # Distinctions the Upbringing answers grant, shown locked in the Distinctions
     # stage so a player can't also hand-pick one already bundled in (#3660).
     bundled_distinctions = serializers.SerializerMethodField()
@@ -992,11 +1019,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "age_min",
+            "age_max",
             "bundled_distinctions",
             "derived_anchors",
         ]
         read_only_fields = [
             "id",
+            "age_min",
+            "age_max",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1057,6 +1088,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
         return obj.calculate_stat_budget()
+
+    def get_age_min(self, obj: CharacterDraft) -> int:
+        return age_bounds(obj.selected_species, obj.selected_beginnings, get_ic_now()).minimum
+
+    def get_age_max(self, obj: CharacterDraft) -> int:
+        return age_bounds(obj.selected_species, obj.selected_beginnings, get_ic_now()).maximum
 
     @extend_schema_field(serializers.ListField(child=serializers.DictField()))
     def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
@@ -1138,13 +1175,14 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         return value
 
     def validate_age(self, value):
-        """Validate age against the CG range, tightened for eternal-youth species."""
+        """Validate age against ``age_bounds`` for the draft's species and heritage (#3663).
+
+        Species and Beginnings come from the same request when it changes them,
+        else from the instance, so a PATCH that picks a Beginnings and an age
+        together is judged against the Beginnings it picked.
+        """
         if value is None:
             return value
-
-        if value < AGE_MIN or value > AGE_MAX:
-            msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
-            raise serializers.ValidationError(msg)
 
         species = None
         species_id = self.initial_data.get("selected_species_id")
@@ -1152,13 +1190,38 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             species = Species.objects.filter(id=species_id).first()
         elif self.instance:
             species = self.instance.selected_species
-        if species is not None and species.eternal_youth and value > AGE_MAX_ETERNAL_YOUTH:
+        beginnings = None
+        beginnings_id = self.initial_data.get("selected_beginnings_id")
+        if beginnings_id:
+            beginnings = Beginnings.objects.filter(id=beginnings_id).first()
+        elif self.instance:
+            beginnings = self.instance.selected_beginnings
+        bounds = age_bounds(species, beginnings, get_ic_now())
+
+        if value < AGE_MIN or value > AGE_MAX:
+            msg = f"Age must be between {AGE_MIN} and {AGE_MAX} years."
+            raise serializers.ValidationError(msg)
+        if value <= bounds.maximum:
+            return value
+        # Name the cap that bound: eternal youth when it set the ceiling, else
+        # the heritage's first appearance (the only other thing that tightens it).
+        if (
+            species is not None
+            and species.eternal_youth
+            and bounds.maximum == AGE_MAX_ETERNAL_YOUTH
+        ):
             msg = (
                 f"{species.name} characters keep their eternal youth: age must be "
                 f"at most {AGE_MAX_ETERNAL_YOUTH}."
             )
             raise serializers.ValidationError(msg)
-        return value
+        heritage = beginnings.heritage if beginnings is not None else None
+        heritage_name = heritage.name if heritage is not None else "Characters of this heritage"
+        msg = (
+            f"{heritage_name} can be at most {bounds.maximum} years old: "
+            f"the first were born in {bounds.heritage_first_year} AS."
+        )
+        raise serializers.ValidationError(msg)
 
     def update(self, instance, validated_data):
         """Handle the Upbringing/family-path picks, then merge ``draft_data``.

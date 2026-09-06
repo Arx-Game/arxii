@@ -6,6 +6,7 @@ from django.http import HttpRequest
 from world.character_sheets.models import (
     CharacterSheet,
     Gender,
+    Heritage,
     MoodOption,
     Profile,
     ProfileTextVersion,
@@ -216,3 +217,24 @@ class CharacterSheetAdmin(admin.ModelAdmin):
 # CharacterDescription admin removed - display data now handled by:
 # - evennia_extensions.ObjectDisplayData for basic display info
 # - world.scenes.Persona for character identities and contextual appearances
+
+
+@admin.register(Heritage)
+class HeritageAdmin(admin.ModelAdmin):
+    """Heritage rows, including the IC date the first of each were born (#3663).
+
+    ``first_appeared_ic`` is the anchor for the CG age ceiling; on production
+    it is set here once (the seed only fills it on an empty database).
+    """
+
+    list_display = ["name", "is_special", "family_known", "first_appeared_ic"]
+    search_fields = ["name"]
+    fields = (
+        "name",
+        "description",
+        "is_special",
+        "family_known",
+        "family_display",
+        "chronological_age_unknown",
+        "first_appeared_ic",
+    )
