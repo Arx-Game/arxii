@@ -18,7 +18,8 @@ from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from world.character_creation.models import CharacterDraft
+from world.character_creation.models import CharacterDraft, DistinctionOffer
+from world.character_creation.offers import opener_label, reconcile_offer_picks, visible_offers
 from world.codex.models import DistinctionCodexGrant
 from world.distinctions.filters import DistinctionCategoryFilter, DistinctionFilter
 from world.distinctions.models import (
@@ -169,7 +170,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         Validate distinction data for adding to a draft.
 
         Args:
-            data: Request data with distinction_id, rank, notes.
+            data: Request data with distinction_id, rank, notes, offer_id.
             existing_ids: Set of distinction IDs already on the draft.
             draft: The draft being edited (species-innate gate, #2846).
 
@@ -211,7 +212,36 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         # Species-innate gate (#2846)
         self._check_species_innate(distinction, draft)
 
-        return ValidatedDistinction(distinction=distinction, rank=rank, notes=notes)
+        # Offer gate (#3675): every CG pick must resolve to an offer the draft earned.
+        offer = self._resolve_offer(data.get("offer_id"), distinction, draft)
+
+        return ValidatedDistinction(distinction=distinction, rank=rank, notes=notes, offer=offer)
+
+    def _resolve_offer(
+        self, offer_id: object, distinction: Distinction, draft: CharacterDraft
+    ) -> DistinctionOffer:
+        """Resolve and validate an ``offer_id`` against the draft's visible offers.
+
+        Called by ``_validate_distinction_for_add`` and ``sync``. Raises when the
+        id isn't an int (carried sources are string keys a client never sends),
+        or when the offer isn't visible to this draft or names a different
+        distinction.
+        """
+        if not isinstance(offer_id, int):
+            raise ValidationError({"detail": f"{distinction.name} requires an offer_id."})
+        visible = visible_offers(draft)
+        offer = visible.get(offer_id)
+        if offer is None or offer.distinction_id != distinction.id:
+            hidden = (
+                DistinctionOffer.objects.filter(pk=offer_id)
+                .select_related("glimpse_tag", "origin_choice", "schooling_line")
+                .first()
+            )
+            label = opener_label(hidden) if hidden else "this chapter"
+            raise ValidationError(
+                {"detail": f"{distinction.name} is not offered to you here ({label})."}
+            )
+        return offer
 
     def _check_species_innate_bulk(self, distinctions, draft: CharacterDraft) -> None:
         """Apply the species-innate gate (#2846) to every distinction in a sync payload."""
@@ -285,9 +315,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 }
             )
 
-    def _build_distinction_entry(self, distinction: Distinction, rank: int, notes: str):
-        """Build the dictionary entry for a distinction on a draft."""
-        return build_distinction_entry(distinction, rank, notes)
+    def _build_distinction_entry(
+        self, distinction: Distinction, rank: int, notes: str, offer: DistinctionOffer
+    ):
+        """Build the dictionary entry for a distinction on a draft, from its offer."""
+        return build_distinction_entry(
+            distinction, rank, notes, offer=offer, source=opener_label(offer)
+        )
 
     @extend_schema(responses=DraftDistinctionEntrySerializer(many=True))
     def list(self, request, draft_id: int):
@@ -311,6 +345,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         Request body:
             {
                 "distinction_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -322,7 +357,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         validated = self._validate_distinction_for_add(request.data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
-            validated.distinction, validated.rank, validated.notes
+            validated.distinction, validated.rank, validated.notes, validated.offer
         )
         distinctions.append(new_entry)
 
@@ -353,10 +388,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         draft.draft_data["distinctions"] = distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
 
-        # Clear tradition if its required distinction was removed
-        remaining_ids = {d.get("distinction_id") for d in distinctions}
-        self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
-
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     @extend_schema(
@@ -378,6 +409,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             {
                 "remove_id": int,
                 "add_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -414,20 +446,17 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             "distinction_id": add_id,
             "rank": request.data.get("rank", 1),
             "notes": request.data.get("notes", ""),
+            "offer_id": request.data.get("offer_id"),
         }
         validated = self._validate_distinction_for_add(add_data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
-            validated.distinction, validated.rank, validated.notes
+            validated.distinction, validated.rank, validated.notes, validated.offer
         )
         new_distinctions.append(new_entry)
 
         draft.draft_data["distinctions"] = new_distinctions
         draft.save(update_fields=["draft_data", "updated_at"])
-
-        # Clear tradition if its required distinction was removed
-        remaining_ids = {d.get("distinction_id") for d in new_distinctions}
-        self._clear_tradition_if_required_distinction_removed(draft, remaining_ids)
 
         return Response({"removed": remove_id, "added": new_entry})
 
@@ -441,43 +470,76 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
     @action(detail=False, methods=["put"])
     def sync(self, request, draft_id: int):
         """
-        Set the full list of distinctions on a draft.
+        Set the full list of CHOICE distinctions on a draft, then reconcile (#3675).
 
         Request body:
             {
-                "distinctions": [{"id": int, "rank": int}, ...]
+                "distinctions": [{"id": int, "rank": int, "offer_id": int}, ...]
             }
 
-        This replaces all distinctions on the draft with the provided list.
-        All distinctions are validated together for mutual exclusion conflicts.
+        This replaces every CHOICE-arrival distinction on the draft with the
+        provided list; every entry must resolve to an offer the draft earned
+        (``_resolve_offer``). ``reconcile_offer_picks`` runs afterward so any
+        BUNDLED/CARRIED entries the frontend never sends survive the sync.
         """
         draft = self._get_draft(draft_id)
+        distinction_entries = self._parse_sync_payload(request.data.get("distinctions"))
 
-        raw_distinctions = request.data.get("distinctions")
+        # Handle empty list (clear all CHOICE distinctions)
+        if not distinction_entries:
+            draft.draft_data["distinctions"] = []
+            draft.save(update_fields=["draft_data", "updated_at"])
+            reconcile_offer_picks(draft)
+            return Response({"distinctions": draft.draft_data.get("distinctions", [])})
+
+        by_id = self._fetch_sync_distinctions(distinction_entries)
+        self._validate_sync_ranks(distinction_entries, by_id)
+
+        # Validate mutual exclusions
+        self._validate_bulk_exclusions(list(by_id.values()))
+
+        # Species-innate gate (#2846)
+        self._check_species_innate_bulk(list(by_id.values()), draft)
+
+        new_distinctions = self._build_sync_entries(distinction_entries, by_id, draft)
+
+        draft.draft_data["distinctions"] = new_distinctions
+        draft.save(update_fields=["draft_data", "updated_at"])
+        reconcile_offer_picks(draft)
+
+        return Response({"distinctions": draft.draft_data.get("distinctions", [])})
+
+    def _parse_sync_payload(self, raw_distinctions: object) -> list[dict]:
+        """Validate the sync request shape and normalize each entry.
+
+        Called by ``sync``. Raises on a missing/malformed ``distinctions`` field
+        or an entry missing its ``id``.
+        """
         if raw_distinctions is None:
             raise ValidationError({"detail": "distinctions field is required."})
         if not isinstance(raw_distinctions, list):
             raise ValidationError({"detail": "distinctions must be a list."})
 
-        distinction_entries = []
+        entries = []
         for entry in raw_distinctions:
             id_key = "id"
             if not isinstance(entry, dict) or id_key not in entry:
                 raise ValidationError({"detail": "Each entry must have an 'id' field."})
-            distinction_entries.append({"id": entry["id"], "rank": entry.get("rank", 1)})
+            entries.append(
+                {
+                    "id": entry["id"],
+                    "rank": entry.get("rank", 1),
+                    "offer_id": entry.get("offer_id"),
+                }
+            )
+        return entries
 
-        # Handle empty list (clear all distinctions)
-        if not distinction_entries:
-            self._clear_tradition_if_required_distinction_removed(draft, set())
-            draft.draft_data["distinctions"] = []
-            draft.save(update_fields=["draft_data", "updated_at"])
-            return Response({"distinctions": []})
+    def _fetch_sync_distinctions(self, distinction_entries: list[dict]) -> dict[int, Distinction]:
+        """Fetch every requested distinction in one query, prefetched for exclusion checks.
 
-        # Build lookup of requested ranks
-        requested_ranks = {entry["id"]: entry["rank"] for entry in distinction_entries}
-        requested_ids = set(requested_ranks.keys())
-
-        # Fetch all distinctions in one query
+        Called by ``sync``. Raises when an id is missing or inactive.
+        """
+        requested_ids = {entry["id"] for entry in distinction_entries}
         distinctions = (
             Distinction.objects.filter(id__in=requested_ids, is_active=True)
             .select_related("category", "parent_distinction")
@@ -494,17 +556,21 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 ),
             )
         )
-
-        found_ids = {d.id for d in distinctions}
-        missing_ids = requested_ids - found_ids
+        by_id = {d.id: d for d in distinctions}
+        missing_ids = requested_ids - set(by_id)
         if missing_ids:
             raise ValidationError(
                 {"detail": f"Distinctions not found or inactive: {list(missing_ids)}"}
             )
+        return by_id
 
-        # Validate ranks
-        for distinction in distinctions:
-            rank = requested_ranks[distinction.id]
+    def _validate_sync_ranks(
+        self, distinction_entries: list[dict], by_id: dict[int, Distinction]
+    ) -> None:
+        """Raise if any entry's rank is out of bounds for its distinction. Called by ``sync``."""
+        for entry in distinction_entries:
+            distinction = by_id[entry["id"]]
+            rank = entry["rank"]
             if not isinstance(rank, int) or rank < 1 or rank > distinction.max_rank:
                 raise ValidationError(
                     {
@@ -515,53 +581,36 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                     }
                 )
 
-        # Validate mutual exclusions
-        self._validate_bulk_exclusions(distinctions)
+    def _build_sync_entries(
+        self,
+        distinction_entries: list[dict],
+        by_id: dict[int, Distinction],
+        draft: CharacterDraft,
+    ) -> list[dict]:
+        """Resolve each entry's offer and build the merged draft-entry list.
 
-        # Species-innate gate (#2846)
-        self._check_species_innate_bulk(distinctions, draft)
-
-        # Build the new distinctions list
-        new_distinctions = []
-        for distinction in distinctions:
-            rank = requested_ranks[distinction.id]
-            entry = self._build_distinction_entry(distinction, rank=rank, notes="")
-            new_distinctions.append(entry)
-
-        draft.draft_data["distinctions"] = new_distinctions
-        draft.save(update_fields=["draft_data", "updated_at"])
-
-        # Clear tradition if its required distinction was removed
-        new_distinction_ids = {d.id for d in distinctions}
-        self._clear_tradition_if_required_distinction_removed(draft, new_distinction_ids)
-
-        return Response({"distinctions": new_distinctions})
-
-    def _clear_tradition_if_required_distinction_removed(
-        self, draft: CharacterDraft, new_distinction_ids: set[int]
-    ) -> None:
-        """Clear selected tradition if its required distinction was removed.
-
-        Args:
-            draft: The character draft being modified.
-            new_distinction_ids: Set of distinction IDs in the new selection.
+        Called by ``sync``. An entry for a distinction already added from
+        another offer in this same payload merges into it (offer_ids/sources/
+        arrivals appended, rank raised to the max requested).
         """
-        if not draft.selected_tradition or not draft.selected_beginnings:
-            return
-
-        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
-
-        bt = BeginningTradition.objects.filter(
-            beginning=draft.selected_beginnings,
-            tradition=draft.selected_tradition,
-        ).first()
-        if (
-            bt
-            and bt.required_distinction_id
-            and bt.required_distinction_id not in new_distinction_ids
-        ):
-            draft.selected_tradition = None
-            draft.save(update_fields=["selected_tradition"])
+        new_by_id: dict[int, dict] = {}
+        for entry in distinction_entries:
+            distinction = by_id[entry["id"]]
+            rank = entry["rank"]
+            offer = self._resolve_offer(entry["offer_id"], distinction, draft)
+            existing = new_by_id.get(distinction.id)
+            if existing is None:
+                new_by_id[distinction.id] = self._build_distinction_entry(
+                    distinction, rank, "", offer
+                )
+                continue
+            existing["rank"] = max(existing["rank"], rank)
+            existing["cost"] = distinction.calculate_total_cost(existing["rank"])
+            if offer.id not in existing["offer_ids"]:
+                existing["offer_ids"].append(offer.id)
+                existing["sources"].append(opener_label(offer))
+                existing["arrivals"].append(offer.arrives_as)
+        return list(new_by_id.values())
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """

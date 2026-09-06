@@ -341,27 +341,43 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
 
 
 class DraftDistinctionCreateSerializer(serializers.Serializer):
-    """Request body for adding a distinction to a draft (create)."""
+    """Request body for adding a distinction to a draft (create).
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from — every
+    add must resolve to an offer the draft earned.
+    """
 
     distinction_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class DraftDistinctionSwapSerializer(serializers.Serializer):
-    """Request body for swapping mutually-exclusive distinctions."""
+    """Request body for swapping mutually-exclusive distinctions.
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
+    came from — the same offer rule ``create`` enforces.
+    """
 
     remove_id = serializers.IntegerField()
     add_id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
 
 
 class DraftDistinctionSyncItemSerializer(serializers.Serializer):
-    """One ``{id, rank}`` pair in the sync request list."""
+    """One ``{id, rank, offer_id}`` entry in the sync request list.
+
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
+    from; required, since carried/bundled entries are re-applied by
+    ``reconcile_offer_picks`` rather than sent by the client.
+    """
 
     id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
+    offer_id = serializers.IntegerField()
 
 
 class DraftDistinctionSyncSerializer(serializers.Serializer):

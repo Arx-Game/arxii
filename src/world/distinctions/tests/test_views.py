@@ -7,7 +7,8 @@ from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.constants import OfferChapter
+from world.character_creation.factories import CharacterDraftFactory, DistinctionOfferFactory
 from world.distinctions.factories import (
     DistinctionCategoryFactory,
     DistinctionFactory,
@@ -207,6 +208,10 @@ class DraftDistinctionViewSetTests(TestCase):
         self.client.force_authenticate(user=self.user)
         self.draft = CharacterDraftFactory(account=self.user, draft_data={})
 
+    def _offer_for(self, distinction) -> int:
+        """A CG-earned APPEARANCE offer id for this distinction (#3675)."""
+        return DistinctionOfferFactory(distinction=distinction, chapter=OfferChapter.APPEARANCE).id
+
     def test_list_draft_distinctions_empty(self):
         """List returns empty array for new draft."""
         response = self.client.get(f"/api/distinctions/drafts/{self.draft.id}/distinctions/")
@@ -228,7 +233,11 @@ class DraftDistinctionViewSetTests(TestCase):
         """Can add a distinction to a draft."""
         response = self.client.post(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
-            {"distinction_id": self.distinction.id, "rank": 2},
+            {
+                "distinction_id": self.distinction.id,
+                "rank": 2,
+                "offer_id": self._offer_for(self.distinction),
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -244,7 +253,7 @@ class DraftDistinctionViewSetTests(TestCase):
         """Adding without rank defaults to 1."""
         response = self.client.post(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/",
-            {"distinction_id": self.distinction.id},
+            {"distinction_id": self.distinction.id, "offer_id": self._offer_for(self.distinction)},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -380,7 +389,11 @@ class DraftDistinctionViewSetTests(TestCase):
         # Swap to conflicting
         response = self.client.post(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/swap/",
-            {"remove_id": self.distinction.id, "add_id": conflicting.id},
+            {
+                "remove_id": self.distinction.id,
+                "add_id": conflicting.id,
+                "offer_id": self._offer_for(conflicting),
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -419,8 +432,16 @@ class DraftDistinctionViewSetTests(TestCase):
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
             {
                 "distinctions": [
-                    {"id": self.distinction.id, "rank": 1},
-                    {"id": self.distinction2.id, "rank": 1},
+                    {
+                        "id": self.distinction.id,
+                        "rank": 1,
+                        "offer_id": self._offer_for(self.distinction),
+                    },
+                    {
+                        "id": self.distinction2.id,
+                        "rank": 1,
+                        "offer_id": self._offer_for(self.distinction2),
+                    },
                 ]
             },
             format="json",
@@ -465,7 +486,15 @@ class DraftDistinctionViewSetTests(TestCase):
         # Sync with only distinction2
         response = self.client.put(
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
-            {"distinctions": [{"id": self.distinction2.id, "rank": 1}]},
+            {
+                "distinctions": [
+                    {
+                        "id": self.distinction2.id,
+                        "rank": 1,
+                        "offer_id": self._offer_for(self.distinction2),
+                    }
+                ]
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_200_OK
@@ -571,8 +600,16 @@ class DraftDistinctionViewSetTests(TestCase):
             f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/",
             {
                 "distinctions": [
-                    {"id": self.distinction.id, "rank": 2},
-                    {"id": self.distinction2.id, "rank": 1},
+                    {
+                        "id": self.distinction.id,
+                        "rank": 2,
+                        "offer_id": self._offer_for(self.distinction),
+                    },
+                    {
+                        "id": self.distinction2.id,
+                        "rank": 1,
+                        "offer_id": self._offer_for(self.distinction2),
+                    },
                 ]
             },
             format="json",
@@ -627,11 +664,12 @@ class SyncResponseFormatTests(TestCase):
     def test_sync_response_includes_distinctions(self):
         """Sync response includes the distinctions list."""
         distinction = DistinctionFactory()
+        offer = DistinctionOfferFactory(distinction=distinction, chapter=OfferChapter.APPEARANCE)
 
         url = f"/api/distinctions/drafts/{self.draft.id}/distinctions/sync/"
         response = self.client.put(
             url,
-            {"distinctions": [{"id": distinction.id, "rank": 1}]},
+            {"distinctions": [{"id": distinction.id, "rank": 1, "offer_id": offer.id}]},
             format="json",
         )
 
@@ -671,6 +709,10 @@ class SpeciesInnateGateTests(TestCase):
     def _draft(self, species):
         return CharacterDraftFactory(account=self.user, draft_data={}, selected_species=species)
 
+    def _offer_for(self, distinction) -> int:
+        """A CG-earned APPEARANCE offer id for this distinction (#3675)."""
+        return DistinctionOfferFactory(distinction=distinction, chapter=OfferChapter.APPEARANCE).id
+
     def test_vampire_cannot_select_innate_bane(self):
         draft = self._draft(self.vampire)
         response = self.client.post(
@@ -695,7 +737,7 @@ class SpeciesInnateGateTests(TestCase):
         draft = self._draft(self.human)
         response = self.client.post(
             f"/api/distinctions/drafts/{draft.id}/distinctions/",
-            {"distinction_id": self.bane.id},
+            {"distinction_id": self.bane.id, "offer_id": self._offer_for(self.bane)},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -706,7 +748,7 @@ class SpeciesInnateGateTests(TestCase):
         other = DistinctionFactory(name="Iron Stomach", is_active=True)
         response = self.client.post(
             f"/api/distinctions/drafts/{draft.id}/distinctions/",
-            {"distinction_id": other.id},
+            {"distinction_id": other.id, "offer_id": self._offer_for(other)},
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED

@@ -784,6 +784,37 @@ class DraftMarkingSerializer(serializers.ModelSerializer):
         fields = ["id", "body_region", "kind", "name", "description"]
 
 
+class VisibleOfferSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.VisibleOffer`` (#3675)."""
+
+    offer_id = serializers.IntegerField()
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    player_line = serializers.CharField()
+    chapter = serializers.CharField()
+    arrives_as = serializers.CharField()
+    opener_label = serializers.CharField()
+    cost_per_rank = serializers.IntegerField()
+    max_rank = serializers.IntegerField()
+    is_locked = serializers.BooleanField()
+    lock_reason = serializers.CharField()
+
+
+class ClosedDistinctionSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.ClosedDistinction`` (#3675)."""
+
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    reason = serializers.CharField()
+
+
+class OffersResponseSerializer(serializers.Serializer):
+    """The ``offers``/``closed`` payload the offers action returns (#3675)."""
+
+    offers = VisibleOfferSerializer(many=True)
+    closed = ClosedDistinctionSerializer(many=True)
+
+
 class CharacterDraftSerializer(serializers.ModelSerializer):
     """Serializer for character drafts."""
 

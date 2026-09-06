@@ -13,11 +13,16 @@ if TYPE_CHECKING:
 
 @dataclass
 class ValidatedDistinction:
-    """Validated distinction data for adding to a draft."""
+    """Validated distinction data for adding to a draft.
+
+    ``offer`` is the ``DistinctionOffer`` row the pick was validated against
+    (#3675) — every CG add goes through an offer now, so it is required.
+    """
 
     distinction: Distinction
     rank: int
     notes: str
+    offer: DistinctionOffer
 
 
 class DraftDistinctionEntry(TypedDict):

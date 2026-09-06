@@ -14,7 +14,7 @@ from django.db.models import Case, IntegerField, Prefetch, QuerySet, Value, When
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import mixins, permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import ValidationError
@@ -25,8 +25,8 @@ from rest_framework.serializers import BaseSerializer, Serializer
 from rest_framework.views import APIView
 
 from world.character_creation.constants import (
-    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     ApplicationStatus,
+    OfferChapter,
 )
 from world.character_creation.filters import (
     CGGiftOptionFilter,
@@ -50,6 +50,7 @@ from world.character_creation.models import (
     OriginTemplateSlot,
     StartingArea,
 )
+from world.character_creation.offers import closed_for, offers_for, reconcile_offer_picks
 from world.character_creation.serializers import (
     BeginningsSerializer,
     CGExplanationsSerializer,
@@ -68,6 +69,7 @@ from world.character_creation.serializers import (
     DraftMarkingSerializer,
     GenderSerializer,
     HouseClaimStatusSerializer,
+    OffersResponseSerializer,
     PathSerializer,
     PerspectiveEntrySerializer,
     PronounsSerializer,
@@ -789,8 +791,9 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
         return CharacterDraftSerializer
 
     def perform_update(self, serializer: BaseSerializer[Any]) -> None:
-        """Save the draft."""
-        serializer.save()
+        """Save the draft, then reconcile which offers its new state carries or drops."""
+        super().perform_update(serializer)
+        reconcile_offer_picks(cast("CharacterDraft", serializer.instance))
 
     def create(self, request: Request, *args: Any, **kwargs: Any) -> Response:
         """Create a new draft, checking eligibility first."""
@@ -978,34 +981,22 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=[HTTPMethod.POST], url_path="select-tradition")
     def select_tradition(self, request: Request, pk: int | None = None) -> Response:
-        """Select a tradition for the draft.
+        """Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
-        that requires formal training may only be selected once the draft already
-        holds that distinction (added via the distinctions app). There is no
-        general auto-attach — `world.distinctions.views` only *clears* the selected
-        tradition when its required distinction is later removed
-        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
-
-        **One deliberate exception (#2442):** the "Unbound" drawback distinction
-        (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
-        of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
-        — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
-        player must not be forced to already know about this one specific drawback
-        before CG can complete; see
-        ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-        .test_tradition_step_completable_for_every_seeded_beginning`` for the
-        "CG must remain completable via the Unbound path with zero manual steps"
-        regression proof #2426 shipped, which this exception preserves.
+        There is no gate here — every tradition a Beginning's slate offers is
+        selectable outright. What the pick carries is decided by the slate line's
+        state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
+        to that state may name a drawback distinction the pick carries for free,
+        applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
+        removes whatever it carried the same way.
         """
-        from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
-
         draft = self.get_object()
         tradition_id = request.data.get("tradition_id")
 
         if tradition_id is None:
             draft.selected_tradition = None
             draft.save(update_fields=["selected_tradition"])
+            reconcile_offer_picks(draft)
             return Response({"status": "tradition cleared"})
 
         if not draft.selected_beginnings:
@@ -1019,31 +1010,29 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
                 {"detail": "This tradition is not available for the selected beginning."}
             )
 
-        update_fields = ["selected_tradition"]
-        if bt.required_distinction_id:
-            distinctions = draft.draft_data.get("distinctions", [])
-            held_distinction_ids = {entry.get("distinction_id") for entry in distinctions}
-            if bt.required_distinction_id not in held_distinction_ids:
-                if bt.required_distinction.slug == UNBOUND_DRAWBACK_DISTINCTION_SLUG:
-                    distinctions.append(build_distinction_entry(bt.required_distinction, rank=1))
-                    draft.draft_data["distinctions"] = distinctions
-                    update_fields.append("draft_data")
-                else:
-                    raise ValidationError(
-                        {
-                            "detail": (
-                                "This tradition requires formal training "
-                                "(take its distinction first)."
-                            )
-                        }
-                    )
-
         tradition = get_object_or_404(Tradition, pk=tradition_id, is_active=True)
         draft.selected_tradition = tradition
-        draft.save(update_fields=update_fields)
+        draft.save(update_fields=["selected_tradition"])
+        reconcile_offer_picks(draft)
 
         serializer = self.get_serializer(draft)
         return Response(serializer.data)
+
+    @extend_schema(
+        parameters=[OpenApiParameter("chapter", str, required=True)],
+        responses=OffersResponseSerializer,
+    )
+    @action(detail=True, methods=[HTTPMethod.GET])
+    def offers(self, request: Request, pk: int | None = None) -> Response:
+        """The distinctions this draft can pick in one chapter, and what its route closed."""
+        draft = self.get_object()
+        raw = request.query_params.get("chapter", "")  # noqa: USE_FILTERSET
+        try:
+            chapter = OfferChapter(raw)
+        except ValueError as exc:
+            raise ValidationError({"chapter": "Unknown chapter."}) from exc
+        payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft)}
+        return Response(OffersResponseSerializer(payload).data)
 
     @extend_schema(responses=HouseClaimStatusSerializer)
     @action(detail=True, methods=[HTTPMethod.GET, HTTPMethod.POST], url_path="house-claim")

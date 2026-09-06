@@ -1,13 +1,15 @@
 from django.db import IntegrityError
-from django.test import TestCase, override_settings
+from django.test import TestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory
+from world.character_creation.constants import TraditionState
 from world.character_creation.factories import (
     BeginningsFactory,
     BeginningTraditionFactory,
     CharacterDraftFactory,
+    TraditionStateLineFactory,
 )
 from world.character_creation.models import Beginnings, BeginningTradition
 from world.distinctions.factories import DistinctionFactory
@@ -123,75 +125,24 @@ class TraditionListLeakTests(TestCase):
     and SKIPPED the new prefetch, so requests with a different
     ``beginning_id`` would inherit the previous request's filtered data.
 
-    The list response varies by ``beginning_id`` via the ``required_distinction_id``
-    field — different beginnings can require different distinctions for the
-    same tradition. We hit the endpoint with ``beginning_id=B1`` and then
-    ``beginning_id=B2`` against the same Tradition, and assert the second
-    response reflects B2's BeginningTradition, not B1's.
+    The list response varies by ``beginning_id`` — different beginnings can
+    show the same Tradition with a different ``BeginningTradition`` row (own
+    wording, state, sort order). ``test_repeat_request_with_same_beginning_hits_cache``
+    below guards the SharedMemoryModel cache-hit path this leak's fix relies on.
     """
 
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountFactory()
         cls.tradition = TraditionFactory(name="LeakTestTradition")
-        cls.distinction_a = DistinctionFactory(name="DistinctionA")
-        cls.distinction_b = DistinctionFactory(name="DistinctionB")
         cls.beginning_a = BeginningsFactory(name="LeakBeginningA")
         cls.beginning_b = BeginningsFactory(name="LeakBeginningB")
-        BeginningTraditionFactory(
-            beginning=cls.beginning_a,
-            tradition=cls.tradition,
-            required_distinction=cls.distinction_a,
-        )
-        BeginningTraditionFactory(
-            beginning=cls.beginning_b,
-            tradition=cls.tradition,
-            required_distinction=cls.distinction_b,
-        )
+        BeginningTraditionFactory(beginning=cls.beginning_a, tradition=cls.tradition)
+        BeginningTraditionFactory(beginning=cls.beginning_b, tradition=cls.tradition)
 
     def setUp(self):
         self.client = APIClient()
         self.client.force_authenticate(user=self.account)
-
-    def _required_distinction(self, response, tradition_id):
-        for row in response.data:
-            if row["id"] == tradition_id:
-                return row["required_distinction_id"]
-        return None
-
-    def test_required_distinction_is_per_beginning_not_per_process(self):
-        """Sequential requests with different beginning_id see their own data."""
-        from world.magic.models import Tradition
-
-        url = "/api/character-creation/traditions/"
-
-        # Confirm the bug's precondition: SharedMemoryModel returns the
-        # *same Python object* for repeated lookups of the same pk. Without
-        # this property the leak shape doesn't apply, and the regression
-        # this test guards against would be untestable in isolation.
-        instance_one = Tradition.objects.get(pk=self.tradition.pk)
-        instance_two = Tradition.objects.get(pk=self.tradition.pk)
-        assert instance_one is instance_two, (
-            "Tradition is no longer SharedMemoryModel-shared; this test no "
-            "longer guards the original leak shape and should be revisited."
-        )
-
-        # First request — beginning A.
-        resp_a = self.client.get(url, {"beginning_id": self.beginning_a.id})
-        assert resp_a.status_code == status.HTTP_200_OK
-        assert self._required_distinction(resp_a, self.tradition.id) == self.distinction_a.id
-
-        # Second request — beginning B. Same Tradition instance is in
-        # SharedMemoryModel cache from request 1; this is where the prior
-        # implementation leaked beginning_a's distinction_id.
-        resp_b = self.client.get(url, {"beginning_id": self.beginning_b.id})
-        assert resp_b.status_code == status.HTTP_200_OK
-        assert self._required_distinction(resp_b, self.tradition.id) == self.distinction_b.id
-
-        # And going back to A still returns A's value (no flip-flop either).
-        resp_a2 = self.client.get(url, {"beginning_id": self.beginning_a.id})
-        assert resp_a2.status_code == status.HTTP_200_OK
-        assert self._required_distinction(resp_a2, self.tradition.id) == self.distinction_a.id
 
     def test_repeat_request_with_same_beginning_hits_cache(self):
         """Beginning + beginning_traditions are SharedMemoryModel-cached.
@@ -238,26 +189,6 @@ class TraditionListLeakTests(TestCase):
             f"(SharedMemoryModel cache hit), got: {primary_tables}"
         )
 
-    def test_nested_tradition_in_draft_resolves_required_distinction(self):
-        """CharacterDraftSerializer.selected_tradition resolves required_distinction_id.
-
-        The nested TraditionSerializer needs the draft's beginning_id to look
-        up the right BeginningTradition row. Prior to the SerializerMethodField
-        wiring, nested usage always returned ``required_distinction_id=None``
-        because ``beginning_id`` wasn't in the draft serializer's context.
-        """
-        draft = CharacterDraftFactory(
-            account=self.account,
-            selected_beginnings=self.beginning_a,
-            selected_tradition=self.tradition,
-        )
-        resp = self.client.get(f"/api/character-creation/drafts/{draft.id}/")
-        assert resp.status_code == status.HTTP_200_OK
-        nested = resp.data["selected_tradition"]
-        assert nested is not None
-        assert nested["id"] == self.tradition.id
-        assert nested["required_distinction_id"] == self.distinction_a.id
-
 
 class SelectTraditionTests(TestCase):
     """Tests for the select-tradition API endpoint."""
@@ -266,12 +197,10 @@ class SelectTraditionTests(TestCase):
     def setUpTestData(cls):
         cls.account = AccountFactory()
         cls.tradition = TraditionFactory()
-        cls.distinction = DistinctionFactory()
         cls.beginning = BeginningsFactory()
         cls.bt = BeginningTraditionFactory(
             beginning=cls.beginning,
             tradition=cls.tradition,
-            required_distinction=cls.distinction,
         )
 
     def setUp(self):
@@ -287,27 +216,9 @@ class SelectTraditionTests(TestCase):
         defaults.update(kwargs)
         return CharacterDraftFactory(**defaults)
 
-    def _add_distinction_to_draft(self, draft, distinction):
-        """Helper to add a distinction entry to draft_data (#2426 gate)."""
-        distinctions = draft.draft_data.get("distinctions", [])
-        distinctions.append(
-            {
-                "distinction_id": distinction.id,
-                "distinction_name": distinction.name,
-                "distinction_slug": distinction.slug,
-                "category_slug": distinction.category.slug,
-                "rank": 1,
-                "cost": distinction.calculate_total_cost(1),
-                "notes": "",
-            }
-        )
-        draft.draft_data["distinctions"] = distinctions
-        draft.save(update_fields=["draft_data"])
-
     def test_select_tradition_sets_fk(self):
-        """Selecting a tradition (with its required distinction held) sets the FK."""
+        """Selecting a tradition sets the FK; there is no gate (#3675)."""
         draft = self._create_draft()
-        self._add_distinction_to_draft(draft, self.distinction)
 
         response = self.client.post(
             f"/api/character-creation/drafts/{draft.id}/select-tradition/",
@@ -318,37 +229,6 @@ class SelectTraditionTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         draft.refresh_from_db()
         assert draft.selected_tradition == self.tradition
-
-    def test_select_tradition_without_required_distinction_fails(self):
-        """Selecting a tradition whose required distinction the draft lacks returns 400 (#2426)."""
-        draft = self._create_draft()
-
-        response = self.client.post(
-            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": self.tradition.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "formal training" in response.data["detail"]
-        draft.refresh_from_db()
-        assert draft.selected_tradition is None
-
-    def test_select_tradition_without_required_distinction_field_succeeds(self):
-        """A tradition with no required_distinction never gates on distinctions."""
-        open_tradition = TraditionFactory()
-        BeginningTraditionFactory(beginning=self.beginning, tradition=open_tradition)
-        draft = self._create_draft()
-
-        response = self.client.post(
-            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": open_tradition.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        assert draft.selected_tradition == open_tradition
 
     def test_clear_tradition(self):
         """Setting tradition_id=None clears selected_tradition."""
@@ -393,18 +273,28 @@ class SelectTraditionTests(TestCase):
 
 
 class DistinctionSyncClearsTraditionTests(TestCase):
-    """Tests that removing a required distinction clears the tradition."""
+    """The slate line's carried drawback survives a sync that omits it (#3675).
+
+    There is no more "required distinction" gate to remove a pick from under —
+    ``select_tradition`` no longer gates, and the carried drawback is applied by
+    ``reconcile_offer_picks`` rather than stored independently of the pick. So a
+    sync that omits the carried drawback does nothing (the next reconcile just
+    re-adds it); only clearing the tradition itself removes it.
+    """
 
     @classmethod
     def setUpTestData(cls):
         cls.account = AccountFactory()
         cls.tradition = TraditionFactory()
-        cls.distinction = DistinctionFactory()
+        cls.drawback = DistinctionFactory(name="Self-Taught Drawback", cost_per_rank=-15)
         cls.beginning = BeginningsFactory()
         cls.bt = BeginningTraditionFactory(
             beginning=cls.beginning,
             tradition=cls.tradition,
-            required_distinction=cls.distinction,
+            state=TraditionState.SELF_TAUGHT,
+        )
+        TraditionStateLineFactory(
+            state=TraditionState.SELF_TAUGHT, carries=cls.drawback, entry_line="Self-taught"
         )
 
     def setUp(self):
@@ -420,320 +310,35 @@ class DistinctionSyncClearsTraditionTests(TestCase):
         defaults.update(kwargs)
         return CharacterDraftFactory(**defaults)
 
-    def _add_distinction_to_draft(self, draft, distinction):
-        """Helper to add a distinction entry to draft_data."""
-        distinctions = draft.draft_data.get("distinctions", [])
-        distinctions.append(
-            {
-                "distinction_id": distinction.id,
-                "distinction_name": distinction.name,
-                "distinction_slug": distinction.slug,
-                "category_slug": distinction.category.slug,
-                "rank": 1,
-                "cost": distinction.calculate_total_cost(1),
-                "notes": "",
-            }
+    def test_sync_cannot_shed_the_carried_drawback_only_clearing_the_tradition_can(self):
+        draft = self._create_draft()
+        self.client.post(
+            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
+            {"tradition_id": self.tradition.id},
+            format="json",
         )
-        draft.draft_data["distinctions"] = distinctions
-        draft.save(update_fields=["draft_data"])
+        draft.refresh_from_db()
+        held_ids = {e["distinction_id"] for e in draft.draft_data["distinctions"]}
+        assert self.drawback.id in held_ids
 
-    def test_distinction_sync_removes_required_clears_tradition(self):
-        """Removing the required distinction via sync clears selected_tradition."""
-        draft = self._create_draft(selected_tradition=self.tradition)
-        draft.draft_data["distinctions"] = [
-            {
-                "distinction_id": self.distinction.id,
-                "distinction_name": self.distinction.name,
-                "distinction_slug": self.distinction.slug,
-                "category_slug": self.distinction.category.slug,
-                "rank": 1,
-                "cost": self.distinction.calculate_total_cost(1),
-                "notes": "",
-            }
-        ]
-        draft.save(update_fields=["draft_data"])
-
-        # Sync with an empty list, removing all distinctions
+        # Syncing an empty CHOICE list does nothing: reconcile re-adds the carry.
         response = self.client.put(
             f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
             {"distinctions": []},
             format="json",
         )
-
         assert response.status_code == status.HTTP_200_OK
         draft.refresh_from_db()
-        assert draft.selected_tradition is None
-
-    def test_destroy_required_distinction_clears_tradition(self):
-        """Removing the required distinction via destroy clears selected_tradition."""
-        draft = self._create_draft(selected_tradition=self.tradition)
-        self._add_distinction_to_draft(draft, self.distinction)
-
-        response = self.client.delete(
-            f"/api/distinctions/drafts/{draft.id}/distinctions/{self.distinction.id}/",
-        )
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        draft.refresh_from_db()
-        assert draft.selected_tradition is None
-
-    def test_swap_away_required_distinction_clears_tradition(self):
-        """Swapping away the required distinction clears selected_tradition."""
-        other_distinction = DistinctionFactory()
-        draft = self._create_draft(selected_tradition=self.tradition)
-        self._add_distinction_to_draft(draft, self.distinction)
-
-        response = self.client.post(
-            f"/api/distinctions/drafts/{draft.id}/distinctions/swap/",
-            {
-                "remove_id": self.distinction.id,
-                "add_id": other_distinction.id,
-            },
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        assert draft.selected_tradition is None
-
-    def test_destroy_non_required_distinction_keeps_tradition(self):
-        """Removing a non-required distinction does not clear the tradition."""
-        other_distinction = DistinctionFactory()
-        draft = self._create_draft(selected_tradition=self.tradition)
-        self._add_distinction_to_draft(draft, self.distinction)
-        self._add_distinction_to_draft(draft, other_distinction)
-
-        response = self.client.delete(
-            f"/api/distinctions/drafts/{draft.id}/distinctions/{other_distinction.id}/",
-        )
-
-        assert response.status_code == status.HTTP_204_NO_CONTENT
-        draft.refresh_from_db()
+        held_ids = {e["distinction_id"] for e in draft.draft_data["distinctions"]}
+        assert self.drawback.id in held_ids
         assert draft.selected_tradition == self.tradition
 
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class OrphanedTraditionSelectionTests(TestCase):
-    """End-to-end: the seeded 'Metallic Order' example is gated by the real
-    'Orphaned Tradition' drawback distinction through the real select-tradition
-    endpoint (#2428 Task 5).
-
-    Reuses #2426's ``required_distinction`` gate (already covered abstractly by
-    ``SelectTraditionTests`` above) — this class proves the *seeded* orphaned-
-    tradition wiring itself: ``seed_metallic_order_tradition()`` produces a
-    tradition + BeginningTradition row that actually enforces the gate end to
-    end, not just that the gate mechanism works in the abstract.
-
-    distinctions.distinction/distinctioncategory are content-repo-owned
-    (#2698); ensure_orphaned_tradition_distinction() only invents them under
-    SEED_SAMPLE_CONTENT — this test asserts on the real distinction, so it
-    opts in.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        from world.character_creation.factories import RealmFactory, StartingAreaFactory
-        from world.distinctions.models import Distinction
-        from world.magic.factories import GiftFactory, TraditionGiftGrantFactory
-        from world.seeds.character_creation import seed_metallic_order_tradition
-
-        cls.account = AccountFactory()
-
-        # Unbound + its 5 starter gift grants — the source seed_metallic_order_
-        # tradition() mirrors when granting Metallic Order its own 5 gifts.
-        unbound = TraditionFactory(name="Unbound")
-        for _ in range(5):
-            TraditionGiftGrantFactory(tradition=unbound, gift=GiftFactory())
-
-        # An Arx-realm Beginning — seed_metallic_order_tradition() scopes its
-        # BeginningTradition rows to starting_area__realm__name="Arx".
-        realm = RealmFactory(name="Arx")
-        area = StartingAreaFactory(realm=realm)
-        cls.beginning = BeginningsFactory(starting_area=area)
-
-        cls.tradition = seed_metallic_order_tradition()
-        cls.distinction = Distinction.objects.get(slug="orphaned-tradition")
-
-    def setUp(self):
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.account)
-
-    def _create_draft(self, **kwargs):
-        defaults = {
-            "account": self.account,
-            "selected_beginnings": self.beginning,
-        }
-        defaults.update(kwargs)
-        return CharacterDraftFactory(**defaults)
-
-    def _add_distinction_to_draft(self, draft, distinction):
-        distinctions = draft.draft_data.get("distinctions", [])
-        distinctions.append(
-            {
-                "distinction_id": distinction.id,
-                "distinction_name": distinction.name,
-                "distinction_slug": distinction.slug,
-                "category_slug": distinction.category.slug,
-                "rank": 1,
-                "cost": distinction.calculate_total_cost(1),
-                "notes": "",
-            }
-        )
-        draft.draft_data["distinctions"] = distinctions
-        draft.save(update_fields=["draft_data"])
-
-    def test_seed_wired_up_beginning_tradition_row(self):
-        """Sanity: the seeder actually produced the row this test class exercises."""
-        bt = BeginningTradition.objects.get(beginning=self.beginning, tradition=self.tradition)
-        assert bt.required_distinction_id == self.distinction.id
-
-    def test_not_selectable_without_the_drawback(self):
-        """Metallic Order is refused when the draft lacks the seeded drawback."""
-        draft = self._create_draft()
-
-        response = self.client.post(
+        # Clearing the tradition removes the carried drawback.
+        clear = self.client.post(
             f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": self.tradition.id},
+            {"tradition_id": None},
             format="json",
         )
-
-        assert response.status_code == status.HTTP_400_BAD_REQUEST
-        assert "formal training" in response.data["detail"]
+        assert clear.status_code == status.HTTP_200_OK
         draft.refresh_from_db()
-        assert draft.selected_tradition is None
-
-    def test_selectable_once_the_draft_holds_the_drawback(self):
-        """Metallic Order is selectable once the draft carries the drawback."""
-        draft = self._create_draft()
-        self._add_distinction_to_draft(draft, self.distinction)
-
-        response = self.client.post(
-            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": self.tradition.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        assert draft.selected_tradition == self.tradition
-
-
-@override_settings(SEED_SAMPLE_CONTENT=True)
-class UnboundTraditionSelectionTests(TestCase):
-    """End-to-end: the seeded Unbound tradition carries its own "Unbound"
-    drawback distinction, auto-added by the real select-tradition endpoint
-    (#2442).
-
-    Reuses #2426's ``BeginningTradition.required_distinction`` gate, now wired
-    onto Unbound's own seeded row (``seed_beginning_traditions()``,
-    ``required_distinction=<Unbound drawback>`` — was ``None`` pre-#2442).
-
-    **CG-UX finding (per the #2442 task brief's "verify the UX" instruction):**
-    the generic gate (``OrphanedTraditionSelectionTests`` above) rejects a
-    selection when the draft doesn't already hold the required distinction —
-    that's correct and unchanged for Orphaned Tradition/Metallic Order, a
-    deliberate story pick (#2428 Task 5). Naively reusing that same "requires,
-    never auto-adds" behavior for Unbound would have been a real CG-completion
-    regression: Unbound is CG's tradition-agnostic *default*, seeded with zero
-    gate for every Beginning since #2426 (see
-    ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-    .test_tradition_step_completable_for_every_seeded_beginning``, which drives
-    the real endpoint with a draft holding NO distinctions at all and asserts
-    200). Silently making Unbound require a distinction the player has no
-    reason to know about would deadlock CG for anyone who doesn't take it.
-
-    So ``select_tradition`` special-cases exactly the "Unbound" drawback slug
-    (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``): missing → auto-added to the draft's
-    ``draft_data["distinctions"]`` (via the same ``build_distinction_entry``
-    shape the real distinctions-add endpoint writes) rather than rejected.
-    Every other ``required_distinction`` (Orphaned Tradition included) keeps the
-    original "must already hold it" behavior — this is a one-off exception, not
-    a general auto-attach.
-    """
-
-    @classmethod
-    def setUpTestData(cls):
-        from world.distinctions.models import Distinction
-        from world.seeds.character_creation import seed_beginning_traditions
-
-        cls.account = AccountFactory()
-        cls.unbound = TraditionFactory(name="Unbound")
-        cls.beginning = BeginningsFactory()
-
-        seed_beginning_traditions()
-        cls.distinction = Distinction.objects.get(slug="unbound")
-
-    def setUp(self):
-        self.client = APIClient()
-        self.client.force_authenticate(user=self.account)
-
-    def _create_draft(self, **kwargs):
-        defaults = {
-            "account": self.account,
-            "selected_beginnings": self.beginning,
-        }
-        defaults.update(kwargs)
-        return CharacterDraftFactory(**defaults)
-
-    def _add_distinction_to_draft(self, draft, distinction):
-        distinctions = draft.draft_data.get("distinctions", [])
-        distinctions.append(
-            {
-                "distinction_id": distinction.id,
-                "distinction_name": distinction.name,
-                "distinction_slug": distinction.slug,
-                "category_slug": distinction.category.slug,
-                "rank": 1,
-                "cost": distinction.calculate_total_cost(1),
-                "notes": "",
-            }
-        )
-        draft.draft_data["distinctions"] = distinctions
-        draft.save(update_fields=["draft_data"])
-
-    def test_seed_wires_required_distinction(self):
-        """Sanity: seed_beginning_traditions() now gates Unbound on its own drawback."""
-        bt = BeginningTradition.objects.get(beginning=self.beginning, tradition=self.unbound)
-        assert bt.required_distinction_id == self.distinction.id
-
-    def test_selectable_without_the_drawback_and_auto_adds_it(self):
-        """Unbound stays selectable with zero manual steps (no CG regression) —
-        the drawback is auto-added to the draft rather than rejected."""
-        draft = self._create_draft()
         assert draft.draft_data.get("distinctions", []) == []
-
-        response = self.client.post(
-            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": self.unbound.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        assert draft.selected_tradition == self.unbound
-        distinction_ids = {
-            entry.get("distinction_id") for entry in draft.draft_data.get("distinctions", [])
-        }
-        assert self.distinction.id in distinction_ids
-
-    def test_selectable_once_the_draft_already_holds_the_drawback(self):
-        """A draft that already holds the drawback selects Unbound without
-        duplicating the entry."""
-        draft = self._create_draft()
-        self._add_distinction_to_draft(draft, self.distinction)
-
-        response = self.client.post(
-            f"/api/character-creation/drafts/{draft.id}/select-tradition/",
-            {"tradition_id": self.unbound.id},
-            format="json",
-        )
-
-        assert response.status_code == status.HTTP_200_OK
-        draft.refresh_from_db()
-        assert draft.selected_tradition == self.unbound
-        matching = [
-            entry
-            for entry in draft.draft_data.get("distinctions", [])
-            if entry.get("distinction_id") == self.distinction.id
-        ]
-        assert len(matching) == 1
