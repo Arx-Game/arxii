@@ -189,3 +189,74 @@ class BuilderSaveTest(BuilderTestCase):
         )
         assert resp.status_code == 200  # re-rendered with the setup guidance
         assert OriginTemplateSlotChoice.objects.get(pk=self.livery.pk).cg_point_cost == 0
+
+
+class BuilderLiveTest(BuilderTestCase):
+    def test_rail_counts_and_checks(self):
+        from web.admin.upbringing_builder import live
+
+        counts = live.rail_counts(self.template)
+        assert counts["questions"] == 1
+        assert counts["groups_asked_about"] == 1
+        assert counts["answers"] == 1
+        panel = live.for_template(self.template, self.author)
+        assert [org.name for org in panel.groups_by_slot[self.q1.pk]] == ["House Orisant"]
+        assert any(kind == "ok" for kind, _ in panel.checks)
+
+    def test_inactive_granted_distinction_is_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        inactive = DistinctionFactory(name="Faded Claim", is_active=False)
+        OriginTemplateSlotChoiceFactory(
+            slot=self.q1, name="Old promise", grants_distinction=inactive
+        )
+        panel = live.for_template(self.template, self.author)
+        assert any(kind == "warn" and "Faded Claim" in text for kind, text in panel.checks)
+
+    def test_group_question_with_no_anchor_source_is_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        OriginTemplateSlotFactory(
+            template=self.template,
+            sort_order=1,
+            kind=QuestionKind.GROUP,
+            anchor_source="",
+            name="No source",
+        )
+        panel = live.for_template(self.template, self.author)
+        assert any(kind == "warn" and "No source" in text for kind, text in panel.checks)
+
+    def test_shown_for_choices_without_follow_up_is_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        branchy = OriginTemplateSlotFactory(
+            template=self.template,
+            sort_order=1,
+            kind=QuestionKind.TEXT,
+            name="Branchy",
+        )
+        branchy.shown_for_choices.add(self.livery)
+        panel = live.for_template(self.template, self.author)
+        assert any(kind == "warn" and "Branchy" in text for kind, text in panel.checks)
+
+    def test_open_places_unavailable_on_error(self):
+        from unittest.mock import patch
+
+        from web.admin.upbringing_builder import live
+
+        with patch(
+            "web.admin.upbringing_builder.live.reachable_vacancies",
+            side_effect=AttributeError("boom"),
+        ):
+            panel = live.for_template(self.template, self.author)
+        assert panel.open_places == live.OPEN_PLACES_UNAVAILABLE
+
+
+class BuilderPreviewTest(BuilderTestCase):
+    def test_preview_renders_the_question_and_first_group(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder_preview", args=[self.template.pk]))
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        assert "House" in body
+        assert "House Orisant" in body

@@ -55,7 +55,11 @@ from web.admin.tuning.views import (
     tuning_simulation_fragment,
     tuning_techniques_fragment,
 )
-from web.admin.upbringing_builder.views import upbringing_builder, upbringing_builder_review
+from web.admin.upbringing_builder.views import (
+    upbringing_builder,
+    upbringing_builder_preview,
+    upbringing_builder_review,
+)
 from web.admin.views import (
     export_data,
     export_preview,
@@ -178,6 +182,11 @@ urlpatterns = [
         "_upbringing_builder/<int:pk>/review/",
         upbringing_builder_review,
         name="admin_upbringing_builder_review",
+    ),
+    path(
+        "_upbringing_builder/<int:pk>/preview/",
+        upbringing_builder_preview,
+        name="admin_upbringing_builder_preview",
     ),
     path("", arx_admin_site.urls),
 ]

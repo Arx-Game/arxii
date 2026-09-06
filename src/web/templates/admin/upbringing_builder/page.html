@@ -63,17 +63,7 @@
     <button type="submit">Mark reviewed</button>
   </form>
 
-  <div class="tuning-panel" id="upbringing-credit-box">
-    <h2>Credit</h2>
-    <p>Written by:
-      {% if template.written_by %}{{ template.written_by.name }} on {{ template.written_on }}
-      {% else %}Not yet written{% endif %}
-    </p>
-    <p>Reviewed by:
-      {% if template.reviewed_by %}{{ template.reviewed_by.name }} on {{ template.reviewed_on }}
-      {% else %}Not yet reviewed{% endif %}
-    </p>
-  </div>
+  {% include "admin/upbringing_builder/_rail.html" %}
   {% endif %}
 
   {% endif %}
@@ -93,6 +83,18 @@
     return index;
   }
 
+  // Django's own admin/js/autocomplete.js only initializes select2 on load and
+  // on this event - a row cloned client-side otherwise carries a plain,
+  // uninitialized <select> for every autocomplete widget it contains (#3660
+  // review round 1). Dispatching this on the inserted element itself, with
+  // bubbles set, matches what autocomplete.js's document-level listener reads
+  // off event.target ($(event.target).find('.admin-autocomplete')).
+  function announceFormsetAdded(prefix, row) {
+    row.dispatchEvent(
+      new CustomEvent("formset:added", { bubbles: true, detail: { formsetName: prefix } })
+    );
+  }
+
   var addQuestionBtn = document.getElementById("add-question-btn");
   if (addQuestionBtn) {
     addQuestionBtn.addEventListener("click", function () {
@@ -103,6 +105,7 @@
       wrapper.className = "module question-module";
       wrapper.innerHTML = html;
       document.getElementById("questions-list").appendChild(wrapper);
+      announceFormsetAdded("q", wrapper);
     });
   }
 
@@ -114,7 +117,9 @@
     var html = tpl.innerHTML.split("__prefix__").join(String(index));
     var rowParent = document.createElement("tbody");
     rowParent.innerHTML = html;
-    document.getElementById(btn.dataset.target).appendChild(rowParent.firstElementChild);
+    var row = rowParent.firstElementChild;
+    document.getElementById(btn.dataset.target).appendChild(row);
+    announceFormsetAdded(btn.dataset.prefix, row);
   });
 })();
 </script>

@@ -61,7 +61,9 @@
         {% if matched is not None %}
         <p class="live-line">
           Matches {{ matched|length }} group{{ matched|length|pluralize }} today:
-          {% for org in matched %}{{ org.name }}{% if not forloop.last %}, {% endif %}{% endfor %}
+          {% for org in matched %}
+          <a href="{% url 'admin:arxii_organization_change' org.pk %}">{{ org.name }}</a>{% if not forloop.last %}, {% endif %}
+          {% endfor %}
         </p>
         {% endif %}
         {% endwith %}

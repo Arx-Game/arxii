@@ -38,6 +38,7 @@ from web.admin.upbringing_builder.forms import (
 )
 from world.character_creation.constants import QuestionKind
 from world.character_creation.models import Beginnings, OriginTemplate, OriginTemplateSlot
+from world.character_creation.serializers import CGOriginTemplateSerializer
 
 #: Only these question kinds carry priced answers (Ruling G, #3660 review): the
 #: template only ever renders an ``_answers.html`` block for PICK/GROUP
@@ -164,6 +165,23 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
     answers = _answer_formsets(None, template) if template.pk else {}
     return _render_page(
         request, template, _RouteForms(form, questions, answers), needs_setup=contributor is None
+    )
+
+
+@superuser_required
+def upbringing_builder_preview(request: HttpRequest, pk: int) -> HttpResponse:
+    """Read-only: the questionnaire the way ``CGOriginTemplateSerializer`` hands it to a player.
+
+    Renders the same payload the guided flow's API call returns, picking the
+    first offered group of every GROUP question's list for display - a real
+    draft would let the player pick among them, but this page has none.
+    """
+    template = get_object_or_404(OriginTemplate, pk=pk)
+    data = CGOriginTemplateSerializer(template, context={"request": request}).data
+    return render(
+        request,
+        "admin/upbringing_builder/_preview.html",
+        {"template": template, "origin": data},
     )
 
 

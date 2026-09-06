@@ -1,0 +1,69 @@
+{% load i18n %}
+<div class="tuning-panel" id="upbringing-rail">
+  <h2>Live</h2>
+
+  <div class="stat-tiles">
+    <div class="stat-tile">
+      <span class="stat-value">{{ rail.questions }}</span>
+      <span class="stat-label">Questions</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">{{ rail.groups_asked_about }}</span>
+      <span class="stat-label">Groups asked about</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">{{ rail.people_named }}</span>
+      <span class="stat-label">People named</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">{{ rail.answers }}</span>
+      <span class="stat-label">Answers</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">{{ live.total_placeholders }}</span>
+      <span class="stat-label">Placeholders</span>
+    </div>
+    <div class="stat-tile">
+      <span class="stat-value">{{ live.open_places }}</span>
+      <span class="stat-label">Open places today</span>
+    </div>
+  </div>
+
+  <p>Distinctions used:
+    {% if rail.distinctions_used %}{{ rail.distinctions_used }}{% else %}None yet{% endif %}
+  </p>
+  <p>
+    Cheapest complete answer: {{ rail.cheapest_complete_answer }} point{{ rail.cheapest_complete_answer|pluralize }}.
+    Dearest: {{ rail.dearest_complete_answer }} point{{ rail.dearest_complete_answer|pluralize }}.
+    Largest refund: {{ rail.largest_refund }} point{{ rail.largest_refund|pluralize }}.
+  </p>
+
+  <h3>Checks</h3>
+  {% if live.checks %}
+  <ul class="upbringing-checks">
+    {% for kind, text in live.checks %}
+    <li class="upbringing-check upbringing-check--{{ kind }}">
+      {% if kind == "ok" %}OK{% else %}Warn{% endif %}: {{ text }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Nothing to flag yet.</p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'admin_upbringing_builder_preview' template.pk %}" target="_blank" rel="noopener">
+      Preview as the player sees it
+    </a>
+  </p>
+
+  <h3>Credit</h3>
+  <p>Written by:
+    {% if template.written_by %}{{ template.written_by.name }} on {{ template.written_on }}
+    {% else %}Not yet written{% endif %}
+  </p>
+  <p>Reviewed by:
+    {% if template.reviewed_by %}{{ template.reviewed_by.name }} on {{ template.reviewed_on }}
+    {% else %}Not yet reviewed{% endif %}
+  </p>
+</div>
