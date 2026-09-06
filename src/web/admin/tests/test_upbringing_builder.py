@@ -10,6 +10,7 @@ from world.character_creation.factories import (
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
+    OriginTemplateSlotFactory,
 )
 from world.character_creation.models import (
     OriginTemplate,
@@ -56,6 +57,14 @@ class BuilderGetTest(BuilderTestCase):
         self.client.force_login(self.unlinked)
         resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
         assert "link a contributor" in resp.content.decode().lower()
+
+    def test_add_answer_button_clones_the_formsets_empty_form(self):
+        """Ruling H: "Add answer" is a client-side clone, not an HTMX round trip."""
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert f"a{self.q1.pk}-__prefix__-name" in body
+        assert "Add answer" in body
 
 
 class BuilderSaveTest(BuilderTestCase):
@@ -120,6 +129,50 @@ class BuilderSaveTest(BuilderTestCase):
         assert choice.grants_distinction == kept
         assert choice.written_by == self.writer
         assert OriginTemplateSlot.objects.get(pk=self.q1.pk).written_by == self.writer
+
+    def test_save_with_a_text_question_succeeds(self):
+        """Ruling G: a TEXT/PERSON question has no answers formset to bind."""
+        self.client.force_login(self.author)
+        text_q = OriginTemplateSlotFactory(
+            template=self.template, sort_order=1, kind=QuestionKind.TEXT
+        )
+        data = self._post_data(
+            **{
+                "q-TOTAL_FORMS": "2",
+                "q-INITIAL_FORMS": "2",
+                "q-1-id": str(text_q.pk),
+                "q-1-name": text_q.name,
+                "q-1-prompt": "Where did you grow up",
+                "q-1-example": "",
+                "q-1-sort_order": "1",
+                "q-1-is_required": "on",
+                "q-1-applies_to": "any",
+                "q-1-kind": QuestionKind.TEXT,
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 302
+        assert OriginTemplateSlot.objects.get(pk=text_q.pk).prompt == "Where did you grow up"
+
+    def test_add_answer_row_saves_a_second_choice(self):
+        """Ruling H: the client-cloned second row posts and saves like any other."""
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                f"a{self.q1.pk}-TOTAL_FORMS": "2",
+                f"a{self.q1.pk}-1-name": "Cold shoulder",
+                f"a{self.q1.pk}-1-description": "",
+                f"a{self.q1.pk}-1-cg_point_cost": "0",
+                f"a{self.q1.pk}-1-cost_per_influence": "0",
+                f"a{self.q1.pk}-1-reputation_seed": "0",
+                f"a{self.q1.pk}-1-trust_required": "0",
+                f"a{self.q1.pk}-1-is_active": "on",
+                f"a{self.q1.pk}-1-sort_order": "1",
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 302
+        assert OriginTemplateSlotChoice.objects.filter(slot=self.q1).count() == 2
 
     def test_review_stamps_review_only(self):
         self.client.force_login(self.author)

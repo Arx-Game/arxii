@@ -138,3 +138,21 @@ class ConnectionChoiceSchemaTest(TestCase):
         choice = OriginTemplateSlotChoiceFactory.build(slot=slot, reputation_seed=100)
         with self.assertRaises(ValidationError):
             choice.full_clean()
+
+    def test_answer_on_a_text_question_is_rejected(self):
+        """Carry-over from Task 3's review, Builder review Finding 3 (#3660)."""
+        slot = OriginTemplateSlotFactory(kind=QuestionKind.TEXT)
+        choice = OriginTemplateSlotChoiceFactory.build(slot=slot)
+        with self.assertRaises(ValidationError):
+            choice.full_clean()
+
+    def test_answer_on_a_person_question_is_rejected(self):
+        slot = OriginTemplateSlotFactory(kind=QuestionKind.PERSON)
+        choice = OriginTemplateSlotChoiceFactory.build(slot=slot)
+        with self.assertRaises(ValidationError):
+            choice.full_clean()
+
+    def test_answer_on_a_pick_question_is_allowed(self):
+        slot = OriginTemplateSlotFactory(kind=QuestionKind.PICK, allows_text=False)
+        choice = OriginTemplateSlotChoiceFactory.build(slot=slot)
+        choice.full_clean()

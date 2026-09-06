@@ -146,8 +146,9 @@ def answer_formset_for(slot: OriginTemplateSlot, data: QueryDict | None = None) 
     """One ``AnswerFormSet`` instance for ``slot``, prefixed ``a<slot.pk>``.
 
     The one place the ``a<slot.pk>`` prefix convention lives: every caller
-    that needs a slot's answers formset (the page's per-question section, the
-    HTMX "add answer" fragment, and the save view's POST binding) goes
-    through this rather than re-deriving the prefix.
+    that needs a slot's answers formset (the page's per-question section and
+    the save view's POST binding) goes through this rather than re-deriving
+    the prefix. "Add answer" itself is a client-side clone of this formset's
+    own empty form, not a server round trip (#3660 review Ruling H).
     """
     return AnswerFormSet(data, instance=slot, prefix=f"a{slot.pk}")

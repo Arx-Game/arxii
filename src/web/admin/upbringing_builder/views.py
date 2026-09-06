@@ -1,7 +1,10 @@
 """The Upbringing Builder (#3660): author a whole route on one admin page.
 
 Pattern: the Authoring Workbench (`web.admin.authoring.views`): `superuser_required`,
-the contributor gate, plain forms, HTMX fragments, `base_site.html`.
+the contributor gate, plain forms, `base_site.html`. Unlike the Workbench, "Add
+question" and "Add answer" are client-side formset clones (see `page.html`'s
+inline script), not HTMX fragments - there was never a saved row to fetch a
+fresh fragment for until the whole route is saved (#3660 review Ruling H).
 
 A "route" is one Upbringing (`OriginTemplate`) plus every question
 (`OriginTemplateSlot`) and answer (`OriginTemplateSlotChoice`) hanging off it.
@@ -33,7 +36,16 @@ from web.admin.upbringing_builder.forms import (
     UpbringingForm,
     answer_formset_for,
 )
+from world.character_creation.constants import QuestionKind
 from world.character_creation.models import Beginnings, OriginTemplate, OriginTemplateSlot
+
+#: Only these question kinds carry priced answers (Ruling G, #3660 review): the
+#: template only ever renders an ``_answers.html`` block for PICK/GROUP
+#: (`_question.html`), so binding a formset for every saved question here -
+#: including TEXT/PERSON, which the page never posts a management form for -
+#: made ``is_valid()`` fail on the missing ``a<pk>-TOTAL_FORMS`` key with no
+#: visible error the moment a route carried a TEXT or PERSON question.
+_ANSWERABLE_KINDS = (QuestionKind.PICK, QuestionKind.GROUP)
 
 #: Fixed copy shown once, above the answers formsets, on every Upbringing
 #: (#3660 amendment: "every help line on the page is fixed copy identical for
@@ -44,9 +56,18 @@ NEW_QUESTION_ANSWERS_HELP = "Save the route once to add answers to a new questio
 def _answer_formsets(
     request: HttpRequest | None, template: OriginTemplate
 ) -> dict[int, AnswerFormSet]:
-    """One bound (POST) or unbound answers formset per saved question, prefix ``a<slot pk>``."""
+    """One bound (POST) or unbound answers formset per saved PICK/GROUP question.
+
+    Scoped to ``_ANSWERABLE_KINDS`` so this always matches what
+    ``_question.html`` actually renders a formset for - a TEXT or PERSON
+    question has no answers block on the page and so never posts its
+    management form.
+    """
     out: dict[int, AnswerFormSet] = {}
-    for slot in OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "id"):
+    slots = OriginTemplateSlot.objects.filter(
+        template=template, kind__in=_ANSWERABLE_KINDS
+    ).order_by("sort_order", "id")
+    for slot in slots:
         data = request.POST if request is not None and request.method == "POST" else None
         out[slot.pk] = answer_formset_for(slot, data)
     return out
@@ -158,15 +179,3 @@ def upbringing_builder_review(request: HttpRequest, pk: int) -> HttpResponse:
         stamp_reviewed(template, contributor)
         messages.success(request, "Marked reviewed.")
     return redirect(reverse("admin_upbringing_builder", args=[pk]))
-
-
-@superuser_required
-def upbringing_builder_answers(request: HttpRequest, pk: int, slot_pk: int) -> HttpResponse:
-    """HTMX fragment: the answers formset for one saved question, with one extra blank row."""
-    slot = get_object_or_404(OriginTemplateSlot, pk=slot_pk, template_id=pk)
-    formset = answer_formset_for(slot)
-    return render(
-        request,
-        "admin/upbringing_builder/_answers.html",
-        {"slot": slot, "formset": formset, "extra": True},
-    )

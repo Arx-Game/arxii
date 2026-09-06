@@ -1,12 +1,11 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static %}
+{% load i18n %}
 
 {% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
 {{ media }}
-<script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -21,7 +20,7 @@
 
 {% block content %}
 {% include "admin/tuning/_panel_css.html" %}
-<div id="upbringing-builder-root" hx-headers='{"x-csrftoken": "{{ csrf_token }}"}'>
+<div id="upbringing-builder-root">
   <h1>Upbringing Builder</h1>
   <p>Author one Upbringing here, with every question and answer that hangs off it.</p>
 
@@ -40,6 +39,9 @@
     </div>
 
     {{ questions.management_form }}
+    {% if questions.non_form_errors %}
+    <p class="errornote">{{ questions.non_form_errors }}</p>
+    {% endif %}
     <div id="questions-list">
       {% for question_form in questions.forms %}
         {% include "admin/upbringing_builder/_question.html" %}
@@ -79,18 +81,40 @@
 
 <script>
 (function () {
-  var addBtn = document.getElementById("add-question-btn");
-  if (!addBtn) { return; }
-  addBtn.addEventListener("click", function () {
-    var totalInput = document.getElementById("id_q-TOTAL_FORMS");
+  // The one place both "Add question" and every question's "Add answer"
+  // button clone a formset row: bump that formset's TOTAL_FORMS, then
+  // swap __prefix__ in its <template> for the fresh index (#3660 review
+  // Ruling H - "Add answer" used to hx-get a fragment from a formset fixed
+  // at extra=0, which just re-rendered the same rows and did nothing).
+  function nextFormIndex(prefix) {
+    var totalInput = document.getElementById("id_" + prefix + "-TOTAL_FORMS");
     var index = parseInt(totalInput.value, 10);
-    var tpl = document.getElementById("empty-question-template");
-    var html = tpl.innerHTML.split("__prefix__").join(String(index));
-    var wrapper = document.createElement("div");
-    wrapper.className = "module question-module";
-    wrapper.innerHTML = html;
-    document.getElementById("questions-list").appendChild(wrapper);
     totalInput.value = String(index + 1);
+    return index;
+  }
+
+  var addQuestionBtn = document.getElementById("add-question-btn");
+  if (addQuestionBtn) {
+    addQuestionBtn.addEventListener("click", function () {
+      var index = nextFormIndex("q");
+      var tpl = document.getElementById("empty-question-template");
+      var html = tpl.innerHTML.split("__prefix__").join(String(index));
+      var wrapper = document.createElement("div");
+      wrapper.className = "module question-module";
+      wrapper.innerHTML = html;
+      document.getElementById("questions-list").appendChild(wrapper);
+    });
+  }
+
+  document.addEventListener("click", function (evt) {
+    var btn = evt.target.closest(".add-answer-btn");
+    if (!btn) { return; }
+    var index = nextFormIndex(btn.dataset.prefix);
+    var tpl = document.getElementById(btn.dataset.template);
+    var html = tpl.innerHTML.split("__prefix__").join(String(index));
+    var rowParent = document.createElement("tbody");
+    rowParent.innerHTML = html;
+    document.getElementById(btn.dataset.target).appendChild(rowParent.firstElementChild);
   });
 })();
 </script>

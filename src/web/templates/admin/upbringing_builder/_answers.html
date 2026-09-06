@@ -19,7 +19,7 @@
         <th>Delete</th>
       </tr>
     </thead>
-    <tbody>
+    <tbody id="answers-body-{{ slot.pk }}">
       {% for answer_form in formset.forms %}
       <tr>
         <td>
@@ -42,9 +42,24 @@
       {% endfor %}
     </tbody>
   </table>
+  <template id="empty-answer-template-{{ slot.pk }}">
+    <tr>
+      <td>{{ formset.empty_form.name }}</td>
+      <td>{{ formset.empty_form.description }}</td>
+      <td>{{ formset.empty_form.cg_point_cost }}</td>
+      <td>{{ formset.empty_form.cost_per_influence }}</td>
+      <td>{{ formset.empty_form.grants_distinction }}</td>
+      <td>{{ formset.empty_form.reputation_seed }}</td>
+      <td>{{ formset.empty_form.trust_required }}</td>
+      <td>{{ formset.empty_form.is_active }}</td>
+      <td>{{ formset.empty_form.sort_order }}</td>
+      <td></td>
+    </tr>
+  </template>
   <button type="button" class="add-answer-btn"
-          hx-get="{% url 'admin_upbringing_builder_answers' slot.template_id slot.pk %}"
-          hx-target="#answers-{{ slot.pk }}" hx-swap="outerHTML">
+          data-prefix="{{ formset.prefix }}"
+          data-target="answers-body-{{ slot.pk }}"
+          data-template="empty-answer-template-{{ slot.pk }}">
     Add answer
   </button>
 </div>
