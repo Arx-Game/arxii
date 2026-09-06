@@ -601,3 +601,90 @@ class BuilderDemoFidelityTest(BuilderTestCase):
         wanted = ("This route", "Checks", "Credit", "Preview")
         order = [body.index(f"<h2>{name}</h2>") for name in wanted]
         assert order == sorted(order), f"the rail's panels are out of the demo's order {wanted}"
+
+
+class BuilderFieldWidthTest(BuilderStylingTest):
+    """Fields must be sized for the column they sit in (#3673).
+
+    The Builder runs a ~1050px main column beside the rail, and admin's own
+    widths were drawn for a narrow change form: Name came out 184px and cut off
+    the template name it is a natural key for, Card text 309px for the longest
+    prose on the page, Claimable kinds 90px. Measured in a browser after the
+    fix: Name 622px, Card text 846px, Claimable kinds 512px, Point cost and
+    Trust required side by side (both at y=786) instead of stacked with the
+    first one's help line pressed against the second one's label.
+
+    No test here runs a browser, so none of them can measure a rendered width.
+    Two things they can ask, and both fail against the state that shipped: does
+    a rule sizing each field kind reach the page at all, and does the page still
+    render that field where the rule's selector looks for it. The second is the
+    one that rots quietly - a Django release or a fieldset change moves the
+    input out of ``div.flex-container`` and every width silently reverts.
+    """
+
+    #: id -> the CSS the sheet must carry for that field's kind. A field whose
+    #: rule is gone falls back to admin's default width with nothing to notice.
+    SIZED_FIELDS = {
+        "id_name": '.form-row .flex-container > input[type="text"]',
+        "id_frame_narrative": ".form-row .flex-container > textarea",
+        "id_claimable_kinds": (
+            ".form-row .flex-container > select[multiple]:not(.admin-autocomplete)"
+        ),
+        "id_q-0-prompt": ".form-row .flex-container > textarea",
+    }
+
+    #: The row that holds two or three fields. Admin sizes those boxes to their
+    #: content, which put Point cost's help line directly above Trust required's
+    #: label; a flex basis gives each field a column of its own.
+    MULTILINE_RULE = ".form-row .form-multiline > div"
+
+    def _parent_classes(self, body: str, element_id: str) -> list[list[str]]:
+        """Class lists of every open ancestor of ``element_id``, outermost first."""
+        from html.parser import HTMLParser
+
+        void = {"input", "br", "img", "hr", "meta", "link", "source", "col"}
+
+        class _Ancestry(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=True)
+                self.stack: list[list[str]] = []
+                self.found: list[list[str]] | None = None
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if attrs.get("id") == element_id and self.found is None:
+                    self.found = list(self.stack)
+                if tag not in void:
+                    self.stack.append((attrs.get("class") or "").split())
+
+            def handle_endtag(self, tag):
+                if tag not in void and self.stack:
+                    self.stack.pop()
+
+        parser = _Ancestry()
+        parser.feed(body)
+        assert parser.found is not None, f"#{element_id} is not on the page at all"
+        return parser.found
+
+    def test_every_widened_field_sits_where_its_rule_looks_for_it(self):
+        body = self._body()
+        for element_id in self.SIZED_FIELDS:
+            ancestors = self._parent_classes(body, element_id)
+            parent = ancestors[-1] if ancestors else []
+            assert "flex-container" in parent, (
+                f"#{element_id} is not a direct child of div.flex-container "
+                f"(parent classes: {parent}); its width rule matches nothing and the "
+                f"field reverts to admin's default."
+            )
+            assert any("form-row" in classes for classes in ancestors), (
+                f"#{element_id} is not inside a div.form-row; its width rule matches nothing."
+            )
+
+    def test_a_width_rule_for_every_field_kind_reaches_the_page(self):
+        css = self._reachable_css(self._body())
+        wanted = set(self.SIZED_FIELDS.values()) | {self.MULTILINE_RULE}
+        missing = sorted(rule for rule in wanted if rule not in css)
+        assert not missing, (
+            f"no width rule reaches the page for: {missing}; those fields render at "
+            f"admin's default width in this page's much wider column."
+        )
