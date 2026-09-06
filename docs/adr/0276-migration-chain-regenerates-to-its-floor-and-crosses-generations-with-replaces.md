@@ -59,7 +59,15 @@ minutes (it now records wall time and emits a warning past that), or before any
 release that will replay on a fresh environment. A regeneration PR is
 regenerated on the tip of `main` in a fresh worktree before it is enqueued, never
 rebased: a migration that lands after the branch was cut would depend on a node
-the branch deleted. Its review unit is the inliner's `--check` counts, the three
+the branch deleted. **That tip must already be deployed to production** (the
+last successful "Stand up infra" run's SHA is at or past it): the snapshot of
+the outgoing generation is every migration on `main` at the cut, and any of
+them production has not yet recorded leaves it partially recorded, which the
+guard refuses. Generation 2 was cut on 2026-09-06 from a tip one migration past
+production (`0228_codex_entry_filing`, #3651, merged after the last deploy), and
+the next deploy failed at `migrate` with `227 of 228`. If `main` is ahead of
+production by a migration, press the button first, then cut. Its review unit is
+the inliner's `--check` counts, the three
 tails read in full, the drop report, and the `just verify-regeneration` output,
 not the hundred generated chunk files.
 
@@ -126,6 +134,12 @@ models), which every schema-construction path pays and this ADR does not touch.
 - A dev database behind the old tip must `migrate` to it before pulling a
   regeneration; the guard says so and names the commit to visit
   (`ARX_SKIP_GENERATION_GUARD=1` bypasses it for someone who knows better).
+  Production behind the old tip has no shell to do that from, so the deploy
+  button carries a `ref` input: press it once with the named commit, once with
+  `main` (`infra/README.md`, "Recovering a guard-refused database"). The bypass
+  is not a recovery there: with one old name missing, the loader drops the one
+  generated file whose slice contains it and applies nothing, exit 0, and the
+  missing migration's tables never exist.
 - Generation-1 rows stay in every `django_migrations` forever; `migrate --prune`
   exists if anyone ever wants them gone. They are harmless.
 - `GENERATIONS` in `_generations.py` grows by one list per regeneration and is

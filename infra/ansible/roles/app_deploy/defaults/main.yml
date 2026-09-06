@@ -26,7 +26,14 @@ app_migrate_async_timeout: 10800
 # Ansible reports that as UNREACHABLE, not as a failed task — see the
 # GIT_TERMINAL_PROMPT guard on the checkout task.
 app_repo: "https://github.com/Arx-Game/arxii.git"  # public; no credential needed
-app_ref: main                            # release tag/ref to deploy
+# Release ref to deploy: branch, tag or commit SHA. The button overrides it
+# through standup.yml's `ref` input (standup.sh writes it into the
+# generated group_vars, shape-checked to one path segment because it also
+# names /opt/arxii/releases/<ref>). Anything but main is for recovering a
+# database the migration generation guard refused (ADR-0276) or rolling
+# back to a tag; a SHA forgoes the shallow clone (Ansible only shallow-
+# clones branches and tags) and warns, which is harmless.
+app_ref: main
 app_service: arxii
 # Evennia is a forking Twisted daemon; it writes its PID file relative to
 # the gamedir (server/server.pid), NOT relative to app_current.
