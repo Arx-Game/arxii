@@ -5838,17 +5838,13 @@ def _emit_companion_fall(opponent: CombatOpponent) -> None:
     CHARACTER_KILLED: defeat is not death (#1873 resolves death at encounter end),
     and the KILLED subscribers (asset loss, death deferral) are for people. Both
     events reach ``relationship_spike_handler`` and dedup to one ALLY_FALLEN.
+    The "is this ally someone's companion" predicate now lives in
+    ``world.companions.services.resolve_bonded_companion`` (#3652), shared with
+    the encounter/battle defeat hooks so it is not spelled a third time.
     """
-    if opponent.allegiance != CombatAllegiance.ALLY or opponent.summoned_by_id is None:
-        return
-    if opponent.objectdb_id is None:
-        return
-    from world.companions.models import Companion  # noqa: PLC0415
+    from world.companions.services import resolve_bonded_companion  # noqa: PLC0415
 
-    is_companion = Companion.objects.filter(
-        objectdb_id=opponent.objectdb_id, released_at__isnull=True
-    ).exists()
-    if not is_companion:
+    if resolve_bonded_companion(opponent) is None:
         return
     room = opponent.encounter.room
     if room is None:

@@ -415,6 +415,72 @@ def _apply_savaged(companion: Companion) -> None:
     apply_condition(companion.objectdb, template)
 
 
+def resolve_bonded_companion(opponent: CombatOpponent) -> Companion | None:
+    """The live, unreleased Companion behind an ALLY CombatOpponent, if any.
+
+    The one place that answers "is this ally someone's companion." A plain
+    summon, a persona-backed NPC and every ENEMY resolve to None. Extracted
+    from _emit_companion_fall (#3575), whose predicate this is, so the defeat
+    hook (#3652) does not spell it a third time.
+    """
+    from world.combat.constants import CombatAllegiance  # noqa: PLC0415
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    if opponent.allegiance != CombatAllegiance.ALLY or opponent.summoned_by_id is None:
+        return None
+    if opponent.objectdb_id is None:
+        return None
+    return Companion.objects.filter(
+        objectdb_id=opponent.objectdb_id, released_at__isnull=True
+    ).first()
+
+
+def narrate_companion_loss(companion_name: str, scene) -> None:
+    """Tell the scene that a companion died.
+
+    Takes a scene rather than an encounter because both completion seams use
+    it and broadcast_action_outcome is encounter-bound. Persisted in the scene
+    log, so the owner can re-read it after the fight, and broadcast live to
+    the scene's room so the loss lands as a moment rather than something read
+    back later. Mirrors the non-concealed branch of broadcast_action_outcome
+    (there is no concealment concept here - a companion dying is public).
+    When scene or scene.location is None, the line is still persisted but not
+    broadcast rather than raising.
+    """
+    if scene is None:
+        return
+
+    from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        create_interaction,
+    )
+
+    narrator = get_or_create_narrator_persona()
+    interaction = create_interaction(
+        persona=narrator,
+        content=f"{companion_name} does not get up.",
+        mode=InteractionMode.OUTCOME,
+        scene=scene,
+    )
+
+    room = scene.location
+    if room is None:
+        return
+
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+    )
+    _broadcast_to_location(room, payload)
+
+
 class PromoteSummonError(Exception):
     """Raised when a summon/combatant cannot be promoted to a Companion (#2502)."""
 
