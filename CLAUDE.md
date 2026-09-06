@@ -271,7 +271,12 @@ See `tools/agents/README.md`.
 
 **Migrations are the worked example and are non-optional: any migration generated
 or edited MUST be reviewed with the `reviewing-migrations` skill (or the
-`migration-reviewer` agent) before it is committed.** `migrate --noinput` runs
+`migration-reviewer` agent) before it is committed.** **Demo fidelity is the
+second: when an issue's spec carries a demo link, the `demo-fidelity-reviewer`
+agent MUST compare the built surface against that demo before the PR opens.** The
+demo *is* the approved design, and no other gate ever reads it again - #3660
+shipped an admin page with none of its demo's form rows, chips, submit row or rail
+and no rule for any of its own class hooks, past nineteen green tests (#3667). `migrate --noinput` runs
 unattended on every converge and CI only ever migrates an empty database, so the
 failures that matter are invisible to it.
 
