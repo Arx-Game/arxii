@@ -12,9 +12,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING
 
-from django.core.exceptions import ObjectDoesNotExist
 from evennia.accounts.models import AccountDB
 
 from world.character_creation.constants import AnchorSource, QuestionKind
@@ -29,6 +29,8 @@ from world.societies.vacancy_services import reachable_vacancies
 if TYPE_CHECKING:
     from world.character_creation.models import OriginTemplate
     from world.societies.models import Organization
+
+logger = logging.getLogger(__name__)
 
 #: A group named this way is a stand-in an author hasn't replaced yet
 #: (``core_management.content_fixtures.PLACEHOLDER_MARK``'s convention).
@@ -88,10 +90,11 @@ def _open_places(template: OriginTemplate, user: AccountDB) -> int | str:
 
     Built on an unsaved ``CharacterDraft`` - never written to the database -
     the same shape ``reachable_vacancies`` expects from the guided flow. An
-    in-progress route with no ``beginning`` set yet (or a ``beginning`` with
-    no ``starting_area``) can't resolve a draft to check Vacancies against;
-    that surfaces as ``AttributeError``/``ObjectDoesNotExist`` off the missing
-    relation, never anything broader.
+    in-progress route with no ``beginning``/``starting_area`` set yet, or any
+    other failure inside ``reachable_vacancies``, degrades this one rail tile
+    rather than 500ing the whole Builder page (#3660 review Ruling I) - a
+    side tile must never take the page down, so this is deliberately as broad
+    as ``Exception``, logged rather than silently swallowed.
     """
     try:
         draft = CharacterDraft(
@@ -100,7 +103,8 @@ def _open_places(template: OriginTemplate, user: AccountDB) -> int | str:
             account=user,
         )
         return reachable_vacancies(draft).count()
-    except (AttributeError, ObjectDoesNotExist):
+    except Exception as exc:  # noqa: BLE001 - BROAD_EXCEPT: a side tile must never sink the page
+        logger.warning("Open places unavailable for Upbringing %s: %s", template.pk, exc)
         return OPEN_PLACES_UNAVAILABLE
 
 
@@ -162,10 +166,16 @@ def _branch_check(slot: OriginTemplateSlot, branch_slot_ids: set[int]) -> list[t
 
 
 def _distinction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
-    """Every granted Distinction is active, or a warn; one flat query."""
+    """Every granted Distinction is active, or a warn; one flat query.
+
+    Scoped to active answers only - an inactive answer is never offered to a
+    player, so a Distinction it would grant is not this route's problem
+    (mirrors ``CGOriginTemplateSerializer.get_slots``'s own ``is_active=True``
+    filter on choices, #3660 review Ruling 2).
+    """
     checks: list[tuple[str, str]] = []
     rows = OriginTemplateSlotChoice.objects.filter(
-        slot__template=template, grants_distinction__isnull=False
+        slot__template=template, is_active=True, grants_distinction__isnull=False
     ).select_related("grants_distinction")
     for choice in rows:
         dist = choice.grants_distinction
@@ -215,10 +225,16 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
     exists here) is the cheapest total; the sum of each's dearest answer is the
     dearest total. A negative cheapest total means some required answers are
     refunds; ``largest_refund`` is that shortfall's magnitude, or 0.
+
+    Every count here is scoped to active answers (``is_active=True``) - an
+    inactive answer is never offered to a player, so it counts toward none of
+    "answers", "distinctions used", or the cost spread (mirrors
+    ``CGOriginTemplateSerializer.get_slots``'s own choices filter, #3660
+    review Ruling 2).
     """
     slots = list(OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "id"))
     choices = list(
-        OriginTemplateSlotChoice.objects.filter(slot__in=slots).select_related(
+        OriginTemplateSlotChoice.objects.filter(slot__in=slots, is_active=True).select_related(
             "slot", "grants_distinction"
         )
     )

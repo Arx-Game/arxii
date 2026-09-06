@@ -246,10 +246,51 @@ class BuilderLiveTest(BuilderTestCase):
 
         with patch(
             "web.admin.upbringing_builder.live.reachable_vacancies",
-            side_effect=AttributeError("boom"),
+            side_effect=RuntimeError("boom"),
         ):
             panel = live.for_template(self.template, self.author)
         assert panel.open_places == live.OPEN_PLACES_UNAVAILABLE
+
+    def test_page_still_renders_when_open_places_check_raises(self):
+        """Ruling I: a side tile must never take the whole Builder page down."""
+        from unittest.mock import patch
+
+        self.client.force_login(self.author)
+        with patch(
+            "web.admin.upbringing_builder.live.reachable_vacancies",
+            side_effect=RuntimeError("boom"),
+        ):
+            resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        assert resp.status_code == 200
+        assert "unavailable" in resp.content.decode()
+
+    def test_inactive_answers_are_excluded_from_rail_counts_and_checks(self):
+        """Ruling 2: an inactive answer is never offered to a player, so it never counts."""
+        from web.admin.upbringing_builder import live
+
+        template = OriginTemplateFactory(name="Isolated Rail Counts")
+        slot = OriginTemplateSlotFactory(
+            template=template, kind=QuestionKind.PICK, is_required=True
+        )
+        OriginTemplateSlotChoiceFactory(
+            slot=slot, name="Cheap and active", cg_point_cost=5, is_active=True
+        )
+        inactive_dist = DistinctionFactory(name="Retired Claim", is_active=False)
+        OriginTemplateSlotChoiceFactory(
+            slot=slot,
+            name="Retired and pricey",
+            cg_point_cost=50,
+            is_active=False,
+            grants_distinction=inactive_dist,
+        )
+
+        counts = live.rail_counts(template)
+        assert counts["answers"] == 1
+        assert counts["cheapest_complete_answer"] == 5
+        assert counts["dearest_complete_answer"] == 5
+
+        panel = live.for_template(template, self.author)
+        assert not any("Retired Claim" in text for _, text in panel.checks)
 
 
 class BuilderPreviewTest(BuilderTestCase):
