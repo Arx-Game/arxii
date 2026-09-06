@@ -41,22 +41,32 @@ This script performs that rewrite:
    model creation order in which every *inter-SCC* FK edge points backward
    (target already created).
 5. Emit one ``CreateModel`` per model in that order, with every FK/O2O field
-   inlined into it *unless* the field's target is a different model in the
-   same non-trivial SCC (a genuine cycle — these ~49 fields become
-   ``AddField`` ops emitted after every ``CreateModel``). Self-referential
+   inlined into it *unless* it is a back edge of its cycle: inside each
+   non-trivial SCC the members are ordered by the Eades-Lin-Smyth
+   feedback-arc heuristic (``order_within_cycle``, ADR-0276) and only the FKs
+   whose target is created *later* stay deferred as ``AddField`` ops after
+   every ``CreateModel`` (12 on the 2026-09-05 schema, where deferring every
+   intra-cycle edge would have cost 82). Self-referential
    FK/O2O fields are always inlined (a table can reference its own
    not-yet-committed primary key inside its own ``CREATE TABLE`` — this is
    ordinary SQL, not a cycle in the Django-migration sense; verified against
    the existing SCC/self-loop distinction, not assumed).
-6. ``ManyToManyField`` operations are *not* part of this FK-ordering problem
-   (they create a separate through-table and Django's autodetector always
-   defers them regardless of cycles) — they are kept as ``AddField`` ops,
-   unchanged in content, just moved after all ``CreateModel`` ops like the
-   cyclic FK/O2O fields.
-7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are kept
-   byte-for-byte (their AST subtree is reused verbatim) and moved as a block
-   to the very end, in their original relative order — by construction every
-   field they can reference already exists by that point.
+6. ``ManyToManyField`` ops with an auto-created through table inline like
+   FKs (ADR-0276): ``CreateModel`` creates the through table itself, so the
+   only ordering need is target-before-owner, and the M2M edges join the
+   same topological graph. An M2M with an explicit ``through=`` model stays a
+   deferred ``AddField`` (its through model has its own ``CreateModel`` with
+   FKs to both ends and must exist first), as does an M2M that is a back
+   edge of its cycle.
+7. ``AddConstraint``/``AddIndex``/``AlterUniqueTogether`` operations are
+   folded into their model's ``CreateModel`` ``options`` (``constraints`` /
+   ``indexes`` / ``unique_together``) when every field they reference is on
+   that model and not deferred (ADR-0276, #3656: each one is otherwise a
+   full-cost step of the replay, ~800 of them). Anything the resolver cannot
+   prove safe (positional expressions, a field that is a deferred cycle
+   FK or M2M) is kept byte-for-byte and moved as a block to the very end, in
+   its original relative order — by construction every field it can
+   reference already exists by that point.
 
 All field/option/constraint AST subtrees are reused verbatim from the parsed
 source (never hand-reconstructed field-by-field), and the *only* thing this
@@ -105,6 +115,12 @@ chunks. This is a *starting model*, not a proven-optimal one - if measured
 per-chunk timings come out skewed, the boundaries should be adjusted from
 that data (see the Task 10 report for what was actually measured).
 
+With ``--generation G`` (ADR-0276) every chunk is stamped ``NNNN_gG_...``,
+carries ``replaces = replaced_slice(k, total)`` (the generated files partition
+the previous generation), and a chunk of pure ``CreateModel`` ops subclasses
+``core_management.batched_migration.BatchedCreateModelMigration`` so the
+project state is rendered once per chunk rather than once per model.
+
 Chunk 1 keeps ``0001_initial``'s exact header (imports, ``initial = True``,
 the original ``dependencies`` list including the swappable
 ``AUTH_USER_MODEL`` dependency) verbatim, shrunk to only its slice of
@@ -146,8 +162,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 MIGRATION_PATH = REPO_ROOT / "src" / "world" / "migrations" / "0001_initial.py"
 APP_LABEL = "arxii"
 SINGLE_VALUED_RELATION_TYPES = {"ForeignKey", "OneToOneField"}
+M2M_TYPE = "ManyToManyField"
+# Relations that impose "target before owner" on creation order.
+ORDERING_RELATION_TYPES = SINGLE_VALUED_RELATION_TYPES | {M2M_TYPE}
 DEFAULT_CHUNK_COUNT = 100
 _ARXII_DEP_RE = re.compile(rf'\("{APP_LABEL}",\s*"([^"]+)"\)')
+_CHUNK_PART_RE = re.compile(r"\d{4}_(initial_part_\d+|g\d+_part_\d+)")
 
 
 def _require(condition: bool, message: str) -> None:
@@ -187,10 +207,21 @@ class CreateModelOp:
         self.bases_node = kwargs.get("bases")
         # Extra fields inlined by this script (AddField ops folded in).
         self.extra_field_entries: list[ast.Tuple] = []
+        # Tail ops folded into this model's ``options`` (ADR-0276).
+        self.folded_constraints: list[ast.expr] = []
+        self.folded_indexes: list[ast.expr] = []
+        self.folded_unique_together: ast.expr | None = None
 
     def field_names(self) -> set[str]:
         names = set()
         for entry in self.field_entries:
+            names.add(_const_str(entry.elts[0]))
+        return names
+
+    def all_field_names(self) -> set[str]:
+        """Original fields plus the FKs this script inlined."""
+        names = self.field_names()
+        for entry in self.extra_field_entries:
             names.add(_const_str(entry.elts[0]))
         return names
 
@@ -207,14 +238,177 @@ class AddFieldOp:
         self.field_type: str = self.field_call.func.attr
         field_kwargs = _kwargs_dict(self.field_call)
         self.to: str | None = _const_str(field_kwargs.get("to"))
+        # An explicit through model is created by its own CreateModel (with FKs to
+        # both ends); the M2M that names it stays deferred so it never precedes it.
+        self.explicit_through: bool = self.field_type == M2M_TYPE and "through" in field_kwargs
+
+
+_TAIL_PAYLOAD_KW = {
+    "AddConstraint": "constraint",
+    "AddIndex": "index",
+    "AlterUniqueTogether": "unique_together",
+}
 
 
 class TailOp:
-    """AddConstraint / AddIndex / AlterUniqueTogether — kept verbatim."""
+    """AddConstraint / AddIndex / AlterUniqueTogether.
+
+    Folded into the owning model's ``CreateModel`` options when every field the
+    operation references is already on that model (ADR-0276); otherwise kept
+    verbatim after the deferred ``AddField`` ops, exactly as before.
+    """
 
     def __init__(self, node: ast.Call, kind: str):
         self.node = node
         self.kind = kind
+        kwargs = _kwargs_dict(node)
+        name_kw = "name" if kind == "AlterUniqueTogether" else "model_name"
+        self.model_key: str = _const_str(kwargs[name_kw]).lower()
+        self.payload: ast.expr = kwargs[_TAIL_PAYLOAD_KW[kind]]
+
+
+def _lookup_root(name: str) -> str:
+    """``-created`` -> ``created``; ``amount__gte`` -> ``amount``."""
+    return name.lstrip("-").split("__", 1)[0]
+
+
+def _is_q_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == "Q") or (
+        isinstance(func, ast.Attribute) and func.attr == "Q"
+    )
+
+
+_Q_INTERNAL_KWARGS = {"_connector", "_negated"}
+_LOOKUP_PAIR_LEN = 2  # the writer's ("lookup", value) form
+
+
+def _is_f_call(node: ast.expr) -> bool:
+    if not isinstance(node, ast.Call):
+        return False
+    func = node.func
+    return (isinstance(func, ast.Name) and func.id == "F") or (
+        isinstance(func, ast.Attribute) and func.attr == "F"
+    )
+
+
+def _collect_f_refs(node: ast.expr, out: set[str]) -> bool:
+    """Add the field every ``F("name")`` inside ``node`` references; False if an F is opaque."""
+    for sub in ast.walk(node):
+        if _is_f_call(sub):
+            name = _const_str(sub.args[0]) if len(sub.args) == 1 else None
+            if name is None:
+                return False
+            out.add(_lookup_root(name))
+    return True
+
+
+def _q_positional(arg: ast.expr, out: set[str]) -> bool:
+    """One positional child of a ``Q``: a nested ``Q`` or the writer's ``("lookup", value)``."""
+    if _is_q_call(arg):
+        return _names_in_q(arg, out)
+    if isinstance(arg, ast.Tuple) and len(arg.elts) == _LOOKUP_PAIR_LEN:
+        lookup = _const_str(arg.elts[0])
+        if lookup is None:
+            return False
+        out.add(_lookup_root(lookup))
+        return _collect_f_refs(arg.elts[1], out)
+    return False
+
+
+def _names_in_q(call: ast.Call, out: set[str]) -> bool:
+    """Collect field roots from a ``Q(...)``; False if anything unresolvable appears.
+
+    Django's migration writer serializes ``Q(status="x") | ~Q(y__gt=F("z"))`` as
+    ``models.Q(models.Q(("status", "x")), models.Q(("y__gt", models.F("z")),
+    _negated=True), _connector="OR")``: positional 2-tuples, nested ``Q`` calls,
+    and the two internal kwargs. Hand-written keyword lookups are accepted too.
+    """
+    for kw in call.keywords:
+        if kw.arg is None:
+            return False
+        if kw.arg in _Q_INTERNAL_KWARGS:
+            continue
+        out.add(_lookup_root(kw.arg))
+        if not _collect_f_refs(kw.value, out):
+            return False
+    return all(_q_positional(arg, out) for arg in call.args)
+
+
+_UNFOLDABLE_KWARGS = {"expressions", "include", "opclasses"}
+
+
+def referenced_field_names(op: TailOp) -> set[str] | None:
+    """Field names a tail op references, or None when it cannot be resolved
+    conservatively (positional expressions, non-literal ``fields``, ...)."""
+    names: set[str] = set()
+    if op.kind == "AlterUniqueTogether":
+        try:
+            groups = ast.literal_eval(op.payload)
+        except ValueError:
+            return None
+        for group in groups:
+            names.update(_lookup_root(n) for n in group)
+        return names
+    payload = op.payload
+    if not isinstance(payload, ast.Call) or payload.args:
+        return None  # positional expressions (Lower("x"), F("y"), ...): stay in the tail
+    for kw in payload.keywords:
+        if kw.arg is None or not _collect_kwarg_names(kw.arg, kw.value, names):
+            return None
+    return names
+
+
+def _collect_kwarg_names(arg: str, value: ast.expr, names: set[str]) -> bool:
+    """Add the field roots one constraint/index kwarg references; False if unresolvable.
+
+    ``name=``, ``deferrable=``, ``violation_error_message=`` and ``nulls_distinct=``
+    reference no field and pass through.
+    """
+    if arg == "fields":
+        try:
+            names.update(_lookup_root(n) for n in ast.literal_eval(value))
+        except ValueError:
+            return False
+        return True
+    if arg in {"condition", "check"}:
+        return _is_q_call(value) and _names_in_q(value, names)
+    return arg not in _UNFOLDABLE_KWARGS
+
+
+def fold_tail_ops(
+    create_models: dict[str, CreateModelOp],
+    tail_ops: list[TailOp],
+    deferred_by_model: dict[str, set[str]],
+) -> tuple[list[TailOp], int]:
+    """Fold each tail op into its model's CreateModel options when safe.
+
+    Returns ``(remaining_tail_ops, folded_count)``. Safe means: the model has a
+    CreateModel here, every referenced field resolves, and none of them is a
+    field that stays deferred (a cycle-breaking FK or an M2M).
+    """
+    remaining: list[TailOp] = []
+    folded = 0
+    for op in tail_ops:
+        model = create_models.get(op.model_key)
+        names = referenced_field_names(op)
+        if model is None or names is None:
+            remaining.append(op)
+            continue
+        present = model.all_field_names() - deferred_by_model.get(op.model_key, set())
+        if not names <= present:
+            remaining.append(op)
+            continue
+        if op.kind == "AddConstraint":
+            model.folded_constraints.append(op.payload)
+        elif op.kind == "AddIndex":
+            model.folded_indexes.append(op.payload)
+        else:
+            model.folded_unique_together = op.payload
+        folded += 1
+    return remaining, folded
 
 
 def parse_operations(tree: ast.Module) -> list[ast.Call]:
@@ -273,7 +467,7 @@ def build_graph(create_models: dict[str, CreateModelOp], add_fields: list[AddFie
             if not isinstance(field_call, ast.Call):
                 continue
             ftype = field_call.func.attr
-            if ftype not in SINGLE_VALUED_RELATION_TYPES:
+            if ftype not in ORDERING_RELATION_TYPES:
                 continue
             fkwargs = _kwargs_dict(field_call)
             tkey = target_key(_const_str(fkwargs.get("to")))
@@ -282,7 +476,7 @@ def build_graph(create_models: dict[str, CreateModelOp], add_fields: list[AddFie
             edges.add((owner_key, tkey))
 
     for af in add_fields:
-        if af.field_type not in SINGLE_VALUED_RELATION_TYPES:
+        if af.field_type not in ORDERING_RELATION_TYPES or af.explicit_through:
             continue
         tkey = target_key(af.to)
         if tkey is None or tkey == af.model_key:
@@ -432,21 +626,104 @@ def topo_order_sccs(
     return order
 
 
+def order_within_cycle(members: list[str], before: set[tuple[str, str]]) -> list[str]:
+    """Order the members of one cycle so that few ``(u, v)`` "u before v" edges point backward.
+
+    Eades-Lin-Smyth greedy feedback-arc-set heuristic: peel sinks to the end and
+    sources to the front; when neither exists, move the node with the largest
+    out-degree minus in-degree to the front. Ties break by ``members`` order so the
+    result is stable. Every edge that still points backward in the returned order
+    is one FK the caller must defer to an ``AddField``; every other edge inlines.
+    """
+    remaining = list(members)
+    out_edges: dict[str, set[str]] = {m: set() for m in members}
+    in_edges: dict[str, set[str]] = {m: set() for m in members}
+    for u, v in before:
+        if u in out_edges and v in in_edges and u != v:
+            out_edges[u].add(v)
+            in_edges[v].add(u)
+    front: list[str] = []
+    back: list[str] = []
+
+    def remove(node: str) -> None:
+        remaining.remove(node)
+        for other in out_edges[node]:
+            in_edges[other].discard(node)
+        for other in in_edges[node]:
+            out_edges[other].discard(node)
+        out_edges[node].clear()
+        in_edges[node].clear()
+
+    while remaining:
+        sinks = [m for m in remaining if not out_edges[m]]
+        if sinks:
+            back.insert(0, sinks[0])
+            remove(sinks[0])
+            continue
+        sources = [m for m in remaining if not in_edges[m]]
+        if sources:
+            front.append(sources[0])
+            remove(sources[0])
+            continue
+        best = max(remaining, key=lambda m: len(out_edges[m]) - len(in_edges[m]))
+        front.append(best)
+        remove(best)
+    return front + back
+
+
 def build_model_order(
-    create_order: list[str], scc_id: dict[str, int], scc_topo: list[int]
+    create_order: list[str],
+    scc_id: dict[str, int],
+    scc_topo: list[int],
+    edges: set[tuple[str, str]] | None = None,
 ) -> list[str]:
+    """Creation order: SCCs topologically, and inside a non-trivial SCC the order
+    that leaves the fewest FK edges pointing at a later model (see `order_within_cycle`)."""
     members: dict[int, list[str]] = defaultdict(list)
     for key in create_order:  # preserve original file order within each SCC
         members[scc_id[key]].append(key)
     ordered_keys: list[str] = []
     for s in scc_topo:
-        ordered_keys.extend(members[s])
+        group = members[s]
+        if len(group) > 1 and edges:
+            # An FK owner -> target means "target before owner".
+            before = {(t, o) for (o, t) in edges if scc_id[o] == s and scc_id[t] == s and o != t}
+            group = order_within_cycle(group, before)
+        ordered_keys.extend(group)
     _require(len(ordered_keys) == len(create_order), "model_order dropped or duplicated a model")
     return ordered_keys
 
 
+def _check_inline_relations(
+    create_models: dict[str, CreateModelOp], position: dict[str, int]
+) -> None:
+    """A FK already inline in a CreateModel must target a model created no later.
+
+    Django's autodetector defers every forward-referencing FK whenever a cycle
+    exists, so this never fires on its output; it exists so a cycle order that
+    put an inline target later would fail loudly instead of emitting a migration
+    that fails at CREATE TABLE.
+    """
+    for owner_key, op in create_models.items():
+        for entry in op.field_entries:
+            field_call = entry.elts[1]
+            if not isinstance(field_call, ast.Call) or field_call.func.attr not in (
+                SINGLE_VALUED_RELATION_TYPES
+            ):
+                continue
+            tkey = target_key(_const_str(_kwargs_dict(field_call).get("to")))
+            if tkey is None or tkey == owner_key:
+                continue
+            _require(
+                position[tkey] < position[owner_key],
+                f"inline FK {owner_key}.{_const_str(entry.elts[0])} targets {tkey}, created later",
+            )
+
+
 def _analyze(
     tree: ast.Module,
+    *,
+    fold: bool = True,
 ) -> tuple[dict[str, CreateModelOp], list[str], list[AddFieldOp], list[TailOp], dict]:
     """Parse, classify, and fold deferred ``AddField`` ops into ``CreateModel``.
 
@@ -461,7 +738,9 @@ def _analyze(
     edges = build_graph(create_models, add_fields)
     scc_id = tarjan_scc(create_order, edges)
     scc_topo = topo_order_sccs(create_order, edges, scc_id)
-    model_order = build_model_order(create_order, scc_id, scc_topo)
+    model_order = build_model_order(create_order, scc_id, scc_topo, edges)
+    position = {key: i for i, key in enumerate(model_order)}
+    _check_inline_relations(create_models, position)
 
     # Non-trivial SCCs (size > 1): the only place a real cycle can require
     # deferral. A trivial SCC (size 1) never needs deferral: if it has a
@@ -474,21 +753,22 @@ def _analyze(
     non_trivial_sccs = {s for s, members in scc_members.items() if len(members) > 1}
 
     deferred_field_count = 0
+    deferred_m2m_count = 0
     inlined_field_count = 0
+    inlined_m2m_count = 0
     self_ref_count = 0
 
-    # Fold every currently-deferred FK/O2O AddField into its owner's
-    # CreateModel unless it is a genuine intra-SCC-cycle edge; leave
-    # ManyToManyField AddField ops untouched (always deferred, matching
-    # Django's own convention — they build a separate through-table, not
-    # part of this FK ordering problem).
+    # Fold every currently-deferred relational AddField into its owner's
+    # CreateModel unless it is a back edge of its cycle's chosen order or an
+    # M2M with an explicit through model. Auto-through M2Ms inline like FKs:
+    # CreateModel creates the through table itself, so target-before-owner is
+    # the only ordering need and the topological order provides it.
     remaining_add_field_ops: list[AddFieldOp] = []
     for af in add_fields:
-        if af.field_type == "ManyToManyField":
-            # Always a separate through-table op; Django's own autodetector
-            # never inlines M2M into CreateModel either. Not part of the FK
-            # ordering problem this script solves - left untouched.
+        is_m2m = af.field_type == M2M_TYPE
+        if af.explicit_through:
             remaining_add_field_ops.append(af)
+            deferred_m2m_count += 1
             continue
 
         tkey = target_key(af.to)
@@ -498,20 +778,28 @@ def _analyze(
             # Self-referential FK/O2O: the table being created can reference
             # its own (not-yet-committed) rows in the same CREATE TABLE -
             # ordinary SQL, not a real ordering cycle. Always safe to inline.
+            # A self-referential auto-through M2M is the same.
             self_ref_count += 1
             owner_op.extra_field_entries.append(_field_entry_from_addfield(af))
             inlined_field_count += 1
+            inlined_m2m_count += is_m2m
             continue
 
         if (
             tkey is not None
             and scc_id[af.model_key] in non_trivial_sccs
             and scc_id.get(tkey) == scc_id[af.model_key]
+            and position[tkey] > position[af.model_key]
         ):
-            # Genuine intra-SCC cycle edge (both endpoints in the same
-            # non-trivial SCC) - the only case that truly must stay deferred.
+            # A back edge of the cycle's chosen order: the target is created
+            # after the owner, so this relation is one of the few that truly
+            # must stay deferred. Cycle edges whose target comes first inline
+            # like any other (the table exists by then).
             remaining_add_field_ops.append(af)
-            deferred_field_count += 1
+            if is_m2m:
+                deferred_m2m_count += 1
+            else:
+                deferred_field_count += 1
             continue
 
         # Everything else: target is external/settings-based (tkey is None,
@@ -521,6 +809,14 @@ def _analyze(
         # inline either way.
         owner_op.extra_field_entries.append(_field_entry_from_addfield(af))
         inlined_field_count += 1
+        inlined_m2m_count += is_m2m
+
+    deferred_by_model: dict[str, set[str]] = defaultdict(set)
+    for af in remaining_add_field_ops:
+        deferred_by_model[af.model_key].add(af.field_name)
+    folded_count = 0
+    if fold:
+        tail_ops, folded_count = fold_tail_ops(create_models, tail_ops, deferred_by_model)
 
     stats = {
         "models": len(create_order),
@@ -529,7 +825,9 @@ def _analyze(
         "self_ref_inlined": self_ref_count,
         "inlined_total": inlined_field_count,
         "deferred_addfield_cycle": deferred_field_count,
-        "deferred_addfield_m2m": sum(1 for af in add_fields if af.field_type == "ManyToManyField"),
+        "deferred_addfield_m2m": deferred_m2m_count,
+        "inlined_m2m": inlined_m2m_count,
+        "tail_ops_folded": folded_count,
         "tail_ops": len(tail_ops),
         "create_model_ops": len(create_order),
     }
@@ -537,9 +835,9 @@ def _analyze(
     return create_models, model_order, remaining_add_field_ops, tail_ops, stats
 
 
-def rewrite(source: str, check_only: bool) -> tuple[str, dict]:
+def rewrite(source: str, check_only: bool, *, fold: bool = True) -> tuple[str, dict]:
     tree = ast.parse(source)
-    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree, fold=fold)
 
     if check_only:
         return source, stats
@@ -584,16 +882,50 @@ def _find_operations_assign(tree: ast.Module) -> ast.Assign:
     return candidates[0]
 
 
+def _options_with_folds(op: CreateModelOp) -> ast.expr | None:
+    """The model's ``options`` Dict with folded constraints/indexes/unique_together merged in."""
+    if not (op.folded_constraints or op.folded_indexes or op.folded_unique_together):
+        return op.options_node
+    keys: list[ast.expr | None] = []
+    values: list[ast.expr] = []
+    if op.options_node is not None:
+        _require(isinstance(op.options_node, ast.Dict), "CreateModel.options must be a Dict node")
+        keys, values = list(op.options_node.keys), list(op.options_node.values)
+    existing = {_const_str(k): i for i, k in enumerate(keys) if k is not None}
+
+    def merge_list(key: str, items: list[ast.expr]) -> None:
+        if not items:
+            return
+        if key in existing:
+            node = values[existing[key]]
+            _require(isinstance(node, ast.List), f"options[{key!r}] must be a List node")
+            node.elts.extend(items)
+        else:
+            keys.append(ast.Constant(value=key))
+            values.append(ast.List(elts=items, ctx=ast.Load()))
+
+    merge_list("constraints", op.folded_constraints)
+    merge_list("indexes", op.folded_indexes)
+    if op.folded_unique_together is not None:
+        if "unique_together" in existing:
+            values[existing["unique_together"]] = op.folded_unique_together
+        else:
+            keys.append(ast.Constant(value="unique_together"))
+            values.append(op.folded_unique_together)
+    return ast.Dict(keys=keys, values=values)
+
+
 def _create_model_call(op: CreateModelOp) -> ast.Call:
-    """Rebuild a `CreateModel(...)` call node with any folded-in fields added."""
+    """Rebuild a `CreateModel(...)` call node with folded fields and options added."""
     fields_list = ast.List(
         elts=[*op.field_entries, *[e for e in op.extra_field_entries if e is not None]],
         ctx=ast.Load(),
     )
     kw = [ast.keyword(arg="name", value=ast.Constant(value=op.name))]
     kw.append(ast.keyword(arg="fields", value=fields_list))
-    if op.options_node is not None:
-        kw.append(ast.keyword(arg="options", value=op.options_node))
+    options = _options_with_folds(op)
+    if options is not None:
+        kw.append(ast.keyword(arg="options", value=options))
     if op.bases_node is not None:
         kw.append(ast.keyword(arg="bases", value=op.bases_node))
     return ast.Call(
@@ -694,14 +1026,58 @@ def _operation_costs(n_model_ops: int, n_tail_ops: int) -> list[int]:
     return [*range(1, n_model_ops + 1), *([n_model_ops] * n_tail_ops)]
 
 
-def rewrite_chunks(source: str, n_chunks: int) -> tuple[list[tuple[str, str]], dict]:
+GENERATIONS_IMPORT = "from world.migrations._generations import replaced_slice\n"
+BATCHED_IMPORT = "from core_management.batched_migration import BatchedCreateModelMigration\n"
+
+
+def chunk_name(generation: int | None, index: int) -> str:
+    """Name of chunk ``index`` (1-based).
+
+    ``generation=None`` is the #2906 shape (``0001_initial``, ``NNNN_initial_part_N``).
+    A stamped name (``0001_g2_initial``, ``NNNN_g2_part_N``) can never collide with an
+    earlier generation's, which is what lets production keep every old name
+    recorded forever (ADR-0276).
+    """
+    if generation is None:
+        return "0001_initial" if index == 1 else f"{index:04d}_initial_part_{index}"
+    if index == 1:
+        return f"{index:04d}_g{generation}_initial"
+    return f"{index:04d}_g{generation}_part_{index}"
+
+
+def _dependencies_source(tree: ast.Module) -> str:
+    """The original ``dependencies = [...]`` list, re-rendered from its AST."""
+    migration_class = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
+    )
+    for node in migration_class.body:
+        if isinstance(node, ast.Assign) and any(
+            isinstance(t, ast.Name) and t.id == "dependencies" for t in node.targets
+        ):
+            return ast.unparse(node.value)
+    return "[]"
+
+
+def rewrite_chunks(
+    source: str,
+    n_chunks: int,
+    generation: int | None = None,
+    *,
+    fold: bool = True,
+    replaces_total: int | None = None,
+) -> tuple[list[tuple[str, str]], dict]:
     """Split `source` into `n_chunks` cost-weighted migration files.
 
     Returns `(files, stats)` where `files` is `[(migration_name, content),
-    ...]` in dependency-chain order (first is always "0001_initial").
+    ...]` in dependency-chain order (first is `chunk_name(generation, 1)`).
+    With ``generation`` set, every file is stamped and carries
+    ``replaces = replaced_slice(k, replaces_total)`` (``replaces_total`` is the
+    number of generated files in the generation, chunks plus tails; it defaults
+    to the chunk count), and a chunk made only of ``CreateModel`` ops uses
+    ``BatchedCreateModelMigration`` (see `_render_chunk_files`).
     """
     tree = ast.parse(source)
-    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree)
+    create_models, model_order, remaining_add_field_ops, tail_ops, stats = _analyze(tree, fold=fold)
     plan = RewritePlan(
         create_models=create_models,
         model_order=model_order,
@@ -718,52 +1094,92 @@ def rewrite_chunks(source: str, n_chunks: int) -> tuple[list[tuple[str, str]], d
     boundaries = compute_chunk_boundaries(costs, n_chunks)
     groups = _split_by_boundaries(full_ops, boundaries)
 
-    files = _render_chunk_files(source, tree, groups)
+    files = _render_chunk_files(
+        source, tree, groups, generation, replaces_total=replaces_total or len(groups)
+    )
     stats = {**stats, "n_chunks": len(files), "chunk_sizes": [len(g) for g in groups]}
     return files, stats
 
 
+def _is_pure_create_model(group: list[ast.expr]) -> bool:
+    return all(
+        isinstance(op, ast.Call)
+        and isinstance(op.func, ast.Attribute)
+        and op.func.attr == "CreateModel"
+        for op in group
+    )
+
+
 def _render_chunk_files(
-    source: str, tree: ast.Module, groups: list[list[ast.expr]]
+    source: str,
+    tree: ast.Module,
+    groups: list[list[ast.expr]],
+    generation: int | None = None,
+    *,
+    replaces_total: int | None = None,
 ) -> list[tuple[str, str]]:
     """Render each op group into a migration file's full source text.
 
-    Chunk 1 keeps `0001_initial`'s original header (imports, header comment,
-    `initial = True`, the original `dependencies` list) byte-identical via
-    the same source-slicing technique as `emit_source`, with only its
-    `operations` list shrunk to `groups[0]`. Chunks 2..N get a fresh minimal
-    header built from the original file's imports block (reused verbatim,
-    over-inclusive - `ruff check --fix` strips whatever a given chunk
-    doesn't need) and a `dependencies = [("arxii", <previous chunk>)]`.
+    Unstamped (``generation=None``, the #2906 shape): chunk 1 keeps
+    `0001_initial`'s original header (imports, header comment, `initial = True`,
+    the original `dependencies` list) byte-identical via the same source-slicing
+    technique as `emit_source`, with only its `operations` list shrunk to
+    `groups[0]`. Chunks 2..N get a fresh minimal header built from the original
+    file's imports block (reused verbatim, over-inclusive - `ruff check --fix`
+    strips whatever a given chunk doesn't need) and a
+    `dependencies = [("arxii", <previous chunk>)]`.
+
+    Stamped (``generation=G``, ADR-0276): every file gets the minimal header,
+    plus ``replaces = replaced_slice(k, replaces_total)`` so the generated files
+    partition the previous generation; chunk 1 keeps ``initial = True`` and the
+    original ``dependencies`` list (re-rendered from its AST, so the swappable
+    AUTH_USER_MODEL dependency survives). A chunk made only of ``CreateModel``
+    ops subclasses ``BatchedCreateModelMigration``, which renders the project
+    state once per chunk instead of once per model (the O(n^2) closure
+    re-render that dominates a replay).
     """
     ops_assign = _find_operations_assign(tree)
     lines = source.splitlines(keepends=True)
-
-    ops_list_node = ops_assign.value
-    start_line, start_col = ops_list_node.lineno, ops_list_node.col_offset
-    end_line, end_col = ops_list_node.end_lineno, ops_list_node.end_col_offset
-    before = "".join(lines[: start_line - 1]) + lines[start_line - 1][:start_col]
-    after = lines[end_line - 1][end_col:] + "".join(lines[end_line:])
 
     migration_class = next(
         n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "Migration"
     )
     imports_block = "".join(lines[: migration_class.lineno - 1])
+    total = replaces_total or len(groups)
 
-    files: list[tuple[str, str]] = [("0001_initial", before + _unparse_ops_list(groups[0]) + after)]
-
-    prev_name = "0001_initial"
-    for i, group in enumerate(groups[1:], start=2):
-        name = f"{i:04d}_initial_part_{i}"
-        content = (
-            f"{imports_block}\n"
-            "class Migration(migrations.Migration):\n"
-            "    dependencies = [\n"
-            f'        ("{APP_LABEL}", "{prev_name}"),\n'
-            "    ]\n\n"
+    def render(index: int, class_body_prefix: str, group: list[ast.expr]) -> str:
+        if generation is None:
+            imports, base, replaces_line = imports_block, "migrations.Migration", ""
+        else:
+            batched = _is_pure_create_model(group)
+            imports = imports_block + (BATCHED_IMPORT if batched else "") + GENERATIONS_IMPORT
+            base = "BatchedCreateModelMigration" if batched else "migrations.Migration"
+            replaces_line = f"    replaces = replaced_slice({index}, {total})\n"
+        return (
+            f"{imports}\n"
+            f"class Migration({base}):\n"
+            f"{class_body_prefix}{replaces_line}"
             f"    operations = {_unparse_ops_list(group)}\n"
         )
-        files.append((name, content))
+
+    first_name = chunk_name(generation, 1)
+    if generation is None:
+        ops_list_node = ops_assign.value
+        start_line, start_col = ops_list_node.lineno, ops_list_node.col_offset
+        end_line, end_col = ops_list_node.end_lineno, ops_list_node.end_col_offset
+        before = "".join(lines[: start_line - 1]) + lines[start_line - 1][:start_col]
+        after = lines[end_line - 1][end_col:] + "".join(lines[end_line:])
+        first_content = before + _unparse_ops_list(groups[0]) + after
+    else:
+        first_prefix = f"    initial = True\n    dependencies = {_dependencies_source(tree)}\n"
+        first_content = render(1, first_prefix, groups[0])
+    files: list[tuple[str, str]] = [(first_name, first_content)]
+
+    prev_name = first_name
+    for i, group in enumerate(groups[1:], start=2):
+        name = chunk_name(generation, i)
+        prefix = f'    dependencies = [\n        ("{APP_LABEL}", "{prev_name}"),\n    ]\n\n'
+        files.append((name, render(i, prefix, group)))
         prev_name = name
 
     return files
@@ -791,7 +1207,7 @@ def _discover_tail_migrations(migrations_dir: Path) -> list[Path]:
     return sorted(
         p
         for p in migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py")
-        if p.name != "0001_initial.py" and "_initial_part_" not in p.name
+        if p.stem != chunk_name(None, 1) and not _CHUNK_PART_RE.match(p.stem)
     )
 
 
@@ -838,8 +1254,8 @@ def _renumber_tail_migrations(migrations_dir: Path, last_chunk_name: str, n_chun
     return prev_name
 
 
-def _run_chunk_mode(source: str, n_chunks: int) -> int:
-    files, stats = rewrite_chunks(source, n_chunks)
+def _run_chunk_mode(source: str, n_chunks: int, generation: int | None = None) -> int:
+    files, stats = rewrite_chunks(source, n_chunks, generation)
 
     print("=== optimize_initial_migration chunk stats ===")
     for k, v in stats.items():
@@ -852,7 +1268,9 @@ def _run_chunk_mode(source: str, n_chunks: int) -> int:
     # Discover the tail migrations (materialized views, later AlterFields,
     # ...) and the stale chunk artifacts from any previous run BEFORE
     # touching anything, so a rerun with a different N still works.
-    old_part_files = sorted(migrations_dir.glob("*_initial_part_*.py"))
+    old_part_files = sorted(
+        p for p in migrations_dir.glob("[0-9][0-9][0-9][0-9]_*.py") if _CHUNK_PART_RE.match(p.stem)
+    )
     tail_final_name = _renumber_tail_migrations(migrations_dir, files[-1][0], len(files))
 
     for p in old_part_files:
@@ -864,7 +1282,7 @@ def _run_chunk_mode(source: str, n_chunks: int) -> int:
     max_migration_path.write_text(tail_final_name + "\n")
 
     print(
-        f"wrote {len(written)} chunk files (0001_initial.py .. "
+        f"wrote {len(written)} chunk files ({chunk_name(generation, 1)}.py .. "
         f"{files[-1][0]}.py) + renumbered tail migrations through "
         f"{tail_final_name}; max_migration.txt updated"
     )
@@ -900,6 +1318,13 @@ def main() -> int:
             "with --check."
         ),
     )
+    parser.add_argument(
+        "--generation",
+        type=int,
+        default=None,
+        metavar="G",
+        help="stamp chunk names with generation G and add replaces = REPLACED (ADR-0276)",
+    )
     args = parser.parse_args()
     if args.chunks is not None and args.check:
         parser.error("--check and --chunks are mutually exclusive")
@@ -907,7 +1332,7 @@ def main() -> int:
     source = MIGRATION_PATH.read_text()
 
     if args.chunks is not None:
-        return _run_chunk_mode(source, args.chunks)
+        return _run_chunk_mode(source, args.chunks, args.generation)
 
     new_source, stats = rewrite(source, check_only=args.check)
 

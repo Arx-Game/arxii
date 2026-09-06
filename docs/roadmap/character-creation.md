@@ -19,7 +19,7 @@ Builder (`src/web/admin/upbringing_builder/`), credited to the operator on save,
 a live right rail (matched groups, placeholder counts, open Vacancy count, authoring
 checks, cost spread) and a player-view preview; (6) the character sheet's Origins
 panel (`OriginsSection.tsx`) shows each connection: the linked group, its tags, the
-viewer's own standing with it, and any named figures. See ADR-0276,
+viewer's own standing with it, and any named figures. See ADR-0277,
 [character_creation.md](../systems/character_creation.md)'s "Question kinds and
 connections" subsection, and [family-authoring-recipes.md](../systems/family-authoring-recipes.md)
 recipes 13-15.

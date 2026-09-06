@@ -493,7 +493,7 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   a staff family is still authored on the `Organization`/`Vacancy` admin page
   (Recipes 11-12 in `family-authoring-recipes.md`), not on this one.
 - Deliberate no-ADR for the page-layout/formset decisions: recorded in the approved
-  #3660 spec review, the same precedent #3019 set above; ADR-0276 covers the
+  #3660 spec review, the same precedent #3019 set above; ADR-0277 covers the
   questionnaire model itself.
 
 ## Game Tuning & Game Ops Dashboards (#1221)

@@ -324,5 +324,6 @@ treat those names as hints to confirm, not gospel.
 - [0273 - Family entry is a staff-authored Vacancy with two importance axes; players never create authority](0273-family-entry-is-a-vacancy-with-two-importance-axes.md) (#3648; related ADR-0268, ADR-0269, ADR-0209)
 - [0274 - During an encounter the scene page has one map and one home per GM lever](0274-scene-page-combat-layout-one-map-one-home-per-lever.md) (#3557; related ADR-0127, ADR-0111)
 - [0275 - A codex entry cross-files under several subjects through a dedicated link table](0275-codex-entries-cross-filed-under-several-subjects.md) (#2896; related ADR-0221, ADR-0238)
-- [0276 - Upbringings are authored questionnaires, not a generalised anchor/mentor model](0276-upbringings-are-authored-questionnaires.md) (#3660; related ADR-0268, ADR-0269, ADR-0273)
+- [0276 - The migration chain regenerates to its floor and crosses generations with replaces](0276-migration-chain-regenerates-to-its-floor-and-crosses-generations-with-replaces.md) (#3656; amends ADR-0195, related ADR-0083, ADR-0237)
+- [0277 - Upbringings are authored questionnaires, not a generalised anchor/mentor model](0277-upbringings-are-authored-questionnaires.md) (#3660; related ADR-0268, ADR-0269, ADR-0273)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

@@ -65,6 +65,11 @@ lands - and cross-app FKs are exactly what a 66-app domain split encourages, sin
 feature routinely needs to relate to three or four existing domains - the cycle re-tangles
 and the floor climbs back up until the next squash.
 
+> **Superseded on this point by ADR-0276 (2026-09-05).** The rejection above rested on
+> the 46-app cycle's 1,153-edge deferral floor. With the collapse in place the floor is
+> the schema's own 49 edges, so periodic regeneration is structural rather than
+> transitory, and `arx manage squashmigrations arxii` is now the standing mechanism.
+
 **Rejected: inlining without the collapse.** `tools/optimize_initial_migration.py`'s
 topological-inlining technique is generic - it operates on any migration graph, and would
 cut `main`'s 2,321 deferred `AddField`s down toward its true floor without touching the

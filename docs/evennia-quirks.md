@@ -65,9 +65,65 @@ deferral floor drop to the schema's true 49. A new subsystem is a new
 the same as any other model change. `django_notes.md`'s old per-app
 clean-slate squash workflow (fake-to-zero, delete migration files, regenerate
 `0001_initial.py`) is now obsolete for this case - the history is now one
-flattened `world/migrations/` sequence (102 files: 100 cost-weighted chunks
-plus 2 tail migrations, not a single file), and squashing it again defeats
-the point of the collapse.
+flattened `world/migrations/` sequence (100 cost-weighted chunks plus tail
+migrations plus whatever incrementals have landed since, not a single file).
+Squashing it by hand, or with Django's `squashmigrations`, is not the tool;
+regeneration is (next section).
+
+### Migration Chain Regeneration (ADR-0276)
+
+The chain grows by roughly 20 replay-minutes a month, and Django's
+`squashmigrations` cannot shrink it (its optimizer never reorders models and is
+blocked by every index/constraint operation in between; measured 2026-09-05: nine
+minutes for a 3% reduction and a file that does not compile). So
+`core_management` **replaces** `squashmigrations`, the way it already replaces
+`makemigrations`:
+
+```bash
+just regenerate-migrations        # = arx manage squashmigrations arxii
+just verify-regeneration          # replay into a scratch DB, build a second from
+                                  # models, assert the partition, diff the schemas
+```
+
+What a regeneration does: snapshots the outgoing chain's names into
+`world/migrations/_generations.py` (generated, underscore-prefixed so Django's
+loader does not treat it as a migration), deletes every migration file, runs our
+`makemigrations` for a fresh initial, inlines FKs and auto-through M2Ms topologically and folds
+constraints/indexes/`unique_together` into `CreateModel`
+(`tools/optimize_initial_migration.py`), chunks into 100 files (a chunk of pure
+`CreateModel`s subclasses `BatchedCreateModelMigration`, which renders the project
+state once per chunk instead of once per model: that re-render is where a replay's
+time goes), renders the three
+infrastructure tails from `build_schema.SQL_FILES` (`tools/migration_tails.py`),
+stamps every file with its `replaced_slice` of the previous generation (the slices
+partition it, so a fresh replay records each old name once), rewrites `max_migration.txt`, prunes the
+filename-keyed lint lists, and writes `regeneration-report.md` (gitignored; paste
+it into the PR body). Every `RunPython` of the old chain is dropped: production
+already applied them and a fresh database has no rows for them.
+
+Names: `0001_g2_initial`, `0002_g2_part_2` ... `0100_g2_part_100`,
+`0101_g2_partition_sql`, `0102_g2_partition_columns`, `0103_g2_matviews`; later
+incrementals keep Django's names. `tools/lint_migration_generations.py` refuses a
+name or dependency that belongs to an earlier generation.
+
+How databases cross: Django's `replaces`. A database with the previous generation
+fully recorded treats the new one as applied and records it on its next real
+`migrate`; production does this on its next deploy with no manual step. Two states
+Django handles badly are refused by our `migrate` override before any schema is
+touched: a **partially recorded** previous generation (stock Django would silently
+apply nothing) and a **skipped** generation (stock Django would try to `CREATE`
+every table). The refusal names the commit to visit: check it out, `arx manage
+migrate` there, come back, repeat. A dev database behind the old tip therefore
+migrates to the tip **before** pulling a regenerated `main`.
+
+Rules for the regeneration PR: run it from a worktree on the tip of `main` with a
+clean tree and the dev database at the tip; commit the tooling and the generated
+output separately; if `main` moves before it is enqueued, regenerate again from a
+fresh worktree (cherry-pick the tooling commits, run the recipe, force-push),
+never rebase. Review the inliner's `--check` counts (`deferred_addfield_cycle`
+must not rise without a named cycle), the three tails in full, the drop report
+and the `verify-regeneration` output; the hundred chunk files are generated.
+When to run it: the nightly replay workflow warns past 30 minutes.
 
 ### loaddata Cannot UPDATE SharedMemoryModel Rows (#946)
 
