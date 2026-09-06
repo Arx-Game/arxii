@@ -278,3 +278,51 @@ class PostCGOriginSlotAPITest(TestCase):
         )
         assert response.status_code == 200
         assert not CharacterOriginSlot.objects.filter(sheet=self.sheet, slot=slot).exists()
+
+    def test_text_edit_preserves_organization_and_figure_name(self) -> None:
+        """A value-only edit via the API keeps an existing tie/named figure (#3660 fix round 1).
+
+        The post-CG write-in editor (this endpoint) never sends ``organization``/
+        ``figure_name`` at all - ``set_origin_slot`` must not wipe them just
+        because the caller didn't mention them.
+        """
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+        from world.character_creation.services import set_origin_slot
+        from world.societies.factories import OrganizationFactory
+
+        slot = OriginTemplateSlotFactory()
+        org = OrganizationFactory()
+        set_origin_slot(self.sheet, slot, "Original text.", organization=org, figure_name="Mira")
+
+        response = self.client.post(
+            self._url("set-origin-slot"),
+            {"slot_id": slot.id, "value": "A fuller account."},
+            format="json",
+        )
+        assert response.status_code == 200
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.value == "A fuller account."
+        assert row.organization == org
+        assert row.figure_name == "Mira"
+
+    def test_explicit_none_organization_clears_the_tie(self) -> None:
+        """Passing ``organization=None``/``figure_name=""`` explicitly still clears them.
+
+        The ``_KEEP`` sentinel must only swallow an *omitted* kwarg, never a
+        deliberate clear (#3660 fix round 1).
+        """
+        from world.character_creation.factories import OriginTemplateSlotFactory
+        from world.character_creation.models import CharacterOriginSlot
+        from world.character_creation.services import set_origin_slot
+        from world.societies.factories import OrganizationFactory
+
+        slot = OriginTemplateSlotFactory()
+        org = OrganizationFactory()
+        set_origin_slot(self.sheet, slot, "Some text.", organization=org, figure_name="Mira")
+
+        set_origin_slot(self.sheet, slot, "Some text.", organization=None, figure_name="")
+
+        row = CharacterOriginSlot.objects.get(sheet=self.sheet, slot=slot)
+        assert row.organization is None
+        assert row.figure_name == ""

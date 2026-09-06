@@ -4,7 +4,7 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from rest_framework.test import APIClient
 
-from world.character_creation.constants import FamilyPath
+from world.character_creation.constants import AnchorSource, FamilyPath, QuestionKind
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
@@ -54,6 +54,8 @@ class UpbringingListTest(TestCase):
             "description": "",
             "cg_point_cost": 0,
             "cost_per_influence": 3,
+            "trust_required": 0,
+            "grants_distinction": None,
             "sort_order": self.choice.sort_order,
         }
 
@@ -227,3 +229,40 @@ class DraftUpbringingPatchTest(TestCase):
         draft.refresh_from_db()
         assert draft.family_path == FamilyPath.CLAIMED
         assert draft.family == family
+
+
+class DraftDerivedAnchorsTest(TestCase):
+    """Ruling L: the draft response carries the resolved org a client can't derive itself."""
+
+    def setUp(self):
+        self.account = AccountDB.objects.create_user(username="derived", password="x")
+        self.family = FamilyFactory(influence=3)
+        self.house = OrganizationFactory(name="Hold", family=self.family)
+        self.template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=False)
+        self.slot = OriginTemplateSlotFactory(
+            template=self.template, kind=QuestionKind.GROUP, anchor_source=AnchorSource.OWN_FAMILY
+        )
+        self.draft = CharacterDraftFactory(
+            account=self.account,
+            selected_area=self.template.beginning.starting_area,
+            selected_beginnings=self.template.beginning,
+            selected_origin_template=self.template,
+            family=self.family,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.account)
+
+    def test_draft_get_carries_derived_anchors_keyed_by_slot_id(self):
+        res = self.client.get(f"/api/character-creation/drafts/{self.draft.pk}/")
+        assert res.status_code == 200, res.json()
+        assert res.json()["derived_anchors"] == {
+            str(self.slot.id): {"id": self.house.id, "name": "Hold", "influence": 3}
+        }
+
+    def test_draft_get_carries_none_when_the_family_has_no_house(self):
+        self.house.family = None
+        self.house.save(update_fields=["family"])
+
+        res = self.client.get(f"/api/character-creation/drafts/{self.draft.pk}/")
+        assert res.status_code == 200, res.json()
+        assert res.json()["derived_anchors"] == {str(self.slot.id): None}

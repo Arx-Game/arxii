@@ -5,7 +5,14 @@ Factory definitions for character creation system tests.
 import factory
 import factory.django as factory_django
 
-from world.character_creation.constants import ApplicationStatus, CommentType
+from world.character_creation.constants import (
+    AnchorSource,
+    ApplicationStatus,
+    CommentType,
+    ConnectionKind,
+    LifeStage,
+    QuestionKind,
+)
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
@@ -162,9 +169,19 @@ class OriginTemplateSlotChoiceFactory(factory_django.DjangoModelFactory):
     class Meta:
         model = OriginTemplateSlotChoice
 
-    slot = factory.SubFactory(OriginTemplateSlotFactory, allows_text=False)
+    slot = factory.SubFactory(OriginTemplateSlotFactory, allows_text=False, kind=QuestionKind.PICK)
     name = factory.Sequence(lambda n: f"Choice {n}")
     sort_order = factory.Sequence(lambda n: n)
+
+
+class GroupPromptFactory(OriginTemplateSlotFactory):
+    """A 'pick a group' question on a LISTED source with no groups yet (#3660)."""
+
+    kind = QuestionKind.GROUP
+    anchor_source = AnchorSource.LISTED
+    connection_kind = ConnectionKind.RAISED_BY
+    life_stage = LifeStage.CHILDHOOD
+    allows_text = False
 
 
 def make_unknown_upbringing(beginning: Beginnings) -> OriginTemplate:

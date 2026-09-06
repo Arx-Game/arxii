@@ -1,0 +1,65 @@
+{% load i18n %}
+<div class="answers-wrapper" id="answers-{{ slot.pk }}">
+  {{ formset.management_form }}
+  {% if formset.non_form_errors %}
+  <p class="errornote">{{ formset.non_form_errors }}</p>
+  {% endif %}
+  <table class="tuning-table answers-table">
+    <thead>
+      <tr>
+        <th>Answer</th>
+        <th>Line under it</th>
+        <th>Cost</th>
+        <th>Per point of influence</th>
+        <th>Grants Distinction</th>
+        <th>Group's opinion</th>
+        <th>Trust</th>
+        <th>Active</th>
+        <th>Order</th>
+        <th>Delete</th>
+      </tr>
+    </thead>
+    <tbody id="answers-body-{{ slot.pk }}">
+      {% for answer_form in formset.forms %}
+      <tr>
+        <td>
+          {% for hidden in answer_form.hidden_fields %}{{ hidden }}{% endfor %}
+          {{ answer_form.name }}
+        </td>
+        <td>{{ answer_form.description }}</td>
+        <td>{{ answer_form.cg_point_cost }}</td>
+        <td>{{ answer_form.cost_per_influence }}</td>
+        <td>{{ answer_form.grants_distinction }}</td>
+        <td>{{ answer_form.reputation_seed }}</td>
+        <td>{{ answer_form.trust_required }}</td>
+        <td>{{ answer_form.is_active }}</td>
+        <td>{{ answer_form.sort_order }}</td>
+        <td>{% if answer_form.instance.pk %}{{ answer_form.DELETE }}{% endif %}</td>
+      </tr>
+      {% if answer_form.errors %}
+      <tr><td colspan="10">{{ answer_form.errors }}</td></tr>
+      {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  <template id="empty-answer-template-{{ slot.pk }}">
+    <tr>
+      <td>{{ formset.empty_form.name }}</td>
+      <td>{{ formset.empty_form.description }}</td>
+      <td>{{ formset.empty_form.cg_point_cost }}</td>
+      <td>{{ formset.empty_form.cost_per_influence }}</td>
+      <td>{{ formset.empty_form.grants_distinction }}</td>
+      <td>{{ formset.empty_form.reputation_seed }}</td>
+      <td>{{ formset.empty_form.trust_required }}</td>
+      <td>{{ formset.empty_form.is_active }}</td>
+      <td>{{ formset.empty_form.sort_order }}</td>
+      <td></td>
+    </tr>
+  </template>
+  <button type="button" class="add-answer-btn"
+          data-prefix="{{ formset.prefix }}"
+          data-target="answers-body-{{ slot.pk }}"
+          data-template="empty-answer-template-{{ slot.pk }}">
+    Add answer
+  </button>
+</div>

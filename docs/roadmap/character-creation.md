@@ -1,5 +1,36 @@
 # Character Creation & Identity
 
+## Built (2026-09-06, #3660: formative connections)
+
+Upbringing prompts now carry entity-linked, life-stage-tagged connections instead of
+prose alone. What was built: (1) `OriginTemplateSlot.kind` (`QuestionKind`: text, pick,
+"pick a group", "name a person") and, on a group question, `connection_kind` (what the
+tie was) and `life_stage` (when); (2) `AnchorSource` resolves who a group question
+offers: a pool of matching Organizations, a named list, the same group an earlier
+question resolved to, the served house, or the character's own family, evaluated in
+one place (`questionnaire.py`) shared by validation, pricing, and finalize; (3) a
+question may show only after an earlier one, and only for certain answers to it
+(`follow_up_to`, `shown_for_choices`); (4) an answer may grant a Distinction bundled
+free (`grants_distinction`) and seed the anchor's opinion at finalize
+(`reputation_seed`, via `bump_organization_reputation`); a named person on a PERSON
+question becomes the granted Distinction's spawned NPC's display name; (5) staff
+author a whole route (Upbringing, questions, answers) on one page, the Upbringing
+Builder (`src/web/admin/upbringing_builder/`), credited to the operator on save, with
+a live right rail (matched groups, placeholder counts, open Vacancy count, authoring
+checks, cost spread) and a player-view preview; (6) the character sheet's Origins
+panel (`OriginsSection.tsx`) shows each connection: the linked group, its tags, the
+viewer's own standing with it, and any named figures. See ADR-0277,
+[character_creation.md](../systems/character_creation.md)'s "Question kinds and
+connections" subsection, and [family-authoring-recipes.md](../systems/family-authoring-recipes.md)
+recipes 13-15.
+
+Deferred: authored stance sets and a shared prompt library both need design work before
+they're worth building (repeating the same GROUP/PERSON shape by hand across
+Upbringings today); the granted NPC asset has no player-facing surface yet beyond the
+sheet's Origins panel; a Vacancy still cannot carry answers from its own connection
+questions; and Organization influence stays the only lever a connection's cost reads
+from (no separate "how much this group values you" axis).
+
 ## Built (2026-09-05, #3648: Family Templates and Vacancies)
 
 Generalized the noble house-template pipeline to every family kind and gave a

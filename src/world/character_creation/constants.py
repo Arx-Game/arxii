@@ -23,6 +23,10 @@ AGE_MAX = 65
 # early 20s — CG caps their age input here (#2756, PLACEHOLDER).
 AGE_MAX_ETERNAL_YOUTH = 29
 
+# Bounds for OriginTemplateSlotChoice.reputation_seed (#3660)
+REPUTATION_SEED_MIN = -1000
+REPUTATION_SEED_MAX = 1000
+
 # Required primary stat names
 REQUIRED_STATS = PrimaryStat.get_all_stat_names()
 
@@ -146,3 +150,55 @@ class FamilyPath(models.TextChoices):
     CLAIMED = "claimed", "Claim a staff-authored family"
     NAMED = "named", "Name your own family"
     NONE = "none", "No family"
+
+
+class QuestionKind(models.TextChoices):
+    """What kind of thing an Upbringing prompt asks for (#3660).
+
+    ``TEXT`` and ``PICK`` are the two shapes prompts already had (a write-in, a
+    priced pick-list). ``GROUP`` links the answer to a real ``Organization`` (the
+    prompt's anchor) and offers stances toward it; ``PERSON`` lets the player
+    name someone of their own, optionally inside an earlier prompt's group.
+    """
+
+    TEXT = "text", "Write an answer"
+    PICK = "pick", "Pick one answer"
+    GROUP = "group", "Pick a group"
+    PERSON = "person", "Name a person"
+
+
+class ConnectionKind(models.TextChoices):
+    """What the tie to the anchor was. A tag; nothing branches on it (#3660)."""
+
+    RAISED_BY = "raised_by", "Raised by"
+    TAUGHT_BY = "taught_by", "Taught by"
+    SERVED = "served", "Served"
+    SAILED_WITH = "sailed_with", "Sailed with"
+    OWES = "owes", "Owes"
+    SWORN_TO = "sworn_to", "Sworn to"
+    HUNTED_BY = "hunted_by", "Hunted by"
+
+
+class LifeStage(models.TextChoices):
+    """When the tie was formed. A tag; orders the sheet's Origins panel (#3660)."""
+
+    CHILDHOOD = "childhood", "Childhood"
+    YOUTH = "youth", "Youth"
+    AT_THE_GLIMPSE = "at_the_glimpse", "At the Glimpse"
+    SINCE_THE_GLIMPSE = "since_the_glimpse", "Since the Glimpse"
+
+
+class AnchorSource(models.TextChoices):
+    """Which groups a GROUP prompt lets the player pick from (#3660).
+
+    ``POOL``: every active, non-covert org matching ``anchor_org_type`` and/or
+    ``anchor_society``. ``LISTED``: ``anchor_orgs``. ``SAME_AS``: the org answered on
+    ``same_anchor_as``. ``SERVED_HOUSE``: ``CharacterDraft.served_house``.
+    ``OWN_FAMILY``: the org rooted in ``CharacterDraft.family``.
+    """
+
+    POOL = "pool", "Every group of a type in a realm"
+    LISTED = "listed", "Groups I name"
+    SAME_AS = "same_as", "The same group as an earlier question"
+    SERVED_HOUSE = "served_house", "The house the character's family served"
+    OWN_FAMILY = "own_family", "The character's own family"

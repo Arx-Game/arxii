@@ -2190,6 +2190,18 @@ Multi-stage character creation flow with draft system.
   `_bind_kinship_node`. See [character_creation.md](character_creation.md)'s
   Lineage step section and [family-authoring-recipes.md](family-authoring-recipes.md)
   recipes 10-12.
+- **Lineage stage: formative connections (#3660, ADR-0277):** an Upbringing
+  prompt now has one of four `QuestionKind`s (text, pick, "pick a group", "name a
+  person"); a group question ties the answer to a real `societies.Organization`
+  (five `AnchorSource` rules: a pool, a named list, the same group as an earlier
+  question, the served house, or the character's own family), tags when and what
+  kind of tie it was, and may show only after an earlier question or only for one
+  of its answers; an answer may grant a Distinction bundled free and seed the
+  group's opinion at finalize. Staff author a whole route on one page, the
+  Upbringing Builder (`src/web/admin/upbringing_builder/`); the character sheet's
+  Origins panel (`OriginsSection.tsx`) shows the resulting ties, entity-linked and
+  life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
+  kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)

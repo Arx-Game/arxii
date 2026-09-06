@@ -416,6 +416,16 @@ export interface CharacterDraft {
   stats_budget: number;
   /** Gift-stage technique pick budget (base 1 + distinction bonus, #2426). */
   starting_technique_picks: number;
+  /** Distinctions the draft's visible, picked Upbringing answers grant (#3660). */
+  bundled_distinctions: BundledDistinction[];
+  /**
+   * OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id as a
+   * string, or `null` when that source has nothing to resolve to yet (#3660 ruling
+   * L). The frontend cannot derive these itself (no house org id for a claimed
+   * family, no served-house lookup without the offering Family Template), so the
+   * server hands back what it resolved.
+   */
+  derived_anchors: Record<string, DerivedAnchor | null>;
 }
 
 export interface Stats {
@@ -746,6 +756,11 @@ export interface DraftData {
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
   origin_choices?: Record<string, number | null>;
+  // GROUP question answers: slot id -> organization id or null (#3660). Never
+  // set for an own_family/served_house question; the server resolves those.
+  origin_anchors?: Record<string, number | null>;
+  // PERSON question answers: slot id -> the named person's name (#3660)
+  origin_figures?: Record<string, string>;
   // The name given to a newly founded family on the 'named' family path (#3617)
   new_family_name?: string;
   concept?: string;
@@ -911,6 +926,14 @@ export interface DraftSummary {
 
 // Origin story guided flow (#2478); extended into the Upbringing model (#3617)
 
+/** The Distinction a choice bundles at no extra cost (#3660). */
+export interface GrantedDistinction {
+  id: number;
+  name: string;
+  cost_per_rank: number;
+  secret_by_default: boolean;
+}
+
 /** One priced answer on a pick-list Upbringing prompt. */
 export interface OriginTemplateSlotChoice {
   id: number;
@@ -918,11 +941,39 @@ export interface OriginTemplateSlotChoice {
   description: string;
   cg_point_cost: number;
   cost_per_influence: number;
+  /** Minimum trust to see this answer; staff always see it (#3660). */
+  trust_required: number;
+  grants_distinction: GrantedDistinction | null;
   sort_order: number;
 }
 
 /** The family path a slot prompt is scoped to, or 'any' for every path. */
 export type FamilyPath = 'claimed' | 'named' | 'none';
+
+/** What kind of thing an Upbringing prompt asks for (#3660). */
+export type QuestionKind = 'text' | 'pick' | 'group' | 'person';
+
+/** Which groups a 'group' question offers, or '' for a non-group question (#3660). */
+export type AnchorSource = '' | 'pool' | 'listed' | 'same_as' | 'served_house' | 'own_family';
+
+/**
+ * An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+ * Mirrors the generated `DerivedAnchor` schema - no `gloss`, unlike `OriginGroup`,
+ * since this backs a fact card, not a picker.
+ */
+export interface DerivedAnchor {
+  id: number;
+  name: string;
+  influence: number | null;
+}
+
+/** One group a GROUP question offers, for the frontend picker (#3660). */
+export interface OriginGroup {
+  id: number;
+  name: string;
+  gloss: string;
+  influence: number | null;
+}
 
 export interface OriginTemplateSlot {
   id: number;
@@ -933,7 +984,56 @@ export interface OriginTemplateSlot {
   is_required: boolean;
   applies_to: 'any' | FamilyPath;
   allows_text: boolean;
+  kind: QuestionKind;
+  /** What the tie was; a tag shown on the page and the sheet (#3660). */
+  connection_kind: string;
+  /** When the tie was formed; a tag (#3660). */
+  life_stage: string;
+  /** Which groups a 'group' question offers (#3660). */
+  anchor_source: AnchorSource;
+  /** GROUP with SAME_AS: the earlier group question whose answer is this anchor.
+   *  PERSON: the group question this person belongs to (#3660). */
+  same_anchor_as: number | null;
+  /** Shown only once this earlier question is answered (#3660). */
+  follow_up_to: number | null;
+  /** Choice ids on `follow_up_to` that reveal this slot; `[]` means any answer. */
+  shown_for_choice_ids: number[];
+  /** Groups a POOL/LISTED question offers; `[]` for every other source (#3660). */
+  groups: OriginGroup[];
   choices: OriginTemplateSlotChoice[];
+}
+
+/** A tag label for `OriginTemplateSlot.connection_kind` (#3660). */
+export const CONNECTION_KIND_LABELS: Record<string, string> = {
+  raised_by: 'Raised by',
+  taught_by: 'Taught by',
+  served: 'Served',
+  sailed_with: 'Sailed with',
+  owes: 'Owes',
+  sworn_to: 'Sworn to',
+  hunted_by: 'Hunted by',
+};
+
+/** A tag label for `OriginTemplateSlot.life_stage` (#3660). */
+export const LIFE_STAGE_LABELS: Record<string, string> = {
+  childhood: 'Childhood',
+  youth: 'Youth',
+  at_the_glimpse: 'At the Glimpse',
+  since_the_glimpse: 'Since the Glimpse',
+};
+
+/** A Distinction bundled at no extra cost by a picked Upbringing answer (#3660). */
+export interface BundledDistinction {
+  distinction_id: number;
+  name: string;
+  cost_per_rank: number;
+  secret_by_default: boolean;
+  slot_id: number;
+  slot_name: string;
+  choice_id: number;
+  choice_name: string;
+  organization_id: number | null;
+  organization_name: string;
 }
 
 /** An "Upbringing" in CG copy: the authored content row chosen in the Lineage step. */
@@ -987,4 +1087,138 @@ export function resolveFamilyTemplate(draft: CharacterDraft): FamilyTemplate | n
 /** A pick-list choice's CG point cost, scaled by the claimed family's influence. */
 export function choiceCost(choice: OriginTemplateSlotChoice, influence: number): number {
   return choice.cg_point_cost + choice.cost_per_influence * influence;
+}
+
+/**
+ * Whether the draft has answered `slot` in the way its kind needs (#3660).
+ * Mirrors `world.character_creation.questionnaire.is_answered`.
+ */
+/** Whether a GROUP question has an anchor to answer with, by anchor source (#3660). */
+function hasGroupAnchor(slot: OriginTemplateSlot, draft: CharacterDraft): boolean {
+  if (slot.anchor_source === 'own_family' || slot.anchor_source === 'served_house') {
+    // The server is the only side that can resolve these (ruling L): a claimable
+    // family with no house org, or no served house picked yet, must read as
+    // unanswered here too, not just at validation - `draft.family`/`served_house`
+    // being set is not the same thing as the org resolving.
+    return draft.derived_anchors[String(slot.id)] != null;
+  }
+  return (draft.draft_data.origin_anchors?.[String(slot.id)] ?? null) != null;
+}
+
+export function isAnswered(slot: OriginTemplateSlot, draft: CharacterDraft): boolean {
+  const picked = draft.draft_data.origin_choices?.[String(slot.id)] ?? null;
+  const validPick = picked != null && slot.choices.some((c) => c.id === picked);
+  const text = Boolean((draft.draft_data.origin_slots?.[String(slot.id)] ?? '').trim());
+  if (slot.kind === 'text') return text;
+  if (slot.kind === 'pick') return validPick || (slot.allows_text && text);
+  if (slot.kind === 'person') {
+    return Boolean((draft.draft_data.origin_figures?.[String(slot.id)] ?? '').trim());
+  }
+  // GROUP: an anchor, plus a stance when the question offers any.
+  const hasAnchor = hasGroupAnchor(slot, draft);
+  if (slot.choices.length === 0) return hasAnchor;
+  return hasAnchor && validPick;
+}
+
+/**
+ * Ids of the questions shown to this draft, evaluated in sort order (#3660).
+ * Mirrors `world.character_creation.questionnaire.is_shown`/`visible_slot_ids`.
+ */
+export function shownSlotIds(
+  template: OriginTemplate,
+  draft: CharacterDraft,
+  path: FamilyPath | ''
+): Set<number> {
+  const slots = [...template.slots].sort((a, b) => a.sort_order - b.sort_order || a.id - b.id);
+  const slotsById = new Map(slots.map((s) => [s.id, s]));
+  const picks = draft.draft_data.origin_choices ?? {};
+  const shown = new Set<number>();
+  for (const slot of slots) {
+    if (slot.applies_to !== 'any' && slot.applies_to !== path) continue;
+    if (slot.follow_up_to == null) {
+      shown.add(slot.id);
+      continue;
+    }
+    const target = slotsById.get(slot.follow_up_to);
+    if (!target || !shown.has(target.id) || !isAnswered(target, draft)) continue;
+    if (slot.shown_for_choice_ids.length === 0) {
+      shown.add(slot.id);
+      continue;
+    }
+    const targetPick = picks[String(target.id)];
+    if (targetPick != null && slot.shown_for_choice_ids.includes(targetPick)) {
+      shown.add(slot.id);
+    }
+  }
+  return shown;
+}
+
+/**
+ * The groups a GROUP question offers this draft, for the picker (#3660).
+ * POOL/LISTED come straight from the slot's own `groups`; SAME_AS looks up the
+ * earlier question's `groups` by its stored anchor id; SERVED_HOUSE/OWN_FAMILY
+ * resolve from draft state the server also derives at validation/finalize time.
+ */
+export function groupsFor(
+  slot: OriginTemplateSlot,
+  template: OriginTemplate,
+  draft: CharacterDraft
+): OriginGroup[] {
+  switch (slot.anchor_source) {
+    case 'pool':
+    case 'listed':
+      return slot.groups;
+    case 'same_as': {
+      const target = template.slots.find((s) => s.id === slot.same_anchor_as);
+      if (!target) return [];
+      const anchorId = draft.draft_data.origin_anchors?.[String(target.id)] ?? null;
+      if (anchorId == null) return [];
+      const found = groupsFor(target, template, draft).find((g) => g.id === anchorId);
+      return found ? [found] : [];
+    }
+    case 'served_house':
+    case 'own_family': {
+      // Neither source has a stored answer to look up client-side: the server
+      // resolves the real org (a claimed family's house, or the served house
+      // pick) and hands it back on the draft (#3660 ruling L). A DerivedAnchor
+      // carries no gloss (it backs a fact card, not a picker), so it maps into
+      // the OriginGroup shape with an empty one.
+      const anchor = draft.derived_anchors[String(slot.id)] ?? null;
+      return anchor ? [{ ...anchor, gloss: '' }] : [];
+    }
+    default:
+      return [];
+  }
+}
+
+/**
+ * The single group currently in effect for a GROUP question: the only offered
+ * group (SAME_AS/SERVED_HOUSE/OWN_FAMILY, or a single-item POOL/LISTED list),
+ * else the player's stored pick among several offered groups (#3660).
+ */
+export function chosenGroupForSlot(
+  slot: OriginTemplateSlot,
+  template: OriginTemplate,
+  draft: CharacterDraft
+): OriginGroup | null {
+  const groups = groupsFor(slot, template, draft);
+  if (groups.length === 1) return groups[0];
+  const anchorId = draft.draft_data.origin_anchors?.[String(slot.id)] ?? null;
+  return groups.find((g) => g.id === anchorId) ?? null;
+}
+
+/**
+ * Influence that multiplies `cost_per_influence` for one question's answer
+ * (#3660). A GROUP question prices off its chosen group's own influence;
+ * every other question keeps pricing off the claimed family's influence.
+ */
+export function questionInfluence(
+  slot: OriginTemplateSlot,
+  group: OriginGroup | null,
+  draft: CharacterDraft,
+  path: FamilyPath | ''
+): number {
+  if (slot.kind === 'group') return group?.influence ?? 0;
+  if (path === 'claimed' && draft.family) return draft.family.influence;
+  return 0;
 }

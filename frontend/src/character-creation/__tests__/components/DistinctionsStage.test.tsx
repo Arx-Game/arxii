@@ -42,6 +42,22 @@ const distinctions = [
     lock_reason: 'Requires a Beginnings that allows it',
     codex_entry_ids: [],
   },
+  {
+    id: 77,
+    name: 'Kept Close',
+    slug: 'kept-close',
+    description: 'Someone watches over you.',
+    category_slug: 'background',
+    cost_per_rank: 3,
+    max_rank: 1,
+    is_variant_parent: false,
+    allow_other: false,
+    tags: [],
+    effects_summary: [],
+    is_locked: false,
+    lock_reason: null,
+    codex_entry_ids: [],
+  },
 ];
 
 vi.mock('@/hooks/useDistinctions', () => ({
@@ -125,5 +141,36 @@ describe('DistinctionsStage (folio)', () => {
     if (!note) throw new Error('expected #why-note to be rendered');
     expect(within(note).getByText(/Born to a house/)).toBeInTheDocument();
     expect(within(note).getByText(/\+1 Presence/)).toBeInTheDocument();
+  });
+
+  it('lists Distinctions bundled by the Upbringing and locks their catalog row', () => {
+    const bundledDraft = createMockDraft({
+      cg_points_spent: 5,
+      cg_points_remaining: 115,
+      bundled_distinctions: [
+        {
+          distinction_id: 77,
+          name: 'Kept Close',
+          cost_per_rank: 3,
+          secret_by_default: false,
+          slot_id: 5,
+          slot_name: 'Who watched over you?',
+          choice_id: 9,
+          choice_name: 'Courier',
+          organization_id: null,
+          organization_name: '',
+        },
+      ],
+    });
+    renderWithCharacterCreationProviders(
+      <DistinctionsStage draft={bundledDraft} onRegisterBeforeLeave={vi.fn()} />
+    );
+
+    expect(screen.getByText('From your Upbringing')).toBeInTheDocument();
+    expect(screen.getByText('Kept Close · bundled with Courier')).toBeInTheDocument();
+
+    const raise = screen.getByRole('button', { name: 'Raise Kept Close' });
+    expect(raise).toBeDisabled();
+    expect(raise).toHaveAttribute('title', 'Bundled with your Upbringing');
   });
 });

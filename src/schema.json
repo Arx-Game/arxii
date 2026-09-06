@@ -39544,6 +39544,20 @@ components:
       - id
       - name
       - provocation_cap
+    AnchorSourceEnum:
+      enum:
+      - pool
+      - listed
+      - same_as
+      - served_house
+      - own_family
+      type: string
+      description: |-
+        * `pool` - Every group of a type in a realm
+        * `listed` - Groups I name
+        * `same_as` - The same group as an earlier question
+        * `served_house` - The house the character's family served
+        * `own_family` - The character's own family
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -43947,12 +43961,27 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
+        bundled_distinctions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        derived_anchors:
+          type: object
+          additionalProperties:
+            allOf:
+            - $ref: '#/components/schemas/DerivedAnchor'
+            nullable: true
+          readOnly: true
       required:
       - build
+      - bundled_distinctions
       - cg_points_remaining
       - cg_points_spent
       - claimed_kin_pool
       - claimed_kin_slot
+      - derived_anchors
       - family
       - has_existing_characters
       - height_band
@@ -46003,6 +46032,24 @@ components:
       description: |-
         * `group_vote` - Group Vote
         * `joint` - Joint
+    ConnectionKindEnum:
+      enum:
+      - raised_by
+      - taught_by
+      - served
+      - sailed_with
+      - owes
+      - sworn_to
+      - hunted_by
+      type: string
+      description: |-
+        * `raised_by` - Raised by
+        * `taught_by` - Taught by
+        * `served` - Served
+        * `sailed_with` - Sailed with
+        * `owes` - Owes
+        * `sworn_to` - Sworn to
+        * `hunted_by` - Hunted by
     ConnectionTypeEnum:
       enum:
       - therefore
@@ -47618,6 +47665,25 @@ components:
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
+    DerivedAnchor:
+      type: object
+      description: |-
+        An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+
+        No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+        display on an already-answered question, not a picker.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - id
+      - influence
+      - name
     DevelopmentWrite:
       type: object
       description: Serializer for creating a relationship development update.
@@ -53195,6 +53261,24 @@ components:
       - content
       - heat
       - id
+    GrantedDistinction:
+      type: object
+      description: The Distinction a choice bundles at no extra cost (#3660 ruling
+        E).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cost_per_rank:
+          type: integer
+        secret_by_default:
+          type: boolean
+      required:
+      - cost_per_rank
+      - id
+      - name
+      - secret_by_default
     GrievanceOption:
       type: object
       description: A preset grievance swing offered to a wronged character (#1429).
@@ -56099,6 +56183,18 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    LifeStageEnum:
+      enum:
+      - childhood
+      - youth
+      - at_the_glimpse
+      - since_the_glimpse
+      type: string
+      description: |-
+        * `childhood` - Childhood
+        * `youth` - Youth
+        * `at_the_glimpse` - At the Glimpse
+        * `since_the_glimpse` - Since the Glimpse
     ListenerPost:
       type: object
       description: |-
@@ -60849,9 +60945,28 @@ components:
         * `authored` - Authored (canonical, exported)
         * `story` - GM Story (never exported)
         * `player` - Player-built (never exported)
+    OriginGroup:
+      type: object
+      description: One group a GROUP question offers, for the frontend picker (#3660
+        ruling E).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gloss:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - gloss
+      - id
+      - influence
+      - name
     OriginTemplateSlot:
       type: object
-      description: 'Slot prompt within an origin template (#2478, #3617).'
+      description: 'Slot prompt within an origin template (#2478, #3617, #3660).'
       properties:
         id:
           type: integer
@@ -60891,6 +61006,75 @@ components:
           readOnly: true
           description: Player may write a free-text answer (the 'other' box on a pick-list)
             (#3617).
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/OriginTemplateSlotKindEnum'
+          readOnly: true
+          description: |-
+            What this question asks for (#3660).
+
+            * `text` - Write an answer
+            * `pick` - Pick one answer
+            * `group` - Pick a group
+            * `person` - Name a person
+        connection_kind:
+          allOf:
+          - $ref: '#/components/schemas/ConnectionKindEnum'
+          readOnly: true
+          description: |-
+            What the tie was; a tag shown on the page and the sheet (#3660).
+
+            * `raised_by` - Raised by
+            * `taught_by` - Taught by
+            * `served` - Served
+            * `sailed_with` - Sailed with
+            * `owes` - Owes
+            * `sworn_to` - Sworn to
+            * `hunted_by` - Hunted by
+        life_stage:
+          allOf:
+          - $ref: '#/components/schemas/LifeStageEnum'
+          readOnly: true
+          description: |-
+            When the tie was formed; a tag (#3660).
+
+            * `childhood` - Childhood
+            * `youth` - Youth
+            * `at_the_glimpse` - At the Glimpse
+            * `since_the_glimpse` - Since the Glimpse
+        anchor_source:
+          allOf:
+          - $ref: '#/components/schemas/AnchorSourceEnum'
+          readOnly: true
+          description: |-
+            Which groups a 'pick a group' question offers (#3660).
+
+            * `pool` - Every group of a type in a realm
+            * `listed` - Groups I name
+            * `same_as` - The same group as an earlier question
+            * `served_house` - The house the character's family served
+            * `own_family` - The character's own family
+        same_anchor_as:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'GROUP with SAME_AS: the earlier group question whose answer
+            is this anchor. PERSON: the group question this person belongs to (#3660).'
+        follow_up_to:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Shown only once this earlier question is answered (#3660).
+        shown_for_choice_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginGroup'
+          readOnly: true
         choices:
           type: array
           items:
@@ -60898,17 +61082,26 @@ components:
           readOnly: true
       required:
       - allows_text
+      - anchor_source
       - applies_to
       - choices
+      - connection_kind
       - example
+      - follow_up_to
+      - groups
       - id
       - is_required
+      - kind
+      - life_stage
       - name
       - prompt
+      - same_anchor_as
+      - shown_for_choice_ids
       - sort_order
     OriginTemplateSlotChoice:
       type: object
-      description: One priced answer on a pick-list Upbringing prompt (#3617).
+      description: 'One priced answer on an Upbringing prompt (#3617, #3660). The
+        seed stays server-side.'
       properties:
         id:
           type: integer
@@ -60929,6 +61122,15 @@ components:
           type: integer
           readOnly: true
           description: CG cost per point of the claimed family's influence.
+        trust_required:
+          type: integer
+          readOnly: true
+          description: Minimum trust to see this answer; staff always see it (#3660).
+        grants_distinction:
+          allOf:
+          - $ref: '#/components/schemas/GrantedDistinction'
+          nullable: true
+          readOnly: true
         sort_order:
           type: integer
           readOnly: true
@@ -60936,9 +61138,23 @@ components:
       - cg_point_cost
       - cost_per_influence
       - description
+      - grants_distinction
       - id
       - name
       - sort_order
+      - trust_required
+    OriginTemplateSlotKindEnum:
+      enum:
+      - text
+      - pick
+      - group
+      - person
+      type: string
+      description: |-
+        * `text` - Write an answer
+        * `pick` - Pick one answer
+        * `group` - Pick a group
+        * `person` - Name a person
     Outcome425Enum:
       enum:
       - unsatisfied

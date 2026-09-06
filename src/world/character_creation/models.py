@@ -29,13 +29,19 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
+    REPUTATION_SEED_MAX,
+    REPUTATION_SEED_MIN,
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
+    AnchorSource,
     ApplicationStatus,
     CommentType,
+    ConnectionKind,
     FamilyPath,
+    LifeStage,
+    QuestionKind,
     Stage,
     StartingAreaAccessLevel,
 )
@@ -52,6 +58,7 @@ from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_PO
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
+    from world.character_creation.questionnaire import BundledDistinction, DerivedAnchor
     from world.skills.models import SkillPointBudget
     from world.societies.houses.models import HouseTemplate
 
@@ -709,6 +716,86 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Player may write a free-text answer (the 'other' box on a pick-list) (#3617).",
     )
+    kind = models.CharField(
+        max_length=10,
+        choices=QuestionKind.choices,
+        default=QuestionKind.TEXT,
+        help_text="What this question asks for (#3660).",
+    )
+    connection_kind = models.CharField(
+        max_length=20,
+        choices=ConnectionKind.choices,
+        blank=True,
+        default="",
+        help_text="What the tie was; a tag shown on the page and the sheet (#3660).",
+    )
+    life_stage = models.CharField(
+        max_length=20,
+        choices=LifeStage.choices,
+        blank=True,
+        default="",
+        help_text="When the tie was formed; a tag (#3660).",
+    )
+    anchor_source = models.CharField(
+        max_length=20,
+        choices=AnchorSource.choices,
+        blank=True,
+        default="",
+        help_text="Which groups a 'pick a group' question offers (#3660).",
+    )
+    anchor_org_type = models.ForeignKey(
+        "arxii.OrganizationType",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the org type groups must have (#3660).",
+    )
+    anchor_society = models.ForeignKey(
+        "arxii.Society",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="anchor_pool_prompts",
+        help_text="POOL source: the society groups must belong to (#3660).",
+    )
+    anchor_orgs = models.ManyToManyField(
+        "arxii.Organization",
+        blank=True,
+        related_name="anchor_prompts",
+        help_text="LISTED source: the groups offered, in name order (#3660).",
+    )
+    exclude_covert = models.BooleanField(
+        default=True, help_text="POOL source: leave out covert org types (#3660)."
+    )
+    same_anchor_as = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="dependents",
+        help_text=(
+            "GROUP with SAME_AS: the earlier group question whose answer is this anchor. "
+            "PERSON: the group question this person belongs to (#3660)."
+        ),
+    )
+    follow_up_to = models.ForeignKey(
+        "self",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="follow_ups",
+        help_text="Shown only once this earlier question is answered (#3660).",
+    )
+    shown_for_choices = models.ManyToManyField(
+        "arxii.OriginTemplateSlotChoice",
+        blank=True,
+        related_name="branching_prompts",
+        help_text=(
+            "With follow_up_to: shown only when the answer picked there is one of these; "
+            "empty means any answer (#3660)."
+        ),
+    )
 
     objects = OriginTemplateSlotManager()
 
@@ -724,6 +811,59 @@ class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def is_connection(self) -> bool:
+        return self.kind == QuestionKind.GROUP
+
+    def _clean_anchor_source(self, errors: dict[str, str]) -> None:
+        if self.kind == QuestionKind.GROUP:
+            if not self.anchor_source:
+                errors["anchor_source"] = "A 'pick a group' question needs a group source."
+            elif self.anchor_source == AnchorSource.POOL and not (
+                self.anchor_org_type_id or self.anchor_society_id
+            ):
+                errors["anchor_org_type"] = "A pool needs an org type, a society, or both."
+            elif self.anchor_source == AnchorSource.SAME_AS and self.same_anchor_as_id is None:
+                errors["same_anchor_as"] = "Name the earlier question whose group this reuses."
+        elif self.anchor_source:
+            errors["anchor_source"] = "Only a 'pick a group' question has a group source."
+
+    def _clean_same_anchor_as(self, errors: dict[str, str]) -> None:
+        if self.same_anchor_as_id is None:
+            return
+        target = self.same_anchor_as
+        if target.template_id != self.template_id or target.kind != QuestionKind.GROUP:
+            errors["same_anchor_as"] = "Must be a 'pick a group' question on this Upbringing."
+        elif target.sort_order >= self.sort_order:
+            errors["same_anchor_as"] = "Must be an earlier question."
+
+    def _clean_follow_up_to(self, errors: dict[str, str]) -> None:
+        if self.follow_up_to_id is None:
+            return
+        target = self.follow_up_to
+        if target.template_id != self.template_id or target.sort_order >= self.sort_order:
+            errors["follow_up_to"] = "Must be an earlier question on this Upbringing."
+
+    def _clean_shown_for_choices(self, errors: dict[str, str]) -> None:
+        if not self.pk or not self.shown_for_choices.exists():
+            return
+        if self.follow_up_to_id is None:
+            errors["shown_for_choices"] = "Branching answers need 'follow up to' set."
+        elif self.shown_for_choices.exclude(slot_id=self.follow_up_to_id).exists():
+            errors["shown_for_choices"] = (
+                "Every branching answer must belong to the follow-up question."
+            )
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        self._clean_anchor_source(errors)
+        self._clean_same_anchor_as(errors)
+        self._clean_follow_up_to(errors)
+        self._clean_shown_for_choices(errors)
+        if errors:
+            raise ValidationError(errors)
 
 
 class OriginTemplateSlotChoiceManager(NaturalKeyManager):
@@ -743,6 +883,21 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     cg_point_cost = models.IntegerField(default=0, help_text="Flat CG cost of this choice.")
     cost_per_influence = models.IntegerField(
         default=0, help_text="CG cost per point of the claimed family's influence."
+    )
+    grants_distinction = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="granting_choices",
+        help_text="Picking this answer grants the Distinction, bundled at no extra cost (#3660).",
+    )
+    reputation_seed = models.IntegerField(
+        default=0,
+        help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
+    )
+    trust_required = models.IntegerField(
+        default=0, help_text="Minimum trust to see this answer; staff always see it (#3660)."
     )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)
@@ -765,6 +920,25 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     def cost_for(self, influence: int) -> int:
         """Price of this choice against a family of ``influence`` (#3617)."""
         return self.cg_point_cost + self.cost_per_influence * influence
+
+    def clean(self) -> None:
+        super().clean()
+        if self.reputation_seed and self.slot.kind != QuestionKind.GROUP:
+            raise ValidationError(
+                {"reputation_seed": "Only a group question's answer seeds an opinion."}
+            )
+        if not REPUTATION_SEED_MIN <= self.reputation_seed <= REPUTATION_SEED_MAX:
+            raise ValidationError(
+                {
+                    "reputation_seed": (
+                        f"Seed must be between {REPUTATION_SEED_MIN} and {REPUTATION_SEED_MAX}."
+                    )
+                }
+            )
+        if self.slot.kind not in (QuestionKind.PICK, QuestionKind.GROUP):
+            raise ValidationError(
+                {"slot": "Answers belong only to a 'pick one answer' or 'pick a group' question."}
+            )
 
 
 class CharacterOriginSlot(SharedMemoryModel):
@@ -794,6 +968,22 @@ class CharacterOriginSlot(SharedMemoryModel):
         blank=True,
         related_name="character_rows",
         help_text="The picked choice on a pick-list prompt; null for a pure write-in (#3617).",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="connection_rows",
+        help_text=(
+            "The anchor a group question resolved to, or the group a person belongs to (#3660)."
+        ),
+    )
+    figure_name = models.CharField(
+        max_length=120,
+        blank=True,
+        default="",
+        help_text="A 'name a person' answer: the person the player named (#3660).",
     )
 
     class Meta:
@@ -1123,53 +1313,68 @@ class CharacterDraft(SharedMemoryModel):
         return next((row for row in offered if row.pk == int(chosen_id)), None)
 
     def visible_origin_slot_ids(self) -> set[int]:
-        """Ids of this draft's Upbringing slots visible on the resolved family path (#3617).
+        """Ids of this draft's Upbringing slots visible under the questionnaire rules (#3660).
 
-        A slot applies when ``applies_to`` is ANY or matches the resolved
-        path; a slot scoped to a path the draft is not currently on is
-        hidden, and its answer/choice must be ignored everywhere (pricing,
-        finalize persistence), mirroring ``validators._get_prompt_errors``.
+        Delegates to ``questionnaire.visible_slot_ids``: a slot applies when
+        ``applies_to`` is ANY or matches the resolved family path, and a
+        follow-up slot also needs its target shown and answered (and, for a
+        branching follow-up, one of the wanted answers picked). A slot hidden
+        by any of this must be ignored everywhere else (pricing, finalize
+        persistence), mirroring ``validators._get_prompt_errors``.
         """
-        template = self.selected_origin_template
-        if template is None:
-            return set()
-        path = self.resolve_family_path()
-        return {
-            slot_id
-            for slot_id, applies_to in template.slots.values_list("id", "applies_to")
-            if applies_to in (FamilyPath.ANY, path)
-        }
+        from world.character_creation.questionnaire import visible_slot_ids  # noqa: PLC0415
+
+        return visible_slot_ids(self)
 
     def calculate_upbringing_cost(self) -> int:
-        """Upbringing flat cost + each picked choice priced against the claimed family (#3617).
+        """Upbringing flat cost + each visible picked choice, priced per question (#3660).
 
-        Only choices on slots visible under the resolved family path are
-        priced: a choice on a slot the current path hides was answered
-        before a path switch and must not be charged for (#3617 review).
+        Only choices on slots visible under the questionnaire rules are
+        priced: a choice on a slot the current path/branch hides was
+        answered before a switch and must not be charged for (#3617 review).
+        A GROUP question prices against the influence of the family behind
+        its own anchor (which family need not be the claimed one); every
+        other question keeps the claim-path rule.
         """
+        from world.character_creation.questionnaire import (  # noqa: PLC0415
+            DraftAnswers,
+            question_influences,
+        )
+
         template = self.selected_origin_template
         if template is None:
             return 0
         path = self.resolve_family_path()
-        influence = self.family.influence if (path == FamilyPath.CLAIMED and self.family) else 0
-        visible_slot_ids = self.visible_origin_slot_ids()
-        picks = self.draft_data.get("origin_choices") or {}
-        ids = [
-            int(choice_id)
-            for slot_id, choice_id in picks.items()
-            if choice_id is not None and int(slot_id) in visible_slot_ids
-        ]
+        answers = DraftAnswers.from_draft(self)
+        visible = self.visible_origin_slot_ids()
+        picked = {sid: cid for sid, cid in answers.picks.items() if sid in visible}
         total = template.cg_point_cost
-        if ids:
-            for choice in OriginTemplateSlotChoice.objects.filter(
-                pk__in=ids, slot__template=template, is_active=True
-            ):
-                total += choice.cost_for(influence)
+        if picked:
+            choices = list(
+                OriginTemplateSlotChoice.objects.filter(
+                    pk__in=picked.values(), slot__template=template, is_active=True
+                ).select_related("slot")
+            )
+            influences = question_influences(choices, self, answers, path)
+            for choice in choices:
+                total += choice.cost_for(influences[choice.id])
         vacancy = self.selected_vacancy
         if vacancy is not None:
             family = vacancy.organization.family
             total += vacancy.cost_for(family.influence if family is not None else 0)
         return total
+
+    def bundled_distinctions(self) -> list[BundledDistinction]:
+        """Distinctions granted by the Upbringing answers this draft has picked (#3660)."""
+        from world.character_creation.questionnaire import bundled_distinctions  # noqa: PLC0415
+
+        return bundled_distinctions(self)
+
+    def derived_anchors(self) -> dict[int, DerivedAnchor | None]:
+        """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660)."""
+        from world.character_creation.questionnaire import derived_anchors  # noqa: PLC0415
+
+        return derived_anchors(self)
 
     def get_starting_room(self) -> ObjectDB | None:  # noqa: OBJECTDB_PARAM — a room object
         """

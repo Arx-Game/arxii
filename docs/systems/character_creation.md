@@ -39,9 +39,9 @@ from world.character_creation.types import (
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
-| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `named_family_kind` (FK `FamilyKind`, required when naming is allowed) |
-| `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text` |
-| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `is_active`, `sort_order` |
+| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648) |
+| `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
+| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `grants_distinction` (FK `Distinction`, nullable; bundled free), `reputation_seed` (int, -1000 to 1000; GROUP only), `trust_required`, `is_active`, `sort_order` |
 
 **Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
 Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
@@ -64,7 +64,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CharacterDraft` | In-progress creation state | `account`, `current_stage`, `selected_area`, `selected_beginnings`, `selected_species`, `selected_gender`, `age`, `selected_origin_template` (FK `OriginTemplate`, the chosen Upbringing, #3617), `family_path` (`FamilyPath`: claimed/named/none, #3617), `family`, `selected_path`, `selected_tradition`, `height_band`, `height_inches`, `build`, `draft_data` (JSON) |
-| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617) |
+| `CharacterOriginSlot` | A character's authored answer to an Upbringing prompt (instance data, not content) | `sheet` (FK), `slot` (FK `OriginTemplateSlot`), `value`, `choice` (FK `OriginTemplateSlotChoice`, nullable; the picked answer on a pick-list prompt, null for a pure write-in, #3617), `organization` (FK `Organization`, nullable; a GROUP question's resolved anchor, or the group a PERSON's named figure belongs to, #3660), `figure_name` (the named person, #3660) |
 
 **Note:** Magic selections during CG (gift, techniques, gift resonance, Anima Check stat/skill, aura distribution) are stored in `draft_data` JSON, not in separate Draft* models. The old DraftGift, DraftTechnique, DraftMotif, DraftMotifResonance, DraftMotifResonanceAssociation, DraftAnimaRitual, TraditionTemplate, TraditionTemplateTechnique, and TraditionTemplateFacet models have been removed.
 
@@ -247,7 +247,14 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 - `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for a beginning,
   trust-filtered; each row carries its `slots` (prefetched) and `claimable_kind_ids`, batched
   with one flat query grouped in Python and passed through serializer context rather than a
-  per-instance `.claimable_kinds.all()` or a bare `prefetch_related` (ADR-0263; #3617)
+  per-instance `.claimable_kinds.all()` or a bare `prefetch_related` (ADR-0263; #3617). Each
+  slot (`OriginTemplateSlotSerializer`) carries `kind`, `connection_kind`, `life_stage`,
+  `anchor_source`, `same_anchor_as`, `follow_up_to`, `shown_for_choice_ids`, and `groups` (the
+  offered `Organization`s for a POOL/LISTED slot, batched across the whole template; empty for
+  SAME_AS/SERVED_HOUSE/OWN_FAMILY, which the frontend resolves from the draft instead, #3660
+  ruling D). Each choice (`OriginTemplateSlotChoiceSerializer`) carries `grants_distinction`
+  (`GrantedDistinctionSerializer`: `id`, `name`, `cost_per_rank`, `secret_by_default`, or
+  `null`); `reputation_seed` stays server-side, never serialized to the player (#3660 ruling E)
 - `GET /api/character-creation/genders/` - Gender options
 - `GET /api/character-creation/pronouns/` - Pronoun sets
 - `GET /api/character-creation/cg-budgets/` - Active CG point budget
@@ -264,7 +271,12 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ### Draft Management
 - `GET/POST /api/character-creation/drafts/` - List/create drafts
-- `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft
+- `GET/PATCH/DELETE /api/character-creation/drafts/{id}/` - Read/update/delete draft. The draft
+  payload's `bundled_distinctions` (read-only) lists the Distinctions the visible, picked
+  Upbringing answers grant (`CharacterDraft.bundled_distinctions()`, #3660); `draft_data` also
+  carries `origin_anchors` (str slot id -> `Organization` id or null, a GROUP question's pick)
+  and `origin_figures` (str slot id -> a person's name, at most 120 chars, a PERSON question's
+  answer), validated the same shape as the existing `origin_choices`/`origin_slots`
 - `GET /api/character-creation/drafts/{id}/cg-points/` - CG points breakdown
 - `POST /api/character-creation/drafts/{id}/select-tradition/` - Select/clear tradition
 - `POST /api/character-creation/drafts/{id}/add-to-roster/` - Staff: finalize directly to roster (STAFF provenance)
@@ -311,6 +323,13 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 ## Admin
 
 Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+`CharacterOriginSlotAdmin`'s `list_display` also carries `organization` and `figure_name`
+(#3660), and `list_filter` adds `slot__kind`/`organization`.
+
+**Upbringing Builder (#3660):** an "Open in Upbringing Builder" object tool on
+`OriginTemplateAdmin`'s change form (Character Creation > Upbringings > a row) opens the whole
+route on one page; see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section for the
+files, URLs, gate, and credit rule.
 
 ## Lineage step (#3617, #3648)
 
@@ -352,6 +371,87 @@ extended to a second consumer).
 named, then `_bind_vacancy` (takes the Vacancy, claims/mints its kin link, joins the
 org) before `_bind_kinship_node`, so a kin Vacancy's node exists when the self-serve
 kinship fallback looks. `finalize_gm_character` mirrors both calls for GM drafts.
+
+### Question kinds and connections (#3660)
+
+An Upbringing prompt (`OriginTemplateSlot`) is one of four `QuestionKind`s: **Write an
+answer** (`text`, a write-in), **Pick one answer** (`pick`, a priced pick-list, both
+already on the app before #3660), **Pick a group** (`group`, ties the answer to a real
+`societies.Organization`), and **Name a person** (`person`, a free-text figure,
+optionally scoped inside a group question). All four kinds, and every rule below, are
+evaluated in exactly one place: `world/character_creation/questionnaire.py`, read by
+`models.py` (`visible_origin_slot_ids`, `calculate_upbringing_cost`,
+`bundled_distinctions`), `validators.py` (`get_lineage_errors`), `serializers.py`
+(the read API), and `services.py` (finalize), so the four never drift apart (#3660
+controller ruling A).
+
+**Group sources (`AnchorSource`, on a `group` question):** "Every group of a type in a
+realm" (`pool`, filtered by `anchor_org_type`/`anchor_society`, `exclude_covert`),
+"Groups I name" (`listed`, `anchor_orgs`), "The same group as an earlier question"
+(`same_as`, `same_anchor_as`; still needs its own `origin_anchors` entry, since the
+frontend auto-fills it, as a SAME_AS question only ever offers the one group), "The
+house the character's family served" (`served_house`) and "The character's own
+family" (`own_family`): the last two need no `origin_anchors` entry at all, since
+`questionnaire.anchor_for` derives the group fresh from the draft every time. The
+frontend has no way to derive either on its own (no house-org id for a claimed
+family, no served-house lookup without the offering Family Template), so
+`CharacterDraftSerializer.derived_anchors` (backed by `questionnaire.derived_anchors`)
+hands back what each such question resolved to, keyed by slot id, or `null` when it
+has nothing to resolve to yet (a claimable family with no house org, or no served
+house picked): the answered-ness check on both sides then agrees (#3660 fix round 2,
+controller ruling L).
+
+**Show-when rules (`is_shown`):** a prompt shows when its `applies_to` matches the
+resolved family path (or is `any`), AND (it has no `follow_up_to`, OR its `follow_up_to`
+target is itself shown and answered AND, when the prompt's `shown_for_choices` is
+non-empty, the target's picked answer is one of them). A hidden prompt's stored answer
+is ignored everywhere (pricing, validation, finalize persistence): the same rule the
+family-path switch has followed since #3617.
+
+**Answers with a grant and a seed:** an `OriginTemplateSlotChoice` may set
+`grants_distinction` (any pick-list or group answer; the Distinction is bundled at no
+extra cost, never adding to the choice's own `cost_for`) and, on a `group` question
+only, `reputation_seed` (-1000 to 1000; seeds `OrganizationReputation` toward the
+resolved anchor via `societies.renown.bump_organization_reputation` at finalize).
+
+**Plain word to code word (the Upbringing Builder's labels):**
+
+| Builder label | Code name |
+|---|---|
+| Question | `prompt` |
+| Kind of question | `kind` |
+| Pick a group | `QuestionKind.GROUP` |
+| Which groups can be picked | `anchor_source` |
+| Groups | `anchor_orgs` |
+| What the tie was | `connection_kind` |
+| When | `life_stage` |
+| Same group as / belongs to | `same_anchor_as` |
+| Shown after | `follow_up_to` |
+| Only for these answers | `shown_for_choices` |
+| Name a person | `QuestionKind.PERSON` / `figure_name` |
+| Group's opinion | `reputation_seed` |
+| Grants distinction | `grants_distinction` |
+
+**Finalize order (`_finalize_origin_slots`, `_grant_connection_distinctions`,
+`_seed_connection_reputation`):** every visible answered prompt is upserted via
+`set_origin_slot` (assembling `Profile.background`), then the visible picked answers'
+bundled Distinctions are granted through the same `CharacterDistinction` write path a
+hand-picked Distinction uses (bulk-create, `_create_distinction_modifiers_bulk`,
+Secret relocation); a `person` question anchored to the granting group's answer
+names the granted Distinction's spawned `NPCAsset`
+(`world.assets.services.reconcile_distinction_asset_grants(...,
+display_name=<the named figure>)`), overriding the staff-authored placeholder, then
+each picked group answer's non-zero `reputation_seed` bumps that anchor's
+`OrganizationReputation`. `CharacterDraft.bundled_distinctions()` is the same read
+`validators.get_distinctions_errors` uses to block a player from also hand-picking an
+already-bundled Distinction, and `character_sheets.types.OriginSlotEntry` is the sheet
+read's shape for one answered slot (`kind`, `connection_kind`, `life_stage`,
+`organization_id`/`organization_name`, `figure_name`: blanked for a non-owner,
+non-staff viewer).
+
+See ADR-0277 for why this landed as an authored questionnaire rather than a
+generalised single-anchor/single-mentor model, and Recipes 13-15 in
+[family-authoring-recipes.md](family-authoring-recipes.md) for the authoring walkthrough.
 
 ## Seeded content + Game Setup hub
 

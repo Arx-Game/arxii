@@ -261,3 +261,51 @@ Naming is deliberately unfinished — Apostate's to finalize; don't treat "the
 Hall" as a canon term to build further copy/UI around until ratified.
 _Avoid_: treating the name as final; "home page" (loses the in-fiction voice
 the rest of the frontend maintains).
+
+**Connection** (#3660):
+The tie a "pick a group" Upbringing prompt records: which real
+`societies.Organization` it names (its Anchor), what kind of tie it was
+(`ConnectionKind`, a tag: raised by, taught by, served, sailed with, owes,
+sworn to, hunted by), when it formed (`LifeStage`: childhood, youth, at the
+Glimpse, since the Glimpse), and the player's Stance toward it. Stored as a
+`character_creation.CharacterOriginSlot` row with `organization` set;
+evaluated everywhere through `questionnaire.py`, never re-derived per caller.
+_Avoid:_ tie, bond, mentor, patron, position, seat, station, role, standing,
+regard; "pool" for anything but the POOL anchor source below.
+
+**Anchor** (#3660):
+The Organization a Connection resolves to. Which groups a "pick a group"
+question offers comes from its authored source rule (`AnchorSource`): a pool
+of every active org matching a type/society filter, a named list, the same
+group an earlier group question resolved to, the house the character's
+family served, or the character's own family. The last two need no stored
+pick at all: `questionnaire.anchor_for` derives the Anchor fresh from the
+draft every time, so a family-path switch can never leave a stale one behind.
+_Avoid:_ tie, bond, mentor, patron, position, seat, station, role, standing,
+regard; "pool" for anything but the POOL source specifically.
+
+**Stance** (#3660):
+An answer (`OriginTemplateSlotChoice`) on a Connection's "pick a group"
+prompt: it may carry a price (against the resolved Anchor's own family
+influence, 0 when that group has no Family), grant a Distinction bundled at
+no extra cost, and seed the Anchor's opinion of the character
+(`reputation_seed`, applied through `bump_organization_reputation` at
+finalize). Distinct from a plain "pick one answer" Choice, which carries a
+price and grant but never a seed. _Avoid:_ tie, bond, mentor, patron,
+position, seat, station, role, standing, regard.
+
+**Follow-up** (#3660):
+An Upbringing prompt shown only once an earlier one is answered
+(`OriginTemplateSlot.follow_up_to`), optionally narrowed to specific answers
+on that earlier prompt (`shown_for_choices`; empty means any answer reveals
+it). A hidden prompt's stored answer is ignored everywhere: pricing,
+validation, and finalize persistence. _Avoid:_ branch as the field name (the
+field is `follow_up_to`); treating a follow-up with no `shown_for_choices` as
+unconditional in a different sense than "shown after any answer".
+
+**Question kind** (#3660):
+`OriginTemplateSlot.kind` (`QuestionKind`): TEXT (a write-in), PICK (a priced
+pick-list, both pre-#3660), GROUP (a Connection to an Anchor), or PERSON (a
+named figure, optionally scoped inside a GROUP question via
+`same_anchor_as`). _Avoid:_ tie, bond, mentor, patron, position, seat,
+station, role, standing, regard.

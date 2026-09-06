@@ -161,6 +161,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Choose how you were raised within your beginning, answer what it asks of you, "
         "and settle your family: name your own, claim one, or carry none."
     ),
+    # Lineage questions by kind (#3660): hints shown under a group/person prompt.
+    "origin_group_hint": "The group is real and staff wrote it. What you were to it is yours.",
+    "origin_person_hint": "Someone of your own, below the group's leaders.",
+    "origin_same_group_hint": "About the group you chose above.",
+    "origin_derived_group_missing": "No group was found for your family yet. Tell staff.",
     "family_path_heading": "Your Family",
     "family_template_heading": "Your Household",
     "vacancy_heading": "Your Place in the Family",

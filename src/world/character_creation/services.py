@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Final
 
 from django.conf import settings
 from django.core.exceptions import ValidationError
@@ -28,6 +28,7 @@ from world.character_creation.constants import (
     CommentType,
     FamilyPath,
     OriginStoryState,
+    QuestionKind,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -54,6 +55,7 @@ if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet, Gender, Profile
     from world.roster.models import Kinsperson
     from world.scenes.models import Persona
+    from world.societies.models import Organization
     from world.stories.models import Story
 
 logger = logging.getLogger(__name__)
@@ -228,6 +230,10 @@ def finalize_character(
     # by the time the self-serve fallback looks.
     _bind_vacancy(draft, sheet, primary_persona)
 
+    # Connection reputation seeding (#3660): each picked group answer's authored
+    # seed becomes the anchor org's opinion of the new PC.
+    _seed_connection_reputation(draft, primary_persona)
+
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
     # deletion (the claim FKs live on the draft).
@@ -360,6 +366,44 @@ def _bind_vacancy(draft: CharacterDraft, sheet: CharacterSheet, primary_persona:
             draft.selected_vacancy_id,
             draft.pk,
         )
+
+
+def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None:
+    """Apply each picked group answer's seed to the anchor's opinion of the character (#3660).
+
+    Every visible, picked GROUP-question choice with a non-zero
+    ``reputation_seed`` bumps ``OrganizationReputation`` for the resolved
+    anchor. The anchor is resolved through ``anchor_for`` (not read straight
+    off ``answers.anchors``) so an OWN_FAMILY/SERVED_HOUSE question, which
+    stores no anchor at all, still seeds the right Organization.
+    """
+    from world.character_creation.questionnaire import DraftAnswers, anchor_for  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
+
+    template = draft.selected_origin_template
+    if template is None:
+        return
+    answers = DraftAnswers.from_draft(draft)
+    visible = draft.visible_origin_slot_ids()
+    choices = list(
+        OriginTemplateSlotChoice.objects.filter(
+            pk__in=[cid for sid, cid in answers.picks.items() if sid in visible],
+            slot__template=template,
+            is_active=True,
+        )
+        .exclude(reputation_seed=0)
+        .select_related("slot")
+    )
+    if not choices:
+        return
+    anchor_by_choice_id = {choice.id: anchor_for(choice.slot, draft, answers) for choice in choices}
+    org_ids = {org_id for org_id in anchor_by_choice_id.values() if org_id is not None}
+    orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
+    for choice in choices:
+        org = orgs.get(anchor_by_choice_id[choice.id])
+        if org is not None:
+            bump_organization_reputation(persona, org, choice.reputation_seed)
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -617,45 +661,58 @@ def _grant_orientation_mission(
 
 def _finalize_origin_slots(
     sheet: CharacterSheet,
-    origin_slots: dict[str, str],
-    origin_choices: dict[str, int],
+    draft: CharacterDraft,
     visible_slot_ids: set[int],
 ) -> str:
-    """Upsert answers (text and choices) from draft_data and assemble prose (#2478, #3617).
+    """Upsert every visible answered question and assemble prose (#2478, #3617, #3660).
 
-    Called from ``_apply_sheet_demographics`` when the draft carries
-    ``origin_slots`` and/or ``origin_choices``. ``visible_slot_ids`` (from
-    ``CharacterDraft.visible_origin_slot_ids``) excludes slots the resolved
-    family path hides; an answer left over from before a path switch is
-    ignored here, not persisted (#3617 review). Returns the assembled prose for
-    ``Profile.background``. State refresh is deferred to the caller (after
-    ``profile.save()``) so ``refresh_origin_story_state`` sees the final prose value.
+    Called from ``_apply_sheet_demographics`` whenever the draft carries any
+    Upbringing answer (text, pick, anchor, or named figure). ``visible_slot_ids``
+    (from ``CharacterDraft.visible_origin_slot_ids``) excludes slots the resolved
+    family path hides; an answer left over from before a path switch is ignored
+    here, not persisted (#3617 review). The organization behind each question's
+    answer is resolved through ``anchor_for`` rather than read straight off
+    ``answers.anchors``, so an OWN_FAMILY/SERVED_HOUSE GROUP question (which
+    stores no anchor at all) and a PERSON question naming someone inside an
+    earlier group both land on the right ``Organization`` (#3660). Returns the
+    assembled prose for ``Profile.background``. State refresh is deferred to
+    the caller (after ``profile.save()``) so ``refresh_origin_story_state`` sees
+    the final prose value.
     """
-    for slot_id_str in set(origin_slots) | set(origin_choices):
-        try:
-            slot_id = int(slot_id_str)
-        except (ValueError, TypeError):
-            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id_str)
-            continue
-        if slot_id not in visible_slot_ids:
-            continue
-        try:
-            slot = OriginTemplateSlot.objects.get(pk=slot_id)
-        except OriginTemplateSlot.DoesNotExist:
-            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id_str)
+    from world.character_creation.questionnaire import DraftAnswers, anchor_for  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    answers = DraftAnswers.from_draft(draft)
+    slot_ids = (
+        set(answers.texts) | set(answers.picks) | set(answers.anchors) | set(answers.figures)
+    ) & visible_slot_ids
+    slots = {s.id: s for s in OriginTemplateSlot.objects.filter(pk__in=slot_ids)}
+    anchor_by_slot_id = {
+        slot_id: anchor_for(slots[slot_id], draft, answers)
+        for slot_id in slot_ids
+        if slot_id in slots
+    }
+    org_ids = {org_id for org_id in anchor_by_slot_id.values() if org_id is not None}
+    orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
+    for slot_id in sorted(slot_ids, key=lambda sid: slots[sid].sort_order if sid in slots else 0):
+        slot = slots.get(slot_id)
+        if slot is None:
+            logger.warning("Origin slot id %s not found during finalize; skipping.", slot_id)
             continue
         choice = None
-        choice_id = origin_choices.get(slot_id_str)
+        choice_id = answers.picks.get(slot_id)
         if choice_id is not None:
             choice = OriginTemplateSlotChoice.objects.filter(pk=choice_id, slot=slot).first()
             if choice is None:
                 logger.warning(
                     "Origin choice %s not on slot %s; skipping choice.", choice_id, slot.pk
                 )
-        value = str(origin_slots.get(slot_id_str, "")).strip()
-        if not value and choice is None:
+        organization = orgs.get(anchor_by_slot_id.get(slot_id))
+        figure = answers.figures.get(slot_id, "") if slot.kind == QuestionKind.PERSON else ""
+        value = answers.texts.get(slot_id, "")
+        if not value and choice is None and organization is None and not figure:
             continue
-        set_origin_slot(sheet, slot, value, choice=choice)
+        set_origin_slot(sheet, slot, value, choice, organization=organization, figure_name=figure)
     return assemble_origin_prose(sheet)
 
 
@@ -786,28 +843,27 @@ def _ensure_profile(sheet: CharacterSheet) -> Profile:
     return profile
 
 
-def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> dict:
+def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     """Apply descriptive/profile text fields from the draft's draft_data.
 
     additional_desc is appearance text (stays on the sheet); the narrative bio
     lives on true_profile now (#1270). Origin story: assemble prose from
-    structured slots and/or picked choices (#2478, #3617), filtered to the
-    slots visible on the resolved family path. Returns a truthy dict
-    (whichever of origin_slots/origin_choices was non-empty) when prose
-    was assembled, so the caller can refresh state; else an empty dict.
+    structured slots, picked choices, group anchors, and named figures
+    (#2478, #3617, #3660), filtered to the slots visible on the resolved
+    family path. Returns whether any Upbringing answer was present, so the
+    caller can refresh state.
     """
     draft_data = draft.draft_data
     if draft_data.get("description"):
         sheet.additional_desc = draft_data["description"]
 
     profile = _ensure_profile(sheet)
-    origin_slots = draft_data.get("origin_slots") or {}
-    origin_choices = draft_data.get("origin_choices") or {}
-    if origin_slots or origin_choices:
-        visible_slot_ids = draft.visible_origin_slot_ids()
-        profile.background = _finalize_origin_slots(
-            sheet, origin_slots, origin_choices, visible_slot_ids
-        )
+    answers_present = any(
+        draft_data.get(k)
+        for k in ("origin_slots", "origin_choices", "origin_anchors", "origin_figures")
+    )
+    if answers_present:
+        profile.background = _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
     if draft_data.get("personality"):
         profile.personality = draft_data["personality"]
     if draft_data.get("concept"):
@@ -815,7 +871,7 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> dict:
     if draft_data.get("quote"):
         profile.quote = draft_data["quote"]
     profile.save()
-    return origin_slots or origin_choices
+    return answers_present
 
 
 def _set_physical_characteristics(sheet: CharacterSheet, draft: CharacterDraft) -> None:
@@ -843,9 +899,9 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     _set_heritage(sheet, draft)
     _set_origin_realm(sheet, draft)
 
-    origin_slots = _set_descriptive_text(sheet, draft)
+    answers_present = _set_descriptive_text(sheet, draft)
     # Refresh origin-story state now that the assembled prose is persisted (#2478).
-    if origin_slots:
+    if answers_present:
         refresh_origin_story_state(sheet)
 
     _set_physical_characteristics(sheet, draft)
@@ -865,6 +921,7 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     _create_skill_values(character, draft)
     _build_and_create_goals(character, draft)
     _create_distinctions(character, draft)
+    _grant_connection_distinctions(character, draft)
     _create_worship_declaration(character, draft)
     _create_path_history(character, draft)
     _stamp_default_class_level(character)
@@ -1217,7 +1274,78 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
             mint_distinction_secret(cd)
 
 
-def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions: list) -> None:
+def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
+    """Grant the Distinctions the Upbringing answers bundle (#3660).
+
+    Same write path as picked Distinctions: bulk-create, then
+    ``_create_distinction_modifiers_bulk`` (modifiers, resonance grants, asset grants),
+    then Secret relocation for ``secret_by_default``. A person named on a PERSON
+    question in the granting group becomes the granted asset's name.
+    """
+    from world.character_creation.questionnaire import DraftAnswers  # noqa: PLC0415
+    from world.distinctions.models import (  # noqa: PLC0415
+        CharacterDistinction,
+        Distinction,
+        DistinctionEffect,
+    )
+    from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    bundled = draft.bundled_distinctions()
+    if not bundled:
+        return
+    sheet = character.sheet_data
+    existing = set(
+        CharacterDistinction.objects.filter(character=sheet).values_list(
+            "distinction_id", flat=True
+        )
+    )
+    wanted = {b["distinction_id"]: b for b in bundled if b["distinction_id"] not in existing}
+    if not wanted:
+        return
+    distinctions = Distinction.objects.filter(id__in=wanted).prefetch_related(
+        Prefetch(
+            "effects",
+            queryset=DistinctionEffect.objects.select_related("target__category"),
+            to_attr="cached_effects",
+        ),
+    )
+    answers = DraftAnswers.from_draft(draft)
+    visible = draft.visible_origin_slot_ids()
+    person_by_group_slot: dict[int, str] = {}
+    for slot in draft.selected_origin_template.slots.filter(
+        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
+    ):
+        name = answers.figures.get(slot.id)
+        if name and slot.id in visible:
+            person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
+    rows = []
+    asset_names: dict[int, str] = {}
+    for dist in distinctions:
+        b = wanted[dist.id]
+        rows.append(
+            CharacterDistinction(
+                character=sheet,
+                distinction=dist,
+                rank=1,
+                origin=DistinctionOrigin.CHARACTER_CREATION,
+                source_description=f"{b['choice_name']}, {b['organization_name']}".rstrip(", "),
+            )
+        )
+        if b["slot_id"] in person_by_group_slot:
+            asset_names[dist.id] = person_by_group_slot[b["slot_id"]]
+    created = CharacterDistinction.objects.bulk_create(rows)
+    _create_distinction_modifiers_bulk(sheet, created, asset_names=asset_names)
+    for cd in created:
+        if cd.distinction.secret_by_default:
+            mint_distinction_secret(cd)
+
+
+def _create_distinction_modifiers_bulk(
+    sheet: CharacterSheet,
+    char_distinctions: list,
+    asset_names: dict[int, str] | None = None,
+) -> None:
     """
     Bulk-create ModifierSource and CharacterModifier records for a list of CharacterDistinctions,
     then reconcile each distinction's resonance grants.
@@ -1230,6 +1358,12 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
     materializes a modifier as before. Reconcile runs for every CharacterDistinction
     regardless of whether it has any effects at all — a distinction can carry a
     ``DistinctionResonanceGrant`` with no ``DistinctionEffect`` rows.
+
+    ``asset_names`` (#3660) maps a distinction id to the name a connection's
+    named figure should give the distinction's granted ``NPCAsset``, overriding
+    the staff-authored ``asset_display_name``: used by
+    ``_grant_connection_distinctions`` for bundled Distinctions; ``None`` (the
+    picked-Distinction path) always uses the authored name.
     """
     from world.assets.services import (  # noqa: PLC0415
         reconcile_distinction_asset_grants,
@@ -1273,7 +1407,9 @@ def _create_distinction_modifiers_bulk(sheet: CharacterSheet, char_distinctions:
 
     for char_dist in char_distinctions:
         reconcile_distinction_resonance_grants(char_dist)
-        reconcile_distinction_asset_grants(char_dist)
+        reconcile_distinction_asset_grants(
+            char_dist, display_name=(asset_names or {}).get(char_dist.distinction_id)
+        )
         reconcile_distinction_regard_seeds(char_dist)
 
 
@@ -2549,6 +2685,9 @@ def finalize_gm_character(
     # membership, mirroring the player finalize flow.
     _bind_vacancy(draft, sheet, primary_persona)
 
+    # Connection reputation seeding (#3660): mirrors the player finalize flow.
+    _seed_connection_reputation(draft, primary_persona)
+
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).
     finalize_magic_data(draft, sheet)
@@ -2629,6 +2768,19 @@ def finalize_gm_character(
 # =============================================================================
 
 
+class _Keep:
+    """Sentinel type for ``set_origin_slot``'s ``organization``/``figure_name`` kwargs
+    (#3660 fix round 1): distinguishes "caller didn't mention this field, leave
+    it alone" from "caller passed None/'', clear it." A plain ``None``/``""``
+    default would make every caller that omits these kwargs (the post-CG
+    write-in editor, ``character_sheets/views.py``) silently wipe an existing
+    group tie or named figure on every edit.
+    """
+
+
+_KEEP: Final = _Keep()
+
+
 def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
     """Recompute and persist ``origin_story_state`` from slot rows + prose.
 
@@ -2649,19 +2801,34 @@ def refresh_origin_story_state(sheet: CharacterSheet) -> OriginStoryState:
 
 
 @transaction.atomic
-def set_origin_slot(
+def set_origin_slot(  # noqa: PLR0913 - one write path for every question kind (#3660)
     sheet: CharacterSheet,
     slot: OriginTemplateSlot,
     value: str,
     choice: OriginTemplateSlotChoice | None = None,
+    *,
+    organization: Organization | None | _Keep = _KEEP,
+    figure_name: str | _Keep = _KEEP,
 ) -> None:
-    """Upsert a character's answer (text and/or picked choice), then refresh state.
+    """Upsert a character's answer (text, picked choice, anchor, person), then refresh state.
 
-    Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``).
+    Mirrors ``set_glimpse_tags`` (``glimpse.py:42-62``). ``organization`` and
+    ``figure_name`` are the entity-linked/life-stage-tagged connection fields
+    added in #3660: the group a GROUP question anchored to, or the group a
+    PERSON question's named figure belongs to. Both default to the ``_KEEP``
+    sentinel rather than ``None``/``""``, so a caller that only ever edits
+    ``value`` (the post-CG write-in editor) leaves an existing tie/figure
+    alone instead of silently clearing it (#3660 fix round 1, Controller
+    Ruling F); finalize passes both explicitly, so it is unaffected. Pass
+    ``organization=None`` explicitly to clear an existing tie, and
+    ``figure_name=""`` explicitly to clear an existing person.
     """
-    CharacterOriginSlot.objects.update_or_create(
-        sheet=sheet, slot=slot, defaults={"value": value, "choice": choice}
-    )
+    defaults: dict[str, object] = {"value": value, "choice": choice}
+    if organization is not _KEEP:
+        defaults["organization"] = organization
+    if figure_name is not _KEEP:
+        defaults["figure_name"] = figure_name
+    CharacterOriginSlot.objects.update_or_create(sheet=sheet, slot=slot, defaults=defaults)
     refresh_origin_story_state(sheet)
 
 

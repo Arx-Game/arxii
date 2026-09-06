@@ -4,6 +4,7 @@ Character Creation serializers.
 
 from collections import defaultdict
 
+from django.db.models import Q
 from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
@@ -11,6 +12,8 @@ from world.character_creation.constants import (
     AGE_MAX_ETERNAL_YOUTH,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    AnchorSource,
+    QuestionKind,
 )
 from world.character_creation.models import (
     AGE_MAX,
@@ -20,6 +23,7 @@ from world.character_creation.models import (
     CGExplanation,
     CGPointBudget,
     CharacterDraft,
+    CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
@@ -413,19 +417,174 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
         ).data
 
 
+_GLOSS_MAX_LEN = 160
+
+
+def _gloss(description: str) -> str:
+    """First line of ``description``, cut at a word boundary to <= 160 chars.
+
+    No sentence-detection (a "St." abbreviation split on ". " was the bug this
+    replaced, #3660 ruling C) and no trailing ellipsis - just the last whole
+    word that still fits. An empty description gives "".
+    """
+    first_line = description.split("\n", 1)[0].strip()
+    if len(first_line) <= _GLOSS_MAX_LEN:
+        return first_line
+    truncated = first_line[:_GLOSS_MAX_LEN]
+    last_space = truncated.rfind(" ")
+    return truncated[:last_space] if last_space > 0 else truncated
+
+
+def _group_payload(org: Organization) -> dict:
+    """Name, first-line gloss, and the family's influence (#3660)."""
+    return {
+        "id": org.id,
+        "name": org.name,
+        "gloss": _gloss(org.description),
+        "influence": org.family.influence if org.family_id else None,
+    }
+
+
+def _batch_listed_groups(
+    slots: list[OriginTemplateSlot],
+) -> dict[int, list[Organization]]:
+    """LISTED slots' offered groups: one query over the ``anchor_orgs`` M2M (#3660 ruling D).
+
+    Every LISTED slot on the template shares this single query over the through
+    table (joined to ``Organization``), grouped by slot id in Python - never a
+    per-slot ``slot.anchor_orgs.all()`` call.
+    """
+    slot_ids = [
+        slot.id
+        for slot in slots
+        if slot.kind == QuestionKind.GROUP and slot.anchor_source == AnchorSource.LISTED
+    ]
+    if not slot_ids:
+        return {}
+    through = OriginTemplateSlot.anchor_orgs.through
+    pairs = list(
+        through.objects.filter(origintemplateslot_id__in=slot_ids).values_list(
+            "origintemplateslot_id", "organization_id"
+        )
+    )
+    org_ids = {org_id for _, org_id in pairs}
+    orgs_by_id = {
+        org.id: org for org in Organization.objects.filter(pk__in=org_ids).select_related("family")
+    }
+    grouped: dict[int, list[Organization]] = defaultdict(list)
+    for slot_id, org_id in pairs:
+        org = orgs_by_id.get(org_id)
+        if org is not None:
+            grouped[slot_id].append(org)
+    for orgs in grouped.values():
+        orgs.sort(key=lambda org: org.name)
+    return grouped
+
+
+def _batch_pool_groups(
+    slots: list[OriginTemplateSlot],
+) -> dict[int, list[Organization]]:
+    """POOL slots' offered groups: one shared query, partitioned per slot (#3660 ruling D).
+
+    Every POOL slot's (org_type, society) filter is OR'd into a single
+    ``Organization`` query; each slot's own filter (plus ``exclude_covert``) is
+    then re-applied in Python to split the shared result set back out per slot,
+    so the query count doesn't grow with the number of POOL questions.
+    """
+    pool_slots = [
+        slot
+        for slot in slots
+        if slot.kind == QuestionKind.GROUP and slot.anchor_source == AnchorSource.POOL
+    ]
+    if not pool_slots:
+        return {}
+    combined = Q()
+    for slot in pool_slots:
+        slot_q = Q()
+        if slot.anchor_org_type_id:
+            slot_q &= Q(org_type_id=slot.anchor_org_type_id)
+        if slot.anchor_society_id:
+            slot_q &= Q(society_id=slot.anchor_society_id)
+        combined |= slot_q
+    rows = list(
+        Organization.objects.filter(combined).select_related("org_type", "family").order_by("name")
+    )
+    grouped: dict[int, list[Organization]] = {}
+    for slot in pool_slots:
+        matches = []
+        for org in rows:
+            if slot.anchor_org_type_id and org.org_type_id != slot.anchor_org_type_id:
+                continue
+            if slot.anchor_society_id and org.society_id != slot.anchor_society_id:
+                continue
+            if slot.exclude_covert and org.org_type is not None and org.org_type.is_covert:
+                continue
+            matches.append(org)
+        grouped[slot.id] = matches
+    return grouped
+
+
+class GrantedDistinctionSerializer(serializers.Serializer):
+    """The Distinction a choice bundles at no extra cost (#3660 ruling E)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    cost_per_rank = serializers.IntegerField()
+    secret_by_default = serializers.BooleanField()
+
+
+class OriginGroupSerializer(serializers.Serializer):
+    """One group a GROUP question offers, for the frontend picker (#3660 ruling E)."""
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    gloss = serializers.CharField(allow_blank=True)
+    influence = serializers.IntegerField(allow_null=True)
+
+
+class DerivedAnchorSerializer(serializers.Serializer):
+    """An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+
+    No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+    display on an already-answered question, not a picker.
+    """
+
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    influence = serializers.IntegerField(allow_null=True)
+
+
 class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
-    """One priced answer on a pick-list Upbringing prompt (#3617)."""
+    """One priced answer on an Upbringing prompt (#3617, #3660). The seed stays server-side."""
+
+    grants_distinction = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplateSlotChoice
-        fields = ["id", "name", "description", "cg_point_cost", "cost_per_influence", "sort_order"]
+        fields = [
+            "id",
+            "name",
+            "description",
+            "cg_point_cost",
+            "cost_per_influence",
+            "trust_required",
+            "grants_distinction",
+            "sort_order",
+        ]
         read_only_fields = fields
+
+    @extend_schema_field(GrantedDistinctionSerializer(allow_null=True))
+    def get_grants_distinction(self, obj: OriginTemplateSlotChoice) -> dict | None:
+        dist = obj.grants_distinction
+        return GrantedDistinctionSerializer(dist).data if dist is not None else None
 
 
 class OriginTemplateSlotSerializer(serializers.ModelSerializer):
-    """Slot prompt within an origin template (#2478, #3617)."""
+    """Slot prompt within an origin template (#2478, #3617, #3660)."""
 
     choices = serializers.SerializerMethodField()
+    shown_for_choice_ids = serializers.SerializerMethodField()
+    groups = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplateSlot
@@ -438,6 +597,14 @@ class OriginTemplateSlotSerializer(serializers.ModelSerializer):
             "is_required",
             "applies_to",
             "allows_text",
+            "kind",
+            "connection_kind",
+            "life_stage",
+            "anchor_source",
+            "same_anchor_as",
+            "follow_up_to",
+            "shown_for_choice_ids",
+            "groups",
             "choices",
         ]
         read_only_fields = fields
@@ -454,6 +621,28 @@ class OriginTemplateSlotSerializer(serializers.ModelSerializer):
         """
         rows = self.context.get("choices_by_slot", {}).get(obj.id, [])
         return OriginTemplateSlotChoiceSerializer(rows, many=True).data
+
+    @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
+    def get_shown_for_choice_ids(self, obj: OriginTemplateSlot) -> list[int]:
+        """Choice ids on ``follow_up_to`` that reveal this slot; ``[]`` means any answer.
+
+        Resolved by the parent serializer's flat query over the M2M through table
+        (``CGOriginTemplateSerializer.get_slots``), never a per-slot ``.shown_for_choices
+        .all()`` call here (ADR-0263).
+        """
+        return self.context.get("branch_ids_by_slot", {}).get(obj.id, [])
+
+    @extend_schema_field(OriginGroupSerializer(many=True))
+    def get_groups(self, obj: OriginTemplateSlot) -> list[dict]:
+        """Groups a POOL/LISTED question offers; ``[]`` for every other source.
+
+        SAME_AS / SERVED_HOUSE / OWN_FAMILY depend on draft state a template read
+        doesn't have, so the frontend resolves those from the draft instead
+        (``CGOriginTemplateSerializer.get_slots`` only populates this context key
+        for POOL/LISTED).
+        """
+        payload = self.context.get("groups_by_slot", {}).get(obj.id, [])
+        return OriginGroupSerializer(payload, many=True).data
 
 
 class CGOriginTemplateSerializer(serializers.ModelSerializer):
@@ -514,10 +703,19 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
         """Return nested slots, preferring the prefetched ``cached_slots`` attr.
 
-        Choices are resolved with one flat query across every slot on this
-        template, grouped by slot id in Python, rather than a per-slot query in
-        the loop below or a new ``to_attr`` prefetch (see
-        ``OriginTemplateSlotSerializer.get_choices``).
+        Choices and the branch-choice ids are each resolved with one flat query
+        across every slot on this template, grouped by slot id in Python (see
+        ``OriginTemplateSlotSerializer.get_choices``/``get_shown_for_choice_ids``).
+        The groups a POOL or LISTED slot offers are batched the same way and
+        never a per-slot query (#3660 ruling D): ``_batch_listed_groups`` runs
+        one query over the ``anchor_orgs`` M2M's through table for every LISTED
+        slot on the template, and ``_batch_pool_groups`` runs ONE ``Organization``
+        query ORing every POOL slot's (org_type, society) filter together, then
+        re-applies each slot's own filter (plus ``exclude_covert``) in Python to
+        partition the shared result set back out per slot. Neither call's query
+        count grows with the number of group questions. ``questionnaire.
+        resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
+        OWN_FAMILY, and other single-slot callers) and is not used here.
         """
         slots = (
             obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
@@ -525,12 +723,33 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:
-            choice_rows = OriginTemplateSlotChoice.objects.filter(
-                slot_id__in=slot_ids, is_active=True
-            ).order_by("sort_order")
+            choice_rows = (
+                OriginTemplateSlotChoice.objects.filter(slot_id__in=slot_ids, is_active=True)
+                .select_related("grants_distinction")
+                .order_by("sort_order")
+            )
             for choice in choice_rows:
                 choices_by_slot[choice.slot_id].append(choice)
-        nested_context = {**self.context, "choices_by_slot": choices_by_slot}
+
+        branch_ids_by_slot: dict[int, list[int]] = defaultdict(list)
+        if slot_ids:
+            through = OriginTemplateSlot.shown_for_choices.through
+            for slot_id, choice_id in through.objects.filter(
+                origintemplateslot_id__in=slot_ids
+            ).values_list("origintemplateslot_id", "origintemplateslotchoice_id"):
+                branch_ids_by_slot[slot_id].append(choice_id)
+
+        orgs_by_slot = {**_batch_listed_groups(slots), **_batch_pool_groups(slots)}
+        groups_by_slot: dict[int, list[dict]] = {
+            slot_id: [_group_payload(org) for org in orgs] for slot_id, orgs in orgs_by_slot.items()
+        }
+
+        nested_context = {
+            **self.context,
+            "choices_by_slot": choices_by_slot,
+            "branch_ids_by_slot": branch_ids_by_slot,
+            "groups_by_slot": groups_by_slot,
+        }
         return OriginTemplateSlotSerializer(slots, many=True, context=nested_context).data
 
 
@@ -711,6 +930,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # base 1 + any distinction bonus; the GiftStage funnel's technique picker
     # needs it for the "n of m chosen" budget banner.
     starting_technique_picks = serializers.IntegerField(read_only=True)
+    # Distinctions the Upbringing answers grant, shown locked in the Distinctions
+    # stage so a player can't also hand-pick one already bundled in (#3660).
+    bundled_distinctions = serializers.SerializerMethodField()
+    # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
+    # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
+    derived_anchors = serializers.SerializerMethodField()
 
     class Meta:
         model = CharacterDraft
@@ -767,6 +992,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "bundled_distinctions",
+            "derived_anchors",
         ]
         read_only_fields = [
             "id",
@@ -779,6 +1006,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "stats_points_remaining",
             "stats_budget",
             "starting_technique_picks",
+            "bundled_distinctions",
+            "derived_anchors",
         ]
 
     def get_has_existing_characters(self, obj: CharacterDraft) -> bool:
@@ -828,6 +1057,21 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_stats_budget(self, obj: CharacterDraft) -> int:
         """Get total stat point budget (base + bonuses)."""
         return obj.calculate_stat_budget()
+
+    @extend_schema_field(serializers.ListField(child=serializers.DictField()))
+    def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
+        """Distinctions the Upbringing answers grant; shown locked in Distinctions (#3660)."""
+        return list(obj.bundled_distinctions())
+
+    @extend_schema_field(serializers.DictField(child=DerivedAnchorSerializer(allow_null=True)))
+    def get_derived_anchors(self, obj: CharacterDraft) -> dict[str, dict | None]:
+        """OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, keyed by slot id (#3660).
+
+        JSON object keys are always strings, so a slot id that ``derived_anchors``
+        keys by ``int`` comes back here keyed by ``str`` - the frontend looks each
+        slot up by ``String(slot.id)``.
+        """
+        return {str(slot_id): anchor for slot_id, anchor in obj.derived_anchors().items()}
 
     def validate_selected_area(self, value):
         """Ensure user can access the selected area."""
@@ -996,6 +1240,8 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
         self._validate_tarot_card_name(value)
         self._validate_origin_choices(value)
+        self._validate_origin_anchors(value)
+        self._validate_origin_figures(value)
         self._validate_new_family_name(value)
         self._validate_family_aspect_picks(value)
 
@@ -1020,6 +1266,49 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             if choice_id is not None and not isinstance(choice_id, int):
                 msg = "origin_choices values must be an integer choice id or null"
                 raise serializers.ValidationError({"origin_choices": msg})
+
+    def _validate_origin_anchors(self, data: dict) -> None:
+        """``origin_anchors`` maps a str slot id to an organization id, or null (#3660)."""
+        anchors = data.get("origin_anchors")
+        if anchors is None:
+            return
+        if not isinstance(anchors, dict):
+            raise serializers.ValidationError(
+                {"origin_anchors": "origin_anchors must be a dictionary"}
+            )
+        for slot_id, org_id in anchors.items():
+            if not isinstance(slot_id, str):
+                raise serializers.ValidationError(
+                    {"origin_anchors": "origin_anchors keys must be strings"}
+                )
+            if org_id is not None and not isinstance(org_id, int):
+                raise serializers.ValidationError(
+                    {
+                        "origin_anchors": (
+                            "origin_anchors values must be an integer organization id or null"
+                        )
+                    }
+                )
+
+    def _validate_origin_figures(self, data: dict) -> None:
+        """``origin_figures`` maps a str slot id to a person's name, at most 120 chars (#3660)."""
+        figures = data.get("origin_figures")
+        if figures is None:
+            return
+        if not isinstance(figures, dict):
+            raise serializers.ValidationError(
+                {"origin_figures": "origin_figures must be a dictionary"}
+            )
+        max_length = CharacterOriginSlot._meta.get_field("figure_name").max_length  # noqa: SLF001
+        for slot_id, name in figures.items():
+            if not isinstance(slot_id, str) or not isinstance(name, str):
+                raise serializers.ValidationError(
+                    {"origin_figures": "origin_figures must map strings to strings"}
+                )
+            if len(name) > max_length:
+                raise serializers.ValidationError(
+                    {"origin_figures": f"A person's name is at most {max_length} characters"}
+                )
 
     def _validate_new_family_name(self, data: dict) -> None:
         """``new_family_name`` must fit ``Family.name``'s column width (#3617)."""
