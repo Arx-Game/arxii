@@ -145,11 +145,26 @@ export interface CharacterSheetSkill {
  * `world.character_sheets.types._build_stats`/`SkillEntry`); `distinctions` and `magic` in
  * Tasks 9 & 10.
  */
+/**
+ * Mirrors `world.character_sheets.types.OriginSlotEntry`. `kind`/`connection_kind`/`life_stage`
+ * mirror the prompt (#3660); `choice_name`/`choice_description` are the picked choice's own
+ * fields. `organization_id`/`organization_name` are the resolved anchor (a GROUP question's
+ * pick, or the group a PERSON question's named figure belongs to). `figure_name` is blanked
+ * for a non-privileged (foreign) viewer.
+ */
 export interface CharacterSheetOriginSlot {
   slot_id: number;
   slot_name: string;
   slot_prompt: string;
   value: string;
+  kind: string;
+  connection_kind: string;
+  life_stage: string;
+  choice_name: string;
+  choice_description: string;
+  organization_id: number | null;
+  organization_name: string;
+  figure_name: string;
 }
 
 export interface CharacterSheetStory {

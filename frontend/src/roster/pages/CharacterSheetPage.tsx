@@ -28,6 +28,7 @@ import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
 import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
+import { OriginsSection } from '@/character_sheets/components/OriginsSection';
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
@@ -158,7 +159,15 @@ export function CharacterSheetPage() {
               <p>{entry.description}</p>
             </section>
           )}
-          <BackgroundSection background={entry.character.background} />
+          {sheetPayload && sheetPayload.story.origin_slots.length > 0 ? (
+            <OriginsSection
+              story={sheetPayload.story}
+              background={entry.character.background}
+              isMyCharacter={isMyCharacter}
+            />
+          ) : (
+            <BackgroundSection background={entry.character.background} />
+          )}
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
           )}

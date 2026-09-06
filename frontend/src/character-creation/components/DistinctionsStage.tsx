@@ -30,7 +30,7 @@ import {
   StatRow,
 } from '../folio';
 import { useCGExplanations, useCGPointBudget, useUpdateDraft } from '../queries';
-import type { CharacterDraft } from '../types';
+import type { BundledDistinction, CharacterDraft } from '../types';
 import { Stage } from '../types';
 
 interface DistinctionsStageProps {
@@ -65,6 +65,15 @@ function increaseTitleFor(distinction: Distinction, rank: number): string | unde
   if (distinction.is_locked) return distinction.lock_reason ?? 'Locked';
   if (rank >= distinction.max_rank) return `At ${distinction.max_rank}, the most it can be`;
   return undefined;
+}
+
+/**
+ * The line for one Distinction a picked Upbringing answer bundled for free
+ * (#3660): what it is, and which answer it came bundled with.
+ */
+function bundledLineFor(bundled: BundledDistinction): string {
+  const line = `${bundled.name} · bundled with ${bundled.choice_name}`;
+  return bundled.organization_name ? `${line} · ${bundled.organization_name}` : line;
 }
 
 export function DistinctionsStage({ draft, onRegisterBeforeLeave }: DistinctionsStageProps) {
@@ -242,6 +251,9 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
   }
 
   const list = distinctions ?? [];
+  // Ids a picked Upbringing answer already bundled for free (#3660): locked in
+  // the catalog here so a player can't also pay for the same Distinction.
+  const bundledIds = new Set(draft.bundled_distinctions.map((b) => b.distinction_id));
   const sortedCategories = [...(categories ?? [])].sort(
     (a, b) => a.display_order - b.display_order
   );
@@ -283,9 +295,13 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
             value={rankOf(d.id)}
             max={d.max_rank}
             onChange={(v) => setRank(d, v)}
-            canDecrease={rankOf(d.id) > 0}
-            canIncrease={!d.is_locked && rankOf(d.id) < d.max_rank}
-            increaseTitle={increaseTitleFor(d, rankOf(d.id))}
+            canDecrease={!bundledIds.has(d.id) && rankOf(d.id) > 0}
+            canIncrease={!bundledIds.has(d.id) && !d.is_locked && rankOf(d.id) < d.max_rank}
+            increaseTitle={
+              bundledIds.has(d.id)
+                ? 'Bundled with your Upbringing'
+                : increaseTitleFor(d, rankOf(d.id))
+            }
             onWhy={() => setWhy(d)}
             whyOpen={why?.id === d.id}
           />
@@ -359,6 +375,18 @@ export function DistinctionsStage({ draft, onRegisterBeforeLeave }: Distinctions
       <span className="vh" role="status">
         {announce}
       </span>
+      {draft.bundled_distinctions.length > 0 && (
+        <section aria-labelledby="dist-bundled-h">
+          <h2 className="section-h" id="dist-bundled-h">
+            From your Upbringing
+          </h2>
+          {draft.bundled_distinctions.map((bundled: BundledDistinction) => (
+            <p key={bundled.distinction_id} className="ledger-line">
+              {bundledLineFor(bundled)}
+            </p>
+          ))}
+        </section>
+      )}
       <h2 className="section-h" id="dist-cat">
         Category
       </h2>

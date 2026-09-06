@@ -26,10 +26,12 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog';
+import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { apiFetch } from '@/evennia_replacements/api';
 import type { CharacterSheetPayload } from '@/character_sheets/api';
+import { CONNECTION_KIND_LABELS, LIFE_STAGE_LABELS } from '@/character-creation/types';
 
 interface OriginStoryEditorDialogProps {
   /** The character sheet pk — backs the character-sheet query invalidated after every write. */
@@ -61,6 +63,7 @@ export function OriginStoryEditorDialog({ characterId, sheet }: OriginStoryEdito
   const queryClient = useQueryClient();
 
   const existingSlots = sheet.story.origin_slots ?? [];
+  const groupSlots = existingSlots.filter((slot) => slot.kind === 'group');
   const state = sheet.story.origin_story_state ?? 'not_started';
 
   const handleSlotChange = async (slotId: number, value: string) => {
@@ -84,6 +87,28 @@ export function OriginStoryEditorDialog({ characterId, sheet }: OriginStoryEdito
         <DialogHeader>
           <DialogTitle>Origin Story</DialogTitle>
         </DialogHeader>
+        {groupSlots.length > 0 && (
+          <div className="space-y-3" data-testid="origin-editor-group-rows">
+            {groupSlots.map((slot) => (
+              <div key={slot.slot_id} className="space-y-1 rounded-md border p-2 text-sm">
+                <p className="font-medium">{slot.organization_name || slot.slot_name}</p>
+                <div className="flex flex-wrap gap-1">
+                  {slot.connection_kind && (
+                    <Badge variant="outline">
+                      {CONNECTION_KIND_LABELS[slot.connection_kind] ?? slot.connection_kind}
+                    </Badge>
+                  )}
+                  {slot.life_stage && (
+                    <Badge variant="outline">
+                      {LIFE_STAGE_LABELS[slot.life_stage] ?? slot.life_stage}
+                    </Badge>
+                  )}
+                </div>
+                {slot.value && <p className="text-muted-foreground">{slot.value}</p>}
+              </div>
+            ))}
+          </div>
+        )}
         {existingSlots.length > 0 ? (
           <div className="space-y-4">
             {existingSlots.map((slot) => (
