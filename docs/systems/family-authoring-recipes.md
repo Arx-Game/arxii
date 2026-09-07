@@ -116,8 +116,10 @@ group" question, or the two draft-derived sources ("The house the character's fa
 served" / "The character's own family"), which need no group named at all - the
 Builder resolves those from the draft. Add its Answers (the group's stances): each an
 **Answer** (name), **Cost** / **Per point of influence** (priced against the resolved
-group's own family, 0 if it has none), and optionally **Grants distinction** and
-**Group's opinion** (`reputation_seed`, -1000 to 1000). Add a second question with
+group's own family, 0 if it has none), and **Group's opinion** (`reputation_seed`,
+-1000 to 1000). Save the page first; a newly added answer has no Offers cell until it
+has been saved and has a row of its own (Recipe 15 covers granting a Distinction from
+a saved answer). Add a second question with
 **Kind of question** "Name a person" (`person`) and **Same group as / belongs to**
 pointing at the group question, so the named figure belongs to it; leave it not
 Required if the tie can stand with no name given. Save. The right rail's Checks
@@ -133,17 +135,27 @@ by the row's own clean rule. The right rail's Checks warn when a question only s
 for certain answers but has no "Shown after" target set, and confirm when "Shown
 after" / "Same group as / belongs to" each point at an earlier question.
 
-## Recipe 15: an answer that grants a Distinction and sets the group's opinion
-On a "Pick a group" or "Pick one answer" question's Answer, set **Grants distinction**
-to an authored Distinction: picking that answer grants it at character creation for
-no extra Cost - the grant never adds to the priced answer's own Cost, and a player can
-no longer also hand-pick the same Distinction in the Distinctions stage. On a "Pick a
+## Recipe 15: an answer that offers a Distinction and sets the group's opinion
+An answer no longer carries a Distinction field of its own (#3675) - it hangs one or
+more `DistinctionOffer` rows off itself instead, authored in the Answer's own **Offers**
+cell once the answer is saved. Click **+ Offer**, pick the **Distinction**, and set
+**Arrives as**: "Bundled free with its opener" grants it the moment the player picks
+this answer, at no extra Cost (the grant never adds to the answer's own priced Cost);
+"A choice, priced" instead lists it as a separate pick the player must make explicitly,
+priced at the Distinction's own cost per rank. Add a second **+ Offer** row on the same
+answer to both bundle one Distinction and separately offer another from the same
+answer - each row is independent. Every offer here is `chapter=lineage`,
+`origin_choice=` this answer, set automatically; "Carried" is not offered, since an
+Upbringing answer is itself a choice, never something else's opener. On a "Pick a
 group" question's Answer, set **Group's opinion** (`reputation_seed`) to seed that
 group's opinion of the character at finalize (positive or negative, -1000 to 1000; 0
 seeds nothing). If a "Name a person" question is anchored to the same group (Recipe
-13), that named figure becomes the granted Distinction's spawned NPC's display name
-in place of the staff-authored placeholder. The right rail's "Distinctions used" tile
-lists every Distinction the route grants and flags one that has since gone inactive.
+13), that named figure becomes a bundled Distinction's spawned NPC's display name in
+place of the staff-authored placeholder. A Distinction offered only from this one row
+has no other route onto the sheet unless a different offer names it too. The right
+rail's backlog count shows how many distinct active offers this route uses; the
+Distinction Builder's own Checks (`src/web/admin/CLAUDE.md`) flag a LINEAGE offer whose
+answer has since gone inactive.
 
 ## Pricing at a glance
 Cost of an Upbringing = its flat cost + for each picked choice (flat + per-influence x
@@ -151,8 +163,10 @@ the claimed family's influence; influence is 0 on the name and none paths) + the
 selected Vacancy's cost (flat + per-influence x the **Vacancy's** family's influence,
 ADR-0269 extended by ADR-0273). A "pick a group" question's per-influence instead
 multiplies the *chosen group's own* family's influence (0 when that group has no
-Family) - which family that is need not be the claimed one (ADR-0277). A Distinction
-an answer grants adds nothing to that answer's cost; it is bundled free.
+Family) - which family that is need not be the claimed one (ADR-0277). An answer's
+Bundled Distinction offer adds nothing to that answer's own cost; a Choice offer on the
+same answer prices separately, at the Distinction's own cost per rank (#3675, Recipe
+15).
 
 ## Worked examples (illustrative names; not shipped content)
 

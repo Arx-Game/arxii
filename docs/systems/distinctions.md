@@ -142,8 +142,10 @@ run against a character's **currently-held** distinctions instead of a draft. It
 of a DRF `ValidationError`, since `grant_distinction` has non-HTTP callers (GM action, telnet,
 achievement engine, consequence-effect handler, resonance-threshold check).
 
-**In-play exclusion behavior differs from CG:** at CG time an exclusion conflict blocks the
-draft's Traits stage outright. In play, every calling source catches
+**In-play exclusion behavior differs from CG:** at CG time an exclusion conflict never blocks a
+stage (no stage owns distinctions, #3675) -- `offers.offers_for` marks the conflicting offer
+`is_locked` with a `lock_reason` (`"Cannot be held with {other.name}"`), so only that one choice
+is unpickable; every other offer in the chapter stays open. In play, every calling source catches
 `DistinctionExclusionError` at its own call site and **skips just that grant** — logging it and
 continuing — rather than failing the surrounding operation (an achievement award, a
 consequence-pool resolution, an endorsement's resonance grant). This mirrors

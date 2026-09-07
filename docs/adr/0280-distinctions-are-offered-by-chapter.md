@@ -1,10 +1,6 @@
 # ADR-0280: Distinctions are offered by CG chapter, not gated by a stage
 
-**Status:** Accepted (#3675, 2026-09-07). Related ADR-0136 (the CG magic revamp this
-extends), ADR-0277 (the questionnaire model whose answers open Lineage offers),
-ADR-0278 (the handler pattern `GlimpseTag.offers` follows), ADR-0279 (enemy degrees
-arrive as offers with source `enemy:<degree>`, the same shape this ADR gives every
-other CG-earned distinction).
+**Status:** Accepted (#3675, 2026-09-07). Related ADR-0136, ADR-0277, ADR-0278, ADR-0279.
 
 **Context.** The Distinctions stage was a standalone catalog browser, disconnected
 from the prose sections that should have earned or explained a pick. Three separate,
