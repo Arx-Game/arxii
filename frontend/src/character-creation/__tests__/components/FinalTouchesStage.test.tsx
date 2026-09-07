@@ -2,6 +2,8 @@
  * FinalTouchesStage Component Tests: the Actor's Sheet (#3621).
  */
 
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
@@ -139,6 +141,37 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     expect(
       screen.getByRole('heading', { name: /An Application to Shroudwatch Academy/ })
     ).toBeInTheDocument();
+  });
+
+  it('emits no class hook that cg.css has no rule for (#3667 shape)', async () => {
+    const user = userEvent.setup();
+    const { container } = renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          enemy_offers: [rouault],
+          draft_data: {
+            goals: [{ domain_id: 1, notes: 'A', points: 1, horizon: 'short_term' }],
+          },
+        })}
+        onRegisterBeforeLeave={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Name them' }));
+    await user.click(screen.getAllByRole('button', { name: 'Write it' })[0]);
+    const css = readFileSync(resolve(__dirname, '../../cg.css'), 'utf8');
+    const emitted = new Set<string>();
+    container.querySelectorAll('[class]').forEach((el) => {
+      el.className
+        .split(/\s+/)
+        .filter(Boolean)
+        .forEach((name) => emitted.add(name));
+    });
+    // App-wide utilities styled outside the folio sheet.
+    const styledElsewhere = new Set(['chosen', 'closed']);
+    const unstyled = [...emitted].filter(
+      (name) => !styledElsewhere.has(name) && !new RegExp(`\\.${name}(?![\\w-])`).test(css)
+    );
+    expect(unstyled).toEqual([]);
   });
 
   it('saves the answers, goals, enemy and introductions in one PATCH on leave', async () => {
