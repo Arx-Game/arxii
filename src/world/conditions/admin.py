@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from world.admin_utils import describe_reverse_relations
 from world.conditions.models import (
     CapabilityType,
     ConditionCapabilityEffect,
@@ -31,8 +32,17 @@ class ConditionCategoryAdmin(admin.ModelAdmin):
 
 @admin.register(CapabilityType)
 class CapabilityTypeAdmin(admin.ModelAdmin):
+    """Consumed by ``battles``, ``checks``, ``combat``, ``covenants``, ``magic``,
+    ``military``, ``missions``, ``mechanics`` and ``conditions`` itself — see
+    ``get_connections`` (#3679)."""
+
     list_display = ["name"]
     search_fields = ["name"]
+    readonly_fields = ["get_connections"]
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj)
 
 
 @admin.register(DamageType)
@@ -41,6 +51,11 @@ class DamageTypeAdmin(admin.ModelAdmin):
     list_filter = ["resonance"]
     search_fields = ["name"]
     autocomplete_fields = ["wound_pool", "death_pool"]
+    readonly_fields = ["get_connections"]
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj)
 
 
 # =============================================================================

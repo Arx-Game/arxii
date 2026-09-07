@@ -1,12 +1,14 @@
 from django.contrib import admin
 from django.db.models import Prefetch
 
+from world.admin_utils import describe_reverse_relations
 from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
     AudereMajoraFaithVariantAppliedCondition,
 )
+from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -111,14 +113,36 @@ class AffinityAdmin(admin.ModelAdmin):
 
 @admin.register(Resonance)
 class ResonanceAdmin(admin.ModelAdmin):
-    list_display = ["name", "affinity", "get_opposite"]
+    """The most cross-referenced model in the app (#3679) — see ``get_connections``."""
+
+    list_display = ["name", "affinity", "get_opposite", "get_gift_count"]
     list_filter = ["affinity"]
     search_fields = ["name"]
     list_select_related = ["affinity", "opposite"]
+    readonly_fields = ["get_gifts", "get_connections"]
 
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(Prefetch("gifts", to_attr="cached_gifts"))
+        )
+
+    @admin.display(description="Gifts (supported set)")
+    def get_gift_count(self, obj):
+        return len(obj.cached_gifts)
+
+    @admin.display(description="Gifts in supported set")
+    def get_gifts(self, obj):
+        return ", ".join(g.name for g in obj.cached_gifts) or "-"
+
+    @admin.display(description="Other connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"gifts"}))
 
 
 @admin.register(AffinityInteraction)
@@ -137,9 +161,26 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
 
 @admin.register(EffectType)
 class EffectTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "base_power", "base_anima_cost", "has_power_scaling"]
+    list_display = [
+        "name",
+        "base_power",
+        "base_anima_cost",
+        "has_power_scaling",
+        "get_technique_count",
+    ]
     list_filter = ["has_power_scaling"]
     search_fields = ["name"]
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(Prefetch("techniques", to_attr="cached_techniques"))
+        )
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        return len(obj.cached_techniques)
 
 
 class StyleCapabilityRequirementInline(admin.TabularInline):
@@ -438,13 +479,71 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     actions = [grant_resonance_action]
 
 
+class GiftChildInline(admin.TabularInline):
+    """Read-only: gifts hanging beneath this one in the lineage (#2891, ADR-0192)."""
+
+    model = Gift
+    fk_name = "parent"
+    fields = ["name", "kind"]
+    readonly_fields = ["name", "kind"]
+    extra = 0
+    can_delete = False
+    verbose_name = "Child gift (lineage)"
+    verbose_name_plural = "Child gifts (lineage)"
+
+    def has_add_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     autocomplete_fields = ["creator", "parent"]
-    list_display = ["name", "kind", "parent"]
+    list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
+    readonly_fields = ["get_grant_sources"]
+    inlines = [GiftChildInline]
+
+    def get_queryset(self, request):
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(Prefetch("techniques", to_attr="cached_techniques"))
+        )
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        return len(obj.cached_techniques)
+
+    @admin.display(description="Grant sources (who grants this gift, and how it's learned)")
+    def get_grant_sources(self, obj: Gift) -> str:
+        if not obj.pk:
+            return "-"
+        paths = ", ".join(g.path.name for g in obj.path_grants.select_related("path"))
+        traditions = ", ".join(
+            g.tradition.name for g in obj.tradition_grants.select_related("tradition")
+        )
+        species = ", ".join(g.species.name for g in obj.species_grants.select_related("species"))
+        parts = []
+        if paths:
+            parts.append(f"Paths: {paths}")
+        if traditions:
+            parts.append(f"Traditions: {traditions}")
+        if species:
+            parts.append(f"Species: {species}")
+        unlock = obj.gift_unlocks.first()
+        if unlock:
+            parts.append(f"GiftUnlock: xp_cost={unlock.xp_cost}")
+        elif obj.kind == GiftKind.MINOR:
+            parts.append(
+                "No GiftUnlock authored — not directly player-learnable; "
+                "reachable only via a Path/Tradition/Species grant above."
+            )
+        return "; ".join(parts) or "No authored grant sources found."
 
 
 @admin.register(CharacterGift)
@@ -462,13 +561,25 @@ class TraditionCodexGrantInline(admin.TabularInline):
     autocomplete_fields = ["entry"]
 
 
+class TraditionGiftGrantInline(admin.TabularInline):
+    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above)."""
+
+    model = TraditionGiftGrant
+    extra = 1
+    autocomplete_fields = ["gift"]
+
+
 @admin.register(Tradition)
 class TraditionAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_active", "sort_order"]
+    list_display = ["name", "is_active", "sort_order", "get_member_count"]
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
-    inlines = [TraditionCodexGrantInline]
+    inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
+
+    @admin.display(description="Current members")
+    def get_member_count(self, obj):
+        return obj.character_traditions.filter(left_at__isnull=True).count()
 
 
 @admin.register(TraditionGiftGrant)
@@ -565,6 +676,7 @@ class FacetAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     autocomplete_fields = ["parent"]
     ordering = ["parent__name", "name"]
+    readonly_fields = ["get_connections"]
 
     @admin.display(description="Depth")
     def get_depth(self, obj):
@@ -573,6 +685,10 @@ class FacetAdmin(admin.ModelAdmin):
     @admin.display(description="Full Path")
     def get_full_path(self, obj):
         return obj.full_path
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"children"}))
 
 
 @admin.register(Reincarnation)
