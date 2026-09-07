@@ -55,10 +55,14 @@ class DistinctionOffersMigrationTests(TransactionTestCase):
         # graph's head, so fake-apply the whole graph before asking
         # MigrationExecutor to compute a real backward plan.
         call_command("migrate", fake=True, verbosity=0)
+        # Registered BEFORE the rewind: a failure inside the backward DDL would
+        # skip tearDown and leave the shared keepdb test database half-reversed,
+        # but addCleanup runs even when setUp raises past this line.
+        self.addCleanup(self._restore_head)
         executor = MigrationExecutor(connection)
         executor.migrate([_START])
 
-    def tearDown(self):
+    def _restore_head(self):
         # Build a fresh executor: the loader caches state from the last
         # ``migrate()`` call, so reusing the ``setUp`` executor here would
         # replay against a stale graph.
@@ -66,7 +70,6 @@ class DistinctionOffersMigrationTests(TransactionTestCase):
         executor.migrate(executor.loader.graph.leaf_nodes())
         # Restore the empty django_migrations baseline this test found.
         MigrationRecorder(connection).migration_qs.all().delete()
-        super().tearDown()
 
     def _historical_apps(self, node):
         executor = MigrationExecutor(connection)
