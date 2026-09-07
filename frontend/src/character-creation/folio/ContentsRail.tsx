@@ -21,9 +21,19 @@ export const CHAPTERS: ReadonlyArray<{ stage: Stage }> = [
   { stage: Stage.REVIEW },
 ];
 
-/** "Stage n of N" eyebrow for a stage (#3540 OOC sweep: plain, no in-character ordinal). */
+/**
+ * "Stage n of N" eyebrow for a stage (#3540 OOC sweep: plain, no in-character
+ * ordinal). No unknown-stage branch: migration 0110 moved every draft that
+ * carried the old stage 4 to stage 5 (#3675), so `findIndex` returning -1 is
+ * unreachable after migrate; the clamp only keeps the arithmetic honest and
+ * agrees with the page's own Origin fallback ("Stage 1 of N").
+ */
 export function stageEyebrow(stage: Stage): string {
-  const index = CHAPTERS.findIndex((c) => c.stage === stage) + 1;
+  const index =
+    Math.max(
+      CHAPTERS.findIndex((c) => c.stage === stage),
+      0
+    ) + 1;
   return `Stage ${index} of ${CHAPTERS.length}`;
 }
 
