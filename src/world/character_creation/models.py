@@ -52,11 +52,13 @@ from world.character_creation.types import (
     CGPointBreakdownEntry,
     StageValidationErrors,
 )
+from world.character_sheets.types import EnemyPowerTier
 from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
 from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
+from world.societies.constants import EnemyReach
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -515,6 +517,70 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
                 )
             )
         return Language.objects.filter(id__in=language_ids)
+
+
+class BeginningEnemyOffer(SharedMemoryModel):
+    """An enemy a Beginning itself puts in the character's way (#3621).
+
+    The Lineage's answered group and person questions are offered automatically; these
+    rows are only for what the Beginning adds (the Republic that does not keep the Gifted).
+    A group row is an Organization and takes its reach from its type unless
+    ``reach_override`` says the group cannot reach where the character plays (issue rule
+    2, "reach is measured where the character plays"). A person row is a name and a power
+    tier, optionally inside a group.
+    """
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="enemy_offers",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="beginning_enemy_offers",
+        help_text="The group offered, or the group the offered person belongs to.",
+    )
+    figure_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Set for a person: their name. Blank for a group.",
+    )
+    power_tier = models.CharField(
+        max_length=10,
+        choices=EnemyPowerTier.choices,
+        blank=True,
+        help_text="Set for a person: their power. Blank for a group.",
+    )
+    reach_override = models.CharField(
+        max_length=12,
+        choices=EnemyReach.choices,
+        blank=True,
+        help_text=(
+            "A group only: price it at this reach instead of its type's, when it cannot "
+            "reach the character where they play."
+        ),
+    )
+    why = models.CharField(
+        max_length=255,
+        help_text="Why they want the character to fail, as offered (a gloss on the list).",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["beginning_id", "sort_order", "id"]
+        verbose_name = "Beginning enemy offer"
+        verbose_name_plural = "Beginning enemy offers"
+
+    def __str__(self) -> str:
+        who = self.figure_name or (self.organization.name if self.organization_id else "?")
+        return f"{self.beginning.name}: {who}"
+
+    @property
+    def is_person(self) -> bool:
+        return bool(self.figure_name)
 
 
 class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
@@ -1597,6 +1663,20 @@ class CharacterDraft(SharedMemoryModel):
                         "cost": cost,
                     }
                 )
+        # Carrying an enemy is paid for, into the shared purse (#3621): a negative cost.
+        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+
+        enemy = resolve_enemy(self)
+        if enemy is not None and enemy.price:
+            from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+
+            breakdown.append(
+                {
+                    "category": "enemy",
+                    "item": f"{enemy.name or 'Unplaced enemy'}: {EnemyDegree(enemy.degree).label}",
+                    "cost": -enemy.price,
+                }
+            )
         if self.age is not None and self.age < MATURATION_UNDERAGE_YEAR:
             # The youngest starts buy their youth with a thinner purse (#3635).
             breakdown.append(

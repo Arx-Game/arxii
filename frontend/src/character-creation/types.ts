@@ -437,6 +437,14 @@ export interface CharacterDraft {
    * server hands back what it resolved.
    */
   derived_anchors: Record<string, DerivedAnchor | null>;
+  /** Who the draft may name as its enemy (#3621): Lineage groups and persons, Beginning offers. */
+  enemy_offers: EnemyOffer[];
+  /** Both price scales, reach or power tier -> degree -> CG points awarded (#3621). */
+  enemy_price_tables: Record<'group' | 'person', Record<string, Record<string, number>>>;
+  /** Degree value -> the Distinction that degree grants (#3621), so the row can say so. */
+  enemy_degree_grants: Record<string, string>;
+  /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
+  introductions_offered: { first_journal: boolean };
 }
 
 export interface Stats {
@@ -752,17 +760,57 @@ export interface Power {
   resonances: Resonance[];
 }
 
+export type GoalHorizon = 'short_term' | 'long_term';
+
 export interface DraftGoal {
   domain_id: number;
   notes: string;
   points: number;
+  /** Short term or long term (#3621); numbered within the horizon in list order. */
+  horizon: GoalHorizon;
+}
+
+/** The draft's enemy pick (#3621): a person or a group, at a degree. */
+export interface DraftEnemy {
+  kind: 'person' | 'group';
+  organization_id: number | null;
+  /** The person's name, or a free-written group's name; blank for an offered group. */
+  name: string;
+  /** A person's power on the ladder; blank for a group. */
+  power_tier: string;
+  degree: string;
+  why: string;
+  public_line: string;
+}
+
+/** The Introductions' answers (#3621): three per journal, one rumor per line for the Whispers. */
+export interface DraftIntroductions {
+  first_journal: string[];
+  application: string[];
+  whispers: string;
+}
+
+/** One person or group the draft may name as its enemy (#3621, `enemy_offers`). */
+export interface EnemyOffer {
+  kind: 'person' | 'group';
+  organization_id: number | null;
+  name: string;
+  reach: string;
+  power_tier: string;
+  why: string;
+  source: 'lineage' | 'beginning';
 }
 
 export interface DraftData {
   first_name?: string;
   description?: string;
-  personality?: string;
   background?: string;
+  // The Actor's Sheet (#3621): the three answers, the enemy pick, the Introductions
+  never_do?: string;
+  protect?: string;
+  fear?: string;
+  enemy?: DraftEnemy | null;
+  introductions?: DraftIntroductions;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
@@ -924,7 +972,9 @@ export interface DraftSummary {
   id: number;
   first_name: string;
   description: string;
-  personality: string;
+  never_do: string;
+  protect: string;
+  fear: string;
   background: string;
   species: string | null;
   area: string | null;

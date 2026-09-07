@@ -79,9 +79,18 @@ class TestLoreOnboardingSeed(TestCase):
             "identity_name_heading",
             "identity_concept_heading",
             "identity_quote_heading",
-            "identity_personality_heading",
             "identity_worship_heading",
             "finaltouches_how_note",
+            "finaltouches_never_do_prompt",
+            "finaltouches_never_do_example",
+            "finaltouches_protect_prompt",
+            "finaltouches_fear_prompt",
+            "finaltouches_enemy_heading",
+            "introductions_heading",
+            "introductions_intro",
+            "first_journal_q1",
+            "application_q3",
+            "whispers_frame",
         )
         for key in stage_internal_keys:
             explanation = CGExplanation.objects.get(key=key)

@@ -327,4 +327,5 @@ treat those names as hints to confirm, not gospel.
 - [0276 - The migration chain regenerates to its floor and crosses generations with replaces](0276-migration-chain-regenerates-to-its-floor-and-crosses-generations-with-replaces.md) (#3656; amends ADR-0195, related ADR-0083, ADR-0237)
 - [0277 - Upbringings are authored questionnaires, not a generalised anchor/mentor model](0277-upbringings-are-authored-questionnaires.md) (#3660; related ADR-0268, ADR-0269, ADR-0273)
 - [0278 - Rows a parent owns live behind a handler, not a prefetch](0278-cached-rows-live-behind-a-handler-not-a-prefetch.md) (#3673; extends ADR-0263, ADR-0008)
+- [0279 - An enemy is a priced flaw the world must collect, on two scales](0279-enemies-are-priced-flaws-collected-by-the-world.md) (#3621; related ADR-0277, ADR-0269, ADR-0010)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

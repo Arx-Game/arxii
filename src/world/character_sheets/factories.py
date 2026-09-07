@@ -30,7 +30,9 @@ class ProfileFactory(factory_django.DjangoModelFactory):
 
     concept = factory.Faker("sentence", nb_words=3)
     quote = factory.Faker("sentence")
-    personality = factory.Faker("paragraph")
+    never_do = factory.Faker("sentence")
+    protect = factory.Faker("sentence")
+    fear = factory.Faker("sentence")
     background = factory.Faker("paragraph")
 
 

@@ -29,6 +29,9 @@ import { MechanicsSection } from '@/character_sheets/components/MechanicsSection
 import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { OriginsSection } from '@/character_sheets/components/OriginsSection';
+import { ActorSheetSection } from '@/character_sheets/components/ActorSheetSection';
+
+type ActorSheetGoal = Parameters<typeof ActorSheetSection>[0]['goals'][number];
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
@@ -158,6 +161,12 @@ export function CharacterSheetPage() {
               <h3 className="text-xl font-semibold">Description</h3>
               <p>{entry.description}</p>
             </section>
+          )}
+          {sheetPayload && (
+            <ActorSheetSection
+              block={sheetPayload.actor_sheet}
+              goals={sheetPayload.goals as ActorSheetGoal[]}
+            />
           )}
           {sheetPayload && sheetPayload.story.origin_slots.length > 0 ? (
             <OriginsSection

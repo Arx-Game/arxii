@@ -4,6 +4,7 @@ from django.contrib import admin
 from django.http import HttpRequest
 
 from world.character_sheets.models import (
+    CharacterEnemy,
     CharacterSheet,
     Gender,
     Heritage,
@@ -29,7 +30,9 @@ class ProfileAdmin(admin.ModelAdmin):
         "concept",
         "real_concept",
         "quote",
-        "personality",
+        "never_do",
+        "protect",
+        "fear",
         "background",
         "obituary",
         # Lineage moved to Profile (#1270 slice 3) — edit it here.
@@ -43,7 +46,7 @@ class ProfileAdmin(admin.ModelAdmin):
     def save_model(self, request: HttpRequest, obj: Profile, form: Any, change: bool) -> None:
         """Route versioned prose fields through the snapshot service (#2631).
 
-        Staff edits must never overwrite background/personality silently — the
+        Staff edits must never overwrite versioned prose silently — the
         same history invariant the table-request flow holds. The pre-edit text
         comes from ``form.initial``: the identity map means the instance (and
         any refetch) already holds the new value by the time we get here.
@@ -238,3 +241,35 @@ class HeritageAdmin(admin.ModelAdmin):
         "chronological_age_unknown",
         "first_appeared_ic",
     )
+
+
+@admin.register(CharacterEnemy)
+class CharacterEnemyAdmin(admin.ModelAdmin):
+    """Who wants a character to fail, priced (#3621).
+
+    Staff place a free-written enemy here: linking a real group (or rating a person)
+    recomputes the price on save and flips the row to placed.
+    """
+
+    list_display = ["character", "kind", "target_name", "degree", "price", "status"]
+    list_filter = ["kind", "degree", "status"]
+    search_fields = ["figure_name", "organization__name", "family__name"]
+    raw_id_fields = ["character", "organization", "family", "secret"]
+    readonly_fields = ["price", "reach", "created_at"]
+
+    def save_model(
+        self, request: HttpRequest, obj: CharacterEnemy, form: Any, change: bool
+    ) -> None:
+        from world.character_creation.enemies import enemy_price  # noqa: PLC0415
+        from world.character_sheets.types import EnemyKind, EnemyStatus  # noqa: PLC0415
+
+        if obj.kind == EnemyKind.GROUP and obj.organization_id is not None:
+            obj.reach = obj.organization.org_type.reach
+            scale = obj.reach
+        elif obj.kind == EnemyKind.PERSON:
+            scale = obj.power_tier
+        else:
+            scale = ""
+        obj.price = enemy_price(obj.kind, scale, obj.degree)
+        obj.status = EnemyStatus.PLACED if scale else EnemyStatus.PENDING
+        super().save_model(request, obj, form, change)

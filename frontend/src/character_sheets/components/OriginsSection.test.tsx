@@ -25,7 +25,6 @@ const mockReputationsQuery = vi.mocked(useOrganizationReputationsQuery);
 function makeStory(): CharacterSheetStory {
   return {
     background: 'Raised in the shadow of the guild hall.',
-    personality: '',
     origin_story_state: 'complete',
     origin_slots: [
       {

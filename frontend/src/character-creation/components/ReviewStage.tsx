@@ -135,7 +135,9 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
     },
     { label: 'Background', text: draftData.background, stage: Stage.IDENTITY },
     { label: 'Description', text: draftData.description, stage: Stage.APPEARANCE },
-    { label: 'Personality', text: draftData.personality, stage: Stage.IDENTITY },
+    { label: 'Would never', text: draftData.never_do, stage: Stage.FINAL_TOUCHES },
+    { label: 'Protects at all costs', text: draftData.protect, stage: Stage.FINAL_TOUCHES },
+    { label: 'Deathly afraid of', text: draftData.fear, stage: Stage.FINAL_TOUCHES },
   ];
   const months = [
     'January',
