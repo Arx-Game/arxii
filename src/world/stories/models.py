@@ -2927,12 +2927,7 @@ class StakeRewardLine(SharedMemoryModel):
             raise ValidationError(
                 {"resolution": "Reward lines only attach to WIN-column resolutions."}
             )
-        for sink, field_name in self.SINK_FIELDS.items():
-            field_id = getattr(self, f"{field_name}_id")
-            if self.sink == sink and field_id is None:
-                raise ValidationError({field_name: f"Required when sink is {sink}."})
-            if self.sink != sink and field_id is not None:
-                raise ValidationError({field_name: f"Only allowed when sink is {sink}."})
+        self._validate_sink_fields()
         if self.item_template_id is not None:
             if self.item_template.value < 1:
                 raise ValidationError(
@@ -2948,6 +2943,15 @@ class StakeRewardLine(SharedMemoryModel):
                     )
                 }
             )
+
+    def _validate_sink_fields(self) -> None:
+        """Validate that only the selected sink has a payload."""
+        for sink, field_name in self.SINK_FIELDS.items():
+            field_id = getattr(self, f"{field_name}_id")
+            if self.sink == sink and field_id is None:
+                raise ValidationError({field_name: f"Required when sink is {sink}."})
+            if self.sink != sink and field_id is not None:
+                raise ValidationError({field_name: f"Only allowed when sink is {sink}."})
 
     def __str__(self) -> str:
         return f"StakeRewardLine({self.resolution_id}: {self.sink} x{self.amount})"
