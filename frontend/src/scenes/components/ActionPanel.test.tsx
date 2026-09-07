@@ -196,6 +196,7 @@ const CASTABLE_EFFECT_SUMMARY: TechniqueEffectSummary = {
   applies: [],
   removes: [],
   damage: [],
+  treatments: [],
   grants: [],
   summary: 'Cast on an ally, anywhere in the room, in the physical arena.',
   is_underspecified: false,

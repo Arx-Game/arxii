@@ -298,11 +298,26 @@ class DamageEffectSerializer(serializers.Serializer):
 
 
 class CapabilityEffectSerializer(serializers.Serializer):
-    """One Capability a technique grants (#2898)."""
+    """One Capability a technique grants by being KNOWN (#2898, ADR-0248).
+
+    Standing possession, not a cast effect — the summary sentence says so in
+    words ("Knowing it grants ..."), so a client rendering these rows must not
+    file them under what the cast does (#3682).
+    """
 
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
     base_value = serializers.IntegerField(read_only=True)
+
+
+class TreatmentEffectSerializer(serializers.Serializer):
+    """One treatment a technique performs on cast (#3682)."""
+
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    treats = serializers.CharField(read_only=True)
+    target_kind = serializers.CharField(read_only=True)
+    minimum_success_level = serializers.IntegerField(read_only=True)
 
 
 class TechniqueEffectSummarySerializer(serializers.Serializer):
@@ -324,6 +339,7 @@ class TechniqueEffectSummarySerializer(serializers.Serializer):
     applies = ConditionEffectSerializer(many=True, read_only=True)
     removes = ConditionEffectSerializer(many=True, read_only=True)
     damage = DamageEffectSerializer(many=True, read_only=True)
+    treatments = TreatmentEffectSerializer(many=True, read_only=True)
     grants = CapabilityEffectSerializer(many=True, read_only=True)
     summary = serializers.CharField(read_only=True)
     is_underspecified = serializers.BooleanField(read_only=True)

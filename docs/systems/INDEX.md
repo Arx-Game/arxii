@@ -160,12 +160,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   - **Technique effect summary (#2898):** the one block every technique surface
     shows. `summarize_technique_effects(technique) -> TechniqueEffectPayload`
     (`services/technique_effects.py`, types in `types/technique_effects.py`)
-    reads the four payload tables — `TechniqueCapabilityGrant` /
+    reads the five payload tables — `TechniqueCapabilityGrant` /
     `TechniqueAppliedCondition` / `TechniqueDamageProfile` /
-    `TechniqueRemovedCondition` — none of which reached any display surface
+    `TechniqueRemovedCondition` / `TechniqueTreatment` (the fifth joined in
+    #3682) — none of which reached any display surface
     before, and renders both structured data and a plain-words line ("Cast on an
     ally, anywhere in the room, in the physical arena. Costs 5 anima. Applies
-    Guarded."). It **composes** `is_technique_hostile` and
+    Guarded."). A capability grant reads "Knowing it grants X" — standing
+    possession, never something the cast does (ADR-0248). It **composes** `is_technique_hostile` and
     `derive_target_relationship` rather than restating them; no model field is
     added (`Technique.target_type`'s help text forbids a stored relationship).
     Cached on the row as `Technique.cached_effect_summary`; drop it with
@@ -182,7 +184,12 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `target_kind`, so the derived relationship is a guess) and
     `technique_is_underspecified` (nothing authored at all), collected by
     `technique_effect_authoring_gaps()` and surfaced on `TechniqueAdmin` as
-    columns + a filter. See magic.md "Technique effect summary".
+    columns + a filter. `technique_is_not_castable_standalone` (#3682) reports a
+    third state — no `action_template`, so the cast gate refuses it and the cast
+    list hides it while CG still offers it as a pick. It is a fact about the cast
+    linkage, not a verdict: it stays out of `technique_effect_authoring_gaps()`
+    (every authored technique lacks a template today) and filters in SQL on the
+    admin instead. See magic.md "Technique effect summary".
   - **Per-caster technique forms (#2901):** the effect summary above describes
     the *authored* technique, which is the whole story for the two catalog
     surfaces (CG, the magic API) but not for the two per-character ones. A
@@ -496,7 +503,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     casts roll the same personal check.
   - Technique targeting (#1321):
     `derive_target_relationship(technique) -> ConditionTargetKind` (`world/magic/services/targeting.py`)
-    — ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF.
+    — ENEMY if hostile; ALLY if any applied, removed or treatment row has
+    `target_kind=ALLY`; ENEMY if a treatment row targets an enemy; else SELF.
+    Hostility itself reads the payload rows only — `EffectType.base_power` is a
+    magnitude knob and is NOT consulted (ADR-0278, #3682): it used to be, which
+    made all 54 authored Defense techniques classify as hostile.
     `technique_alters_behavior(technique) -> bool` — True if any applied condition's
     `category.alters_behavior` is True (compulsion, charm, fear).
     `cast_requires_consent(technique) -> bool` — True iff `technique_alters_behavior`; **behavior

@@ -42581,7 +42581,12 @@ components:
         * `changes_requested` - Changes requested
     CapabilityEffect:
       type: object
-      description: One Capability a technique grants (#2898).
+      description: |-
+        One Capability a technique grants by being KNOWN (#2898, ADR-0248).
+
+        Standing possession, not a cast effect — the summary sentence says so in
+        words ("Knowing it grants ..."), so a client rendering these rows must not
+        file them under what the cast does (#3682).
       properties:
         name:
           type: string
@@ -80040,6 +80045,11 @@ components:
           items:
             $ref: '#/components/schemas/DamageEffect'
           readOnly: true
+        treatments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreatmentEffect'
+          readOnly: true
         grants:
           type: array
           items:
@@ -80065,6 +80075,7 @@ components:
       - removes
       - summary
       - target_type
+      - treatments
     TechniqueForm:
       type: object
       description: |-
@@ -81785,6 +81796,31 @@ components:
       required:
       - candidates
       - scene_id
+    TreatmentEffect:
+      type: object
+      description: One treatment a technique performs on cast (#3682).
+      properties:
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        treats:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        minimum_success_level:
+          type: integer
+          readOnly: true
+      required:
+      - description
+      - minimum_success_level
+      - name
+      - target_kind
+      - treats
     TreatmentTemplate:
       type: object
       description: |-

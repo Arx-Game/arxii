@@ -623,6 +623,17 @@ class _ResolvedTechnique:
         """
         return self.technique.cached_removed_conditions
 
+    @property
+    def cached_treatments(self) -> list:
+        """Treatment rows, always the parent's (#3682).
+
+        Same asymmetry as ``cached_removed_conditions``: there is no
+        ``TechniqueVariantTreatment`` model, so a variant cannot override which
+        treatments the technique performs. Declared explicitly rather than left
+        to ``__getattr__`` so the asymmetry stays visible.
+        """
+        return self.technique.cached_treatments
+
     # Pass-through for the cast pipeline's other technique reads.
     def __getattr__(self, item):
         return getattr(self.technique, item)

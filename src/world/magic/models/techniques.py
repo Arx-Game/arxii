@@ -636,6 +636,22 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         return list(self.removed_conditions.select_related("condition"))
 
     @cached_property
+    def cached_treatments(self) -> list:
+        """Treatment payload rows for this technique (#3682). Supports Prefetch(to_attr=).
+
+        The fourth cast payload family, and the one the #2898 summary never read:
+        a technique whose only authored effect was a treatment described itself as
+        having no effect at all, and ``derive_target_relationship`` fell through to
+        SELF — so a heal authored for an ally was rejected at the cast gate.
+
+        ``treatment_template`` and the condition it relieves are select_related
+        for the same reason as above.
+
+        To invalidate: ``del instance.cached_treatments``.
+        """
+        return list(self.treatments.select_related("treatment_template__target_condition"))
+
+    @cached_property
     def cached_target_prerequisites(self) -> list:
         """Targeting preconditions for this technique. Supports Prefetch(to_attr=).
 

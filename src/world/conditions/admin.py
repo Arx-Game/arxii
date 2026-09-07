@@ -9,6 +9,7 @@ from world.conditions.models import (
     ConditionDamageInteraction,
     ConditionDamageOverTime,
     ConditionInstance,
+    ConditionModifierEffect,
     ConditionResistanceModifier,
     ConditionStage,
     ConditionTemplate,
@@ -58,6 +59,25 @@ class ConditionCapabilityEffectInline(admin.TabularInline):
     model = ConditionCapabilityEffect
     extra = 0
     autocomplete_fields = ["capability", "stage"]
+
+
+class ConditionModifierEffectInline(admin.TabularInline):
+    """Stat-modifier channel for a condition (#3682).
+
+    ``ConditionModifierEffect`` is the row every stat reader folds in
+    (``get_condition_modifier_total`` / ``get_condition_modifier_sources``,
+    ``world/conditions/services.py``), and the DE evaluator prices a condition
+    on whether it carries one at all. Until now it was authorable only through
+    a fixture or a shell: a condition authored in the admin as "Guarded" or
+    "Inspired" got a name, a description and no mechanical effect whatsoever,
+    and the technique applying it advertised a change that never arrived.
+    """
+
+    model = ConditionModifierEffect
+    extra = 0
+    autocomplete_fields = ["modifier_target", "stage"]
+    verbose_name = "Stat Modifier"
+    verbose_name_plural = "Stat Modifiers"
 
 
 class ConditionCheckModifierInline(admin.TabularInline):
@@ -193,6 +213,7 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
 
     inlines = [
         ConditionStageInline,
+        ConditionModifierEffectInline,
         ConditionCapabilityEffectInline,
         ConditionCheckModifierInline,
         ConditionResistanceModifierInline,

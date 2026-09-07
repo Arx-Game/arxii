@@ -247,3 +247,98 @@ class TestTechniqueFragmentView(TestCase):
         body = resp.content.decode()
         self.assertIn("Inert Placeholder", body)
         self.assertIn("INERT_PAYLOAD", body)
+
+
+class TestTechniquePanelCatalogRevision(TestCase):
+    """An authoring edit must invalidate both cache layers (#3682).
+
+    Both the corpus cache (24h, keyed on the numeric knobs) and the rendered
+    panel cache were keyed on parameters alone, so re-submitting the same
+    parameters after editing a technique served the pre-edit corpus: staff tuned
+    against the numbers they had just changed and saw no movement.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser(
+            "revtechadmin", "revtech@example.com", "pw-123456"
+        )
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _post_data(self) -> dict[str, Any]:
+        return {
+            "level": 10,
+            "thread_level": 3,
+            "roller_points": 25,
+            "target_difficulty": 25,
+            "roll_modifier": 0,
+            "sort": "baseline_de",
+        }
+
+    @patch(_PATCH_TARGET)
+    def test_authoring_edit_forces_a_rebuild_on_identical_params(self, mock_build: Any) -> None:
+        from world.magic.factories import BinaryEffectTypeFactory, TechniqueFactory
+        from world.magic.services.technique_effects import invalidate_technique_payload_caches
+
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(mock_build.call_count, 1)
+
+        # The one seam every authoring write already passes through.
+        technique = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        invalidate_technique_payload_caches(technique)
+
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(mock_build.call_count, 2)
+
+    @patch(_PATCH_TARGET)
+    def test_get_after_an_edit_does_not_re_render_the_stale_panel(self, mock_build: Any) -> None:
+        """The last-key pointer is revision-scoped, so GET shows nothing stale."""
+        from world.magic.factories import BinaryEffectTypeFactory, TechniqueFactory
+        from world.magic.services.technique_effects import invalidate_technique_payload_caches
+
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+
+        technique = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        invalidate_technique_payload_caches(technique)
+
+        resp = self.client.get(reverse("admin_tuning_techniques"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Distinctive Firebolt", resp.content.decode())
+
+
+class TestTechniqueCatalogRevision(TestCase):
+    """The revision counter itself (#3682)."""
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_revision_starts_at_zero_and_rises_on_each_bump(self) -> None:
+        from world.magic.services.technique_effects import (
+            bump_technique_catalog_revision,
+            technique_catalog_revision,
+        )
+
+        self.assertEqual(technique_catalog_revision(), 0)
+        bump_technique_catalog_revision()
+        self.assertEqual(technique_catalog_revision(), 1)
+        bump_technique_catalog_revision()
+        self.assertEqual(technique_catalog_revision(), 2)
+
+    def test_corpus_cache_key_changes_with_the_revision(self) -> None:
+        from web.admin.tuning.technique_analytics import _corpus_cache_key
+        from world.magic.services.technique_effects import bump_technique_catalog_revision
+
+        params = TechniqueAnalyticsParams()
+        before = _corpus_cache_key(params)
+        bump_technique_catalog_revision()
+
+        self.assertNotEqual(before, _corpus_cache_key(params))

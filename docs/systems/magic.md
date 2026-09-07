@@ -729,7 +729,7 @@ Lives on `world/conditions/models.py:ConditionCategory`.
 
 | Function | Purpose |
 |----------|---------|
-| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any condition has `target_kind=ALLY`; else SELF. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
+| `derive_target_relationship(technique) -> ConditionTargetKind` | ENEMY if hostile; ALLY if any applied, removed or **treatment** row has `target_kind=ALLY`; ENEMY if a treatment row targets an enemy (stabilising a downed foe is aimed at an adversary without being hostile); else SELF. Treatments joined in #3682 — a technique whose only payload was an ALLY treatment derived SELF, and the SELF branch of `_check_relationship` then refused to let the authored heal name its ally. Reads the technique's `cached_*` payload lists rather than its own `.filter().exists()` queries (#2898). Exactly one relationship comes back, so a technique whose payload rows disagree gets a guess — see `technique_relationship_is_ambiguous` below. |
 | `technique_alters_behavior(technique) -> bool` | True if any applied condition's `category.alters_behavior` is True |
 | `cast_requires_consent(technique) -> bool` | True iff `technique_alters_behavior` — **behavior only**, not blanket benign |
 | `validate_cast_target(*, technique, initiator_persona, target_personas)` | Raises `InvalidCastTarget` on cardinality or relationship violations |
@@ -821,17 +821,28 @@ differentiation lives, since the authored catalog is near-uniform on `level`,
 **The derivation** — `summarize_technique_effects(technique) -> TechniqueEffectPayload`
 (`world/magic/services/technique_effects.py`; wire shapes in
 `world/magic/types/technique_effects.py`). It reads `cached_capability_grants` /
-`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions`
+`cached_condition_applications` / `cached_damage_profiles` / `cached_removed_conditions` /
+`cached_treatments` (the fifth joined in #3682 — see below)
 and **composes the two derivations that already existed** — `is_technique_hostile`
 (`services/hostility.py`) and `derive_target_relationship` (`services/targeting.py`) —
 rather than restating them. No model field is added: `Technique.target_type`'s own help
 text records that relationship is derived, never stored.
 
 The payload carries `relationship` / `hostile` / `target_type` / `reach` / `reach_hops` /
-`arena` (`action_category`) / `anima_cost`, the four effect lists, `is_underspecified`,
+`arena` (`action_category`) / `anima_cost`, the five effect lists, `is_underspecified`,
 and `summary` — the plain-words line, e.g. *"Cast on an ally, anywhere in the room, in the
 physical arena. Costs 5 anima. Applies Guarded."* The sentence is authored server-side and
 is byte-identical on the web and over telnet; clients render it, never re-derive it.
+
+**Treatments and grants say what they are (#3682).** `TechniqueTreatment` was authorable
+from #2668 and read by no display surface, no relationship derivation and no gap check, so
+a technique whose only authored effect was a treatment described itself as having none —
+it is the fifth list (`treatments`) and its own clause, *"Treats Bleeding."* A capability
+grant is **standing possession**, not a cast effect (ADR-0248): knowing the technique is
+what confers it, and the cast deliberately does nothing extra with the row. The clause
+reads *"Knowing it grants flight."* and the frontend chip is labelled `Known:` — before
+#3682 both sat unqualified among the cast clauses and told the player a lie about when the
+capability arrives.
 
 **Ordering is authoring order.** The four payload models carry `Meta.ordering = ["pk"]`, so
 a multi-condition clause reads in the order staff attached the rows — "Applies Burning,
@@ -874,15 +885,30 @@ while authoring #2764). Authored data carries no signal separating the point of 
 from a side effect, so an override would mean the stored field this system rules out, and a
 heuristic would be a second silent guess. Instead:
 
-- `technique_relationship_is_ambiguous(technique)` — the applied + removed rows carry more
-  than one distinct `target_kind`, so the single derived relationship is a guess.
+- `technique_relationship_is_ambiguous(technique)` — the applied + removed + treatment
+  rows carry more than one distinct `target_kind`, so the single derived relationship is a
+  guess.
 - `technique_is_underspecified(technique)` — no condition, no removal, no damage profile,
-  so relationship isn't derivable at all. Display renders this as "effects not yet
-  catalogued" rather than a blank; 86 of 272 authored techniques were in this state.
+  no treatment, so relationship isn't derivable at all. Display renders this as "effects
+  not yet catalogued" rather than a blank; 86 of 272 authored techniques were in this
+  state. Capability grants deliberately do **not** clear the flag: a grant is standing
+  possession (ADR-0248), so a grant-only technique genuinely does nothing on cast.
+- `technique_is_not_castable_standalone(technique)` (#3682) — the technique carries no
+  `action_template`, so `request_technique_cast` refuses it ("not castable standalone")
+  and `castable_technique_links_for_sheet` filters it out of both the web and telnet cast
+  lists, while `get_technique_options` still offers it as a valid CG pick and
+  `compute_magic_errors` still accepts it. **A fact, not a verdict** — whether a technique
+  is meant to be castable at all is an authoring decision, and no readiness policy is
+  enforced off the back of it. All 306 authored techniques were in this state when it was
+  added, which is exactly why it is *not* a `TechniqueAuthoringGap` member: folding it in
+  would make gap membership mean "every technique" and bury the two gaps that are about
+  unreadable authored data. `TechniqueAdmin` filters it in SQL
+  (`action_template__isnull=True`) and shows it in the `Gap` column.
 
-`technique_effect_authoring_gaps()` collects both; `TechniqueAdmin` surfaces them as the
-`Targets` / `Gap` columns and an "authoring gap" filter. `derive_target_relationship`'s own
-answers are deliberately unchanged — it gates live cast targeting.
+`technique_effect_authoring_gaps()` collects the first two; `TechniqueAdmin` surfaces all
+three as the `Targets` / `Gap` columns and an "authoring gap" filter.
+`derive_target_relationship`'s own answers are deliberately unchanged — it gates live cast
+targeting.
 
 **Shared condition application** (`world/magic/services/condition_application.py`):
 `apply_technique_conditions(*, technique, success_level, eff_intensity, targets_by_kind, source_character, applied_condition_rows=None)`

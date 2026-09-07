@@ -1035,6 +1035,7 @@ export const mockTechniqueEffectSummary: TechniqueEffectSummary = {
   applies: [],
   removes: [],
   damage: [],
+  treatments: [],
   grants: [],
   summary: 'Cast on an enemy, in melee range, in the physical arena. Costs 5 anima.',
   is_underspecified: false,
