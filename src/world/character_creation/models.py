@@ -2175,7 +2175,9 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.grants.cost_per_rank * self.rank if self.grants_id else 0
 
 
-class DistinctionOffer(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class DistinctionOffer(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
     """One line that shows a distinction in one CG chapter (#3675).
 
     Lets staff say where a distinction is offered, what opens it there, and how
@@ -2183,6 +2185,17 @@ class DistinctionOffer(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     a distinction with no active offer is never shown in CG. FK direction per
     ADR-0010: this row is the specific side.
     """
+
+    #: Saving or deleting an offer drops its opener's cached properties, which
+    #: is where ``GlimpseTag.offers`` (``world.magic.models.glimpse``) lives.
+    #: A cascade or a ``queryset.delete()`` bypasses ``Model.delete()`` and
+    #: never gets here - the handler's own pk check is what covers those
+    #: (ADR-0278, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    related_cache_fields: ClassVar[list[str]] = [
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+    ]
 
     distinction = models.ForeignKey(
         "arxii.Distinction", on_delete=models.PROTECT, related_name="offers"
@@ -2248,7 +2261,7 @@ class DistinctionOffer(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         OfferChapter.GLIMPSE: "glimpse_tag",
         OfferChapter.LINEAGE: "origin_choice",
         OfferChapter.APPEARANCE: None,
-        OfferChapter.IDENTITY: None,
+        OfferChapter.ACTORS_SHEET: None,
     }
 
     def __str__(self) -> str:

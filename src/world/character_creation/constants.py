@@ -113,7 +113,7 @@ class OfferChapter(models.TextChoices):
     GLIMPSE = "glimpse", "Gift, the Glimpse"
     LINEAGE = "lineage", "Lineage"
     APPEARANCE = "appearance", "Appearance"
-    IDENTITY = "identity", "Identity"
+    ACTORS_SHEET = "actors_sheet", "The actor's sheet"
 
 
 class OfferArrival(models.TextChoices):

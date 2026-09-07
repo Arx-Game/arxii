@@ -106,6 +106,7 @@ from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.models import (
     Gift,
     GlimpseTag,
+    GlimpseTagOffersHandler,
     Technique,
     Tradition,
 )
@@ -643,15 +644,23 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
-        return GlimpseTag.objects.filter(is_active=True).prefetch_related(
-            Prefetch(
-                "distinction_offers",
-                queryset=DistinctionOffer.objects.filter(is_active=True).select_related(
-                    "distinction"
-                ),
-                to_attr="cached_offers",
-            )
-        )
+        return GlimpseTag.objects.filter(is_active=True)
+
+    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
+        """Serialize with one batched offers query, not one per row (ADR-0278).
+
+        Mirrors ``CGOriginTemplateViewSet.list()``: this ViewSet opts out of
+        pagination, so there's no ``page`` branch to preserve. Offers are read
+        through ``GlimpseTag.offers`` (``GlimpseTagOffersHandler``), primed here
+        for the whole page rather than reached via a ``Prefetch(to_attr=...)`` —
+        a `to_attr` prefetch silently stops running on an identity-mapped
+        instance the second time it's warm (ADR-0263), which is what this
+        endpoint shipped with until #3675.
+        """
+        tags = list(self.filter_queryset(self.get_queryset()))
+        GlimpseTagOffersHandler.prime(tags)
+        serializer = self.get_serializer(tags, many=True)
+        return Response(serializer.data)
 
 
 class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):

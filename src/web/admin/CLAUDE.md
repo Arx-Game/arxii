@@ -857,7 +857,7 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `preview_line` (via the shared `offers.preview_from_offers`, picking
   `min(offers, key=offer_sort_key)` over the fetched rows) sort by
   `OfferChapter`'s own declared sequence
-  (TRADITION_STEP, GLIMPSE, LINEAGE, APPEARANCE, IDENTITY) then `sort_order`
+  (TRADITION_STEP, GLIMPSE, LINEAGE, APPEARANCE, ACTORS_SHEET) then `sort_order`
   then id - `chapter` is a plain `CharField`, so a DB `.order_by("chapter",
   ...)` sorts alphabetically, wrong order entirely (review round 1,
   Demo-fidelity defect B).

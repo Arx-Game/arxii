@@ -19,6 +19,7 @@ from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
+from web.admin.authoring.views import _builders_context
 from world.character_creation.factories import BeginningsFactory, OriginTemplateFactory
 from world.contributors.factories import ContentContributorFactory
 from world.distinctions.factories import DistinctionFactory
@@ -85,6 +86,20 @@ class BuildersPanelRenderTest(BuildersPanelTestCase):
         assert "1 active tag" in body  # the inactive tag never bumps the count
 
 
+class BuildersContextQueryCountTest(BuildersPanelTestCase):
+    """``_builders_context()`` stays at one query per option list (#3675 review).
+
+    Four lists, four queries: distinctions, beginnings, upbringings (one query
+    even with the ``select_related("beginning")`` label-building comprehension),
+    and the glimpse tag count. A regression here is an N+1 hiding behind the
+    docstring's "one query each" claim.
+    """
+
+    def test_builders_context_runs_four_queries(self):
+        with self.assertNumQueries(4):
+            _builders_context()
+
+
 class DistinctionBuilderPickTest(BuildersPanelTestCase):
     def test_redirects_to_the_builder(self):
         self.client.force_login(self.author)
@@ -127,6 +142,11 @@ class TraditionSlatePickTest(BuildersPanelTestCase):
         resp = self.client.get(reverse("admin_tradition_slate_pick"), {"pk": "999999"})
         assert resp.status_code == 400
 
+    def test_400_on_non_numeric_pk(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_tradition_slate_pick"), {"pk": "not-a-number"})
+        assert resp.status_code == 400
+
 
 class UpbringingBuilderPickTest(BuildersPanelTestCase):
     def test_redirects_to_the_builder(self):
@@ -143,6 +163,11 @@ class UpbringingBuilderPickTest(BuildersPanelTestCase):
     def test_400_on_unknown_pk(self):
         self.client.force_login(self.author)
         resp = self.client.get(reverse("admin_upbringing_builder_pick"), {"pk": "999999"})
+        assert resp.status_code == 400
+
+    def test_400_on_non_numeric_pk(self):
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder_pick"), {"pk": "not-a-number"})
         assert resp.status_code == 400
 
 

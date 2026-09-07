@@ -56,6 +56,14 @@ class OffersForTests(TestCase):
         draft = self._draft()
         assert [o.offer_id for o in offers_for(draft, OfferChapter.APPEARANCE)] == [offer.id]
 
+    def test_actors_sheet_offers_need_no_opener(self):
+        """The renamed personality chapter (formerly IDENTITY) is opener-free,
+        exactly like APPEARANCE (#3675)."""
+        haunted = DistinctionFactory(name="Haunted", cost_per_rank=10)
+        offer = DistinctionOfferFactory(distinction=haunted, chapter=OfferChapter.ACTORS_SHEET)
+        draft = self._draft()
+        assert [o.offer_id for o in offers_for(draft, OfferChapter.ACTORS_SHEET)] == [offer.id]
+
     def test_route_closed_offers_are_hidden_and_listed(self):
         route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
         route.closed_distinctions.add(self.scar)

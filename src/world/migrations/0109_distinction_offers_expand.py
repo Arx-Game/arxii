@@ -242,7 +242,7 @@ class Migration(migrations.Migration):
                             ("glimpse", "Gift, the Glimpse"),
                             ("lineage", "Lineage"),
                             ("appearance", "Appearance"),
-                            ("identity", "Identity"),
+                            ("actors_sheet", "The actor's sheet"),
                         ],
                         max_length=20,
                     ),

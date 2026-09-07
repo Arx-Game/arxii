@@ -761,6 +761,27 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         assert len(big.captured_queries) == len(small.captured_queries)
 
+    def test_list_is_three_queries_offers_primed_not_prefetched(self):
+        """Session lookup + tags query + one batched
+        ``GlimpseTagOffersHandler.prime()`` query (ADR-0278) - never a
+        ``Prefetch(to_attr=...)`` and never one query per tag."""
+        url = "/api/character-creation/glimpse-tags/"
+        self.client.get(url)  # warm the session row's first-request INSERT
+
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc3-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc3-b")
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
+
+        with self.assertNumQueries(3):
+            response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
+
     def test_path_filter_excludes_tags_not_on_path(self):
         """Tags with a non-empty paths M2M not containing path_id are excluded."""
         path_a = PathFactory(name="Path of Steel")

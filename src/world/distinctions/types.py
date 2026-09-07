@@ -64,9 +64,9 @@ def build_distinction_entry(
 
     ``offer_ids``/``sources``/``arrivals`` are kept in lockstep by ``offer``
     alone (never by whether ``source`` happens to be a non-empty string) — an
-    APPEARANCE/IDENTITY CHOICE offer has no opener, so ``source`` is routinely
-    ``""``, and a length mismatch between the three lists would blow up the
-    ``zip(..., strict=True)`` in ``offers._drop_vanished_sources``.
+    APPEARANCE/ACTORS_SHEET CHOICE offer has no opener, so ``source`` is
+    routinely ``""``, and a length mismatch between the three lists would blow
+    up the ``zip(..., strict=True)`` in ``offers._drop_vanished_sources``.
     """
     has_offer = offer is not None
     arrival = offer.arrives_as if has_offer else ""

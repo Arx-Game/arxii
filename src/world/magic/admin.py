@@ -527,10 +527,9 @@ class GlimpseTagAdmin(admin.ModelAdmin):
 
         preview = None
         if obj is not None and obj.pk:
-            offers = DistinctionOffer.objects.filter(
-                glimpse_tag=obj, is_active=True
-            ).select_related("distinction")
-            preview = preview_from_offers(offers)
+            # obj.offers is the GlimpseTagOffersHandler (ADR-0278) - already
+            # active-only, select_related("distinction"), ordered.
+            preview = preview_from_offers(obj.offers.rows)
         context["offer_preview"] = preview
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj
