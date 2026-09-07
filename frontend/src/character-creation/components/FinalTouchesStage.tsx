@@ -28,6 +28,7 @@ import {
   Marginalia,
   Note,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import { useGoalDomains } from '../goals';
 import { ChapterOffers } from './offers/ChapterOffers';
@@ -417,7 +418,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             value: enemyLine ? `${enemyLine} · ${awardLabel(enemyAward)}` : undefined,
           },
         ]}
-        ledger="Stage 10 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-finaltouches">
         <Note lead="Goals">{copy?.finaltouches_how_note ?? HOW_GOALS_WORK}</Note>

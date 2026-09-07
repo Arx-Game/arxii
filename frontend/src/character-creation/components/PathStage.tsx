@@ -34,6 +34,7 @@ import {
   Note,
   Paragraphs,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import { useCGExplanations, usePaths, useUpdateDraft } from '../queries';
 import type { CharacterDraft, Path } from '../types';
@@ -91,7 +92,7 @@ export function PathStage({ draft }: PathStageProps) {
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Path', value: draft.selected_path?.name },
         ]}
-        ledger="Stage 5 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-path">
         {/* PLACEHOLDER: Apostate rewrite */}

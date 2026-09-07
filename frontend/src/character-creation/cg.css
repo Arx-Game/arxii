@@ -929,17 +929,6 @@
   border-color: var(--cg-hairline-strong);
   color: var(--cg-muted);
 }
-.interview .instr-search {
-  margin: 0.4rem 0 0.9rem;
-}
-.interview .instr-search input {
-  width: 100%;
-  font: inherit;
-  padding: 0.5rem 0.7rem;
-  background: transparent;
-  border: 1px solid var(--cg-hairline-strong);
-  color: var(--cg-text);
-}
 .interview .instruments .choice-row {
   margin: 0.2rem 0 0.6rem;
   gap: 0.5rem;

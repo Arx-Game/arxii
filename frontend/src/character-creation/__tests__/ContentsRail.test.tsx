@@ -12,7 +12,7 @@ const completion = (done: Stage[]): Record<Stage, boolean> =>
   ) as Record<Stage, boolean>;
 
 describe('ContentsRail', () => {
-  it('lists the eleven chapters with Arabic numerals and marks the current one', () => {
+  it('lists the ten chapters with Arabic numerals and marks the current one', () => {
     render(
       <ContentsRail
         currentStage={Stage.ATTRIBUTES}
@@ -22,8 +22,8 @@ describe('ContentsRail', () => {
       />
     );
     const nav = screen.getByRole('navigation', { name: /character creation stages/i });
-    expect(nav.querySelectorAll('li')).toHaveLength(11);
-    expect(screen.getByText('7')).toBeInTheDocument();
+    expect(nav.querySelectorAll('li')).toHaveLength(10);
+    expect(screen.getByText('6')).toBeInTheDocument();
     const current = screen.getByRole('link', { current: 'step' });
     expect(current).toHaveTextContent('Attributes');
     expect(screen.getByText('Origin').closest('li')).toHaveClass('toc-done');

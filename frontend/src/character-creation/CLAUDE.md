@@ -36,7 +36,6 @@ character-creation/
     │                        #   InventedParentsCard, HouseFoundingPanel,
     │                        #   FamilyNamePreview, KinSlotPicker, TarotNamingRitual,
     │                        #   TarotCardItem, FamilyCard (exported for lineage/)
-    ├── DistinctionsStage.tsx # Stage 4: Distinctions
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
@@ -131,10 +130,11 @@ character-creation/
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
 - **Folio primitives** (entries, instrument frames, fields, choice rows) now back Origin,
-  Heritage, Distinctions, Path, Gift, Attributes & Skills, Appearance, Identity, Final
-  Touches, and Review; Lineage alone still carries the pre-Folio card/badge markup, pending
-  Plan C (#3630). `SkillsSection`, mounted inside AttributesStage's frame, still uses the
-  shadcn Accordion for its per-skill specialization panels.
+  Heritage, Path, Gift, Attributes & Skills, Appearance, Identity, Final Touches, and Review;
+  Lineage alone still carries the pre-Folio card/badge markup, pending Plan C (#3630).
+  `SkillsSection`, mounted inside AttributesStage's frame, still uses the shadcn Accordion for
+  its per-skill specialization panels. The Distinctions stage is retired (#3675): every
+  chapter now offers its own distinctions through `ChapterOffers` instead.
 - Interface chrome is OOC and plain (stages, Next/Back, Selected); in-character text is confined to
   realm/codex prose and the player's own words; the game never speaks for the player (#3540)
 - **Staff-only features**: "Add to Roster" button visible only to staff

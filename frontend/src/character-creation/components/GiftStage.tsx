@@ -28,6 +28,7 @@ import {
   Marginalia,
   Note,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import {
   useCGExplanations,
@@ -267,7 +268,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
             value: `${draft.cg_points_spent} of ${startingCGPoints} spent`,
           },
         ]}
-        ledger="Stage 6 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-gift">
         {/* PLACEHOLDER: Apostate rewrite */}

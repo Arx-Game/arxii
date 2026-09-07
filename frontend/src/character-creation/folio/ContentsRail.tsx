@@ -1,6 +1,6 @@
 /**
  * The contents rail (#3540): progress as a table of contents, never a stepper.
- * The eleven stages with complete / current / not-yet-started state, the
+ * The ten stages with complete / current / not-yet-started state, the
  * validation reason as an "n.b." note, and the restart door beneath. Free
  * navigation is preserved (every stage is a link). Replaces StageStepper.
  */
@@ -8,21 +8,20 @@
 import type { ReactNode } from 'react';
 import { Stage, STAGE_LABELS } from '../types';
 
-export const CHAPTERS: ReadonlyArray<{ stage: Stage; numeral: string }> = [
-  { stage: Stage.ORIGIN, numeral: '1' },
-  { stage: Stage.HERITAGE, numeral: '2' },
-  { stage: Stage.LINEAGE, numeral: '3' },
-  { stage: Stage.DISTINCTIONS, numeral: '4' },
-  { stage: Stage.PATH, numeral: '5' },
-  { stage: Stage.GIFT, numeral: '6' },
-  { stage: Stage.ATTRIBUTES, numeral: '7' },
-  { stage: Stage.APPEARANCE, numeral: '8' },
-  { stage: Stage.IDENTITY, numeral: '9' },
-  { stage: Stage.FINAL_TOUCHES, numeral: '10' },
-  { stage: Stage.REVIEW, numeral: '11' },
+export const CHAPTERS: ReadonlyArray<{ stage: Stage }> = [
+  { stage: Stage.ORIGIN },
+  { stage: Stage.HERITAGE },
+  { stage: Stage.LINEAGE },
+  { stage: Stage.PATH },
+  { stage: Stage.GIFT },
+  { stage: Stage.ATTRIBUTES },
+  { stage: Stage.APPEARANCE },
+  { stage: Stage.IDENTITY },
+  { stage: Stage.FINAL_TOUCHES },
+  { stage: Stage.REVIEW },
 ];
 
-/** "Stage n of 11" eyebrow for a stage (#3540 OOC sweep: plain, no in-character ordinal). */
+/** "Stage n of N" eyebrow for a stage (#3540 OOC sweep: plain, no in-character ordinal). */
 export function stageEyebrow(stage: Stage): string {
   const index = CHAPTERS.findIndex((c) => c.stage === stage) + 1;
   return `Stage ${index} of ${CHAPTERS.length}`;
@@ -67,7 +66,8 @@ export function ContentsRail({
       <nav aria-label="Character creation stages">
         <p className="toc-title">Stages</p>
         <ol className="toc-list">
-          {CHAPTERS.map(({ stage, numeral }) => {
+          {CHAPTERS.map(({ stage }, index) => {
+            const numeral = String(index + 1);
             const state = stateOf(stage, currentStage, stageCompletion[stage]);
             // Review is never "incomplete" of itself; its reasons are the other chapters'.
             const errors = stage === Stage.REVIEW ? [] : (stageErrors[stage] ?? []);

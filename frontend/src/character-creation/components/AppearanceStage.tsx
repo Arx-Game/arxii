@@ -20,7 +20,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf, ChoiceRow, Field, Marginalia, Note, RecordRail } from '../folio';
+import {
+  ChapterLeaf,
+  ChoiceRow,
+  Field,
+  Marginalia,
+  Note,
+  RecordRail,
+  stageEyebrow,
+} from '../folio';
 import {
   useBuilds,
   useCGExplanations,
@@ -286,7 +294,7 @@ export function AppearanceStage({
           },
           { label: 'Build', value: draft.build?.display_name },
         ]}
-        ledger="Stage 8 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-appearance">
         {/* PLACEHOLDER: Apostate rewrite */}

@@ -331,6 +331,32 @@ describe('CharacterCreationPage', () => {
     });
   });
 
+  describe('Retired Distinctions Stage (#3675)', () => {
+    it('falls through to the default chapter for a stage 4 draft, not the retired stage', async () => {
+      const queryClient = createTestQueryClient();
+      // Stage 4 no longer exists on the Stage enum (the gap left by the
+      // retired Distinctions stage); a lingering draft carrying the old
+      // numeric value must not crash or render the deleted stage.
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: { ...mockEmptyDraft, current_stage: 4 as Stage },
+        startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Where does the story begin?')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Your Distinctions')).not.toBeInTheDocument();
+    });
+  });
+
   describe('Staff Features', () => {
     it('staff can see all stages and features', async () => {
       const queryClient = createTestQueryClient();
