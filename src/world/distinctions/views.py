@@ -323,11 +323,16 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             )
 
     def _build_distinction_entry(
-        self, distinction: Distinction, rank: int, notes: str, offer: DistinctionOffer
+        self,
+        distinction: Distinction,
+        rank: int,
+        notes: str,
+        offer: DistinctionOffer,
+        draft: CharacterDraft,
     ):
         """Build the dictionary entry for a distinction on a draft, from its offer."""
         return build_distinction_entry(
-            distinction, rank, notes, offer=offer, source=opener_label(offer)
+            distinction, rank, notes, offer=offer, source=opener_label(offer, draft=draft)
         )
 
     @extend_schema(responses=DraftDistinctionEntrySerializer(many=True))
@@ -364,7 +369,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         validated = self._validate_distinction_for_add(request.data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
-            validated.distinction, validated.rank, validated.notes, validated.offer
+            validated.distinction, validated.rank, validated.notes, validated.offer, draft
         )
         distinctions.append(new_entry)
 
@@ -459,7 +464,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         validated = self._validate_distinction_for_add(add_data, existing_ids, draft)
 
         new_entry = self._build_distinction_entry(
-            validated.distinction, validated.rank, validated.notes, validated.offer
+            validated.distinction, validated.rank, validated.notes, validated.offer, draft
         )
         new_distinctions.append(new_entry)
 
@@ -610,14 +615,14 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             existing = new_by_id.get(distinction.id)
             if existing is None:
                 new_by_id[distinction.id] = self._build_distinction_entry(
-                    distinction, rank, "", offer
+                    distinction, rank, "", offer, draft
                 )
                 continue
             existing["rank"] = max(existing["rank"], rank)
             existing["cost"] = distinction.calculate_total_cost(existing["rank"])
             if offer.id not in existing["offer_ids"]:
                 existing["offer_ids"].append(offer.id)
-                existing["sources"].append(opener_label(offer))
+                existing["sources"].append(opener_label(offer, draft=draft))
                 existing["arrivals"].append(offer.arrives_as)
         return list(new_by_id.values())
 

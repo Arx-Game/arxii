@@ -186,3 +186,27 @@ class ReconcileTests(TestCase):
         entry = self._ids(draft)[self.poor.id]
         assert entry["offer_ids"] == [choice.id]
         assert entry["cost"] == -25
+
+    def test_legacy_entry_with_no_offer_ids_key_survives_unchanged(self):
+        """A pre-#3675 pick (no offer_ids key at all) is left exactly as stored.
+
+        Drafts saved before the offers system landed (0106) hold catalogue picks a
+        player can no longer re-make -- there is no offer to trace such a pick back
+        to. Review round 2 ruling A: this is a legacy entry, not a source that
+        "vanished," so it is neither dropped nor repriced nor given the key.
+        """
+        legacy = DistinctionFactory(name="Old Family Ring", cost_per_rank=10)
+        legacy_entry = {
+            "distinction_id": legacy.id,
+            "distinction_name": legacy.name,
+            "distinction_slug": legacy.slug,
+            "category_slug": legacy.category.slug,
+            "rank": 1,
+            "cost": 10,
+            "notes": "",
+        }
+        draft = self._draft(distinctions=[dict(legacy_entry)])
+        reconcile_offer_picks(draft)
+        entry = self._ids(draft)[legacy.id]
+        assert entry == legacy_entry
+        assert "offer_ids" not in entry

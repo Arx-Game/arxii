@@ -41,6 +41,7 @@ from world.character_creation.models import (
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
 )
+from world.character_creation.offers import reconcile_offer_picks
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import ParentageKind
@@ -185,6 +186,16 @@ def finalize_character(
         raise DraftExpiredError(msg)
 
     require_draft_complete(draft)
+
+    # Fold in every bundled/carried DistinctionOffer before any row is written (#3675
+    # review round 1/2). reconcile_offer_picks is normally called after every draft
+    # PATCH that could change which offers are open, but a draft created directly (a
+    # staff direct-add, a test fixture) never went through that view, so its
+    # draft_data["distinctions"] list would otherwise miss whatever the last-set
+    # answer opened. Idempotent -- a draft already reconciled after its final PATCH
+    # sees no change here. A legacy entry with no offer_ids key (a pre-offers pick)
+    # is left untouched by this call (ruling A, offers.py's _drop_vanished_sources).
+    reconcile_offer_picks(draft)
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.

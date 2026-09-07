@@ -10,14 +10,19 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
+from world.character_creation.constants import (
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
+    TraditionState,
+)
 from world.character_creation.models import (
     BeginningTradition,
     CharacterDraft,
     DistinctionOffer,
     TraditionStateLine,
 )
-from world.character_creation.questionnaire import DraftAnswers, visible_slot_ids
+from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
 from world.character_creation.types import ClosedDistinction, VisibleOffer
 from world.distinctions.models import Distinction
 from world.distinctions.types import DraftDistinctionEntry, build_distinction_entry
@@ -145,16 +150,36 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
 
-def opener_label(offer: DistinctionOffer) -> str:
+def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None) -> str:
     """The name of the thing that opens this offer, for display and as a source string.
 
-    Called by ``offers_for`` (a ``VisibleOffer``'s ``opener_label``) and by
-    ``reconcile_offer_picks`` / Task 3's chapter views to record an entry's source.
+    Called by ``offers_for`` (a ``VisibleOffer``'s ``opener_label``, no ``draft`` --
+    a not-yet-picked offer in the picker has nothing to anchor against) and, with
+    ``draft`` given, by ``reconcile_offer_picks`` and the sync path in
+    ``distinctions/views.py`` to record an entry's ``source`` / ``sources`` (review
+    round 2, ruling B): the pairing table this offer replaced
+    (pre-#3675 ``_grant_connection_distinctions``) recorded which GROUP answer's
+    anchored organization a connection distinction was about, not just the answer's
+    own name, and ``CharacterDistinction.source_description`` needs that same
+    provenance. Only a LINEAGE offer on a GROUP question carries an anchor to
+    resolve; every other opener is unaffected by ``draft``.
     """
     if offer.glimpse_tag_id:
         return offer.glimpse_tag.name
     if offer.origin_choice_id:
-        return offer.origin_choice.name
+        label = offer.origin_choice.name
+        if draft is not None:
+            slot = offer.origin_choice.slot
+            if slot.kind == QuestionKind.GROUP:
+                answers = DraftAnswers.from_draft(draft)
+                org_id = anchor_for(slot, draft, answers)
+                if org_id is not None:
+                    from world.societies.models import Organization  # noqa: PLC0415
+
+                    org = Organization.objects.filter(pk=org_id).first()
+                    if org is not None:
+                        label = f"{label}, {org.name}"
+        return label
     if offer.schooling_line_id:
         return offer.schooling_line.name
     return ""
@@ -238,13 +263,21 @@ def _drop_vanished_sources(
 
     Called by ``reconcile_offer_picks`` before the carried/bundled offers are applied,
     so a source that vanished this call (e.g. a tradition switch) never survives
-    alongside a still-live one.
+    alongside a still-live one. An entry with no ``offer_ids`` key at all is a legacy
+    pick: drafts saved before 0106 (when the offers system landed) hold catalogue
+    picks the player made against no ``DistinctionOffer`` at all, since none existed
+    yet, and there is nothing to re-derive their offer from now. Such an entry is
+    left exactly as stored -- not touched here, not dropped or repriced in
+    ``_drop_empty_and_reprice`` -- until the player changes it through a path that
+    does carry ``offer_ids`` (review round 2, ruling A).
     """
     changed: list[str] = []
     for entry in entries:
+        if "offer_ids" not in entry:  # noqa: STRING_LITERAL
+            continue
         srcs = entry.setdefault("sources", [])
         arrs = entry.setdefault("arrivals", [])
-        ids = entry.setdefault("offer_ids", [])
+        ids = entry["offer_ids"]
         keep = [(oid in visible) or (isinstance(oid, str) and oid == carried_key) for oid in ids]
         if not all(keep):
             entry["offer_ids"] = [x for x, k in zip(ids, keep, strict=True) if k]
@@ -278,10 +311,14 @@ def _apply_carried(
         entries.append(entry)
         by_dist[drawback.id] = entry
         return [drawback.name]
-    if carried_key not in entry["offer_ids"]:
-        entry["offer_ids"].append(carried_key)
-        entry["sources"].append(state_line.entry_line)
-        entry["arrivals"].append(OfferArrival.CARRIED)
+    if carried_key not in entry.get("offer_ids", []):
+        # A legacy entry (see _drop_vanished_sources) has no offer_ids key at all;
+        # setdefault converts it into an offer-tracked entry the moment a live
+        # source actually needs to record itself against it, without disturbing it
+        # on every other reconcile pass.
+        entry.setdefault("offer_ids", []).append(carried_key)
+        entry.setdefault("sources", []).append(state_line.entry_line)
+        entry.setdefault("arrivals", []).append(OfferArrival.CARRIED)
         return [drawback.name]
     return []
 
@@ -290,6 +327,7 @@ def _apply_bundled(
     entries: list[DraftDistinctionEntry],
     by_dist: dict[int, DraftDistinctionEntry],
     visible: dict[int, DistinctionOffer],
+    draft: CharacterDraft,
 ) -> list[str]:
     """Add or extend every distinction bundled free with an answer the draft holds.
 
@@ -302,15 +340,18 @@ def _apply_bundled(
         entry = by_dist.get(offer.distinction_id)
         if entry is None:
             entry = build_distinction_entry(
-                offer.distinction, rank=1, offer=offer, source=opener_label(offer)
+                offer.distinction, rank=1, offer=offer, source=opener_label(offer, draft=draft)
             )
             entries.append(entry)
             by_dist[offer.distinction_id] = entry
             changed.append(offer.distinction.name)
-        elif offer.id not in entry["offer_ids"]:
-            entry["offer_ids"].append(offer.id)
-            entry["sources"].append(opener_label(offer))
-            entry["arrivals"].append(OfferArrival.BUNDLED)
+        elif offer.id not in entry.get("offer_ids", []):
+            # See _apply_carried's identical setdefault: converts a legacy entry
+            # (no offer_ids key) into an offer-tracked one only when a live offer
+            # actually needs to record itself against it.
+            entry.setdefault("offer_ids", []).append(offer.id)
+            entry.setdefault("sources", []).append(opener_label(offer, draft=draft))
+            entry.setdefault("arrivals", []).append(OfferArrival.BUNDLED)
             changed.append(offer.distinction.name)
     return changed
 
@@ -323,12 +364,17 @@ def _drop_empty_and_reprice(
     Called by ``reconcile_offer_picks``. A carried-only entry is priced at the
     drawback's own ``cost_per_rank`` (Decision 3 of the #3675 spec: the refund
     lands even though it wasn't a choice); everything else goes through
-    ``entry_price``.
+    ``entry_price``. A legacy entry with no ``offer_ids`` key (see
+    ``_drop_vanished_sources``) is kept exactly as stored and never repriced -- it
+    predates the offers system, so there is no offer to price it against.
     """
     changed: list[str] = []
     kept: list[DraftDistinctionEntry] = []
     dists = Distinction.objects.in_bulk([e["distinction_id"] for e in entries])
     for entry in entries:
+        if "offer_ids" not in entry:  # noqa: STRING_LITERAL
+            kept.append(entry)
+            continue
         if not entry["offer_ids"]:
             changed.append(entry["distinction_name"])
             continue
@@ -361,7 +407,7 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     changed: list[str] = []
     changed += _drop_vanished_sources(entries, visible, carried_key)
     changed += _apply_carried(entries, by_dist, carried)
-    changed += _apply_bundled(entries, by_dist, visible)
+    changed += _apply_bundled(entries, by_dist, visible, draft)
     kept, repriced = _drop_empty_and_reprice(entries)
     changed += repriced
 
