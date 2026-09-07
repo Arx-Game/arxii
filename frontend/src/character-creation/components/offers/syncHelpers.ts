@@ -8,9 +8,23 @@
 
 import type { DraftDistinctionEntry, SyncDistinctionEntry } from '@/types/distinctions';
 
-/** The first integer id in an entry's `offer_ids`, the CHOICE offer it came from, if any. */
+/**
+ * The CHOICE offer id an entry came from, if any.
+ *
+ * `offer_ids`/`arrivals` are index-aligned (the backend writes them in lockstep --
+ * see `world.character_creation.offers` and `DistinctionsViewSet._build_sync_entries`),
+ * so an entry is a choice entry only when its `arrivals` list actually contains
+ * `'choice'` at some index; the id at that same index is the CHOICE offer. A
+ * bundled-only or carried-only entry has an integer `offer_ids` entry too (a real
+ * `DistinctionOffer` row), but no `'choice'` arrival, and must not be treated as one.
+ * A legacy entry (drafts saved before the offers system, #3675) has no `arrivals`
+ * key at all -- also not a choice entry, nothing to resend.
+ */
 export function choiceOfferId(entry: DraftDistinctionEntry): number | undefined {
-  return entry.offer_ids.find((id): id is number => typeof id === 'number');
+  const index = (entry.arrivals ?? []).indexOf('choice');
+  if (index === -1) return undefined;
+  const offerId = entry.offer_ids?.[index];
+  return typeof offerId === 'number' ? offerId : undefined;
 }
 
 /**

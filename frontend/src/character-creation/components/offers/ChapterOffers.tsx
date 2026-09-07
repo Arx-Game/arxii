@@ -8,11 +8,11 @@
  * `useDraftDistinctions` (an offer is picked when a draft entry's
  * `offer_ids` includes it) and writes through `useSyncDistinctions`
  * immediately on toggle or rank change, there is no deferred save: the
- * stage that deferred is gone. Every current CHOICE entry (one with an
- * integer `offer_id`) is resent on every sync so a toggle in one chapter
- * never drops another chapter's picks; carried entries (string-only
- * `offer_ids`) and bundled entries are never sent, the server reconciles
- * those itself.
+ * stage that deferred is gone. Every current CHOICE entry (one whose
+ * `arrivals` list actually contains `'choice'`, `syncHelpers.choiceOfferId`)
+ * is resent on every sync so a toggle in one chapter never drops another
+ * chapter's picks; carried and bundled-only entries are never sent, the
+ * server reconciles those itself.
  *
  * Wraps ITSELF in the folio `.field`; callers pass `heading`/`hint` as
  * props and never wrap this component in a `.field` of their own. A caller

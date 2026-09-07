@@ -129,6 +129,33 @@ describe('ChapterOffers', () => {
     ]);
   });
 
+  it('toggling an offer sends a sync body without a bundled-only entry (#3675 final fix F1)', async () => {
+    const bundledOnly: DraftDistinctionEntry = {
+      distinction_id: 60,
+      distinction_name: 'Household Retainer',
+      distinction_slug: 'household-retainer',
+      category_slug: 'social',
+      rank: 1,
+      cost: 0,
+      notes: '',
+      offer_ids: [888],
+      sources: ['A group question'],
+      arrivals: ['bundled'],
+    };
+    draftDistinctions = [otherChapterEntry, bundledOnly];
+    const user = userEvent.setup();
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    await user.click(screen.getByRole('button', { name: /Silver Tongue/ }));
+    expect(mutate).toHaveBeenCalledWith([
+      { id: 50, rank: 2, offer_id: 999 },
+      { id: 1, rank: 1, offer_id: 101 },
+    ]);
+    const [syncBody] = mutate.mock.calls[0];
+    expect(syncBody.some((row: { id: number }) => row.id === 60)).toBe(false);
+  });
+
   it('a locked row is aria-disabled, shows its reason, and cannot be toggled', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(
