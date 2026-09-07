@@ -1,0 +1,92 @@
+{% comment %}
+The Builders panel (#3675 Task 10, Decision 11 of the spec: every builder is
+one click from the Authoring Workbench and from the row it edits). Included
+directly in `dashboard.html` right after the intro paragraph, on the initial
+GET - not an HTMX fragment like the stats/queue/reference panels below it,
+since its four option lists are built once by `authoring_dashboard` itself
+and never refresh on their own.
+
+Each row is a small GET form: the `<select>` posts nothing of its own, it
+only names which existing row to open, and its own `*_pick` view (a plain
+redirect, 400 on a missing/unknown pk) does the rest. Takes `builders`, a
+dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
+`web.admin.authoring.views._builders_context`.
+{% endcomment %}
+<style>
+  #panel-authoring-builders .ab-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-right: 0.75rem;
+  }
+  #panel-authoring-builders td .help {
+    margin: 0.35rem 0 0;
+  }
+</style>
+
+<h2>Builders</h2>
+
+<table class="tuning-table">
+  <tbody>
+    <tr>
+      <th>Distinction Builder</th>
+      <td>
+        <form method="get" action="{% url 'admin_distinction_builder_pick' %}" class="ab-picker">
+          <select name="pk">
+            {% for distinction in builders.distinctions %}
+            <option value="{{ distinction.pk }}">{{ distinction.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Open</button>
+        </form>
+        <a href="{% url 'admin_distinction_builder_new' %}">New distinction</a>
+        <p class="help">Author one Distinction's fields, effects, exclusions and offers.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Tradition slate</th>
+      <td>
+        <form method="get" action="{% url 'admin_tradition_slate_pick' %}" class="ab-picker">
+          <select name="pk">
+            {% for beginning in builders.beginnings %}
+            <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Open</button>
+        </form>
+        <p class="help">Author the standard tradition-step lines and one Beginning's own
+          slate of traditions.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Upbringing Builder</th>
+      <td>
+        <form method="get" action="{% url 'admin_upbringing_builder_pick' %}" class="ab-picker">
+          <select name="pk">
+            {% for upbringing in builders.upbringings %}
+            <option value="{{ upbringing.pk }}">{{ upbringing.label }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">Open</button>
+        </form>
+        <form method="get" action="{% url 'admin_upbringing_builder_new' %}" class="ab-picker">
+          <select name="beginning">
+            {% for beginning in builders.beginnings %}
+            <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
+            {% endfor %}
+          </select>
+          <button type="submit">New Upbringing</button>
+        </form>
+        <p class="help">Author one Upbringing's questions, answers and offers.</p>
+      </td>
+    </tr>
+    <tr>
+      <th>Glimpse tags</th>
+      <td>
+        <a href="{% url 'admin:arxii_glimpsetag_changelist' %}">
+          {{ builders.glimpse_tag_count }} active tag{{ builders.glimpse_tag_count|pluralize }}</a>
+        <p class="help">Author a Glimpse tag's own offers, alongside its other fields.</p>
+      </td>
+    </tr>
+  </tbody>
+</table>

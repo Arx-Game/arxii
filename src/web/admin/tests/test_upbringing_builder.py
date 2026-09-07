@@ -83,6 +83,30 @@ class BuilderGetTest(BuilderTestCase):
         assert f"o{self.livery.pk}-__prefix__-distinction" in body
         assert "+ Offer" in body
 
+    def test_question_module_carries_an_id_for_the_distinction_builder_to_anchor_to(self):
+        """#3675 Task 10: the Distinction Builder's opener link anchors #question-<slot pk>."""
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert f'id="question-{self.q1.pk}"' in body
+
+    def test_offer_row_links_the_distinction_to_its_builder(self):
+        """#3675 Task 10: an answer's own offer links its distinction to the Distinction Builder."""
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        offered = DistinctionFactory(name="Quiet Debt")
+        DistinctionOfferFactory(
+            distinction=offered,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=self.livery,
+            arrives_as=OfferArrival.BUNDLED,
+        )
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert reverse("admin_distinction_builder", args=[offered.pk]) in body
+
     def test_this_route_closes_module_renders(self):
         """#3675: "This route closes" is its own route-level module."""
         self.client.force_login(self.author)

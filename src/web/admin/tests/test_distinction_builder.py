@@ -12,6 +12,7 @@ from evennia.accounts.models import AccountDB
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.factories import (
+    DistinctionOfferFactory,
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
@@ -92,6 +93,23 @@ class BuilderGetTest(BuilderTestCase):
             )
             for r in results
         )
+
+    def test_opened_by_cell_links_the_origin_choice_opener_to_its_question(self):
+        """#3675 Task 10: the "Opened by" cell links an offer's opener to where it's edited."""
+        DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=self.choice,
+            arrives_as=OfferArrival.BUNDLED,
+        )
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_distinction_builder", args=[self.distinction.pk]))
+        body = resp.content.decode()
+        expected_href = (
+            f"{reverse('admin_upbringing_builder', args=[self.slot.template.pk])}"
+            f"#question-{self.slot.pk}"
+        )
+        assert expected_href in body
 
 
 class BuilderSaveTest(BuilderTestCase):

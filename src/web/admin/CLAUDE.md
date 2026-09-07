@@ -432,6 +432,72 @@ The stock changelists carry the same credit story the workbench queue tells:
   `tests/test_change_form_workbench_link.py`, `tests/test_authoring_links.py`,
   plus the E001 class in `tests/test_admin_checks.py`.
 
+### Builders panel (#3675 Task 10)
+
+**Purpose:** every builder page is one click from the workbench and from the
+row it edits (Decision 11 of the #3675 spec) - a "Builders" table on the
+dashboard itself, plus outgoing cross-links each builder page draws to the
+others.
+
+- **The panel** - `web/templates/admin/authoring/_builders_panel.html`,
+  included in `dashboard.html` right after the intro paragraph (before the
+  stats panel), rendered only when setup is not required - a plain include
+  on the initial GET, not an HTMX fragment, since its four option lists never
+  refresh on their own. `authoring_dashboard`'s `_builders_context()` builds
+  them in four queries total (never per row): active `Distinction`s and
+  active `Beginnings`, both by name; active `OriginTemplate`s as
+  `{"pk": ..., "label": "{beginning} › {name}"}` dicts, ordered by beginning
+  then name; and the active `GlimpseTag` count.
+- **Four rows** - Distinction Builder (a `<select>` of distinctions + Open,
+  plus a "New distinction" link to `admin_distinction_builder_new`);
+  tradition slate (a `<select>` of Beginnings + Open); Upbringing Builder (a
+  `<select>` of Upbringings + Open, plus a second `<select>` of Beginnings +
+  "New Upbringing" - `admin_upbringing_builder_new?beginning=` already reads
+  that param, no new view needed for it); Glimpse tags (a link to
+  `admin:arxii_glimpsetag_changelist` naming the active count). Each row
+  carries one line of fixed help copy under it.
+- **Pick routes** - each `<select>` posts nothing; picking a row and clicking
+  Open is a plain GET to a `*_pick` view (`distinction_builder_pick`,
+  `tradition_slate_pick`, `upbringing_builder_pick`, living beside their own
+  builder's other views): `_distinction_builder/pick/?pk=` ->
+  `admin_distinction_builder_pick`, `_tradition_slate/pick/?pk=` ->
+  `admin_tradition_slate_pick`, `_upbringing_builder/pick/?pk=` ->
+  `admin_upbringing_builder_pick`. Each redirects to the matching builder
+  page for that pk, or 400s on a missing or unknown one - never a silent
+  redirect to a stale or absent row.
+- **Cross-links between builder pages** - a `builder_link` simple tag
+  (`web/admin/templatetags/authoring_tags.py`, alongside the existing
+  `workbench_url` filter) wraps `links.builder_url`/`builder_label` into
+  `<a href="...">label</a>` (or `""`); the tradition slate page's
+  "Carries"/"Grants" cells use it to link a standard line's Distinction back
+  to its own Builder page. The Distinction Builder's own "Opened by" cell
+  gets a second, purpose-built link (`distinction_builder.live.opener_link`,
+  a `distinction_builder_tags.opener_link` filter) to wherever the offer's
+  opener is actually edited - a Glimpse tag's own change form
+  (`admin:arxii_glimpsetag_change`), an Upbringing answer's own question on
+  its Upbringing Builder page (`builder_url(origin_choice.slot.template)`,
+  anchored `#question-<slot pk>` - `_question.html`'s module `<div>` now
+  carries that id for a saved question), or, for a schooling-line opener
+  (whose standard lines are shared by every Beginning, so no one page owns
+  them), the tradition slate page of the first active Beginning by name
+  (`live.default_slate_url()`, computed once per page render and passed to
+  every offer row rather than queried per row).
+- **The duplicate-offer guard, deduplicated** - the Upbringing Builder's
+  `_OfferBaseFormSet` (`upbringing_builder/forms.py`) and the Glimpse tag
+  admin's `GlimpseTagOfferFormSet` (`world/magic/admin.py`) had each
+  implemented an identical "no distinction offered twice by this owner"
+  `clean()` (Task 9 review), differing only in the noun naming the owner in
+  the message. Both now mix in `web.admin.authoring.offers
+  .DistinctionOfferFormSetMixin` and set their own `owner_noun`.
+- Tests: `web/admin/tests/test_authoring_builders_panel.py` (the panel's four
+  rows and their option lists, the setup-gate absence, the three pick
+  routes' redirects and 400s, and the panel's own styling guard); the
+  cross-link assertions live beside each builder's own tests
+  (`test_distinction_builder.py`, `test_tradition_slate.py`,
+  `test_upbringing_builder.py`).
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  the Builder pages set above.
+
 **When Asked About**
 
 If an agent is asked about any of these topics, this is the system:
@@ -439,6 +505,8 @@ If an agent is asked about any of these topics, this is the system:
 - "who still needs to write or review this content model"
 - "the row editor for credited content"
 - "reference search across the content database / staff docs / Arx I dump"
+- "the Builders panel / how to get to a builder page from the dashboard"
+- "cross-links between the Distinction Builder, tradition slate and Upbringing Builder"
 
 ## Upbringing Builder (#3660)
 
@@ -495,7 +563,9 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   the admin contract and that every class the templates emit has a rule on the
   rendered page.
 - **URLs** (all superuser-only): `_upbringing_builder/new/` ->
-  `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/<pk>/` ->
+  `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/pick/` ->
+  `admin_upbringing_builder_pick` (`?pk=`, GET redirect, 400 on a missing/unknown
+  pk - the Builders panel's own picker, #3675 Task 10), `_upbringing_builder/<pk>/` ->
   `admin_upbringing_builder`, `_upbringing_builder/<pk>/review/` ->
   `admin_upbringing_builder_review` (POST), `_upbringing_builder/<pk>/preview/` ->
   `admin_upbringing_builder_preview` (read-only, the questionnaire the way
@@ -639,7 +709,9 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   `Beginnings` change form (`admin_tradition_slate`, keyed by the Beginning's
   own pk) the same way they resolve "Open in Upbringing Builder" for
   `OriginTemplate`.
-- **URLs** (superuser-only): `_tradition_slate/<beginning_pk>/` ->
+- **URLs** (superuser-only): `_tradition_slate/pick/` ->
+  `admin_tradition_slate_pick` (`?pk=`, GET redirect, 400 on a missing/unknown pk -
+  the Builders panel's own picker, #3675 Task 10), `_tradition_slate/<beginning_pk>/` ->
   `admin_tradition_slate`, `_tradition_slate/<beginning_pk>/review/` ->
   `admin_tradition_slate_review` (POST).
 - **Checks (`live.checks`)** - every self-taught/teachers-gone standard line
@@ -756,7 +828,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `OriginTemplateSlotChoiceInline` - the inline alone gives it no
   `search_fields` of its own.
 - **URLs** (superuser-only): `_distinction_builder/new/` ->
-  `admin_distinction_builder_new`, `_distinction_builder/<pk>/` ->
+  `admin_distinction_builder_new`, `_distinction_builder/pick/` ->
+  `admin_distinction_builder_pick` (`?pk=`, GET redirect, 400 on a missing/unknown pk -
+  the Builders panel's own picker, #3675 Task 10), `_distinction_builder/<pk>/` ->
   `admin_distinction_builder`, `_distinction_builder/<pk>/review/` ->
   `admin_distinction_builder_review` (POST).
 - **Gate** - `@superuser_required`, then `current_contributor(request.user)`;

@@ -1,5 +1,5 @@
 {% extends "admin/base_site.html" %}
-{% load i18n static %}
+{% load i18n static authoring_tags %}
 
 {% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
 
@@ -74,7 +74,7 @@ review: this page used to carry a verbatim copy of that script inline.
                 <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
                   {{ label }}</td>
                 <td>{{ form.entry_line }}</td>
-                <td>{{ form.carries }}</td>
+                <td>{{ form.carries }} {% builder_link form.instance.carries %}</td>
                 <td>{{ display.text }}<br><span class="help">{{ display.help }}</span></td>
               </tr>
               {% if form.errors %}<tr><td colspan="4">{{ form.errors }}</td></tr>{% endif %}
@@ -100,7 +100,7 @@ review: this page used to carry a verbatim copy of that script inline.
                   {{ rank }}</td>
                 <td>{{ form.name }}</td>
                 <td>{{ form.player_line }}</td>
-                <td>{{ form.grants }}</td>
+                <td>{{ form.grants }} {% builder_link form.instance.grants %}</td>
                 <td>{{ display.text }}<br><span class="help">{{ display.help }}</span></td>
               </tr>
               {% if form.errors %}<tr><td colspan="5">{{ form.errors }}</td></tr>{% endif %}

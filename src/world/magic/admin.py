@@ -4,6 +4,7 @@ from django.db.models import Prefetch
 from django.forms.models import BaseInlineFormSet
 from django.utils.html import format_html
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
 from world.codex.models import TraditionCodexGrant
@@ -381,22 +382,15 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         refresh_glimpse_state(obj)
 
 
-class GlimpseTagOfferFormSet(BaseInlineFormSet):
-    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2)."""
+class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2).
 
-    def clean(self):
-        super().clean()
-        seen: set[int] = set()
-        for form in self.forms:
-            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
-                continue
-            distinction = form.cleaned_data.get("distinction")
-            if distinction is None:
-                continue
-            if distinction.pk in seen:
-                dupe_message = f"'{distinction.name}' is already offered by this tag."
-                raise forms.ValidationError(dupe_message)
-            seen.add(distinction.pk)
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review, promoted alongside the Upbringing Builder's
+    identical ``_OfferBaseFormSet``) - this class only names the owner noun.
+    """
+
+    owner_noun = "tag"
 
 
 class GlimpseTagOfferForm(forms.ModelForm):

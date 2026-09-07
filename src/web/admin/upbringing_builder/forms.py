@@ -13,6 +13,7 @@ from django.forms import inlineformset_factory
 from django.forms.models import BaseInlineFormSet
 from django.http import QueryDict
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import (
     DistinctionOffer,
@@ -211,22 +212,14 @@ def answer_formset_for(slot: OriginTemplateSlot, data: QueryDict | None = None) 
     return AnswerFormSet(data, instance=slot, prefix=f"a{slot.pk}")
 
 
-class _OfferBaseFormSet(BaseInlineFormSet):
-    """Rejects the same distinction offered twice on one answer (#3675 review minor 2)."""
+class _OfferBaseFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one answer (#3675 review minor 2).
 
-    def clean(self):
-        super().clean()
-        seen: set[int] = set()
-        for form in self.forms:
-            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
-                continue
-            distinction = form.cleaned_data.get("distinction")
-            if distinction is None:
-                continue
-            if distinction.pk in seen:
-                dupe_message = f"'{distinction.name}' is already offered by this answer."
-                raise forms.ValidationError(dupe_message)
-            seen.add(distinction.pk)
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review) - this class only names the owner noun.
+    """
+
+    owner_noun = "answer"
 
 
 class OfferForm(forms.ModelForm):

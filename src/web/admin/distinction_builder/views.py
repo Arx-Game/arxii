@@ -16,7 +16,7 @@ from dataclasses import dataclass
 from django.contrib import messages
 from django.db import transaction
 from django.forms import Media
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -63,7 +63,7 @@ def _build_forms(request: HttpRequest, distinction: Distinction) -> _BuilderForm
         instance=distinction,
         prefix="offers",
         queryset=DistinctionOffer.objects.select_related(
-            "schooling_line", "glimpse_tag", "origin_choice"
+            "schooling_line", "glimpse_tag", "origin_choice__slot__template"
         ),
     )
     return _BuilderForms(form, effects, offers)
@@ -111,6 +111,7 @@ def _render_page(
             "offers": forms.offers,
             "offer_rows": live.sorted_offer_forms(forms.offers),
             "opener_field_map": live.opener_field_map(),
+            "default_slate_url": live.default_slate_url(),
             "needs_setup": needs_setup,
             "media": forms.media,
             "rail": live.rail_counts(distinction) if distinction.pk else None,
@@ -145,6 +146,21 @@ def distinction_builder(request: HttpRequest, pk: int | None = None) -> HttpResp
             return redirect(reverse("admin_distinction_builder", args=[saved.pk]))
         return _render_page(request, distinction, forms)
     return _render_page(request, distinction, forms, needs_setup=contributor is None)
+
+
+@superuser_required
+def distinction_builder_pick(request: HttpRequest) -> HttpResponse:
+    """GET `?pk=` redirect target for the Builders panel's distinction picker (#3675 Task 10).
+
+    The panel's `<select>` posts nothing of its own - it only names which
+    existing row to open - so this is a plain redirect, not a form view. A
+    missing or unknown pk is a 400, never a silent redirect to a stale or
+    absent row.
+    """
+    pk_raw = request.GET.get("pk", "")
+    if not pk_raw.isdigit() or not Distinction.objects.filter(pk=pk_raw).exists():
+        return HttpResponseBadRequest("Pick a distinction to open.")
+    return redirect("admin_distinction_builder", pk=int(pk_raw))
 
 
 @superuser_required

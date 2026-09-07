@@ -87,7 +87,10 @@ from web.admin.authoring.reference import db_search, file_search, reference_root
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
 from web.admin.constants import BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
+from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
+from world.distinctions.models import Distinction
+from world.magic.models import GlimpseTag
 
 _QUEUE_DISPLAY_CAP = 100
 
@@ -116,6 +119,28 @@ _BACKLOG_CHANGED_EVENT = "authoring-backlog-changed"
 
 def _setup_required(request: HttpRequest) -> bool:
     return current_contributor(request.user) is None
+
+
+def _builders_context() -> dict[str, object]:
+    """The Builders panel's four option lists (#3675 Task 10): one query each.
+
+    ``upbringings`` is a list of plain dicts rather than the model rows
+    themselves - the panel's option text ("{beginning} - {name}") needs a
+    span into a related row, and building that string here keeps the
+    template from doing it (and from tripping over `Beginnings` not being in
+    scope there).
+    """
+    return {
+        "distinctions": list(Distinction.objects.filter(is_active=True).order_by("name")),
+        "beginnings": list(Beginnings.objects.filter(is_active=True).order_by("name")),
+        "upbringings": [
+            {"pk": template.pk, "label": f"{template.beginning.name} › {template.name}"}
+            for template in OriginTemplate.objects.filter(is_active=True)
+            .select_related("beginning")
+            .order_by("beginning__name", "name")
+        ],
+        "glimpse_tag_count": GlimpseTag.objects.filter(is_active=True).count(),
+    }
 
 
 def _row_matches(row: BacklogRow, domain: str, model: str, status: str, query: str) -> bool:
@@ -201,6 +226,8 @@ def authoring_dashboard(request: HttpRequest) -> HttpResponse:
             player_data__isnull=True
         )
         context["suggested_name"] = request.user.username
+    else:
+        context["builders"] = _builders_context()
     return render(request, "admin/authoring/dashboard.html", context)
 
 

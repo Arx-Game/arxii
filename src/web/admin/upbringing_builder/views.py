@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from django.contrib import messages
 from django.db import transaction
 from django.forms import Media
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -246,6 +246,22 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
         _RouteForms(form, questions, answers, offers),
         needs_setup=contributor is None,
     )
+
+
+@superuser_required
+def upbringing_builder_pick(request: HttpRequest) -> HttpResponse:
+    """GET `?pk=` redirect target for the Builders panel's Upbringing picker (#3675 Task 10).
+
+    Mirrors `distinction_builder_pick`: a plain redirect, 400 on a missing or
+    unknown pk, never a silent redirect to a stale or absent row. The "New
+    Upbringing" side of the panel needs no pick view of its own -
+    `admin_upbringing_builder_new?beginning=` is handled by `upbringing_builder`
+    itself, above.
+    """
+    pk_raw = request.GET.get("pk", "")
+    if not pk_raw.isdigit() or not OriginTemplate.objects.filter(pk=pk_raw).exists():
+        return HttpResponseBadRequest("Pick an Upbringing to open.")
+    return redirect("admin_upbringing_builder", int(pk_raw))
 
 
 @superuser_required

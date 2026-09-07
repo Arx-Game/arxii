@@ -190,6 +190,9 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   <span class="db-opener" data-opener="schooling_line">{{ f.schooling_line }}</span>
                   <span class="db-opener" data-opener="glimpse_tag">{{ f.glimpse_tag }}</span>
                   <span class="db-opener" data-opener="origin_choice">{{ f.origin_choice }}</span>
+                  {% with url=f.instance|opener_link:default_slate_url %}
+                  {% if url %}<a class="db-opener-link" href="{{ url }}">open</a>{% endif %}
+                  {% endwith %}
                 </td>
                 <td>{{ f.arrives_as }}</td>
                 <td>

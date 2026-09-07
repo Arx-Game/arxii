@@ -5,10 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from django.forms.models import BaseInlineFormSet
+from django.urls import NoReverseMatch, reverse
 
+from web.admin.authoring.links import builder_url
 from web.admin.authoring.offers import PreviewLine, offer_sort_key, preview_from_offers
 from world.character_creation.constants import OfferChapter
-from world.character_creation.models import DistinctionOffer
+from world.character_creation.models import Beginnings, DistinctionOffer
 from world.distinctions.models import CharacterDistinction, Distinction, DistinctionEffect
 
 #: The placeholder marker `_placeholder_check` watches for - never typed by a
@@ -144,3 +146,42 @@ def preview_line(distinction: Distinction) -> PreviewLine | None:
     """
     offers = DistinctionOffer.objects.filter(distinction=distinction, is_active=True)
     return preview_from_offers(offers)
+
+
+def default_slate_url() -> str:
+    """The tradition slate page a TRADITION_STEP offer's opener cell links to (#3675 Task 10).
+
+    The standard lines a schooling-line opener actually edits are shared by
+    every Beginning, so there is no one "the" slate page for it - any active
+    Beginning's own slate page reads the standard lines the same way. The
+    first one by name is as good a pick as any; "" when there is none yet.
+    """
+    beginning = Beginnings.objects.filter(is_active=True).order_by("name").first()
+    if beginning is None:
+        return ""
+    return builder_url(beginning)
+
+
+def opener_link(offer: DistinctionOffer, *, default_slate_url: str) -> str:
+    """Where this offer's opener is edited: the "Opened by" cell's own link (#3675 Task 10).
+
+    The model's own constraint (`distinctionoffer_at_most_one_opener`) means
+    at most one of the three branches below ever fires. A Glimpse tag opens
+    on its own stock change form; an Upbringing answer opens on its
+    Upbringing Builder page, anchored to the question that carries it
+    (`_question.html` names that anchor `question-<slot pk>`); a schooling
+    line has no page of its own, so it links `default_slate_url` instead -
+    computed once by the caller (`views._render_page`), not per offer, since
+    every schooling-line row would otherwise repeat the same query.
+    """
+    if offer.glimpse_tag_id:
+        try:
+            return reverse("admin:arxii_glimpsetag_change", args=[offer.glimpse_tag_id])
+        except NoReverseMatch:
+            return ""
+    if offer.origin_choice_id:
+        url = builder_url(offer.origin_choice.slot.template)
+        return f"{url}#question-{offer.origin_choice.slot_id}" if url else ""
+    if offer.schooling_line_id:
+        return default_slate_url
+    return ""

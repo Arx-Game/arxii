@@ -123,6 +123,17 @@ class SlateGetTest(SlateTestCase):
         for label in ("Self-taught", "Teachers gone", "Living masters"):
             assert label in body
 
+    def test_grants_cell_links_the_distinction_to_its_builder(self):
+        """#3675 Task 10: a schooling line's grant links out to the Distinction Builder."""
+        training = DistinctionFactory(name="Craft Training", cost_per_rank=1)
+        SchoolingLineFactory(
+            rank=1, name="Apprentice", player_line="Some training.", grants=training
+        )
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_tradition_slate", args=[self.beginning.pk]))
+        body = resp.content.decode()
+        assert reverse("admin_distinction_builder", args=[training.pk]) in body
+
     def test_unlinked_superuser_sees_setup_panel(self):
         self.client.force_login(self.unlinked)
         resp = self.client.get(reverse("admin_tradition_slate", args=[self.beginning.pk]))

@@ -16,6 +16,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
+from django import forms
+
 from web.admin.authoring.copy import price_text
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
@@ -39,6 +41,34 @@ def offer_sort_key(offer: DistinctionOffer) -> tuple[int, int, int]:
     except ValueError:
         chapter_index = len(CHAPTER_ORDER)
     return (chapter_index, offer.sort_order or 0, offer.pk or 0)
+
+
+class DistinctionOfferFormSetMixin:
+    """Rejects the same distinction offered twice by one owner (#3675 Task 10 review).
+
+    Promoted out of two identical ``clean()`` bodies: the Upbringing
+    Builder's per-answer offer formset (``upbringing_builder.forms
+    ._OfferBaseFormSet``) and the Glimpse tag admin's own offer inline
+    (``world.magic.admin.GlimpseTagOfferFormSet``) each duplicated this same
+    check, differing only in which noun names the owner in the message.
+    Mixed in ahead of ``BaseInlineFormSet``; a subclass sets ``owner_noun``.
+    """
+
+    owner_noun = "row"
+
+    def clean(self):
+        super().clean()
+        seen: set[int] = set()
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
+                continue
+            distinction = form.cleaned_data.get("distinction")
+            if distinction is None:
+                continue
+            if distinction.pk in seen:
+                dupe_message = f"'{distinction.name}' is already offered by this {self.owner_noun}."
+                raise forms.ValidationError(dupe_message)
+            seen.add(distinction.pk)
 
 
 @dataclass(frozen=True)

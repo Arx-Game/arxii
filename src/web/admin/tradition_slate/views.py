@@ -24,7 +24,7 @@ from django.contrib import messages
 from django.db import transaction
 from django.db.models import Case, IntegerField, QuerySet, Value, When
 from django.forms import BaseModelFormSet, Media
-from django.http import HttpRequest, HttpResponse
+from django.http import HttpRequest, HttpResponse, HttpResponseBadRequest
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views.decorators.http import require_POST
@@ -217,6 +217,19 @@ def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
             return redirect(reverse("admin_tradition_slate", args=[beginning.pk]))
         return _render_page(request, beginning, forms)
     return _render_page(request, beginning, forms, needs_setup=contributor is None)
+
+
+@superuser_required
+def tradition_slate_pick(request: HttpRequest) -> HttpResponse:
+    """GET `?pk=` redirect target for the Builders panel's Beginning picker (#3675 Task 10).
+
+    Mirrors `distinction_builder_pick`: a plain redirect, 400 on a missing or
+    unknown pk, never a silent redirect to a stale or absent row.
+    """
+    pk_raw = request.GET.get("pk", "")
+    if not pk_raw.isdigit() or not Beginnings.objects.filter(pk=pk_raw).exists():
+        return HttpResponseBadRequest("Pick a Beginning to open its tradition slate.")
+    return redirect("admin_tradition_slate", beginning_pk=int(pk_raw))
 
 
 @superuser_required
