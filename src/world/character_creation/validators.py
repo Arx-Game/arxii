@@ -567,44 +567,52 @@ def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplat
     return []
 
 
-def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
+def _own_family_organization_id(draft: CharacterDraft, path: str) -> int | None:
+    if path != FamilyPath.CLAIMED or draft.family_id is None:
+        return None
+    from world.societies.houses.services import house_for_family  # noqa: PLC0415
+
+    own_org = house_for_family(draft.family)
+    return own_org.pk if own_org is not None else None
+
+
+def _kin_vacancy_error(
+    draft: CharacterDraft,
+    reachable: object,
+    own_org_id: int | None,
+) -> str | None:
+    from world.societies.constants import VACANCY_BASIS_KIN  # noqa: PLC0415
+
+    if own_org_id is None:
+        return None
+    kin_offered = (
+        reachable.filter(organization_id=own_org_id)
+        .exclude(kin_pool__isnull=True, kin_node__isnull=True)
+        .exists()
+    )
+    vacancy = draft.selected_vacancy
+    if kin_offered and (
+        vacancy is None
+        or vacancy.organization_id != own_org_id
+        or vacancy.basis != VACANCY_BASIS_KIN
+    ):
+        return "Choose your place in the family"
+    return None
+
+
+def _vacancy_gate_errors(
+    draft: CharacterDraft,
+    path: str,
+    vacancy: object,
+    reachable_any_state: object,
+    own_org_id: int | None,
+) -> list[str]:
     from world.societies.constants import (  # noqa: PLC0415
         VACANCY_BASIS_KIN,
         VACANCY_BASIS_RETAINER,
     )
-    from world.societies.vacancy_services import (  # noqa: PLC0415
-        _open_filter,
-        reachable_vacancies,
-    )
 
-    reachable_any_state = reachable_vacancies(draft, require_open=False)
-    reachable = reachable_any_state.filter(_open_filter())
-    vacancy = draft.selected_vacancy
-    own_org_id = None
-    if path == FamilyPath.CLAIMED and draft.family_id is not None:
-        from world.societies.houses.services import house_for_family  # noqa: PLC0415
-
-        own_org = house_for_family(draft.family)
-        own_org_id = own_org.pk if own_org is not None else None
-        kin_offered = (
-            own_org_id is not None
-            and reachable.filter(organization_id=own_org_id)
-            .exclude(kin_pool__isnull=True, kin_node__isnull=True)
-            .exists()
-        )
-        if kin_offered and (
-            vacancy is None
-            or vacancy.organization_id != own_org_id
-            or vacancy.basis != VACANCY_BASIS_KIN
-        ):
-            return ["Choose your place in the family"]
-    if vacancy is None:
-        return []
     errors: list[str] = []
-    # A vacancy that closed between pick and finalize is graceful-degradation
-    # territory (``take_vacancy``/``VacancyExhaustedError``), not a stage-blocking
-    # error - only a gate the player can't fix (wrong realm/upbringing/trust,
-    # or the vacancy was deactivated outright) belongs here.
     if not reachable_any_state.filter(pk=vacancy.pk).exists():
         errors.append("That opening is not available to you")
     if vacancy.basis == VACANCY_BASIS_KIN and (
@@ -622,3 +630,21 @@ def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
     ):
         errors.append("Your place in the family already covers your kin slot")
     return errors
+
+
+def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
+    from world.societies.vacancy_services import (  # noqa: PLC0415
+        _open_filter,
+        reachable_vacancies,
+    )
+
+    reachable_any_state = reachable_vacancies(draft, require_open=False)
+    reachable = reachable_any_state.filter(_open_filter())
+    own_org_id = _own_family_organization_id(draft, path)
+    kin_error = _kin_vacancy_error(draft, reachable, own_org_id)
+    if kin_error is not None:
+        return [kin_error]
+    vacancy = draft.selected_vacancy
+    if vacancy is None:
+        return []
+    return _vacancy_gate_errors(draft, path, vacancy, reachable_any_state, own_org_id)
