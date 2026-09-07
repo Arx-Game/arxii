@@ -32,7 +32,8 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Distinction Builder</th>
       <td>
         <form method="get" action="{% url 'admin_distinction_builder_pick' %}" class="ab-picker">
-          <select name="pk" aria-label="Distinction to open in the builder">
+          <label for="distinction-builder-select">Distinction to open in the builder</label>
+          <select id="distinction-builder-select" name="pk">
             {% for distinction in builders.distinctions %}
             <option value="{{ distinction.pk }}">{{ distinction.name }}</option>
             {% endfor %}
@@ -47,7 +48,8 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Tradition slate</th>
       <td>
         <form method="get" action="{% url 'admin_tradition_slate_pick' %}" class="ab-picker">
-          <select name="pk" aria-label="Beginning whose tradition slate to open">
+          <label for="tradition-slate-select">Beginning whose tradition slate to open</label>
+          <select id="tradition-slate-select" name="pk">
             {% for beginning in builders.beginnings %}
             <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
             {% endfor %}
@@ -62,7 +64,8 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Upbringing Builder</th>
       <td>
         <form method="get" action="{% url 'admin_upbringing_builder_pick' %}" class="ab-picker">
-          <select name="pk" aria-label="Upbringing to open in the builder">
+          <label for="upbringing-builder-select">Upbringing to open in the builder</label>
+          <select id="upbringing-builder-select" name="pk">
             {% for upbringing in builders.upbringings %}
             <option value="{{ upbringing.pk }}">{{ upbringing.label }}</option>
             {% endfor %}
@@ -70,7 +73,8 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
           <button type="submit">Open</button>
         </form>
         <form method="get" action="{% url 'admin_upbringing_builder_new' %}" class="ab-picker">
-          <select name="beginning" aria-label="Beginning for the new Upbringing">
+          <label for="new-upbringing-beginning-select">Beginning for the new Upbringing</label>
+          <select id="new-upbringing-beginning-select" name="beginning">
             {% for beginning in builders.beginnings %}
             <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
             {% endfor %}
