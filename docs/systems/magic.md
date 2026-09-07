@@ -316,7 +316,7 @@ offers are (`world.character_creation.offers`, `docs/systems/character_creation.
 
 **A tag's offers live behind a handler, not a prefetch (ADR-0278).**
 `GlimpseTag.offers` is a `cached_property` returning a `GlimpseTagOffersHandler`
-(`CachedRowsHandler` subclass, `models/glimpse.py`) — active `DistinctionOffer` rows
+(`CachedRowsHandler` subclass, `models/glimpse.py`): active `DistinctionOffer` rows
 for the tag, ordered `sort_order, id`, `select_related("distinction")`. Every reader
 (the CG API serializer's `get_offers`, `GlimpseTagAdmin`'s change-form preview) reads
 `tag.offers.rows`, never a `Prefetch(..., to_attr=...)`. `CGGlimpseTagViewSet.list()`

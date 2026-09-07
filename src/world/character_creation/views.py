@@ -652,7 +652,7 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
         Mirrors ``CGOriginTemplateViewSet.list()``: this ViewSet opts out of
         pagination, so there's no ``page`` branch to preserve. Offers are read
         through ``GlimpseTag.offers`` (``GlimpseTagOffersHandler``), primed here
-        for the whole page rather than reached via a ``Prefetch(to_attr=...)`` —
+        for the whole page rather than reached via a ``Prefetch(to_attr=...)``:
         a `to_attr` prefetch silently stops running on an identity-mapped
         instance the second time it's warm (ADR-0263), which is what this
         endpoint shipped with until #3675.
