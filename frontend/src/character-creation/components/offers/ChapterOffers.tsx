@@ -65,6 +65,20 @@ interface ChapterOffersProps {
    * response carries.
    */
   closedFilter?: (closed: ClosedDistinction) => boolean;
+  /**
+   * Print the closed-offers hint. Defaults to true; pass false when the
+   * caller renders its own once-per-chapter closed note elsewhere (Lineage's
+   * `ClosedByRoute`, #3675 Task 14) so a mount under one answer doesn't
+   * repeat the whole route's closed list.
+   */
+  showClosed?: boolean;
+  /**
+   * Locked "bundled" stances rendered BEFORE the offered ones, no toggle or
+   * rank control - the answer already granted these for free (or a refund),
+   * this just shows what arrived (#3675 Task 14). `player_line` is optional:
+   * a bundled distinction's own line, when the caller has it.
+   */
+  bundled?: { name: string; player_line?: string; cost_per_rank: number; max_rank: number }[];
 }
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
@@ -85,6 +99,19 @@ function PriceLine({ offer, rank }: { offer: VisibleOffer; rank: number }) {
   return <span>{offer.cost_per_rank}</span>;
 }
 
+/** The price line for a `bundled` row: same shape as `PriceLine`, off a
+ * plain `{cost_per_rank, max_rank}` pair rather than a full `VisibleOffer` -
+ * a bundled distinction carries no rank state of its own to spend against. */
+function BundledPriceLine({ item }: { item: { cost_per_rank: number; max_rank: number } }) {
+  if (item.max_rank > 1) {
+    return <span>{item.cost_per_rank} per rank</span>;
+  }
+  if (item.cost_per_rank < 0) {
+    return <span className="refund">Refunds {-item.cost_per_rank}</span>;
+  }
+  return <span>{item.cost_per_rank}</span>;
+}
+
 export function ChapterOffers({
   draft,
   chapter,
@@ -95,6 +122,8 @@ export function ChapterOffers({
   showOpener = true,
   closedLead,
   closedFilter,
+  showClosed = true,
+  bundled = [],
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -131,7 +160,7 @@ export function ChapterOffers({
   const offers = (offersData?.offers ?? []).filter((offer) => (filter ? filter(offer) : true));
   const closed = (offersData?.closed ?? []).filter((c) => (closedFilter ? closedFilter(c) : true));
 
-  if (offers.length === 0 && closed.length === 0) return null;
+  if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
 
   return (
     <div className="field">
@@ -146,6 +175,21 @@ export function ChapterOffers({
         </label>
       )}
       <ul className="stances">
+        {bundled.map((item) => (
+          <li key={item.name}>
+            <div className="stance" aria-pressed="true" aria-disabled="true">
+              <span className="dot sq" />
+              <span>
+                <b>{item.name}</b>
+                {item.player_line && <span className="g">{item.player_line}</span>}
+              </span>
+              <span className="price">
+                <span className="locked">bundled</span>
+                <BundledPriceLine item={item} />
+              </span>
+            </div>
+          </li>
+        ))}
         {offers.map((offer) => {
           const entry = entryByOfferId.get(offer.offer_id);
           const rank = entry?.rank ?? 0;
@@ -205,7 +249,7 @@ export function ChapterOffers({
         })}
       </ul>
       {hint && <span className="hint">{hint}</span>}
-      {closed.length > 0 && (
+      {showClosed && closed.length > 0 && (
         <span className="hint">
           {`${closedLead ?? 'Closed on this road'}: ${closed
             .map((c) => `${c.name}: ${c.reason}`)

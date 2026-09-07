@@ -345,6 +345,74 @@ describe('ChapterOffers', () => {
     ).toBeInTheDocument();
   });
 
+  it('showClosed={false} hides the closed hint even when the chapter has closed items', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" showClosed={false} />
+    );
+    expect(screen.getByText('Silver Tongue')).toBeInTheDocument();
+    expect(screen.queryByText(/Closed on this road/)).not.toBeInTheDocument();
+  });
+
+  it('showClosed defaults to true (the closed hint prints without the prop)', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByText(/Closed on this road/)).toBeInTheDocument();
+  });
+
+  it('a bundled row renders locked, ahead of the offered rows, with its refund', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        bundled={[
+          {
+            name: 'Impoverished',
+            player_line: 'Nothing but the clothes.',
+            cost_per_rank: -25,
+            max_rank: 1,
+          },
+        ]}
+      />
+    );
+    const impoverished = screen.getByText('Impoverished');
+    const stance = impoverished.closest('.stance');
+    expect(stance).not.toBeNull();
+    expect(stance).toHaveAttribute('aria-pressed', 'true');
+    expect(stance).toHaveAttribute('aria-disabled', 'true');
+    expect(stance?.querySelector('.locked')).toHaveTextContent('bundled');
+    expect(stance?.querySelector('.refund')).toHaveTextContent('Refunds 25');
+    expect(screen.getByText('Nothing but the clothes.')).toBeInTheDocument();
+    // The bundled row prints before the offered ones.
+    const stances = Array.from(document.querySelectorAll('.stances > li'));
+    expect(stances[0].textContent).toContain('Impoverished');
+    expect(stances[1].textContent).toContain('Silver Tongue');
+  });
+
+  it('a bundled row with no player_line renders no description span', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        bundled={[{ name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
+      />
+    );
+    const stance = screen.getByText('Impoverished').closest('.stance');
+    expect(stance?.querySelector('.g')).toBeNull();
+  });
+
+  it('bundled rows alone (no offers, no closed) still render the block', () => {
+    offersResponse = { offers: [], closed: [] };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        bundled={[{ name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
+      />
+    );
+    expect(screen.getByText('Impoverished')).toBeInTheDocument();
+  });
+
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
     const { container } = renderWithCharacterCreationProviders(
       <div className="interview">

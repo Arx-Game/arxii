@@ -86,7 +86,17 @@ character-creation/
         │                         #   block, `scope: 'path'` renders below it, scoped to
         │                         #   the resolved family path; write-in ->
         │                         #   draft_data.origin_slots, pick-list ->
-        │                         #   draft_data.origin_choices, priced off influence
+        │                         #   draft_data.origin_choices, priced off influence.
+        │                         #   Each priced answer prints an `offers X` / `bundles Y`
+        │                         #   line off its own `AnswerOffer[]` (#3675 Task 14); the
+        │                         #   CHOSEN answer alone, when it carries a CHOICE offer,
+        │                         #   mounts a `ChapterOffers` `.conditional` block right
+        │                         #   after the answers list (`chapter="lineage"`, filtered
+        │                         #   to its own `opener_label`, `showClosed={false}`, its
+        │                         #   bundled offers passed through as locked stances). The
+        │                         #   route's whole closed list prints once, as a `ClosedByRoute`
+        │                         #   note after the last `scope: 'path'` question, never
+        │                         #   per-answer.
         ├── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
         │                         #   one) plus the claim/name/none path UI; renders
         │                         #   FamilyTemplateForm (name path), VacancyPicker
