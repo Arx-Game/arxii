@@ -344,6 +344,21 @@ class CharacterDraftStatsValidationTests(TestCase):
         assert CharacterDraft.Stage.ATTRIBUTES in stage_completion
         assert stage_completion[CharacterDraft.Stage.ATTRIBUTES] is True
 
+    def test_stage_completion_has_no_distinctions_stage(self):
+        """The Distinctions stage is retired (#3675): 4 is not a Stage member any more."""
+        stage_completion = self.draft.get_stage_completion()
+        assert 4 not in stage_completion
+
+    def test_over_budget_shows_on_final_touches(self):
+        """Final Touches is the purse check now: over budget blocks it (#3675)."""
+        self.draft.draft_data = {
+            "distinctions": [{"distinction_name": "Extravagant Claim", "cost": 500}]
+        }
+        self.draft.save()
+        assert self.draft.calculate_cg_points_remaining() < 0
+        stage_completion = self.draft.get_stage_completion()
+        assert stage_completion[CharacterDraft.Stage.FINAL_TOUCHES] is False
+
     # --- calculate_final_stats ---
 
     def test_calculate_final_stats_returns_allocated_values(self):
@@ -818,12 +833,18 @@ class CharacterDraftGMFieldsTest(TestCase):
 
 
 class OriginTemplateCleanTest(TestCase):
-    def test_name_path_requires_a_family_template(self):
-        from django.core.exceptions import ValidationError
+    def test_clean_does_not_refuse_a_name_path_over_its_saved_family_templates(self):
+        """The rule moved to the form, because here it read the wrong state (#3673).
 
+        ``clean()`` can only see ``self.family_templates`` as the database has
+        it, and a ModelForm calls ``full_clean()`` before ``save_m2m()`` - so
+        this check rejected every save that turned the name path on, including
+        the ones that were selecting a Family Template in the same POST.
+        ``UpbringingForm.clean()`` asks the submitted value instead; the Builder
+        rail flags a saved route that still has none.
+        """
         from world.character_creation.factories import OriginTemplateFactory
 
         template = OriginTemplateFactory(allows_name_family=True, family_templates=[])
         template.family_templates.clear()
-        with self.assertRaises(ValidationError):
-            template.clean()
+        template.clean()

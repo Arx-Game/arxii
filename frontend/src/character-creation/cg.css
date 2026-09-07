@@ -764,13 +764,79 @@
 .interview .stat-row.spec {
   padding-left: 1.4rem;
 }
+/* A goal row (#3621): its number, the goal in the player's words, the domain, the
+   points, and the Remove door. */
 .interview .goal-row {
-  grid-template-columns: 1fr 6rem auto;
+  grid-template-columns: auto 1fr 9rem 5rem auto;
   align-items: end;
   gap: 1rem;
 }
 .interview .goal-row .field {
   margin: 0;
+}
+.interview .goal-row .stat-name {
+  font-family: 'Cinzel', serif;
+  font-size: 0.8125rem;
+  letter-spacing: 0.1em;
+  color: var(--cg-muted);
+  padding-bottom: 0.45rem;
+}
+/* The two enemy price scales (#3621): a small grid per scale, the chosen cell inked. */
+.interview .price-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.interview .price-grid th,
+.interview .price-grid td {
+  border: 1px solid var(--cg-hairline);
+  padding: 0.3rem 0.5rem;
+  text-align: center;
+  color: var(--cg-text-soft);
+}
+.interview .price-grid th {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+.interview .price-grid th[scope='row'] {
+  text-align: left;
+}
+.interview .price-grid td.on {
+  background: var(--cg-accent);
+  color: var(--cg-btn-fg);
+}
+/* One of The Introductions (#3621): its title and Skip door on one line over the
+   frame, the questions folded beneath when open. */
+.interview .introduction {
+  margin-top: 1.8rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--cg-rule);
+}
+.interview .introduction .entry-act {
+  justify-content: space-between;
+}
+.interview .introduction .section-h {
+  margin: 0;
+}
+.interview .introduction .section-h small {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 0.95rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cg-muted);
+  font-weight: 400;
+}
+.interview .introduction > .hint {
+  display: block;
+  margin: 0.5rem 0 0;
+  font-style: italic;
+  color: var(--cg-muted);
 }
 .interview .stat-name {
   font-weight: 500;
@@ -863,17 +929,6 @@
   border-color: var(--cg-hairline-strong);
   color: var(--cg-muted);
 }
-.interview .instr-search {
-  margin: 0.4rem 0 0.9rem;
-}
-.interview .instr-search input {
-  width: 100%;
-  font: inherit;
-  padding: 0.5rem 0.7rem;
-  background: transparent;
-  border: 1px solid var(--cg-hairline-strong);
-  color: var(--cg-text);
-}
 .interview .instruments .choice-row {
   margin: 0.2rem 0 0.6rem;
   gap: 0.5rem;
@@ -886,7 +941,7 @@
     grid-template-columns: 1fr 2.25rem auto;
   }
   .interview .goal-row {
-    grid-template-columns: 1fr 5rem auto;
+    grid-template-columns: auto 1fr;
   }
   .interview .stat-pips {
     display: none;
@@ -946,6 +1001,189 @@
   margin-top: 0.4rem;
   color: var(--cg-muted);
   font-size: 0.9375rem;
+  font-style: italic;
+}
+.interview .tags {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-left: 0.8rem;
+  vertical-align: middle;
+}
+.interview .tag {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  border: 1px solid var(--cg-rule);
+  padding: 0.12rem 0.5rem;
+}
+.interview .tag.soft {
+  color: var(--cg-muted);
+  border-color: var(--cg-hairline-strong);
+}
+
+/* axis picks (#3675 fix round 1): the Glimpse's own field-per-axis layout,
+   pill toggle buttons standing in for the demo's static `<span>` mockup so
+   they carry native keyboard/focus/click behavior for free. */
+.interview .picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 0.6rem 0 0;
+}
+.interview .picks button {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  background: transparent;
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+}
+.interview .picks button[aria-pressed='true'] {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .picks button small {
+  display: block;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cg-muted);
+  font-weight: 400;
+}
+.interview .conditional {
+  margin-top: 0.8rem;
+  border-left: 2px solid var(--cg-rule);
+  padding-left: 1rem;
+}
+
+/* offer stances (#3675): the CG chapters' picks, in place of the retired
+   Distinctions stage. Some rows are plain `<div>`s (a ranked offer, whose
+   own +/- buttons carry the interaction); others are the whole row as a
+   `<button>` (an unranked offer, toggled by pressing it): the reset
+   properties below cover both. */
+.interview .stances {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+.interview .stance {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  column-gap: 0.6rem;
+  align-items: baseline;
+  width: 100%;
+  padding: 0.75rem 0.25rem 0.75rem 0;
+  border: none;
+  border-top: 1px solid var(--cg-hairline);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.interview .stance:disabled {
+  cursor: not-allowed;
+}
+.interview .stances > li:last-child .stance {
+  border-bottom: 1px solid var(--cg-hairline);
+}
+.interview .stance .dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  display: inline-block;
+  transform: translateY(0.1rem);
+}
+.interview .stance .dot.sq {
+  border-radius: 1px;
+}
+.interview .stance[aria-pressed='true'] .dot {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .stance[aria-disabled='true'] {
+  opacity: 0.55;
+}
+.interview .stance b {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+}
+.interview .stance[aria-pressed='false'] b {
+  color: var(--cg-muted);
+}
+.interview .stance .g {
+  display: block;
+  color: var(--cg-text-soft);
+  font-size: 0.98rem;
+}
+.interview .stance .g i {
+  color: var(--cg-muted);
+}
+.interview .stance .price {
+  text-align: right;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-end;
+}
+.interview .stance .price .grant {
+  color: var(--cg-orn);
+}
+.interview .stance .price .refund {
+  color: var(--cg-accent);
+}
+.interview .stance .rank {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-left: 0.6rem;
+  vertical-align: middle;
+}
+.interview .stance .rank button {
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cg-text-soft);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.interview .stance .rank button:hover {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+.interview .stance .rank button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  color: var(--cg-muted);
+}
+.interview .stances .locked {
+  color: var(--cg-muted);
   font-style: italic;
 }
 

@@ -57,7 +57,6 @@ from world.magic.models import (
     Gift,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
@@ -364,7 +363,7 @@ class TechniqueFactory(factory.django.DjangoModelFactory):
         ``True`` used to skip as well (#3682), which meant six call sites reading
         ``TechniqueFactory(damage_profile=True)  # hostile`` got no damage profile
         at all. They stayed green only because ``is_technique_hostile`` was
-        reading ``EffectType.base_power``; removing that shortcut (ADR-0278)
+        reading ``EffectType.base_power``; removing that shortcut (ADR-0281)
         exposed them. ``True`` now means what every one of them meant by it.
         """
         if not create:
@@ -1543,15 +1542,6 @@ class CharacterGlimpseTagFactory(factory.django.DjangoModelFactory):
 
     aura = factory.SubFactory(CharacterAuraFactory)
     tag = factory.SubFactory(GlimpseTagFactory)
-
-
-class GlimpseTagDistinctionSuggestionFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = GlimpseTagDistinctionSuggestion
-
-    tag = factory.SubFactory(GlimpseTagFactory)
-    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
-    sort_order = 0
 
 
 # =============================================================================

@@ -432,6 +432,72 @@ The stock changelists carry the same credit story the workbench queue tells:
   `tests/test_change_form_workbench_link.py`, `tests/test_authoring_links.py`,
   plus the E001 class in `tests/test_admin_checks.py`.
 
+### Builders panel (#3675 Task 10)
+
+**Purpose:** every builder page is one click from the workbench and from the
+row it edits (Decision 11 of the #3675 spec) - a "Builders" table on the
+dashboard itself, plus outgoing cross-links each builder page draws to the
+others.
+
+- **The panel** - `web/templates/admin/authoring/_builders_panel.html`,
+  included in `dashboard.html` right after the intro paragraph (before the
+  stats panel), rendered only when setup is not required - a plain include
+  on the initial GET, not an HTMX fragment, since its four option lists never
+  refresh on their own. `authoring_dashboard`'s `_builders_context()` builds
+  them in four queries total (never per row): active `Distinction`s and
+  active `Beginnings`, both by name; active `OriginTemplate`s as
+  `{"pk": ..., "label": "{beginning} › {name}"}` dicts, ordered by beginning
+  then name; and the active `GlimpseTag` count.
+- **Four rows** - Distinction Builder (a `<select>` of distinctions + Open,
+  plus a "New distinction" link to `admin_distinction_builder_new`);
+  tradition slate (a `<select>` of Beginnings + Open); Upbringing Builder (a
+  `<select>` of Upbringings + Open, plus a second `<select>` of Beginnings +
+  "New Upbringing" - `admin_upbringing_builder_new?beginning=` already reads
+  that param, no new view needed for it); Glimpse tags (a link to
+  `admin:arxii_glimpsetag_changelist` naming the active count). Each row
+  carries one line of fixed help copy under it.
+- **Pick routes** - each `<select>` posts nothing; picking a row and clicking
+  Open is a plain GET to a `*_pick` view (`distinction_builder_pick`,
+  `tradition_slate_pick`, `upbringing_builder_pick`, living beside their own
+  builder's other views): `_distinction_builder/pick/?pk=` ->
+  `admin_distinction_builder_pick`, `_tradition_slate/pick/?pk=` ->
+  `admin_tradition_slate_pick`, `_upbringing_builder/pick/?pk=` ->
+  `admin_upbringing_builder_pick`. Each redirects to the matching builder
+  page for that pk, or 400s on a missing or unknown one - never a silent
+  redirect to a stale or absent row.
+- **Cross-links between builder pages** - a `builder_link` simple tag
+  (`web/admin/templatetags/authoring_tags.py`, alongside the existing
+  `workbench_url` filter) wraps `links.builder_url`/`builder_label` into
+  `<a href="...">label</a>` (or `""`); the tradition slate page's
+  "Carries"/"Grants" cells use it to link a standard line's Distinction back
+  to its own Builder page. The Distinction Builder's own "Opened by" cell
+  gets a second, purpose-built link (`distinction_builder.live.opener_link`,
+  a `distinction_builder_tags.opener_link` filter) to wherever the offer's
+  opener is actually edited - a Glimpse tag's own change form
+  (`admin:arxii_glimpsetag_change`), an Upbringing answer's own question on
+  its Upbringing Builder page (`builder_url(origin_choice.slot.template)`,
+  anchored `#question-<slot pk>` - `_question.html`'s module `<div>` now
+  carries that id for a saved question), or, for a schooling-line opener
+  (whose standard lines are shared by every Beginning, so no one page owns
+  them), the tradition slate page of the first active Beginning by name
+  (`live.default_slate_url()`, computed once per page render and passed to
+  every offer row rather than queried per row).
+- **The duplicate-offer guard, deduplicated** - the Upbringing Builder's
+  `_OfferBaseFormSet` (`upbringing_builder/forms.py`) and the Glimpse tag
+  admin's `GlimpseTagOfferFormSet` (`world/magic/admin.py`) had each
+  implemented an identical "no distinction offered twice by this owner"
+  `clean()` (Task 9 review), differing only in the noun naming the owner in
+  the message. Both now mix in `web.admin.authoring.offers
+  .DistinctionOfferFormSetMixin` and set their own `owner_noun`.
+- Tests: `web/admin/tests/test_authoring_builders_panel.py` (the panel's four
+  rows and their option lists, the setup-gate absence, the three pick
+  routes' redirects and 400s, and the panel's own styling guard); the
+  cross-link assertions live beside each builder's own tests
+  (`test_distinction_builder.py`, `test_tradition_slate.py`,
+  `test_upbringing_builder.py`).
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  the Builder pages set above.
+
 **When Asked About**
 
 If an agent is asked about any of these topics, this is the system:
@@ -439,6 +505,8 @@ If an agent is asked about any of these topics, this is the system:
 - "who still needs to write or review this content model"
 - "the row editor for credited content"
 - "reference search across the content database / staff docs / Arx I dump"
+- "the Builders panel / how to get to a builder page from the dashboard"
+- "cross-links between the Distinction Builder, tradition slate and Upbringing Builder"
 
 ## Upbringing Builder (#3660)
 
@@ -450,15 +518,28 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
 
 - **Files** - `web/admin/upbringing_builder/`: `views.py` (`upbringing_builder`,
   `upbringing_builder_preview`, `upbringing_builder_review`), `forms.py`
-  (`UpbringingForm`, `QuestionFormSet`, `AnswerFormSet` via `inlineformset_factory`,
-  `answer_formset_for` for the per-question `a<slot.pk>`-prefixed formset), `live.py`
-  (the right rail: `for_template` -> `LivePanel`, `rail_counts`), `credit.py`
-  (`stamp_written`, `stamp_reviewed`). Templates in
-  `web/templates/admin/upbringing_builder/`: `page.html` (the form, with a
-  client-side script that clones "Add question"/"Add answer" formset rows - there is
-  no saved row to fetch an HTMX fragment for until the whole route is saved),
-  `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`,
-  `_css.html`.
+  (`UpbringingForm` - now also carrying `closed_distinctions`
+  (`FilteredSelectMultiple`) and `closed_reason`, #3675 - `QuestionFormSet`,
+  `AnswerFormSet` via `inlineformset_factory`, `answer_formset_for` for the
+  per-question `a<slot.pk>`-prefixed formset, and `OfferForm`/`OfferFormSet`/
+  `offer_formset_for` for the per-answer `o<choice.pk>`-prefixed offers
+  formset (#3675) - `OfferForm` forces `chapter=LINEAGE` in `__init__` (never
+  a select) and drops CARRIED from `arrives_as`'s choices, since an answer's
+  own offer is a priced choice or bundled free, never carried by something
+  else), `live.py` (the right rail: `for_template` -> `LivePanel`,
+  `rail_counts` - now also `closed_distinctions`, #3675), `credit.py`
+  (`stamp_written`, `stamp_reviewed`, looping every `DistinctionOffer` hung
+  off the route's own answers alongside the template/slots/choices, #3675).
+  Templates in `web/templates/admin/upbringing_builder/`: `page.html` (the
+  form, wiring up "Add question"/"Add answer"/"+ Offer" against the shared
+  clone-a-formset-row helpers in `web/static/admin/js/builder_formsets.js`
+  (also loaded by the tradition slate page, #3675) - there is no saved row to
+  fetch an HTMX fragment for until the whole route is saved; also links
+  `admin/css/widgets.css` and the jsi18n script for the closes module's
+  `FilteredSelectMultiple`), `_question.html`, `_answers.html` (the answers
+  table's "Offers" column nests one small offers table per saved answer,
+  "Closes" is a static link to the route-level module below - never
+  per-answer), `_rail.html`, `_setup.html`, `_preview.html`, `_css.html`.
 - **Stylesheets** - the page links `admin/css/forms.css` itself, in its own
   `extrastyle` block. `admin/base.html` links only `base.css`, `dark_mode.css` and
   `responsive.css`; `forms.css` - where `.form-row`, `.aligned label`,
@@ -482,15 +563,19 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   the admin contract and that every class the templates emit has a rule on the
   rendered page.
 - **URLs** (all superuser-only): `_upbringing_builder/new/` ->
-  `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/<pk>/` ->
+  `admin_upbringing_builder_new` (`?beginning=<id>`), `_upbringing_builder/pick/` ->
+  `admin_upbringing_builder_pick` (`?pk=`, GET redirect, 400 on a missing/unknown
+  pk - the Builders panel's own picker, #3675 Task 10), `_upbringing_builder/<pk>/` ->
   `admin_upbringing_builder`, `_upbringing_builder/<pk>/review/` ->
   `admin_upbringing_builder_review` (POST), `_upbringing_builder/<pk>/preview/` ->
   `admin_upbringing_builder_preview` (read-only, the questionnaire the way
   `CGOriginTemplateSerializer` hands it to a player, picking a GROUP question's first
   offered group for display since there is no real draft here).
 - **Gate** - `@superuser_required`, then `current_contributor(request.user)`; an
-  unlinked operator sees the setup guidance (`_setup.html`) instead and nothing is
-  saved, mirroring the Workbench's own gate.
+  unlinked operator sees the setup guidance (`_setup.html`, generic wording and a
+  generic `#panel-builder-setup` id - it is `{% include %}`d by the tradition
+  slate page and the Distinction Builder too, not just this page, since review
+  round 1) instead and nothing is saved, mirroring the Workbench's own gate.
 - **Credit** - a POST that validates saves the whole route (`UpbringingForm`,
   `QuestionFormSet`, every question's `AnswerFormSet`) inside one
   `transaction.atomic()` block, then `stamp_written` credits every row on the route
@@ -505,19 +590,336 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   today (built on an unsaved `CharacterDraft`, never written to the database),
   authoring checks (`("ok"|"warn", text)`: a group question has a source, a
   `same_anchor_as`/`follow_up_to` points at an earlier question, a branch condition
-  has a follow-up target to gate it, a granted Distinction is active, an OWN_FAMILY
-  group question warns when a claimable family has no house org for it to resolve
-  through, #3660 fix round 2 ruling L), and backlog counts (questions, groups asked
-  about, people named, answers, distinctions used, cheapest/dearest/largest-refund
-  cost spread over required questions).
+  has a follow-up target to gate it, a `DistinctionOffer` opened by one of this
+  route's answers is active (#3675: reads offers, not a field on the answer), an
+  OWN_FAMILY group question warns when a claimable family has no house org for it to
+  resolve through, #3660 fix round 2 ruling L; a distinction both closed by
+  `closed_distinctions` and still offered by one of this route's own active
+  answers - a contradiction; `closed_distinctions` non-empty with a blank
+  `closed_reason` - #3675), and backlog counts (questions, groups asked about,
+  people named, answers, distinctions used - a count of distinct active
+  offers, not a name list, closed by this route, cheapest/dearest/
+  largest-refund cost spread over required questions).
+- **"This route closes" module (#3675)** - a route-level panel, not per-answer:
+  `closed_distinctions` (`FilteredSelectMultiple`) names Distinctions this
+  route never offers in any chapter (a question here, a Glimpse tag, a
+  tradition step - `world.character_creation.offers._closed_ids` reads it for
+  every chapter alike) and `closed_reason` is the one line a player reads
+  where a closed one would have shown. Saved with `UpbringingForm` in the same
+  transaction as everything else; the answers table's own "Closes" column
+  is a static link to this module (`#closes-module`), never a per-answer field.
 - **What is authored here:** the Upbringing itself, its questions (including the
-  `#3660` kind/connection/anchor/follow-up fields), and their answers (including
-  `grants_distinction`/`reputation_seed`). **What is not:** a Vacancy - membership in
-  a staff family is still authored on the `Organization`/`Vacancy` admin page
-  (Recipes 11-12 in `family-authoring-recipes.md`), not on this one.
+  `#3660` kind/connection/anchor/follow-up fields), their answers (including
+  `reputation_seed`), and now (#3675) each answer's own `DistinctionOffer` rows
+  (chapter forced to LINEAGE, `origin_choice` forced to the answer) plus the
+  route's closed list - the same `DistinctionOffer` rows remain editable from
+  the Distinction Builder's own "Where it is offered" table too (either side
+  can add one). **What is not:** a Vacancy - membership in a staff family is
+  still authored on the `Organization`/`Vacancy` admin page (Recipes 11-12 in
+  `family-authoring-recipes.md`), not on this one.
 - Deliberate no-ADR for the page-layout/formset decisions: recorded in the approved
   #3660 spec review, the same precedent #3019 set above; ADR-0277 covers the
   questionnaire model itself.
+
+## Tradition Slate (#3675)
+
+**Purpose:** author the standard tradition-step lines once (shared by every
+Beginning), and one Beginning's own slate (which traditions it offers, in
+which state, with which own wording), on one admin page. Pattern mirrors the
+Upbringing Builder: `superuser_required`, the contributor gate, plain Django
+forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
+
+- **Files** - `web/admin/tradition_slate/`: `views.py` (`tradition_slate`,
+  `tradition_slate_review`), `forms.py` (`TraditionStateLineForm`/
+  `SchoolingLineForm` - each carries its own identity field (`state`/`rank`)
+  as a `HiddenInput`, never a free select - plus the two factory functions
+  `state_line_formset`/`schooling_line_formset` that build a fresh
+  `modelformset_factory` class per request, sized `extra=len(missing)`;
+  `SlateForm`/`SlateFormSet`, an `inlineformset_factory(Beginnings,
+  BeginningTradition, extra=1, can_delete=True)`, the one formset actually
+  scoped to the page's Beginning), `live.py` (`rail_counts`, `checks`,
+  `preview_line`, `price_text` - re-exported from the shared
+  `web/admin/authoring/copy.price_text` (Distinction Builder review round 1
+  promoted this page's own copy of it out; this page's own call sites are
+  unchanged, its default `per_rank=False`), `state_line_display`/
+  `schooling_line_display` for the derived-price + help-text pair each
+  standard line's row shows).
+  Templates in `web/templates/admin/tradition_slate/`: `page.html`, `_css.html`,
+  `_rail.html`, `_preview.html` (the entry-line preview, a fragment included
+  inside "The slate" module - deliberately not excluded from the styling
+  guard's class scan, unlike the Upbringing Builder's standalone
+  `_preview.html`). Both this page's and the Upbringing Builder's inline
+  "clone a formset row" scripts were promoted to one shared file,
+  `web/static/admin/js/builder_formsets.js` (`window.arxBuilderFormsets`:
+  `nextFormIndex`/`announceFormsetAdded`/`cloneFromTemplate`, the last taking
+  a `wrapperTag` - `"div"` for a whole panel, `"tbody"` for a bare `<tr>`,
+  since a `<tr>` parsed into a plain `<div>` is silently dropped by the
+  browser's own HTML parser) - #3675 review: this page had shipped a verbatim
+  copy of that script.
+- **A GET never writes to the database** (#3675 demo-fidelity ruling: a
+  `get_or_create` on every GET is a guard by another name). `views._missing_states`/
+  `_missing_ranks` diff the current DB against the fixed vocabulary
+  (`TraditionState.values`, ranks 0-2); `forms.state_line_formset`/
+  `schooling_line_formset` render one form per existing row plus one unsaved
+  `extra` form per still-missing state/rank, each extra row's identity fixed
+  by the formset's own `initial=` (never typed in, never a free select). A
+  still-unauthored row is only written to the database the moment Save
+  actually changes one of its visible fields - an author who leaves a new
+  row entirely blank saves nothing for it. The three-plus-three sentinel
+  the removed write used to stand in for now lives in `required_content.py`
+  (below).
+- **Required-content sentinel** (`web/admin/tuning/required_content.py`) -
+  `_probe_tradition_state_lines`/`_probe_schooling_lines`, both
+  `DependencyTier.REQUIRED`: report a missing `TraditionStateLine`/
+  `SchoolingLine` row for any `TraditionState` value / rank 0-2, and treat a
+  row with a blank `entry_line`/`name` as missing too - the standard lines
+  are shared by every Beginning, so a gap here is silent everywhere, not
+  just on one Beginning's slate page.
+- **Credit** - `web/admin/authoring/credit.py:stamp_written`/`stamp_reviewed`
+  take a single `CreditedContent` row rather than a whole route; the
+  Upbringing Builder's own `credit.py` was generalised to loop its route's
+  rows through these instead of stamping inline. The tradition slate page
+  calls them directly on every `TraditionStateLine`/`SchoolingLine` a save
+  actually changed (via each formset's own `.save()` return value) and on
+  every `DistinctionOffer` row `_sync_schooling_offers` touches (below) - a
+  `DistinctionOffer` is `CreditedContent` in its own right, not just the line
+  that opens it (#3675 review Important 1: this was missing on first cut).
+  `BeginningTradition` carries no authorship fields, so slate rows are never
+  stamped. "Mark reviewed" likewise stamps every standard line, not the
+  Beginning's own slate rows - the standard lines are shared, so review here
+  is not per-Beginning.
+- **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
+  validates saves all three formsets in one `transaction.atomic()` block,
+  then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in
+  step with its `grants`: creates the offer (and credits it) for a line that
+  gained a grant, keeps an existing offer's `distinction` and `is_active`
+  in step (reactivating and crediting it if it had gone inactive), and
+  **deactivates** (and credits) an existing active offer for a line whose
+  grant was cleared - #3675 review Important 3: a cleared grant used to
+  leave its offer active forever. A newly-created offer also flashes a
+  message naming it. Its `name`/`player_line` are set from the schooling
+  line's own at creation and corrected back to match on every later sync
+  pass too - a TRADITION_STEP offer's wording is never typed on the
+  Distinction Builder's own offer row, and the Distinction Builder's save
+  view runs the mirror-image correction the other direction (Distinction
+  Builder review round 1, Demo-fidelity defect A).
+- **Reachability** - `web/admin/authoring/links.py:builder_url`/`builder_label`
+  (generalised from `upbringing_builder_tags.builder_url`, which now
+  delegates to it) resolve the "Open the tradition slate" object tool on the
+  `Beginnings` change form (`admin_tradition_slate`, keyed by the Beginning's
+  own pk) the same way they resolve "Open in Upbringing Builder" for
+  `OriginTemplate`.
+- **URLs** (superuser-only): `_tradition_slate/pick/` ->
+  `admin_tradition_slate_pick` (`?pk=`, GET redirect, 400 on a missing/unknown pk -
+  the Builders panel's own picker, #3675 Task 10), `_tradition_slate/<beginning_pk>/` ->
+  `admin_tradition_slate`, `_tradition_slate/<beginning_pk>/review/` ->
+  `admin_tradition_slate_review` (POST).
+- **Checks (`live.checks`)** - every self-taught/teachers-gone standard line
+  carries a drawback; those two drawbacks are each other's
+  `mutually_exclusive_with` (worded without naming that attribute, since it
+  is staff-facing copy); how many of this Beginning's slate lines are still
+  at the model's default state (living masters); every schooling line with a
+  grant has its active TRADITION_STEP offer (a warn that clears itself once
+  the page is saved, since save is what creates/reactivates the offer); a
+  schooling line with **no** grant but a still-active offer (a warn that
+  only ever fires for a row edited outside this page, or one from before the
+  deactivation fix shipped - saving this page always self-heals it).
+- **What is authored here:** the three `TraditionStateLine` rows, the three
+  `SchoolingLine` rows, and one Beginning's `BeginningTradition` slate
+  (state, own wording, sort order). **What is not:** the `Tradition` row
+  itself (name, description) - authored on its own stock admin page - and a
+  `DistinctionOffer`'s own fields beyond what this page derives for the
+  TRADITION_STEP chapter.
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  #3660 set above.
+
+## Distinction Builder (#3675)
+
+**Purpose:** author one `Distinction` - its fields, every `DistinctionEffect`,
+its `mutually_exclusive_with` M2M, and every `DistinctionOffer` that shows it
+in a CG chapter - on one admin page in one transaction, fully replacing the
+stock `DistinctionAdmin` for authoring. Pattern mirrors the Upbringing
+Builder and the tradition slate page: `superuser_required`, the contributor
+gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
+
+- **Files** - `web/admin/distinction_builder/`: `views.py`
+  (`distinction_builder`, `distinction_builder_review`), `forms.py`
+  (`DistinctionForm` - every field the stock `DistinctionAdmin` fieldsets
+  expose today, plus `is_active`/`tags`/`secret_by_default`/
+  `default_secret_level` so this page can fully replace it, with
+  `mutually_exclusive_with` widgeted `FilteredSelectMultiple`;
+  `EffectForm`/`DistinctionEffectFormSet` and `OfferForm`/
+  `DistinctionOfferFormSet` via `inlineformset_factory`, `OfferForm` also
+  carrying `sort_order` - a small numeric input, the offer table's own
+  ordering column), `live.py` (`price_text` - a thin wrapper over the shared
+  `web/admin/authoring/copy.price_text(value, *, per_rank=False)`, promoted
+  out of a duplicate this page had re-implemented from the tradition slate
+  page's own `price_text` in review round 1; `effect_reads`,
+  `opener_field_map`, `rail_counts`, `checks`, `sorted_offer_forms`; the
+  chapter-ordering key and the offer preview itself
+  (`CHAPTER_ORDER`/`offer_sort_key`/`PreviewLine`/`preview_from_offers`) were
+  promoted out to the shared `web/admin/authoring/offers.py` (Task 9, #3675) -
+  the Glimpse tag admin's own preview picks the same way among a tag's own
+  offers, so `preview_line` here is now a one-line delegation to
+  `preview_from_offers`). Templates in
+  `web/templates/admin/distinction_builder/`:
+  `page.html`, `_css.html`, `_rail.html`. The offer preview itself is the
+  shared fragment `web/templates/admin/authoring/_offer_preview.html`
+  (included inside "Where it is offered"; carries its own self-contained
+  `<style>` rather than this page's `#distinction-builder-root` scope, so the
+  Glimpse tag admin's change form - which has no such root - renders it
+  correctly too), not a page-local `_preview.html` (retired, Task 9).
+  `templatetags/distinction_builder_tags.py`
+  carries `effect_reads` (the template-side wrapper: "" for an unsaved
+  formset row rather than raising on a null `target`).
+- **Stylesheets** - the page links `admin/css/forms.css` (form-row/help/
+  submit-row - not linked outside `change_form.html`, #3667) **and**
+  `admin/css/widgets.css` directly, matching what `change_form.html` links
+  for the same `FilteredSelectMultiple` widget the "Cannot be held with"
+  module uses (`forms.css` `@import`s `widgets.css` too, but this page asks
+  for both rather than relying on the transitive import). The widget also
+  needs the jsi18n catalog (`{% url 'admin:jsi18n' %}` in `extrahead`,
+  loaded automatically by `change_form.html` but not by `base_site.html`).
+- **Rendering** - the top module's five main fields and the collapsed "More"
+  fieldset (every other field the stock admin exposes) are plain
+  `tuning-table` rows, not `admin/includes/fieldset.html` - "More" is a bare
+  `<details>`/`<summary>`, native disclosure needing no admin collapse JS.
+  Effects and offers are `tuning-table`-styled formsets; "+ Add an effect" /
+  "+ Offer it somewhere else" clone the formset's own empty form client-side
+  via the shared `web/static/admin/js/builder_formsets.js` helpers (there is
+  no saved row to fetch a fragment for until the whole page is saved).
+- **The opener cascade** - an offer row always renders all three opener
+  widgets (`schooling_line` select, `glimpse_tag` autocomplete, `origin_choice`
+  autocomplete), each wrapped `<span class="db-opener" data-opener="...">`;
+  `page.html`'s inline script reads a `chapter -> opener field` map
+  (`live.opener_field_map()`, `json_script`-embedded, built off
+  `DistinctionOffer.opener_field`'s own public per-instance lookup rather than
+  its private `_OPENER_FOR_CHAPTER` table) and hides the two the row's current
+  `chapter` selection does not want, re-run on every `chapter` change and on
+  every cloned row. Server-side validation is unchanged: the model's own
+  `DistinctionOffer.clean()`, run automatically by `ModelForm._post_clean()`.
+- **`origin_choice`'s autocomplete label** reads
+  `"{template.name} › Q{slot.sort_order + 1} · {slot.name} › {choice.name}"`
+  via `OriginTemplateSlotChoice.__str__` itself
+  (`world/character_creation/models.py`) - both the AJAX search results and
+  the widget's own pre-selected-option render call plain `str(obj)`, so
+  overriding `__str__` covers both without a custom `AutocompleteJsonView`. A
+  bare slot name is not unique across Upbringings, unlike the old
+  `"{slot}: {name}"` form; the ordinal (matching the demo's own "Q2 · Who
+  taught you") was folded in on review round 1.
+- **A TRADITION_STEP offer's `name`/`player_line` are derived, not authored
+  here.** They always mirror the schooling line's own wording - the save
+  view's `_sync_tradition_step_offer_copy` overwrites whatever the form
+  posted for those two fields on every TRADITION_STEP row after the formsets
+  save (not just rows this request touched), and the tradition slate page's
+  own `_sync_schooling_offers` does the same when a schooling line's wording
+  changes there instead, so both writers agree (review round 1, Demo-fidelity
+  defect A). `page.html`'s inline script swaps the "player reads" cell
+  between an editable pair of inputs and read-only text plus the help "read
+  from the schooling set; edit it there" the moment the row's `chapter`
+  select's opener resolves to `schooling_line` - matching what the server
+  will do to it on save, so the row never invites an edit that gets thrown
+  away.
+- **Autocomplete registrations** - `origin_choice`/`glimpse_tag` need their
+  target models registered with `search_fields` (Django's autocomplete view
+  404s otherwise): `GlimpseTag` already was (`world/magic/admin.py`);
+  `OriginTemplateSlotChoice` got a standalone `ModelAdmin` registration
+  (`world/character_creation/admin.py`) alongside its existing
+  `OriginTemplateSlotChoiceInline` - the inline alone gives it no
+  `search_fields` of its own.
+- **URLs** (superuser-only): `_distinction_builder/new/` ->
+  `admin_distinction_builder_new`, `_distinction_builder/pick/` ->
+  `admin_distinction_builder_pick` (`?pk=`, GET redirect, 400 on a missing/unknown pk -
+  the Builders panel's own picker, #3675 Task 10), `_distinction_builder/<pk>/` ->
+  `admin_distinction_builder`, `_distinction_builder/<pk>/review/` ->
+  `admin_distinction_builder_review` (POST).
+- **Gate** - `@superuser_required`, then `current_contributor(request.user)`;
+  an unlinked operator sees the setup guidance instead and nothing is saved.
+- **Credit** - a POST that validates saves `DistinctionForm`, the effects
+  formset and the offers formset in one `transaction.atomic()` block, then
+  `stamp_written` (`web/admin/authoring/credit.py`) credits the distinction
+  and every effect/offer the save actually touched - all three inherit
+  `CreditedContent`. "Mark reviewed" stamps the distinction plus every one of
+  its effects and offers in a separate POST.
+- **Reachability** - `web/admin/authoring/links.py:builder_url`/
+  `builder_label` add a `Distinction` branch ("Open in Distinction Builder"),
+  read generically by `change_form.html`'s object-tools block the same way
+  as `OriginTemplate`/`Beginnings`.
+- **Checks (`live.checks`)** - offered somewhere (any active offer); every
+  effect names a modifier target that exists (the FK is required, so this
+  only ever warns for a row that reached the database some other way);
+  description does not start with `PLACEHOLDER`; a LINEAGE offer whose
+  `origin_choice` answer has gone inactive; a TRADITION_STEP offer whose
+  `schooling_line` now grants a different distinction than this one.
+- **Offer ordering** - both the offers table (`live.sorted_offer_forms`,
+  reordering the formset's already-fetched `forms` in Python rather than its
+  `queryset`, which stays in DB order for `is_valid()`/`save()`) and
+  `preview_line` (via the shared `offers.preview_from_offers`, picking
+  `min(offers, key=offer_sort_key)` over the fetched rows) sort by
+  `OfferChapter`'s own declared sequence
+  (TRADITION_STEP, GLIMPSE, LINEAGE, APPEARANCE, ACTORS_SHEET) then `sort_order`
+  then id - `chapter` is a plain `CharField`, so a DB `.order_by("chapter",
+  ...)` sorts alphabetically, wrong order entirely (review round 1,
+  Demo-fidelity defect B).
+- **Rail modules, top to bottom:** "This distinction" (stat tiles), "Checks",
+  "Preview" (the fixed line "The CG line, drawn as the player sees it,
+  above.", matching the demo), "Credit" (written/reviewed-by plus "Mark
+  reviewed").
+- **What is authored here:** the distinction's own fields, its effects, its
+  `mutually_exclusive_with` exclusions, and every `DistinctionOffer` line
+  naming it. **What is not:** the standard tradition-step lines themselves
+  (authored on the tradition slate page) or an Upbringing's questions/answers
+  (authored on the Upbringing Builder) - this page only adds/edits the offer
+  row that links a distinction to one of those.
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  #3660/#3675 set above.
+
+## Glimpse Tag Admin Offers (#3675, Task 9)
+
+**Purpose:** the third and last "authored from either side" surface for
+`DistinctionOffer` (the tradition slate page's schooling lines and the
+Upbringing Builder's answers are the other two) - a stock `GlimpseTag`
+change form, extended, **not** a new builder page: `GlimpseTagAdmin` already
+existed (`world/magic/admin.py`); this only adds an inline and a preview line.
+
+- **Files** - `world/magic/admin.py`: `GlimpseTagOfferForm` (forces
+  `chapter=GLIMPSE` in `__init__`, never a select - `glimpse_tag` itself
+  needs no forcing, since Django's own `BaseInlineFormSet._construct_form`
+  stamps the parent tag's pk onto a new row's fk attribute before validation
+  runs, the same plumbing every admin inline relies on; also sets a
+  per-instance `help_text` linking the selected Distinction to its own
+  Builder page, via `web.admin.authoring.links.builder_url`),
+  `DistinctionOfferInline` (`TabularInline`, `fk_name="glimpse_tag"`, fields
+  `distinction` (autocomplete) / `arrives_as` / `name` / `player_line` /
+  `sort_order` / `is_active`), and `GlimpseTagAdmin.render_change_form`
+  (injects `context["offer_preview"]`, built from
+  `web.admin.authoring.offers.preview_from_offers` over the tag's own active
+  offers) + `GlimpseTagAdmin.save_formset` (credits every saved offer via
+  `web.admin.authoring.credit.stamp_written`, mirroring the Builder pages'
+  own save). `GlimpseTagAdmin.change_form_template` points at
+  `web/templates/admin/magic/glimpsetag/change_form.html`, which extends the
+  site's own `admin/change_form.html` override (not Django's stock one - see
+  that file's own docstring precedent) and only adds one thing in
+  `after_related_objects`: `{% include "admin/authoring/_offer_preview.html" %}`.
+- **The preview fragment is shared, not copy-pasted** - both this page and
+  the Distinction Builder draw "the first active offer, as a player reads it"
+  off the same `web.admin.authoring.offers.preview_from_offers`, and both
+  render it through the same `web/templates/admin/authoring/_offer_preview.html`
+  fragment (its own self-contained `<style>`, since this page has no
+  `#distinction-builder-root` to scope under).
+- **Credit** - `save_formset` runs `formset.save(commit=False)`, deletes
+  `formset.deleted_objects`, then saves and `stamp_written`s each surviving
+  instance individually (only when the operator has a linked
+  `ContentContributor` - an unlinked operator's save simply isn't credited,
+  there is no setup-guidance gate on a stock change form the way the Builder
+  pages have one).
+- **What is authored here:** a Glimpse tag's own `DistinctionOffer` rows
+  (chapter forced to GLIMPSE, `glimpse_tag` forced to this tag). **What is
+  not:** the tag's own fields (already on this same stock change form,
+  unchanged) or the distinction's own fields/effects/exclusions (the
+  Distinction Builder).
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  the Builder pages set above.
 
 ## Game Tuning & Game Ops Dashboards (#1221)
 

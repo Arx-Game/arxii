@@ -100,7 +100,7 @@ class IsTechniqueHostileTests(EvenniaTestCase):
         )
         self.assertFalse(is_technique_hostile(profile.technique))
 
-    # --- base_power is magnitude, not intent (#3682, ADR-0278) ---
+    # --- base_power is magnitude, not intent (#3682, ADR-0281) ---
 
     def test_defense_effect_type_with_base_power_is_not_hostile(self):
         """A power-scaled DEFENSE technique with no hostile payload is benign.

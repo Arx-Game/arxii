@@ -25,6 +25,7 @@ import {
   getDraft,
   getDraftApplication,
   getDraftCGPoints,
+  getDraftOffers,
   getEffectTypes,
   getFacets,
   getFacetTree,
@@ -66,7 +67,7 @@ import {
   withdrawDraft,
 } from './api';
 import type { FinalizeForTablePayload } from './api';
-import type { CharacterDraft, CharacterDraftUpdate } from './types';
+import type { CharacterDraft, CharacterDraftUpdate, OfferChapter } from './types';
 
 export const characterCreationKeys = {
   all: ['character-creation'] as const,
@@ -80,6 +81,9 @@ export const characterCreationKeys = {
   cgBudget: () => [...characterCreationKeys.all, 'cg-budget'] as const,
   draftCGPoints: (draftId: number) =>
     [...characterCreationKeys.all, 'draft-cg-points', draftId] as const,
+  // Distinctions are offered by CG chapter, not a standalone stage (#3675).
+  draftOffers: (draftId: number, chapter: OfferChapter) =>
+    [...characterCreationKeys.all, 'draft-offers', draftId, chapter] as const,
   families: (areaId: number) => [...characterCreationKeys.all, 'families', areaId] as const,
   familiesWithOpenKinSlots: (areaId?: number) =>
     [...characterCreationKeys.all, 'families-open', areaId] as const,
@@ -333,6 +337,23 @@ export function useDraftCGPoints(draftId: number | undefined) {
     queryKey: characterCreationKeys.draftCGPoints(draftId!),
     queryFn: () => getDraftCGPoints(draftId!),
     enabled: !!draftId,
+  });
+}
+
+/**
+ * A CG chapter's visible/closed distinction offers (#3675). Every chapter
+ * mount (Path/Tradition, Glimpse, Lineage, Appearance, the Actor's Sheet)
+ * calls this with its own `chapter` rather than reading a Distinctions stage.
+ */
+export function useDraftOffers(
+  draftId: number | undefined,
+  chapter: OfferChapter,
+  options?: { enabled?: boolean }
+) {
+  return useQuery({
+    queryKey: characterCreationKeys.draftOffers(draftId!, chapter),
+    queryFn: () => getDraftOffers(draftId!, chapter),
+    enabled: !!draftId && (options?.enabled ?? true),
   });
 }
 

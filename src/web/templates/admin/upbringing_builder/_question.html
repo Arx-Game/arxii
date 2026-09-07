@@ -8,7 +8,8 @@ saved one (#3667).
 
 Takes `question_form`, and `question_number` (blank for the unsaved clone).
 {% endcomment %}
-<div class="module question-module">
+<div class="module question-module"
+     {% if question_form.instance.pk %}id="question-{{ question_form.instance.pk }}"{% endif %}>
   <h2>
     {% if question_number %}Question {{ question_number }}{% else %}New question{% endif %}
     {% if question_form.instance.name %}&middot; {{ question_form.instance.name }}{% endif %}

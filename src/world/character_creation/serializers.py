@@ -13,24 +13,30 @@ from world.character_creation.constants import (
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
     AnchorSource,
+    OfferChapter,
     QuestionKind,
+    TraditionState,
 )
 from world.character_creation.models import (
     AGE_MAX,
     AGE_MIN,
     REQUIRED_STATS,
     Beginnings,
+    BeginningTradition,
     CGExplanation,
     CGPointBudget,
     CharacterDraft,
     CharacterOriginSlot,
+    DistinctionOffer,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
+    SchoolingLine,
     StartingArea,
+    TraditionStateLine,
 )
 from world.character_creation.services import (
     age_bounds,
@@ -41,7 +47,6 @@ from world.character_creation.services import (
 from world.character_creation.types import StageValidationErrors
 from world.character_sheets.models import DAYS_IN_MONTH, Gender, Heritage, Pronouns
 from world.classes.models import Path, PathStage
-from world.distinctions.models import Distinction
 from world.forms.models import Build, HeightBand
 from world.forms.serializers import BuildSerializer, HeightBandSerializer
 from world.game_clock.services import get_ic_now
@@ -99,6 +104,24 @@ class HeritageAnchorSerializer(serializers.ModelSerializer):
 
     def get_first_appeared_ic_year(self, obj: Heritage) -> int | None:
         return obj.first_appeared_ic.year if obj.first_appeared_ic is not None else None
+
+
+class EnemyOfferSerializer(serializers.Serializer):
+    """One person or group a draft may name as its enemy (#3621). Read-only, schema only."""
+
+    kind = serializers.CharField(read_only=True)
+    organization_id = serializers.IntegerField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True)
+    reach = serializers.CharField(read_only=True)
+    power_tier = serializers.CharField(read_only=True)
+    why = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
+
+
+class IntroductionsOfferedSerializer(serializers.Serializer):
+    """Which Introductions a draft is offered (#3621). Read-only, schema only."""
+
+    first_journal = serializers.BooleanField(read_only=True)
 
 
 class BeginningsSerializer(serializers.ModelSerializer):
@@ -279,11 +302,65 @@ class PathSerializer(serializers.ModelSerializer):
         return [grant.entry_id for grant in obj.cached_codex_grants]
 
 
+class SchoolingLineSerializer(serializers.Serializer):
+    """One standard schooling stance under a ``living_masters`` tradition (#3675)."""
+
+    schooling_line_id = serializers.IntegerField()
+    rank = serializers.IntegerField()
+    name = serializers.CharField()
+    player_line = serializers.CharField()
+    price = serializers.IntegerField()
+    techniques = serializers.IntegerField()
+    grants_distinction_id = serializers.IntegerField(allow_null=True)
+    offer_id = serializers.IntegerField(allow_null=True)
+
+
+def schooling_rows() -> list[dict]:
+    """The three standard schooling lines under a living tradition, priced and offer-linked.
+
+    Shared by every tradition whose slate entry is ``living_masters`` state (#3675),
+    not per-tradition data, so it is built once per request in
+    ``TraditionViewSet.get_serializer_context`` (key ``"schooling"``) and read from
+    there by every row's ``TraditionSerializer.get_schooling``. Also the fallback this
+    module-level function provides for the nested ``selected_tradition`` use inside
+    ``CharacterDraftSerializer``, where that context isn't set up (mirrors the
+    ``get_required_distinction_id`` fallback this replaces).
+    """
+    lines = list(SchoolingLine.objects.select_related("grants").order_by("rank"))
+    offers = DistinctionOffer.objects.filter(
+        chapter=OfferChapter.TRADITION_STEP,
+        schooling_line__in=lines,
+        is_active=True,
+    ).select_related("schooling_line")
+    offer_by_line_id = {
+        offer.schooling_line_id: offer.id
+        for offer in offers
+        if offer.distinction_id == offer.schooling_line.grants_id
+    }
+    return [
+        {
+            "schooling_line_id": line.id,
+            "rank": line.rank,
+            "name": line.name,
+            "player_line": line.player_line,
+            "price": line.price,
+            "techniques": 1 + line.rank,
+            "grants_distinction_id": line.grants_id,
+            "offer_id": offer_by_line_id.get(line.id),
+        }
+        for line in lines
+    ]
+
+
 class TraditionSerializer(serializers.ModelSerializer):
     """Serializer for Tradition records available during CG."""
 
     codex_entry_ids = serializers.SerializerMethodField()
-    required_distinction_id = serializers.SerializerMethodField()
+    state = serializers.SerializerMethodField()
+    state_line = serializers.SerializerMethodField()
+    own_wording = serializers.SerializerMethodField()
+    refund = serializers.SerializerMethodField()
+    schooling = serializers.SerializerMethodField()
 
     class Meta:
         model = Tradition
@@ -294,7 +371,11 @@ class TraditionSerializer(serializers.ModelSerializer):
             "is_active",
             "sort_order",
             "codex_entry_ids",
-            "required_distinction_id",
+            "state",
+            "state_line",
+            "own_wording",
+            "refund",
+            "schooling",
         ]
         read_only_fields = fields
 
@@ -310,35 +391,64 @@ class TraditionSerializer(serializers.ModelSerializer):
         # Prefetch/query interface, #2386.
         return [grant.entry_id for grant in obj.cached_codex_grants]
 
-    def get_required_distinction_id(self, obj) -> int | None:
-        """Get the required distinction ID from the BeginningTradition context.
+    def _beginning_tradition(self, obj) -> BeginningTradition | None:
+        """The BeginningTradition row for this tradition on the request's Beginning.
 
-        The view computes a ``{tradition_id: BeginningTradition}`` dict per
-        request and passes it via context. We do NOT attach the BT row to
-        ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
-        because that attribute would persist across requests with different
-        ``beginning_id`` values and leak filtered data between users.
+        The view computes a ``{tradition_id: BeginningTradition}`` dict per request
+        and passes it via context. We do NOT attach the BT row to ``obj`` (a
+        SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)`` because that
+        attribute would persist across requests with different ``beginning_id``
+        values and leak filtered data between users.
         """
         bt_map = self.context.get("beginning_traditions_by_tradition")
         if bt_map is not None:
-            bt = bt_map.get(obj.id)
-            return bt.required_distinction_id if bt and bt.required_distinction_id else None
+            return bt_map.get(obj.id)
 
         # Fallback for callers that didn't pre-compute the map (e.g. nested
         # use in CharacterDraftSerializer where context is set up differently).
         beginning_id = self.context.get("beginning_id")
         if not beginning_id:
             return None
-        from world.character_creation.models import BeginningTradition  # noqa: PLC0415
+        return BeginningTradition.objects.filter(beginning_id=beginning_id, tradition=obj).first()
 
-        bt = (
-            BeginningTradition.objects.filter(beginning_id=beginning_id, tradition=obj)
-            .select_related("required_distinction")
-            .first()
-        )
-        if bt and bt.required_distinction_id:
-            return bt.required_distinction_id
-        return None
+    def _state_line_row(self, bt: BeginningTradition) -> TraditionStateLine | None:
+        """The standard ``TraditionStateLine`` for ``bt.state``, from context or a direct query."""
+        state_lines = self.context.get("state_lines")
+        if state_lines is not None:
+            return state_lines.get(bt.state)
+        return TraditionStateLine.objects.filter(state=bt.state).first()
+
+    def get_state(self, obj) -> str | None:
+        bt = self._beginning_tradition(obj)
+        return bt.state if bt is not None else None
+
+    def get_own_wording(self, obj) -> str:
+        bt = self._beginning_tradition(obj)
+        return bt.own_wording if bt is not None else ""
+
+    def get_state_line(self, obj) -> str:
+        bt = self._beginning_tradition(obj)
+        if bt is None:
+            return ""
+        if bt.own_wording:
+            return bt.own_wording
+        line = self._state_line_row(bt)
+        return line.entry_line if line is not None else ""
+
+    def get_refund(self, obj) -> int:
+        bt = self._beginning_tradition(obj)
+        if bt is None:
+            return 0
+        line = self._state_line_row(bt)
+        return line.price if line is not None else 0
+
+    @extend_schema_field(SchoolingLineSerializer(many=True))
+    def get_schooling(self, obj) -> list[dict]:
+        bt = self._beginning_tradition(obj)
+        if bt is None or bt.state != TraditionState.LIVING_MASTERS:
+            return []
+        rows = self.context.get("schooling")
+        return rows if rows is not None else schooling_rows()
 
 
 class CGGiftOptionSerializer(serializers.ModelSerializer):
@@ -366,7 +476,7 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
     serializer context — never attached to the (SharedMemoryModel) ``Technique``
     instance itself, to avoid leaking one request's filtered flag into another's
-    cached row (see the ``required_distinction_id`` comment above).
+    cached row (see ``TraditionSerializer._beginning_tradition`` above).
     """
 
     category = serializers.CharField(source="effect_type.category", read_only=True)
@@ -398,24 +508,48 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
         return obj.id in self.context.get("tradition_technique_ids", set())
 
 
-class CGGlimpseTagSuggestedDistinctionSerializer(serializers.ModelSerializer):
-    """Distinction stub embedded in a glimpse tag's suggestion list (#2427)."""
+def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:
+    """One ``DistinctionOffer`` shaped for embedding on a Glimpse tag or Upbringing
+    answer row (#3675). ``name`` falls back to the distinction's own name when the
+    offer's ``name`` is blank (per ``DistinctionOffer.name``'s help text). Shared by
+    ``CGGlimpseTagSerializer.get_offers`` (``with_arrival=False``, since a Glimpse
+    offer is always a priced choice) and
+    ``OriginTemplateSlotChoiceSerializer.get_offers`` (``with_arrival=True``, since a
+    Lineage answer's offer can arrive bundled, carried, or as a choice).
+    """
+    row = {
+        "offer_id": offer.id,
+        "distinction_id": offer.distinction_id,
+        "name": offer.name or offer.distinction.name,
+        "player_line": offer.player_line,
+        "cost_per_rank": offer.distinction.cost_per_rank,
+        "max_rank": offer.distinction.max_rank,
+    }
+    if with_arrival:
+        row["arrives_as"] = offer.arrives_as
+    return row
 
-    class Meta:
-        model = Distinction
-        fields = ["id", "name"]
-        read_only_fields = fields
+
+class CGGlimpseTagOfferSerializer(serializers.Serializer):
+    """A ``DistinctionOffer`` embedded on a glimpse tag row (#3675)."""
+
+    offer_id = serializers.IntegerField()
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    player_line = serializers.CharField()
+    cost_per_rank = serializers.IntegerField()
+    max_rank = serializers.IntegerField()
 
 
 class CGGlimpseTagSerializer(serializers.ModelSerializer):
-    """Glimpse tag row for the CG guided flow (#2427).
+    """Glimpse tag row for the CG guided flow (#2427, #3675).
 
-    Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
-    suggestions are embedded per tag (prefetched); the client dedupes across
-    the chosen tag set.
+    Backs ``GET /api/character-creation/glimpse-tags/``. The distinctions this tag
+    opens are embedded as offers (prefetched); the client dedupes across the chosen
+    tag set.
     """
 
-    suggested_distinctions = serializers.SerializerMethodField()
+    offers = serializers.SerializerMethodField()
 
     class Meta:
         model = GlimpseTag
@@ -428,16 +562,15 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
             "example",
             "sort_order",
             "affinity",
-            "suggested_distinctions",
+            "offers",
         ]
         read_only_fields = fields
 
-    @extend_schema_field(CGGlimpseTagSuggestedDistinctionSerializer(many=True))
-    def get_suggested_distinctions(self, obj: GlimpseTag) -> list[dict]:
-        rows = obj.cached_distinction_suggestions  # Prefetch(to_attr=...), ordered
-        return CGGlimpseTagSuggestedDistinctionSerializer(
-            [row.distinction for row in rows], many=True
-        ).data
+    @extend_schema_field(CGGlimpseTagOfferSerializer(many=True))
+    def get_offers(self, obj: GlimpseTag) -> list[dict]:
+        # obj.offers is a GlimpseTagOffersHandler (ADR-0278) - primed for the
+        # whole page by CGGlimpseTagViewSet.list(), select_related("distinction").
+        return [_offer_row(offer, with_arrival=False) for offer in obj.offers.rows]
 
 
 _GLOSS_MAX_LEN = 160
@@ -547,13 +680,16 @@ def _batch_pool_groups(
     return grouped
 
 
-class GrantedDistinctionSerializer(serializers.Serializer):
-    """The Distinction a choice bundles at no extra cost (#3660 ruling E)."""
+class OriginChoiceOfferSerializer(serializers.Serializer):
+    """A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675)."""
 
-    id = serializers.IntegerField()
+    offer_id = serializers.IntegerField()
+    distinction_id = serializers.IntegerField()
     name = serializers.CharField()
+    player_line = serializers.CharField()
+    arrives_as = serializers.CharField()
     cost_per_rank = serializers.IntegerField()
-    secret_by_default = serializers.BooleanField()
+    max_rank = serializers.IntegerField()
 
 
 class OriginGroupSerializer(serializers.Serializer):
@@ -578,9 +714,12 @@ class DerivedAnchorSerializer(serializers.Serializer):
 
 
 class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
-    """One priced answer on an Upbringing prompt (#3617, #3660). The seed stays server-side."""
+    """One priced answer on an Upbringing prompt (#3617, #3660, #3675).
 
-    grants_distinction = serializers.SerializerMethodField()
+    The seed stays server-side.
+    """
+
+    offers = serializers.SerializerMethodField()
 
     class Meta:
         model = OriginTemplateSlotChoice
@@ -591,15 +730,21 @@ class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
             "cg_point_cost",
             "cost_per_influence",
             "trust_required",
-            "grants_distinction",
+            "offers",
             "sort_order",
         ]
         read_only_fields = fields
 
-    @extend_schema_field(GrantedDistinctionSerializer(allow_null=True))
-    def get_grants_distinction(self, obj: OriginTemplateSlotChoice) -> dict | None:
-        dist = obj.grants_distinction
-        return GrantedDistinctionSerializer(dist).data if dist is not None else None
+    @extend_schema_field(OriginChoiceOfferSerializer(many=True))
+    def get_offers(self, obj: OriginTemplateSlotChoice) -> list[dict]:
+        """Distinction offers this answer opens, from the view's per-template map.
+
+        ``offers_by_choice`` is built once per request in
+        ``CGOriginTemplateViewSet.list()`` over every template being listed - never a
+        ``Prefetch(to_attr=)`` on this SharedMemoryModel row (ADR-0263).
+        """
+        offers = self.context.get("offers_by_choice", {}).get(obj.id, [])
+        return [_offer_row(offer, with_arrival=True) for offer in offers]
 
 
 class OriginTemplateSlotSerializer(serializers.ModelSerializer):
@@ -641,9 +786,12 @@ class OriginTemplateSlotSerializer(serializers.ModelSerializer):
         (``CGOriginTemplateSerializer.get_slots``) runs one flat query for every
         slot's choices and passes the grouping down via context instead (mirrors
         the two-flat-queries approach in ``validators.py:_get_prompt_errors``).
+        Context is forwarded (not just the rows) so
+        ``OriginTemplateSlotChoiceSerializer.get_offers`` can read the
+        ``offers_by_choice`` map the top-level view built (#3675).
         """
         rows = self.context.get("choices_by_slot", {}).get(obj.id, [])
-        return OriginTemplateSlotChoiceSerializer(rows, many=True).data
+        return OriginTemplateSlotChoiceSerializer(rows, many=True, context=self.context).data
 
     @extend_schema_field(serializers.ListField(child=serializers.IntegerField()))
     def get_shown_for_choice_ids(self, obj: OriginTemplateSlot) -> list[int]:
@@ -724,7 +872,12 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
-        """Return nested slots, preferring the prefetched ``cached_slots`` attr.
+        """Return nested slots from the view's grouping, or one fresh query.
+
+        Never from a ``to_attr`` prefetch attribute: ``OriginTemplate`` is
+        identity-mapped, so an attribute set by one request answered the next one
+        too and a question deleted in between was still served, with a null id
+        (ADR-0263, #3673).
 
         Choices and the branch-choice ids are each resolved with one flat query
         across every slot on this template, grouped by slot id in Python (see
@@ -740,17 +893,13 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        slots = (
-            obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
-        )
+        slots = obj.questions.rows
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:
-            choice_rows = (
-                OriginTemplateSlotChoice.objects.filter(slot_id__in=slot_ids, is_active=True)
-                .select_related("grants_distinction")
-                .order_by("sort_order")
-            )
+            choice_rows = OriginTemplateSlotChoice.objects.filter(
+                slot_id__in=slot_ids, is_active=True
+            ).order_by("sort_order")
             for choice in choice_rows:
                 choices_by_slot[choice.slot_id].append(choice)
 
@@ -782,6 +931,39 @@ class DraftMarkingSerializer(serializers.ModelSerializer):
     class Meta:
         model = DraftMarking
         fields = ["id", "body_region", "kind", "name", "description"]
+
+
+class VisibleOfferSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.VisibleOffer`` (#3675)."""
+
+    offer_id = serializers.IntegerField()
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    player_line = serializers.CharField()
+    chapter = serializers.CharField()
+    arrives_as = serializers.CharField()
+    opener_label = serializers.CharField()
+    cost_per_rank = serializers.IntegerField()
+    max_rank = serializers.IntegerField()
+    is_locked = serializers.BooleanField()
+    lock_reason = serializers.CharField()
+
+
+class ClosedDistinctionSerializer(serializers.Serializer):
+    """A ``world.character_creation.types.ClosedDistinction`` (#3675)."""
+
+    distinction_id = serializers.IntegerField()
+    name = serializers.CharField()
+    reason = serializers.CharField()
+    opener_labels = serializers.ListField(child=serializers.CharField())
+    opener_ids = serializers.ListField(child=serializers.IntegerField())
+
+
+class OffersResponseSerializer(serializers.Serializer):
+    """The ``offers``/``closed`` payload the offers action returns (#3675)."""
+
+    offers = VisibleOfferSerializer(many=True)
+    closed = ClosedDistinctionSerializer(many=True)
 
 
 class CharacterDraftSerializer(serializers.ModelSerializer):
@@ -928,9 +1110,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     )
     # Tradition selection — SerializerMethodField (not a nested declaration) so
     # we can inject ``beginning_id`` into the TraditionSerializer's context per
-    # draft. The nested serializer's ``required_distinction_id`` resolves a
+    # draft. The nested serializer's ``_beginning_tradition`` resolves a
     # BeginningTradition row keyed on (beginning_id, tradition_id); without
-    # the per-draft beginning_id it always returned None.
+    # the per-draft beginning_id it always returns None.
     selected_tradition = serializers.SerializerMethodField()
     selected_tradition_id = serializers.PrimaryKeyRelatedField(
         queryset=Tradition.objects.filter(is_active=True),
@@ -961,6 +1143,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # Distinctions the Upbringing answers grant, shown locked in the Distinctions
     # stage so a player can't also hand-pick one already bundled in (#3660).
     bundled_distinctions = serializers.SerializerMethodField()
+    # The Actor's Sheet (#3621): who the draft may name as its enemy, the two price
+    # scales, and whether the First Journal is offered (an Arx start).
+    enemy_offers = serializers.SerializerMethodField()
+    enemy_price_tables = serializers.SerializerMethodField()
+    enemy_degree_grants = serializers.SerializerMethodField()
+    introductions_offered = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
     derived_anchors = serializers.SerializerMethodField()
@@ -1024,11 +1212,19 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "age_max",
             "bundled_distinctions",
             "derived_anchors",
+            "enemy_offers",
+            "enemy_price_tables",
+            "enemy_degree_grants",
+            "introductions_offered",
         ]
         read_only_fields = [
             "id",
             "age_min",
             "age_max",
+            "enemy_offers",
+            "enemy_price_tables",
+            "enemy_degree_grants",
+            "introductions_offered",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1051,10 +1247,10 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_selected_tradition(self, obj: CharacterDraft) -> dict | None:
         """Render the selected tradition with this draft's beginning_id in context.
 
-        TraditionSerializer.required_distinction_id resolves a BeginningTradition
-        row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
-        state directly, so we inject ``beginning_id`` into a per-draft context
-        rather than relying on the list endpoint's pre-built map.
+        TraditionSerializer._beginning_tradition resolves a BeginningTradition row
+        keyed on (beginning_id, tradition_id). Drafts carry both pieces of state
+        directly, so we inject ``beginning_id`` into a per-draft context rather than
+        relying on the list endpoint's pre-built map.
         """
         if obj.selected_tradition is None:
             return None
@@ -1100,6 +1296,42 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
         """Distinctions the Upbringing answers grant; shown locked in Distinctions (#3660)."""
         return list(obj.bundled_distinctions())
+
+    @extend_schema_field(EnemyOfferSerializer(many=True))
+    def get_enemy_offers(self, obj: CharacterDraft) -> list[dict]:
+        """Persons and groups the draft may name as its enemy (#3621)."""
+        from dataclasses import asdict  # noqa: PLC0415
+
+        from world.character_creation.enemies import enemy_offers  # noqa: PLC0415
+
+        return [asdict(offer) for offer in enemy_offers(obj)]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=serializers.DictField(
+                child=serializers.DictField(child=serializers.IntegerField())
+            )
+        )
+    )
+    def get_enemy_price_tables(self, obj: CharacterDraft) -> dict:  # noqa: ARG002
+        """Both price scales, so the leaf can show the ledger line before it is chosen."""
+        from world.character_creation.enemies import price_tables  # noqa: PLC0415
+
+        return price_tables()
+
+    @extend_schema_field(serializers.DictField(child=serializers.CharField()))
+    def get_enemy_degree_grants(self, obj: CharacterDraft) -> dict[str, str]:  # noqa: ARG002
+        """Degree value -> the Distinction it grants, so the row says "grants Hunted"."""
+        from world.character_creation.enemies import degree_grants  # noqa: PLC0415
+
+        return degree_grants()
+
+    @extend_schema_field(IntroductionsOfferedSerializer())
+    def get_introductions_offered(self, obj: CharacterDraft) -> dict[str, bool]:
+        """Which Introductions this draft is offered (the First Journal needs an Arx start)."""
+        from world.character_creation.services import first_journal_offered  # noqa: PLC0415
+
+        return {"first_journal": first_journal_offered(obj)}
 
     @extend_schema_field(serializers.DictField(child=DerivedAnchorSerializer(allow_null=True)))
     def get_derived_anchors(self, obj: CharacterDraft) -> dict[str, dict | None]:
@@ -1313,7 +1545,62 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if goals is not None:
             value["goals"] = self._validate_goals(goals)
 
+        self._validate_actor_sheet(value)
         return value
+
+    def _validate_actor_sheet(self, data: dict) -> None:
+        """The Actor's Sheet keys (#3621): three answers, the enemy pick, the Introductions."""
+        from world.character_creation.constants import ACTOR_SHEET_QUESTIONS  # noqa: PLC0415
+
+        for key, _copy_key in ACTOR_SHEET_QUESTIONS:
+            if key in data and not isinstance(data[key], str):
+                raise serializers.ValidationError({key: "Must be text."})
+        if data.get("enemy") is not None:
+            self._validate_enemy_pick(data["enemy"])
+        if data.get("introductions") is not None:
+            self._validate_introductions(data["introductions"])
+
+    @staticmethod
+    def _validate_enemy_pick(enemy: object) -> None:
+        from world.character_sheets.types import (  # noqa: PLC0415
+            EnemyDegree,
+            EnemyKind,
+            EnemyPowerTier,
+        )
+
+        if not isinstance(enemy, dict):
+            raise serializers.ValidationError({"enemy": "Must be an object."})
+        if enemy.get("kind") not in EnemyKind.values:
+            raise serializers.ValidationError({"enemy": "kind must be person or group."})
+        if enemy.get("degree") not in EnemyDegree.values:
+            raise serializers.ValidationError({"enemy": "degree is not one of the four."})
+        org_id = enemy.get("organization_id")
+        if org_id is not None and not isinstance(org_id, int):
+            raise serializers.ValidationError({"enemy": "organization_id must be an id."})
+        tier = enemy.get("power_tier", "")
+        if tier and tier not in EnemyPowerTier.values:
+            raise serializers.ValidationError({"enemy": "power_tier is not on the ladder."})
+        for key in ("name", "why", "public_line"):
+            if not isinstance(enemy.get(key, ""), str):
+                raise serializers.ValidationError({"enemy": f"{key} must be text."})
+
+    @staticmethod
+    def _validate_introductions(intros: object) -> None:
+        from world.character_creation.constants import (  # noqa: PLC0415
+            INTRODUCTION_APPLICATION,
+            INTRODUCTION_FIRST_JOURNAL,
+            INTRODUCTION_WHISPERS,
+        )
+
+        if not isinstance(intros, dict):
+            raise serializers.ValidationError({"introductions": "Must be an object."})
+        for key in (INTRODUCTION_FIRST_JOURNAL, INTRODUCTION_APPLICATION):
+            answers = intros.get(key, [])
+            if not isinstance(answers, list) or not all(isinstance(a, str) for a in answers):
+                msg = f"{key} must be a list of text answers."
+                raise serializers.ValidationError({"introductions": msg})
+        if not isinstance(intros.get(INTRODUCTION_WHISPERS, ""), str):
+            raise serializers.ValidationError({"introductions": "whispers must be text."})
 
     def _validate_origin_choices(self, data: dict) -> None:
         """``origin_choices`` maps a str slot id to a picked choice id, or null (#3617)."""
@@ -1448,7 +1735,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = "Goal points must be a non-negative integer"
             raise serializers.ValidationError(msg)
 
+        from world.goals.constants import GoalHorizon  # noqa: PLC0415
+
+        horizon = goal.get("horizon") or GoalHorizon.SHORT_TERM
+        if horizon not in GoalHorizon.values:
+            msg = f"Invalid goal horizon: '{horizon}'"
+            raise serializers.ValidationError(msg)
+
         return {
+            "horizon": horizon,
             "domain_id": resolved_id,
             "points": points,
             "notes": goal.get("notes", goal.get("text", "")),
@@ -1606,7 +1901,9 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
                 "id": None,
                 "first_name": obj.character_name or "Unknown",
                 "description": "",
-                "personality": "",
+                "never_do": "",
+                "protect": "",
+                "fear": "",
                 "background": "",
                 "species": None,
                 "area": None,
@@ -1620,7 +1917,9 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
             "id": draft.id,
             "first_name": draft.draft_data.get("first_name", ""),
             "description": draft.draft_data.get("description", ""),
-            "personality": draft.draft_data.get("personality", ""),
+            "never_do": draft.draft_data.get("never_do", ""),
+            "protect": draft.draft_data.get("protect", ""),
+            "fear": draft.draft_data.get("fear", ""),
             "background": draft.draft_data.get("background", ""),
             "species": draft.selected_species.name if draft.selected_species else None,
             "area": draft.selected_area.name if draft.selected_area else None,

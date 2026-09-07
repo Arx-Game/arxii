@@ -136,7 +136,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt like the world cracked open.',
     example: 'Everything glowed.',
     sort_order: 1,
-    suggested_distinctions: [],
+    offers: [],
   },
   {
     id: 2,
@@ -146,7 +146,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt wrong from the first instant.',
     example: 'The air went cold.',
     sort_order: 2,
-    suggested_distinctions: [],
+    offers: [],
   },
 ];
 
@@ -474,7 +474,7 @@ describe('SpellbookTab', () => {
 
       await userEvent.click(screen.getByText('Touched by the Unseen'));
 
-      // is_from_glimpse was false for this CharacterDistinction (id 7) — toggling
+      // is_from_glimpse was false for this CharacterDistinction (id 7): toggling
       // it calls the link (not unlink) side.
       expect(toggleDistinction).toHaveBeenCalledWith(7, false);
     });

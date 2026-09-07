@@ -220,7 +220,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.gift",
         "magic.giftunlock",
         "magic.glimpsetag",
-        "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",
         # #3034: the row-level "authored_by IS NULL" split lives in
         # EXPORT_FILTERS below — a player's "author from scratch" Mage Scar

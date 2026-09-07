@@ -20,21 +20,28 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_creation.models import CharacterOriginSlot
-from world.character_sheets.models import CharacterSheet, Profile, ProfileTextVersion
+from world.character_sheets.models import (
+    CharacterSheet,
+    Profile,
+    ProfileTextVersion,
+)
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
+    ActorSheetSection,
     AnimaRitualSection,
     AppearanceSection,
     AuraData,
     AuraThemingData,
     DistinctionEntry,
+    EnemyEntry,
     FormTraitEntry,
     GiftEntry,
     GlimpseTagEntry,
     GoalEntry,
     IdentitySection,
     IdNameRef,
+    IntroductionEntry,
     MagicSection,
     MotifResonanceEntry,
     MotifSection,
@@ -1043,7 +1050,7 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
     )
 
 
-_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background/personality
+_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "origin_slots",
@@ -1068,7 +1075,6 @@ def _build_story(
     if bio_profile is None:
         return StorySection(
             background="",
-            personality="",
             origin_story_state=sheet.origin_story_state,
             origin_slots=[],
         )
@@ -1100,7 +1106,6 @@ def _build_story(
     ]
     return StorySection(
         background=bio_profile.background,
-        personality=bio_profile.personality,
         origin_story_state=sheet.origin_story_state,
         origin_slots=origin_slots,
     )
@@ -1121,11 +1126,73 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     return [
         GoalEntry(
             domain=goal.domain.name,
+            horizon=goal.horizon,
+            ordinal=goal.ordinal,
             points=goal.points,
             notes=goal.notes,
         )
         for goal in sheet.cached_goals
     ]
+
+
+# The enemy rows and the Introductions live behind handlers on the sheet (ADR-0278):
+# ``sheet.enemy_rows`` and ``sheet.introductions`` each load once per sheet and are
+# cleared by their children's saves and deletes, so nothing is prefetched here.
+_ACTOR_SHEET_SELECT_RELATED: tuple[str, ...] = ()
+_ACTOR_SHEET_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
+
+def _build_actor_sheet(
+    sheet: CharacterSheet,
+    *,
+    bio_profile: Profile | None,
+    reveal_identity: bool,
+    privileged: bool,
+) -> ActorSheetSection:
+    """The Actor's Sheet block (#3621).
+
+    The three answers read from the presented face's profile, so a cover persona shows
+    its own. The enemy and the Introductions are the real sheet's: the public line and
+    the entries show only when the presented identity is revealed (a mask must not leak
+    them), and the full enemy row only to the owner, staff and the assigned GM.
+    """
+    enemies = sheet.enemy_rows.rows
+    enemy = enemies[0] if enemies else None
+    entries = sheet.introductions.rows
+    return ActorSheetSection(
+        never_do=bio_profile.never_do if bio_profile is not None else "",
+        protect=bio_profile.protect if bio_profile is not None else "",
+        fear=bio_profile.fear if bio_profile is not None else "",
+        enemy_public_line=enemy.public_line if enemy is not None and reveal_identity else "",
+        enemy=(
+            EnemyEntry(
+                kind=enemy.kind,
+                name=enemy.target_name,
+                power_tier=enemy.power_tier,
+                reach=enemy.reach,
+                degree=enemy.degree,
+                price=enemy.price,
+                why=enemy.why,
+                public_line=enemy.public_line,
+                status=enemy.status,
+                has_secret=enemy.secret_id is not None,
+            )
+            if enemy is not None and privileged
+            else None
+        ),
+        introductions=[
+            IntroductionEntry(
+                id=entry.pk,
+                kind=entry.kind,
+                title=entry.title,
+                body=entry.body,
+                created_at=entry.created_at.isoformat(),
+            )
+            for entry in entries
+        ]
+        if reveal_identity
+        else [],
+    )
 
 
 _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
@@ -1308,6 +1375,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_MAGIC_SELECT_RELATED, _MAGIC_PREFETCH_RELATED),
     (_STORY_SELECT_RELATED, _STORY_PREFETCH_RELATED),
     (_GOALS_SELECT_RELATED, _GOALS_PREFETCH_RELATED),
+    (_ACTOR_SHEET_SELECT_RELATED, _ACTOR_SHEET_PREFETCH_RELATED),
     (_PERSONAS_SELECT_RELATED, _PERSONAS_PREFETCH_RELATED),
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
@@ -1421,6 +1489,12 @@ class CharacterSheetSerializer(serializers.Serializer):
             # Story reads from the presented face's profile (cover identities show their own).
             "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
             "goals": _build_goals(sheet) if show_goals else [],
+            "actor_sheet": _build_actor_sheet(
+                sheet,
+                bio_profile=bio_profile,
+                reveal_identity=reveal_identity,
+                privileged=privileged,
+            ),
             "personas": _build_personas(
                 sheet,
                 privileged=privileged,

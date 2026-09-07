@@ -11,19 +11,68 @@ All writes go through ``world.magic.services.glimpse`` so
 ``CharacterAura.glimpse_state`` stays consistent.
 """
 
+from __future__ import annotations
+
+from collections import defaultdict
+from typing import TYPE_CHECKING, ClassVar
+
 from django.db import models
+from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.handlers import CachedRowsHandler
+from evennia_extensions.mixins import CachedPropertiesMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import GlimpseTagAxis
+
+if TYPE_CHECKING:
+    from world.character_creation.models import DistinctionOffer
+
+
+class GlimpseTagOffersHandler(CachedRowsHandler["DistinctionOffer"]):
+    """The distinctions one glimpse tag opens, in display order (#3675, ADR-0278).
+
+    ``DistinctionOffer`` lives in ``world.character_creation.models``, which the
+    magic app must not import at module scope (ADR-0010: magic is the
+    general/foundational side, mirroring ``services/tradition_membership.py``'s
+    lazy imports) - both ``load()`` and ``rows_for()`` import it lazily.
+    """
+
+    attname: ClassVar[str] = "offers"
+
+    def load(self) -> list[DistinctionOffer]:
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+
+        return list(
+            DistinctionOffer.objects.filter(glimpse_tag_id=self.parent.pk, is_active=True)
+            .select_related("distinction")
+            .order_by("sort_order", "id")
+        )
+
+    @classmethod
+    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[DistinctionOffer]]:
+        """One query for every offer across ``parents``, bucketed by glimpse tag."""
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+
+        grouped: dict[int, list[DistinctionOffer]] = defaultdict(list)
+        rows = (
+            DistinctionOffer.objects.filter(
+                glimpse_tag_id__in=[parent.pk for parent in parents], is_active=True
+            )
+            .select_related("distinction")
+            .order_by("sort_order", "id")
+        )
+        for offer in rows:
+            grouped[offer.glimpse_tag_id].append(offer)
+        return grouped
 
 
 class GlimpseTagManager(NaturalKeyManager):
     """Manager for GlimpseTag with natural key support."""
 
 
-class GlimpseTag(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """One authored choice in the guided glimpse flow (#2427).
 
     Content model — authored in the lore repo, exported/imported via
@@ -76,6 +125,12 @@ class GlimpseTag(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     class NaturalKeyConfig:
         fields = ["slug"]
 
+    @cached_property
+    def offers(self) -> GlimpseTagOffersHandler:
+        """This tag's active distinction offers. Cleared by any offer save/delete
+        through ``DistinctionOffer.related_cache_fields`` (ADR-0278)."""
+        return GlimpseTagOffersHandler(self)
+
     def __str__(self) -> str:
         return f"{self.get_axis_display()}: {self.name}"
 
@@ -104,48 +159,3 @@ class CharacterGlimpseTag(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.tag} on {self.aura.character}"
-
-
-class GlimpseTagDistinctionSuggestionManager(NaturalKeyManager):
-    """Manager for GlimpseTagDistinctionSuggestion with natural key support."""
-
-
-class GlimpseTagDistinctionSuggestion(NaturalKeyMixin, SharedMemoryModel):
-    """Curated tag→distinction suggestion (#2427). Content model (lore repo).
-
-    Purely a suggestion surface for the CG flow's "distinctions born of this
-    moment" panel — grants nothing. FK direction per ADR-0010: glimpse-domain
-    content points *into* the reusable ``Distinction`` primitive so
-    ``distinctions`` stays dependency-free.
-    """
-
-    tag = models.ForeignKey(
-        GlimpseTag,
-        on_delete=models.CASCADE,
-        related_name="distinction_suggestions",
-        help_text="The glimpse tag that suggests the distinction.",
-    )
-    distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.CASCADE,
-        related_name="glimpse_tag_suggestions",
-        help_text="The distinction this tag suggests considering.",
-    )
-    sort_order = models.PositiveIntegerField(
-        default=0, help_text="Display order within the tag's suggestions."
-    )
-
-    objects = GlimpseTagDistinctionSuggestionManager()
-
-    class Meta:
-        verbose_name = "Glimpse Tag Distinction Suggestion"
-        verbose_name_plural = "Glimpse Tag Distinction Suggestions"
-        unique_together = [["tag", "distinction"]]
-        ordering = ["tag__axis", "tag__sort_order", "sort_order"]
-
-    class NaturalKeyConfig:
-        fields = ["tag", "distinction"]
-        dependencies = ["arxii.GlimpseTag", "arxii.Distinction"]
-
-    def __str__(self) -> str:
-        return f"{self.tag.name} → {self.distinction.name}"

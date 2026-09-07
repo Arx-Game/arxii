@@ -63,11 +63,17 @@ class CharacterGoalModelTests(TestCase):
         assert "Wealth" in str(goal)
         assert "15" in str(goal)
 
-    def test_unique_character_domain(self):
-        """Character can only have one goal per domain."""
-        CharacterGoalFactory(character=self.character, domain=self.domain)
+    def test_many_goals_may_share_a_domain(self):
+        """Any number of goals may sit in one domain; each is numbered within its horizon."""
+        CharacterGoalFactory(character=self.character, domain=self.domain, ordinal=1)
+        second = CharacterGoalFactory(character=self.character, domain=self.domain, ordinal=2)
+        assert second.ordinal == 2
+
+    def test_ordinal_is_unique_within_a_horizon(self):
+        """The number within a horizon is the goal's name in play, so it cannot repeat."""
+        CharacterGoalFactory(character=self.character, domain=self.domain, ordinal=1)
         with self.assertRaises(IntegrityError):
-            CharacterGoalFactory(character=self.character, domain=self.domain)
+            CharacterGoalFactory(character=self.character, domain=self.domain, ordinal=1)
 
     def test_default_points_zero(self):
         """CharacterGoal defaults to zero points."""

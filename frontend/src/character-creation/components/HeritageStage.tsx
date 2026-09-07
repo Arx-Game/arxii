@@ -24,6 +24,7 @@ import {
   Note,
   Paragraphs,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import {
   useBeginnings,
@@ -212,7 +213,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
           { label: 'Gender', value: draft.selected_gender?.display_name },
           { label: 'CG points', value: `${draft.cg_points_spent} of ${starting} spent` },
         ]}
-        ledger="Stage 2 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-heritage">
         {perspectives && perspectives.length > 0 ? (

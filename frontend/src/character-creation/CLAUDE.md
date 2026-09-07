@@ -36,7 +36,6 @@ character-creation/
     │                        #   InventedParentsCard, HouseFoundingPanel,
     │                        #   FamilyNamePreview, KinSlotPicker, TarotNamingRitual,
     │                        #   TarotCardItem, FamilyCard (exported for lineage/)
-    ├── DistinctionsStage.tsx # Stage 4: Distinctions
     ├── PathStage.tsx        # Stage 5: Path selection
     ├── SkillsSection.tsx    # Skill point allocation, mounted inside AttributesStage
     ├── AttributesStage.tsx  # Stage 7: Attributes & Skills (mounts SkillsSection)
@@ -44,9 +43,21 @@ character-creation/
     │                        #   Techniques → Gift Resonance → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
-    ├── AppearanceStage.tsx  # Stage 8: Appearance
+    ├── AppearanceStage.tsx  # Stage 8: Appearance. After the height block, mounts this
+    │                        #   chapter's own offered distinctions (ChapterOffers
+    │                        #   chapter="appearance", #3675 Task 15), the physical/social
+    │                        #   ones that show, in place of the retired Distinctions stage.
+    │                        #   A height band's title reads its own authored `cg_hint`
+    │                        #   column (forms.HeightBand, #3675 fix round 1) when staff
+    │                        #   wrote one - e.g. what opens a band players cannot normally
+    │                        #   take - never a name match against a literal band name.
     ├── IdentityStage.tsx    # Stage 9: Identity
-    ├── FinalTouchesStage.tsx # Stage 10: Goals
+    ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
+    │                        #   numbered goals by horizon, the priced enemy, The Introductions.
+    │                        #   Directly under the three questions mounts this chapter's own
+    │                        #   offered distinctions (ChapterOffers chapter="actors_sheet",
+    │                        #   #3675 Task 15), the personality-flavored ones each prompt
+    │                        #   answers.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep
@@ -58,17 +69,45 @@ character-creation/
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=)
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
-    │   └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
-    │                            #   binds `@/magic/components/glimpse/GlimpseFlow` to
-    │                            #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
-    │                            #   prose stays on GiftStage's register('glimpse_story')
+    │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
+    │   │                        #   updateDraft writes (draft_data.glimpse_tag_ids), the
+    │   │                        #   isCollapsed deferral affordance, the copy query. Prose
+    │   │                        #   stays on GiftStage's register('glimpse_story'). Renders
+    │   │                        #   `GlimpseAxes`, not the shared
+    │   │                        #   `@/magic/components/glimpse/GlimpseFlow` (#3675 fix
+    │   │                        #   round 1: that shared component's shadcn accordion hid
+    │   │                        #   two axes at a time; the sheet's live editor still uses
+    │   │                        #   it, unchanged)
+    │   └── GlimpseAxes.tsx      # CG-only folio-grammar layout for the Glimpse (#3675 fix
+    │                            #   round 1): one `.field` per axis, all visible at once,
+    │                            #   `.picks` pill buttons per tag, and one `ChapterOffers`
+    │                            #   `.conditional` sub-block PER SELECTED TAG (not per
+    │                            #   axis: two tags chosen on one multi-select axis each
+    │                            #   get their own heading, matching the demo). No heading
+    │                            #   of its own; GiftStage's `section-h` above the mount
+    │                            #   carries it. Each sub-block passes ChapterOffers a
+    │                            #   headingTag ("optional") and a closedFilter scoped to
+    │                            #   `opener_labels.includes(tag.name)` so a route-closed
+    │                            #   distinction prints once, under its own tag (fix
+    │                            #   round 2).
     └── lineage/             # LineageStage subsections (#3617, #3648)
         ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
         ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family
         │                         #   block, `scope: 'path'` renders below it, scoped to
         │                         #   the resolved family path; write-in ->
         │                         #   draft_data.origin_slots, pick-list ->
-        │                         #   draft_data.origin_choices, priced off influence
+        │                         #   draft_data.origin_choices, priced off influence.
+        │                         #   Each priced answer prints an `offers X` / `bundles Y`
+        │                         #   line off its own `AnswerOffer[]` (#3675 Task 14); the
+        │                         #   CHOSEN answer alone, when it carries a CHOICE offer,
+        │                         #   mounts a `ChapterOffers` block right after the answers
+        │                         #   list (`chapter="lineage"`, filtered to its own choice's
+        │                         #   `offer_id`s - never by name/label, #3676 - `className=
+        │                         #   "conditional"` merged onto ChapterOffers's own `.field`,
+        │                         #   `showClosed={false}`, its bundled offers passed through
+        │                         #   as locked stances). The route's whole closed list prints
+        │                         #   once, as a `ClosedByRoute` note after the last
+        │                         #   `scope: 'path'` question, never per-answer.
         ├── FamilyPathSection.tsx # Path picker (when the Upbringing allows more than
         │                         #   one) plus the claim/name/none path UI; renders
         │                         #   FamilyTemplateForm (name path), VacancyPicker
@@ -91,10 +130,11 @@ character-creation/
 - **Free navigation**: All stages clickable, incomplete stages show warning badge
 - **Real-time validation**: Stage completion tracked, submit blocked until all required stages complete
 - **Folio primitives** (entries, instrument frames, fields, choice rows) now back Origin,
-  Heritage, Distinctions, Path, Gift, Attributes & Skills, Appearance, Identity, Final
-  Touches, and Review; Lineage alone still carries the pre-Folio card/badge markup, pending
-  Plan C (#3630). `SkillsSection`, mounted inside AttributesStage's frame, still uses the
-  shadcn Accordion for its per-skill specialization panels.
+  Heritage, Path, Gift, Attributes & Skills, Appearance, Identity, Final Touches, and Review;
+  Lineage alone still carries the pre-Folio card/badge markup, pending Plan C (#3630).
+  `SkillsSection`, mounted inside AttributesStage's frame, still uses the shadcn Accordion for
+  its per-skill specialization panels. The Distinctions stage is retired (#3675): every
+  chapter now offers its own distinctions through `ChapterOffers` instead.
 - Interface chrome is OOC and plain (stages, Next/Back, Selected); in-character text is confined to
   realm/codex prose and the player's own words; the game never speaks for the player (#3540)
 - **Staff-only features**: "Add to Roster" button visible only to staff

@@ -4,6 +4,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind, MarkingSource
 from world.items.constants import BodyRegion
 from world.species.models import Species
@@ -18,8 +19,12 @@ class TraitType(models.TextChoices):
     FEATURE = "feature", "Feature"
 
 
-class HeightBand(NaturalKeyMixin, SharedMemoryModel):
-    """Defines height ranges that map to descriptive bands."""
+class HeightBand(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Defines height ranges that map to descriptive bands.
+
+    Credited because ``cg_hint`` is player-facing prose a staff member writes
+    (#3675); the numeric range and flags are not.
+    """
 
     name = models.CharField(max_length=50, unique=True, help_text="Internal key")
     display_name = models.CharField(max_length=100, help_text="Display name")
@@ -38,6 +43,15 @@ class HeightBand(NaturalKeyMixin, SharedMemoryModel):
     is_cg_selectable = models.BooleanField(
         default=False,
         help_text="Whether players can select heights in this band during CG",
+    )
+    cg_hint = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "What character creation says about picking this band, shown on the option "
+            "(for example what opens a band players cannot normally take)"
+        ),
     )
     hide_build = models.BooleanField(
         default=False,

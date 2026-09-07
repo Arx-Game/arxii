@@ -171,7 +171,6 @@ class FinalizationTestMixin:
             "stats": DEFAULT_STATS,
             "tarot_card_name": self.tarot_card.name,
             "tarot_reversed": False,
-            "traits_complete": True,
         }
         base_data.update(extra_draft_data)
 

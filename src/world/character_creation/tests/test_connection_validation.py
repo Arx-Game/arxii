@@ -2,7 +2,10 @@
 
 from django.test import TestCase
 
-from world.character_creation.constants import AnchorSource, QuestionKind
+from world.character_creation.constants import (
+    AnchorSource,
+    QuestionKind,
+)
 from world.character_creation.factories import (
     CharacterDraftFactory,
     GroupPromptFactory,
@@ -10,8 +13,7 @@ from world.character_creation.factories import (
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
-from world.character_creation.validators import get_distinctions_errors, get_lineage_errors
-from world.distinctions.factories import DistinctionFactory
+from world.character_creation.validators import get_lineage_errors
 from world.roster.factories import FamilyFactory
 from world.societies.factories import OrganizationFactory
 
@@ -82,22 +84,6 @@ class ConnectionValidationTest(TestCase):
             origin_figures={str(self.person.id): "Tessaline"},
         )
         assert get_lineage_errors(answered) == []
-
-    def test_bundled_distinction_cannot_also_be_picked(self):
-        kept = DistinctionFactory(name="Kept Close")
-        granting = OriginTemplateSlotChoiceFactory(
-            slot=self.q1, name="Courier", grants_distinction=kept
-        )
-        draft = _draft(
-            self.template,
-            origin_anchors={str(self.q1.id): self.house.id},
-            origin_choices={str(self.q1.id): granting.id},
-            distinctions=[
-                {"distinction_id": kept.id, "distinction_name": "Kept Close", "rank": 1, "cost": 15}
-            ],
-            traits_complete=True,
-        )
-        assert "Kept Close is already granted by your Upbringing" in get_distinctions_errors(draft)
 
 
 class OwnFamilyGroupLineageTest(TestCase):

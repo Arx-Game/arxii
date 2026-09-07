@@ -1,4 +1,4 @@
-# ADR-0278: base_power is a magnitude knob, never a statement of hostility
+# ADR-0281: base_power is a magnitude knob, never a statement of hostility
 
 **Status:** Accepted (#3682, 2026-09-07). Related ADR-0024, ADR-0064, ADR-0119, ADR-0248.
 

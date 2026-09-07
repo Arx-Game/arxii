@@ -16,6 +16,7 @@ class GoalInputData(TypedDict):
     domain: int  # ModifierTarget primary key (category='goal')
     points: int
     notes: NotRequired[str]
+    horizon: NotRequired[str]  # GoalHorizon value; short term when absent (#3621)
 
 
 @dataclass
@@ -30,7 +31,6 @@ class GoalBonusBreakdown:
 _GOAL_ERROR_MESSAGES: dict[str, str] = {
     "REVISION_TOO_SOON": "You cannot revise your goals again yet.",
     "OVER_POINT_CAP": "Total goal points exceed the maximum of 30.",
-    "DUPLICATE_DOMAIN": "Each goal domain may only be allocated once.",
 }
 
 
@@ -44,7 +44,6 @@ class GoalError(Exception):
 
     REVISION_TOO_SOON = _GOAL_ERROR_MESSAGES["REVISION_TOO_SOON"]
     OVER_POINT_CAP = _GOAL_ERROR_MESSAGES["OVER_POINT_CAP"]
-    DUPLICATE_DOMAIN = _GOAL_ERROR_MESSAGES["DUPLICATE_DOMAIN"]
 
     @property
     def user_message(self) -> str:

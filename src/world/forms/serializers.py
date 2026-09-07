@@ -74,7 +74,15 @@ class ApparentFormSerializer(serializers.Serializer):
 class HeightBandSerializer(serializers.ModelSerializer):
     class Meta:
         model = HeightBand
-        fields = ["id", "name", "display_name", "min_inches", "max_inches", "is_cg_selectable"]
+        fields = [
+            "id",
+            "name",
+            "display_name",
+            "min_inches",
+            "max_inches",
+            "is_cg_selectable",
+            "cg_hint",
+        ]
 
 
 class BuildSerializer(serializers.ModelSerializer):

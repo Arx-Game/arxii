@@ -35,6 +35,7 @@ from world.societies.constants import (
     VACANCY_BASIS_KIN,
     VACANCY_BASIS_RETAINER,
     DeedKnowledgeSource,
+    EnemyReach,
     ObligationOrigin,
     ObligationState,
     OrgAppealState,
@@ -202,6 +203,16 @@ class OrganizationType(NaturalKeyMixin, SharedMemoryModel):
             "Orgs of this type are clandestine (#2820): membership is hidden from "
             "public surfaces, joining mints a subject-anchored Secret, and the org "
             "is excluded from non-member listings."
+        ),
+    )
+    reach = models.CharField(
+        max_length=12,
+        choices=EnemyReach.choices,
+        default=EnemyReach.HOUSE,
+        help_text=(
+            "How far a group of this type reaches a character who made an enemy of it "
+            "(#3621): prices the enemy on the group scale. A crime family is a house or "
+            "company; a church a society; a republic a realm."
         ),
     )
 

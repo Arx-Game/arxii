@@ -31,6 +31,41 @@ class UpbringingListTest(TestCase):
         cls.choice = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=3)
         cls.gated = OriginTemplateFactory(beginning=cls.template.beginning, trust_required=50)
 
+    def test_a_deleted_question_stops_being_served(self):
+        """Reported from production: deleted questions came back with ``"id": null``.
+
+        The staff Builder deleted them and stopped showing them; the guided flow
+        kept offering them. Django's ``Collector.delete()`` sets ``pk = None`` on
+        the instances it deleted, and on this identity-mapped model those are the
+        shared cached instances - so the zombie rows serialize with a null id.
+
+        They were still reachable because the list view prefetched slots with
+        ``Prefetch(..., to_attr="cached_slots")``. ``to_attr`` writes a plain
+        attribute into the instance ``__dict__``, Django skips a prefetch whose
+        ``to_attr`` is already set, and the identity map hands the same instance
+        to the next request - so the second GET re-serves the first GET's slot
+        list however much the table has changed underneath it (ADR-0263).
+
+        Two GETs with a delete in between is the smallest shape that shows it;
+        one GET alone passes on the broken code.
+        """
+        client = APIClient()
+        client.force_authenticate(self.account)
+        doomed = OriginTemplateSlotFactory(template=self.template, name="Doomed", sort_order=9)
+        url = f"/api/character-creation/origin-templates/?beginning={self.template.beginning_id}"
+
+        first = client.get(url)
+        assert doomed.id in [slot["id"] for slot in first.json()[0]["slots"]]
+
+        doomed.delete()
+
+        rows = client.get(url).json()
+        served = [slot["id"] for slot in rows[0]["slots"]]
+        assert None not in served, (
+            f"a deleted question is still being served, with a null id: {served}"
+        )
+        assert doomed.id not in served, f"the deleted question is still served: {served}"
+
     def test_list_carries_paths_prompts_and_choices_and_hides_trust_gated(self):
         client = APIClient()
         client.force_authenticate(self.account)
@@ -55,7 +90,7 @@ class UpbringingListTest(TestCase):
             "cg_point_cost": 0,
             "cost_per_influence": 3,
             "trust_required": 0,
-            "grants_distinction": None,
+            "offers": [],
             "sort_order": self.choice.sort_order,
         }
 

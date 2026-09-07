@@ -37,12 +37,20 @@ PATTERNS: dict[str, str] = {
     # tick, CLI/request boundary) that logs with exc_info. New ones need the
     # same classification — or a narrower catch.
     "BROAD_EXCEPT": r"except Exception\b",
+    # `Prefetch(..., to_attr=...)` onto an identity-mapped instance (#3673,
+    # ADR-0263): Django skips a prefetch whose to_attr is already set and the
+    # identity map hands the same instance to the next request, so the second
+    # request re-serves the first one's rows - deleted ones included, arriving
+    # with a null id. Rows a parent owns belong behind a CachedRowsHandler
+    # (evennia_extensions/handlers.py). The grandfathered remainder is every
+    # site that predates the handler; each one retired lowers this number.
+    "PREFETCH_TO_ATTR": r"to_attr=",
 }
 
 # Pattern tokens whose count should skip test files (tests legitimately use
 # broad catches and bare fixtures the production rule forbids... except where
 # another token explicitly covers tests, like BARE_OBJECTDB_CREATE).
-PATTERNS_EXCLUDE_TESTS = {"BROAD_EXCEPT"}
+PATTERNS_EXCLUDE_TESTS = {"BROAD_EXCEPT", "PREFETCH_TO_ATTR"}
 
 _TEST_PATH_RE = re.compile(r"(^|/)tests?(/|\.py$)|(^|/)test_[^/]*\.py$")
 

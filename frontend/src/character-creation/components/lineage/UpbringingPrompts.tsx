@@ -17,7 +17,7 @@ import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { useUpdateDraft } from '../../queries';
+import { useDraftOffers, useUpdateDraft } from '../../queries';
 import {
   choiceCost,
   chosenGroupForSlot,
@@ -27,12 +27,15 @@ import {
   LIFE_STAGE_LABELS,
   questionInfluence,
   shownSlotIds,
+  type AnswerOffer,
   type CGExplanations,
   type CharacterDraft,
   type FamilyPath,
   type OriginTemplate,
   type OriginTemplateSlot,
+  type OriginTemplateSlotChoice,
 } from '../../types';
+import { ChapterOffers } from '../offers/ChapterOffers';
 
 interface Props {
   draft: CharacterDraft;
@@ -151,6 +154,8 @@ export function UpbringingPrompts({ draft, template, path, influence, copy, scop
           <TextOrPickQuestion
             key={slot.id}
             slot={slot}
+            draft={draft}
+            copy={copy}
             influence={influence}
             picked={picks[String(slot.id)] ?? null}
             text={texts[String(slot.id)] ?? ''}
@@ -159,7 +164,108 @@ export function UpbringingPrompts({ draft, template, path, influence, copy, scop
           />
         );
       })}
+      {scope === 'path' && <ClosedByRoute draft={draft} copy={copy} />}
     </section>
+  );
+}
+
+// =============================================================================
+// AnswerOfferSummary / ChosenAnswerOffers / ClosedByRoute - an Upbringing
+// answer's own distinction offers, offered by CG chapter rather than a
+// Distinctions stage (#3675 Task 14).
+// =============================================================================
+
+/** The muted `offers X` / `bundles Y` line under a priced answer, built from
+ * its own `AnswerOffer[]` rather than the retired singular `grants_distinction`. */
+function AnswerOfferSummary({
+  offers,
+  copy,
+}: {
+  offers: AnswerOffer[];
+  copy: CGExplanations | undefined;
+}) {
+  if (offers.length === 0) return null;
+  const bundled = offers.filter((o) => o.arrives_as === 'bundled');
+  const chosen = offers.filter((o) => o.arrives_as === 'choice');
+  return (
+    <>
+      {bundled.length > 0 && (
+        <span className="block text-xs text-muted-foreground">
+          {copy?.lineage_bundles_word ?? 'bundles'} {bundled.map((o) => o.name).join(', ')}
+        </span>
+      )}
+      {chosen.length > 0 && (
+        <span className="block text-xs text-muted-foreground">
+          {copy?.lineage_offers_word ?? 'offers'} {chosen.map((o) => o.name).join(', ')}
+        </span>
+      )}
+    </>
+  );
+}
+
+/**
+ * The chosen answer's own offered block, mounted right after the answers
+ * list - only when the chosen answer has at least one CHOICE offer (a
+ * bundled-only answer already said everything in its `AnswerOfferSummary`
+ * line). Its bundled offers (if any) render as locked stances in the same
+ * block, ahead of the priced ones.
+ */
+function ChosenAnswerOffers({
+  draft,
+  copy,
+  choice,
+}: {
+  draft: CharacterDraft;
+  copy: CGExplanations | undefined;
+  choice: OriginTemplateSlotChoice;
+}) {
+  const chosenOffers = choice.offers.filter((o) => o.arrives_as === 'choice');
+  if (chosenOffers.length === 0) return null;
+  const bundled = choice.offers.filter((o) => o.arrives_as === 'bundled');
+  // Match by offer_id, the id the answer's own `offers` already carry - never
+  // by opener_label/choice.name, a display string that can collide or drift
+  // (#3676: never designate by matching strings in code).
+  const chosenOfferIds = new Set(chosenOffers.map((o) => o.offer_id));
+  return (
+    <ChapterOffers
+      draft={draft}
+      chapter="lineage"
+      filter={(o) => chosenOfferIds.has(o.offer_id)}
+      heading={copy?.lineage_offers_heading ?? 'What it left you with'}
+      headingTag={copy?.lineage_offers_chip ?? 'offered by your answer'}
+      showOpener={false}
+      showClosed={false}
+      bundled={bundled}
+      className="conditional"
+      syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+      wordBundled={copy?.offers_word_bundled}
+      wordPerRank={copy?.offers_word_per_rank}
+      wordSpent={copy?.offers_word_spent}
+      wordRefunds={copy?.offers_word_refunds}
+    />
+  );
+}
+
+/** The route's own closed-distinctions note, printed once at the end of the
+ * path-scoped prompts (not per question, not per answer's offered block). */
+function ClosedByRoute({
+  draft,
+  copy,
+}: {
+  draft: CharacterDraft;
+  copy: CGExplanations | undefined;
+}) {
+  const { data } = useDraftOffers(draft.id, 'lineage');
+  const closed = data?.closed ?? [];
+  if (closed.length === 0) return null;
+  const names = closed.map((c) => c.name).join(', ');
+  const reason = closed.find((c) => c.reason)?.reason ?? '';
+  return (
+    <div className="field">
+      <span className="hint">
+        {`${copy?.lineage_closed_lead ?? 'Closed by this route'}: ${names}. ${reason}`}
+      </span>
+    </div>
   );
 }
 
@@ -178,6 +284,8 @@ function QuestionLabel({ slot }: { slot: OriginTemplateSlot }) {
 
 interface TextOrPickProps {
   slot: OriginTemplateSlot;
+  draft: CharacterDraft;
+  copy: CGExplanations | undefined;
   influence: number;
   picked: number | null;
   text: string;
@@ -187,12 +295,15 @@ interface TextOrPickProps {
 
 function TextOrPickQuestion({
   slot,
+  draft,
+  copy,
   influence,
   picked,
   text,
   onSetChoice,
   onSetText,
 }: TextOrPickProps) {
+  const chosenChoice = slot.choices.find((c) => c.id === picked) ?? null;
   return (
     <div className="space-y-2">
       <QuestionLabel slot={slot} />
@@ -218,16 +329,13 @@ function TextOrPickQuestion({
                 {choice.description && (
                   <span className="block text-xs text-muted-foreground">{choice.description}</span>
                 )}
-                {choice.grants_distinction && (
-                  <span className="block text-xs text-muted-foreground">
-                    grants {choice.grants_distinction.name}
-                  </span>
-                )}
+                <AnswerOfferSummary offers={choice.offers} copy={copy} />
               </button>
             );
           })}
         </div>
       )}
+      {chosenChoice && <ChosenAnswerOffers draft={draft} copy={copy} choice={chosenChoice} />}
       {slot.allows_text && (
         <Textarea
           id={`origin-slot-${slot.id}`}
@@ -299,6 +407,7 @@ function GroupQuestion({
 
   const chosenGroup = chosenGroupForSlot(slot, template, draft);
   const groupInfluence = questionInfluence(slot, chosenGroup, draft, path);
+  const chosenChoice = slot.choices.find((c) => c.id === picked) ?? null;
   const hint =
     slot.anchor_source === 'same_as'
       ? (copy?.origin_same_group_hint ?? 'About the group you chose above.')
@@ -382,16 +491,13 @@ function GroupQuestion({
                 {choice.description && (
                   <span className="block text-xs text-muted-foreground">{choice.description}</span>
                 )}
-                {choice.grants_distinction && (
-                  <span className="block text-xs text-muted-foreground">
-                    grants {choice.grants_distinction.name}
-                  </span>
-                )}
+                <AnswerOfferSummary offers={choice.offers} copy={copy} />
               </button>
             );
           })}
         </div>
       )}
+      {chosenChoice && <ChosenAnswerOffers draft={draft} copy={copy} choice={chosenChoice} />}
       {slot.allows_text && (
         <Textarea
           value={text}

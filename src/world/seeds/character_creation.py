@@ -26,13 +26,21 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 
 from world.character_creation.constants import (
+    APPLICATION_FRAME,
+    APPLICATION_QUESTIONS,
+    APPLICATION_TITLE,
     CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    FIRST_JOURNAL_FRAME,
+    FIRST_JOURNAL_INSTITUTION,
+    FIRST_JOURNAL_QUESTIONS,
+    INTRODUCTIONS_INTRO,
     STARTING_TECHNIQUE_PICKS_TARGET,
-    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     UNBOUND_TRADITION_NAME,
+    WHISPERS_FRAME,
+    WHISPERS_TITLE,
 )
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender, Heritage, Pronouns
@@ -74,6 +82,7 @@ from world.traits.models import Trait, TraitType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.distinctions.models import Distinction
     from world.societies.models import Organization
 
 logger = logging.getLogger(__name__)
@@ -166,6 +175,13 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "origin_person_hint": "Someone of your own, below the group's leaders.",
     "origin_same_group_hint": "About the group you chose above.",
     "origin_derived_group_missing": "No group was found for your family yet. Tell staff.",
+    # Lineage's own offered distinctions (#3675 Task 14): a chosen answer's
+    # bundled/priced offers, and the route's closed-distinctions note.
+    "lineage_bundles_word": "bundles",
+    "lineage_offers_word": "offers",
+    "lineage_offers_heading": "What it left you with",
+    "lineage_offers_chip": "offered by your answer",
+    "lineage_closed_lead": "Closed by this route",
     "family_path_heading": "Your Family",
     "family_template_heading": "Your Household",
     "vacancy_heading": "Your Place in the Family",
@@ -211,12 +227,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Set your character's age, build, and physical traits, then write the "
         "description other players will see when they look at your character."
     ),
-    "finaltouches_heading": "Goals & Motivations",
-    "finaltouches_intro": (
-        "Choose the goals and motivations that drive your character forward. "
-        "Checks that align with a goal earn a bonus, so pick what your character "
-        "actually wants."
-    ),
+    "finaltouches_heading": "Actor's Sheet",
+    "finaltouches_intro": "Questions for the character, to flesh out their motivations.",
     "review_heading": "Review and Submit",
     "review_intro": (
         "Read through everything you have chosen and written. You can go back "
@@ -230,6 +242,16 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_testament_heading": "The Testament",
     "review_glimpse_label": "What your character would speak of themselves",
     "review_record_heading": "Summary",
+    # The Review stage's own distinction ledger (#3675 fix round 3): every
+    # entry the draft carries into the character, off the same offers system
+    # every other chapter reads.
+    "review_distinctions_heading": "What you carry",
+    # The record ledger's own arrival word per entry (#3675 final fix F5):
+    # a CHOICE pick wins the label over a bundled/carried one on an entry
+    # with more than one contributing offer (`arrivalWord`, ReviewStage.tsx).
+    "review_arrival_choice": "choice",
+    "review_arrival_bundled": "bundled",
+    "review_arrival_carried": "carried",
     "review_banner_submitted": "Your character has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
     "origin_lore_intro": (
@@ -280,6 +302,54 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # Folio stage-internal copy (#3630 Plan B): section headings and one
     # explanatory note for stages moved onto the folio primitives.
     "gift_tradition_heading": "Tradition",
+    # Read by TraditionPicker.tsx (predates #3675, fix round 3): the component
+    # substitutes the literal `{tradition}` token for the chosen tradition's
+    # name, so an authored override can name the tradition without a static
+    # seed value trying to reproduce it itself.
+    "gift_schooling_label": "How you came to {tradition}",
+    # The Glimpse's own offered distinctions (#3675 fix round 1), one
+    # sub-block per chosen tag, and the CG-only axis layout's own copy.
+    "glimpse_choose_any": "choose any",
+    "glimpse_choose_one": "choose one",
+    "glimpse_offers_heading": "What it left in you",
+    "offers_optional_chip": "optional",
+    # Printed under ChapterOffers/SchoolingStances (#3675 final fix F2) when
+    # the sync mutation that writes a pick fails, so a rejected save is never
+    # silent.
+    "offers_sync_error": "That pick did not save. Try again.",
+    # The price-grammar words every offer/bundled row is built from (#3675
+    # final fix F5): ChapterOffers.tsx's PriceLine/BundledPriceLine and the
+    # bundled row's own "bundled" tag; offers_word_free is SchoolingStances.tsx's
+    # rank-0 stance. Values are the literals that printed before this fix.
+    "offers_word_bundled": "bundled",
+    "offers_word_free": "Free",
+    "offers_word_per_rank": "per rank",
+    "offers_word_spent": "spent",
+    "offers_word_refunds": "Refunds",
+    "glimpse_story_label": "Your story",
+    "glimpse_story_hint": (
+        "The detail behind any of the picks above goes here; the picks stay short."
+    ),
+    # Per-axis chip text on GlimpseAxes.tsx (#3675 fix round 3): the axis
+    # display name printed beside each field's prompt. Values mirror
+    # `GlimpseTagAxis`'s own choice labels (`world.magic.constants`) - the
+    # component's own literal fallback must not drift from these.
+    "glimpse_axis_trigger_chip": "Trigger",
+    "glimpse_axis_choosing_chip": "The Choosing",
+    "glimpse_axis_reflection_chip": "The Reflection",
+    "glimpse_axis_tone_chip": "Tone",
+    "glimpse_axis_consequence_chip": "Consequence",
+    "glimpse_axis_witness_chip": "Witness & Secrecy",
+    # Per-axis prompt text on GlimpseAxes.tsx (#3675 final fix F3): the
+    # question label above each field, read via `glimpse_axis_<axis>_prompt`.
+    # Values mirror the component's own AXIS_PROMPT_FALLBACK literal - must
+    # not drift from it.
+    "glimpse_axis_trigger_prompt": "What was happening",
+    "glimpse_axis_choosing_prompt": "How it claimed you",
+    "glimpse_axis_reflection_prompt": "What you saw in yourself",
+    "glimpse_axis_tone_prompt": "How it felt",
+    "glimpse_axis_consequence_prompt": "What it left behind",
+    "glimpse_axis_witness_prompt": "Who saw",
     "appearance_age_heading": "Age",
     "appearance_birthday_heading": "Birthday",
     "appearance_height_heading": "Height",
@@ -287,18 +357,78 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "appearance_features_heading": "Physical features",
     "appearance_description_heading": "Physical description",
     "appearance_markings_heading": "Markings",
+    # The Appearance chapter's own offered distinctions (#3675 Task 15): what
+    # shows offers here, in place of the retired Distinctions stage.
+    "appearance_offers_heading": "What people notice first",
+    "appearance_offers_chip": "optional",
+    "appearance_closed_lead": "Closed by your route",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
-    "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
+    # The Actor's Sheet (#3621): the three questions and their example lines, the
+    # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
+    # words are content.
+    # The Actor's Sheet's own offered distinctions (#3675 Task 15): the
+    # personality-flavored offers mounted under the three questions.
+    "finaltouches_offers_heading": "Is it a hunger",
+    "finaltouches_offers_chip": "optional",
+    "finaltouches_closed_lead": "Closed by your route",
+    "finaltouches_never_do_prompt": "What would you never do?",
+    "finaltouches_never_do_example": "Ex. Betray a secret. Break a vow. Make a pun.",
+    "finaltouches_protect_prompt": "What would you protect at all costs?",
+    "finaltouches_protect_example": (
+        "Ex. Family. Party members. My fortune. My stunning good looks."
+    ),
+    "finaltouches_fear_prompt": "What are you deathly afraid of?",
+    "finaltouches_fear_example": (
+        "Ex. Being trapped in an unending boring conversation. Drowning. Social ruin. Turtles."
+    ),
+    "finaltouches_goals_heading": "Goals",
+    "finaltouches_short_term_heading": "Short term goals",
+    "finaltouches_long_term_heading": "Long term goals",
     # Continues the margin note's lead "Goals", so it starts mid-sentence.
     "finaltouches_how_note": (
         "take points from a pool of thirty. During play a goal can be invoked to add its "
         "point value as a bonus to a roll, up to twice your total goal points per day. "
-        "Spend more on the goals that matter most; a goal with no points is a note to "
-        "yourself, not a commitment."
+        "A goal with no points is a note to yourself. Goals are numbered as you add them, "
+        "so a goal can be named in play. Add more, and change these, from your sheet as "
+        "the character goes on."
     ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_heading": "Who wants you to fail",
+    "finaltouches_enemy_intro": (
+        "A person or a group. Offered from your Lineage and your Beginning, or write your "
+        "own. The price is what the world owes you for carrying them, and the worst of "
+        "them mark you."
+    ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_why_prompt": "Why",
+    "finaltouches_enemy_degree_prompt": "How badly",
+    "finaltouches_enemy_mark_hint": (
+        "Reach is fixed by the group picked; only how badly is the player's choice. The two "
+        "worst degrees mark you with a Distinction, the way a Lineage answer can. A "
+        "free-written enemy awards one point until staff place them."
+    ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_scales_heading": "The two scales",
+    "finaltouches_enemy_public_line_prompt": "As the sheet will say it",
+    "finaltouches_enemy_public_line_hint": (
+        "The public line. The name, the reach and the price are yours, your GM's and staff's."
+    ),  # PLACEHOLDER: Apostate rewrite
+    # The Introductions (#3621): world-level copy, the reviewer's own wording. The
+    # question keys (first_journal_q1.. / application_q1..) are also read at finalize.
+    "introductions_heading": "The Introductions",
+    "introductions_intro": INTRODUCTIONS_INTRO,
+    "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
+    "first_journal_frame": FIRST_JOURNAL_FRAME,
+    "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],
+    "first_journal_q2": FIRST_JOURNAL_QUESTIONS[1],
+    "first_journal_q3": FIRST_JOURNAL_QUESTIONS[2],
+    "application_title": APPLICATION_TITLE,
+    "application_frame": APPLICATION_FRAME,
+    "application_q1": APPLICATION_QUESTIONS[0],
+    "application_q2": APPLICATION_QUESTIONS[1],
+    "application_q3": APPLICATION_QUESTIONS[2],
+    "whispers_title": WHISPERS_TITLE,
+    "whispers_frame": WHISPERS_FRAME,
 }
 
 
@@ -418,6 +548,9 @@ def ensure_tradition_training_distinction() -> None:
     invented only under ``SEED_SAMPLE_CONTENT``. Skips wiring the category,
     distinction, or effect once any of its own dependencies (category, then
     distinction, then the ``ModifierTarget``) isn't authored.
+
+    Also seeds the LIVING_MASTERS slate line and its three schooling stances
+    (#3675), see ``_ensure_living_masters_schooling``.
     """
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
@@ -461,6 +594,53 @@ def ensure_tradition_training_distinction() -> None:
             distinction=distinction,
             target=target,
         )
+    if distinction is not None:
+        _ensure_living_masters_schooling(distinction)
+
+
+def _ensure_living_masters_schooling(training: Distinction) -> None:
+    """Seed the LIVING_MASTERS slate line and its three schooling stances (#3675).
+
+    Rank 0 grants nothing (a fresh member); ranks 1 and 2 grant ``training`` at
+    that rank, each opening a Tradition Training ``DistinctionOffer`` in the
+    Tradition Step chapter. Staff author the same rows by hand on the
+    Distinction Builder and the tradition slate page; this seed only covers the
+    E2E/clone-bootstrap default. Never mentions ghosts, tutors, or any
+    play-time discovery, this is CG-facing, not a play reveal.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        OfferArrival,
+        OfferChapter,
+        TraditionState,
+    )
+    from world.character_creation.models import (  # noqa: PLC0415
+        DistinctionOffer,
+        SchoolingLine,
+        TraditionStateLine,
+    )
+
+    TraditionStateLine.objects.get_or_create(
+        state=TraditionState.LIVING_MASTERS,
+        defaults={"entry_line": "Living masters"},
+    )
+
+    stances = [
+        (0, "Newly taken in", "Taken in after the Glimpse.", None),
+        (1, "Trained for years", "Trained since youth.", training),
+        (2, "Raised within it", "Born to it.", training),
+    ]
+    for rank, name, player_line, grants in stances:
+        line, _ = SchoolingLine.objects.get_or_create(
+            rank=rank,
+            defaults={"name": name, "player_line": player_line, "grants": grants},
+        )
+        if grants is not None:
+            DistinctionOffer.objects.get_or_create(
+                distinction=training,
+                chapter=OfferChapter.TRADITION_STEP,
+                schooling_line=line,
+                defaults={"arrives_as": OfferArrival.CHOICE},
+            )
 
 
 #: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
@@ -477,17 +657,17 @@ _UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 #: tests resolves this by name; the CG-finalize hook never reads it.
 _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 
-#: Canonical name: ``world.character_creation.constants.UNBOUND_DRAWBACK_DISTINCTION_SLUG``
-#: (#2442). Also referenced by name (this exact string) in
-#: ``world.magic.services.tradition_membership`` (the
-#: ``_SHED_ON_JOIN_SLUGS``/``_REAPPLY_ON_LEAVE_SLUG`` constants, #2441 Task 8/9) —
-#: keep in sync if this ever changes.
-_UNBOUND_DRAWBACK_DISTINCTION_SLUG = UNBOUND_DRAWBACK_DISTINCTION_SLUG
+#: Slug of the "Unbound" drawback Distinction (#2442). Local to this module as
+#: of #3675: ``world.character_creation.constants.UNBOUND_DRAWBACK_DISTINCTION_SLUG``
+#: is retired; ``world.magic.services.tradition_membership`` now resolves the
+#: drawback via ``world.character_creation.offers.self_taught_drawback()``
+#: (the SELF_TAUGHT ``TraditionStateLine.carries`` FK), never this slug.
+_UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
 
-#: DistinctionTag slugs for traditionless categorization (#2752).
+#: DistinctionTag slug for the shed-on-joining-a-living-tradition set (#2752). The
+#: sibling "default"/"marker" tags this once also created are retired (#3675);
+#: SELF_TAUGHT/TEACHERS_GONE identification is state-driven now; nothing reads them.
 _TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
-_TRADITIONLESS_DEFAULT_TAG = "traditionless-default"
-_ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
 
 #: Name for the one example orphaned Arx tradition seeded alongside the
 #: drawback (#2428 Task 5). Richer lore ("ancient Traditions for the Metallic
@@ -546,14 +726,11 @@ def ensure_unbound_drawback_distinction():
     Marks a character as self-taught/traditionless-in-play: a +50%-AP-cost
     surcharge on magic-learning activities (the "uphill battle" the Unbound codex
     lore describes — TIME, not power; resonance earning/spending is untouched, per
-    the 2026-07-17 spec correction). Wired onto the Unbound ``BeginningTradition``
-    row via ``required_distinction`` (``seed_beginning_traditions`` below) — the
-    same #2426 gate ``ensure_tradition_training_distinction``/
-    ``ensure_orphaned_tradition_distinction`` use, so selecting Unbound at CG
-    requires the drawback already be in the draft (no auto-attach — mirrors
-    Orphaned Tradition's shape exactly; ``world.character_creation.views
-    .TraditionViewSet.select_tradition``'s gate is generic and was not changed by
-    this task).
+    the 2026-07-17 spec correction). Also seeds the SELF_TAUGHT
+    ``TraditionStateLine`` carrying this drawback (#3675); picking a SELF_TAUGHT
+    tradition at CG carries it into the draft automatically via
+    ``world.character_creation.offers.reconcile_offer_picks``, never a manual
+    attach.
 
     ``cost_per_rank=-2`` mirrors ``ensure_orphaned_tradition_distinction``'s
     convention (a modest CG point refund; the drawback's teeth are the AP
@@ -617,8 +794,10 @@ def ensure_unbound_drawback_distinction():
             distinction=distinction,
             target=target,
         )
-    # Attach traditionless tags so tradition_membership can identify this
-    # distinction by tag instead of hardcoded slug (#2752).
+    # Attach the shed-on-join tag so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752). The SELF_TAUGHT
+    # identification itself is state-driven (#3675, below); no "default" tag
+    # is created any more; nothing reads it.
     if distinction is not None:
         from world.distinctions.models import DistinctionTag  # noqa: PLC0415
 
@@ -626,11 +805,18 @@ def ensure_unbound_drawback_distinction():
             slug=_TRADITIONLESS_DRAWBACK_TAG,
             defaults={"name": "Traditionless Drawback"},
         )
-        default_tag, _ = DistinctionTag.objects.get_or_create(
-            slug=_TRADITIONLESS_DEFAULT_TAG,
-            defaults={"name": "Traditionless Default"},
+        distinction.tags.add(drawback_tag)
+
+        # The SELF_TAUGHT slate line carries this drawback into the draft (#3675),
+        # read by world.character_creation.offers.self_taught_drawback(),
+        # never by name or slug.
+        from world.character_creation.constants import TraditionState  # noqa: PLC0415
+        from world.character_creation.models import TraditionStateLine  # noqa: PLC0415
+
+        TraditionStateLine.objects.get_or_create(
+            state=TraditionState.SELF_TAUGHT,
+            defaults={"entry_line": "Self-taught, slower to learn", "carries": distinction},
         )
-        distinction.tags.add(drawback_tag, default_tag)
     return distinction
 
 
@@ -651,20 +837,18 @@ def seed_beginning_traditions() -> None:
     seeder (formerly seeded here-adjacent by the now-retired "magic" cluster
     helper ``seed_starter_gift_catalog``, #2474), precisely so both sides of
     this join exist by the time this function runs.
-    ``required_distinction=<Unbound drawback>`` (#2442,
-    was ``None`` pre-#2442) — selecting Unbound now requires the draft already
-    hold the "Unbound" drawback distinction, exactly the same gate shape
-    ``seed_metallic_order_tradition`` uses for its orphaned-tradition example
-    (no auto-attach anywhere in the stack; see ``ensure_unbound_drawback_
-    distinction``'s docstring). Idempotent via get_or_create; never overwrites a
-    staff-adjusted row — an already-seeded pre-#2442 row keeps
-    ``required_distinction=None`` until staff (or a fresh DB) re-seeds it.
+    ``state=TraditionState.SELF_TAUGHT`` (#3675, was a ``required_distinction`` FK
+    pre-#3675); the SELF_TAUGHT slate line's own ``TraditionStateLine.carries``
+    is what carries the "Unbound" drawback into the draft now (see
+    ``ensure_unbound_drawback_distinction``'s docstring), never a per-row FK.
+    Idempotent via get_or_create; never overwrites a staff-adjusted row.
 
     Skips silently (logged) if the Unbound tradition hasn't been seeded yet —
     cluster ordering guarantees this can't happen via the Big Button; defensive
     only, mirrors the per-row skip in ``seed_durance_officiants``
     (``world.progression.seeds``).
     """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415
 
@@ -676,13 +860,13 @@ def seed_beginning_traditions() -> None:
         )
         return
 
-    unbound_drawback = ensure_unbound_drawback_distinction()
+    ensure_unbound_drawback_distinction()
 
     for beginning in Beginnings.objects.all():
         BeginningTradition.objects.get_or_create(
             beginning=beginning,
             tradition=unbound,
-            defaults={"required_distinction": unbound_drawback, "sort_order": 0},
+            defaults={"state": TraditionState.SELF_TAUGHT, "sort_order": 0},
         )
 
 
@@ -813,10 +997,11 @@ def ensure_orphaned_tradition_distinction():
     """Seed the 'Orphaned Tradition' drawback distinction (#2428 Task 5).
 
     Marks a tradition as currently teacherless (post-Vanishing Arx traditions
-    especially — see #2428's addendum). Wired onto a ``BeginningTradition`` row
-    via ``required_distinction`` (the same #2426 gate ``ensure_tradition_training_
-    distinction`` uses), so selecting an orphaned tradition at CG auto-attaches
-    this drawback. ``cost_per_rank`` is negative — the house drawback convention
+    especially, see #2428's addendum). Also seeds the TEACHERS_GONE
+    ``TraditionStateLine`` carrying this drawback (#3675); selecting a
+    TEACHERS_GONE tradition at CG carries it into the draft automatically via
+    ``world.character_creation.offers.reconcile_offer_picks``, never a manual
+    attach. ``cost_per_rank`` is negative, the house drawback convention
     (``Distinction.cost_per_rank`` docstring: "Positive costs points, negative
     reimburses"; e.g. the ``-2``/``-5``/``-10`` fixtures across
     ``world/distinctions/tests``) — refunding CG points the way any other
@@ -861,8 +1046,11 @@ def ensure_orphaned_tradition_distinction():
         },
         slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
     )
-    # Attach traditionless tags so tradition_membership can identify this
-    # distinction by tag instead of hardcoded slug (#2752).
+    # Attach the shed-on-join tag so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752). No "marker" tag is
+    # created any more (#3675); TEACHERS_GONE identification is state-driven,
+    # below; a legacy database's already-tagged rows are carried across by
+    # migration 0107's one-time backfill, not by this seed re-tagging anything.
     if distinction is not None:
         from world.distinctions.models import DistinctionTag  # noqa: PLC0415
 
@@ -870,11 +1058,18 @@ def ensure_orphaned_tradition_distinction():
             slug=_TRADITIONLESS_DRAWBACK_TAG,
             defaults={"name": "Traditionless Drawback"},
         )
-        marker_tag, _ = DistinctionTag.objects.get_or_create(
-            slug=_ORPHANED_TRADITION_MARKER_TAG,
-            defaults={"name": "Orphaned Tradition Marker"},
+        distinction.tags.add(drawback_tag)
+
+        # The TEACHERS_GONE slate line carries this drawback into the draft
+        # (#3675), read by world.magic.services.tradition_membership
+        # ._tradition_is_orphaned() via BeginningTradition.state, never a tag.
+        from world.character_creation.constants import TraditionState  # noqa: PLC0415
+        from world.character_creation.models import TraditionStateLine  # noqa: PLC0415
+
+        TraditionStateLine.objects.get_or_create(
+            state=TraditionState.TEACHERS_GONE,
+            defaults={"entry_line": "Teachers gone, no living tutor", "carries": distinction},
         )
-        distinction.tags.add(drawback_tag, marker_tag)
     return distinction
 
 
@@ -894,10 +1089,11 @@ def seed_metallic_order_tradition():
     - ``BeginningTradition`` rows for every Arx-realm ``Beginnings`` (``starting_
       area__realm__name="Arx"`` — the #2428 vision names Arx as the realm with
       "many orphans" and ancient traditions like this one), each carrying
-      ``required_distinction=<Orphaned Tradition>``. Per the #2428 spec ruling,
-      this is authored data staff can mutate as story unfolds (a recovery quest
-      restoring teachers => staff clears ``required_distinction`` on these rows),
-      and CG reflects the change automatically — no code change needed.
+      ``state=TraditionState.TEACHERS_GONE`` (#3675, was a ``required_distinction``
+      FK pre-#3675). Per the #2428 spec ruling, this is authored data staff can
+      mutate as story unfolds (a recovery quest restoring teachers => staff sets
+      ``state=TraditionState.LIVING_MASTERS`` on these rows), and CG reflects the
+      change automatically, no code change needed.
 
     Skips (logged) if the Unbound tradition or its starter gift grants aren't
     seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip;
@@ -905,6 +1101,7 @@ def seed_metallic_order_tradition():
     guarantees this can't happen via the Big Button. Idempotent throughout via
     get_or_create; never overwrites a staff-adjusted row.
     """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415
     from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
@@ -927,7 +1124,7 @@ def seed_metallic_order_tradition():
         )
         return None
 
-    distinction = ensure_orphaned_tradition_distinction()
+    ensure_orphaned_tradition_distinction()
 
     tradition, _ = Tradition.objects.get_or_create(
         name=_METALLIC_ORDER_TRADITION_NAME,
@@ -950,7 +1147,7 @@ def seed_metallic_order_tradition():
         BeginningTradition.objects.get_or_create(
             beginning=beginning,
             tradition=tradition,
-            defaults={"required_distinction": distinction, "sort_order": 1},
+            defaults={"state": TraditionState.TEACHERS_GONE, "sort_order": 1},
         )
 
     return tradition

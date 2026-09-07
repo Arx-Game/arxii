@@ -235,7 +235,7 @@ def visible_slot_ids(draft: CharacterDraft) -> set[int]:
         return set()
     path = draft.resolve_family_path()
     answers = DraftAnswers.from_draft(draft)
-    slots = list(template.slots.order_by("sort_order", "id"))
+    slots = template.questions.rows
     slots_by_id = {s.id: s for s in slots}
     choice_ids_by_slot, branch = _load_choice_maps(template.id)
     shown: set[int] = set()
@@ -317,8 +317,9 @@ def question_influence(
 
 
 def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
-    """Distinctions the draft's visible, picked answers grant (#3660)."""
-    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+    """Distinctions the draft's visible, picked answers grant for free (#3660, #3675)."""
+    from world.character_creation.constants import OfferArrival  # noqa: PLC0415
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
     from world.societies.models import Organization  # noqa: PLC0415
 
     template = draft.selected_origin_template
@@ -329,23 +330,28 @@ def bundled_distinctions(draft: CharacterDraft) -> list[BundledDistinction]:
     choice_ids = [cid for sid, cid in answers.picks.items() if sid in visible]
     if not choice_ids:
         return []
-    rows = list(
-        OriginTemplateSlotChoice.objects.filter(
-            pk__in=choice_ids,
-            slot__template=template,
+    offers = list(
+        DistinctionOffer.objects.filter(
+            origin_choice_id__in=choice_ids,
+            origin_choice__slot__template=template,
+            origin_choice__is_active=True,
+            arrives_as=OfferArrival.BUNDLED,
             is_active=True,
-            grants_distinction__isnull=False,
         )
-        .select_related("slot", "grants_distinction")
-        .order_by("slot__sort_order")
+        .select_related("origin_choice__slot", "distinction")
+        .order_by("origin_choice__slot__sort_order")
     )
-    anchor_by_choice_id = {choice.id: anchor_for(choice.slot, draft, answers) for choice in rows}
+    anchor_by_choice_id = {
+        offer.origin_choice_id: anchor_for(offer.origin_choice.slot, draft, answers)
+        for offer in offers
+    }
     org_ids = {org_id for org_id in anchor_by_choice_id.values() if org_id is not None}
     orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
     out: list[BundledDistinction] = []
-    for choice in rows:
+    for offer in offers:
+        choice = offer.origin_choice
         org = orgs.get(anchor_by_choice_id[choice.id])
-        dist = choice.grants_distinction
+        dist = offer.distinction
         out.append(
             BundledDistinction(
                 distinction_id=dist.id,
@@ -378,12 +384,12 @@ def derived_anchors(draft: CharacterDraft) -> dict[int, DerivedAnchor | None]:
     template = draft.selected_origin_template
     if template is None:
         return {}
-    slots = list(
-        template.slots.filter(
-            kind=QuestionKind.GROUP,
-            anchor_source__in=(AnchorSource.OWN_FAMILY, AnchorSource.SERVED_HOUSE),
-        ).values_list("id", "anchor_source")
-    )
+    slots = [
+        (slot.id, slot.anchor_source)
+        for slot in template.questions
+        if slot.kind == QuestionKind.GROUP
+        and slot.anchor_source in (AnchorSource.OWN_FAMILY, AnchorSource.SERVED_HOUSE)
+    ]
     if not slots:
         return {}
     from world.societies.houses.services import house_for_family  # noqa: PLC0415

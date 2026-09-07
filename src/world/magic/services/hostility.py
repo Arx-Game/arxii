@@ -22,7 +22,7 @@ def is_technique_hostile(technique: Technique) -> bool:
     - It applies a condition whose target_kind is ENEMY, OR
     - It strips a condition off a target whose target_kind is ENEMY.
 
-    ``effect_type.base_power`` is deliberately NOT consulted (#3682, ADR-0278).
+    ``effect_type.base_power`` is deliberately NOT consulted (#3682, ADR-0281).
     It is the magnitude knob for a power-*scaled* effect, not a statement of
     intent: the authored ``Defense`` effect type carries base_power 10, which
     made all 54 Defense techniques classify as hostile — a shield cast at an

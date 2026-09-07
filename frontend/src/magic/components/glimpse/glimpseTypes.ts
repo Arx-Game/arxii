@@ -5,10 +5,14 @@
  * `GlimpseTagOption` — re-export it rather than redeclaring it elsewhere.
  */
 
-/** Distinction stub embedded in a glimpse tag's suggestion list. */
-export interface GlimpseSuggestedDistinction {
-  id: number;
+/** A `DistinctionOffer` embedded on a glimpse tag row (#3675). */
+export interface TagOffer {
+  offer_id: number;
+  distinction_id: number;
   name: string;
+  player_line: string;
+  cost_per_rank: number;
+  max_rank: number;
 }
 
 /**
@@ -23,7 +27,7 @@ export interface GlimpseTagOption {
   description: string;
   example: string;
   sort_order: number;
-  suggested_distinctions: GlimpseSuggestedDistinction[];
+  offers: TagOffer[];
 }
 
 export interface GlimpseFlowProps {
@@ -39,15 +43,17 @@ export interface GlimpseFlowProps {
   tags: GlimpseTagOption[];
   selectedTagIds: number[];
   prose: string;
-  linkedDistinctionIds: number[];
   /** Replace the selection for one axis (already arity-enforced by the UI). */
   onChangeAxis: (axis: GlimpseTagOption['axis'], tagIds: number[]) => void;
   onChangeProse: (text: string) => void;
-  onToggleDistinctionLink: (distinctionId: number) => void;
   /** "Skip for now" — clears nothing, just collapses the flow. */
   onSkip?: () => void;
   /** Labels the deferral affordance; CG shows both buttons, sheet omits skip. */
   showDeferralControls: boolean;
-  /** Distinctions available for the manual-link fallback control. */
-  linkableDistinctions: GlimpseSuggestedDistinction[];
+  /**
+   * Staff-authorable hint printed under the story textarea (#3675),
+   * e.g. "The detail behind any of the picks above goes here; the picks
+   * stay short." Omitted mount points render no hint.
+   */
+  storyHint?: string;
 }

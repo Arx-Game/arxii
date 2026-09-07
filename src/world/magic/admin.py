@@ -1,12 +1,20 @@
+from django import forms
 from django.contrib import admin
 from django.db.models import Prefetch
+from django.forms.models import BaseInlineFormSet
+from django.utils.html import format_html
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
+from world.admin_utils import describe_reverse_relations
+from world.character_creation.constants import OfferChapter
+from world.character_creation.models import DistinctionOffer
 from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
     AudereMajoraFaithVariantAppliedCondition,
 )
+from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
@@ -31,7 +39,6 @@ from world.magic.models import (
     GiftAcquisitionConfig,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -115,14 +122,33 @@ class AffinityAdmin(admin.ModelAdmin):
 
 @admin.register(Resonance)
 class ResonanceAdmin(admin.ModelAdmin):
-    list_display = ["name", "affinity", "get_opposite"]
+    """The most cross-referenced model in the app (#3679) — see ``get_connections``."""
+
+    list_display = ["name", "affinity", "get_opposite", "get_gift_count"]
     list_filter = ["affinity"]
     search_fields = ["name"]
     list_select_related = ["affinity", "opposite"]
+    readonly_fields = ["get_gifts", "get_connections"]
 
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+    @admin.display(description="Gifts (supported set)")
+    def get_gift_count(self, obj):
+        # No prefetch here — Resonance/Gift are identity-mapped SharedMemoryModels,
+        # and a to_attr/prefetch cache written onto a shared instance goes stale
+        # across requests (ADR-0278). This admin list is small (~24 rows); a
+        # per-row query is the correct trade, not a cache with a staleness bug.
+        return obj.gifts.count()
+
+    @admin.display(description="Gifts in supported set")
+    def get_gifts(self, obj):
+        return ", ".join(g.name for g in obj.gifts.all()) or "-"
+
+    @admin.display(description="Other connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"gifts"}))
 
 
 @admin.register(AffinityInteraction)
@@ -141,9 +167,21 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
 
 @admin.register(EffectType)
 class EffectTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "base_power", "base_anima_cost", "has_power_scaling"]
+    list_display = [
+        "name",
+        "base_power",
+        "base_anima_cost",
+        "has_power_scaling",
+        "get_technique_count",
+    ]
     list_filter = ["has_power_scaling"]
     search_fields = ["name"]
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
 
 
 class StyleCapabilityRequirementInline(admin.TabularInline):
@@ -455,6 +493,87 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         refresh_glimpse_state(obj)
 
 
+class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2).
+
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review, promoted alongside the Upbringing Builder's
+    identical ``_OfferBaseFormSet``) - this class only names the owner noun.
+    """
+
+    owner_noun = "tag"
+
+
+class GlimpseTagOfferForm(forms.ModelForm):
+    """One "what it offers" row on a Glimpse tag's own change form (#3675).
+
+    ``chapter`` is forced to GLIMPSE here and never shown as a select - the
+    row exists because it hangs off this tag, so which chapter it belongs to
+    is not a choice an author makes on this page (mirrors the Distinction
+    Builder's own per-chapter opener, just fixed to one value instead of
+    picked). ``glimpse_tag`` itself needs no forcing here: Django's own
+    ``BaseInlineFormSet._construct_form`` stamps the parent's pk onto a new
+    row's fk attribute before validation runs, the same plumbing every
+    admin inline relies on.
+    """
+
+    class Meta:
+        model = DistinctionOffer
+        fields = ["distinction", "arrives_as", "name", "player_line", "sort_order", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.chapter = OfferChapter.GLIMPSE
+
+
+class DistinctionOfferInline(admin.TabularInline):
+    """ "What it offers" on a Glimpse tag's own page (#3675): every priced offer
+    this tag opens. A stock admin inline, not a new builder - the tag's own
+    change form already carries this table, matching how a Distinction's
+    Lineage offers are also editable from the Upbringing Builder's own answer
+    row (either side can add one).
+    """
+
+    model = DistinctionOffer
+    fk_name = "glimpse_tag"
+    form = GlimpseTagOfferForm
+    formset = GlimpseTagOfferFormSet
+    fields = [
+        "distinction",
+        "arrives_as",
+        "name",
+        "player_line",
+        "sort_order",
+        "is_active",
+        "builder_link",
+    ]
+    readonly_fields = ["builder_link"]
+    autocomplete_fields = ["distinction"]
+    extra = 1
+    verbose_name = "offer"
+    verbose_name_plural = "What it offers"
+
+    @admin.display(description="")
+    def builder_link(self, obj: DistinctionOffer) -> str:
+        """A saved row's link to its Distinction's own Builder page (#3675 review Important 2).
+
+        ``help_text`` set in ``GlimpseTagOfferForm.__init__`` was tried first and
+        does not reach the page: a ``TabularInline`` renders each column's help
+        text once, off the formset's own ``empty_form`` - a per-instance value
+        set in a bound form's ``__init__`` never shows for a saved row. A
+        ``readonly_fields`` callable column is the admin-native way to render
+        one link per row instead.
+        """
+        if not obj.pk or not obj.distinction_id:
+            return ""
+        from web.admin.authoring.links import builder_url  # noqa: PLC0415
+
+        url = builder_url(obj.distinction)
+        if not url:
+            return ""
+        return format_html('<a href="{}">open</a>', url)
+
+
 @admin.register(GlimpseTag)
 class GlimpseTagAdmin(admin.ModelAdmin):
     """Guided glimpse tag catalog (#2427) — lore-repo content model."""
@@ -465,15 +584,52 @@ class GlimpseTagAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]
     autocomplete_fields = ["affinity"]
+    inlines = [DistinctionOfferInline]
+    change_form_template = "admin/magic/glimpsetag/change_form.html"
 
+    def render_change_form(  # noqa: PLR0913
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        """Injects the "how it reads to a player" preview (#3675).
 
-@admin.register(GlimpseTagDistinctionSuggestion)
-class GlimpseTagDistinctionSuggestionAdmin(admin.ModelAdmin):
-    """Curated tag→distinction suggestion (#2427) — lore-repo content model."""
+        The six-argument signature matches ``ModelAdmin.render_change_form``'s
+        own (PLR0913 noqa'd rather than trimmed) - overriding it means keeping
+        every parameter Django itself declares.
 
-    list_display = ["tag", "distinction", "sort_order"]
-    list_filter = ["tag__axis"]
-    search_fields = ["tag__name", "distinction__name"]
+        Runs for both add and change so the template's include always has a
+        ``preview`` variable - an unsaved tag has no offers yet, so this is
+        ``None`` on the add page, and the shared fragment already renders its
+        own "add an active offer" line for that case.
+        """
+        from web.admin.authoring.offers import preview_from_offers  # noqa: PLC0415
+
+        preview = None
+        if obj is not None and obj.pk:
+            # obj.offers is the GlimpseTagOffersHandler (ADR-0278) - already
+            # active-only, select_related("distinction"), ordered.
+            preview = preview_from_offers(obj.offers.rows)
+        context["offer_preview"] = preview
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def save_formset(self, request, form, formset, change):
+        """Credits every saved offer row (#3675), mirroring the Builder pages' save."""
+        if formset.model is not DistinctionOffer:
+            super().save_formset(request, form, formset, change)
+            return
+        from web.admin.authoring.contributors import current_contributor  # noqa: PLC0415
+        from web.admin.authoring.credit import stamp_written  # noqa: PLC0415
+
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        contributor = current_contributor(request.user)
+        for obj in instances:
+            obj.save()
+            if contributor is not None:
+                stamp_written(obj, contributor)
+        formset.save_m2m()
 
 
 @admin.action(description="Staff grant resonance to this row")
@@ -516,13 +672,66 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     actions = [grant_resonance_action]
 
 
+class GiftChildInline(admin.TabularInline):
+    """Read-only: gifts hanging beneath this one in the lineage (#2891, ADR-0192)."""
+
+    model = Gift
+    fk_name = "parent"
+    fields = ["name", "kind"]
+    readonly_fields = ["name", "kind"]
+    extra = 0
+    can_delete = False
+    verbose_name = "Child gift (lineage)"
+    verbose_name_plural = "Child gifts (lineage)"
+
+    def has_add_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     autocomplete_fields = ["creator", "parent"]
-    list_display = ["name", "kind", "parent"]
+    list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
+    readonly_fields = ["get_grant_sources"]
+    inlines = [GiftChildInline]
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
+
+    @admin.display(description="Grant sources (who grants this gift, and how it's learned)")
+    def get_grant_sources(self, obj: Gift) -> str:
+        if not obj.pk:
+            return "-"
+        paths = ", ".join(g.path.name for g in obj.path_grants.select_related("path"))
+        traditions = ", ".join(
+            g.tradition.name for g in obj.tradition_grants.select_related("tradition")
+        )
+        species = ", ".join(g.species.name for g in obj.species_grants.select_related("species"))
+        parts = []
+        if paths:
+            parts.append(f"Paths: {paths}")
+        if traditions:
+            parts.append(f"Traditions: {traditions}")
+        if species:
+            parts.append(f"Species: {species}")
+        unlock = obj.gift_unlocks.first()
+        if unlock:
+            parts.append(f"GiftUnlock: xp_cost={unlock.xp_cost}")
+        elif obj.kind == GiftKind.MINOR:
+            parts.append(
+                "No GiftUnlock authored — not directly player-learnable; "
+                "reachable only via a Path/Tradition/Species grant above."
+            )
+        return "; ".join(parts) or "No authored grant sources found."
 
 
 @admin.register(CharacterGift)
@@ -540,13 +749,25 @@ class TraditionCodexGrantInline(admin.TabularInline):
     autocomplete_fields = ["entry"]
 
 
+class TraditionGiftGrantInline(admin.TabularInline):
+    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above)."""
+
+    model = TraditionGiftGrant
+    extra = 1
+    autocomplete_fields = ["gift"]
+
+
 @admin.register(Tradition)
 class TraditionAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_active", "sort_order"]
+    list_display = ["name", "is_active", "sort_order", "get_member_count"]
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
-    inlines = [TraditionCodexGrantInline]
+    inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
+
+    @admin.display(description="Current members")
+    def get_member_count(self, obj):
+        return obj.character_traditions.filter(left_at__isnull=True).count()
 
 
 @admin.register(TraditionGiftGrant)
@@ -643,6 +864,7 @@ class FacetAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     autocomplete_fields = ["parent"]
     ordering = ["parent__name", "name"]
+    readonly_fields = ["get_connections"]
 
     @admin.display(description="Depth")
     def get_depth(self, obj):
@@ -651,6 +873,10 @@ class FacetAdmin(admin.ModelAdmin):
     @admin.display(description="Full Path")
     def get_full_path(self, obj):
         return obj.full_path
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"children"}))
 
 
 @admin.register(Reincarnation)

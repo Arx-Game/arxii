@@ -23,6 +23,7 @@ from rest_framework import serializers
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
+    ACTOR_SHEET_QUESTIONS,
     AGE_MAX,
     AGE_MAX_ETERNAL_YOUTH,
     AGE_MIN,
@@ -41,6 +42,7 @@ from world.character_creation.models import (
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
 )
+from world.character_creation.offers import reconcile_offer_picks
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import ParentageKind
@@ -52,12 +54,14 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser
     from evennia.accounts.models import AccountDB
 
+    from world.character_creation.enemies import ResolvedEnemy
     from world.character_creation.models import (
         Beginnings,
         DraftApplication,
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
+    from world.distinctions.types import DraftDistinctionEntry
     from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -151,6 +155,26 @@ def require_draft_complete(draft: CharacterDraft) -> None:
     raise DraftIncompleteError(msg)
 
 
+def _prepare_draft_entries(draft: CharacterDraft) -> None:
+    """Settle the draft's distinctions list before any row is written (#3675, #3621).
+
+    Two folds, shared by every finalize path (player and GM):
+
+    1. ``reconcile_offer_picks`` -- normally called after every draft PATCH that could
+       change which offers are open, but a draft created directly (a staff direct-add,
+       a GM draft, a test fixture) never went through that view, so its
+       ``draft_data["distinctions"]`` list would otherwise miss whatever the last-set
+       answer opened. Idempotent -- a draft already reconciled after its final PATCH
+       sees no change here. A legacy entry with no offer_ids key (a pre-offers pick) is
+       left untouched by this call (ruling A, offers.py's ``_drop_vanished_sources``).
+    2. ``_apply_enemy_distinction_entry`` -- folds the enemy's worst-two-degrees
+       Distinction (if any) into the same pick list, so it is created through the one
+       ``_create_distinctions`` write path instead of a second bespoke one.
+    """
+    reconcile_offer_picks(draft)
+    _apply_enemy_distinction_entry(draft)
+
+
 @transaction.atomic
 def finalize_character(
     draft: CharacterDraft,
@@ -182,6 +206,12 @@ def finalize_character(
     if draft.is_expired:
         msg = "This character draft has expired due to inactivity."
         raise DraftExpiredError(msg)
+
+    # Reconcile offer picks (and the enemy-worst-degree fold) BEFORE the
+    # completeness check, so a carried refund from a SELF_TAUGHT tradition's
+    # drawback is on the entry list before require_draft_complete sums the
+    # purse (#3675 final-fix B1). finalize_gm_character mirrors this order.
+    _prepare_draft_entries(draft)
 
     require_draft_complete(draft)
 
@@ -225,17 +255,7 @@ def finalize_character(
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
     _apply_character_mechanics(character, draft)
 
-    # Initialize CharacterVitals and set to full health now that class levels / stats exist
-    # so derive_base_max_health has meaningful inputs. recompute alone never heals from 0,
-    # so we explicitly set health = max_health to give fresh characters a full pool.
-    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
-    from world.vitals.models import CharacterVitals  # noqa: PLC0415
-
-    vitals, _ = CharacterVitals.objects.get_or_create(character_sheet=sheet)
-    recompute_max_health_with_threads(sheet)
-    vitals.refresh_from_db()
-    vitals.health = vitals.max_health
-    vitals.save(update_fields=["health"])
+    _initialize_full_vitals(sheet)
 
     # Handle roster assignment
     # Provenance signal (#1506): the staff direct-add path is STAFF; the normal
@@ -283,6 +303,7 @@ def finalize_character(
     # Connection reputation seeding (#3660): each picked group answer's authored
     # seed becomes the anchor org's opinion of the new PC.
     _seed_connection_reputation(draft, primary_persona)
+    _write_actor_sheet(draft, sheet, primary_persona, character)
 
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
@@ -315,6 +336,25 @@ def finalize_character(
     draft.delete()
 
     return character
+
+
+def _initialize_full_vitals(sheet: CharacterSheet) -> None:
+    """Create CharacterVitals and set health to full, once class levels/stats exist.
+
+    ``derive_base_max_health`` (via ``recompute_max_health_with_threads``) needs those
+    as inputs, so this runs after ``_apply_character_mechanics``. Recompute alone never
+    heals from 0, so health is explicitly set to max_health to give a fresh character a
+    full pool. Split out of ``finalize_character`` to keep it under the statement
+    ceiling (#3675/#3621 merge).
+    """
+    from world.magic.services.threads import recompute_max_health_with_threads  # noqa: PLC0415
+    from world.vitals.models import CharacterVitals  # noqa: PLC0415
+
+    vitals, _ = CharacterVitals.objects.get_or_create(character_sheet=sheet)
+    recompute_max_health_with_threads(sheet)
+    vitals.refresh_from_db()
+    vitals.health = vitals.max_health
+    vitals.save(update_fields=["health"])
 
 
 def _sync_finalized_name_aliases(sheet: CharacterSheet) -> None:
@@ -454,6 +494,310 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
         org = orgs.get(anchor_by_choice_id[choice.id])
         if org is not None:
             bump_organization_reputation(persona, org, choice.reputation_seed)
+
+
+def _write_actor_sheet(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """The Actor's Sheet's finalize writes beyond the profile answers and goals (#3621)."""
+    _create_enemy(draft, sheet, persona, character)
+    _write_introductions(draft, sheet, persona, character)
+
+
+def _create_enemy(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Write the priced enemy and collect the first of its debt (#3621).
+
+    The row itself; the group's opinion of the character (the same reputation seam a
+    Lineage answer's seed uses); and, for a society- or realm-reach group whose
+    enforcing society covers where the character starts, pursuit heat there, pinned at
+    the worst degree. A free-written enemy writes the row only, pending staff placement.
+
+    The worst-two-degrees Distinction (``ENEMY_DEGREE_DISTINCTION_NAMES``) is no longer
+    granted here: ``_apply_enemy_distinction_entry`` folds it into the draft's
+    ``distinctions`` list before ``_apply_character_mechanics`` runs, so it goes through
+    the one ``_create_distinctions`` write path (#3675) rather than a second one.
+    """
+    from world.character_creation.constants import ENEMY_REPUTATION_SEED  # noqa: PLC0415
+    from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+    from world.character_sheets.models import CharacterEnemy  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
+
+    resolved = resolve_enemy(draft)
+    if resolved is None:
+        return
+    org = (
+        Organization.objects.filter(pk=resolved.organization_id).select_related("society").first()
+        if resolved.organization_id
+        else None
+    )
+    CharacterEnemy.objects.create(
+        character=sheet,
+        kind=resolved.kind,
+        organization=org,
+        figure_name=resolved.figure_name,
+        power_tier=resolved.power_tier,
+        reach=resolved.reach,
+        degree=resolved.degree,
+        price=resolved.price,
+        why=resolved.why,
+        public_line=resolved.public_line,
+        status=resolved.status,
+    )
+    if org is not None:
+        bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
+
+    _seed_enemy_heat(resolved, org, persona, character)
+
+
+def _apply_enemy_distinction_entry(draft: CharacterDraft) -> None:
+    """Fold the enemy's worst-two-degrees Distinction into the draft's pick list (#3675, #3621).
+
+    Called from ``_prepare_draft_entries`` (shared by ``finalize_character`` and
+    ``finalize_gm_character``) right after ``reconcile_offer_picks``, before
+    ``_apply_character_mechanics`` runs ``_create_distinctions`` - so the enemy-marked
+    Distinction (``ENEMY_DEGREE_DISTINCTION_NAMES``) is created through that one write
+    path instead of a second bespoke one. ``resolve_enemy`` is pure (no writes), so
+    calling it again inside ``_create_enemy`` later in the same finalize is cheap and
+    gives the identical row. The synthetic offer id ``enemy:<degree>`` mirrors the
+    ``state:<TraditionState>`` pattern ``offers._apply_carried`` uses for a source that
+    has no real ``DistinctionOffer`` row.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        ENEMY_DEGREE_DISTINCTION_NAMES,
+        OfferArrival,
+    )
+    from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+    from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+    from world.distinctions.models import Distinction  # noqa: PLC0415
+    from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
+
+    resolved = resolve_enemy(draft)
+    if resolved is None:
+        return
+    distinction_name = ENEMY_DEGREE_DISTINCTION_NAMES.get(resolved.degree)
+    if not distinction_name:
+        return
+    distinction = Distinction.objects.filter(name=distinction_name).first()
+    if distinction is None:
+        logger.warning(
+            "Enemy degree %s grants Distinction %r but no such row exists; skipped for %s",
+            resolved.degree,
+            distinction_name,
+            draft,
+        )
+        return
+
+    entry_key = f"enemy:{resolved.degree}"
+    source = f"{EnemyDegree(resolved.degree).label}: {resolved.name}"
+    entries = draft.draft_data.setdefault("distinctions", [])
+    entry = next((e for e in entries if e["distinction_id"] == distinction.id), None)
+    if entry is None:
+        entry = build_distinction_entry(distinction, rank=1)
+        entry["offer_ids"] = [entry_key]
+        entry["sources"] = [source]
+        entry["arrivals"] = [OfferArrival.BUNDLED]
+        entry["cost"] = 0
+        entries.append(entry)
+    elif entry_key not in entry.get("offer_ids", []):
+        entry.setdefault("offer_ids", []).append(entry_key)
+        entry.setdefault("sources", []).append(source)
+        entry.setdefault("arrivals", []).append(OfferArrival.BUNDLED)
+        entry["cost"] = 0
+
+
+def _seed_enemy_heat(
+    resolved: ResolvedEnemy,
+    org: Organization | None,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Pursuit heat where the character starts, when the enemy's society enforces there.
+
+    Only a society- or realm-reach group, from ruined upward; pinned at the worst degree.
+    A group whose enforcing society does not cover the start seeds nothing: reach is
+    measured where the character plays (issue rule 2).
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        ENEMY_HEAT_PIN_DAYS,
+        ENEMY_HEAT_SEED,
+    )
+    from world.character_sheets.types import EnemyDegree, EnemyKind  # noqa: PLC0415
+    from world.justice.models import HeatSource, PersonaHeat  # noqa: PLC0415
+    from world.justice.services import area_for_room, enforcing_society_for  # noqa: PLC0415
+    from world.societies.constants import EnemyReach  # noqa: PLC0415
+
+    heat_amount = ENEMY_HEAT_SEED.get(resolved.degree, 0)
+    if (
+        not heat_amount
+        or resolved.kind != EnemyKind.GROUP
+        or resolved.reach not in (EnemyReach.SOCIETY, EnemyReach.REALM)
+        or org is None
+        or org.society_id is None
+        or character.location is None
+    ):
+        return
+    area = area_for_room(character.location)
+    if area is None or enforcing_society_for(area) != org.society:
+        return
+    with transaction.atomic():
+        row, _ = PersonaHeat.objects.get_or_create(persona=persona, area=area, society=org.society)
+        row.value = row.value + heat_amount
+        if resolved.degree == EnemyDegree.DESTROY:
+            row.pinned_until = timezone.now() + timedelta(days=ENEMY_HEAT_PIN_DAYS)
+        row.save(update_fields=["value", "pinned_until", "updated_date"])
+        HeatSource.objects.create(heat=row, deed=None, amount=heat_amount)
+
+
+def _introduction_questions(kind: str) -> list[str]:
+    """The three questions of an Introduction: the CG copy rows, else the constants."""
+    from world.character_creation.constants import (  # noqa: PLC0415
+        APPLICATION_QUESTIONS,
+        FIRST_JOURNAL_QUESTIONS,
+        INTRODUCTION_APPLICATION,
+    )
+    from world.character_creation.models import CGExplanation  # noqa: PLC0415
+
+    defaults = (
+        APPLICATION_QUESTIONS if kind == INTRODUCTION_APPLICATION else FIRST_JOURNAL_QUESTIONS
+    )
+    keys = [f"{kind}_q{i + 1}" for i in range(len(defaults))]
+    rows = {row.key: row.text for row in CGExplanation.objects.filter(key__in=keys)}
+    return [rows.get(key) or default for key, default in zip(keys, defaults, strict=True)]
+
+
+def first_journal_offered(draft: CharacterDraft) -> bool:
+    """The First Journal is offered to an Arx start; anyone else writes one in play."""
+    from world.character_creation.constants import ARX_REALM_NAME  # noqa: PLC0415
+
+    area = draft.selected_area
+    return area is not None and area.realm is not None and area.realm.name == ARX_REALM_NAME
+
+
+def _write_introductions(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Write the Introductions the player answered as white journals (#3621).
+
+    The First Journal and the Application assemble question and answer pairs (answered
+    ones only); the Whispers keep one rumor per line, and each line also becomes a
+    Level-1 player-flavor Secret about the character with gossip heat seeded in the
+    start region, so it is overhearable at a hub from day one. A skipped Introduction
+    writes nothing. Journal XP applies as for any entry when the character has an
+    account to award.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        APPLICATION_TITLE,
+        INTRODUCTION_APPLICATION,
+        INTRODUCTION_FIRST_JOURNAL,
+        INTRODUCTION_WHISPERS,
+        WHISPERS_TITLE,
+    )
+    from world.journals.constants import JournalKind  # noqa: PLC0415
+    from world.journals.services import create_journal_entry  # noqa: PLC0415
+
+    intros = draft.draft_data.get("introductions") or {}
+    if not intros:
+        return
+    award_xp = character.db_account is not None
+
+    def answered(kind: str) -> str:
+        answers = intros.get(kind) or []
+        pairs = [
+            f"{question}\n{answer.strip()}"
+            for question, answer in zip(_introduction_questions(kind), answers, strict=False)
+            if isinstance(answer, str) and answer.strip()
+        ]
+        return "\n\n".join(pairs)
+
+    if first_journal_offered(draft):
+        body = answered(INTRODUCTION_FIRST_JOURNAL)
+        if body:
+            first_name = draft.draft_data.get("first_name") or persona.name
+            create_journal_entry(
+                author=sheet,
+                title=f"{first_name}'s First Journal",
+                body=body,
+                is_public=True,
+                award_weekly_xp=award_xp,
+                kind=JournalKind.FIRST_JOURNAL,
+            )
+    body = answered(INTRODUCTION_APPLICATION)
+    if body:
+        create_journal_entry(
+            author=sheet,
+            title=APPLICATION_TITLE,
+            body=body,
+            is_public=True,
+            award_weekly_xp=award_xp,
+            kind=JournalKind.APPLICATION,
+        )
+    whispers = intros.get(INTRODUCTION_WHISPERS)
+    lines = (
+        [ln.strip() for ln in whispers.splitlines() if ln.strip()]
+        if isinstance(whispers, str)
+        else []
+    )
+    if not lines:
+        return
+    create_journal_entry(
+        author=sheet,
+        title=WHISPERS_TITLE,
+        body="\n".join(lines),
+        is_public=True,
+        award_weekly_xp=award_xp,
+        kind=JournalKind.WHISPERS,
+    )
+    _seed_whispers(sheet, persona, character, lines)
+
+
+def _seed_whispers(
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+    lines: list[str],
+) -> None:
+    """Each Whispers line: a Level-1 player-flavor Secret with heat in the start region."""
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.character_creation.constants import WHISPERS_SEED_HEAT  # noqa: PLC0415
+    from world.justice.services import area_for_room  # noqa: PLC0415
+    from world.secrets.constants import SecretLevel, SecretProvenance  # noqa: PLC0415
+    from world.secrets.models import SecretGossip  # noqa: PLC0415
+    from world.secrets.services import author_secret  # noqa: PLC0415
+
+    # Walk parent links (self first, cycle-safe) rather than the AreaClosure matview, which
+    # the SQLite tier's test databases do not carry (the justice heat chain does the same).
+    region = None
+    node = area_for_room(character.location) if character.location is not None else None
+    seen: set[int] = set()
+    while node is not None and node.pk not in seen:
+        if node.level == AreaLevel.REGION:
+            region = node
+            break
+        seen.add(node.pk)
+        node = node.parent
+    for line in lines:
+        secret = author_secret(
+            subject_sheet=sheet,
+            provenance=SecretProvenance.PLAYER_FLAVOR,
+            level=SecretLevel.UNCOMMON_KNOWLEDGE,
+            content=line,
+            subject_aware=True,
+            author_persona=persona,
+        )
+        if region is not None:
+            SecretGossip.objects.create(secret=secret, region=region, heat=WHISPERS_SEED_HEAT)
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -914,8 +1258,11 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     )
     if answers_present:
         profile.background = _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
-    if draft_data.get("personality"):
-        profile.personality = draft_data["personality"]
+    # The Actor's Sheet answers (#3621), like concept and quote: set directly at CG; the
+    # versioned write path takes over on the first post-CG edit.
+    for key, _copy_key in ACTOR_SHEET_QUESTIONS:
+        if draft_data.get(key):
+            setattr(profile, key, draft_data[key])
     if draft_data.get("concept"):
         profile.concept = draft_data["concept"]
     if draft_data.get("quote"):
@@ -941,7 +1288,7 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     from a CharacterDraft and save it.
 
     Covers: gender/pronouns, age, species, family, tarot, heritage, origin realm,
-    descriptive text (description/background/personality/concept/quote), and
+    descriptive text (description/background/the Actor's Sheet answers/concept/quote), and
     physical characteristics (height/build/weight).
     """
     _set_demographics(sheet, draft)
@@ -971,7 +1318,6 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     _create_skill_values(character, draft)
     _build_and_create_goals(character, draft)
     _create_distinctions(character, draft)
-    _grant_connection_distinctions(character, draft)
     _create_worship_declaration(character, draft)
     _create_path_history(character, draft)
     _stamp_default_class_level(character)
@@ -1221,7 +1567,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
 
     Serializer validated the domain PKs; this builds instances and bulk creates.
     """
-    from world.goals.constants import GoalStatus  # noqa: PLC0415
+    from world.goals.constants import GoalHorizon, GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
@@ -1233,18 +1579,34 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
     domains_by_id = {d.id: d for d in ModifierTarget.objects.filter(id__in=domain_ids)}
 
-    # Build and create instances
-    goals_to_create = [
-        CharacterGoal(
-            character=character.sheet_data,
-            domain=domains_by_id[g["domain_id"]],
-            points=g["points"],
-            notes=g.get("notes", ""),
-            status=GoalStatus.ACTIVE,
+    # Build and create instances, numbered within each horizon in the order the player
+    # listed them (#3621). A goal with no points but words is a note to yourself and is
+    # kept; an empty row is dropped.
+    goals_to_create = []
+    next_ordinal: dict[str, int] = {}
+    for g in goals_data:
+        if g.get("domain_id") not in domains_by_id:
+            continue
+        points = g.get("points", 0)
+        notes = (g.get("notes") or "").strip()
+        if points <= 0 and not notes:
+            continue
+        horizon = g.get("horizon") or GoalHorizon.SHORT_TERM
+        if horizon not in GoalHorizon.values:
+            horizon = GoalHorizon.SHORT_TERM
+        ordinal = next_ordinal.get(horizon, 0) + 1
+        next_ordinal[horizon] = ordinal
+        goals_to_create.append(
+            CharacterGoal(
+                character=character.sheet_data,
+                domain=domains_by_id[g["domain_id"]],
+                horizon=horizon,
+                ordinal=ordinal,
+                points=points,
+                notes=notes,
+                status=GoalStatus.ACTIVE,
+            )
         )
-        for g in goals_data
-        if g.get("domain_id") in domains_by_id and g.get("points", 0) > 0
-    ]
 
     if not goals_to_create:
         return []
@@ -1252,17 +1614,73 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
+def _connection_asset_names(
+    draft: CharacterDraft, entries: Iterable[DraftDistinctionEntry]
+) -> dict[int, str]:
+    """Distinction id -> the PERSON answer's figure name, for bundled connection grants.
+
+    A PERSON question anchored (``same_anchor_as``) to a GROUP question names the
+    granted asset, when the group answer's picked ``OriginTemplateSlotChoice`` bundles
+    a Distinction via its ``DistinctionOffer`` (#3660, #3675). Called by
+    ``_create_distinctions`` before the bulk write.
+    """
+    from world.character_creation.constants import OfferArrival  # noqa: PLC0415
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.character_creation.questionnaire import DraftAnswers  # noqa: PLC0415
+
+    bundled_offer_ids = {
+        offer_id
+        for entry in entries
+        for offer_id, arrival in zip(
+            entry.get("offer_ids", []), entry.get("arrivals", []), strict=True
+        )
+        if arrival == OfferArrival.BUNDLED and isinstance(offer_id, int)
+    }
+    if not bundled_offer_ids or draft.selected_origin_template_id is None:
+        return {}
+
+    offers = DistinctionOffer.objects.filter(
+        pk__in=bundled_offer_ids, origin_choice__isnull=False
+    ).select_related("origin_choice")
+    if not offers:
+        return {}
+
+    answers = DraftAnswers.from_draft(draft)
+    visible = draft.visible_origin_slot_ids()
+    person_by_group_slot: dict[int, str] = {}
+    for slot in draft.selected_origin_template.slots.filter(
+        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
+    ):
+        name = answers.figures.get(slot.id)
+        if name and slot.id in visible:
+            person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
+
+    asset_names: dict[int, str] = {}
+    for offer in offers:
+        slot_id = offer.origin_choice.slot_id
+        if slot_id in person_by_group_slot:
+            asset_names[offer.distinction_id] = person_by_group_slot[slot_id]
+    return asset_names
+
+
 def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     """
     Create CharacterDistinction records and their modifiers from draft data.
 
     Uses bulk operations to avoid per-distinction queries. The chain is:
-    1. Bulk-create CharacterDistinction records
+    1. Bulk-create CharacterDistinction records (source description is
+       ``"; ".join(entry["sources"])``, every source that granted this pick, #3675)
     2. Bulk-create ModifierSource + CharacterModifier records for all non-resonance-category
-       effects, then reconcile each distinction's resonance grants (standing/currency axis —
+       effects, then reconcile each distinction's resonance grants (standing/currency axis,
        ``reconcile_distinction_resonance_grants``, the ``DistinctionResonanceGrant`` sidecar;
        see ``_create_distinction_modifiers_bulk``, #1834)
     3. Mint a Secret for any ``secret_by_default`` distinction
+
+    Bundled connection grants (#3660) arrive in this same ``draft_data["distinctions"]``
+    list (``reconcile_offer_picks`` put them there at cost 0), so this one path covers
+    both a player's paid pick and a bundled/carried offer. ``asset_names`` (#3675)
+    resolves the connection-asset naming for any bundled offer whose group question has
+    a PERSON question anchored to it.
     """
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -1275,15 +1693,9 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     # has unique_together on character+distinction, so duplicates would fail)
     entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
 
-    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
-
     # Fetch all distinctions with effects prefetched in one query
-    distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
-        Prefetch(
-            "effects",
-            queryset=DistinctionEffect.objects.select_related("target__category"),
-            to_attr="cached_effects",
-        ),
+    distinctions = _distinctions_with_effects(
+        Distinction.objects.filter(id__in=entries_by_id.keys())
     )
     distinctions_by_id = {d.id: d for d in distinctions}
 
@@ -1305,14 +1717,18 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
                 rank=entry.get("rank", 1),
                 notes=entry.get("notes", ""),
                 origin=DistinctionOrigin.CHARACTER_CREATION,
+                source_description="; ".join(entry.get("sources", [])),
             )
         )
 
     if not char_distinctions:
         return
 
+    asset_names = _connection_asset_names(draft, entries_by_id.values())
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
-    _create_distinction_modifiers_bulk(character.sheet_data, created_distinctions)
+    _create_distinction_modifiers_bulk(
+        character.sheet_data, created_distinctions, asset_names=asset_names
+    )
 
     # #1334 — a ``secret_by_default`` kind (criminal / scandalous) relocates into a Secret on
     # grant, so it never shows on the public distinctions list. One-time finalize over a handful
@@ -1324,71 +1740,27 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
             mint_distinction_secret(cd)
 
 
-def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Grant the Distinctions the Upbringing answers bundle (#3660).
+def _distinctions_with_effects(distinctions: QuerySet) -> QuerySet:
+    """Attach each Distinction's effects as ``cached_effects`` for the bulk grant path.
 
-    Same write path as picked Distinctions: bulk-create, then
-    ``_create_distinction_modifiers_bulk`` (modifiers, resonance grants, asset grants),
-    then Secret relocation for ``secret_by_default``. A person named on a PERSON
-    question in the granting group becomes the granted asset's name.
+    The one place the CG grant paths (hand-picked, offer-bundled, enemy-marked) load
+    effects; ``_create_distinction_modifiers_bulk`` reads ``cached_effects`` off each row.
+    Distinction rows are content read once at finalize, never held across requests here.
+
+    Bundled/carried Upbringing offers no longer have a separate grant path (#3675):
+    ``_apply_enemy_distinction_entry`` and ``offers.reconcile_offer_picks`` both fold
+    their picks into the draft's ``distinctions`` list, so ``_create_distinctions`` is
+    the one write path and this is the one effects loader for all of them.
     """
-    from world.character_creation.questionnaire import DraftAnswers  # noqa: PLC0415
-    from world.distinctions.models import (  # noqa: PLC0415
-        CharacterDistinction,
-        Distinction,
-        DistinctionEffect,
-    )
-    from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
-    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
 
-    bundled = draft.bundled_distinctions()
-    if not bundled:
-        return
-    sheet = character.sheet_data
-    existing = set(
-        CharacterDistinction.objects.filter(character=sheet).values_list(
-            "distinction_id", flat=True
-        )
-    )
-    wanted = {b["distinction_id"]: b for b in bundled if b["distinction_id"] not in existing}
-    if not wanted:
-        return
-    distinctions = Distinction.objects.filter(id__in=wanted).prefetch_related(
+    return distinctions.prefetch_related(
         Prefetch(
             "effects",
             queryset=DistinctionEffect.objects.select_related("target__category"),
             to_attr="cached_effects",
         ),
     )
-    answers = DraftAnswers.from_draft(draft)
-    visible = draft.visible_origin_slot_ids()
-    person_by_group_slot: dict[int, str] = {}
-    for slot in draft.selected_origin_template.slots.filter(
-        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
-    ):
-        name = answers.figures.get(slot.id)
-        if name and slot.id in visible:
-            person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
-    rows = []
-    asset_names: dict[int, str] = {}
-    for dist in distinctions:
-        b = wanted[dist.id]
-        rows.append(
-            CharacterDistinction(
-                character=sheet,
-                distinction=dist,
-                rank=1,
-                origin=DistinctionOrigin.CHARACTER_CREATION,
-                source_description=f"{b['choice_name']}, {b['organization_name']}".rstrip(", "),
-            )
-        )
-        if b["slot_id"] in person_by_group_slot:
-            asset_names[dist.id] = person_by_group_slot[b["slot_id"]]
-    created = CharacterDistinction.objects.bulk_create(rows)
-    _create_distinction_modifiers_bulk(sheet, created, asset_names=asset_names)
-    for cd in created:
-        if cd.distinction.secret_by_default:
-            mint_distinction_secret(cd)
 
 
 def _create_distinction_modifiers_bulk(
@@ -1409,11 +1781,11 @@ def _create_distinction_modifiers_bulk(
     regardless of whether it has any effects at all — a distinction can carry a
     ``DistinctionResonanceGrant`` with no ``DistinctionEffect`` rows.
 
-    ``asset_names`` (#3660) maps a distinction id to the name a connection's
-    named figure should give the distinction's granted ``NPCAsset``, overriding
-    the staff-authored ``asset_display_name``: used by
-    ``_grant_connection_distinctions`` for bundled Distinctions; ``None`` (the
-    picked-Distinction path) always uses the authored name.
+    ``asset_names`` (#3660, computed by ``_connection_asset_names`` since #3675) maps a
+    distinction id to the name a connection's named figure should give the
+    distinction's granted ``NPCAsset``, overriding the staff-authored
+    ``asset_display_name``; an id with no entry (or ``None`` itself) always uses the
+    authored name.
     """
     from world.assets.services import (  # noqa: PLC0415
         reconcile_distinction_asset_grants,
@@ -2096,13 +2468,27 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     set_glimpse_prose(aura, draft.draft_data.get("glimpse_story", ""))
 
-    linked_ids = draft.draft_data.get("glimpse_linked_distinction_ids", [])
-    if linked_ids:
+    picked_offer_ids = {
+        offer_id
+        for entry in draft.draft_data.get("distinctions", [])
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
+    if picked_offer_ids:
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
         from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
-        linked = CharacterDistinction.objects.filter(character=sheet, distinction_id__in=linked_ids)
-        for character_distinction in linked:
-            link_distinction_to_glimpse(character_distinction, aura)
+        glimpse_distinction_ids = set(
+            DistinctionOffer.objects.filter(
+                pk__in=picked_offer_ids, glimpse_tag__isnull=False
+            ).values_list("distinction_id", flat=True)
+        )
+        if glimpse_distinction_ids:
+            linked = CharacterDistinction.objects.filter(
+                character=sheet, distinction_id__in=glimpse_distinction_ids
+            )
+            for character_distinction in linked:
+                link_distinction_to_glimpse(character_distinction, aura)
 
     # 4b. Recompute aura now that CharacterAura exists. _apply_character_mechanics
     # (distinctions, via reconcile_distinction_resonance_grants) runs earlier in
@@ -2157,13 +2543,14 @@ def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: Characte
     mirrors ``seed_beginning_traditions``'s Unbound-tradition skip (#2444);
     cluster ordering guarantees this can't happen via the Big Button.
 
+    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
+    ``state``, #3675), never the tradition's name.
+
     Idempotent via ``get_or_create`` keyed on (debtor, creditor, origin) so
     re-finalize test paths don't create a duplicate obligation row.
     """
-    from world.character_creation.constants import (  # noqa: PLC0415
-        SHROUDWATCH_ACADEMY_NAME,
-        UNBOUND_TRADITION_NAME,
-    )
+    from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
+    from world.character_creation.offers import tradition_is_self_taught  # noqa: PLC0415
     from world.societies.constants import ObligationOrigin, ObligationState  # noqa: PLC0415
     from world.societies.models import Organization, OrganizationObligation  # noqa: PLC0415
 
@@ -2176,7 +2563,7 @@ def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: Characte
         return
 
     tradition = draft.selected_tradition
-    is_unbound = tradition is not None and tradition.name == UNBOUND_TRADITION_NAME
+    is_unbound = tradition is not None and tradition_is_self_taught(tradition)
     if is_unbound:
         defaults = {"state": ObligationState.OWED}
     else:
@@ -2713,6 +3100,8 @@ def finalize_gm_character(
         except StaffMintError as exc:
             raise ValidationError(exc.user_message) from exc
 
+    _prepare_draft_entries(draft)
+
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
     _materialize_named_family(draft)
@@ -2737,6 +3126,7 @@ def finalize_gm_character(
 
     # Connection reputation seeding (#3660): mirrors the player finalize flow.
     _seed_connection_reputation(draft, primary_persona)
+    _write_actor_sheet(draft, sheet, primary_persona, character)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).

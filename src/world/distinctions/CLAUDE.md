@@ -43,8 +43,10 @@ are the only other writers — no in-play caller re-implements the create/rank-u
 (`EffectType.GRANT_DISTINCTION` on `checks.ConsequenceEffect`), `ENDORSEMENT_THRESHOLD`
 (`DistinctionResonanceRankThreshold` in `world.magic`, fired from sustained-endorsement resonance
 gain), and — as of #2441 Task 8 — `GAMEPLAY` (`world.magic.services.tradition_membership.
-leave_tradition` re-applying the traditionless-default drawback, identified by
-the `traditionless-default` `DistinctionTag` rather than a hardcoded slug, #2752;
+leave_tradition` re-applying the self-taught drawback, identified by the SELF_TAUGHT
+`character_creation.TraditionStateLine.carries` distinction, read through
+`world.character_creation.offers.self_taught_drawback()` (#3675; was the
+`traditionless-default` `DistinctionTag` #2752, before that a hardcoded slug);
 previously vestigial/unassigned). Full
 per-source detail: `docs/systems/distinctions.md` "Post-CG acquisition" section.
 

@@ -18,6 +18,7 @@ from world.journals.constants import (
     PRAISE_RECEIVED_XP,
     RETORT_GIVEN_XP,
     RETORT_RECEIVED_XP,
+    JournalKind,
     PosthumousOverride,
     ResponseType,
 )
@@ -127,6 +128,7 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
     tags: list[str] | None = None,
     posthumous_override: str = PosthumousOverride.INHERIT,
     award_weekly_xp: bool = True,
+    kind: str = JournalKind.ENTRY,
 ) -> JournalEntry:
     """
     Create a journal entry, optionally awarding weekly XP.
@@ -153,6 +155,7 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
             body=body,
             is_public=is_public,
             posthumous_override=posthumous_override,
+            kind=kind,
         )
 
         if tags:

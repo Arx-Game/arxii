@@ -424,8 +424,11 @@ export type SetGlimpseProseRequest = components['schemas']['GlimpseSetProseReque
  *
  * NOTE the semantic difference from CG: this id is a **CharacterDistinction**
  * row pk (the character's own distinction instance), not a catalog
- * `Distinction` id — CG's `glimpse_linked_distinction_ids` (draft_data) links
- * by catalog Distinction id instead. Never mix the two id spaces.
+ * `Distinction` id. CG links a distinction to the Glimpse through the offer
+ * that produced the pick instead (#3675: the pick's `offer_ids` names the
+ * Glimpse tag offer it came from, not a separate linked-ids list) - only this
+ * post-CG sheet dialog links *existing* distinctions by id. Never mix the two
+ * id spaces.
  */
 export type GlimpseDistinctionLinkRequest = components['schemas']['GlimpseDistinctionLinkRequest'];
 

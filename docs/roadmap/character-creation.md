@@ -1,5 +1,47 @@
 # Character Creation & Identity
 
+## Built (2026-09-07, #3675: retire the Distinctions stage)
+
+The standalone Distinctions stage is gone; each CG chapter now offers the
+distinctions that belong to it, priced and explained at the moment of choice. What
+was built: (1) `character_creation.DistinctionOffer` (distinction, chapter, how it
+arrives -- choice/bundled/carried, an opener FK scoped to its chapter) replaces the
+three separate couplings that used to link a chapter to a distinction
+(`BeginningTradition.required_distinction`, `GlimpseTagDistinctionSuggestion`,
+`OriginTemplateSlotChoice.grants_distinction`), read by the one module
+`world.character_creation.offers`; (2) a tradition's slate line
+(`BeginningTradition.state`: self-taught/teachers-gone/living-masters) prints one of
+three staff-authored standard lines (`TraditionStateLine`, per-tradition
+`own_wording`, never its own price) and, for a living tradition, offers the standard
+schooling set (`SchoolingLine`, rank 0-2); (3) `OriginTemplate.closed_distinctions`/
+`closed_reason` closes distinctions by field, never by name; (4) the Gift tradition
+step, the Glimpse (`GlimpseAxes`, one offer sub-block per chosen tag), Lineage
+answers, Appearance and the Actor's Sheet each mount `ChapterOffers` against
+`GET .../drafts/{id}/offers/?chapter=`; (5) four staff admin builders (Distinction
+Builder, the tradition slate page, the Upbringing Builder's per-answer offers +
+route closes, a `GlimpseTag` change-form inline) author this surface, reachable
+from a Builders panel on the Authoring Workbench dashboard, one click from the row
+each edits. Migrations 0109-0111 expand, backfill, then drop the three retired
+couplings and the unused `DistinctionPrerequisite` model (0 rows in production,
+never wired to a live check). See ADR-0280,
+[distinctions.md](../systems/distinctions.md)'s "CG Integration" and
+[character_creation.md](../systems/character_creation.md)'s "Distinction offers"
+section.
+
+## Built (2026-09-07, #3621: the Actor's Sheet)
+
+Final Touches replaced the free-text personality field with the Actor's Sheet: three
+questions ("What would you never do?", "What would you protect at all costs?", "What are
+you deathly afraid of?") on the profile as versioned prose; goals numbered within short and
+long term, any number per domain; one enemy, a person priced by power or a group by reach at
+one of four degrees, awarding CG points into the shared purse and collected at finalize
+through the group's opinion, a Distinction at the worst two degrees and pinned pursuit heat
+(ADR-0279); and The Introductions, three white journals in the character's voice (First
+Journal on an Arx start, Application, Whispers), the Whispers' lines seeded as Level-1
+secrets with gossip heat. The sheet shows the block above Origins, the enemy as its public
+line. Later: institution reading rooms for the First Journal and the Application, and
+writing a First Journal at the Archive in play.
+
 ## Built (2026-09-06, #3663: Misbegotten CG age ceiling grows with IC time)
 
 `Heritage.first_appeared_ic` (Misbegotten: 980 AS) anchors a computed CG age ceiling:
@@ -140,15 +182,18 @@ empty catalog, so this stage is exercisable before any lore-repo content is auth
 - **Models** (`world/magic/models/glimpse.py`): `GlimpseTag` (content model, lore-repo
   authored, no factory-seeded catalog) + `CharacterGlimpseTag` (instance data, never
   exported) + `GlimpseTagDistinctionSuggestion` (content model, grants nothing — a
-  suggestion surface only). `CharacterAura.glimpse_state` (`GlimpseState`:
+  suggestion surface only; retired #3675, replaced by `character_creation
+  .DistinctionOffer` rows opened by the tag). `CharacterAura.glimpse_state` (`GlimpseState`:
   NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
   `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
   SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
-- **Finalize wiring:** `finalize_magic_data` consumes three new `draft_data` keys
-  (`glimpse_tag_ids`, `glimpse_story`, `glimpse_linked_distinction_ids`) through the
-  glimpse services, so `glimpse_state` is always consistent post-CG.
+- **Finalize wiring:** `finalize_magic_data` consumes two `draft_data` keys
+  (`glimpse_tag_ids`, `glimpse_story`) through the glimpse services, so `glimpse_state`
+  is always consistent post-CG; distinction-to-Glimpse provenance links through the
+  offers system instead of a separate `glimpse_linked_distinction_ids` key (#3675).
 - **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
+  (`CGGlimpseTagViewSet`, embeds `offers` per tag as of #3675, was
+  `suggested_distinctions`) + four
   `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
   `link-glimpse-distinction` / `unlink-glimpse-distinction`) that also power the
   post-CG editor. Sheet payload: `AuraData.glimpse_story`/`.glimpse_state`/
@@ -195,9 +240,11 @@ literally spent a Hare on their behalf (a lore-recorded deed-coin transaction, n
 item at CG time). `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
 `Organization` by name (`world.seeds.character_creation.ensure_shroudwatch_academy`,
 `tradition=None`) and is `get_or_create`-idempotent. Orphaned Traditions (no living trainer)
-carry an "Orphaned Tradition" drawback `Distinction` via `BeginningTradition
-.required_distinction` — the same authored-data mechanism as the Unbound drawback — so a
-recovery quest restoring a tradition's teachers is a staff row edit, not a code change. Paying
+read `state=TraditionState.TEACHERS_GONE` on their `BeginningTradition` row (#3675, was a
+`required_distinction` FK pre-#3675); the TEACHERS_GONE `TraditionStateLine` carries the
+"Orphaned Tradition" drawback `Distinction`, the same mechanism the Unbound drawback uses
+(SELF_TAUGHT), so a recovery quest restoring a tradition's teachers is a staff row edit
+(`state=LIVING_MASTERS`), not a code change. Paying
 down the obligation, in-play tradition switching, and the in-play technique-training loop that
 consumes it are built in `world/magic` and `world/npc_services` — see
 `docs/roadmap/magic.md`'s "Tradition sponsorship, Academy training, and the in-play loop"
@@ -295,7 +342,7 @@ The 11-stage character creation flow that takes a player from concept to approve
 - Points budget system configurable via admin
 
 ## What Exists
-- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning gate, `required_distinction`)
+- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning slate row, `state`/`own_wording`, #3675), `TraditionStateLine`, `SchoolingLine`, `DistinctionOffer`
 - **APIs:** Complete viewsets and serializers for all stages, including the Gift-stage catalog reads (`gifts`, `technique-options`, #2426)
 - **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, GiftStage, AttributesStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. GiftStage runs the Tradition → Gift → Technique → Resonance → Anima Check funnel; CG Points widget, Species cards, Tarot selection
 - CG perspective panels (#3281): see the codex roadmap for what was built.

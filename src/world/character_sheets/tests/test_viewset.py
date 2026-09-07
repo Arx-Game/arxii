@@ -1512,7 +1512,9 @@ class TestStorySection(TestCase):
         cls.sheet = CharacterSheetFactory(
             character=cls.character,
             background="Born under a blood moon.",
-            personality="Quiet and calculating.",
+            never_do="Speak first.",
+            protect="The archive.",
+            fear="Open water.",
         )
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
@@ -1532,11 +1534,10 @@ class TestStorySection(TestCase):
         return response.data["story"]
 
     def test_story_has_expected_keys(self) -> None:
-        """Story section contains background, personality, and origin-story fields."""
+        """Story section contains background and origin-story fields."""
         story = self._get_story()
         assert set(story.keys()) == {
             "background",
-            "personality",
             "origin_story_state",
             "origin_slots",
         }
@@ -1546,10 +1547,17 @@ class TestStorySection(TestCase):
         story = self._get_story()
         assert story["background"] == "Born under a blood moon."
 
-    def test_story_personality(self) -> None:
-        """personality comes from CharacterSheet.personality."""
-        story = self._get_story()
-        assert story["personality"] == "Quiet and calculating."
+    def test_actor_sheet_answers(self) -> None:
+        """The three answers come from the presented profile (#3621)."""
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        block = response.data["actor_sheet"]
+        assert block["never_do"] == "Speak first."
+        assert block["protect"] == "The archive."
+        assert block["fear"] == "Open water."
+        assert block["enemy"] is None
+        assert block["introductions"] == []
 
 
 class TestStoryEmpty(TestCase):
@@ -1562,7 +1570,7 @@ class TestStoryEmpty(TestCase):
         CharacterSheetFactory(
             character=cls.character,
             background="",
-            personality="",
+            never_do="",
         )
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
@@ -1582,7 +1590,7 @@ class TestStoryEmpty(TestCase):
         assert response.status_code == 200
         story = response.data["story"]
         assert story["background"] == ""
-        assert story["personality"] == ""
+        assert response.data["actor_sheet"]["never_do"] == ""
 
 
 class TestGoalsSection(TestCase):
@@ -1629,10 +1637,10 @@ class TestGoalsSection(TestCase):
         assert len(goals) == 2
 
     def test_goal_entry_keys(self) -> None:
-        """Each goal entry has domain, points, notes."""
+        """Each goal entry has domain, horizon, ordinal, points, notes (#3621)."""
         goals = self._get_goals()
         for entry in goals:
-            assert set(entry.keys()) == {"domain", "points", "notes"}
+            assert set(entry.keys()) == {"domain", "horizon", "ordinal", "points", "notes"}
 
     def test_goal_entry_values(self) -> None:
         """Goal entries contain correct values."""
@@ -1968,7 +1976,7 @@ class TestCharacterSheetQueryCount(TestCase):
             true_height_inches=68,
             additional_desc="Fully described.",
             background="Full background.",
-            personality="Full personality.",
+            never_do="Full never.",
         )
 
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
@@ -2151,9 +2159,13 @@ class TestCharacterSheetQueryCount(TestCase):
                 nested inside the same personas Prefetch already fetched for #21, not a
                 second top-level lookup): one fixed query for every persona's active,
                 vacancy-bearing membership, not one per persona.
+        41-42. Actor's Sheet prefetches, #3621 (enemy rows; the Introductions, journal
+               entries by kind)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(40):
+        # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
+        # Introductions (journal entries by kind).
+        with self.assertNumQueries(42):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2210,7 +2222,7 @@ class TestPrefetchCompleteness(TestCase):
             true_height_inches=70,
             additional_desc="Described.",
             background="PF background.",
-            personality="PF personality.",
+            never_do="PF never.",
         )
 
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)

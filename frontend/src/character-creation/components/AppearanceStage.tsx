@@ -7,11 +7,28 @@
  * pressed-row choices. The record rail lists the choices made so far; every
  * explanatory sentence the old layout put under a section heading now lives
  * in the margin instead (Decision 8).
+ *
+ * Right after the height block, `ChapterOffers` mounts this chapter's own
+ * offered distinctions (`chapter="appearance"`, #3675 Task 15) - the
+ * physical/social ones that show, in place of the retired Distinctions
+ * stage. It carries its own heading (folio grammar; no separate `section-h`
+ * above it, matching the demo's Screen 7). A height band's `title` reads its
+ * own `cg_hint` column when staff authored one (fix round 1: an authored
+ * column on the row itself, the #3676 one-to-one designation, not a name
+ * match against a literal "Towering"); otherwise the usual inches range.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf, ChoiceRow, Field, Marginalia, Note, RecordRail } from '../folio';
+import {
+  ChapterLeaf,
+  ChoiceRow,
+  Field,
+  Marginalia,
+  Note,
+  RecordRail,
+  stageEyebrow,
+} from '../folio';
 import {
   useBuilds,
   useCGExplanations,
@@ -20,6 +37,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { formatHeight } from '../utils';
+import { ChapterOffers } from './offers/ChapterOffers';
 import { MarkingsEditor } from './MarkingsEditor';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
@@ -245,10 +263,17 @@ export function AppearanceStage({
     return formTraits?.[traitName] ?? null;
   };
 
-  const heightBandTitle = (band: HeightBand): string =>
-    !band.is_cg_selectable && isStaff
+  // A band's title is its own authored `cg_hint` (#3675 Task 15 fix round
+  // 1) when staff wrote one - what opens a band players cannot normally
+  // take (e.g. Towering needs Giant's Blood). This is a column on the row
+  // itself, not a name match against a literal band name (the #3676
+  // one-to-one designation the never-match-strings ruling asks for).
+  // Absent a hint, the option falls back to the usual inches range.
+  const heightBandTitle = (band: HeightBand): string | undefined =>
+    band.cg_hint ||
+    (!band.is_cg_selectable && isStaff
       ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
-      : `${band.min_inches} to ${band.max_inches} inches`;
+      : `${band.min_inches} to ${band.max_inches} inches`);
 
   const buildTitle = (build: Build): string | undefined =>
     !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;
@@ -269,7 +294,7 @@ export function AppearanceStage({
           },
           { label: 'Build', value: draft.build?.display_name },
         ]}
-        ledger="Stage 8 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-appearance">
         {/* PLACEHOLDER: Apostate rewrite */}
@@ -413,6 +438,19 @@ export function AppearanceStage({
           />
         </Field>
       )}
+
+      <ChapterOffers
+        draft={draft}
+        chapter="appearance"
+        heading={copy?.appearance_offers_heading ?? 'What people notice first'}
+        headingTag={copy?.appearance_offers_chip ?? 'optional'}
+        closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+        syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+        wordBundled={copy?.offers_word_bundled}
+        wordPerRank={copy?.offers_word_per_rank}
+        wordSpent={copy?.offers_word_spent}
+        wordRefunds={copy?.offers_word_refunds}
+      />
 
       <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
       {buildsLoading ? (

@@ -17,7 +17,13 @@ observationally equivalent.
 
 But Django's `prefetch_related(Prefetch(..., to_attr="cached_X"))` machinery only recognizes its own class via `isinstance`. With `functools.cached_property`, Django's `is_to_attr_fetched()` decides "this isn't my cached_property, assume the attr is already populated" and **silently skips the batched prefetch**. Subsequent attribute access fires the cached_property's fallback query — once per row. Classic N+1, no warning, no exception, correct data, slow performance.
 
-Because the project's documented prefetch pattern (CLAUDE.md: "to_attr should point to a cached_property on the model for cache-safe access") relies on Django recognizing the descriptor, we must use Django's version everywhere. Even on classes that aren't currently a `Prefetch(to_attr=...)` target — making the choice once project-wide eliminates the footgun.
+That interaction is a footgun wherever a prefetch and a cached_property meet, so the choice is made once, project-wide: Django's version everywhere.
+
+**Note (#3673): the `to_attr` prefetch pattern this section describes is no longer the recommended shape.** ADR-0263 records why — Django decides whether to run a `to_attr` prefetch by asking whether the attribute is already there, and under the identity map (ADR-0008) the same instance answers the next request, so the second request re-serves the first one's rows. A row deleted in between comes back with a null id, because `Collector.delete()` nulls the pk on the shared instance. A bare-string `prefetch_related("x")` goes stale the same way through `_prefetched_objects_cache`.
+
+Rows a parent owns belong behind a `CachedRowsHandler` (`evennia_extensions/handlers.py`): one place that loads them, one that drops rows whose pk has gone falsey, cleared by writers through `related_cache_fields`, batched for a list endpoint with `prime()`. Consumers — serializers, telnet commands, flows, service functions — read the handler. A new `to_attr` fails the repo-wide `pattern:PREFETCH_TO_ATTR` ratchet; the `prefetch-to-attr` hook covers the surfaces already converted and says what to build instead.
+
+The cached_property rule above still stands, and matters more under handlers, not less: a handler is held on its parent as a Django `cached_property` so `clear_cached_properties()` can drop it.
 
 ## Suppression
 

@@ -1,11 +1,9 @@
-{% load i18n %}
+{% load i18n upbringing_builder_tags %}
 <div class="answers-wrapper" id="answers-{{ slot.pk }}">
   <h3>Answers: where you stand with them</h3>
-  <div class="help">Each answer is a line the player can pick, with a cost. An answer
-    may grant a Distinction (the character gets it, no extra cost) and set the group's
-    starting opinion of the character (a number from -1000 to 1000; players see it as a
-    tier). The Distinction column is a search box: type to find one, there are
-    hundreds.</div>
+  <div class="help">Each answer is a line the player can pick, with a cost, and sets
+    the group's starting opinion of the character (a number from -1000 to 1000;
+    players see it as a tier).</div>
   {{ formset.management_form }}
   {% if formset.non_form_errors %}
   <p class="errornote">{{ formset.non_form_errors }}</p>
@@ -16,8 +14,9 @@
         <th>Answer</th>
         <th>Line under it</th>
         <th>Cost</th>
+        <th>Offers</th>
+        <th>Closes</th>
         <th>Per point of influence</th>
-        <th>Grants Distinction</th>
         <th>Group's opinion</th>
         <th>Trust</th>
         <th>Active</th>
@@ -34,8 +33,57 @@
         </td>
         <td>{{ answer_form.description }}</td>
         <td>{{ answer_form.cg_point_cost }}</td>
+        <td class="ub-offers-cell">
+          {% if answer_form.instance.pk %}
+          {% with offer_fs=offers|dict_get:answer_form.instance.pk %}
+          {{ offer_fs.management_form }}
+          {% if offer_fs.non_form_errors %}
+          <p class="errornote">{{ offer_fs.non_form_errors }}</p>
+          {% endif %}
+          <table class="ub-offer-table">
+            <thead><tr><th>Distinction</th><th>Arrives as</th><th>Order</th><th></th></tr></thead>
+            <tbody id="offers-body-{{ answer_form.instance.pk }}">
+              {% for offer_form in offer_fs.forms %}
+              <tr>
+                {% for hidden in offer_form.hidden_fields %}{{ hidden }}{% endfor %}
+                <td>
+                  {{ offer_form.distinction }}
+                  {% with url=offer_form.instance.distinction|builder_url %}
+                  {% if url %}<a class="ub-offer-link" href="{{ url }}">open</a>{% endif %}
+                  {% endwith %}
+                </td>
+                <td>{{ offer_form.arrives_as }}</td>
+                <td>{{ offer_form.sort_order }}</td>
+                <td>{% if offer_form.instance.pk %}{{ offer_form.DELETE }}{% endif %}</td>
+              </tr>
+              {% if offer_form.errors %}
+              <tr><td colspan="4">{{ offer_form.errors }}</td></tr>
+              {% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="empty-offer-template-{{ answer_form.instance.pk }}">
+            <tr>
+              {% for hidden in offer_fs.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+              <td>{{ offer_fs.empty_form.distinction }}</td>
+              <td>{{ offer_fs.empty_form.arrives_as }}</td>
+              <td>{{ offer_fs.empty_form.sort_order }}</td>
+              <td></td>
+            </tr>
+          </template>
+          <button type="button" class="button add-offer-btn"
+                  data-prefix="{{ offer_fs.prefix }}"
+                  data-target="offers-body-{{ answer_form.instance.pk }}"
+                  data-template="empty-offer-template-{{ answer_form.instance.pk }}">
+            + Offer
+          </button>
+          {% endwith %}
+          {% else %}
+          <p class="help">{{ new_answer_offers_help }}</p>
+          {% endif %}
+        </td>
+        <td class="ub-closes-pointer"><a href="#closes-module">route's list</a></td>
         <td>{{ answer_form.cost_per_influence }}</td>
-        <td>{{ answer_form.grants_distinction }}</td>
         <td>{{ answer_form.reputation_seed }}</td>
         <td>{{ answer_form.trust_required }}</td>
         <td>{{ answer_form.is_active }}</td>
@@ -43,7 +91,7 @@
         <td>{% if answer_form.instance.pk %}{{ answer_form.DELETE }}{% endif %}</td>
       </tr>
       {% if answer_form.errors %}
-      <tr><td colspan="10">{{ answer_form.errors }}</td></tr>
+      <tr><td colspan="11">{{ answer_form.errors }}</td></tr>
       {% endif %}
       {% endfor %}
     </tbody>
@@ -53,8 +101,9 @@
       <td>{{ formset.empty_form.name }}</td>
       <td>{{ formset.empty_form.description }}</td>
       <td>{{ formset.empty_form.cg_point_cost }}</td>
+      <td class="ub-offers-cell"><p class="help">{{ new_answer_offers_help }}</p></td>
+      <td class="ub-closes-pointer"><a href="#closes-module">route's list</a></td>
       <td>{{ formset.empty_form.cost_per_influence }}</td>
-      <td>{{ formset.empty_form.grants_distinction }}</td>
       <td>{{ formset.empty_form.reputation_seed }}</td>
       <td>{{ formset.empty_form.trust_required }}</td>
       <td>{{ formset.empty_form.is_active }}</td>

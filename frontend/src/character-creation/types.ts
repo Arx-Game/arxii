@@ -307,6 +307,9 @@ export interface HeightBand {
   min_inches: number;
   max_inches: number;
   is_cg_selectable: boolean;
+  /** Staff-authored copy shown on this band's option (#3675 Task 15 fix round 1),
+   * e.g. what opens a band players cannot normally take. Empty when unauthored. */
+  cg_hint: string;
 }
 
 export interface Build {
@@ -352,7 +355,6 @@ export enum Stage {
   ORIGIN = 1,
   HERITAGE = 2,
   LINEAGE = 3,
-  DISTINCTIONS = 4,
   PATH = 5,
   GIFT = 6,
   ATTRIBUTES = 7,
@@ -366,7 +368,6 @@ export const STAGE_LABELS: Record<Stage, string> = {
   [Stage.ORIGIN]: 'Origin',
   [Stage.HERITAGE]: 'Heritage',
   [Stage.LINEAGE]: 'Lineage',
-  [Stage.DISTINCTIONS]: 'Distinctions',
   [Stage.PATH]: 'Path',
   [Stage.GIFT]: 'Gift',
   [Stage.ATTRIBUTES]: 'Attributes & Skills',
@@ -437,6 +438,14 @@ export interface CharacterDraft {
    * server hands back what it resolved.
    */
   derived_anchors: Record<string, DerivedAnchor | null>;
+  /** Who the draft may name as its enemy (#3621): Lineage groups and persons, Beginning offers. */
+  enemy_offers: EnemyOffer[];
+  /** Both price scales, reach or power tier -> degree -> CG points awarded (#3621). */
+  enemy_price_tables: Record<'group' | 'person', Record<string, Record<string, number>>>;
+  /** Degree value -> the Distinction that degree grants (#3621), so the row can say so. */
+  enemy_degree_grants: Record<string, string>;
+  /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
+  introductions_offered: { first_journal: boolean };
 }
 
 export interface Stats {
@@ -480,6 +489,21 @@ export const AFFINITY_TYPES = ['celestial', 'primal', 'abyssal'] as const;
 export type AffinityType = (typeof AFFINITY_TYPES)[number];
 
 /**
+ * One standard schooling stance under a `living_masters` tradition (#3675).
+ * Embedded on `Tradition.schooling`.
+ */
+export interface SchoolingLineRow {
+  schooling_line_id: number;
+  rank: number;
+  name: string;
+  player_line: string;
+  price: number;
+  techniques: number;
+  grants_distinction_id: number | null;
+  offer_id: number | null;
+}
+
+/**
  * Magical tradition — how a character learned magic.
  * From /api/character-creation/traditions/?beginning_id=N
  */
@@ -490,7 +514,12 @@ export interface Tradition {
   is_active: boolean;
   sort_order: number;
   codex_entry_ids: number[];
-  required_distinction_id: number | null;
+  /** Whether this tradition still has living teachers (#3675). */
+  state: 'self_taught' | 'teachers_gone' | 'living_masters';
+  state_line: string;
+  own_wording: string;
+  refund: number;
+  schooling: SchoolingLineRow[];
 }
 
 // =============================================================================
@@ -752,17 +781,57 @@ export interface Power {
   resonances: Resonance[];
 }
 
+export type GoalHorizon = 'short_term' | 'long_term';
+
 export interface DraftGoal {
   domain_id: number;
   notes: string;
   points: number;
+  /** Short term or long term (#3621); numbered within the horizon in list order. */
+  horizon: GoalHorizon;
+}
+
+/** The draft's enemy pick (#3621): a person or a group, at a degree. */
+export interface DraftEnemy {
+  kind: 'person' | 'group';
+  organization_id: number | null;
+  /** The person's name, or a free-written group's name; blank for an offered group. */
+  name: string;
+  /** A person's power on the ladder; blank for a group. */
+  power_tier: string;
+  degree: string;
+  why: string;
+  public_line: string;
+}
+
+/** The Introductions' answers (#3621): three per journal, one rumor per line for the Whispers. */
+export interface DraftIntroductions {
+  first_journal: string[];
+  application: string[];
+  whispers: string;
+}
+
+/** One person or group the draft may name as its enemy (#3621, `enemy_offers`). */
+export interface EnemyOffer {
+  kind: 'person' | 'group';
+  organization_id: number | null;
+  name: string;
+  reach: string;
+  power_tier: string;
+  why: string;
+  source: 'lineage' | 'beginning';
 }
 
 export interface DraftData {
   first_name?: string;
   description?: string;
-  personality?: string;
   background?: string;
+  // The Actor's Sheet (#3621): the three answers, the enemy pick, the Introductions
+  never_do?: string;
+  protect?: string;
+  fear?: string;
+  enemy?: DraftEnemy | null;
+  introductions?: DraftIntroductions;
   // Origin story guided flow (#2478); Upbringing prompt answers (#3617)
   origin_slots?: Record<string, string>;
   // Upbringing pick-list prompt answers: slot id -> choice id or null (#3617)
@@ -778,7 +847,6 @@ export interface DraftData {
   quote?: string;
   stats?: Stats;
   path_skills_complete?: boolean;
-  traits_complete?: boolean;
   // Appearance - form traits (hair color, eye color, etc.)
   form_traits?: Record<string, number>;
   // Skills - maps skill ID to value (0, 10, 20, 30)
@@ -800,7 +868,6 @@ export interface DraftData {
   // The Glimpse guided flow (#2427)
   glimpse_story?: string;
   glimpse_tag_ids?: number[];
-  glimpse_linked_distinction_ids?: number[];
   // Magic fields - Gift resonance (anchors the latent GIFT thread at CG finalization, #1620)
   selected_gift_resonance_id?: number | null;
   magic_complete?: boolean;
@@ -924,7 +991,9 @@ export interface DraftSummary {
   id: number;
   first_name: string;
   description: string;
-  personality: string;
+  never_do: string;
+  protect: string;
+  fear: string;
   background: string;
   species: string | null;
   area: string | null;
@@ -937,12 +1006,15 @@ export interface DraftSummary {
 
 // Origin story guided flow (#2478); extended into the Upbringing model (#3617)
 
-/** The Distinction a choice bundles at no extra cost (#3660). */
-export interface GrantedDistinction {
-  id: number;
+/** A `DistinctionOffer` embedded on an Upbringing answer row (#3675). */
+export interface AnswerOffer {
+  offer_id: number;
+  distinction_id: number;
   name: string;
+  player_line: string;
+  arrives_as: 'choice' | 'bundled';
   cost_per_rank: number;
-  secret_by_default: boolean;
+  max_rank: number;
 }
 
 /** One priced answer on a pick-list Upbringing prompt. */
@@ -954,7 +1026,7 @@ export interface OriginTemplateSlotChoice {
   cost_per_influence: number;
   /** Minimum trust to see this answer; staff always see it (#3660). */
   trust_required: number;
-  grants_distinction: GrantedDistinction | null;
+  offers: AnswerOffer[];
   sort_order: number;
 }
 
@@ -1233,3 +1305,22 @@ export function questionInfluence(
   if (path === 'claimed' && draft.family) return draft.family.influence;
   return 0;
 }
+
+// =============================================================================
+// Distinctions are offered by CG chapter (#3675), not a standalone stage:
+// each chapter (Path/Tradition, Glimpse, Lineage, Appearance, the
+// Actor's Sheet) surfaces the offers it opens via
+// GET /api/character-creation/drafts/{id}/offers/?chapter=<OfferChapter>.
+// =============================================================================
+
+/** Which CG chapter's `GET .../offers/?chapter=` is being requested (#3675). */
+export type OfferChapter = 'tradition_step' | 'glimpse' | 'lineage' | 'appearance' | 'actors_sheet';
+
+/** A distinction offer visible to the draft in the requested chapter (#3675). */
+export type VisibleOffer = components['schemas']['VisibleOffer'];
+
+/** A distinction the draft can no longer take, and why (#3675). */
+export type ClosedDistinction = components['schemas']['ClosedDistinction'];
+
+/** The `offers`/`closed` payload `GET .../offers/?chapter=` returns (#3675). */
+export type OffersResponse = components['schemas']['OffersResponse'];

@@ -867,7 +867,9 @@ class PersonaViewSet(
                 persona,
                 concept=data.get("concept"),
                 quote=data.get("quote"),
-                personality=data.get("personality"),
+                never_do=data.get("never_do"),
+                protect=data.get("protect"),
+                fear=data.get("fear"),
                 background=data.get("background"),
             )
         except GuiseProfileError as exc:

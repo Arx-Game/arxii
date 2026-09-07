@@ -71,7 +71,7 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
      is now **behavior-based**: hostile → combat; benign + behavior-altering → PENDING
      consent; benign + capability/stat → resolves immediately (including on other PCs).
      `cast_requires_consent` in `targeting.py` implements this predicate.
-     **Corrected 2026-09-07 (#3682, ADR-0278):** the hostile/benign half of that routing
+     **Corrected 2026-09-07 (#3682, ADR-0281):** the hostile/benign half of that routing
      was wrong for the whole authored Defense line. `is_technique_hostile` read
      `EffectType.base_power`, which Defense carries at 10, so all 54 Defense techniques
      routed as attacks and a self-shield could not name its own caster. Hostility now reads
@@ -280,8 +280,10 @@ staff-authored catalog content instead:
 - **Tradition is a real mechanical layer.** Every character has exactly one
   Tradition, including the self-taught `Unbound` tradition (no NULL-tradition
   special-casing). `TraditionGiftGrant` (tradition × gift → signature technique
-  extras) drives the CG gift list; `BeginningTradition.required_distinction`
-  hard-gates non-Unbound traditions at tradition selection.
+  extras) drives the CG gift list; there is no selection gate, every tradition a
+  Beginning's slate offers is selectable outright, and `BeginningTradition.state`
+  (#3675, was `required_distinction`) decides which drawback the pick carries into
+  the draft for free (`TraditionStateLine`, see `docs/systems/character_creation.md`).
 - **`PathGiftGrant.starter_techniques`** (unchanged schema) is reinterpreted as
   the CG *availability pool*, not an automatic grant — the same rows
   `grant_path_magic` mints from at the level-3 Durance semi-crossing (ADR-0063,

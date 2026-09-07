@@ -307,8 +307,24 @@ The Glimpse is the narrative of a character's first magical awakening
 (`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
 freeform textarea with a guided, tag-driven flow: pick authored tags across
 five narrative axes, then write (or keep writing) the prose, with curated
-distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
-(what *caused* the awakening) and path-gated tag filtering.
+distinction offers surfaced along the way. #2611 added the TRIGGER axis
+(what *caused* the awakening) and path-gated tag filtering. #3675 retired the
+tag's own `GlimpseTagDistinctionSuggestion` pairing table: a tag's distinctions are
+now `world.character_creation.models.DistinctionOffer` rows (`chapter=glimpse`,
+`glimpse_tag=<this tag>`), authored and read the same way every other CG chapter's
+offers are (`world.character_creation.offers`, `docs/systems/character_creation.md`).
+
+**A tag's offers live behind a handler, not a prefetch (ADR-0278).**
+`GlimpseTag.offers` is a `cached_property` returning a `GlimpseTagOffersHandler`
+(`CachedRowsHandler` subclass, `models/glimpse.py`): active `DistinctionOffer` rows
+for the tag, ordered `sort_order, id`, `select_related("distinction")`. Every reader
+(the CG API serializer's `get_offers`, `GlimpseTagAdmin`'s change-form preview) reads
+`tag.offers.rows`, never a `Prefetch(..., to_attr=...)`. `CGGlimpseTagViewSet.list()`
+calls `GlimpseTagOffersHandler.prime(tags)` to stay at one query for the whole page;
+`DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
+"schooling_line"]` clears the handler's cache on every offer save/delete. This
+replaced a `Prefetch(to_attr="cached_offers")` that shipped with the same staleness
+defect ADR-0263/ADR-0278 document on `OriginTemplate.questions`.
 
 **Models** (`models/glimpse.py`):
 
@@ -316,7 +332,6 @@ distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
 |-------|---------|------------|
 | `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
 | `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
-| `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
 
 **Enums + config** (`constants.py`):
 
@@ -360,27 +375,34 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   — clears `from_glimpse`.
 
 **CG finalize wiring** (`world/character_creation/services.py`,
-`finalize_magic_data`) — after creating `CharacterAura`, three `draft_data`
-keys are consumed through
-the glimpse services above (never written directly to the aura/tag rows):
-`glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis and passed to
-`set_glimpse_tags` per axis), `glimpse_story` (passed to `set_glimpse_prose`,
-defaults to `""`), `glimpse_linked_distinction_ids` (catalog `Distinction`
-ids — resolved to the character's own `CharacterDistinction` rows by
-`distinction_id__in=`, then passed to `link_distinction_to_glimpse`).
+`finalize_magic_data`), after creating `CharacterAura`, two `draft_data` keys
+are consumed through the glimpse services above (never written directly to the
+aura/tag rows): `glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis
+and passed to `set_glimpse_tags` per axis), `glimpse_story` (passed to
+`set_glimpse_prose`, defaults to `""`). Distinction-to-Glimpse provenance is no
+longer read from a separate `glimpse_linked_distinction_ids` list (#3675): every
+picked distinction whose `offer_ids` name a `DistinctionOffer` with
+`glimpse_tag` set gets `link_distinction_to_glimpse` called on it, via one query
+over `DistinctionOffer.objects.filter(pk__in=<picked offer ids>,
+glimpse_tag__isnull=False)`. **Frontend note:** `GlimpseSection.tsx` never writes
+`draft_data.glimpse_linked_distinction_ids` -- that key and its manual-link fallback
+are retired; a Glimpse-chapter distinction pick syncs immediately through
+`useSyncDistinctions` (see `ChapterOffers`/`GlimpseAxes`,
+`frontend/src/character-creation/CLAUDE.md`), so `offer_ids` always carries the
+`DistinctionOffer` provenance this backend read depends on.
 
 **API surfaces:**
 
 - **CG catalog** — `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=` and
-  `?path_id=<N>`). The `path_id` filter (#2611) excludes tags whose `paths`
-  M2M is non-empty and does not contain the given path — used by the CG flow
-  to hide path-restricted trigger tags (e.g. "Patron Chose You" is Path of
-  the Chosen only). Omitting `path_id` returns all tags (post-CG editor mode).
-  Global authored catalog, not draft-dependent, so the same endpoint also
-  backs the post-CG "finish your glimpse later" surface. Each row embeds its
-  `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
-  ordered) via `CGGlimpseTagSerializer`.
+  (`CGGlimpseTagViewSet`, `world.character_creation.views`, read-only,
+  unpaginated, filterable by `?axis=` and `?path_id=<N>`). The `path_id` filter
+  (#2611) excludes tags whose `paths` M2M is non-empty and does not contain the
+  given path, used by the CG flow to hide path-restricted trigger tags (e.g.
+  "Patron Chose You" is Path of the Chosen only). Omitting `path_id` returns all
+  tags (post-CG editor mode). Global authored catalog, not draft-dependent, so
+  the same endpoint also backs the post-CG "finish your glimpse later" surface.
+  Each row embeds its `offers` (prefetched `DistinctionOffer` rows opened by
+  this tag, #3675) via `CGGlimpseTagSerializer`.
 - **Aura actions** — four `@action`s on `CharacterAuraViewSet`
   (`world/magic/views.py`): `POST .../set-glimpse-tags/` (body
   `{axis, tag_ids[]}`, validates tags exist/are active before calling
@@ -397,19 +419,28 @@ when the requester may edit this aura and `glimpse_state != COMPLETE`).
 `DistinctionEntry` gained `is_from_glimpse` (`from_glimpse_id is not None`) so
 the sheet can badge/link distinctions born in the Glimpse.
 
-**Frontend** — one shared, purely presentational guided flow with two mounts
-(see `frontend/src/magic/CLAUDE.md` for the full contract):
+**Frontend** - one shared, purely presentational guided flow, and a folio-grammar CG
+mount that no longer shares its markup (#3675 fix round 1; see
+`frontend/src/magic/CLAUDE.md` and `frontend/src/character-creation/CLAUDE.md` for the
+full contract):
 
 - `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx` +
-  `glimpseTypes.ts`) — accordion of axis steps (TONE single-select,
+  `glimpseTypes.ts`) - accordion of axis steps (TONE single-select,
   CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
-  step), SENSORY as toggle chips inside the always-visible story textarea, a
-  deduped suggestion panel, and a manual distinction-link fallback. No
-  queries/mutations inside — purely props-in/callbacks-out.
+  step), SENSORY as toggle chips inside the always-visible story textarea, and a
+  manual link fallback for a character's *existing* `CharacterDistinction` rows
+  (`GlimpseEditorDialog`'s own linking, unrelated to CG offer picks). No
+  queries/mutations inside, purely props-in/callbacks-out. This is now the sheet's
+  live-editor mount only; the CG mount stopped using it (#3675 fix round 1, a
+  demo-fidelity defect: the single-open accordion hid two axes at a time).
 - `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
-  — the CG mount, binding `GlimpseFlow` to `draft_data.glimpse_tag_ids` /
-  `glimpse_linked_distinction_ids` (prose stays on `GiftStage`'s
-  `register('glimpse_story')`).
+  - the CG mount, a thin state binder: draft reads, `updateDraft` writes
+  `draft_data.glimpse_tag_ids`, the "skip for now" deferral, and the copy query.
+  Renders `GlimpseAxes` (`frontend/src/character-creation/components/gift/GlimpseAxes.tsx`),
+  the folio-grammar per-axis layout (every axis visible at once, one `ChapterOffers`
+  sub-block per chosen tag), which owns the distinction picks itself; they sync
+  immediately through `useSyncDistinctions`, never through a `draft_data` list.
+  Prose stays on `GiftStage`'s `register('glimpse_story')`.
 - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
   — the "finish later" editor on the own-character sheet, opened from
   `SpellbookTab`'s aura card, gated on `isMyCharacter && aura.can_finish_glimpse`.
@@ -418,7 +449,7 @@ the sheet can badge/link distinctions born in the Glimpse.
 **Out of scope (verified against code, not deferred by accident):** no
 mechanics hooks off tag picks, no LLM involvement anywhere in the flow, no new
 privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
-`GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
+glimpse-chapter `DistinctionOffer` rows ship with this repo (lore-repo content,
 authored later) — the flow renders gracefully with an empty catalog (axes with
 no tags simply don't render a step).
 
@@ -1777,16 +1808,19 @@ only slower. The "Unbound" drawback `Distinction` (slug `unbound`, seeded by
 source today: a +50 `DistinctionEffect` on the `magic_learning_ap_cost` `ModifierTarget`
 (category `magic`, seeded by `wire_magic_learning_ap_cost_target`). Applies identically to
 both `charge_and_learn` front doors (accept + TRAIN) — one read, no duplication. Every seeded
-Unbound `BeginningTradition` row now carries `required_distinction=<Unbound drawback>`
-(`seed_beginning_traditions`, was `None` pre-#2442); `select_tradition`
-(`world.character_creation.views`) auto-adds the drawback to the draft when selecting Unbound
-without it already held — a one-off exception to #2426's normal "must already hold it" gate,
-needed because Unbound is CG's tradition-agnostic default (Orphaned Tradition/Metallic Order
-keep the un-auto-added behavior — that gate is a deliberate story pick, #2428 Task 5). Shed
-automatically via `world.magic.services.tradition_membership.join_tradition` and re-applied by
-`leave_tradition` (#2441 Task 8/9) — the underlying `CharacterModifier` row cascade-deletes with
-the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
-so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
+Unbound `BeginningTradition` row reads `state=TraditionState.SELF_TAUGHT`
+(`seed_beginning_traditions`, #3675; was a `required_distinction=<Unbound drawback>` FK
+pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback (`carries` FK,
+`world.character_creation.offers.self_taught_drawback()`), and `select_tradition`
+(`world.character_creation.views`) applies it to the draft via the generic
+`reconcile_offer_picks` call every tradition pick already runs, not a name-matched special
+case (Orphaned Tradition/Metallic Order carry theirs the same way, via TEACHERS_GONE). Shed
+automatically via `world.magic.services.tradition_membership.join_tradition` (checks
+`_tradition_is_orphaned`, now a `BeginningTradition.state == TEACHERS_GONE` read) and
+re-applied by `leave_tradition` (`self_taught_drawback()`, #2441 Task 8/9, #3675); the
+underlying `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+(`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge disappears
+the moment the drawback is shed, no separate cleanup needed.
 
 ### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
 

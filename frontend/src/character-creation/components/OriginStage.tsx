@@ -22,6 +22,7 @@ import {
   PageTurn,
   Paragraphs,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import { useCGExplanations, useStartingAreas, useUpdateDraft } from '../queries';
 import { Stage, STAGE_LABELS } from '../types';
@@ -94,7 +95,10 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         title={copy?.origin_heading ?? 'Where does the story begin?'}
         aside={
           <>
-            <RecordRail rows={[{ label: 'Origin', value: chosen?.name }]} ledger="Stage 1 of 11" />
+            <RecordRail
+              rows={[{ label: 'Origin', value: chosen?.name }]}
+              ledger={stageEyebrow(draft.current_stage)}
+            />
             <Marginalia id="note-change">
               <Note lead="Changing your starting realm">
                 clears the stages that depended on it. You will be asked first.

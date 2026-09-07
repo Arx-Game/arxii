@@ -272,7 +272,6 @@ class StorySection(TypedDict):
     """The story section of the character sheet API response."""
 
     background: str
-    personality: str
     origin_story_state: str
     origin_slots: list[OriginSlotEntry]
 
@@ -302,11 +301,50 @@ class OriginSlotEntry(TypedDict):
 
 
 class GoalEntry(TypedDict):
-    """A single goal held by the character."""
+    """A single goal held by the character, numbered within its horizon (#3621)."""
 
     domain: str
+    horizon: str
+    ordinal: int
     points: int
     notes: str
+
+
+class EnemyEntry(TypedDict):
+    """The priced enemy row; owner, staff and assigned GM only (#3621)."""
+
+    kind: str
+    name: str
+    power_tier: str
+    reach: str
+    degree: str
+    price: int
+    why: str
+    public_line: str
+    status: str
+    has_secret: bool
+
+
+class IntroductionEntry(TypedDict):
+    """One of the Introductions, a white journal found by its kind (#3621)."""
+
+    id: int
+    kind: str
+    title: str
+    body: str
+    created_at: str
+
+
+class ActorSheetSection(TypedDict):
+    """The Actor's Sheet block (#3621): three answers, the enemy's public line, the
+    Introductions. ``enemy`` is the full row for a privileged viewer, else None."""
+
+    never_do: str
+    protect: str
+    fear: str
+    enemy_public_line: str
+    enemy: EnemyEntry | None
+    introductions: list[IntroductionEntry]
 
 
 class PersonaEntry(TypedDict):
@@ -331,7 +369,47 @@ class ProfileTextField(models.TextChoices):
     """
 
     BACKGROUND = "background", "Background"
-    PERSONALITY = "personality", "Personality"
+    NEVER_DO = "never_do", "What would you never do?"
+    PROTECT = "protect", "What would you protect at all costs?"
+    FEAR = "fear", "What are you deathly afraid of?"
+
+
+class EnemyKind(models.TextChoices):
+    """Who wants the character to fail: one person, or a group (#3621)."""
+
+    PERSON = "person", "A person"
+    GROUP = "group", "A group"
+
+
+class EnemyPowerTier(models.TextChoices):
+    """A person's power on the Path ladder, with Quiescent for someone with no Gift (#3621).
+
+    Mirrors ``classes.PathStage`` above Quiescent; kept as its own choice set so an enemy
+    who is not a PC needs no Path row.
+    """
+
+    QUIESCENT = "quiescent", "Quiescent"
+    PROSPECT = "prospect", "Prospect"
+    POTENTIAL = "potential", "Potential"
+    PUISSANT = "puissant", "Puissant"
+    TRUE = "true", "True"
+    GRAND = "grand", "Grand"
+
+
+class EnemyDegree(models.TextChoices):
+    """How badly the enemy wants it (#3621). Death is not a tier: ruined includes it."""
+
+    ANNOYED = "annoyed", "They want you annoyed"
+    THWARTED = "thwarted", "They want you thwarted"
+    RUINED = "ruined", "They want you ruined"
+    DESTROY = "destroy", "They will relentlessly try to destroy you"
+
+
+class EnemyStatus(models.TextChoices):
+    """Whether the enemy is linked to a real person or group the world can send (#3621)."""
+
+    PLACED = "placed", "Placed"
+    PENDING = "pending", "Pending staff placement"
 
 
 class PosthumousJournalDisposition(models.TextChoices):

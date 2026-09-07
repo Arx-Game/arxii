@@ -2,21 +2,26 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_sheets.models import CharacterSheet
-from world.journals.constants import PosthumousOverride, ResponseType
+from world.journals.constants import JournalKind, PosthumousOverride, ResponseType
 
 if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
 
 
-class JournalEntry(SharedMemoryModel):
+class JournalEntry(RelatedCacheClearingMixin, SharedMemoryModel):
     """A single journal entry written by a character."""
+
+    #: Saving or deleting an entry clears the author's cached handlers
+    #: (``CharacterSheet.introductions``, ADR-0278).
+    related_cache_fields: ClassVar[list[str]] = ["author"]
 
     author = models.ForeignKey(
         CharacterSheet,
@@ -26,6 +31,12 @@ class JournalEntry(SharedMemoryModel):
     title = models.CharField(max_length=200)
     body = models.TextField()
     is_public = models.BooleanField(default=False)
+    kind = models.CharField(
+        max_length=14,
+        choices=JournalKind.choices,
+        default=JournalKind.ENTRY,
+        help_text="An ordinary entry, or one of the CG Introductions (#3621).",
+    )
 
     # Response linking
     parent = models.ForeignKey(
@@ -90,6 +101,7 @@ class JournalEntry(SharedMemoryModel):
             models.Index(fields=["-created_at"]),
             models.Index(fields=["author", "-created_at"]),
             models.Index(fields=["is_public", "-created_at"]),
+            models.Index(fields=["author", "kind"]),
             models.Index(fields=["revealed_at"]),
         ]
         constraints = [

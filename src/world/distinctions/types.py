@@ -7,20 +7,32 @@ from typing import TYPE_CHECKING, TypedDict
 from django.db import models
 
 if TYPE_CHECKING:
+    from world.character_creation.models import DistinctionOffer
     from world.distinctions.models import Distinction
 
 
 @dataclass
 class ValidatedDistinction:
-    """Validated distinction data for adding to a draft."""
+    """Validated distinction data for adding to a draft.
+
+    ``offer`` is the ``DistinctionOffer`` row the pick was validated against
+    (#3675), every CG add goes through an offer now, so it is required.
+    """
 
     distinction: Distinction
     rank: int
     notes: str
+    offer: DistinctionOffer
 
 
 class DraftDistinctionEntry(TypedDict):
-    """Type for a distinction entry stored in draft_data."""
+    """Type for a distinction entry stored in draft_data.
+
+    ``offer_ids`` mixes ``int`` (a real ``DistinctionOffer`` row) and ``str``
+    (a tradition-state-carried drawback has no offer row, so its source key is
+    the synthetic string ``"state:<TraditionState value>"`` built by
+    ``world.character_creation.offers.reconcile_offer_picks`` (#3675).
+    """
 
     distinction_id: int
     distinction_name: str
@@ -29,20 +41,47 @@ class DraftDistinctionEntry(TypedDict):
     rank: int
     cost: int
     notes: str
+    # Offer provenance (#3675): one entry per distinction, every contributing offer.
+    offer_ids: list[int | str]
+    sources: list[str]
+    arrivals: list[str]
 
 
 def build_distinction_entry(
-    distinction: Distinction, rank: int, notes: str = ""
+    distinction: Distinction,
+    rank: int = 1,
+    notes: str = "",
+    *,
+    offer: DistinctionOffer | None = None,
+    source: str = "",
 ) -> DraftDistinctionEntry:
-    """Build the dictionary entry for a distinction on a draft."""
+    """Build the dictionary entry for a distinction on a draft.
+
+    Called by the distinctions viewset for a plain player pick (no ``offer``)
+    and by ``world.character_creation.offers`` when a ``DistinctionOffer`` is
+    the source (#3675): the cost is ``0`` when the offer arrives ``bundled`` or
+    ``carried``, since that pick isn't paid for out of CG points.
+
+    ``offer_ids``/``sources``/``arrivals`` are kept in lockstep by ``offer``
+    alone (never by whether ``source`` happens to be a non-empty string): an
+    APPEARANCE/ACTORS_SHEET CHOICE offer has no opener, so ``source`` is
+    routinely ``""``, and a length mismatch between the three lists would blow
+    up the ``zip(..., strict=True)`` in ``offers._drop_vanished_sources``.
+    """
+    has_offer = offer is not None
+    arrival = offer.arrives_as if has_offer else ""
+    free = arrival in ("bundled", "carried")
     return DraftDistinctionEntry(
         distinction_id=distinction.id,
         distinction_name=distinction.name,
         distinction_slug=distinction.slug,
         category_slug=distinction.category.slug,
         rank=rank,
-        cost=distinction.calculate_total_cost(rank),
+        cost=0 if free else distinction.calculate_total_cost(rank),
         notes=notes,
+        offer_ids=[offer.id] if has_offer else [],
+        sources=[source] if has_offer else [],
+        arrivals=[arrival] if has_offer else [],
     )
 
 

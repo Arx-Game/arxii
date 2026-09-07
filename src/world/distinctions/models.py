@@ -7,7 +7,6 @@ defining characteristics (merits/flaws equivalent):
 - DistinctionTag: Tags for filtering and search
 - Distinction: Individual advantages/disadvantages
 - DistinctionEffect: Mechanical effects of distinctions
-- DistinctionPrerequisite: Prerequisites for taking distinctions
 - Distinction.mutually_exclusive_with: symmetrical self-referential M2M for mutually
   exclusive distinction pairs (not a separate model)
 - CharacterDistinction: A character's taken distinctions
@@ -329,49 +328,6 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             QuerySet of mutually exclusive distinctions.
         """
         return self.mutually_exclusive_with.all()
-
-
-class DistinctionPrerequisite(NaturalKeyMixin, SharedMemoryModel):
-    """
-    A prerequisite rule for taking a distinction.
-
-    Prerequisites are stored as flexible JSON rules supporting:
-    - AND, OR, NOT logic
-    - Species, beginning, path, distinction, trust checks
-    - Nested groups for complex conditions
-    """
-
-    distinction = models.ForeignKey(
-        Distinction,
-        on_delete=models.CASCADE,
-        related_name="prerequisites",
-        help_text="The distinction this prerequisite belongs to.",
-    )
-    key = models.CharField(
-        max_length=100,
-        help_text="Short identifier for this prerequisite (e.g., 'species_check', 'min_rank').",
-    )
-    rule_json = models.JSONField(
-        help_text="JSON structure defining the prerequisite rule with AND/OR/NOT logic.",
-    )
-    description = models.TextField(
-        blank=True,
-        help_text="Human-readable description of the prerequisite.",
-    )
-
-    objects = NaturalKeyManager()
-
-    class NaturalKeyConfig:
-        fields = ["distinction", "key"]
-        dependencies = [DISTINCTION_MODEL]
-
-    class Meta:
-        unique_together = [("distinction", "key")]
-        verbose_name = "Distinction Prerequisite"
-        verbose_name_plural = "Distinction Prerequisites"
-
-    def __str__(self) -> str:
-        return f"Prerequisite for {self.distinction.name}"
 
 
 class DistinctionEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):

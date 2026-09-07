@@ -14,11 +14,31 @@ itself. Without it this page renders admin's markup with no rules behind it and
 every field falls back to browser defaults (#3667, second round).
 {% endcomment %}
 <link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% comment %}
+`widgets.css` styles the "This route closes" module's `FilteredSelectMultiple`
+two-list layout (#3675) - `forms.css` `@import`s it, but this page asks for it
+directly too, matching what the Distinction Builder's own page.html links for
+the same widget rather than relying on the transitive import.
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/widgets.css' %}">
 {% endblock %}
 
 {% block extrahead %}
 {{ block.super }}
+{% comment %}
+`FilteredSelectMultiple` assumes the jsi18n catalog is already on the page -
+`change_form.html` loads it for the same reason; a page extending
+`base_site.html` directly does not get it for free.
+{% endcomment %}
+<script src="{% url 'admin:jsi18n' %}"></script>
 {{ media }}
+{% comment %}
+The shared clone-a-formset-row helpers (nextFormIndex/announceFormsetAdded/
+cloneFromTemplate), also loaded by the tradition slate page's page.html
+(#3675: promoted out of this page's own inline script, which the tradition
+slate page had started out copying verbatim).
+{% endcomment %}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -85,6 +105,23 @@ every field falls back to browser defaults (#3667, second round).
 
         <template id="empty-question-template">{% include "admin/upbringing_builder/_question.html" with question_form=questions.empty_form question_number="" %}</template>
 
+        <div class="module" id="closes-module">
+          <h2>This route closes</h2>
+          <div class="description">Distinctions this route never offers, in any chapter,
+            however a question elsewhere on this page or a Glimpse tag would otherwise grant
+            them - and the line the player reads where a closed one would have shown.</div>
+          {{ form.closed_distinctions.errors }}
+          <div class="ub-closed-distinctions">
+            {{ form.closed_distinctions.label_tag }}
+            {{ form.closed_distinctions }}
+          </div>
+          {{ form.closed_reason.errors }}
+          <div class="ub-closed-reason">
+            {{ form.closed_reason.label_tag }}
+            {{ form.closed_reason }}
+          </div>
+        </div>
+
         <div class="submit-row">
           <input type="submit" name="save" value="Save" class="default">
           <input type="submit" name="save_continue" value="Save and continue editing">
@@ -105,63 +142,32 @@ every field falls back to browser defaults (#3667, second round).
 
 <script>
 (function () {
-  // The one place both "Add question" and every question's "Add answer"
-  // button clone a formset row: bump that formset's TOTAL_FORMS, then
-  // swap __prefix__ in its <template> for the fresh index (#3660 review
-  // Ruling H - "Add answer" used to hx-get a fragment from a formset fixed
-  // at extra=0, which just re-rendered the same rows and did nothing).
-  function nextFormIndex(prefix) {
-    var totalInput = document.getElementById("id_" + prefix + "-TOTAL_FORMS");
-    var index = parseInt(totalInput.value, 10);
-    totalInput.value = String(index + 1);
-    return index;
-  }
-
-  // Django's own admin/js/autocomplete.js only initializes select2 on load and
-  // on this event - a row cloned client-side otherwise carries a plain,
-  // uninitialized <select> for every autocomplete widget it contains (#3660
-  // review round 1). Dispatching this on the inserted element itself, with
-  // bubbles set, matches what autocomplete.js's document-level listener reads
-  // off event.target ($(event.target).find('.admin-autocomplete')).
-  function announceFormsetAdded(prefix, row) {
-    row.dispatchEvent(
-      new CustomEvent("formset:added", { bubbles: true, detail: { formsetName: prefix } })
-    );
-  }
-
-  // Both templates below hold a whole element - a question panel, an answers
-  // row - so the clone is the template's own first child rather than a
-  // wrapper this script styles by hand (#3667: the hand-built wrapper was how
-  // a cloned question ended up with different markup from a saved one).
-  function cloneFromTemplate(templateId, index) {
-    var tpl = document.getElementById(templateId);
-    var html = tpl.innerHTML.split("__prefix__").join(String(index));
-    var holder = document.createElement("div");
-    holder.innerHTML = html;
-    return holder.firstElementChild;
-  }
+  // The shared clone helpers (nextFormIndex/announceFormsetAdded/cloneFromTemplate)
+  // live in admin/js/builder_formsets.js, loaded in extrahead above (#3660 review
+  // Ruling H - "Add answer" used to hx-get a fragment from a formset fixed at
+  // extra=0, which just re-rendered the same rows and did nothing; #3675 promoted
+  // these three functions out of this page's own inline copy).
+  var formsets = window.arxBuilderFormsets;
 
   var addQuestionBtn = document.getElementById("add-question-btn");
   if (addQuestionBtn) {
     addQuestionBtn.addEventListener("click", function () {
-      var index = nextFormIndex("q");
-      var row = cloneFromTemplate("empty-question-template", index);
+      var index = formsets.nextFormIndex("q");
+      var row = formsets.cloneFromTemplate("empty-question-template", index, "div");
       document.getElementById("questions-list").appendChild(row);
-      announceFormsetAdded("q", row);
+      formsets.announceFormsetAdded("q", row);
     });
   }
 
+  // ".add-offer-btn" (an answer's own "+ Offer" row, #3675) is a client-side
+  // clone the same way - shares this one listener rather than a second copy.
   document.addEventListener("click", function (evt) {
-    var btn = evt.target.closest(".add-answer-btn");
+    var btn = evt.target.closest(".add-answer-btn, .add-offer-btn");
     if (!btn) { return; }
-    var index = nextFormIndex(btn.dataset.prefix);
-    var tpl = document.getElementById(btn.dataset.template);
-    var html = tpl.innerHTML.split("__prefix__").join(String(index));
-    var rowParent = document.createElement("tbody");
-    rowParent.innerHTML = html;
-    var row = rowParent.firstElementChild;
+    var index = formsets.nextFormIndex(btn.dataset.prefix);
+    var row = formsets.cloneFromTemplate(btn.dataset.template, index, "tbody");
     document.getElementById(btn.dataset.target).appendChild(row);
-    announceFormsetAdded(btn.dataset.prefix, row);
+    formsets.announceFormsetAdded(btn.dataset.prefix, row);
   });
 })();
 </script>
