@@ -125,20 +125,17 @@ class ResonanceAdmin(admin.ModelAdmin):
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
 
-    def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related(Prefetch("gifts", to_attr="cached_gifts"))
-        )
-
     @admin.display(description="Gifts (supported set)")
     def get_gift_count(self, obj):
-        return len(obj.cached_gifts)
+        # No prefetch here — Resonance/Gift are identity-mapped SharedMemoryModels,
+        # and a to_attr/prefetch cache written onto a shared instance goes stale
+        # across requests (ADR-0278). This admin list is small (~24 rows); a
+        # per-row query is the correct trade, not a cache with a staleness bug.
+        return obj.gifts.count()
 
     @admin.display(description="Gifts in supported set")
     def get_gifts(self, obj):
-        return ", ".join(g.name for g in obj.cached_gifts) or "-"
+        return ", ".join(g.name for g in obj.gifts.all()) or "-"
 
     @admin.display(description="Other connections")
     def get_connections(self, obj):
@@ -171,16 +168,11 @@ class EffectTypeAdmin(admin.ModelAdmin):
     list_filter = ["has_power_scaling"]
     search_fields = ["name"]
 
-    def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related(Prefetch("techniques", to_attr="cached_techniques"))
-        )
-
     @admin.display(description="Techniques")
     def get_technique_count(self, obj):
-        return len(obj.cached_techniques)
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
 
 
 class StyleCapabilityRequirementInline(admin.TabularInline):
@@ -508,16 +500,11 @@ class GiftAdmin(admin.ModelAdmin):
     readonly_fields = ["get_grant_sources"]
     inlines = [GiftChildInline]
 
-    def get_queryset(self, request):
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related(Prefetch("techniques", to_attr="cached_techniques"))
-        )
-
     @admin.display(description="Techniques")
     def get_technique_count(self, obj):
-        return len(obj.cached_techniques)
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
 
     @admin.display(description="Grant sources (who grants this gift, and how it's learned)")
     def get_grant_sources(self, obj: Gift) -> str:
