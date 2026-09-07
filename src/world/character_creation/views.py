@@ -47,8 +47,8 @@ from world.character_creation.models import (
     DraftApplication,
     DraftMarking,
     OriginTemplate,
-    OriginTemplateSlot,
     StartingArea,
+    UpbringingQuestionsHandler,
 )
 from world.character_creation.serializers import (
     BeginningsSerializer,
@@ -648,8 +648,16 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         intervening ORM-level M2M write happens on the same cached instance -
         the same staleness class ADR-0263 documents for ``to_attr``, just via
         ``instance._prefetched_objects_cache`` instead of a bare attribute name.
-        The existing ``cached_slots`` prefetch below is the one already-shipped
-        ``to_attr`` exception, kept as-is rather than touched by this task.
+        Questions are not prefetched here at all. They belong to
+        ``OriginTemplate.questions``, the handler that owns them for every
+        consumer - this serializer, the questionnaire resolver, the draft
+        validators, the Builder's rail. This view used to reach past that with a
+        ``Prefetch(..., to_attr="cached_slots")``, which shipped a production
+        bug: ``to_attr`` writes a plain attribute into the instance ``__dict__``,
+        Django skips a prefetch that already has one, and the identity map hands
+        the same instance to the next request, so a second GET re-served the
+        first GET's questions - including ones deleted in between, which
+        serialize with ``"id": null`` (#3673, ADR-0263).
         """
         user = self.request.user
         qs = OriginTemplate.objects.filter(is_active=True)
@@ -660,11 +668,6 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
                 trust = 0
             qs = qs.filter(trust_required__lte=trust)
         return qs.prefetch_related(
-            Prefetch(
-                "slots",
-                queryset=OriginTemplateSlot.objects.order_by("sort_order"),
-                to_attr="cached_slots",
-            ),
             # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
             # prefetch, no ``to_attr`` - the nested serializer reads
             # ``obj.family_templates.all()`` straight off the prefetch cache.
@@ -684,6 +687,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         serializer instance).
         """
         templates = list(self.filter_queryset(self.get_queryset()))
+        UpbringingQuestionsHandler.prime(templates)
         context = {
             **self.get_serializer_context(),
             "claimable_kind_ids_by_template": _claimable_kind_ids_by_template(templates),

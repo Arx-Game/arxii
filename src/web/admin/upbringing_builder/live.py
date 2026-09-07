@@ -225,6 +225,23 @@ def _own_family_house_check(
     ]
 
 
+def _name_path_check(template: OriginTemplate) -> list[tuple[str, str]]:
+    """The name path has to offer something to name from.
+
+    The Builder's own form refuses a save that opens the name path with no
+    Family Template selected. This is the same rule asked of a route that is
+    already saved, whatever wrote it - a fixture, a service, an earlier row from
+    before the rule existed. It is a check rather than a second gate: a route in
+    this state is authored, not corrupt, and the rail is where an author reads
+    what is still wrong with it (#3673).
+    """
+    if not template.allows_name_family:
+        return []
+    if template.family_templates.exists():
+        return [("ok", "The name path offers a Family Template.")]
+    return [("warn", "The name path is open but offers no Family Template to name from.")]
+
+
 def _checks(
     template: OriginTemplate,
     slots: list[OriginTemplateSlot],
@@ -238,6 +255,7 @@ def _checks(
             checks.extend(_source_checks(slot, placeholder_counts))
         checks.extend(_link_checks(slot, position))
         checks.extend(_branch_check(slot, branch_slot_ids))
+    checks.extend(_name_path_check(template))
     checks.extend(_own_family_house_check(template, slots, position))
     checks.extend(_distinction_checks(template))
     return checks
@@ -245,7 +263,7 @@ def _checks(
 
 def for_template(template: OriginTemplate, user: AccountDB) -> LivePanel:
     """The full right-rail live panel for ``template``: matches, checks, open places."""
-    slots = list(template.slots.order_by("sort_order", "id"))
+    slots = template.questions.rows
     groups_by_slot = _matched_groups(slots)
     placeholder_counts = _placeholder_counts(groups_by_slot)
     return LivePanel(

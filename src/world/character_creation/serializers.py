@@ -724,7 +724,12 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
-        """Return nested slots, preferring the prefetched ``cached_slots`` attr.
+        """Return nested slots from the view's grouping, or one fresh query.
+
+        Never from a ``to_attr`` prefetch attribute: ``OriginTemplate`` is
+        identity-mapped, so an attribute set by one request answered the next one
+        too and a question deleted in between was still served, with a null id
+        (ADR-0263, #3673).
 
         Choices and the branch-choice ids are each resolved with one flat query
         across every slot on this template, grouped by slot id in Python (see
@@ -740,9 +745,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        slots = (
-            obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
-        )
+        slots = obj.questions.rows
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:

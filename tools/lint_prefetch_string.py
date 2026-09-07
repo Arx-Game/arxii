@@ -1,8 +1,16 @@
 """Reject prefetch_related() calls with bare string arguments.
 
-Always use Prefetch() objects with to_attr for explicit, cache-safe prefetching.
-Bare strings cause stale data issues with SharedMemoryModel and return
-querysets instead of lists.
+A bare string returns a queryset rather than a list and goes stale on an
+identity-mapped parent through ``instance._prefetched_objects_cache``: the same
+instance answers the next request with the previous one's rows.
+
+``Prefetch(..., to_attr=...)`` is NOT the fix, whatever this module used to say.
+It goes stale the same way, and worse - Django skips a prefetch whose to_attr is
+already set, so the staleness is silent (ADR-0263). A new one fails the
+``pattern:PREFETCH_TO_ATTR`` ratchet.
+
+Rows a parent owns belong behind a ``CachedRowsHandler``
+(``evennia_extensions/handlers.py``), which every consumer reads (#3673).
 
 Use "# noqa: PREFETCH_STRING" to suppress a specific instance.
 """

@@ -9,9 +9,10 @@ Models for the staged character creation flow:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -25,6 +26,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.handlers import CachedRowsHandler
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
@@ -560,7 +563,33 @@ class OriginTemplateManager(NaturalKeyManager):
     """Manager for OriginTemplate with natural key support."""
 
 
-class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class UpbringingQuestionsHandler(CachedRowsHandler["OriginTemplateSlot"]):
+    """The questions on one Upbringing, in the order a player answers them.
+
+    Every consumer reads the route's questions through here - the CG API
+    serializer, the questionnaire resolver, the draft validators, the Builder's
+    rail - so none of them owns a query, an ordering or a cache of its own, and
+    none of them can be handed a question the database no longer has (#3673).
+    """
+
+    attname: ClassVar[str] = "questions"
+
+    def load(self) -> list[OriginTemplateSlot]:
+        return list(self.parent.slots.order_by("sort_order", "id"))
+
+    @classmethod
+    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[OriginTemplateSlot]]:
+        """One query for every question across ``parents``, bucketed by Upbringing."""
+        grouped: dict[int, list[OriginTemplateSlot]] = defaultdict(list)
+        rows = OriginTemplateSlot.objects.filter(
+            template_id__in=[parent.pk for parent in parents]
+        ).order_by("sort_order", "id")
+        for slot in rows:
+            grouped[slot.template_id].append(slot)
+        return grouped
+
+
+class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """The Upbringing a player picks within a beginning (#2478, #3617).
 
     Content model — authored in the lore repo, exported/imported via
@@ -657,6 +686,12 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             paths.append(FamilyPath.NONE)
         return paths
 
+    @cached_property
+    def questions(self) -> UpbringingQuestionsHandler:
+        """This route's questions. Cleared by any slot save/delete through
+        ``OriginTemplateSlot.related_cache_fields``."""
+        return UpbringingQuestionsHandler(self)
+
     def is_accessible_by(self, account: AccountDB) -> bool:
         """Trust gate, mirroring ``Beginnings.is_accessible_by``."""
         if not self.is_active:
@@ -671,24 +706,34 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             return account_trust >= self.trust_required
         return True
 
-    def clean(self) -> None:
-        super().clean()
-        if self.allows_name_family and self.pk and not self.family_templates.exists():
-            raise ValidationError(
-                {"family_templates": "Offer at least one Family Template when naming is allowed."}
-            )
+    # No ``clean()`` for the name path's Family Template rule. A model's
+    # ``clean()`` can only read ``self.family_templates`` off the database, and a
+    # ModelForm runs ``full_clean()`` in ``_post_clean()`` - before
+    # ``save_m2m()`` - so the check read the state the operator was submitting a
+    # change to and refused every save that turned the name path on (#3673,
+    # reported from production). The rule is enforced where the submitted value
+    # exists, in ``UpbringingForm.clean()``, and a route already saved without
+    # one is flagged in the Builder's rail checks.
 
 
 class OriginTemplateSlotManager(NaturalKeyManager):
     """Manager for OriginTemplateSlot with natural key support."""
 
 
-class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class OriginTemplateSlot(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
     """Authored slot prompt within an origin-story template (#2478).
 
     Content model — authored in the lore repo. No slug — natural key is
     (template, name), mirroring ``BeginningTradition``.
     """
+
+    #: Saving or deleting a question drops its Upbringing's cached properties,
+    #: which is where ``OriginTemplate.questions`` lives. A cascade or a
+    #: ``queryset.delete()`` bypasses ``Model.delete()`` and never gets here -
+    #: the handler's own pk check is what covers those (#3673).
+    related_cache_fields: ClassVar[list[str]] = ["template"]
 
     template = models.ForeignKey(
         OriginTemplate,

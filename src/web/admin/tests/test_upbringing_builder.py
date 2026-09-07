@@ -212,6 +212,47 @@ class BuilderSaveTest(BuilderTestCase):
         assert resp.status_code == 302
         assert OriginTemplateSlot.objects.get(pk=text_q.pk).prompt == "Where did you grow up"
 
+    def test_naming_path_saves_with_the_family_template_the_operator_just_picked(self):
+        """Reported from production: the name path could never be saved (#3673).
+
+        ``OriginTemplate.clean()`` asked ``self.family_templates.exists()`` - the
+        rows already in the database. A ModelForm runs the instance's
+        ``full_clean()`` in ``_post_clean()``, which is before ``save_m2m()``, so
+        the check read the state the operator was trying to change and rejected
+        every save of an Upbringing whose name path was being turned on. Ticking
+        the box and highlighting the one Family Template in the box failed
+        identically, because what was selected was never what got looked at.
+        """
+        from world.societies.houses.factories import HouseTemplateFactory
+
+        self.client.force_login(self.author)
+        self.template.family_templates.clear()
+        charter = HouseTemplateFactory(name="Caretaker Household")
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(
+                allows_name_family="on",
+                family_templates=[str(charter.pk)],
+            ),
+        )
+        assert resp.status_code == 302, (
+            "the name path was refused with the Family Template the operator picked: "
+            f"{resp.context['form'].errors.as_text() if resp.context else resp.status_code}"
+        )
+        self.template.refresh_from_db()
+        assert list(self.template.family_templates.all()) == [charter]
+
+    def test_naming_path_is_still_refused_with_no_family_template_picked(self):
+        """The rule itself stands: it now reads what was submitted (#3673)."""
+        self.client.force_login(self.author)
+        self.template.family_templates.clear()
+        resp = self.client.post(
+            reverse("admin_upbringing_builder", args=[self.template.pk]),
+            self._post_data(allows_name_family="on", family_templates=[]),
+        )
+        assert resp.status_code == 200
+        assert "family_templates" in resp.context["form"].errors
+
     def test_add_answer_row_saves_a_second_choice(self):
         """Ruling H: the client-cloned second row posts and saves like any other."""
         self.client.force_login(self.author)
@@ -601,3 +642,90 @@ class BuilderDemoFidelityTest(BuilderTestCase):
         wanted = ("This route", "Checks", "Credit", "Preview")
         order = [body.index(f"<h2>{name}</h2>") for name in wanted]
         assert order == sorted(order), f"the rail's panels are out of the demo's order {wanted}"
+
+
+class BuilderFieldWidthTest(BuilderStylingTest):
+    """Fields must be sized for the column they sit in (#3673).
+
+    The Builder runs a ~1050px main column beside the rail, and admin's own
+    widths were drawn for a narrow change form: Name came out 184px and cut off
+    the template name it is a natural key for, Card text 309px for the longest
+    prose on the page, Claimable kinds 90px. Measured in a browser after the
+    fix: Name 622px, Card text 846px, Claimable kinds 512px, Point cost and
+    Trust required side by side (both at y=786) instead of stacked with the
+    first one's help line pressed against the second one's label.
+
+    No test here runs a browser, so none of them can measure a rendered width.
+    Two things they can ask, and both fail against the state that shipped: does
+    a rule sizing each field kind reach the page at all, and does the page still
+    render that field where the rule's selector looks for it. The second is the
+    one that rots quietly - a Django release or a fieldset change moves the
+    input out of ``div.flex-container`` and every width silently reverts.
+    """
+
+    #: id -> the CSS the sheet must carry for that field's kind. A field whose
+    #: rule is gone falls back to admin's default width with nothing to notice.
+    SIZED_FIELDS = {
+        "id_name": '.form-row .flex-container > input[type="text"]',
+        "id_frame_narrative": ".form-row .flex-container > textarea",
+        "id_claimable_kinds": (
+            ".form-row .flex-container > select[multiple]:not(.admin-autocomplete)"
+        ),
+        "id_q-0-prompt": ".form-row .flex-container > textarea",
+    }
+
+    #: The row that holds two or three fields. Admin sizes those boxes to their
+    #: content, which put Point cost's help line directly above Trust required's
+    #: label; a flex basis gives each field a column of its own.
+    MULTILINE_RULE = ".form-row .form-multiline > div"
+
+    def _parent_classes(self, body: str, element_id: str) -> list[list[str]]:
+        """Class lists of every open ancestor of ``element_id``, outermost first."""
+        from html.parser import HTMLParser
+
+        void = {"input", "br", "img", "hr", "meta", "link", "source", "col"}
+
+        class _Ancestry(HTMLParser):
+            def __init__(self):
+                super().__init__(convert_charrefs=True)
+                self.stack: list[list[str]] = []
+                self.found: list[list[str]] | None = None
+
+            def handle_starttag(self, tag, attrs):
+                attrs = dict(attrs)
+                if attrs.get("id") == element_id and self.found is None:
+                    self.found = list(self.stack)
+                if tag not in void:
+                    self.stack.append((attrs.get("class") or "").split())
+
+            def handle_endtag(self, tag):
+                if tag not in void and self.stack:
+                    self.stack.pop()
+
+        parser = _Ancestry()
+        parser.feed(body)
+        assert parser.found is not None, f"#{element_id} is not on the page at all"
+        return parser.found
+
+    def test_every_widened_field_sits_where_its_rule_looks_for_it(self):
+        body = self._body()
+        for element_id in self.SIZED_FIELDS:
+            ancestors = self._parent_classes(body, element_id)
+            parent = ancestors[-1] if ancestors else []
+            assert "flex-container" in parent, (
+                f"#{element_id} is not a direct child of div.flex-container "
+                f"(parent classes: {parent}); its width rule matches nothing and the "
+                f"field reverts to admin's default."
+            )
+            assert any("form-row" in classes for classes in ancestors), (
+                f"#{element_id} is not inside a div.form-row; its width rule matches nothing."
+            )
+
+    def test_a_width_rule_for_every_field_kind_reaches_the_page(self):
+        css = self._reachable_css(self._body())
+        wanted = set(self.SIZED_FIELDS.values()) | {self.MULTILINE_RULE}
+        missing = sorted(rule for rule in wanted if rule not in css)
+        assert not missing, (
+            f"no width rule reaches the page for: {missing}; those fields render at "
+            f"admin's default width in this page's much wider column."
+        )

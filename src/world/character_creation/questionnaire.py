@@ -235,7 +235,7 @@ def visible_slot_ids(draft: CharacterDraft) -> set[int]:
         return set()
     path = draft.resolve_family_path()
     answers = DraftAnswers.from_draft(draft)
-    slots = list(template.slots.order_by("sort_order", "id"))
+    slots = template.questions.rows
     slots_by_id = {s.id: s for s in slots}
     choice_ids_by_slot, branch = _load_choice_maps(template.id)
     shown: set[int] = set()
@@ -378,12 +378,12 @@ def derived_anchors(draft: CharacterDraft) -> dict[int, DerivedAnchor | None]:
     template = draft.selected_origin_template
     if template is None:
         return {}
-    slots = list(
-        template.slots.filter(
-            kind=QuestionKind.GROUP,
-            anchor_source__in=(AnchorSource.OWN_FAMILY, AnchorSource.SERVED_HOUSE),
-        ).values_list("id", "anchor_source")
-    )
+    slots = [
+        (slot.id, slot.anchor_source)
+        for slot in template.questions
+        if slot.kind == QuestionKind.GROUP
+        and slot.anchor_source in (AnchorSource.OWN_FAMILY, AnchorSource.SERVED_HOUSE)
+    ]
     if not slots:
         return {}
     from world.societies.houses.services import house_for_family  # noqa: PLC0415
