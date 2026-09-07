@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.forms.models import BaseInlineFormSet
+
+from web.admin.authoring.copy import price_text as _price_text
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
 from world.distinctions.models import CharacterDistinction, Distinction, DistinctionEffect
@@ -12,17 +15,16 @@ from world.distinctions.models import CharacterDistinction, Distinction, Distinc
 #: player, just staff shorthand for "description not written yet".
 PLACEHOLDER_PREFIX = "PLACEHOLDER"
 
+#: Chapters in declared, player-facing order (the demo's own worked example:
+#: Gift/tradition step, Gift/Glimpse, Lineage, Appearance, Identity) - the
+#: model's `chapter` column is a CharField, so alphabetical DB ordering does
+#: not match this at all (#3675 review round 1, Demo-fidelity defect B).
+CHAPTER_ORDER = tuple(OfferChapter)
+
 
 def price_text(distinction: Distinction) -> str:
     """Human copy for the distinction's own price: "Free", "Refunds N", or the cost."""
-    value = distinction.cost_per_rank
-    if value == 0:
-        return "Free"  # noqa: STRING_LITERAL - player-facing copy, not an identifier
-    if value < 0:
-        return f"Refunds {abs(value)}"
-    if distinction.max_rank > 1:
-        return f"{value} per rank"
-    return str(value)
+    return _price_text(distinction.cost_per_rank, per_rank=distinction.max_rank > 1)
 
 
 def effect_reads(effect: DistinctionEffect) -> str:
@@ -34,6 +36,34 @@ def effect_reads(effect: DistinctionEffect) -> str:
     if effect.amplifies_sources_by is not None:
         return f"Other {effect.target.name} sources {effect.amplifies_sources_by:+d}"
     return f"See {effect.target.name}"
+
+
+def _offer_sort_key(offer: DistinctionOffer) -> tuple[int, int, int]:
+    """Chapter's declared order, then ``sort_order``, then id.
+
+    ``chapter`` is a plain ``CharField`` (``OfferChapter``'s values are not
+    alphabetically declared), so a DB ``.order_by("chapter", ...)`` sorts
+    Appearance/Glimpse/Identity/Lineage/Tradition Step - wrong order entirely.
+    A row with no recognised chapter yet (a fresh, unsaved formset row) sorts
+    last rather than raising.
+    """
+    try:
+        chapter_index = CHAPTER_ORDER.index(OfferChapter(offer.chapter))
+    except ValueError:
+        chapter_index = len(CHAPTER_ORDER)
+    return (chapter_index, offer.sort_order or 0, offer.pk or 0)
+
+
+def sorted_offer_forms(offers_formset: BaseInlineFormSet) -> list:
+    """The offers formset's own bound forms, reordered for display only.
+
+    Operates on the formset's already-fetched ``forms`` list rather than its
+    ``queryset`` - the queryset itself stays in the formset's default DB
+    order (needed intact for ``is_valid()``/``save()``); only the order
+    ``page.html`` iterates them in for display changes here (#3675 review
+    round 1, Demo-fidelity defect B).
+    """
+    return sorted(offers_formset.forms, key=lambda form: _offer_sort_key(form.instance))
 
 
 def opener_field_map() -> dict[str, str | None]:
@@ -139,14 +169,11 @@ class PreviewLine:
 
 
 def preview_line(distinction: Distinction) -> PreviewLine | None:
-    """The first active offer, drawn as a player would read it."""
-    offer = (
-        DistinctionOffer.objects.filter(distinction=distinction, is_active=True)
-        .order_by("chapter", "sort_order", "id")
-        .first()
-    )
-    if offer is None:
+    """The first active offer in chapter-declared order, drawn as a player would read it."""
+    offers = list(DistinctionOffer.objects.filter(distinction=distinction, is_active=True))
+    if not offers:
         return None
+    offer = min(offers, key=_offer_sort_key)
     return PreviewLine(
         price=price_text(distinction),
         name=offer.name or distinction.name,

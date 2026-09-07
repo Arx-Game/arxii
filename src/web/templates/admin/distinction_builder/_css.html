@@ -90,6 +90,13 @@ light/dark selectors below, so the page follows the theme toggle.
   #distinction-builder-root .db-openers { display: flex; flex-direction: column; gap: 0.25rem; }
   #distinction-builder-root .db-opener[hidden] { display: none; }
 
+  /* A TRADITION_STEP offer's name/player_line are derived, not typed here -
+     the editable inputs and the read-only text swap places on the chapter
+     select's value (page.html's inline script), never both shown at once. */
+  #distinction-builder-root .db-reads-derived[hidden],
+  #distinction-builder-root .db-reads-editable[hidden] { display: none; }
+  #distinction-builder-root .db-reads-derived .help { margin: 0.15rem 0 0; }
+
   /* The preview: how the offer actually reads to a player, so it is set off
      from the admin form around it rather than looking like another row. */
   #distinction-builder-root .preview {

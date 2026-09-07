@@ -117,6 +117,7 @@ class OfferForm(forms.ModelForm):
             "schooling_line",
             "glimpse_tag",
             "origin_choice",
+            "sort_order",
         ]
         widgets = {
             "glimpse_tag": AutocompleteSelect(

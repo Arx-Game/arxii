@@ -150,7 +150,11 @@ def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor
     (crediting the change); a line with no grant has any existing active
     offer deactivated instead of left offering a distinction the line no
     longer names - also credited, since a `DistinctionOffer` is
-    `CreditedContent` in its own right, not just the line that opens it.
+    `CreditedContent` in its own right, not just the line that opens it. Its
+    `name`/`player_line` always mirror the schooling line's own - never typed
+    on the Distinction Builder's offer row for this chapter (#3675 review
+    round 1, Demo-fidelity defect A) - so a name/wording edit made here is
+    also picked up on an existing offer.
     """
     for line in SchoolingLine.objects.all():
         offer = DistinctionOffer.objects.filter(
@@ -167,6 +171,8 @@ def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor
                 schooling_line=line,
                 chapter=OfferChapter.TRADITION_STEP,
                 distinction=line.grants,
+                name=line.name,
+                player_line=line.player_line,
             )
             messages.info(request, f"Created the tradition-step offer for '{line.name}'.")
             stamp_written(offer, contributor)
@@ -178,6 +184,12 @@ def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor
         if not offer.is_active:
             offer.is_active = True
             update_fields.append("is_active")
+        if offer.name != line.name:
+            offer.name = line.name
+            update_fields.append("name")
+        if offer.player_line != line.player_line:
+            offer.player_line = line.player_line
+            update_fields.append("player_line")
         if update_fields:
             offer.save(update_fields=update_fields)
             stamp_written(offer, contributor)

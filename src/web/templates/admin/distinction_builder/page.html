@@ -180,9 +180,9 @@ reason; a page extending `base_site.html` directly does not get it for free.
           {% endif %}
           <table class="tuning-table db-table">
             <thead><tr><th>Chapter</th><th>Opened by</th><th>Arrives as</th>
-              <th>The player reads</th><th>Remove</th></tr></thead>
+              <th>The player reads</th><th>Order</th><th>Remove</th></tr></thead>
             <tbody id="offers-body">
-              {% for f in offers.forms %}
+              {% for f in offer_rows %}
               <tr class="db-offer-row">
                 {% for hidden in f.hidden_fields %}{{ hidden }}{% endfor %}
                 <td>{{ f.chapter }}</td>
@@ -192,10 +192,17 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   <span class="db-opener" data-opener="origin_choice">{{ f.origin_choice }}</span>
                 </td>
                 <td>{{ f.arrives_as }}</td>
-                <td>{{ f.name }} {{ f.player_line }}</td>
+                <td>
+                  <span class="db-reads-editable">{{ f.name }} {{ f.player_line }}</span>
+                  <span class="db-reads-derived" hidden>{{ f.instance.name }}
+                    &middot; {{ f.instance.player_line }}
+                    <div class="help">read from the schooling set; edit it there</div>
+                  </span>
+                </td>
+                <td>{{ f.sort_order }}</td>
                 <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
               </tr>
-              {% if f.errors %}<tr><td colspan="5">{{ f.errors }}</td></tr>{% endif %}
+              {% if f.errors %}<tr><td colspan="6">{{ f.errors }}</td></tr>{% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -212,7 +219,14 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   {{ offers.empty_form.origin_choice }}</span>
               </td>
               <td>{{ offers.empty_form.arrives_as }}</td>
-              <td>{{ offers.empty_form.name }} {{ offers.empty_form.player_line }}</td>
+              <td>
+                <span class="db-reads-editable">
+                  {{ offers.empty_form.name }} {{ offers.empty_form.player_line }}</span>
+                <span class="db-reads-derived" hidden>
+                  <div class="help">read from the schooling set; edit it there</div>
+                </span>
+              </td>
+              <td>{{ offers.empty_form.sort_order }}</td>
               <td></td>
             </tr>
           </template>
@@ -255,7 +269,11 @@ reason; a page extending `base_site.html` directly does not get it for free.
 
   // Only one of the three opener widgets applies to a given chapter - the
   // model's own `DistinctionOffer.clean()` enforces that server-side; this
-  // just keeps the other two out of the way while authoring (#3675).
+  // just keeps the other two out of the way while authoring (#3675). A
+  // TRADITION_STEP row's "player reads" cell is derived, not typed here
+  // (views.py overwrites whatever gets posted) - swap in read-only text
+  // the moment the chapter select says so, so the row does not invite an
+  // edit that will be thrown away on save (review round 1, defect A).
   function updateOpeners(row) {
     var chapterSelect = row.querySelector('[name$="-chapter"]');
     if (!chapterSelect) { return; }
@@ -264,6 +282,15 @@ reason; a page extending `base_site.html` directly does not get it for free.
     for (var i = 0; i < openers.length; i++) {
       openers[i].hidden = openers[i].dataset.opener !== wanted;
     }
+    // Derived, not typed, precisely for the chapter whose opener is the
+    // schooling set (TRADITION_STEP) - tied to `wanted` rather than a
+    // hardcoded chapter value, since that IS why this chapter's wording
+    // is not authored on this page.
+    var isTraditionStep = wanted === "schooling_line";
+    var editable = row.querySelector(".db-reads-editable");
+    var derived = row.querySelector(".db-reads-derived");
+    if (editable) { editable.hidden = isTraditionStep; }
+    if (derived) { derived.hidden = !isTraditionStep; }
   }
 
   var offerRows = document.querySelectorAll(".db-offer-row");

@@ -85,7 +85,11 @@ class BuilderGetTest(BuilderTestCase):
         assert resp.status_code == 200
         results = resp.json()["results"]
         assert any(
-            r["text"] == f"{self.slot.template.name} › {self.slot.name} › {self.choice.name}"
+            r["text"]
+            == (
+                f"{self.slot.template.name} › Q{self.slot.sort_order + 1} · "
+                f"{self.slot.name} › {self.choice.name}"
+            )
             for r in results
         )
 
@@ -126,6 +130,7 @@ class BuilderSaveTest(BuilderTestCase):
             "offers-0-schooling_line": "",
             "offers-0-glimpse_tag": "",
             "offers-0-origin_choice": str(self.choice.pk),
+            "offers-0-sort_order": "0",
         }
         data.update(overrides)
         return data
@@ -167,6 +172,130 @@ class BuilderSaveTest(BuilderTestCase):
         assert distinction.reviewed_by == self.writer
         assert distinction.written_by is None
 
+    def test_delete_checkbox_removes_the_effect(self):
+        # A fresh effect, not the shared `cls.effect` other tests in this class
+        # also post back - deleting a SharedMemoryModel row nulls its pk on the
+        # idmapper-cached Python instance itself, which a rolled-back test
+        # transaction does not undo, so a later test referencing `cls.effect`
+        # would post a stale, now-invalid id (idmapper delete/rollback gotcha).
+        extra_target = ModifierTargetFactory(name="Extra target")
+        extra_effect = DistinctionEffectFactory(
+            distinction=self.distinction, target=extra_target, value_per_rank=3
+        )
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "effects-TOTAL_FORMS": "3",
+                "effects-INITIAL_FORMS": "2",
+                "effects-1-id": str(extra_effect.pk),
+                "effects-1-target": str(extra_target.pk),
+                "effects-1-value_per_rank": "3",
+                "effects-1-DELETE": "on",
+                "effects-2-id": "",
+                "effects-2-target": "",
+                "effects-2-value_per_rank": "",
+                # Leave effects-0 (`cls.effect`) untouched by this save.
+                "effects-0-value_per_rank": "1",
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302
+        assert not DistinctionEffect.objects.filter(pk=extra_effect.pk).exists()
+        assert DistinctionEffect.objects.filter(pk=self.effect.pk).exists()
+
+    def test_delete_checkbox_removes_the_offer(self):
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        offer = DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.APPEARANCE,
+            arrives_as=OfferArrival.CHOICE,
+        )
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "offers-TOTAL_FORMS": "2",
+                "offers-INITIAL_FORMS": "1",
+                "offers-0-id": str(offer.pk),
+                "offers-0-chapter": OfferChapter.APPEARANCE,
+                "offers-0-arrives_as": OfferArrival.CHOICE,
+                "offers-0-name": offer.name,
+                "offers-0-player_line": offer.player_line,
+                "offers-0-schooling_line": "",
+                "offers-0-glimpse_tag": "",
+                "offers-0-origin_choice": "",
+                "offers-0-sort_order": "0",
+                "offers-0-DELETE": "on",
+                "offers-1-id": "",
+                "offers-1-chapter": "",
+                "offers-1-arrives_as": OfferArrival.CHOICE,
+                "offers-1-name": "",
+                "offers-1-player_line": "",
+                "offers-1-schooling_line": "",
+                "offers-1-glimpse_tag": "",
+                "offers-1-origin_choice": "",
+                "offers-1-sort_order": "0",
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302
+        assert not DistinctionOffer.objects.filter(pk=offer.pk).exists()
+
+    def test_tradition_step_offer_wording_ignores_posted_values(self):
+        """Demo-fidelity defect A: a TRADITION_STEP row's name/player_line are derived."""
+        from world.character_creation.factories import DistinctionOfferFactory, SchoolingLineFactory
+
+        line = SchoolingLineFactory(
+            rank=2,
+            name="Trained for years",
+            player_line="Trained since youth.",
+            grants=self.distinction,
+        )
+        offer = DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.TRADITION_STEP,
+            arrives_as=OfferArrival.CHOICE,
+            schooling_line=line,
+            name=line.name,
+            player_line=line.player_line,
+        )
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "offers-TOTAL_FORMS": "2",
+                "offers-INITIAL_FORMS": "1",
+                "offers-0-id": str(offer.pk),
+                "offers-0-chapter": OfferChapter.TRADITION_STEP,
+                "offers-0-arrives_as": OfferArrival.CHOICE,
+                "offers-0-name": "A different name entirely",
+                "offers-0-player_line": "Some other wording.",
+                "offers-0-schooling_line": str(line.pk),
+                "offers-0-glimpse_tag": "",
+                "offers-0-origin_choice": "",
+                "offers-0-sort_order": "0",
+                "offers-1-id": "",
+                "offers-1-chapter": "",
+                "offers-1-arrives_as": OfferArrival.CHOICE,
+                "offers-1-name": "",
+                "offers-1-player_line": "",
+                "offers-1-schooling_line": "",
+                "offers-1-glimpse_tag": "",
+                "offers-1-origin_choice": "",
+                "offers-1-sort_order": "0",
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302
+        offer.refresh_from_db()
+        assert offer.name == "Trained for years"
+        assert offer.player_line == "Trained since youth."
+
 
 class BuilderNewRouteTest(BuilderTestCase):
     def test_new_route_creates_a_distinction(self):
@@ -200,6 +329,7 @@ class BuilderNewRouteTest(BuilderTestCase):
             "offers-0-schooling_line": "",
             "offers-0-glimpse_tag": "",
             "offers-0-origin_choice": "",
+            "offers-0-sort_order": "0",
         }
         resp = self.client.post(reverse("admin_distinction_builder_new"), data)
         assert resp.status_code == 302
@@ -246,6 +376,52 @@ class BuilderLiveTest(BuilderTestCase):
         )
         result = live.checks(self.distinction)
         assert ("ok", "Offered somewhere; a player can reach it.") in result
+
+
+class BuilderOrderingTest(BuilderTestCase):
+    """Demo-fidelity defect B: chapter's declared order, not the DB's alphabetical one."""
+
+    def _make_tied_offers(self):
+        from world.character_creation.factories import DistinctionOfferFactory, SchoolingLineFactory
+
+        line = SchoolingLineFactory(
+            rank=2,
+            name="Trained for years",
+            player_line="Trained since youth.",
+            grants=self.distinction,
+        )
+        DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.CHOICE,
+            origin_choice=self.choice,
+            sort_order=0,
+            name="Drilled by the arms-master",
+            player_line="An arms-master's patience.",
+        )
+        DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.TRADITION_STEP,
+            arrives_as=OfferArrival.CHOICE,
+            schooling_line=line,
+            sort_order=0,
+            name=line.name,
+            player_line=line.player_line,
+        )
+
+    def test_tradition_step_offer_renders_before_lineage_at_the_same_sort_order(self):
+        self._make_tied_offers()
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_distinction_builder", args=[self.distinction.pk]))
+        body = resp.content.decode()
+        assert body.index("Trained for years") < body.index("Drilled by the arms-master")
+
+    def test_preview_prefers_tradition_step_over_lineage_at_the_same_sort_order(self):
+        from web.admin.distinction_builder import live
+
+        self._make_tied_offers()
+        preview = live.preview_line(self.distinction)
+        assert preview.name == "Trained for years"
 
 
 class BuilderObjectToolTest(BuilderTestCase):

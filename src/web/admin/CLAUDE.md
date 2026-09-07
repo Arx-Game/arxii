@@ -490,8 +490,10 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   `CGOriginTemplateSerializer` hands it to a player, picking a GROUP question's first
   offered group for display since there is no real draft here).
 - **Gate** - `@superuser_required`, then `current_contributor(request.user)`; an
-  unlinked operator sees the setup guidance (`_setup.html`) instead and nothing is
-  saved, mirroring the Workbench's own gate.
+  unlinked operator sees the setup guidance (`_setup.html`, generic wording and a
+  generic `#panel-builder-setup` id - it is `{% include %}`d by the tradition
+  slate page and the Distinction Builder too, not just this page, since review
+  round 1) instead and nothing is saved, mirroring the Workbench's own gate.
 - **Credit** - a POST that validates saves the whole route (`UpbringingForm`,
   `QuestionFormSet`, every question's `AnswerFormSet`) inside one
   `transaction.atomic()` block, then `stamp_written` credits every row on the route
@@ -540,8 +542,12 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   `SlateForm`/`SlateFormSet`, an `inlineformset_factory(Beginnings,
   BeginningTradition, extra=1, can_delete=True)`, the one formset actually
   scoped to the page's Beginning), `live.py` (`rail_counts`, `checks`,
-  `preview_line`, `price_text`, `state_line_display`/`schooling_line_display`
-  for the derived-price + help-text pair each standard line's row shows).
+  `preview_line`, `price_text` - re-exported from the shared
+  `web/admin/authoring/copy.price_text` (Distinction Builder review round 1
+  promoted this page's own copy of it out; this page's own call sites are
+  unchanged, its default `per_rank=False`), `state_line_display`/
+  `schooling_line_display` for the derived-price + help-text pair each
+  standard line's row shows).
   Templates in `web/templates/admin/tradition_slate/`: `page.html`, `_css.html`,
   `_rail.html`, `_preview.html` (the entry-line preview, a fragment included
   inside "The slate" module - deliberately not excluded from the styling
@@ -595,7 +601,12 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   **deactivates** (and credits) an existing active offer for a line whose
   grant was cleared - #3675 review Important 3: a cleared grant used to
   leave its offer active forever. A newly-created offer also flashes a
-  message naming it.
+  message naming it. Its `name`/`player_line` are set from the schooling
+  line's own at creation and corrected back to match on every later sync
+  pass too - a TRADITION_STEP offer's wording is never typed on the
+  Distinction Builder's own offer row, and the Distinction Builder's save
+  view runs the mirror-image correction the other direction (Distinction
+  Builder review round 1, Demo-fidelity defect A).
 - **Reachability** - `web/admin/authoring/links.py:builder_url`/`builder_label`
   (generalised from `upbringing_builder_tags.builder_url`, which now
   delegates to it) resolve the "Open the tradition slate" object tool on the
@@ -640,9 +651,17 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `default_secret_level` so this page can fully replace it, with
   `mutually_exclusive_with` widgeted `FilteredSelectMultiple`;
   `EffectForm`/`DistinctionEffectFormSet` and `OfferForm`/
-  `DistinctionOfferFormSet` via `inlineformset_factory`), `live.py`
-  (`price_text`, `effect_reads`, `opener_field_map`, `rail_counts`, `checks`,
-  `preview_line`). Templates in `web/templates/admin/distinction_builder/`:
+  `DistinctionOfferFormSet` via `inlineformset_factory`, `OfferForm` also
+  carrying `sort_order` - a small numeric input, the offer table's own
+  ordering column), `live.py` (`price_text` - a thin wrapper over the shared
+  `web/admin/authoring/copy.price_text(value, *, per_rank=False)`, promoted
+  out of a duplicate this page had re-implemented from the tradition slate
+  page's own `price_text` in review round 1; `effect_reads`,
+  `opener_field_map`, `rail_counts`, `checks`, `preview_line`,
+  `sorted_offer_forms`/`CHAPTER_ORDER`/`_offer_sort_key` - `OfferChapter`'s
+  own declared sequence, not the `chapter` CharField's alphabetical DB order,
+  review round 1 Demo-fidelity defect B). Templates in
+  `web/templates/admin/distinction_builder/`:
   `page.html`, `_css.html`, `_rail.html`, `_preview.html` (the offer preview,
   a fragment included inside "Where it is offered", not excluded from the
   styling guard's class scan). `templatetags/distinction_builder_tags.py`
@@ -675,12 +694,27 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   every cloned row. Server-side validation is unchanged: the model's own
   `DistinctionOffer.clean()`, run automatically by `ModelForm._post_clean()`.
 - **`origin_choice`'s autocomplete label** reads
-  `"{template.name} › {slot.name} › {choice.name}"` via
-  `OriginTemplateSlotChoice.__str__` itself (`world/character_creation/models.py`)
-  - both the AJAX search results and the widget's own pre-selected-option
-  render call plain `str(obj)`, so overriding `__str__` covers both without a
-  custom `AutocompleteJsonView`. A bare slot name is not unique across
-  Upbringings, unlike the old `"{slot}: {name}"` form.
+  `"{template.name} › Q{slot.sort_order + 1} · {slot.name} › {choice.name}"`
+  via `OriginTemplateSlotChoice.__str__` itself
+  (`world/character_creation/models.py`) - both the AJAX search results and
+  the widget's own pre-selected-option render call plain `str(obj)`, so
+  overriding `__str__` covers both without a custom `AutocompleteJsonView`. A
+  bare slot name is not unique across Upbringings, unlike the old
+  `"{slot}: {name}"` form; the ordinal (matching the demo's own "Q2 · Who
+  taught you") was folded in on review round 1.
+- **A TRADITION_STEP offer's `name`/`player_line` are derived, not authored
+  here.** They always mirror the schooling line's own wording - the save
+  view's `_sync_tradition_step_offer_copy` overwrites whatever the form
+  posted for those two fields on every TRADITION_STEP row after the formsets
+  save (not just rows this request touched), and the tradition slate page's
+  own `_sync_schooling_offers` does the same when a schooling line's wording
+  changes there instead, so both writers agree (review round 1, Demo-fidelity
+  defect A). `page.html`'s inline script swaps the "player reads" cell
+  between an editable pair of inputs and read-only text plus the help "read
+  from the schooling set; edit it there" the moment the row's `chapter`
+  select's opener resolves to `schooling_line` - matching what the server
+  will do to it on save, so the row never invites an edit that gets thrown
+  away.
 - **Autocomplete registrations** - `origin_choice`/`glimpse_tag` need their
   target models registered with `search_fields` (Django's autocomplete view
   404s otherwise): `GlimpseTag` already was (`world/magic/admin.py`);
@@ -710,6 +744,19 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   description does not start with `PLACEHOLDER`; a LINEAGE offer whose
   `origin_choice` answer has gone inactive; a TRADITION_STEP offer whose
   `schooling_line` now grants a different distinction than this one.
+- **Offer ordering** - both the offers table (`live.sorted_offer_forms`,
+  reordering the formset's already-fetched `forms` in Python rather than its
+  `queryset`, which stays in DB order for `is_valid()`/`save()`) and
+  `preview_line` (picking `min(offers, key=live._offer_sort_key)` over the
+  fetched rows) sort by `OfferChapter`'s own declared sequence
+  (TRADITION_STEP, GLIMPSE, LINEAGE, APPEARANCE, IDENTITY) then `sort_order`
+  then id - `chapter` is a plain `CharField`, so a DB `.order_by("chapter",
+  ...)` sorts alphabetically, wrong order entirely (review round 1,
+  Demo-fidelity defect B).
+- **Rail modules, top to bottom:** "This distinction" (stat tiles), "Checks",
+  "Preview" (the fixed line "The CG line, drawn as the player sees it,
+  above.", matching the demo), "Credit" (written/reviewed-by plus "Mark
+  reviewed").
 - **What is authored here:** the distinction's own fields, its effects, its
   `mutually_exclusive_with` exclusions, and every `DistinctionOffer` line
   naming it. **What is not:** the standard tradition-step lines themselves

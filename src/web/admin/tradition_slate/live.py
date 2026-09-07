@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from django.db.models import Case, IntegerField, Value, When
 
+from web.admin.authoring.copy import price_text
 from world.character_creation.constants import OfferChapter, TraditionState
 from world.character_creation.models import (
     Beginnings,
@@ -29,15 +30,6 @@ _DRAWBACK_STATES = (TraditionState.SELF_TAUGHT, TraditionState.TEACHERS_GONE)
 #: state the player never gets to fill in themselves, so it takes priority
 #: over self-taught when a slate carries both.
 _PREVIEW_STATES = (TraditionState.TEACHERS_GONE, TraditionState.SELF_TAUGHT)
-
-
-def price_text(value: int) -> str:
-    """Human copy for a derived price: "Free", "Refunds N", or the bare cost."""
-    if value == 0:
-        return "Free"  # noqa: STRING_LITERAL - player-facing copy, not an identifier
-    if value < 0:
-        return f"Refunds {abs(value)}"
-    return str(value)
 
 
 @dataclass(frozen=True)
