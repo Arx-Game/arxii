@@ -222,19 +222,22 @@ function ChosenAnswerOffers({
   const chosenOffers = choice.offers.filter((o) => o.arrives_as === 'choice');
   if (chosenOffers.length === 0) return null;
   const bundled = choice.offers.filter((o) => o.arrives_as === 'bundled');
+  // Match by offer_id, the id the answer's own `offers` already carry - never
+  // by opener_label/choice.name, a display string that can collide or drift
+  // (#3676: never designate by matching strings in code).
+  const chosenOfferIds = new Set(chosenOffers.map((o) => o.offer_id));
   return (
-    <div className="conditional">
-      <ChapterOffers
-        draft={draft}
-        chapter="lineage"
-        filter={(o) => o.opener_label === choice.name}
-        heading={copy?.lineage_offers_heading ?? 'What it left you with'}
-        headingTag={copy?.lineage_offers_chip ?? 'offered by your answer'}
-        showOpener={false}
-        showClosed={false}
-        bundled={bundled}
-      />
-    </div>
+    <ChapterOffers
+      draft={draft}
+      chapter="lineage"
+      filter={(o) => chosenOfferIds.has(o.offer_id)}
+      heading={copy?.lineage_offers_heading ?? 'What it left you with'}
+      headingTag={copy?.lineage_offers_chip ?? 'offered by your answer'}
+      showOpener={false}
+      showClosed={false}
+      bundled={bundled}
+      className="conditional"
+    />
   );
 }
 

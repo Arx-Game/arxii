@@ -114,6 +114,15 @@ const template: OriginTemplate = {
               cost_per_rank: -50,
               max_rank: 1,
             },
+            {
+              offer_id: 14,
+              distinction_id: 24,
+              name: 'Wary of Debts',
+              player_line: 'You do not trust a favor that arrives free.',
+              arrives_as: 'choice',
+              cost_per_rank: 5,
+              max_rank: 1,
+            },
           ],
         },
       ],
@@ -135,12 +144,46 @@ const somehowAlwaysBroke: VisibleOffer = {
   lock_reason: '',
 };
 
+/** Its `offer_id` (14) is in the chosen choice's own `offers`, but its
+ * `opener_label` names the OTHER, unchosen answer - proof the mount matches
+ * by id, never by label/name (#3676). */
+const waryOfDebts: VisibleOffer = {
+  offer_id: 14,
+  distinction_id: 24,
+  name: 'Wary of Debts',
+  player_line: 'You do not trust a favor that arrives free.',
+  chapter: 'lineage',
+  arrives_as: 'choice',
+  opener_label: 'A house bought you out',
+  cost_per_rank: 5,
+  max_rank: 1,
+  is_locked: false,
+  lock_reason: '',
+};
+
+/** Its `opener_label` matches the chosen choice's own name, but its
+ * `offer_id` (99) is not among the chosen choice's `offers` - it must not
+ * render under the chosen answer's block (#3676: id match, never label). */
+const decoyMatchingLabel: VisibleOffer = {
+  offer_id: 99,
+  distinction_id: 99,
+  name: 'Should Not Render',
+  player_line: 'Matches the label but not the id.',
+  chapter: 'lineage',
+  arrives_as: 'choice',
+  opener_label: 'Ran, with nothing',
+  cost_per_rank: 5,
+  max_rank: 1,
+  is_locked: false,
+  lock_reason: '',
+};
+
 let offersResponse: OffersResponse;
 
 beforeEach(() => {
   updateDraftMutate.mockClear();
   offersResponse = {
-    offers: [somehowAlwaysBroke],
+    offers: [somehowAlwaysBroke, waryOfDebts, decoyMatchingLabel],
     closed: [
       {
         distinction_id: 90,
@@ -194,6 +237,27 @@ describe('UpbringingPrompts', () => {
     // The unchosen answer ("A house bought you out") offers Leal Agent on its
     // own answer line only - never its own offered block or heading.
     expect(screen.queryAllByText('What it left you with')).toHaveLength(1);
+  });
+
+  it('matches offers by offer_id, never by opener_label/name (#3676)', () => {
+    renderWithCharacterCreationProviders(
+      <UpbringingPrompts
+        draft={draftWithChoice()}
+        template={template}
+        path="claimed"
+        influence={0}
+        copy={undefined}
+        scope="path"
+      />
+    );
+    // Wary of Debts' offer_id (14) is among the chosen choice's own offers,
+    // even though its opener_label names the OTHER, unchosen answer - it
+    // still renders.
+    expect(screen.getByText('Wary of Debts')).toBeInTheDocument();
+    // The decoy's opener_label matches the chosen choice's own name, but its
+    // offer_id (99) is not among the chosen choice's offers - it never
+    // renders under the chosen answer's block.
+    expect(screen.queryByText('Should Not Render')).not.toBeInTheDocument();
   });
 
   it('a bundled offer prints "bundles X" on the answer line and a locked "bundled" stance in the block', () => {
@@ -254,19 +318,21 @@ describe('UpbringingPrompts', () => {
     // Lineage's answer list still carries the pre-Folio shadcn/Tailwind markup
     // (docs/architecture note, Plan C #3630 pending); only the NEW folio-grammar
     // classes this task adds (field/tags/tag/soft/stances/stance/dot/sq/g/price/
-    // locked/refund/hint/conditional) are cg.css's business here. Named
-    // explicitly (not swept), same discipline as ChapterOffers.test.tsx's own
-    // guard: `space-y-*`/`grid`/`gap-2`/`sm:grid-cols-2` (the answer-list
-    // wrapper), the pick-button classes (`rounded-md`/`border`/`p-2`/
-    // `text-left`/`text-sm`/`transition-colors`/`border-primary`/
-    // `bg-primary/10`/`hover:bg-muted/50`), the `Label` component
-    // (`text-sm`/`font-medium`/`leading-none`/`peer-disabled:*`), the
-    // required-question asterisk (`ml-1`/`text-destructive`), the description/
-    // offer-summary lines (`block`/`text-xs`/`text-muted-foreground`), and the
-    // shadcn `Badge` variant on the "N pts" chip (`inline-flex`/
-    // `items-center`/`justify-between`/`rounded-full`/`px-2.5`/`py-0.5`/
-    // `font-semibold`/`transition-colors`/`focus:outline-none`/`focus:ring-2`/
-    // `focus:ring-ring`/`focus:ring-offset-2`/`text-foreground`/`flex`).
+    // locked/refund/hint/conditional) are cg.css's business here. Every entry
+    // below is a shadcn/Tailwind utility class with NO cg.css rule at all
+    // (verified against this render's actual emitted class set, #3675 fix
+    // round 1 - not swept in defensively): `space-y-*`/`grid`/`gap-2`/
+    // `sm:grid-cols-2` (the answer-list wrapper), the pick-button classes
+    // (`rounded-md`/`border`/`p-2`/`text-left`/`text-sm`/`transition-colors`/
+    // `border-primary`/`bg-primary/10`/`hover:bg-muted/50`), the `Label`
+    // component (`text-sm`/`font-medium`/`leading-none`/`peer-disabled:*`),
+    // the required-question asterisk (`ml-1`/`text-destructive`), the
+    // description/offer-summary lines (`block`/`text-xs`/
+    // `text-muted-foreground`), and the shadcn `Badge` variant on the "N pts"
+    // chip (`inline-flex`/`items-center`/`justify-between`/`rounded-full`/
+    // `px-2.5`/`py-0.5`/`font-semibold`/`transition-colors`/
+    // `focus:outline-none`/`focus:ring-2`/`focus:ring-ring`/
+    // `focus:ring-offset-2`/`text-foreground`/`flex`).
     const styledElsewhere = new Set([
       'space-y-6',
       'space-y-2',

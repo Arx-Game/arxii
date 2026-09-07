@@ -15,11 +15,15 @@
  * those itself.
  *
  * Wraps ITSELF in the folio `.field`; callers pass `heading`/`hint` as
- * props and never wrap this component in a `.field` of their own.
+ * props and never wrap this component in a `.field` of their own. A caller
+ * that needs an extra class on that same div (Lineage's `.field.conditional`
+ * shape, #3675 fix round 1) passes `className`, merged onto `.field` -
+ * never wraps this component in a second div of its own.
  */
 
 import { useCallback, useMemo } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
+import { cn } from '@/lib/utils';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
 import type { CharacterDraft, ClosedDistinction, OfferChapter, VisibleOffer } from '../../types';
@@ -76,9 +80,23 @@ interface ChapterOffersProps {
    * Locked "bundled" stances rendered BEFORE the offered ones, no toggle or
    * rank control - the answer already granted these for free (or a refund),
    * this just shows what arrived (#3675 Task 14). `player_line` is optional:
-   * a bundled distinction's own line, when the caller has it.
+   * a bundled distinction's own line, when the caller has it. Keyed by
+   * `offer_id`, the same id the offered rows key by (never the name - #3676).
    */
-  bundled?: { name: string; player_line?: string; cost_per_rank: number; max_rank: number }[];
+  bundled?: {
+    offer_id: number;
+    name: string;
+    player_line?: string;
+    cost_per_rank: number;
+    max_rank: number;
+  }[];
+  /**
+   * Merged onto this component's own `.field` div (#3675 fix round 1) so a
+   * caller that needs the demo's `.field.conditional` shape (Lineage's
+   * `ChosenAnswerOffers`) doesn't have to wrap this component in a second,
+   * redundant div.
+   */
+  className?: string;
 }
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
@@ -124,6 +142,7 @@ export function ChapterOffers({
   closedFilter,
   showClosed = true,
   bundled = [],
+  className,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -163,7 +182,7 @@ export function ChapterOffers({
   if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
 
   return (
-    <div className="field">
+    <div className={cn('field', className)}>
       {heading && (
         <label>
           {heading}
@@ -176,7 +195,7 @@ export function ChapterOffers({
       )}
       <ul className="stances">
         {bundled.map((item) => (
-          <li key={item.name}>
+          <li key={item.offer_id}>
             <div className="stance" aria-pressed="true" aria-disabled="true">
               <span className="dot sq" />
               <span>

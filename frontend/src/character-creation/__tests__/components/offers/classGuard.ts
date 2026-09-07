@@ -7,6 +7,12 @@
  * file. `container` must include an `.interview` ancestor (wrap the render
  * in `<div className="interview">`) so `.interview`-scoped selectors can
  * match through their real ancestor chain.
+ *
+ * Elements-per-class are found with `classList.contains`, never by building
+ * a `.{name}` selector string for `querySelectorAll` (#3675 fix round 1): a
+ * shadcn/Tailwind class name can contain a `:` (`peer-disabled:opacity-70`),
+ * which is a valid single class-list token but an invalid CSS selector on
+ * its own and throws `SyntaxError` from `querySelectorAll`.
  */
 
 /// <reference types="node" />
@@ -42,8 +48,9 @@ export function unreachableClasses(
   const css = readFileSync(resolve(__dirname, '../../../cg.css'), 'utf8');
   const selectors = ruleSelectors(css);
 
+  const allElements = Array.from(container.querySelectorAll('[class]'));
   const emitted = new Set<string>();
-  container.querySelectorAll('[class]').forEach((el) => {
+  allElements.forEach((el) => {
     el.className
       .split(/\s+/)
       .filter(Boolean)
@@ -54,7 +61,7 @@ export function unreachableClasses(
   for (const name of emitted) {
     if (styledElsewhere.has(name)) continue;
     const candidates = selectors.filter((sel) => new RegExp(`\\.${name}(?![\\w-])`).test(sel));
-    const elements = Array.from(container.querySelectorAll(`.${name}`));
+    const elements = allElements.filter((el) => el.classList.contains(name));
     const reached = candidates.some((sel) =>
       elements.some((el) => {
         try {

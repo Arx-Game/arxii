@@ -367,6 +367,7 @@ describe('ChapterOffers', () => {
         chapter="glimpse"
         bundled={[
           {
+            offer_id: 201,
             name: 'Impoverished',
             player_line: 'Nothing but the clothes.',
             cost_per_rank: -25,
@@ -394,7 +395,7 @@ describe('ChapterOffers', () => {
       <ChapterOffers
         draft={createMockDraft()}
         chapter="glimpse"
-        bundled={[{ name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
+        bundled={[{ offer_id: 202, name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
       />
     );
     const stance = screen.getByText('Impoverished').closest('.stance');
@@ -407,7 +408,7 @@ describe('ChapterOffers', () => {
       <ChapterOffers
         draft={createMockDraft()}
         chapter="glimpse"
-        bundled={[{ name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
+        bundled={[{ offer_id: 202, name: 'Impoverished', cost_per_rank: -25, max_rank: 1 }]}
       />
     );
     expect(screen.getByText('Impoverished')).toBeInTheDocument();
