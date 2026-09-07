@@ -45142,9 +45142,14 @@ components:
           type: string
         reason:
           type: string
+        opener_labels:
+          type: array
+          items:
+            type: string
       required:
       - distinction_id
       - name
+      - opener_labels
       - reason
     ClueRevealOfferDetails:
       type: object

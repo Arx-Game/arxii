@@ -92,7 +92,14 @@ beforeEach(() => {
   mutate.mockClear();
   offersResponse = {
     offers: [silverTongue, magicalScar, highborn],
-    closed: [{ distinction_id: 9, name: 'Generational Talent', reason: 'The route closed it.' }],
+    closed: [
+      {
+        distinction_id: 9,
+        name: 'Generational Talent',
+        reason: 'The route closed it.',
+        opener_labels: [],
+      },
+    ],
   };
   draftDistinctions = [otherChapterEntry];
 });
@@ -162,8 +169,18 @@ describe('ChapterOffers', () => {
     offersResponse = {
       ...offersResponse,
       closed: [
-        { distinction_id: 9, name: 'Generational Talent', reason: 'The route closed it.' },
-        { distinction_id: 8, name: 'Highborn', reason: 'The Cradle raised this character.' },
+        {
+          distinction_id: 9,
+          name: 'Generational Talent',
+          reason: 'The route closed it.',
+          opener_labels: [],
+        },
+        {
+          distinction_id: 8,
+          name: 'Highborn',
+          reason: 'The Cradle raised this character.',
+          opener_labels: ['Public'],
+        },
       ],
     };
     renderWithCharacterCreationProviders(
@@ -267,6 +284,67 @@ describe('ChapterOffers', () => {
     expect(screen.getByText('From Mark.')).toBeInTheDocument();
   });
 
+  it('headingTag prints a .tag.soft chip right after the heading', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        heading="What it left in you"
+        headingTag="optional"
+      />
+    );
+    const chip = screen.getByText('optional');
+    expect(chip).toHaveClass('tag', 'soft');
+    expect(chip.closest('.tags')).toBeInTheDocument();
+  });
+
+  it('headingTag renders nothing when heading itself is omitted', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" headingTag="optional" />
+    );
+    expect(screen.queryByText('optional')).not.toBeInTheDocument();
+  });
+
+  it('closedFilter scopes the closed hint to matching items only', () => {
+    offersResponse = {
+      ...offersResponse,
+      closed: [
+        {
+          distinction_id: 9,
+          name: 'Generational Talent',
+          reason: 'The route closed it.',
+          opener_labels: ['Mark'],
+        },
+        {
+          distinction_id: 8,
+          name: 'Highborn',
+          reason: 'The Cradle raised this character.',
+          opener_labels: ['Public'],
+        },
+      ],
+    };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        closedFilter={(c) => c.opener_labels.includes('Public')}
+      />
+    );
+    expect(
+      screen.getByText('Closed on this road: Highborn: The Cradle raised this character.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Generational Talent/)).not.toBeInTheDocument();
+  });
+
+  it('closedFilter defaults to showing every closed item', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(
+      screen.getByText('Closed on this road: Generational Talent: The route closed it.')
+    ).toBeInTheDocument();
+  });
+
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
     const { container } = renderWithCharacterCreationProviders(
       <div className="interview">
@@ -274,6 +352,7 @@ describe('ChapterOffers', () => {
           draft={createMockDraft()}
           chapter="glimpse"
           heading="What it left in you"
+          headingTag="optional"
           hint="staff copy"
         />
       </div>

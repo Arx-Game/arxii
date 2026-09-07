@@ -22,7 +22,7 @@ import { useCallback, useMemo } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
-import type { CharacterDraft, OfferChapter, VisibleOffer } from '../../types';
+import type { CharacterDraft, ClosedDistinction, OfferChapter, VisibleOffer } from '../../types';
 import { RankControl } from './RankControl';
 import { choiceEntries } from './syncHelpers';
 
@@ -33,6 +33,12 @@ interface ChapterOffersProps {
   filter?: (offer: VisibleOffer) => boolean;
   /** Staff copy printed above the list, e.g. a question label. */
   heading?: string;
+  /**
+   * A `.tags > .tag.soft` chip printed right after `heading`, e.g. "optional"
+   * (#3675 fix round 2, the demo marks every per-tag offer heading this
+   * way). Omitted when `heading` itself is omitted.
+   */
+  headingTag?: string;
   /** Staff copy printed below the list, e.g. an explanatory note. */
   hint?: string;
   /**
@@ -49,6 +55,16 @@ interface ChapterOffersProps {
    * rather than read here; defaults to "Closed on this road".
    */
   closedLead?: string;
+  /**
+   * Scope the closed-offers hint to one axis's tag via `opener_labels`
+   * (#3675 fix round 2, `closed_for` is now chapter-scoped but still
+   * returns the route's whole closed list; a chapter with several sub-blocks,
+   * like the Glimpse's one-per-tag layout, filters here so a closed item
+   * prints once, under the tag that would have opened it, not under every
+   * tag). Default: show every closed item this chapter's `useDraftOffers`
+   * response carries.
+   */
+  closedFilter?: (closed: ClosedDistinction) => boolean;
 }
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
@@ -74,9 +90,11 @@ export function ChapterOffers({
   chapter,
   filter,
   heading,
+  headingTag,
   hint,
   showOpener = true,
   closedLead,
+  closedFilter,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -111,13 +129,22 @@ export function ChapterOffers({
   }
 
   const offers = (offersData?.offers ?? []).filter((offer) => (filter ? filter(offer) : true));
-  const closed = offersData?.closed ?? [];
+  const closed = (offersData?.closed ?? []).filter((c) => (closedFilter ? closedFilter(c) : true));
 
   if (offers.length === 0 && closed.length === 0) return null;
 
   return (
     <div className="field">
-      {heading && <label>{heading}</label>}
+      {heading && (
+        <label>
+          {heading}
+          {headingTag && (
+            <span className="tags">
+              <span className="tag soft">{headingTag}</span>
+            </span>
+          )}
+        </label>
+      )}
       <ul className="stances">
         {offers.map((offer) => {
           const entry = entryByOfferId.get(offer.offer_id);

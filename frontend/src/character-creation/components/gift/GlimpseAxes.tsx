@@ -10,7 +10,11 @@
  * pick row, one sub-block PER TAG (not one per axis, Task 13's shape); two
  * tags chosen on the same axis (e.g. Consequence: Mark + Loss) each get
  * their own heading, matching the demo's "What the mark is" / "What the
- * loss was" side by side under one axis.
+ * loss was" side by side under one axis. Each sub-block's heading carries
+ * an "optional" `.tag.soft` chip (`headingTag`, #3675 fix round 2), and its
+ * `closedFilter` scopes the closed-offers hint to `opener_labels.includes
+ * (tag.name)` so a route-closed distinction prints once, under the tag that
+ * would have opened it, not under every chosen tag's sub-block.
  *
  * The sheet's live editor (`magic/components/glimpse/GlimpseEditorDialog.tsx`)
  * still mounts the shared `GlimpseFlow` unchanged; this component is
@@ -152,7 +156,9 @@ export function GlimpseAxes({
                       copy?.glimpse_offers_heading ??
                       'What it left in you'
                     }
+                    headingTag={copy?.offers_optional_chip ?? 'optional'}
                     showOpener={false}
+                    closedFilter={(closed) => closed.opener_labels.includes(tag.name)}
                   />
                 </div>
               ))}

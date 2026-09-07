@@ -9,6 +9,7 @@ from world.character_creation.factories import (
     BeginningTraditionFactory,
     CharacterDraftFactory,
     DistinctionOfferFactory,
+    OriginTemplateFactory,
     TraditionStateLineFactory,
 )
 from world.distinctions.factories import DistinctionFactory
@@ -49,6 +50,18 @@ class OffersEndpointTests(TestCase):
         assert row["player_line"] == "A scar that answers magic."
         assert row["max_rank"] == 3
         assert row["cost_per_rank"] == 5
+
+    def test_closed_distinctions_carry_opener_labels_scoped_to_the_chapter(self):
+        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+        route.closed_distinctions.add(self.scar)
+        self.draft.selected_origin_template = route
+        self.draft.save(update_fields=["selected_origin_template"])
+        resp = self.client.get(
+            f"/api/character-creation/drafts/{self.draft.id}/offers/?chapter=glimpse"
+        )
+        assert resp.status_code == status.HTTP_200_OK
+        (closed,) = resp.data["closed"]
+        assert closed["opener_labels"] == ["Mark"]
 
     def test_rejects_an_unknown_chapter(self):
         resp = self.client.get(

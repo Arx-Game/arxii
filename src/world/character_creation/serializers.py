@@ -955,6 +955,7 @@ class ClosedDistinctionSerializer(serializers.Serializer):
     distinction_id = serializers.IntegerField()
     name = serializers.CharField()
     reason = serializers.CharField()
+    opener_labels = serializers.ListField(child=serializers.CharField())
 
 
 class OffersResponseSerializer(serializers.Serializer):

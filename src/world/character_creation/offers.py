@@ -8,6 +8,7 @@ offers and removes picks whose offer has gone.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
@@ -216,16 +217,46 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
     return out
 
 
-def closed_for(draft: CharacterDraft) -> list[ClosedDistinction]:
-    """The route's closed-distinction list, for the chapter that would have shown them.
+def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDistinction]:
+    """The route's closed-distinction list, for the one chapter that would have shown them.
 
-    Called by each chapter's view/serializer alongside ``offers_for``.
+    Called by each chapter's view/serializer alongside ``offers_for``. Each row
+    carries ``opener_labels``: the opener labels of this chapter's own active
+    CHOICE offers for the closed distinction whose opener the draft has satisfied
+    (the same ``_opener_satisfied`` check ``visible_offers`` applies, evaluated
+    directly here since ``visible_offers`` itself excludes anything closed before
+    a caller ever sees it). Empty when this chapter's offer for it carries no
+    opener at all (Appearance, the Actor's Sheet) or no offer in this chapter
+    opens it (the route closed something a different chapter offers). A chapter
+    mount (``GlimpseAxes``) uses this to print the closed hint once, under the
+    specific pick that would have opened it, instead of under every pick.
     """
     route = draft.selected_origin_template
     if route is None:
         return []
+    closed_ids = set(route.closed_distinctions.values_list("id", flat=True))
+    if not closed_ids:
+        return []
+    ctx = _context(draft)
+    rows = DistinctionOffer.objects.filter(
+        is_active=True,
+        chapter=chapter,
+        arrives_as=OfferArrival.CHOICE,
+        distinction_id__in=closed_ids,
+    ).select_related("glimpse_tag", "origin_choice", "schooling_line")
+    openers: dict[int, list[str]] = defaultdict(list)
+    for offer in rows:
+        if _opener_satisfied(offer, ctx):
+            label = opener_label(offer)
+            if label:
+                openers[offer.distinction_id].append(label)
     return [
-        ClosedDistinction(distinction_id=d.id, name=d.name, reason=route.closed_reason)
+        ClosedDistinction(
+            distinction_id=d.id,
+            name=d.name,
+            reason=route.closed_reason,
+            opener_labels=openers.get(d.id, []),
+        )
         for d in route.closed_distinctions.all()
     ]
 

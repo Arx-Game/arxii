@@ -324,6 +324,117 @@ describe('GlimpseSection', () => {
     ).toBeInTheDocument();
   });
 
+  it("a route-closed distinction's hint prints exactly once, under the tag that would have opened it (#3675 fix round 2)", () => {
+    // The demo's "Highborn under Public" case: Highborn is closed by the
+    // route, so it never appears in `offers`, only in `closed` with
+    // `opener_labels: ['Public']` (this chapter's own opener check).
+    const publicTag: GlimpseTagOption = {
+      id: 6,
+      axis: 'WITNESS',
+      name: 'Public',
+      slug: 'public',
+      description: 'Everyone; there is no taking it back.',
+      example: 'The whole street saw.',
+      sort_order: 2,
+      offers: [tagOffer({ offer_id: 601, name: 'Highborn', cost_per_rank: 20 })],
+    };
+    const closedOffersResponse: OffersResponse = {
+      offers: [
+        visibleOffer(TONE_WONDER),
+        visibleOffer(TONE_DREAD),
+        visibleOffer(CONSEQUENCE_A),
+        visibleOffer(CONSEQUENCE_B),
+        visibleOffer(WITNESS_ALONE),
+      ],
+      closed: [
+        {
+          distinction_id: 601,
+          name: 'Highborn',
+          reason: 'The Cradle raised this character; the route closed it.',
+          opener_labels: ['Public'],
+        },
+      ],
+    };
+    const draft = createMockDraft({ id: 1, draft_data: { glimpse_tag_ids: [6] } });
+    const queryClient = createTestQueryClient();
+    seedQueryData(queryClient, characterCreationKeys.glimpseTags(), [...CATALOG, publicTag]);
+    seedQueryData(queryClient, distinctionKeys.draftDistinctions(draft.id), [DRAFT_DISTINCTION]);
+    seedQueryData(
+      queryClient,
+      characterCreationKeys.draftOffers(draft.id, 'glimpse'),
+      closedOffersResponse
+    );
+    seedQueryData(queryClient, characterCreationKeys.explanations(), {});
+    const glimpseProseField = {
+      name: 'glimpse_story' as const,
+      onChange: vi.fn(),
+      onBlur: vi.fn(),
+      ref: vi.fn(),
+    };
+    renderWithCharacterCreationProviders(
+      <GlimpseSection draft={draft} glimpseProseField={glimpseProseField} />,
+      { queryClient }
+    );
+
+    expect(screen.getAllByText(/Closed on this road/)).toHaveLength(1);
+    expect(
+      screen.getByText(/Highborn: The Cradle raised this character; the route closed it\./)
+    ).toBeInTheDocument();
+  });
+
+  it('a route-closed distinction prints nowhere when the tag that would have opened it is not chosen', () => {
+    const publicTag: GlimpseTagOption = {
+      id: 6,
+      axis: 'WITNESS',
+      name: 'Public',
+      slug: 'public',
+      description: 'Everyone; there is no taking it back.',
+      example: 'The whole street saw.',
+      sort_order: 2,
+      offers: [tagOffer({ offer_id: 601, name: 'Highborn', cost_per_rank: 20 })],
+    };
+    const closedOffersResponse: OffersResponse = {
+      offers: [
+        visibleOffer(TONE_WONDER),
+        visibleOffer(TONE_DREAD),
+        visibleOffer(CONSEQUENCE_A),
+        visibleOffer(CONSEQUENCE_B),
+        visibleOffer(WITNESS_ALONE),
+      ],
+      closed: [
+        {
+          distinction_id: 601,
+          name: 'Highborn',
+          reason: 'The Cradle raised this character; the route closed it.',
+          opener_labels: ['Public'],
+        },
+      ],
+    };
+    // Public is never chosen here.
+    const draft = createMockDraft({ id: 1, draft_data: {} });
+    const queryClient = createTestQueryClient();
+    seedQueryData(queryClient, characterCreationKeys.glimpseTags(), [...CATALOG, publicTag]);
+    seedQueryData(queryClient, distinctionKeys.draftDistinctions(draft.id), [DRAFT_DISTINCTION]);
+    seedQueryData(
+      queryClient,
+      characterCreationKeys.draftOffers(draft.id, 'glimpse'),
+      closedOffersResponse
+    );
+    seedQueryData(queryClient, characterCreationKeys.explanations(), {});
+    const glimpseProseField = {
+      name: 'glimpse_story' as const,
+      onChange: vi.fn(),
+      onBlur: vi.fn(),
+      ref: vi.fn(),
+    };
+    renderWithCharacterCreationProviders(
+      <GlimpseSection draft={draft} glimpseProseField={glimpseProseField} />,
+      { queryClient }
+    );
+
+    expect(screen.queryByText(/Closed on this road/)).not.toBeInTheDocument();
+  });
+
   it('renders no heading of its own: the h2 above this mount is GiftStage’s job', () => {
     const draft = createMockDraft({ id: 1, draft_data: {} });
     renderSection(draft);

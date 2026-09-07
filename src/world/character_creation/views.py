@@ -1075,7 +1075,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
             chapter = OfferChapter(raw)
         except ValueError as exc:
             raise ValidationError({"chapter": "Unknown chapter."}) from exc
-        payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft)}
+        payload = {"offers": offers_for(draft, chapter), "closed": closed_for(draft, chapter)}
         return Response(OffersResponseSerializer(payload).data)
 
     @extend_schema(responses=HouseClaimStatusSerializer)

@@ -67,7 +67,12 @@ describe('character-creation/api getDraftOffers', () => {
         },
       ],
       closed: [
-        { distinction_id: 99, name: 'Kept Close', reason: 'This tradition has no living masters.' },
+        {
+          distinction_id: 99,
+          name: 'Kept Close',
+          reason: 'This tradition has no living masters.',
+          opener_labels: [],
+        },
       ],
     };
     vi.mocked(apiFetch).mockResolvedValue(mockOkResponse(data));

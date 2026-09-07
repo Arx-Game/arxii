@@ -75,7 +75,11 @@ character-creation/
     │                            #   axis: two tags chosen on one multi-select axis each
     │                            #   get their own heading, matching the demo). No heading
     │                            #   of its own; GiftStage's `section-h` above the mount
-    │                            #   carries it.
+    │                            #   carries it. Each sub-block passes ChapterOffers a
+    │                            #   headingTag ("optional") and a closedFilter scoped to
+    │                            #   `opener_labels.includes(tag.name)` so a route-closed
+    │                            #   distinction prints once, under its own tag (fix
+    │                            #   round 2).
     └── lineage/             # LineageStage subsections (#3617, #3648)
         ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
         ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family

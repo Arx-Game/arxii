@@ -26823,6 +26823,7 @@ export interface components {
       distinction_id: number;
       name: string;
       reason: string;
+      opener_labels: string[];
     };
     /**
      * @description Staff CRUD for clue-reveal-kind offer details (#3428).

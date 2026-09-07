@@ -71,8 +71,50 @@ class OffersForTests(TestCase):
         draft.selected_origin_template = route
         draft.save(update_fields=["selected_origin_template"])
         assert offers_for(draft, OfferChapter.GLIMPSE) == []
-        closed = closed_for(draft)
+        closed = closed_for(draft, OfferChapter.GLIMPSE)
         assert [(c.distinction_id, c.reason) for c in closed] == [(self.scar.id, "Not here.")]
+
+    def test_closed_distinction_opener_labels_name_the_tag_that_would_have_opened_it(self):
+        """The demo's "Highborn under Public" case (#3675 fix round 2): a closed
+        distinction's ``opener_labels`` names the picked tag that would have
+        opened it in this chapter, so the chapter mount can print the closed
+        hint once, under that specific pick, instead of under every pick."""
+        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+        route.closed_distinctions.add(self.scar)
+        draft = self._draft(glimpse_tag_ids=[self.mark.id])
+        draft.selected_origin_template = route
+        draft.save(update_fields=["selected_origin_template"])
+        (closed,) = closed_for(draft, OfferChapter.GLIMPSE)
+        assert closed.opener_labels == ["Mark"]
+
+    def test_closed_distinction_opener_labels_empty_when_the_opener_was_not_picked(self):
+        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+        route.closed_distinctions.add(self.scar)
+        draft = self._draft()  # Mark never chosen
+        draft.selected_origin_template = route
+        draft.save(update_fields=["selected_origin_template"])
+        (closed,) = closed_for(draft, OfferChapter.GLIMPSE)
+        assert closed.opener_labels == []
+
+    def test_closed_distinction_opener_labels_empty_for_an_opener_free_chapter(self):
+        blood = DistinctionFactory(name="Giant's Blood", cost_per_rank=20)
+        DistinctionOfferFactory(distinction=blood, chapter=OfferChapter.APPEARANCE)
+        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+        route.closed_distinctions.add(blood)
+        draft = self._draft()
+        draft.selected_origin_template = route
+        draft.save(update_fields=["selected_origin_template"])
+        (closed,) = closed_for(draft, OfferChapter.APPEARANCE)
+        assert closed.opener_labels == []
+
+    def test_closed_distinction_opener_labels_empty_when_no_offer_in_this_chapter_opens_it(self):
+        route = OriginTemplateFactory(beginning=self.beginning, closed_reason="Not here.")
+        route.closed_distinctions.add(self.scar)  # scar's only offer is chapter=GLIMPSE
+        draft = self._draft(glimpse_tag_ids=[self.mark.id])
+        draft.selected_origin_template = route
+        draft.save(update_fields=["selected_origin_template"])
+        (closed,) = closed_for(draft, OfferChapter.APPEARANCE)
+        assert closed.opener_labels == []
 
     def test_mutual_exclusion_locks_with_reason(self):
         other = DistinctionFactory(name="Other")

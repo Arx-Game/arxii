@@ -41,6 +41,13 @@ class ClosedDistinction:
     distinction_id: int
     name: str
     reason: str
+    #: Opener labels of the requesting chapter's own active offers for this
+    #: distinction whose opener the draft satisfies (#3675 fix round 2); lets a
+    #: chapter mount (the Glimpse's ``GlimpseAxes``) print the closed hint once,
+    #: under the specific pick that would have opened it, instead of under every
+    #: pick. Empty when this chapter's offer for it carries no opener at all
+    #: (Appearance, the Actor's Sheet) or no offer in this chapter opens it.
+    opener_labels: list[str]
 
 
 class StatAdjustment(TypedDict):
