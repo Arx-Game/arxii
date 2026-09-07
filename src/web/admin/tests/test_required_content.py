@@ -790,3 +790,70 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
             "Nothing missing. Every required content dependency resolved against this database.",
             body,
         )
+
+
+class TestTraditionStandardLinesProbes(TestCase):
+    """Both standard-line tables (#3675): missing rows AND blank text both report.
+
+    The tradition slate page's own GET no longer ``get_or_create``s these rows
+    (#3675 demo-fidelity ruling - that write was a guard by another name), so
+    this sentinel is the only thing that notices an entirely-empty database or
+    a row an author left blank.
+    """
+
+    def test_missing_when_no_rows_exist(self) -> None:
+        state_result = rc._probe_tradition_state_lines()
+        self.assertFalse(state_result.present)
+        self.assertEqual(
+            set(state_result.missing), {"self_taught", "teachers_gone", "living_masters"}
+        )
+
+        schooling_result = rc._probe_schooling_lines()
+        self.assertFalse(schooling_result.present)
+        self.assertEqual(set(schooling_result.missing), {"0", "1", "2"})
+
+    def test_blank_entry_line_or_name_reports_missing_too(self) -> None:
+        from world.character_creation.constants import TraditionState
+        from world.character_creation.factories import (
+            SchoolingLineFactory,
+            TraditionStateLineFactory,
+        )
+
+        for state in TraditionState.values:
+            TraditionStateLineFactory(state=state, entry_line="")
+        for rank in range(3):
+            SchoolingLineFactory(rank=rank, name="")
+
+        state_result = rc._probe_tradition_state_lines()
+        self.assertFalse(state_result.present)
+        self.assertEqual(
+            set(state_result.missing), {"self_taught", "teachers_gone", "living_masters"}
+        )
+
+        schooling_result = rc._probe_schooling_lines()
+        self.assertFalse(schooling_result.present)
+        self.assertEqual(set(schooling_result.missing), {"0", "1", "2"})
+
+    def test_present_when_every_row_exists_with_text(self) -> None:
+        from world.character_creation.constants import TraditionState
+        from world.character_creation.factories import (
+            SchoolingLineFactory,
+            TraditionStateLineFactory,
+        )
+
+        for state in TraditionState.values:
+            TraditionStateLineFactory(state=state, entry_line=f"{state} line")
+        for rank in range(3):
+            SchoolingLineFactory(rank=rank, name=f"Schooling {rank}")
+
+        self.assertTrue(rc._probe_tradition_state_lines().present)
+        self.assertTrue(rc._probe_schooling_lines().present)
+
+    def test_declared_as_required_dependencies(self) -> None:
+        for key in (
+            "character_creation.tradition_state_lines",
+            "character_creation.tradition_schooling_lines",
+        ):
+            dep = next(d for d in rc._declarations() if d.key == key)
+            self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+            self.assertIsInstance(dep.probe, rc.CustomProbe)

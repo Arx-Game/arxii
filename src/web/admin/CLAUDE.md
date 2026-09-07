@@ -454,11 +454,12 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   `answer_formset_for` for the per-question `a<slot.pk>`-prefixed formset), `live.py`
   (the right rail: `for_template` -> `LivePanel`, `rail_counts`), `credit.py`
   (`stamp_written`, `stamp_reviewed`). Templates in
-  `web/templates/admin/upbringing_builder/`: `page.html` (the form, with a
-  client-side script that clones "Add question"/"Add answer" formset rows - there is
-  no saved row to fetch an HTMX fragment for until the whole route is saved),
-  `_question.html`, `_answers.html`, `_rail.html`, `_setup.html`, `_preview.html`,
-  `_css.html`.
+  `web/templates/admin/upbringing_builder/`: `page.html` (the form, wiring up
+  "Add question"/"Add answer" against the shared clone-a-formset-row helpers
+  in `web/static/admin/js/builder_formsets.js` (also loaded by the tradition
+  slate page, #3675) - there is no saved row to fetch an HTMX fragment for
+  until the whole route is saved), `_question.html`, `_answers.html`,
+  `_rail.html`, `_setup.html`, `_preview.html`, `_css.html`.
 - **Stylesheets** - the page links `admin/css/forms.css` itself, in its own
   `extrastyle` block. `admin/base.html` links only `base.css`, `dark_mode.css` and
   `responsive.css`; `forms.css` - where `.form-row`, `.aligned label`,
@@ -532,9 +533,10 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
 
 - **Files** - `web/admin/tradition_slate/`: `views.py` (`tradition_slate`,
   `tradition_slate_review`), `forms.py` (`TraditionStateLineForm`/
-  `StateLineFormSet`, `SchoolingLineForm`/`SchoolingLineFormSet` - both
-  `modelformset_factory(..., extra=0)`, always bound against every row in
-  the table since the standard lines are shared, not per-Beginning -
+  `SchoolingLineForm` - each carries its own identity field (`state`/`rank`)
+  as a `HiddenInput`, never a free select - plus the two factory functions
+  `state_line_formset`/`schooling_line_formset` that build a fresh
+  `modelformset_factory` class per request, sized `extra=len(missing)`;
   `SlateForm`/`SlateFormSet`, an `inlineformset_factory(Beginnings,
   BeginningTradition, extra=1, can_delete=True)`, the one formset actually
   scoped to the page's Beginning), `live.py` (`rail_counts`, `checks`,
@@ -544,23 +546,56 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   `_rail.html`, `_preview.html` (the entry-line preview, a fragment included
   inside "The slate" module - deliberately not excluded from the styling
   guard's class scan, unlike the Upbringing Builder's standalone
-  `_preview.html`).
+  `_preview.html`). Both this page's and the Upbringing Builder's inline
+  "clone a formset row" scripts were promoted to one shared file,
+  `web/static/admin/js/builder_formsets.js` (`window.arxBuilderFormsets`:
+  `nextFormIndex`/`announceFormsetAdded`/`cloneFromTemplate`, the last taking
+  a `wrapperTag` - `"div"` for a whole panel, `"tbody"` for a bare `<tr>`,
+  since a `<tr>` parsed into a plain `<div>` is silently dropped by the
+  browser's own HTML parser) - #3675 review: this page had shipped a verbatim
+  copy of that script.
+- **A GET never writes to the database** (#3675 demo-fidelity ruling: a
+  `get_or_create` on every GET is a guard by another name). `views._missing_states`/
+  `_missing_ranks` diff the current DB against the fixed vocabulary
+  (`TraditionState.values`, ranks 0-2); `forms.state_line_formset`/
+  `schooling_line_formset` render one form per existing row plus one unsaved
+  `extra` form per still-missing state/rank, each extra row's identity fixed
+  by the formset's own `initial=` (never typed in, never a free select). A
+  still-unauthored row is only written to the database the moment Save
+  actually changes one of its visible fields - an author who leaves a new
+  row entirely blank saves nothing for it. The three-plus-three sentinel
+  the removed write used to stand in for now lives in `required_content.py`
+  (below).
+- **Required-content sentinel** (`web/admin/tuning/required_content.py`) -
+  `_probe_tradition_state_lines`/`_probe_schooling_lines`, both
+  `DependencyTier.REQUIRED`: report a missing `TraditionStateLine`/
+  `SchoolingLine` row for any `TraditionState` value / rank 0-2, and treat a
+  row with a blank `entry_line`/`name` as missing too - the standard lines
+  are shared by every Beginning, so a gap here is silent everywhere, not
+  just on one Beginning's slate page.
 - **Credit** - `web/admin/authoring/credit.py:stamp_written`/`stamp_reviewed`
-  now take a single `CreditedContent` row rather than a whole route; the
+  take a single `CreditedContent` row rather than a whole route; the
   Upbringing Builder's own `credit.py` was generalised to loop its route's
   rows through these instead of stamping inline. The tradition slate page
   calls them directly on every `TraditionStateLine`/`SchoolingLine` a save
-  actually changed (via each formset's own `.save()` return value) -
+  actually changed (via each formset's own `.save()` return value) and on
+  every `DistinctionOffer` row `_sync_schooling_offers` touches (below) - a
+  `DistinctionOffer` is `CreditedContent` in its own right, not just the line
+  that opens it (#3675 review Important 1: this was missing on first cut).
   `BeginningTradition` carries no authorship fields, so slate rows are never
   stamped. "Mark reviewed" likewise stamps every standard line, not the
   Beginning's own slate rows - the standard lines are shared, so review here
   is not per-Beginning.
-- **Save-time side effect** - a POST that validates saves all three formsets in
-  one `transaction.atomic()` block, then for every `SchoolingLine` with a
-  `grants` distinction, `get_or_create`s its `DistinctionOffer(chapter=
-  TRADITION_STEP, schooling_line=line)` (updating an existing offer's
-  `distinction` in step if the grant changed) and flashes a message for each
-  one newly created.
+- **Save-time side effect (`views._sync_schooling_offers`)** - a POST that
+  validates saves all three formsets in one `transaction.atomic()` block,
+  then keeps every `SchoolingLine`'s TRADITION_STEP `DistinctionOffer` in
+  step with its `grants`: creates the offer (and credits it) for a line that
+  gained a grant, keeps an existing offer's `distinction` and `is_active`
+  in step (reactivating and crediting it if it had gone inactive), and
+  **deactivates** (and credits) an existing active offer for a line whose
+  grant was cleared - #3675 review Important 3: a cleared grant used to
+  leave its offer active forever. A newly-created offer also flashes a
+  message naming it.
 - **Reachability** - `web/admin/authoring/links.py:builder_url`/`builder_label`
   (generalised from `upbringing_builder_tags.builder_url`, which now
   delegates to it) resolve the "Open the tradition slate" object tool on the
@@ -572,10 +607,14 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
   `admin_tradition_slate_review` (POST).
 - **Checks (`live.checks`)** - every self-taught/teachers-gone standard line
   carries a drawback; those two drawbacks are each other's
-  `mutually_exclusive_with`; how many of this Beginning's slate lines are
-  still at the model's default state (living masters); every schooling line
-  with a grant has its TRADITION_STEP offer (a warn that clears itself once
-  the page is saved, since save is what creates the missing offer).
+  `mutually_exclusive_with` (worded without naming that attribute, since it
+  is staff-facing copy); how many of this Beginning's slate lines are still
+  at the model's default state (living masters); every schooling line with a
+  grant has its active TRADITION_STEP offer (a warn that clears itself once
+  the page is saved, since save is what creates/reactivates the offer); a
+  schooling line with **no** grant but a still-active offer (a warn that
+  only ever fires for a row edited outside this page, or one from before the
+  deactivation fix shipped - saving this page always self-heals it).
 - **What is authored here:** the three `TraditionStateLine` rows, the three
   `SchoolingLine` rows, and one Beginning's `BeginningTradition` slate
   (state, own wording, sort order). **What is not:** the `Tradition` row

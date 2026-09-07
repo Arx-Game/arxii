@@ -2,9 +2,15 @@
 
 ``TraditionStateLineForm``/``SchoolingLineForm`` back the standard-lines
 formsets - shared by every Beginning, so the view always binds them against
-every row in the table, not just this Beginning's. ``SlateForm`` backs the
-one formset actually scoped to a Beginning: its own ``BeginningTradition``
-slate.
+every row in the table, not just this Beginning's. Both forms carry their own
+identity field (``state``/``rank``) as a hidden input, never a free select:
+fixed for a saved row, and fixed by the formset's own ``initial`` for a row
+that does not exist yet (a still-unauthored ``TraditionState``/rank). Nothing
+about a standard line's identity is ever typed in - only ``entry_line``/
+``carries`` or ``name``/``player_line``/``grants`` are.
+
+``SlateForm`` backs the one formset actually scoped to a Beginning: its own
+``BeginningTradition`` slate.
 """
 
 from __future__ import annotations
@@ -12,8 +18,11 @@ from __future__ import annotations
 from django import forms
 from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect
-from django.forms import inlineformset_factory, modelformset_factory
+from django.db.models import QuerySet
+from django.forms import BaseModelFormSet, inlineformset_factory, modelformset_factory
+from django.http import QueryDict
 
+from world.character_creation.constants import TraditionState
 from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
@@ -23,9 +32,11 @@ from world.character_creation.models import (
 
 
 class TraditionStateLineForm(forms.ModelForm):
+    state = forms.ChoiceField(choices=TraditionState.choices, widget=forms.HiddenInput())
+
     class Meta:
         model = TraditionStateLine
-        fields = ["entry_line", "carries"]
+        fields = ["state", "entry_line", "carries"]
         widgets = {
             "carries": AutocompleteSelect(
                 TraditionStateLine._meta.get_field("carries"),  # noqa: SLF001
@@ -35,9 +46,11 @@ class TraditionStateLineForm(forms.ModelForm):
 
 
 class SchoolingLineForm(forms.ModelForm):
+    rank = forms.IntegerField(widget=forms.HiddenInput())
+
     class Meta:
         model = SchoolingLine
-        fields = ["name", "player_line", "grants"]
+        fields = ["rank", "name", "player_line", "grants"]
         widgets = {
             "grants": AutocompleteSelect(
                 SchoolingLine._meta.get_field("grants"),  # noqa: SLF001
@@ -62,14 +75,45 @@ class SlateForm(forms.ModelForm):
         }
 
 
-#: The three standard state lines, shared by every Beginning. ``extra=0``: the
-#: view always ensures exactly one row per ``TraditionState`` exists before
-#: building this, so staff never see a spurious blank row or a missing one.
-StateLineFormSet = modelformset_factory(TraditionStateLine, form=TraditionStateLineForm, extra=0)
+def state_line_formset(
+    data: QueryDict | None,
+    queryset: QuerySet[TraditionStateLine],
+    missing_states: list[str],
+) -> BaseModelFormSet:
+    """The three state-line rows: one per existing row, one per still-missing state.
 
-#: The three standard schooling lines (ranks 0-2), likewise shared and
-#: pre-ensured by the view.
-SchoolingLineFormSet = modelformset_factory(SchoolingLine, form=SchoolingLineForm, extra=0)
+    A missing state's row is an unsaved ``extra`` form - its ``state`` comes
+    from ``initial``, never typed in, and nothing is written to the database
+    until the page is saved (#3675 demo-fidelity ruling: a GET used to
+    ``get_or_create`` blank rows just to have three to show).
+    """
+    formset_class = modelformset_factory(
+        TraditionStateLine, form=TraditionStateLineForm, extra=len(missing_states)
+    )
+    return formset_class(
+        data,
+        prefix="state",
+        queryset=queryset,
+        initial=[{"state": state} for state in missing_states],
+    )
+
+
+def schooling_line_formset(
+    data: QueryDict | None,
+    queryset: QuerySet[SchoolingLine],
+    missing_ranks: list[int],
+) -> BaseModelFormSet:
+    """The three schooling-line rows: one per existing row, one per still-missing rank."""
+    formset_class = modelformset_factory(
+        SchoolingLine, form=SchoolingLineForm, extra=len(missing_ranks)
+    )
+    return formset_class(
+        data,
+        prefix="schooling",
+        queryset=queryset,
+        initial=[{"rank": rank} for rank in missing_ranks],
+    )
+
 
 #: This Beginning's own slate: one row per tradition it may offer. ``extra=1``
 #: always shows one blank row to fill in; "Add a tradition to this slate"

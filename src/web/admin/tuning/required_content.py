@@ -520,6 +520,57 @@ def _beginnings_without_upbringing() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_tradition_state_lines() -> ProbeResult:
+    """Every `TraditionState` value has a `TraditionStateLine` row with a non-blank `entry_line`.
+
+    Consumer: `web/admin/tradition_slate/live.py` (`state_line_display`,
+    `preview_line`) and `world/character_creation/serializers.py`
+    (`TraditionSerializer.get_state_line`). The three rows are shared by every
+    Beginning (#3675), so a missing or blank one means the tradition step prints
+    nothing at that state for every Beginning's slate line at once, not just one -
+    this is why the tradition slate page's own GET no longer writes placeholder
+    rows just to have three to show (#3675 demo-fidelity ruling): this sentinel is
+    the dashboard's job, not a silent database write.
+    """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
+    from world.character_creation.models import TraditionStateLine  # noqa: PLC0415
+
+    rows = {
+        line.state: line
+        for line in TraditionStateLine.objects.filter(state__in=TraditionState.values)
+    }
+    missing = tuple(
+        state for state in TraditionState.values if state not in rows or not rows[state].entry_line
+    )
+    detail = (
+        f"Missing or blank TraditionStateLine row(s) for state(s): {', '.join(missing)}."
+        if missing
+        else ""
+    )
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
+def _probe_schooling_lines() -> ProbeResult:
+    """Every rank 0-2 has a `SchoolingLine` row with a non-blank `name`.
+
+    Consumer: `web/admin/tradition_slate/live.py` (`schooling_line_display`) and
+    `world/character_creation/serializers.py` (`schooling_rows`). Like the state
+    lines, these three rows are shared by every Beginning - a missing or blank one
+    means the living-masters schooling set is incomplete everywhere at once.
+    """
+    from world.character_creation.models import SchoolingLine  # noqa: PLC0415
+
+    expected_ranks = (0, 1, 2)
+    rows = {line.rank: line for line in SchoolingLine.objects.filter(rank__in=expected_ranks)}
+    missing = tuple(str(rank) for rank in expected_ranks if rank not in rows or not rows[rank].name)
+    detail = (
+        f"Missing or blank SchoolingLine row(s) for rank(s): {', '.join(missing)}."
+        if missing
+        else ""
+    )
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
@@ -1370,6 +1421,32 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "options and cannot finish CG."
             ),
             probe=CustomProbe(fn=_beginnings_without_upbringing),
+        ),
+        ContentDependency(
+            key="character_creation.tradition_state_lines",
+            label="Tradition state lines",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "web/admin/tradition_slate/live.py state_line_display(), preview_line(); "
+                "world/character_creation/serializers.py TraditionSerializer.get_state_line()"
+            ),
+            consequence=(
+                "The tradition step prints nothing for every Beginning's slate line at "
+                "the missing or blank state - the row is shared, not authored per "
+                "Beginning, so the gap is silent everywhere at once."
+            ),
+            probe=CustomProbe(fn=_probe_tradition_state_lines),
+        ),
+        ContentDependency(
+            key="character_creation.tradition_schooling_lines",
+            label="Tradition schooling lines",
+            tier=DependencyTier.REQUIRED,
+            consumer="web/admin/tradition_slate/live.py schooling_line_display()",
+            consequence=(
+                "The living-masters schooling set is incomplete for every Beginning at "
+                "once at the missing or blank rank."
+            ),
+            probe=CustomProbe(fn=_probe_schooling_lines),
         ),
     )
 

@@ -19,6 +19,13 @@ every field falls back to browser defaults (#3667, second round).
 {% block extrahead %}
 {{ block.super }}
 {{ media }}
+{% comment %}
+The shared clone-a-formset-row helpers (nextFormIndex/announceFormsetAdded/
+cloneFromTemplate), also loaded by the tradition slate page's page.html
+(#3675: promoted out of this page's own inline script, which the tradition
+slate page had started out copying verbatim).
+{% endcomment %}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
 {% endblock %}
 
 {% block breadcrumbs %}
@@ -105,63 +112,30 @@ every field falls back to browser defaults (#3667, second round).
 
 <script>
 (function () {
-  // The one place both "Add question" and every question's "Add answer"
-  // button clone a formset row: bump that formset's TOTAL_FORMS, then
-  // swap __prefix__ in its <template> for the fresh index (#3660 review
-  // Ruling H - "Add answer" used to hx-get a fragment from a formset fixed
-  // at extra=0, which just re-rendered the same rows and did nothing).
-  function nextFormIndex(prefix) {
-    var totalInput = document.getElementById("id_" + prefix + "-TOTAL_FORMS");
-    var index = parseInt(totalInput.value, 10);
-    totalInput.value = String(index + 1);
-    return index;
-  }
-
-  // Django's own admin/js/autocomplete.js only initializes select2 on load and
-  // on this event - a row cloned client-side otherwise carries a plain,
-  // uninitialized <select> for every autocomplete widget it contains (#3660
-  // review round 1). Dispatching this on the inserted element itself, with
-  // bubbles set, matches what autocomplete.js's document-level listener reads
-  // off event.target ($(event.target).find('.admin-autocomplete')).
-  function announceFormsetAdded(prefix, row) {
-    row.dispatchEvent(
-      new CustomEvent("formset:added", { bubbles: true, detail: { formsetName: prefix } })
-    );
-  }
-
-  // Both templates below hold a whole element - a question panel, an answers
-  // row - so the clone is the template's own first child rather than a
-  // wrapper this script styles by hand (#3667: the hand-built wrapper was how
-  // a cloned question ended up with different markup from a saved one).
-  function cloneFromTemplate(templateId, index) {
-    var tpl = document.getElementById(templateId);
-    var html = tpl.innerHTML.split("__prefix__").join(String(index));
-    var holder = document.createElement("div");
-    holder.innerHTML = html;
-    return holder.firstElementChild;
-  }
+  // The shared clone helpers (nextFormIndex/announceFormsetAdded/cloneFromTemplate)
+  // live in admin/js/builder_formsets.js, loaded in extrahead above (#3660 review
+  // Ruling H - "Add answer" used to hx-get a fragment from a formset fixed at
+  // extra=0, which just re-rendered the same rows and did nothing; #3675 promoted
+  // these three functions out of this page's own inline copy).
+  var formsets = window.arxBuilderFormsets;
 
   var addQuestionBtn = document.getElementById("add-question-btn");
   if (addQuestionBtn) {
     addQuestionBtn.addEventListener("click", function () {
-      var index = nextFormIndex("q");
-      var row = cloneFromTemplate("empty-question-template", index);
+      var index = formsets.nextFormIndex("q");
+      var row = formsets.cloneFromTemplate("empty-question-template", index, "div");
       document.getElementById("questions-list").appendChild(row);
-      announceFormsetAdded("q", row);
+      formsets.announceFormsetAdded("q", row);
     });
   }
 
   document.addEventListener("click", function (evt) {
     var btn = evt.target.closest(".add-answer-btn");
     if (!btn) { return; }
-    var index = nextFormIndex(btn.dataset.prefix);
-    var tpl = document.getElementById(btn.dataset.template);
-    var html = tpl.innerHTML.split("__prefix__").join(String(index));
-    var rowParent = document.createElement("tbody");
-    rowParent.innerHTML = html;
-    var row = rowParent.firstElementChild;
+    var index = formsets.nextFormIndex(btn.dataset.prefix);
+    var row = formsets.cloneFromTemplate(btn.dataset.template, index, "tbody");
     document.getElementById(btn.dataset.target).appendChild(row);
-    announceFormsetAdded(btn.dataset.prefix, row);
+    formsets.announceFormsetAdded(btn.dataset.prefix, row);
   });
 })();
 </script>

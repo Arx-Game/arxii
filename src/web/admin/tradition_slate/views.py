@@ -4,11 +4,16 @@ Pattern: the Upbringing Builder (`web.admin.upbringing_builder.views`). Unlike a
 route, the standard lines (`TraditionStateLine`, `SchoolingLine`) are shared by
 every Beginning - the same three-plus-three rows are edited from whichever
 Beginning's slate page an author happens to be on, and only the slate itself
-(`BeginningTradition`) belongs to one Beginning. Save writes all three
-formsets in one transaction, creates any TRADITION_STEP offer a newly
-granting schooling line is missing, and credits every touched
-`CreditedContent` row - the standard lines only; `BeginningTradition` carries
-no authorship fields of its own.
+(`BeginningTradition`) belongs to one Beginning. A still-unauthored state/rank
+shows as an unsaved row with its identity fixed by the formset's own
+``initial`` (`forms.state_line_formset`/`schooling_line_formset`) rather than
+a row this view writes to the database just to have three to show
+(#3675 demo-fidelity ruling: a GET-triggered ``get_or_create`` is a guard by
+another name). Save writes all three formsets in one transaction, keeps every
+schooling line's TRADITION_STEP offer in step with its grant (created,
+distinction updated, or deactivated when the grant is cleared), and credits
+every touched `CreditedContent` row - the standard lines and any offer this
+save touched; `BeginningTradition` carries no authorship fields of its own.
 """
 
 from __future__ import annotations
@@ -18,7 +23,7 @@ from dataclasses import dataclass
 from django.contrib import messages
 from django.db import transaction
 from django.db.models import Case, IntegerField, QuerySet, Value, When
-from django.forms import Media
+from django.forms import BaseModelFormSet, Media
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
@@ -27,7 +32,11 @@ from django.views.decorators.http import require_POST
 from web.admin.authoring.contributors import current_contributor
 from web.admin.authoring.credit import stamp_reviewed, stamp_written
 from web.admin.tradition_slate import live
-from web.admin.tradition_slate.forms import SchoolingLineFormSet, SlateFormSet, StateLineFormSet
+from web.admin.tradition_slate.forms import (
+    SlateFormSet,
+    schooling_line_formset,
+    state_line_formset,
+)
 from web.admin.tuning.views import superuser_required
 from world.character_creation.constants import OfferChapter, TraditionState
 from world.character_creation.models import (
@@ -36,6 +45,7 @@ from world.character_creation.models import (
     SchoolingLine,
     TraditionStateLine,
 )
+from world.contributors.models import ContentContributor
 
 #: Standard-line row order the demo approved: how a player is meant to read
 #: them, not the alphabetical order the model's own ``state`` field sorts to.
@@ -45,18 +55,21 @@ _STATE_ORDER = (
     TraditionState.LIVING_MASTERS,
 )
 
+#: The three standard schooling ranks - fixed by the model's own shape (#3675
+#: spec), not derived from any row that may or may not exist yet.
+_SCHOOLING_RANKS = (0, 1, 2)
 
-def _ensure_standard_lines() -> None:
-    """The three state lines and three schooling lines always exist to edit.
 
-    ``get_or_create`` so a fresh database, or a state/rank an earlier author
-    never touched, still shows a row rather than the formset silently
-    carrying fewer than three.
-    """
-    for state in TraditionState.values:
-        TraditionStateLine.objects.get_or_create(state=state)
-    for rank in range(3):
-        SchoolingLine.objects.get_or_create(rank=rank)
+def _missing_states() -> list[str]:
+    """``TraditionState`` values with no ``TraditionStateLine`` row yet, in demo order."""
+    existing = set(TraditionStateLine.objects.values_list("state", flat=True))
+    return [state for state in _STATE_ORDER if state not in existing]
+
+
+def _missing_ranks() -> list[int]:
+    """Schooling ranks with no ``SchoolingLine`` row yet."""
+    existing = set(SchoolingLine.objects.values_list("rank", flat=True))
+    return [rank for rank in _SCHOOLING_RANKS if rank not in existing]
 
 
 def _state_queryset() -> QuerySet[TraditionStateLine]:
@@ -69,10 +82,16 @@ def _state_queryset() -> QuerySet[TraditionStateLine]:
 
 @dataclass
 class _SlateForms:
-    """The three formsets one tradition slate page needs, bundled (ruff PLR0913)."""
+    """The three formsets one tradition slate page needs, bundled (ruff PLR0913).
 
-    state: StateLineFormSet
-    schooling: SchoolingLineFormSet
+    ``state``/``schooling`` are typed loosely: ``state_line_formset``/
+    ``schooling_line_formset`` each build a fresh ``modelformset_factory``
+    class per request (its ``extra`` count depends on how many rows are still
+    missing), so there is no single named class to annotate them with.
+    """
+
+    state: BaseModelFormSet
+    schooling: BaseModelFormSet
     slate: SlateFormSet
 
     @property
@@ -82,9 +101,9 @@ class _SlateForms:
 
 def _build_forms(request: HttpRequest, beginning: Beginnings) -> _SlateForms:
     data = request.POST if request.method == "POST" else None
-    state = StateLineFormSet(data, prefix="state", queryset=_state_queryset())
-    schooling = SchoolingLineFormSet(
-        data, prefix="schooling", queryset=SchoolingLine.objects.order_by("rank")
+    state = state_line_formset(data, _state_queryset(), _missing_states())
+    schooling = schooling_line_formset(
+        data, SchoolingLine.objects.order_by("rank"), _missing_ranks()
     )
     slate = SlateFormSet(data, instance=beginning, prefix="slate")
     return _SlateForms(state, schooling, slate)
@@ -104,10 +123,14 @@ def _render_page(
             "title": f"Traditions offered to {beginning.name}",
             "beginning": beginning,
             "state_formset": forms.state,
-            "state_rows": [(f, live.state_line_display(f.instance)) for f in forms.state.forms],
+            "state_rows": [
+                (f, f.initial.get("state"), live.state_line_display(f.instance))
+                for f in forms.state.forms
+            ],
             "schooling_formset": forms.schooling,
             "schooling_rows": [
-                (f, live.schooling_line_display(f.instance)) for f in forms.schooling.forms
+                (f, f.initial.get("rank"), live.schooling_line_display(f.instance))
+                for f in forms.schooling.forms
             ],
             "slate_formset": forms.slate,
             "needs_setup": needs_setup,
@@ -119,31 +142,51 @@ def _render_page(
     )
 
 
-def _sync_schooling_offers(request: HttpRequest) -> None:
-    """Every schooling line with a grant gets its TRADITION_STEP offer, creating it if missing.
+def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor) -> None:
+    """Every schooling line's TRADITION_STEP offer stays in step with its grant.
 
-    A schooling line's grant can change on this same save, so an existing
-    offer's ``distinction`` is kept in step rather than left pointing at
-    whatever it was opened with originally.
+    A line with a grant gets its offer created (crediting the new row), or
+    kept in step if the grant changed or the offer had gone inactive
+    (crediting the change); a line with no grant has any existing active
+    offer deactivated instead of left offering a distinction the line no
+    longer names - also credited, since a `DistinctionOffer` is
+    `CreditedContent` in its own right, not just the line that opens it.
     """
-    for line in SchoolingLine.objects.filter(grants__isnull=False):
-        offer, created = DistinctionOffer.objects.get_or_create(
-            schooling_line=line,
-            chapter=OfferChapter.TRADITION_STEP,
-            defaults={"distinction": line.grants},
-        )
-        if created:
+    for line in SchoolingLine.objects.all():
+        offer = DistinctionOffer.objects.filter(
+            schooling_line=line, chapter=OfferChapter.TRADITION_STEP
+        ).first()
+        if line.grants_id is None:
+            if offer is not None and offer.is_active:
+                offer.is_active = False
+                offer.save(update_fields=["is_active"])
+                stamp_written(offer, contributor)
+            continue
+        if offer is None:
+            offer = DistinctionOffer.objects.create(
+                schooling_line=line,
+                chapter=OfferChapter.TRADITION_STEP,
+                distinction=line.grants,
+            )
             messages.info(request, f"Created the tradition-step offer for '{line.name}'.")
-        elif offer.distinction_id != line.grants_id:
+            stamp_written(offer, contributor)
+            continue
+        update_fields = []
+        if offer.distinction_id != line.grants_id:
             offer.distinction = line.grants
-            offer.save(update_fields=["distinction"])
+            update_fields.append("distinction")
+        if not offer.is_active:
+            offer.is_active = True
+            update_fields.append("is_active")
+        if update_fields:
+            offer.save(update_fields=update_fields)
+            stamp_written(offer, contributor)
 
 
 @superuser_required
 def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
     """GET renders the page; POST saves every formset atomically and credits the operator."""
     beginning = get_object_or_404(Beginnings, pk=beginning_pk)
-    _ensure_standard_lines()
     contributor = current_contributor(request.user)
     forms = _build_forms(request, beginning)
     if request.method == "POST":
@@ -155,7 +198,7 @@ def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
                 saved_state = forms.state.save()
                 saved_schooling = forms.schooling.save()
                 forms.slate.save()
-                _sync_schooling_offers(request)
+                _sync_schooling_offers(request, contributor)
                 for row in (*saved_state, *saved_schooling):
                     stamp_written(row, contributor)
             messages.success(request, "Saved and credited to you.")

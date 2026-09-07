@@ -123,7 +123,7 @@ def _offer_checks() -> list[tuple[str, str]]:
     checks: list[tuple[str, str]] = []
     for line in SchoolingLine.objects.filter(grants__isnull=False).order_by("rank"):
         has_offer = DistinctionOffer.objects.filter(
-            chapter=OfferChapter.TRADITION_STEP, schooling_line=line
+            chapter=OfferChapter.TRADITION_STEP, schooling_line=line, is_active=True
         ).exists()
         if has_offer:
             checks.append(("ok", f"Schooling line {line.rank} ('{line.name}') has its offer."))
@@ -138,12 +138,36 @@ def _offer_checks() -> list[tuple[str, str]]:
     return checks
 
 
+def _stale_offer_checks() -> list[tuple[str, str]]:
+    """A schooling line with no grant should carry no active TRADITION_STEP offer.
+
+    Saving this page already deactivates the offer the moment a grant is
+    cleared (`views._sync_schooling_offers`), so this only ever fires for a
+    line edited outside this page (stock admin) or a row from before that fix
+    shipped.
+    """
+    checks: list[tuple[str, str]] = []
+    for line in SchoolingLine.objects.filter(grants__isnull=True).order_by("rank"):
+        stale = DistinctionOffer.objects.filter(
+            chapter=OfferChapter.TRADITION_STEP, schooling_line=line, is_active=True
+        ).exists()
+        if stale:
+            checks.append(
+                (
+                    "warn",
+                    f"Schooling line {line.rank} grants nothing but still has an active offer.",
+                )
+            )
+    return checks
+
+
 def checks(beginning: Beginnings) -> list[tuple[str, str]]:
     state_lines = {line.state: line for line in TraditionStateLine.objects.all()}
     result = _drawback_checks(state_lines)
     result.extend(_exclusion_check(state_lines))
     result.extend(_default_state_check(beginning))
     result.extend(_offer_checks())
+    result.extend(_stale_offer_checks())
     return result
 
 

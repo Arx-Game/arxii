@@ -446,6 +446,10 @@ class BuilderStylingTest(BuilderTestCase):
     #: form rows has to ask for it in its own ``extrastyle`` block.
     REQUIRED_STYLESHEETS = ("admin/css/base.css", "admin/css/forms.css")
 
+    #: The shared clone-a-formset-row helpers, also loaded by the tradition
+    #: slate page (#3675) - promoted out of this page's own inline script.
+    REQUIRED_SCRIPTS = ("admin/js/builder_formsets.js",)
+
     #: Classes our own templates carry that Django admin already styles; the rest
     #: of what they carry is ours, and must have a rule in CSS the page loads.
     ADMIN_PROVIDED_CLASSES = frozenset(
@@ -488,6 +492,9 @@ class BuilderStylingTest(BuilderTestCase):
                 hrefs.append(match.group(1))
         return hrefs
 
+    def _script_srcs(self, body: str) -> list[str]:
+        return re.findall(r'<script[^>]*\bsrc="([^"]+)"', body)
+
     def _reachable_css(self, body: str) -> str:
         """The page's inline ``<style>`` blocks plus every stylesheet it links.
 
@@ -520,6 +527,21 @@ class BuilderStylingTest(BuilderTestCase):
             f"the page does not link {missing}; its admin markup has no rules behind it. "
             f"Linked: {linked}"
         )
+
+    def test_the_page_links_the_shared_builder_formsets_script(self):
+        body = self._body()
+        srcs = self._script_srcs(body)
+        missing = [
+            script
+            for script in self.REQUIRED_SCRIPTS
+            if not any(src.endswith(script) for src in srcs)
+        ]
+        assert not missing, f"the page does not link {missing}. Linked scripts: {srcs}"
+        for script in self.REQUIRED_SCRIPTS:
+            src = next(s for s in srcs if s.endswith(script))
+            if src.startswith(settings.STATIC_URL):
+                found = finders.find(src[len(settings.STATIC_URL) :])
+                assert found is not None, f"the page links a script that does not resolve: {src}"
 
     def test_fields_render_through_admins_fieldset_contract(self):
         body = self._body()
