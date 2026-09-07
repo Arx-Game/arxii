@@ -110,14 +110,24 @@ def _default_state_check(beginning: Beginnings) -> list[tuple[str, str]]:
     return [("warn", f"{count} slate {noun} still at the default state (living masters).")]
 
 
+def _active_offer_line_ids(lines: list[SchoolingLine]) -> set[int]:
+    """One query over every ``line`` at once, instead of an ``.exists()`` per line."""
+    return set(
+        DistinctionOffer.objects.filter(
+            chapter=OfferChapter.TRADITION_STEP,
+            schooling_line_id__in=[line.id for line in lines],
+            is_active=True,
+        ).values_list("schooling_line_id", flat=True)
+    )
+
+
 def _offer_checks() -> list[tuple[str, str]]:
     """Every schooling line with a grant has its TRADITION_STEP offer row, or a warn."""
+    lines = list(SchoolingLine.objects.filter(grants__isnull=False).order_by("rank"))
+    offered_line_ids = _active_offer_line_ids(lines)
     checks: list[tuple[str, str]] = []
-    for line in SchoolingLine.objects.filter(grants__isnull=False).order_by("rank"):
-        has_offer = DistinctionOffer.objects.filter(
-            chapter=OfferChapter.TRADITION_STEP, schooling_line=line, is_active=True
-        ).exists()
-        if has_offer:
+    for line in lines:
+        if line.id in offered_line_ids:
             checks.append(("ok", f"Schooling line {line.rank} ('{line.name}') has its offer."))
         else:
             checks.append(
@@ -138,19 +148,13 @@ def _stale_offer_checks() -> list[tuple[str, str]]:
     line edited outside this page (stock admin) or a row from before that fix
     shipped.
     """
-    checks: list[tuple[str, str]] = []
-    for line in SchoolingLine.objects.filter(grants__isnull=True).order_by("rank"):
-        stale = DistinctionOffer.objects.filter(
-            chapter=OfferChapter.TRADITION_STEP, schooling_line=line, is_active=True
-        ).exists()
-        if stale:
-            checks.append(
-                (
-                    "warn",
-                    f"Schooling line {line.rank} grants nothing but still has an active offer.",
-                )
-            )
-    return checks
+    lines = list(SchoolingLine.objects.filter(grants__isnull=True).order_by("rank"))
+    stale_line_ids = _active_offer_line_ids(lines)
+    return [
+        ("warn", f"Schooling line {line.rank} grants nothing but still has an active offer.")
+        for line in lines
+        if line.id in stale_line_ids
+    ]
 
 
 def checks(beginning: Beginnings) -> list[tuple[str, str]]:
