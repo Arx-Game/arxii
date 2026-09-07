@@ -34,6 +34,7 @@ from world.magic.models.techniques import (
     ConditionTargetKind,
     Technique,
     TechniqueAppliedCondition,
+    TechniqueCapabilityGrant,
     TechniqueDamageProfile,
     TechniqueRemovedCondition,
     TechniqueTreatment,
@@ -226,6 +227,56 @@ def _capability_payload(row: AbstractCapabilityGrant) -> CapabilityEffectPayload
         description=row.capability.description,
         base_value=row.base_value,
     )
+
+
+def technique_payload_prefetches(*, prefix: str = "") -> list[Prefetch]:
+    """The five payload prefetches any queryset feeding the effect summary needs.
+
+    ``summarize_technique_effects`` reads five sibling tables, so a surface that
+    builds a summary per row in a list — the in-scene cast list, the character
+    sheet's magic section, the ``TechniqueAdmin`` changelist — pays five queries
+    per technique unless it prefetches them. Each ``to_attr`` is the
+    ``cached_*`` property name the derivations read, which is also what keeps a
+    prefetched row from going stale against the identity map (#2728, ADR-0263).
+
+    One definition rather than one per call site (#3682): the set has to stay in
+    lockstep with what the summary reads, and it did not — treatments were added
+    to the summary and three separately-maintained copies of this block each had
+    to be found and updated. The next payload family should need one edit.
+
+    ``prefix`` is the relation path from the queryset's model to the Technique
+    (``"technique__"`` when starting from ``CharacterTechnique``, empty when
+    starting from ``Technique`` itself).
+    """
+    return [
+        Prefetch(
+            f"{prefix}condition_applications",
+            queryset=TechniqueAppliedCondition.objects.select_related("condition"),
+            to_attr="cached_condition_applications",
+        ),
+        Prefetch(
+            f"{prefix}removed_conditions",
+            queryset=TechniqueRemovedCondition.objects.select_related("condition"),
+            to_attr="cached_removed_conditions",
+        ),
+        Prefetch(
+            f"{prefix}damage_profiles",
+            queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
+            to_attr="cached_damage_profiles",
+        ),
+        Prefetch(
+            f"{prefix}treatments",
+            queryset=TechniqueTreatment.objects.select_related(
+                "treatment_template__target_condition"
+            ),
+            to_attr="cached_treatments",
+        ),
+        Prefetch(
+            f"{prefix}capability_grants",
+            queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
+            to_attr="cached_capability_grants",
+        ),
+    ]
 
 
 def technique_is_underspecified(technique: SummarizableTechnique) -> bool:
@@ -455,28 +506,7 @@ def technique_effect_authoring_gaps() -> list[TechniqueAuthoringGap]:
         # to_attr targets the cached_property names so the derivations below read
         # the prefetched rows rather than re-querying per technique, and so the
         # prefetch can never go stale against the identity map (#2728).
-        Prefetch(
-            "condition_applications",
-            queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-            to_attr="cached_condition_applications",
-        ),
-        Prefetch(
-            "removed_conditions",
-            queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-            to_attr="cached_removed_conditions",
-        ),
-        Prefetch(
-            "damage_profiles",
-            queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-            to_attr="cached_damage_profiles",
-        ),
-        Prefetch(
-            "treatments",
-            queryset=TechniqueTreatment.objects.select_related(
-                "treatment_template__target_condition"
-            ),
-            to_attr="cached_treatments",
-        ),
+        *technique_payload_prefetches(),
     )
     gaps: list[TechniqueAuthoringGap] = []
     for technique in techniques:

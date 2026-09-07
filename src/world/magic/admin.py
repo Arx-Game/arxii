@@ -102,6 +102,7 @@ from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
     technique_is_not_castable_standalone,
+    technique_payload_prefetches,
     technique_relationship_is_ambiguous,
 )
 
@@ -385,39 +386,7 @@ class TechniqueAdmin(admin.ModelAdmin):
         are what answers them (and cannot go stale against the identity map,
         #2728).
         """
-        return (
-            super()
-            .get_queryset(request)
-            .prefetch_related(
-                Prefetch(
-                    "condition_applications",
-                    queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-                    to_attr="cached_condition_applications",
-                ),
-                Prefetch(
-                    "removed_conditions",
-                    queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-                    to_attr="cached_removed_conditions",
-                ),
-                Prefetch(
-                    "damage_profiles",
-                    queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-                    to_attr="cached_damage_profiles",
-                ),
-                Prefetch(
-                    "treatments",
-                    queryset=TechniqueTreatment.objects.select_related(
-                        "treatment_template__target_condition"
-                    ),
-                    to_attr="cached_treatments",
-                ),
-                Prefetch(
-                    "capability_grants",
-                    queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
-                    to_attr="cached_capability_grants",
-                ),
-            )
-        )
+        return super().get_queryset(request).prefetch_related(*technique_payload_prefetches())
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
