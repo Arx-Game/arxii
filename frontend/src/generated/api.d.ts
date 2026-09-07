@@ -26341,6 +26341,9 @@ export interface components {
           };
         };
       };
+      readonly enemy_degree_grants: {
+        [key: string]: string;
+      };
       readonly introductions_offered: components['schemas']['IntroductionsOffered'];
     };
     /** @description Serializer for creating a new draft. */

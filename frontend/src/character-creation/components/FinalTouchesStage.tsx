@@ -133,6 +133,29 @@ const ENEMY_INTRO =
 const PUBLIC_LINE_HINT =
   "The public line. The name, the reach and the price are yours, your GM's and staff's.";
 
+// PLACEHOLDER: Apostate rewrite
+const MARK_HINT =
+  "Reach is fixed by the group picked; only how badly is the player's choice. The two worst " +
+  'degrees mark you with a Distinction, the way a Lineage answer can. A free-written enemy ' +
+  'awards one point until staff place them.';
+
+const SCALE_ROWS: Record<'group' | 'person', ReadonlyArray<{ value: string; label: string }>> = {
+  group: [
+    { value: 'household', label: 'A household' },
+    { value: 'house', label: 'A house or company' },
+    { value: 'society', label: 'A society or church' },
+    { value: 'realm', label: 'A realm' },
+  ],
+  person: [
+    { value: 'quiescent', label: 'Quiescent' },
+    { value: 'prospect', label: 'Prospect' },
+    { value: 'potential', label: 'Potential' },
+    { value: 'puissant', label: 'Puissant' },
+    { value: 'true', label: 'True' },
+    { value: 'grand', label: 'Grand' },
+  ],
+};
+
 const INTRODUCTIONS_INTRO =
   'These are optional IC introductions that can be answered IC as another way to help flesh ' +
   'out a character in their past. The First Journal is a white journal in the Great Archive, ' +
@@ -590,21 +613,56 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
             <ChoiceRow<string>
               label="How badly"
               labelledBy="enemy-degree-label"
-              options={DEGREES.map((d) => ({
-                value: d.value,
-                label: `${d.label} · ${awardLabel(priceAt(d.value))}`,
-                title: d.gloss,
-              }))}
+              options={DEGREES.map((d) => {
+                const grant = draft.enemy_degree_grants?.[d.value];
+                return {
+                  value: d.value,
+                  label: `${d.label} · ${awardLabel(priceAt(d.value))}${grant ? ` · grants ${grant}` : ''}`,
+                  title: d.gloss,
+                };
+              })}
               value={enemy.degree || null}
               onChange={(value) => patchEnemy({ degree: value ?? '' })}
             />
-            {!scale && (
-              <span className="hint">
-                {enemy.kind === 'person'
-                  ? 'Rate their power to see the price.'
-                  : 'A free-written enemy awards one point until staff place them.'}
-              </span>
-            )}
+            <span className="hint">
+              {!scale && enemy.kind === 'person' ? 'Rate their power to see the price. ' : ''}
+              {copy?.finaltouches_enemy_mark_hint ?? MARK_HINT}
+            </span>
+          </div>
+          <div className="field">
+            <label id="enemy-scales-label">
+              {copy?.finaltouches_enemy_scales_heading ?? 'The two scales'}
+            </label>
+            {(['group', 'person'] as const).map((kind) => (
+              <table className="price-grid" key={kind} aria-labelledby="enemy-scales-label">
+                <thead>
+                  <tr>
+                    <th scope="col">{kind === 'group' ? 'A group' : 'A person'}</th>
+                    {DEGREES.map((d) => (
+                      <th scope="col" key={d.value}>
+                        {d.value[0].toUpperCase() + d.value.slice(1)}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {SCALE_ROWS[kind].map((row) => (
+                    <tr key={row.value}>
+                      <th scope="row">{row.label}</th>
+                      {DEGREES.map((d) => {
+                        const on =
+                          enemy.kind === kind && scale === row.value && enemy.degree === d.value;
+                        return (
+                          <td key={d.value} className={on ? 'on' : undefined}>
+                            {priceFor(draft.enemy_price_tables, kind, row.value, d.value)}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            ))}
           </div>
           <Field
             id="enemy-public-line"

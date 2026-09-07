@@ -26,6 +26,7 @@ from world.character_creation.enemies import (
 from world.character_creation.factories import (
     GroupPromptFactory,
     OriginTemplateFactory,
+    OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import BeginningEnemyOffer
@@ -90,8 +91,10 @@ class EnemyOffersTests(FinalizationTestMixin, TestCase):
             same_anchor_as=group_q,
             follow_up_to=group_q,
         )
+        courier = OriginTemplateSlotChoiceFactory(slot=group_q, name="Courier")
         draft = self._create_base_draft(
             origin_anchors={str(group_q.id): crew.id},
+            origin_choices={str(group_q.id): courier.id},
             origin_figures={str(person_q.id): "The woman who asked twice"},
         )
         draft.selected_origin_template = template
@@ -120,7 +123,7 @@ class EnemyOffersTests(FinalizationTestMixin, TestCase):
             name="the Rouault",
             reach=EnemyReach.HOUSE,
             power_tier="",
-            why="",
+            why="Courier",
             source="lineage",
         )
         assert by_name["The woman who asked twice"].kind == EnemyKind.PERSON

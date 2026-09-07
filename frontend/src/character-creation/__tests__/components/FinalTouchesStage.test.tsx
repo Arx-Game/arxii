@@ -2,6 +2,7 @@
  * FinalTouchesStage Component Tests: the Actor's Sheet (#3621).
  */
 
+/// <reference types="node" />
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { screen, within } from '@testing-library/react';
@@ -110,10 +111,16 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     expect(
       within(degrees).getByRole('button', { name: /destroy you · Awards 48 CG points/ })
     ).toBeInTheDocument();
+    expect(
+      within(degrees).getByRole('button', { name: /ruined · Awards 32 CG points · grants Marked/ })
+    ).toBeInTheDocument();
     await user.click(within(degrees).getByRole('button', { name: /thwarted/ }));
     expect(
       screen.getByText(/They want you thwarted: the Rouault · Awards 16 CG points/)
     ).toBeInTheDocument();
+    const grids = screen.getAllByRole('table', { name: 'The two scales' });
+    expect(grids).toHaveLength(2);
+    expect(within(grids[0]).getByRole('cell', { name: '16' })).toHaveClass('on');
   });
 
   it('offers the First Journal only on an Arx start and folds a skipped one away', async () => {
@@ -157,7 +164,14 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       />
     );
     await user.click(screen.getByRole('button', { name: 'Name them' }));
-    await user.click(screen.getAllByRole('button', { name: 'Write it' })[0]);
+    await user.click(screen.getByRole('button', { name: /ruined/ }));
+    for (const door of screen.getAllByRole('button', { name: 'Write it' })) {
+      await user.click(door);
+    }
+    // The person kind and the free-written path emit their own hooks.
+    await user.click(screen.getByRole('button', { name: 'A person' }));
+    await user.click(screen.getByRole('button', { name: 'Write your own' }));
+    // Read the sheet from disk: vitest mocks CSS modules (raw imports included) to nothing.
     const css = readFileSync(resolve(__dirname, '../../cg.css'), 'utf8');
     const emitted = new Set<string>();
     container.querySelectorAll('[class]').forEach((el) => {

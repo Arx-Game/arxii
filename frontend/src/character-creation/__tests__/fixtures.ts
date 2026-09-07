@@ -745,6 +745,7 @@ export const mockEmptyDraft: CharacterDraft = {
       grand: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
     },
   },
+  enemy_degree_grants: { ruined: 'Marked', destroy: 'Hunted' },
   introductions_offered: { first_journal: true },
 };
 

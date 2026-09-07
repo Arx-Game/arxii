@@ -441,6 +441,8 @@ export interface CharacterDraft {
   enemy_offers: EnemyOffer[];
   /** Both price scales, reach or power tier -> degree -> CG points awarded (#3621). */
   enemy_price_tables: Record<'group' | 'person', Record<string, Record<string, number>>>;
+  /** Degree value -> the Distinction that degree grants (#3621), so the row can say so. */
+  enemy_degree_grants: Record<string, string>;
   /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
   introductions_offered: { first_journal: boolean };
 }

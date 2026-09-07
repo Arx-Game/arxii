@@ -162,6 +162,12 @@ export function CharacterSheetPage() {
               <p>{entry.description}</p>
             </section>
           )}
+          {sheetPayload && (
+            <ActorSheetSection
+              block={sheetPayload.actor_sheet}
+              goals={sheetPayload.goals as ActorSheetGoal[]}
+            />
+          )}
           {sheetPayload && sheetPayload.story.origin_slots.length > 0 ? (
             <OriginsSection
               story={sheetPayload.story}
@@ -170,12 +176,6 @@ export function CharacterSheetPage() {
             />
           ) : (
             <BackgroundSection background={entry.character.background} />
-          )}
-          {sheetPayload && (
-            <ActorSheetSection
-              block={sheetPayload.actor_sheet}
-              goals={sheetPayload.goals as ActorSheetGoal[]}
-            />
           )}
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />

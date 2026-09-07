@@ -208,7 +208,9 @@ by reach, `ENEMY_PRICE_PERSON` by `EnemyPowerTier`, both by `EnemyDegree`); a pi
 real group and no rated person is `pending` at `ENEMY_PRICE_PENDING` until staff link it in
 `CharacterEnemyAdmin`, whose `save_model` recomputes the price. The purse breakdown carries
 one `enemy` line with a negative cost ("Awards N CG points"). The draft API exposes
-`enemy_offers`, `enemy_price_tables` and `introductions_offered`.
+`enemy_offers` (a Lineage offer's gloss is the picked answer's name, or the person question's prompt),
+`enemy_price_tables`, `enemy_degree_grants` (degree -> the Distinction it grants, so the leaf's
+row says "grants Hunted") and `introductions_offered`.
 
 Finalize (`_create_enemy`) writes `CharacterEnemy` (owner, staff and assigned-GM reading;
 everyone else sees `public_line`), seeds the group's opinion through

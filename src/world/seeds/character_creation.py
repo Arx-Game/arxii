@@ -328,6 +328,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     ),  # PLACEHOLDER: Apostate rewrite
     "finaltouches_enemy_why_prompt": "Why",
     "finaltouches_enemy_degree_prompt": "How badly",
+    "finaltouches_enemy_mark_hint": (
+        "Reach is fixed by the group picked; only how badly is the player's choice. The two "
+        "worst degrees mark you with a Distinction, the way a Lineage answer can. A "
+        "free-written enemy awards one point until staff place them."
+    ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_scales_heading": "The two scales",
     "finaltouches_enemy_public_line_prompt": "As the sheet will say it",
     "finaltouches_enemy_public_line_hint": (
         "The public line. The name, the reach and the price are yours, your GM's and staff's."

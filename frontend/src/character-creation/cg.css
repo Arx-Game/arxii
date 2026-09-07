@@ -781,6 +781,36 @@
   color: var(--cg-muted);
   padding-bottom: 0.45rem;
 }
+/* The two enemy price scales (#3621): a small grid per scale, the chosen cell inked. */
+.interview .price-grid {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.6rem 0 0;
+  font-size: 0.9rem;
+  font-variant-numeric: tabular-nums;
+}
+.interview .price-grid th,
+.interview .price-grid td {
+  border: 1px solid var(--cg-hairline);
+  padding: 0.3rem 0.5rem;
+  text-align: center;
+  color: var(--cg-text-soft);
+}
+.interview .price-grid th {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+.interview .price-grid th[scope='row'] {
+  text-align: left;
+}
+.interview .price-grid td.on {
+  background: var(--cg-accent);
+  color: var(--cg-btn-fg);
+}
 /* One of The Introductions (#3621): its title and Skip door on one line over the
    frame, the questions folded beneath when open. */
 .interview .introduction {

@@ -44000,6 +44000,11 @@ components:
               additionalProperties:
                 type: integer
           readOnly: true
+        enemy_degree_grants:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
         introductions_offered:
           allOf:
           - $ref: '#/components/schemas/IntroductionsOffered'
@@ -44014,6 +44019,7 @@ components:
       - claimed_kin_pool
       - claimed_kin_slot
       - derived_anchors
+      - enemy_degree_grants
       - enemy_offers
       - enemy_price_tables
       - family

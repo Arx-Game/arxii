@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
+    ENEMY_DEGREE_DISTINCTION_NAMES,
     ENEMY_PRICE_GROUP,
     ENEMY_PRICE_PENDING,
     ENEMY_PRICE_PERSON,
@@ -77,6 +78,11 @@ def price_tables() -> dict[str, dict[str, dict[str, int]]]:
     return {"group": ENEMY_PRICE_GROUP, "person": ENEMY_PRICE_PERSON}
 
 
+def degree_grants() -> dict[str, str]:
+    """Which degrees mark the character, and with what: the leaf says so on the row."""
+    return dict(ENEMY_DEGREE_DISTINCTION_NAMES)
+
+
 def _reach_of(org: Organization, override: str = "") -> str:
     return override or org.org_type.reach
 
@@ -90,6 +96,16 @@ def _lineage_offers(draft: CharacterDraft) -> list[EnemyOffer]:
     slots = [s for s in template.slots.select_related("same_anchor_as") if s.id in visible]
     org_ids = {anchor for anchor in (anchor_for(slot, draft, answers) for slot in slots) if anchor}
     orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids).select_related("org_type")}
+    # The picked answer's name is the gloss on a Lineage offer ("Courier through the
+    # service court"): the tie the player already chose, so the list reads as theirs.
+    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+
+    pick_names = {
+        choice.slot_id: choice.name
+        for choice in OriginTemplateSlotChoice.objects.filter(
+            pk__in=[cid for sid, cid in answers.picks.items() if sid in visible]
+        )
+    }
     offers: list[EnemyOffer] = []
     seen: set[tuple[str, str]] = set()
     for slot in slots:
@@ -106,7 +122,7 @@ def _lineage_offers(draft: CharacterDraft) -> list[EnemyOffer]:
                     name=org.name,
                     reach=_reach_of(org),
                     power_tier="",
-                    why="",
+                    why=pick_names.get(slot.id, ""),
                     source=SOURCE_LINEAGE,
                 )
             )
@@ -122,7 +138,7 @@ def _lineage_offers(draft: CharacterDraft) -> list[EnemyOffer]:
                     name=name,
                     reach="",
                     power_tier="",
-                    why="",
+                    why=slot.prompt,
                     source=SOURCE_LINEAGE,
                 )
             )

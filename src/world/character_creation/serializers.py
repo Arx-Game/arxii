@@ -986,6 +986,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # scales, and whether the First Journal is offered (an Arx start).
     enemy_offers = serializers.SerializerMethodField()
     enemy_price_tables = serializers.SerializerMethodField()
+    enemy_degree_grants = serializers.SerializerMethodField()
     introductions_offered = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
@@ -1052,6 +1053,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "derived_anchors",
             "enemy_offers",
             "enemy_price_tables",
+            "enemy_degree_grants",
             "introductions_offered",
         ]
         read_only_fields = [
@@ -1060,6 +1062,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "age_max",
             "enemy_offers",
             "enemy_price_tables",
+            "enemy_degree_grants",
             "introductions_offered",
             "has_existing_characters",
             "cg_points_spent",
@@ -1154,6 +1157,13 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         from world.character_creation.enemies import price_tables  # noqa: PLC0415
 
         return price_tables()
+
+    @extend_schema_field(serializers.DictField(child=serializers.CharField()))
+    def get_enemy_degree_grants(self, obj: CharacterDraft) -> dict[str, str]:  # noqa: ARG002
+        """Degree value -> the Distinction it grants, so the row says "grants Hunted"."""
+        from world.character_creation.enemies import degree_grants  # noqa: PLC0415
+
+        return degree_grants()
 
     @extend_schema_field(IntroductionsOfferedSerializer())
     def get_introductions_offered(self, obj: CharacterDraft) -> dict[str, bool]:
