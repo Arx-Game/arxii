@@ -24,7 +24,7 @@ from world.character_sheets.types import EnemyDegree, EnemyKind, EnemyPowerTier,
 from world.societies.models import Organization
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft
+    from world.character_creation.models import CharacterDraft, OriginTemplateSlot
 
 SOURCE_LINEAGE = "lineage"
 SOURCE_BEGINNING = "beginning"
@@ -87,6 +87,44 @@ def _reach_of(org: Organization, override: str = "") -> str:
     return override or org.org_type.reach
 
 
+def _lineage_offer_for_slot(
+    slot: OriginTemplateSlot,
+    draft: CharacterDraft,
+    answers: DraftAnswers,
+    orgs: dict[int, Organization],
+    pick_names: dict[int, str],
+) -> EnemyOffer | None:
+    """Build one Lineage offer for a visible slot, when the slot names an enemy."""
+    anchor = anchor_for(slot, draft, answers)
+    org = orgs.get(anchor) if anchor is not None else None
+    if slot.kind == QuestionKind.GROUP:
+        if org is None:
+            return None
+        return EnemyOffer(
+            kind=EnemyKind.GROUP,
+            organization_id=org.pk,
+            name=org.name,
+            reach=_reach_of(org),
+            power_tier="",
+            why=pick_names.get(slot.id, ""),
+            source=SOURCE_LINEAGE,
+        )
+    if slot.kind != QuestionKind.PERSON:
+        return None
+    name = answers.figures.get(slot.id, "")
+    if not name:
+        return None
+    return EnemyOffer(
+        kind=EnemyKind.PERSON,
+        organization_id=org.pk if org is not None else None,
+        name=name,
+        reach="",
+        power_tier="",
+        why=slot.prompt,
+        source=SOURCE_LINEAGE,
+    )
+
+
 def _lineage_offers(draft: CharacterDraft) -> list[EnemyOffer]:
     template = draft.selected_origin_template
     if template is None:
@@ -109,39 +147,14 @@ def _lineage_offers(draft: CharacterDraft) -> list[EnemyOffer]:
     offers: list[EnemyOffer] = []
     seen: set[tuple[str, str]] = set()
     for slot in slots:
-        org = orgs.get(anchor_for(slot, draft, answers))
-        if slot.kind == QuestionKind.GROUP and org is not None:
-            key = (EnemyKind.GROUP, org.name)
-            if key in seen:
-                continue
-            seen.add(key)
-            offers.append(
-                EnemyOffer(
-                    kind=EnemyKind.GROUP,
-                    organization_id=org.pk,
-                    name=org.name,
-                    reach=_reach_of(org),
-                    power_tier="",
-                    why=pick_names.get(slot.id, ""),
-                    source=SOURCE_LINEAGE,
-                )
-            )
-        elif slot.kind == QuestionKind.PERSON:
-            name = answers.figures.get(slot.id, "")
-            if not name or (EnemyKind.PERSON, name) in seen:
-                continue
-            seen.add((EnemyKind.PERSON, name))
-            offers.append(
-                EnemyOffer(
-                    kind=EnemyKind.PERSON,
-                    organization_id=org.pk if org is not None else None,
-                    name=name,
-                    reach="",
-                    power_tier="",
-                    why=slot.prompt,
-                    source=SOURCE_LINEAGE,
-                )
-            )
+        offer = _lineage_offer_for_slot(slot, draft, answers, orgs, pick_names)
+        if offer is None:
+            continue
+        key = (offer.kind, offer.name)
+        if key in seen:
+            continue
+        seen.add(key)
+        offers.append(offer)
     return offers
 
 
@@ -183,6 +196,35 @@ def enemy_offers(draft: CharacterDraft) -> list[EnemyOffer]:
     return _lineage_offers(draft) + _beginning_offers(draft)
 
 
+def _enemy_organization(data: dict) -> Organization | None:
+    """Load the organization named by an enemy pick, when one was supplied."""
+    org_id = data.get("organization_id")
+    if not org_id:
+        return None
+    return Organization.objects.filter(pk=org_id).select_related("org_type").first()
+
+
+def _enemy_details(
+    kind: str,
+    data: dict,
+    name: str,
+    org: Organization | None,
+    offers_by_target: dict[tuple[str, int | None, str], EnemyOffer],
+) -> tuple[str, str, str, str]:
+    """Return the pricing scale, tier, reach, and resolved name for a pick."""
+    if kind == EnemyKind.GROUP:
+        if org is None:
+            return "", "", "", name
+        offer = offers_by_target.get((EnemyKind.GROUP, org.pk, org.name))
+        reach = offer.reach if offer is not None else _reach_of(org)
+        return reach, "", reach, org.name
+
+    tier = data.get("power_tier", "")
+    if tier not in EnemyPowerTier.values:
+        tier = ""
+    return tier, tier, "", name
+
+
 def resolve_enemy(draft: CharacterDraft) -> ResolvedEnemy | None:
     """Price and place the draft's enemy pick, or None when the draft named nobody.
 
@@ -195,26 +237,10 @@ def resolve_enemy(draft: CharacterDraft) -> ResolvedEnemy | None:
     if degree not in EnemyDegree.values:
         return None
     kind = EnemyKind.PERSON if data.get("kind") == EnemyKind.PERSON else EnemyKind.GROUP
-    org_id = data.get("organization_id")
-    org = (
-        Organization.objects.filter(pk=org_id).select_related("org_type").first()
-        if org_id
-        else None
-    )
+    org = _enemy_organization(data)
     name = (data.get("name") or "").strip()
     offers_by_target = {(o.kind, o.organization_id, o.name): o for o in enemy_offers(draft)}
-    if kind == EnemyKind.GROUP:
-        reach = ""
-        if org is not None:
-            offer = offers_by_target.get((EnemyKind.GROUP, org.pk, org.name))
-            reach = offer.reach if offer is not None else _reach_of(org)
-            name = org.name
-        scale, tier = reach, ""
-    else:
-        tier = data.get("power_tier", "")
-        if tier not in EnemyPowerTier.values:
-            tier = ""
-        scale, reach = tier, ""
+    scale, tier, reach, name = _enemy_details(kind, data, name, org, offers_by_target)
     placed = bool(scale)
     return ResolvedEnemy(
         kind=kind,
