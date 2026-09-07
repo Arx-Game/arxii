@@ -28442,7 +28442,20 @@ export interface components {
       /** @default  */
       notes: string;
     };
-    /** @description Read shape of one distinction entry stored in draft_data. */
+    /**
+     * @description Read shape of one distinction entry stored in draft_data.
+     *
+     *     ``offer_ids``/``sources``/``arrivals`` (#3675) were missing from this
+     *     descriptor entirely -- ``world.distinctions.types.DraftDistinctionEntry``
+     *     carries them on every offer-tracked entry, so the OpenAPI schema for
+     *     list/create/sync was silently undocumenting the offer-provenance fields.
+     *     ``required=False`` mirrors runtime reality: a legacy entry saved before
+     *     the offers system landed (0106) has no ``offer_ids`` key at all (see
+     *     ``offers._drop_vanished_sources``). ``offer_ids`` has no declared item
+     *     type because it mixes ``int`` (a real ``DistinctionOffer`` row) and
+     *     ``str`` (a tradition-state-carried drawback's synthetic
+     *     ``"state:<TraditionState>"`` key).
+     */
     DraftDistinctionEntry: {
       distinction_id: number;
       distinction_name: string;
@@ -28451,6 +28464,9 @@ export interface components {
       rank: number;
       cost: number;
       notes: string;
+      offer_ids?: unknown[];
+      sources?: string[];
+      arrivals?: string[];
     };
     /**
      * @description Request body for swapping mutually-exclusive distinctions.
