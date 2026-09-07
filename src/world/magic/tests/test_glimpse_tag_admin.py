@@ -70,6 +70,25 @@ class GlimpseTagOfferGetTest(GlimpseTagOfferTestCase):
         body = resp.content.decode()
         assert "Add an active offer to preview the CG line." in body
 
+    def test_saved_offer_row_links_to_its_distinctions_builder_page(self):
+        """#3675 review Important 2: a `TabularInline` renders `help_text` once, off
+        the formset's own `empty_form` - a per-row link needs a readonly column instead."""
+        from web.admin.authoring.links import builder_url
+
+        DistinctionOffer.objects.create(
+            distinction=self.distinction,
+            glimpse_tag=self.tag,
+            chapter="glimpse",
+            arrives_as=OfferArrival.CHOICE,
+            player_line="A scar that answers magic.",
+        )
+        self.client.force_login(self.author)
+        resp = self.client.get(self._change_url())
+        body = resp.content.decode()
+        expected_href = builder_url(self.distinction)
+        assert expected_href
+        assert f'<a href="{expected_href}">' in body
+
 
 class GlimpseTagOfferSaveTest(GlimpseTagOfferTestCase):
     def _post_data(self, **overrides) -> dict:
@@ -114,6 +133,24 @@ class GlimpseTagOfferSaveTest(GlimpseTagOfferTestCase):
         assert resp.status_code == 302
         offer = DistinctionOffer.objects.get(distinction=self.distinction, glimpse_tag=self.tag)
         assert offer.written_by is None
+
+    def test_posting_the_same_distinction_twice_is_rejected(self):
+        """#3675 review minor 2: one tag can't offer the same distinction twice."""
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "distinction_offers-TOTAL_FORMS": "2",
+                "distinction_offers-1-distinction": str(self.distinction.pk),
+                "distinction_offers-1-arrives_as": OfferArrival.BUNDLED,
+                "distinction_offers-1-name": "",
+                "distinction_offers-1-player_line": "A second line.",
+                "distinction_offers-1-sort_order": "1",
+                "distinction_offers-1-is_active": "on",
+            }
+        )
+        resp = self.client.post(self._change_url(), data)
+        assert resp.status_code == 200  # re-rendered with errors, nothing saved
+        assert not DistinctionOffer.objects.filter(distinction=self.distinction).exists()
 
 
 class GlimpseTagOfferStylingTest(GlimpseTagOfferTestCase):

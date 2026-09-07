@@ -283,6 +283,83 @@ class BuilderSaveTest(BuilderTestCase):
         assert list(self.template.closed_distinctions.all()) == [closed]
         assert self.template.closed_reason == "The yards do not make those."
 
+    def test_offer_post_with_arrives_as_carried_is_rejected(self):
+        """#3675 review minor 1: CARRIED is not an answer's own offer to give."""
+        from world.character_creation.models import DistinctionOffer
+        from world.distinctions.factories import DistinctionFactory
+
+        offered = DistinctionFactory(name="Somehow Always Broke")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                f"o{self.livery.pk}-TOTAL_FORMS": "1",
+                f"o{self.livery.pk}-0-distinction": str(offered.pk),
+                f"o{self.livery.pk}-0-arrives_as": "carried",
+                f"o{self.livery.pk}-0-sort_order": "0",
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 200  # re-rendered with errors, nothing saved
+        assert not DistinctionOffer.objects.filter(distinction=offered).exists()
+
+    def test_offer_formset_rejects_the_same_distinction_twice(self):
+        """#3675 review minor 2: one answer can't offer the same distinction twice."""
+        from world.character_creation.constants import OfferArrival
+        from world.character_creation.models import DistinctionOffer
+        from world.distinctions.factories import DistinctionFactory
+
+        offered = DistinctionFactory(name="Somehow Always Broke")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                f"o{self.livery.pk}-TOTAL_FORMS": "2",
+                f"o{self.livery.pk}-0-distinction": str(offered.pk),
+                f"o{self.livery.pk}-0-arrives_as": OfferArrival.CHOICE,
+                f"o{self.livery.pk}-0-sort_order": "0",
+                f"o{self.livery.pk}-1-distinction": str(offered.pk),
+                f"o{self.livery.pk}-1-arrives_as": OfferArrival.BUNDLED,
+                f"o{self.livery.pk}-1-sort_order": "1",
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 200  # re-rendered with errors, nothing saved
+        assert not DistinctionOffer.objects.filter(distinction=offered).exists()
+
+    def test_deleting_an_answer_with_a_changed_offer_row_saves_cleanly(self):
+        """#3675 review Important 1: used to FK-violate re-inserting an offer against
+        a choice its own delete had just removed, inside the same transaction."""
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.character_creation.models import DistinctionOffer
+        from world.distinctions.factories import DistinctionFactory
+
+        existing_offer = DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Assassin"),
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.BUNDLED,
+            origin_choice=self.livery,
+            sort_order=0,
+        )
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                f"a{self.q1.pk}-0-DELETE": "on",
+                f"o{self.livery.pk}-TOTAL_FORMS": "1",
+                f"o{self.livery.pk}-INITIAL_FORMS": "1",
+                f"o{self.livery.pk}-0-id": str(existing_offer.pk),
+                f"o{self.livery.pk}-0-distinction": str(existing_offer.distinction_id),
+                f"o{self.livery.pk}-0-arrives_as": OfferArrival.BUNDLED,
+                # Changed from the row's own saved value (0) - the offer form
+                # itself "has_changed()", which used to be exactly what
+                # crashed the save once its parent answer was also deleted.
+                f"o{self.livery.pk}-0-sort_order": "5",
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 302
+        assert not OriginTemplateSlotChoice.objects.filter(pk=self.livery.pk).exists()
+        assert not DistinctionOffer.objects.filter(pk=existing_offer.pk).exists()
+
     def test_review_stamps_review_only(self):
         self.client.force_login(self.author)
         resp = self.client.post(reverse("admin_upbringing_builder_review", args=[self.template.pk]))
@@ -752,3 +829,17 @@ class BuilderDemoFidelityTest(BuilderTestCase):
         wanted = ("This route", "Checks", "Credit", "Preview")
         order = [body.index(f"<h2>{name}</h2>") for name in wanted]
         assert order == sorted(order), f"the rail's panels are out of the demo's order {wanted}"
+
+    def test_closes_module_sits_after_the_questions_list(self):
+        """#3675 review: it used to sit between "The Upbringing" and the questions."""
+        body = self._body()
+        assert body.index('id="closes-module"') > body.index('id="questions-list"'), (
+            "'This route closes' must be the last module before the submit row, "
+            "after every question - not ahead of them"
+        )
+
+    def test_closed_distinctions_field_has_its_own_label(self):
+        """#3675 review: the sibling closed_reason field already has one."""
+        body = self._body()
+        assert 'for="id_closed_distinctions"' in body
+        assert "Distinctions" in body

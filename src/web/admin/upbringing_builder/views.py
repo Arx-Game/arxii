@@ -103,6 +103,24 @@ def _offer_formsets(
     return out
 
 
+def _deleted_choice_pks(answers: dict[int, AnswerFormSet]) -> set[int]:
+    """Every existing answer this POST is about to delete (#3675 review Important 1).
+
+    Called only once every answers formset has validated (``.deleted_forms``
+    needs ``full_clean()`` to have already run). An answer's own offers are
+    cascade-deleted with it, so saving a *separate* offer formset built
+    against that same choice afterward - unconditionally, as the code used
+    to - re-inserts or updates a row against a parent that no longer exists:
+    a Postgres FK violation inside the save transaction (a clean 500, not
+    caught anywhere). Skipping that offer formset's save entirely for a
+    deleted choice is correct regardless of what its own rows say, since the
+    parent answer is going away either way.
+    """
+    return {
+        form.instance.pk for fs in answers.values() for form in fs.deleted_forms if form.instance.pk
+    }
+
+
 def _question_numbers(template: OriginTemplate) -> dict[int, int]:
     """Each saved question's display number on the page, keyed by pk.
 
@@ -201,13 +219,16 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
             and all(fs.is_valid() for fs in offers.values())
         )
         if valid:
+            deleted_choice_pks = _deleted_choice_pks(answers)
             with transaction.atomic():
                 saved = form.save()
                 questions.instance = saved
                 questions.save()
                 for fs in answers.values():
                     fs.save()
-                for fs in offers.values():
+                for choice_pk, fs in offers.items():
+                    if choice_pk in deleted_choice_pks:
+                        continue
                     fs.save()
                 stamp_written(saved, contributor)
             messages.success(request, "Saved and credited to you.")

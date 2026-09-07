@@ -93,22 +93,6 @@ slate page had started out copying verbatim).
           {% endfor %}
         </div>
 
-        <div class="module" id="closes-module">
-          <h2>This route closes</h2>
-          <div class="description">Distinctions this route never offers, in any chapter,
-            however a question elsewhere on this page or a Glimpse tag would otherwise grant
-            them - and the line the player reads where a closed one would have shown.</div>
-          {{ form.closed_distinctions.errors }}
-          <div class="ub-closed-distinctions">
-            {{ form.closed_distinctions }}
-          </div>
-          {{ form.closed_reason.errors }}
-          <div class="ub-closed-reason">
-            {{ form.closed_reason.label_tag }}
-            {{ form.closed_reason }}
-          </div>
-        </div>
-
         {{ questions.management_form }}
         {% if questions.non_form_errors %}
         <p class="errornote">{{ questions.non_form_errors }}</p>
@@ -120,6 +104,23 @@ slate page had started out copying verbatim).
         </div>
 
         <template id="empty-question-template">{% include "admin/upbringing_builder/_question.html" with question_form=questions.empty_form question_number="" %}</template>
+
+        <div class="module" id="closes-module">
+          <h2>This route closes</h2>
+          <div class="description">Distinctions this route never offers, in any chapter,
+            however a question elsewhere on this page or a Glimpse tag would otherwise grant
+            them - and the line the player reads where a closed one would have shown.</div>
+          {{ form.closed_distinctions.errors }}
+          <div class="ub-closed-distinctions">
+            {{ form.closed_distinctions.label_tag }}
+            {{ form.closed_distinctions }}
+          </div>
+          {{ form.closed_reason.errors }}
+          <div class="ub-closed-reason">
+            {{ form.closed_reason.label_tag }}
+            {{ form.closed_reason }}
+          </div>
+        </div>
 
         <div class="submit-row">
           <input type="submit" name="save" value="Save" class="default">

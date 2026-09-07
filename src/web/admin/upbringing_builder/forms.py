@@ -10,6 +10,7 @@ from django.contrib.admin.widgets import (
     FilteredSelectMultiple,
 )
 from django.forms import inlineformset_factory
+from django.forms.models import BaseInlineFormSet
 from django.http import QueryDict
 
 from world.character_creation.constants import OfferArrival, OfferChapter
@@ -210,6 +211,24 @@ def answer_formset_for(slot: OriginTemplateSlot, data: QueryDict | None = None) 
     return AnswerFormSet(data, instance=slot, prefix=f"a{slot.pk}")
 
 
+class _OfferBaseFormSet(BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one answer (#3675 review minor 2)."""
+
+    def clean(self):
+        super().clean()
+        seen: set[int] = set()
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
+                continue
+            distinction = form.cleaned_data.get("distinction")
+            if distinction is None:
+                continue
+            if distinction.pk in seen:
+                dupe_message = f"'{distinction.name}' is already offered by this answer."
+                raise forms.ValidationError(dupe_message)
+            seen.add(distinction.pk)
+
+
 class OfferForm(forms.ModelForm):
     """One "offers" row hanging off an answer (#3675).
 
@@ -248,6 +267,7 @@ OfferFormSet = inlineformset_factory(
     OriginTemplateSlotChoice,
     DistinctionOffer,
     form=OfferForm,
+    formset=_OfferBaseFormSet,
     fk_name="origin_choice",
     extra=0,
     can_delete=True,

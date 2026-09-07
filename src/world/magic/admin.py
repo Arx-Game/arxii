@@ -1,6 +1,7 @@
 from django import forms
 from django.contrib import admin
 from django.db.models import Prefetch
+from django.forms.models import BaseInlineFormSet
 from django.utils.html import format_html
 
 from world.character_creation.constants import OfferChapter
@@ -380,6 +381,24 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         refresh_glimpse_state(obj)
 
 
+class GlimpseTagOfferFormSet(BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2)."""
+
+    def clean(self):
+        super().clean()
+        seen: set[int] = set()
+        for form in self.forms:
+            if not hasattr(form, "cleaned_data") or form.cleaned_data.get("DELETE"):
+                continue
+            distinction = form.cleaned_data.get("distinction")
+            if distinction is None:
+                continue
+            if distinction.pk in seen:
+                dupe_message = f"'{distinction.name}' is already offered by this tag."
+                raise forms.ValidationError(dupe_message)
+            seen.add(distinction.pk)
+
+
 class GlimpseTagOfferForm(forms.ModelForm):
     """One "what it offers" row on a Glimpse tag's own change form (#3675).
 
@@ -400,14 +419,6 @@ class GlimpseTagOfferForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.instance.chapter = OfferChapter.GLIMPSE
-        if self.instance.distinction_id:
-            from web.admin.authoring.links import builder_url  # noqa: PLC0415
-
-            url = builder_url(self.instance.distinction)
-            if url:
-                self.fields["distinction"].help_text = format_html(
-                    '<a href="{}">Open in Distinction Builder</a>', url
-                )
 
 
 class DistinctionOfferInline(admin.TabularInline):
@@ -421,11 +432,41 @@ class DistinctionOfferInline(admin.TabularInline):
     model = DistinctionOffer
     fk_name = "glimpse_tag"
     form = GlimpseTagOfferForm
-    fields = ["distinction", "arrives_as", "name", "player_line", "sort_order", "is_active"]
+    formset = GlimpseTagOfferFormSet
+    fields = [
+        "distinction",
+        "arrives_as",
+        "name",
+        "player_line",
+        "sort_order",
+        "is_active",
+        "builder_link",
+    ]
+    readonly_fields = ["builder_link"]
     autocomplete_fields = ["distinction"]
     extra = 1
     verbose_name = "offer"
     verbose_name_plural = "What it offers"
+
+    @admin.display(description="")
+    def builder_link(self, obj: DistinctionOffer) -> str:
+        """A saved row's link to its Distinction's own Builder page (#3675 review Important 2).
+
+        ``help_text`` set in ``GlimpseTagOfferForm.__init__`` was tried first and
+        does not reach the page: a ``TabularInline`` renders each column's help
+        text once, off the formset's own ``empty_form`` - a per-instance value
+        set in a bound form's ``__init__`` never shows for a saved row. A
+        ``readonly_fields`` callable column is the admin-native way to render
+        one link per row instead.
+        """
+        if not obj.pk or not obj.distinction_id:
+            return ""
+        from web.admin.authoring.links import builder_url  # noqa: PLC0415
+
+        url = builder_url(obj.distinction)
+        if not url:
+            return ""
+        return format_html('<a href="{}">open</a>', url)
 
 
 @admin.register(GlimpseTag)
