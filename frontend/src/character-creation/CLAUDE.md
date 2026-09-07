@@ -44,10 +44,17 @@ character-creation/
     │                        #   Techniques → Gift Resonance → Anima Check, plus an
     │                        #   always-visible Motif textarea and the guided Glimpse
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
-    ├── AppearanceStage.tsx  # Stage 8: Appearance
+    ├── AppearanceStage.tsx  # Stage 8: Appearance. After the height block, mounts this
+    │                        #   chapter's own offered distinctions (ChapterOffers
+    │                        #   chapter="appearance", #3675 Task 15), the physical/social
+    │                        #   ones that show, in place of the retired Distinctions stage.
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
-    │                        #   numbered goals by horizon, the priced enemy, The Introductions
+    │                        #   numbered goals by horizon, the priced enemy, The Introductions.
+    │                        #   Directly under the three questions mounts this chapter's own
+    │                        #   offered distinctions (ChapterOffers chapter="actors_sheet",
+    │                        #   #3675 Task 15), the personality-flavored ones each prompt
+    │                        #   answers.
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep

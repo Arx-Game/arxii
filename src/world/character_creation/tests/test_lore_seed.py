@@ -95,3 +95,34 @@ class TestLoreOnboardingSeed(TestCase):
         for key in stage_internal_keys:
             explanation = CGExplanation.objects.get(key=key)
             assert explanation.text, f"{key} seeded an empty CGExplanation"
+
+    @override_settings(SEED_SAMPLE_CONTENT=True)
+    def test_offers_chapter_keys_seed_cg_explanations(self):
+        """The CG chapters' own offered-distinctions copy (#3675 Tasks 13-15):
+        the Glimpse, Lineage, Appearance and Actor's Sheet headings/chips/closed
+        leads, none of which have a content-repo counterpart yet."""
+        _seed_cg_explanations()
+        offers_chapter_keys = (
+            "glimpse_choose_any",
+            "glimpse_choose_one",
+            "glimpse_offers_heading",
+            "offers_optional_chip",
+            "glimpse_story_label",
+            "glimpse_story_hint",
+            "lineage_bundles_word",
+            "lineage_offers_word",
+            "lineage_offers_heading",
+            "lineage_offers_chip",
+            "lineage_closed_lead",
+            "appearance_offers_heading",
+            "appearance_offers_chip",
+            "appearance_closed_lead",
+            "appearance_towering_hint",
+            "finaltouches_offers_heading",
+            "finaltouches_offers_chip",
+            "finaltouches_closed_lead",
+        )
+        for key in offers_chapter_keys:
+            assert key in CG_EXPLANATION_COPY, f"{key} missing from CG_EXPLANATION_COPY"
+            explanation = CGExplanation.objects.get(key=key)
+            assert explanation.text, f"{key} seeded an empty CGExplanation"

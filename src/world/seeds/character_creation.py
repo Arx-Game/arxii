@@ -175,6 +175,13 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "origin_person_hint": "Someone of your own, below the group's leaders.",
     "origin_same_group_hint": "About the group you chose above.",
     "origin_derived_group_missing": "No group was found for your family yet. Tell staff.",
+    # Lineage's own offered distinctions (#3675 Task 14): a chosen answer's
+    # bundled/priced offers, and the route's closed-distinctions note.
+    "lineage_bundles_word": "bundles",
+    "lineage_offers_word": "offers",
+    "lineage_offers_heading": "What it left you with",
+    "lineage_offers_chip": "offered by your answer",
+    "lineage_closed_lead": "Closed by this route",
     "family_path_heading": "Your Family",
     "family_template_heading": "Your Household",
     "vacancy_heading": "Your Place in the Family",
@@ -285,6 +292,16 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # Folio stage-internal copy (#3630 Plan B): section headings and one
     # explanatory note for stages moved onto the folio primitives.
     "gift_tradition_heading": "Tradition",
+    # The Glimpse's own offered distinctions (#3675 fix round 1), one
+    # sub-block per chosen tag, and the CG-only axis layout's own copy.
+    "glimpse_choose_any": "choose any",
+    "glimpse_choose_one": "choose one",
+    "glimpse_offers_heading": "What it left in you",
+    "offers_optional_chip": "optional",
+    "glimpse_story_label": "Your story",
+    "glimpse_story_hint": (
+        "The detail behind any of the picks above goes here; the picks stay short."
+    ),
     "appearance_age_heading": "Age",
     "appearance_birthday_heading": "Birthday",
     "appearance_height_heading": "Height",
@@ -292,6 +309,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "appearance_features_heading": "Physical features",
     "appearance_description_heading": "Physical description",
     "appearance_markings_heading": "Markings",
+    # The Appearance chapter's own offered distinctions (#3675 Task 15): what
+    # shows offers here, in place of the retired Distinctions stage.
+    "appearance_offers_heading": "What people notice first",
+    "appearance_offers_chip": "optional",
+    "appearance_closed_lead": "Closed by your route",
+    "appearance_towering_hint": "needs Giant's Blood",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
@@ -299,6 +322,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # The Actor's Sheet (#3621): the three questions and their example lines, the
     # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
     # words are content.
+    # The Actor's Sheet's own offered distinctions (#3675 Task 15): the
+    # personality-flavored offers mounted under the three questions.
+    "finaltouches_offers_heading": "Is it a hunger",
+    "finaltouches_offers_chip": "optional",
+    "finaltouches_closed_lead": "Closed by your route",
     "finaltouches_never_do_prompt": "What would you never do?",
     "finaltouches_never_do_example": "Ex. Betray a secret. Break a vow. Make a pun.",
     "finaltouches_protect_prompt": "What would you protect at all costs?",

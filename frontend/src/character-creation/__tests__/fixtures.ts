@@ -642,6 +642,16 @@ export const mockHeightBandTall: HeightBand = {
   is_cg_selectable: true,
 };
 
+// Not normally offered to players; Giant's Blood opens it (#3675 Task 15).
+export const mockHeightBandTowering: HeightBand = {
+  id: 3,
+  name: 'towering',
+  display_name: 'Towering',
+  min_inches: 79,
+  max_inches: 96,
+  is_cg_selectable: false,
+};
+
 // =============================================================================
 // Builds
 // =============================================================================

@@ -7,6 +7,14 @@
  * pressed-row choices. The record rail lists the choices made so far; every
  * explanatory sentence the old layout put under a section heading now lives
  * in the margin instead (Decision 8).
+ *
+ * Right after the height block, `ChapterOffers` mounts this chapter's own
+ * offered distinctions (`chapter="appearance"`, #3675 Task 15) - the
+ * physical/social ones that show, in place of the retired Distinctions
+ * stage. It carries its own heading (folio grammar; no separate `section-h`
+ * above it, matching the demo's Screen 7). The "Towering" height band's
+ * `title` reads staff's `appearance_towering_hint` only when that key
+ * exists; there is never a code literal for it.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -20,6 +28,7 @@ import {
   useUpdateDraft,
 } from '../queries';
 import { formatHeight } from '../utils';
+import { ChapterOffers } from './offers/ChapterOffers';
 import { MarkingsEditor } from './MarkingsEditor';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
@@ -245,10 +254,18 @@ export function AppearanceStage({
     return formTraits?.[traitName] ?? null;
   };
 
-  const heightBandTitle = (band: HeightBand): string =>
-    !band.is_cg_selectable && isStaff
+  // The Towering band's title is staff's own hint (#3675 Task 15), not the
+  // usual inches range: `appearance_towering_hint` is authored to say what
+  // opens it (Giant's Blood). Absent that key, the option carries no title
+  // at all - never a literal. `band.name` is the authored internal key
+  // (fixed catalog row, not a display string in play, unlike a
+  // distinction's own name/opener_label - #3676 is about those).
+  const heightBandTitle = (band: HeightBand): string | undefined => {
+    if (band.name === 'towering') return copy?.appearance_towering_hint;
+    return !band.is_cg_selectable && isStaff
       ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
       : `${band.min_inches} to ${band.max_inches} inches`;
+  };
 
   const buildTitle = (build: Build): string | undefined =>
     !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;
@@ -413,6 +430,14 @@ export function AppearanceStage({
           />
         </Field>
       )}
+
+      <ChapterOffers
+        draft={draft}
+        chapter="appearance"
+        heading={copy?.appearance_offers_heading ?? 'What people notice first'}
+        headingTag={copy?.appearance_offers_chip ?? 'optional'}
+        closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+      />
 
       <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
       {buildsLoading ? (

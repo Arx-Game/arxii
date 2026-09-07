@@ -1,7 +1,10 @@
 /**
  * Stage 10: Final Touches, the Actor's Sheet (#3621).
  *
- * Three questions about what the character does; the goals, numbered within
+ * Three questions about what the character does; directly under them, this
+ * chapter's own offered distinctions (`ChapterOffers chapter="actors_sheet"`,
+ * #3675 Task 15) - the personality-flavored ones each prompt answers, in
+ * place of the retired Distinctions stage; then the goals, numbered within
  * short term and long term with the points purse at the head; who wants the
  * character to fail, a person priced by their power or a group by its reach
  * at one of four degrees, awarding CG points; and The Introductions, three
@@ -27,6 +30,7 @@ import {
   RecordRail,
 } from '../folio';
 import { useGoalDomains } from '../goals';
+import { ChapterOffers } from './offers/ChapterOffers';
 import { useCGExplanations, useUpdateDraft } from '../queries';
 import type {
   CharacterDraft,
@@ -450,6 +454,15 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
           />
         </Field>
       ))}
+
+      <ChapterOffers
+        draft={draft}
+        chapter="actors_sheet"
+        heading={copy?.finaltouches_offers_heading ?? 'Is it a hunger'}
+        headingTag={copy?.finaltouches_offers_chip ?? 'optional'}
+        closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
+        className="conditional"
+      />
 
       <h2 className="section-h">{copy?.finaltouches_goals_heading ?? 'Goals'}</h2>
       <InstrumentFrame
