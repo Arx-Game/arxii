@@ -50,5 +50,5 @@ def forwards(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0106_distinction_offers_expand")]
+    dependencies = [("arxii", "0109_distinction_offers_expand")]
     operations = [migrations.RunPython(forwards, migrations.RunPython.noop)]

@@ -17,7 +17,7 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
 - **Weekly XP reset:** All XP caps reset weekly based on timestamps (not cron)
 
 ## What Exists
-- **JournalEntry model** — title, body, is_public, parent self-FK for responses, response_type (praise/retort), timestamps
+- **JournalEntry model** — title, body, is_public, kind (entry, or one of the CG Introductions: first_journal / application / whispers, #3621), parent self-FK for responses, response_type (praise/retort), timestamps
 - **JournalTag model** — freeform tags per entry with unique constraint
 - **WeeklyJournalXP model** — per-character weekly tracking with timestamp-based reset
 - **Service functions** — `create_journal_entry()`, `create_journal_response()`, `edit_journal_entry()`

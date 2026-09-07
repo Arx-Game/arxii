@@ -1290,6 +1290,11 @@
 
 ## world.character_creation
 
+### BeginningEnemyOffer
+**Foreign Keys:**
+  - beginning -> character_creation.Beginnings [FK]
+  - organization -> societies.Organization [FK] (nullable)
+
 ### BeginningTradition
 **Foreign Keys:**
   - beginning -> character_creation.Beginnings [FK]
@@ -1310,6 +1315,7 @@
   - societies -> societies.Society [M2M]
   - traditions -> magic.Tradition [M2M]
 **Pointed to by:**
+  - enemy_offers <- character_creation.BeginningEnemyOffer
   - beginning_traditions <- character_creation.BeginningTradition
   - origin_templates <- character_creation.OriginTemplate
   - drafts <- character_creation.CharacterDraft
@@ -1464,7 +1470,9 @@
 - `finalize_character(draft: 'CharacterDraft', *, add_to_roster: 'bool' = False, created_by_account: 'AccountDB | None' = None) -> 'ObjectDB' - Create a Character from a completed CharacterDraft.`
 - `finalize_gm_character(draft: 'CharacterDraft', *, claim_as_npc: 'bool' = False) -> 'tuple[RosterEntry, Story]' - Finalize a GM-initiated draft into a roster character + story.`
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
+- `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
+- `reconcile_offer_picks(draft: 'CharacterDraft') -> 'list[str]' - Apply carried and bundled offers, drop picks whose offer has gone, reprice.`
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
 - `require_draft_complete(draft: 'CharacterDraft') -> 'None' - Raise DraftIncompleteError unless every non-Review stage is complete.`
@@ -1478,6 +1486,13 @@
 
 
 ## world.character_sheets
+
+### CharacterEnemy
+**Foreign Keys:**
+  - character -> character_sheets.CharacterSheet [FK]
+  - organization -> societies.Organization [FK] (nullable)
+  - family -> roster.Family [FK] (nullable)
+  - secret -> secrets.Secret [FK] (nullable)
 
 ### CharacterSheet
 **Foreign Keys:**
@@ -1521,6 +1536,7 @@
   - trait_changes <- traits.CharacterTraitChange
   - character_class_levels <- classes.CharacterClassLevel
   - origin_slots <- character_creation.CharacterOriginSlot
+  - enemies <- character_sheets.CharacterEnemy
   - audere_offers <- magic.PendingAudereOffer
   - legend_contributions <- societies.LegendContribution
   - org_obligations <- societies.OrganizationObligation
@@ -2683,9 +2699,11 @@
 - `materialize_companion_as_battle_vehicle(companion: 'Companion', battle: 'Battle', side: 'BattleSide') -> 'BattleVehicle' - Bridge a persistent Companion into a battle-scale BattleVehicle (#1873).`
 - `materialize_companion_as_combat_opponent(companion: 'Companion', encounter: 'CombatEncounter', *, threat_pool: 'ThreatPool | None' = None) -> 'CombatOpponent' - Bridge a persistent Companion into a duel-scale CombatOpponent (#1873).`
 - `mount_companion(sheet: 'CharacterSheet', companion: 'Companion') -> 'Companion' - Mount *sheet* on *companion* — applies the Mounted condition to the rider.`
+- `narrate_companion_loss(companion_name: 'str', scene, *, fallback_recipients=None) -> 'None' - Tell the scene that a companion died.`
 - `order_companion(*, companion: 'Companion', order_kind: 'str', round_number: 'int', encounter: 'CombatEncounter | None' = None, battle: 'Battle | None' = None, target_opponent=None, target_unit=None, ability=None, defending_participant=None, target_ally=None) - Validate and upsert a CompanionOrder directive (#1921).`
 - `promote_summon_to_companion(*, caster_sheet: 'CharacterSheet', combat_opponent: 'CombatOpponent', archetype: 'CompanionArchetype', granting_gift: 'Gift', name: 'str') -> 'Companion' - Promote an ephemeral summon or charmed enemy into a persistent Companion (#2502).`
 - `release_companion(companion: 'Companion') -> 'None' - Release a bonded companion: destroy its live object, keep the row.`
+- `resolve_bonded_companion(opponent: 'CombatOpponent') -> 'Companion | None' - The live, unreleased Companion behind an ALLY CombatOpponent, if any.`
 - `resolve_companion_defeat(companion: 'Companion', risk_level: 'str') -> 'bool' - Resolve a bridged companion's defeat consequence (#1873).`
 - `stables_capacity_bonus_for_sheet(character_sheet: 'CharacterSheet') -> 'int' - Flat Companion Capacity bonus from all Stables the sheet has standing in.`
 - `used_companion_capacity(character_sheet: 'CharacterSheet', gift: 'Gift') -> 'int' - Companion Capacity currently consumed by character_sheet's active companions via gift.`
@@ -4805,7 +4823,7 @@
 ### Service Functions
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
-- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
+- `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True, kind: 'str' = JournalKind.ENTRY) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
 - `edit_journal_entry(*, entry: 'JournalEntry', title: 'str | None' = None, body: 'str | None' = None, posthumous_override: 'str | None' = None) -> 'JournalEntry' - Edit an existing journal entry. Sets edited_at timestamp for title/body edits.`
 - `entry_visible_via_bequest(entry: 'JournalEntry', viewer_sheet: 'CharacterSheet | None') -> 'bool' - Whether ``viewer_sheet`` may read ``entry`` under a bequest grant (retrieve path).`
@@ -7840,6 +7858,7 @@
   - kin_slot_pools <- roster.KinSlotPool
   - character_drafts <- character_creation.CharacterDraft
   - profiles <- character_sheets.Profile
+  - enemies_of <- character_sheets.CharacterEnemy
   - organizations <- societies.Organization
 
 ### FamilyKind
@@ -8546,7 +8565,7 @@
 - `record_persona_discovery(persona: 'Persona | None', linked: 'Persona | None', discovered_by: 'CharacterSheet') -> 'PersonaDiscovery | None' - Record that ``discovered_by`` learned ``persona`` and ``linked`` are the same person.`
 - `register_unseen_observer(scene: 'Scene', observer: 'CharacterSheet', source_label: 'str') -> 'None' - Record that observer can unseen-witness scene; broadcast the OOC state if new.`
 - `set_active_persona(sheet: 'CharacterSheet', persona: 'Persona') -> 'None' - Set the character's active face (#981) — the ONLY mutator.`
-- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, personality: 'str | None' = None, background: 'str | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
+- `set_persona_profile(persona: 'Persona', *, concept: 'str | None' = None, quote: 'str | None' = None, never_do: 'str | None' = None, protect: 'str | None' = None, fear: 'str | None' = None, background: 'str | None' = None) -> 'Profile' - Author the fabricated bio a non-primary persona presents — its **Guise Sheet** (#1270).`
 
 
 ## world.secrets
@@ -8576,6 +8595,7 @@
   - societies_exposed -> societies.Society [M2M]
 **Pointed to by:**
   - consequence_effects <- checks.ConsequenceEffect
+  - enemy_rows <- character_sheets.CharacterEnemy
   - clues <- clues.Clue
   - distinction <- distinctions.CharacterDistinction
   - accusation_crime_claim <- justice.AccusationCrimeClaim
@@ -9092,8 +9112,10 @@
   - boards <- boards.Board
   - building_listings <- buildings.BuildingListing
   - captives <- captivity.Captivity
+  - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
   - anchor_prompts <- character_creation.OriginTemplateSlot
   - connection_rows <- character_creation.CharacterOriginSlot
+  - enemies_of <- character_sheets.CharacterEnemy
   - child_orgs <- societies.Organization
   - ranks <- societies.OrganizationRank
   - gift_grants <- societies.OrganizationGiftGrant

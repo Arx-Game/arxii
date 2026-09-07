@@ -23,6 +23,11 @@ ALLOWED_MIGRATIONS: set[str] = {
     # archetype field and re-keys ArchetypeActionScaling rows onto the new
     # CovenantRoleActionScaling model. No-op on empty databases.
     "world/covenants/migrations/0029_covenantroleactionscaling_and_more.py",
+    # #3621: ADR-0237 restructure. Carries any Profile.personality text on a
+    # sheet's true profile into that character's First Journal entry (one
+    # JournalEntry per affected sheet, the character's own words) before 0108
+    # removes the column, and numbers existing goals. No-op on empty databases.
+    "world/migrations/0107_actors_sheet_carry.py",
     # #3617: ADR-0237 mandatory restructure backfill, re-keys existing
     # Family/NobiliaryParticle/HouseTemplate.family_type values onto the new
     # authored FamilyKind FK. The three canonical rows it get_or_creates are
@@ -40,7 +45,7 @@ ALLOWED_MIGRATIONS: set[str] = {
     # The commoner_family OrganizationType and the mined HouseTemplate are
     # schema-transition targets for that backfill (expected empty in production per
     # the commit's ADR-0237 disposition), not new authored content.
-    "world/migrations/0107_distinction_offers_data.py",
+    "world/migrations/0110_distinction_offers_data.py",
     # #3675: ADR-0237 mandatory restructure backfill, carries the existing pairings
     # already authored on GlimpseTagDistinctionSuggestion/
     # OriginTemplateSlotChoice.grants_distinction into the new DistinctionOffer

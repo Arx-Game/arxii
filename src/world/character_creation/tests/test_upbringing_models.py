@@ -12,7 +12,11 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
     make_unknown_upbringing,
 )
-from world.character_creation.models import Beginnings, OriginTemplate
+from world.character_creation.models import (
+    Beginnings,
+    OriginTemplate,
+    OriginTemplateSlot,
+)
 
 
 class UpbringingFieldsTest(TestCase):
@@ -57,3 +61,55 @@ class UpbringingFieldsTest(TestCase):
 
     def test_beginnings_no_longer_has_family_known(self):
         assert not any(f.name == "family_known" for f in Beginnings._meta.get_fields())
+
+
+class UpbringingQuestionsHandlerTest(TestCase):
+    """The handler that owns a route's questions for every consumer (#3673).
+
+    Two hazards, and each needs its own half of the contract. A cache hung off
+    an identity-mapped Upbringing outlives the request that filled it, so a
+    question added or edited afterwards has to clear it - that is the writer
+    side, ``OriginTemplateSlot.related_cache_fields``. And a delete that never
+    calls ``Model.delete()`` never reaches that writer side at all, while
+    ``Collector.delete()`` still nulls the pk on the shared instance - so the
+    handler drops pk-less rows itself before returning anything.
+    """
+
+    def setUp(self):
+        self.template = OriginTemplateFactory()
+        self.first = OriginTemplateSlotFactory(template=self.template, name="First", sort_order=0)
+
+    def test_questions_come_back_in_the_order_a_player_answers_them(self):
+        later = OriginTemplateSlotFactory(template=self.template, name="Later", sort_order=5)
+        middle = OriginTemplateSlotFactory(template=self.template, name="Middle", sort_order=2)
+        assert list(self.template.questions) == [self.first, middle, later]
+
+    def test_a_question_added_after_the_first_read_shows_up(self):
+        assert list(self.template.questions) == [self.first]
+        added = OriginTemplateSlotFactory(template=self.template, name="Added", sort_order=1)
+        assert list(self.template.questions) == [self.first, added], (
+            "the handler served a stale list; saving a question must clear its "
+            "Upbringing's cached properties via related_cache_fields"
+        )
+
+    def test_a_deleted_question_is_gone_from_a_warm_handler(self):
+        doomed = OriginTemplateSlotFactory(template=self.template, name="Doomed", sort_order=1)
+        assert doomed in list(self.template.questions)
+        doomed.delete()
+        assert list(self.template.questions) == [self.first]
+
+    def test_a_queryset_delete_is_caught_even_though_it_never_calls_delete(self):
+        """The belt. ``queryset.delete()`` bypasses ``Model.delete()``, so no
+        writer-side clearing happens - but the collector still nulls the pk on
+        the shared instance, and the handler refuses to hand that back."""
+        doomed = OriginTemplateSlotFactory(template=self.template, name="Doomed", sort_order=1)
+        warm = list(self.template.questions)
+        assert doomed in warm
+
+        OriginTemplateSlot.objects.filter(pk=doomed.pk).delete()
+
+        assert doomed.pk is None, "the collector no longer nulls the pk; revisit the handler"
+        served = list(self.template.questions)
+        assert served == [self.first], (
+            f"a question deleted through a queryset is still being served: {served}"
+        )

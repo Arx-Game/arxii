@@ -1,6 +1,6 @@
 """Contract migration for #3675: the Distinctions stage and its coupling fields retire.
 
-Schema-only (no ``RunPython``/``RunSQL``); 0107 already carried every row's data across.
+Schema-only (no ``RunPython``/``RunSQL``); 0110 already carried every row's data across.
 The ``AlterUniqueTogether`` on ``glimpsetagdistinctionsuggestion`` is not a separate
 decision -- Django emits it mechanically ahead of the two ``RemoveField`` operations
 that follow it, since the model's ``unique_together`` named both dropped fields; it is
@@ -9,18 +9,18 @@ schema-only like everything else here.
 ADR-0237 data dispositions for each destructive operation below:
 
 - ``GlimpseTagDistinctionSuggestion`` (26 authored rows, per the 2026-09-06 production
-  dump) -- restructured by 0107's ``forwards`` into ``DistinctionOffer`` rows
+  dump) -- restructured by 0110's ``forwards`` into ``DistinctionOffer`` rows
   (``chapter="glimpse"``, ``glimpse_tag=<tag>``). Deleted here as a pairing table with
   no reader left.
-- ``OriginTemplateSlotChoice.grants_distinction`` -- restructured by 0107 into
+- ``OriginTemplateSlotChoice.grants_distinction`` -- restructured by 0110 into
   ``DistinctionOffer`` rows (``chapter="lineage"``, ``origin_choice=<choice>``,
   ``arrives_as="bundled"``). 0 rows set in the 2026-09-06 production dump, so the
   restructure is a no-op there today; the field still carried authored intent and the
-  0107 backfill is the general-case path for any database that does hold rows in this
+  0110 backfill is the general-case path for any database that does hold rows in this
   shape.
-- ``BeginningTradition.required_distinction`` -- restructured by 0107 into
+- ``BeginningTradition.required_distinction`` -- restructured by 0110 into
   ``state`` (``TraditionState``: ``SELF_TAUGHT``/``TEACHERS_GONE``). All 40 rows were
-  null in the 2026-09-06 production dump; 0107's backfill also covers the
+  null in the 2026-09-06 production dump; 0110's backfill also covers the
   tag-matched ``orphaned-tradition-marker`` case for a database that does carry rows.
 - ``DistinctionPrerequisite`` -- deleted outright, no restructure. 0 rows in the
   2026-09-06 production dump (never wired to any live prerequisite check -- its own
@@ -34,9 +34,7 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0107_distinction_offers_data"),
-    ]
+    dependencies = [("arxii", "0110_distinction_offers_data")]
 
     operations = [
         migrations.AlterUniqueTogether(

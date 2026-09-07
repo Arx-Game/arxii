@@ -13,7 +13,12 @@ from world.checks.outcome_models import ConsequenceOutcome
 from world.checks.types import CheckResult
 from world.combat.aftermath import build_aftermath_digest, render_aftermath_digest
 from world.combat.beat_wiring import install_encounter_beat_trigger, wire_encounter_beat_triggers
-from world.combat.constants import EncounterOutcome, ParticipantStatus, RiskLevel
+from world.combat.constants import (
+    AFTERMATH_ATTRIBUTION_WINDOW,
+    EncounterOutcome,
+    ParticipantStatus,
+    RiskLevel,
+)
 from world.combat.factories import (
     CombatEncounterFactory,
     CombatParticipantFactory,
@@ -24,6 +29,8 @@ from world.combat.narrator import get_or_create_narrator_persona
 from world.combat.services import complete_encounter
 from world.combat.tests.test_encounter_aftermath import _CompletionSeamTestBase
 from world.combat.types import AftermathDigest
+from world.companions.factories import CompanionFactory
+from world.companions.models import Companion
 from world.conditions.constants import BLEED_OUT_CONDITION_NAME
 from world.conditions.factories import ConditionInstanceFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionInstance
@@ -246,6 +253,77 @@ class BuildAftermathDigestTests(_CompletionSeamTestBase):
         text = render_aftermath_digest(digest, include_secret_beat=False)
         self.assertIn("Your peril is not over", text)
 
+    def test_digest_reports_companion_released_inside_the_aftermath_window(self) -> None:
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+        sheet = participant.character_sheet
+
+        complete_encounter(encounter, outcome=EncounterOutcome.DEFEAT)
+        encounter.refresh_from_db()
+
+        companion = CompanionFactory(owner=sheet, name="Ember")
+        Companion.objects.filter(pk=companion.pk).update(
+            released_at=encounter.completed_at + timedelta(seconds=30)
+        )
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.companions_lost, ["Ember"])
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertIn("You lost Ember.", text)
+
+    def test_digest_ignores_companion_released_before_completion(self) -> None:
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+        sheet = participant.character_sheet
+
+        complete_encounter(encounter, outcome=EncounterOutcome.DEFEAT)
+        encounter.refresh_from_db()
+
+        companion = CompanionFactory(owner=sheet, name="Ashfoot")
+        Companion.objects.filter(pk=companion.pk).update(
+            released_at=encounter.completed_at - timedelta(minutes=1)
+        )
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.companions_lost, [])
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertNotIn("You lost", text)
+
+    def test_digest_excludes_companion_released_exactly_at_the_window_edge(self) -> None:
+        """The window's upper bound is exclusive: a companion released exactly at
+
+        completed_at + AFTERMATH_ATTRIBUTION_WINDOW belongs to whatever comes next
+        in the same scene, not this encounter (proves released_at__lt=end, not
+        __lte=end).
+        """
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+        sheet = participant.character_sheet
+
+        complete_encounter(encounter, outcome=EncounterOutcome.DEFEAT)
+        encounter.refresh_from_db()
+
+        companion = CompanionFactory(owner=sheet, name="Duskwing")
+        Companion.objects.filter(pk=companion.pk).update(
+            released_at=encounter.completed_at + AFTERMATH_ATTRIBUTION_WINDOW
+        )
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.companions_lost, [])
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertNotIn("You lost", text)
+
+    def test_digest_omits_companion_line_with_no_losses(self) -> None:
+        encounter = self._make_encounter()
+        participant = self._add_pc(encounter)
+
+        complete_encounter(encounter, outcome=EncounterOutcome.VICTORY)
+
+        digest = build_aftermath_digest(encounter, participant)
+        self.assertEqual(digest.companions_lost, [])
+        text = render_aftermath_digest(digest, include_secret_beat=False)
+        self.assertNotIn("You lost", text)
+
 
 class DeliverAftermathDigestsTests(_CompletionSeamTestBase):
     """Tests for complete_encounter's delivery of the aftermath digest (#3551)."""
@@ -334,6 +412,7 @@ class RenderAftermathDigestTests(TestCase):
             beat_completion=None,
             beat_visible_to_player=False,
             peril_round_active=False,
+            companions_lost=[],
         )
         text = render_aftermath_digest(digest, include_secret_beat=False)
         self.assertEqual(text, "Aftermath: Victory.")
@@ -350,6 +429,7 @@ class RenderAftermathDigestTests(TestCase):
             beat_completion=None,
             beat_visible_to_player=False,
             peril_round_active=False,
+            companions_lost=[],
         )
         text = render_aftermath_digest(digest, include_secret_beat=False)
         self.assertIn("Deed remembered: Slew the Gravewight (+7 legend).", text)

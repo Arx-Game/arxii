@@ -306,7 +306,7 @@ def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate) -> list[
 
     answers = DraftAnswers.from_draft(draft)
     shown = visible_slot_ids(draft)
-    slots = [s for s in template.slots.order_by("sort_order", "id") if s.id in shown]
+    slots = [s for s in template.questions if s.id in shown]
     choices_by_slot: dict[int, dict[int, OriginTemplateSlotChoice]] = {}
     for choice in OriginTemplateSlotChoice.objects.filter(slot__template=template, is_active=True):
         choices_by_slot.setdefault(choice.slot_id, {})[choice.id] = choice

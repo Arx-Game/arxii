@@ -833,12 +833,18 @@ class CharacterDraftGMFieldsTest(TestCase):
 
 
 class OriginTemplateCleanTest(TestCase):
-    def test_name_path_requires_a_family_template(self):
-        from django.core.exceptions import ValidationError
+    def test_clean_does_not_refuse_a_name_path_over_its_saved_family_templates(self):
+        """The rule moved to the form, because here it read the wrong state (#3673).
 
+        ``clean()`` can only see ``self.family_templates`` as the database has
+        it, and a ModelForm calls ``full_clean()`` before ``save_m2m()`` - so
+        this check rejected every save that turned the name path on, including
+        the ones that were selecting a Family Template in the same POST.
+        ``UpbringingForm.clean()`` asks the submitted value instead; the Builder
+        rail flags a saved route that still has none.
+        """
         from world.character_creation.factories import OriginTemplateFactory
 
         template = OriginTemplateFactory(allows_name_family=True, family_templates=[])
         template.family_templates.clear()
-        with self.assertRaises(ValidationError):
-            template.clean()
+        template.clean()

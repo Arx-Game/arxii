@@ -41,7 +41,7 @@ tier.range_description                       # "+250 to +499"
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Society` | Socio-political stratum within a Realm | `name`, `realm` (FK to `realms.Realm`), `description`, 6 principle fields (`mercy`, `method`, `status`, `change`, `allegiance`, `power`) |
-| `OrganizationType` | Template with default rank titles for org categories | `name`, `rank_1_title` through `rank_5_title` |
+| `OrganizationType` | Template with default rank titles for org categories | `name`, `is_covert`, `reach` (`EnemyReach`, #3621: how far a group of this type reaches a character who made an enemy of it; prices the enemy on the group scale), `rank_1_title` through `rank_5_title` |
 | `Organization` | Specific group within a Society | `name`, `society`, `org_type`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields |
 
 ### Membership and Reputation (SharedMemoryModel - per-persona instances)

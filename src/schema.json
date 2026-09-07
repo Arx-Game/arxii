@@ -43986,6 +43986,29 @@ components:
             - $ref: '#/components/schemas/DerivedAnchor'
             nullable: true
           readOnly: true
+        enemy_offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnemyOffer'
+          readOnly: true
+        enemy_price_tables:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: object
+              additionalProperties:
+                type: integer
+          readOnly: true
+        enemy_degree_grants:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
+        introductions_offered:
+          allOf:
+          - $ref: '#/components/schemas/IntroductionsOffered'
+          readOnly: true
       required:
       - age_max
       - age_min
@@ -43996,10 +44019,14 @@ components:
       - claimed_kin_pool
       - claimed_kin_slot
       - derived_anchors
+      - enemy_degree_grants
+      - enemy_offers
+      - enemy_price_tables
       - family
       - has_existing_characters
       - height_band
       - id
+      - introductions_offered
       - public_worship
       - second_parent_species
       - secret_worship
@@ -49614,6 +49641,41 @@ components:
         * `party_combat` - Party Combat
         * `open_encounter` - Open Encounter
         * `duel` - Duel
+    EnemyOffer:
+      type: object
+      description: One person or group a draft may name as its enemy (#3621). Read-only,
+        schema only.
+      properties:
+        kind:
+          type: string
+          readOnly: true
+        organization_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        name:
+          type: string
+          readOnly: true
+        reach:
+          type: string
+          readOnly: true
+        power_tier:
+          type: string
+          readOnly: true
+        why:
+          type: string
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+      required:
+      - kind
+      - name
+      - organization_id
+      - power_tier
+      - reach
+      - source
+      - why
     EngagementLock:
       type: object
       description: |-
@@ -51238,11 +51300,15 @@ components:
     FieldEnum:
       enum:
       - background
-      - personality
+      - never_do
+      - protect
+      - fear
       type: string
       description: |-
         * `background` - Background
-        * `personality` - Personality
+        * `never_do` - What would you never do?
+        * `protect` - What would you protect at all costs?
+        * `fear` - What are you deathly afraid of?
     FirstImpressionWrite:
       type: object
       description: Serializer for creating a first impression.
@@ -55193,6 +55259,16 @@ components:
       description: |-
         * `incapacitated` - Character Incapacitated
         * `near_death` - Character Near Death
+    IntroductionsOffered:
+      type: object
+      description: Which Introductions a draft is offered (#3621). Read-only, schema
+        only.
+      properties:
+        first_journal:
+          type: boolean
+          readOnly: true
+      required:
+      - first_journal
     IssueInvite:
       type: object
       description: Input for issuing a new invite — write-only, not model-backed.
@@ -70239,7 +70315,13 @@ components:
         guise_quote:
           type: string
           readOnly: true
-        guise_personality:
+        guise_never_do:
+          type: string
+          readOnly: true
+        guise_protect:
+          type: string
+          readOnly: true
+        guise_fear:
           type: string
           readOnly: true
         guise_background:
@@ -70256,7 +70338,9 @@ components:
       - display_name
       - guise_background
       - guise_concept
-      - guise_personality
+      - guise_fear
+      - guise_never_do
+      - guise_protect
       - guise_quote
       - humiliation_mark
       - id
@@ -71704,7 +71788,9 @@ components:
             Which Profile prose field this version belongs to.
 
             * `background` - Background
-            * `personality` - Personality
+            * `never_do` - What would you never do?
+            * `protect` - What would you protect at all costs?
+            * `fear` - What are you deathly afraid of?
         text:
           type: string
           readOnly: true
@@ -75457,7 +75543,11 @@ components:
           maxLength: 255
         quote:
           type: string
-        personality:
+        never_do:
+          type: string
+        protect:
+          type: string
+        fear:
           type: string
         background:
           type: string

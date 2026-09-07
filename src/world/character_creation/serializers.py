@@ -106,6 +106,24 @@ class HeritageAnchorSerializer(serializers.ModelSerializer):
         return obj.first_appeared_ic.year if obj.first_appeared_ic is not None else None
 
 
+class EnemyOfferSerializer(serializers.Serializer):
+    """One person or group a draft may name as its enemy (#3621). Read-only, schema only."""
+
+    kind = serializers.CharField(read_only=True)
+    organization_id = serializers.IntegerField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True)
+    reach = serializers.CharField(read_only=True)
+    power_tier = serializers.CharField(read_only=True)
+    why = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
+
+
+class IntroductionsOfferedSerializer(serializers.Serializer):
+    """Which Introductions a draft is offered (#3621). Read-only, schema only."""
+
+    first_journal = serializers.BooleanField(read_only=True)
+
+
 class BeginningsSerializer(serializers.ModelSerializer):
     """Serializer for Beginnings options."""
 
@@ -853,7 +871,12 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
-        """Return nested slots, preferring the prefetched ``cached_slots`` attr.
+        """Return nested slots from the view's grouping, or one fresh query.
+
+        Never from a ``to_attr`` prefetch attribute: ``OriginTemplate`` is
+        identity-mapped, so an attribute set by one request answered the next one
+        too and a question deleted in between was still served, with a null id
+        (ADR-0263, #3673).
 
         Choices and the branch-choice ids are each resolved with one flat query
         across every slot on this template, grouped by slot id in Python (see
@@ -869,9 +892,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        slots = (
-            obj.cached_slots if hasattr(obj, "cached_slots") else obj.slots.order_by("sort_order")
-        )
+        slots = obj.questions.rows
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:
@@ -1119,6 +1140,12 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     # Distinctions the Upbringing answers grant, shown locked in the Distinctions
     # stage so a player can't also hand-pick one already bundled in (#3660).
     bundled_distinctions = serializers.SerializerMethodField()
+    # The Actor's Sheet (#3621): who the draft may name as its enemy, the two price
+    # scales, and whether the First Journal is offered (an Arx start).
+    enemy_offers = serializers.SerializerMethodField()
+    enemy_price_tables = serializers.SerializerMethodField()
+    enemy_degree_grants = serializers.SerializerMethodField()
+    introductions_offered = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
     derived_anchors = serializers.SerializerMethodField()
@@ -1182,11 +1209,19 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "age_max",
             "bundled_distinctions",
             "derived_anchors",
+            "enemy_offers",
+            "enemy_price_tables",
+            "enemy_degree_grants",
+            "introductions_offered",
         ]
         read_only_fields = [
             "id",
             "age_min",
             "age_max",
+            "enemy_offers",
+            "enemy_price_tables",
+            "enemy_degree_grants",
+            "introductions_offered",
             "has_existing_characters",
             "cg_points_spent",
             "cg_points_remaining",
@@ -1258,6 +1293,42 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     def get_bundled_distinctions(self, obj: CharacterDraft) -> list[dict]:
         """Distinctions the Upbringing answers grant; shown locked in Distinctions (#3660)."""
         return list(obj.bundled_distinctions())
+
+    @extend_schema_field(EnemyOfferSerializer(many=True))
+    def get_enemy_offers(self, obj: CharacterDraft) -> list[dict]:
+        """Persons and groups the draft may name as its enemy (#3621)."""
+        from dataclasses import asdict  # noqa: PLC0415
+
+        from world.character_creation.enemies import enemy_offers  # noqa: PLC0415
+
+        return [asdict(offer) for offer in enemy_offers(obj)]
+
+    @extend_schema_field(
+        serializers.DictField(
+            child=serializers.DictField(
+                child=serializers.DictField(child=serializers.IntegerField())
+            )
+        )
+    )
+    def get_enemy_price_tables(self, obj: CharacterDraft) -> dict:  # noqa: ARG002
+        """Both price scales, so the leaf can show the ledger line before it is chosen."""
+        from world.character_creation.enemies import price_tables  # noqa: PLC0415
+
+        return price_tables()
+
+    @extend_schema_field(serializers.DictField(child=serializers.CharField()))
+    def get_enemy_degree_grants(self, obj: CharacterDraft) -> dict[str, str]:  # noqa: ARG002
+        """Degree value -> the Distinction it grants, so the row says "grants Hunted"."""
+        from world.character_creation.enemies import degree_grants  # noqa: PLC0415
+
+        return degree_grants()
+
+    @extend_schema_field(IntroductionsOfferedSerializer())
+    def get_introductions_offered(self, obj: CharacterDraft) -> dict[str, bool]:
+        """Which Introductions this draft is offered (the First Journal needs an Arx start)."""
+        from world.character_creation.services import first_journal_offered  # noqa: PLC0415
+
+        return {"first_journal": first_journal_offered(obj)}
 
     @extend_schema_field(serializers.DictField(child=DerivedAnchorSerializer(allow_null=True)))
     def get_derived_anchors(self, obj: CharacterDraft) -> dict[str, dict | None]:
@@ -1471,7 +1542,62 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if goals is not None:
             value["goals"] = self._validate_goals(goals)
 
+        self._validate_actor_sheet(value)
         return value
+
+    def _validate_actor_sheet(self, data: dict) -> None:
+        """The Actor's Sheet keys (#3621): three answers, the enemy pick, the Introductions."""
+        from world.character_creation.constants import ACTOR_SHEET_QUESTIONS  # noqa: PLC0415
+
+        for key, _copy_key in ACTOR_SHEET_QUESTIONS:
+            if key in data and not isinstance(data[key], str):
+                raise serializers.ValidationError({key: "Must be text."})
+        if data.get("enemy") is not None:
+            self._validate_enemy_pick(data["enemy"])
+        if data.get("introductions") is not None:
+            self._validate_introductions(data["introductions"])
+
+    @staticmethod
+    def _validate_enemy_pick(enemy: object) -> None:
+        from world.character_sheets.types import (  # noqa: PLC0415
+            EnemyDegree,
+            EnemyKind,
+            EnemyPowerTier,
+        )
+
+        if not isinstance(enemy, dict):
+            raise serializers.ValidationError({"enemy": "Must be an object."})
+        if enemy.get("kind") not in EnemyKind.values:
+            raise serializers.ValidationError({"enemy": "kind must be person or group."})
+        if enemy.get("degree") not in EnemyDegree.values:
+            raise serializers.ValidationError({"enemy": "degree is not one of the four."})
+        org_id = enemy.get("organization_id")
+        if org_id is not None and not isinstance(org_id, int):
+            raise serializers.ValidationError({"enemy": "organization_id must be an id."})
+        tier = enemy.get("power_tier", "")
+        if tier and tier not in EnemyPowerTier.values:
+            raise serializers.ValidationError({"enemy": "power_tier is not on the ladder."})
+        for key in ("name", "why", "public_line"):
+            if not isinstance(enemy.get(key, ""), str):
+                raise serializers.ValidationError({"enemy": f"{key} must be text."})
+
+    @staticmethod
+    def _validate_introductions(intros: object) -> None:
+        from world.character_creation.constants import (  # noqa: PLC0415
+            INTRODUCTION_APPLICATION,
+            INTRODUCTION_FIRST_JOURNAL,
+            INTRODUCTION_WHISPERS,
+        )
+
+        if not isinstance(intros, dict):
+            raise serializers.ValidationError({"introductions": "Must be an object."})
+        for key in (INTRODUCTION_FIRST_JOURNAL, INTRODUCTION_APPLICATION):
+            answers = intros.get(key, [])
+            if not isinstance(answers, list) or not all(isinstance(a, str) for a in answers):
+                msg = f"{key} must be a list of text answers."
+                raise serializers.ValidationError({"introductions": msg})
+        if not isinstance(intros.get(INTRODUCTION_WHISPERS, ""), str):
+            raise serializers.ValidationError({"introductions": "whispers must be text."})
 
     def _validate_origin_choices(self, data: dict) -> None:
         """``origin_choices`` maps a str slot id to a picked choice id, or null (#3617)."""
@@ -1606,7 +1732,15 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = "Goal points must be a non-negative integer"
             raise serializers.ValidationError(msg)
 
+        from world.goals.constants import GoalHorizon  # noqa: PLC0415
+
+        horizon = goal.get("horizon") or GoalHorizon.SHORT_TERM
+        if horizon not in GoalHorizon.values:
+            msg = f"Invalid goal horizon: '{horizon}'"
+            raise serializers.ValidationError(msg)
+
         return {
+            "horizon": horizon,
             "domain_id": resolved_id,
             "points": points,
             "notes": goal.get("notes", goal.get("text", "")),
@@ -1764,7 +1898,9 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
                 "id": None,
                 "first_name": obj.character_name or "Unknown",
                 "description": "",
-                "personality": "",
+                "never_do": "",
+                "protect": "",
+                "fear": "",
                 "background": "",
                 "species": None,
                 "area": None,
@@ -1778,7 +1914,9 @@ class DraftApplicationDetailSerializer(DraftApplicationSerializer):
             "id": draft.id,
             "first_name": draft.draft_data.get("first_name", ""),
             "description": draft.draft_data.get("description", ""),
-            "personality": draft.draft_data.get("personality", ""),
+            "never_do": draft.draft_data.get("never_do", ""),
+            "protect": draft.draft_data.get("protect", ""),
+            "fear": draft.draft_data.get("fear", ""),
             "background": draft.draft_data.get("background", ""),
             "species": draft.selected_species.name if draft.selected_species else None,
             "area": draft.selected_area.name if draft.selected_area else None,

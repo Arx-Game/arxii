@@ -14,7 +14,7 @@ from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
-from world.goals.constants import GoalStatus
+from world.goals.constants import GoalHorizon, GoalStatus
 
 # Goal domain names for reference (stored as ModifierTarget with category='goal'):
 # - Standing: Social status, reputation, political power
@@ -33,11 +33,12 @@ CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
 
 class CharacterGoal(SharedMemoryModel):
     """
-    A character's goal allocation in a specific domain.
+    One goal a character holds, in a domain, with the points placed on it (#3621).
 
-    Characters have 30 points total to distribute across domains.
-    Points in a domain add as a situational bonus when making checks
-    that align with the goal.
+    Characters have 30 points total to distribute across their goals; any number
+    of goals may sit in any domain, numbered within short term and long term.
+    Points in a domain add as a situational bonus when making checks that align
+    with the goal, summed across the goals sharing that domain.
 
     Domain is a ModifierTarget with category='goal'.
     """
@@ -54,10 +55,22 @@ class CharacterGoal(SharedMemoryModel):
         limit_choices_to={"category__name": "goal"},
         help_text="Goal domain (ModifierTarget with category='goal')",
     )
+    horizon = models.CharField(
+        max_length=10,
+        choices=GoalHorizon.choices,
+        default=GoalHorizon.SHORT_TERM,
+        help_text="Short term or long term (#3621).",
+    )
+    ordinal = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "The goal's number within its horizon, so play can say 'my third short term goal'."
+        ),
+    )
     points = models.PositiveIntegerField(default=0)
     notes = models.TextField(
         blank=True,
-        help_text="Freeform notes describing specific goals within this domain.",
+        help_text="The goal itself, in the player's words.",
     )
     status = models.CharField(
         max_length=20,
@@ -73,10 +86,19 @@ class CharacterGoal(SharedMemoryModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        unique_together = ["character", "domain"]
+        ordering = ["character_id", "horizon", "ordinal"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["character", "horizon", "ordinal"],
+                name="goal_ordinal_unique_per_horizon",
+            ),
+        ]
 
     def __str__(self) -> str:
-        return f"{self.character} - {self.domain.name}: {self.points}"
+        return (
+            f"{self.character} - {self.get_horizon_display()} {self.ordinal} "
+            f"({self.domain.name}): {self.points}"
+        )
 
 
 class GoalJournal(SharedMemoryModel):

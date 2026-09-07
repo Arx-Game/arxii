@@ -8,6 +8,19 @@ class ResponseType(models.TextChoices):
     RETORT = "retort", "Retort"
 
 
+class JournalKind(models.TextChoices):
+    """What an entry is: an ordinary entry, or one of the CG Introductions (#3621).
+
+    The Introductions are white journals written at character generation (or later, from
+    the journals page) whose kind lets the sheet and an institution find them.
+    """
+
+    ENTRY = "entry", "Entry"
+    FIRST_JOURNAL = "first_journal", "First Journal"
+    APPLICATION = "application", "Application to Shroudwatch Academy"
+    WHISPERS = "whispers", "The Whispers"
+
+
 class PosthumousOverride(models.TextChoices):
     """Per-entry override of the author's ``CharacterSheet.posthumous_journal_disposition``.
 

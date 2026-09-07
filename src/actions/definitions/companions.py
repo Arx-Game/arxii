@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from actions.base import Action
 from actions.constants import ActionCategory
 from actions.prerequisites import (
+    CompanionFitToFightPrerequisite,
     CompanionPresentPrerequisite,
     HasCompanionCapacityPrerequisite,
     Prerequisite,
@@ -101,6 +102,9 @@ class CompanionFightAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CompanionFitToFightPrerequisite()]
+
     def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.combat.constants import ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatParticipant  # noqa: PLC0415
@@ -145,6 +149,9 @@ class DeployCompanionAction(Action):
     category: str = "companions"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CompanionFitToFightPrerequisite()]
 
     def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415

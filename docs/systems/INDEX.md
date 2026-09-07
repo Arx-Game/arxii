@@ -1523,7 +1523,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
-- **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
+- **Models:** `CharacterGoal` (with `horizon` + `ordinal`, #3621: any number per domain, numbered within short and long term, bonus summed), `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
@@ -1571,6 +1571,9 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
   `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
   reads/sets the caller's sheet-level default.
+- **Kinds (#3621):** `JournalEntry.kind` (`JournalKind`: entry, first_journal, application,
+  whispers) marks the three CG Introductions so the sheet and, later, an institution's reading
+  room can find them; `create_journal_entry(kind=...)`.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -2089,7 +2092,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270), `ProfileTextVersion`
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
   (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
@@ -2209,6 +2212,12 @@ Multi-stage character creation flow with draft system.
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
   kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
+  (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
+  (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
+  `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation, Distinction
+  and heat seeds) and The Introductions (white journals by `JournalKind`; Whispers lines as
+  Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
 ### Market (#2066, standing gating #2995)
@@ -5181,6 +5190,21 @@ companion. Full detail: [companions.md](companions.md).
   CompanionArchetypeViewSet}` — read endpoints are read-only; write endpoints
   (`bind`/`release`/`fight`/`deploy`/`order`/`emote`) converge on
   `action.run()` via `PuppetActorMixin`, mounted at `/api/companions/`.
+- **Defeat resolution (#3652, #1873 Decision 4):** `resolve_companion_defeat`
+  is now called at both completion seams - `_resolve_companion_defeats`
+  (`world.combat.services`, inside `complete_encounter`) and
+  `apply_companion_battle_outcome` (`world.companions.battle_wiring`, on the
+  battle-conclusion hook registry). At EXTREME/LETHAL risk it draws from the
+  authored `companion_defeat` `ConsequencePool` (seeded by
+  `world.seeds.clusters._seed_companions` for a fresh database, staff-tunable
+  in admin) between three outcomes: no effect, the **Savaged** condition
+  (blocks `companion fight`/`companion deploy` via
+  `CompanionFitToFightPrerequisite` for 72 IC hours, then self-expires), or
+  `release_companion`. A death is narrated publicly
+  (`narrate_companion_loss`) and named in the owner's private aftermath
+  digest. `resolve_bonded_companion(opponent)` is the shared "is this ALLY
+  opponent someone's living companion" resolver, also used by the #3575
+  surge. Full detail: [companions.md](companions.md#bond-with-the-owner-3575-adr-0272).
 - **Cross-app dependencies:** `world.character_sheets`, `world.magic`
   (Gift/Thread/ThreadPullEffect), `world.checks` (`perform_check`).
 - **Source:** `src/world/companions/`
@@ -7536,7 +7560,22 @@ reactive maneuvers (COVER, INTERPOSE, DEFEND stance), and clash-of-wills.
     (`world/combat/serializers.py`) exposes the same digest over the API: null unless
     the encounter is COMPLETED with a `completed_at` and the viewer passes
     `_can_view_vitals` (owner, scene GM, or staff); the `beat` entry is additionally
-    null for a SECRET beat unless the viewer is GM or staff.
+    null for a SECRET beat unless the viewer is GM or staff. `AftermathDigest
+    .companions_lost` (#3652) names any companion the sheet lost in the
+    encounter's `aftermath_window`, read from `Companion.released_at`;
+    `render_aftermath_digest` emits one line when the list is non-empty. See
+    "Companion defeat resolution" below for what wrote that release.
+  - **Companion defeat resolution (#3652, #1873 Decision 4):**
+    `_resolve_companion_defeats(encounter)` runs inside `complete_encounter`'s
+    `outcome != ABANDONED` branch, right after `_apply_opponent_aftermath_pools`
+    and before `cleanup_completed_encounter` (the `die` outcome deletes the
+    companion's `ObjectDB`, so the deletion must run after cleanup's own
+    sweeps have read it). It resolves each DEFEATED ALLY `CombatOpponent` with
+    `summoned_by` set to a live `Companion` via
+    `resolve_bonded_companion(opponent)` (`world.companions.services`) and
+    calls `resolve_companion_defeat`; see the Companions section above for the
+    three outcomes and the battle-scale twin
+    (`apply_companion_battle_outcome`).
   - **The declaring round is skipped**, not resolved: `resolve_round` collects
     `SustainedAction.objects.filter(declared_round=round_number)`'s participant ids and
     excludes them from that round's PC resolution loop — that round's

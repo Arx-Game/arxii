@@ -448,3 +448,17 @@ class OrgAppealState(models.TextChoices):
 
 VACANCY_BASIS_KIN = "kin"
 VACANCY_BASIS_RETAINER = "retainer"
+
+
+class EnemyReach(models.TextChoices):
+    """How far a group can reach a character who has made an enemy of it (#3621).
+
+    Set once per ``OrganizationType``; a Beginning's enemy offer may override it for a
+    group that cannot reach where the character plays (issue rule 2). Prices the group
+    scale of ``ENEMY_PRICE_GROUP`` in ``character_creation.constants``.
+    """
+
+    HOUSEHOLD = "household", "A household"
+    HOUSE = "house", "A house or company"
+    SOCIETY = "society", "A society or church"
+    REALM = "realm", "A realm"

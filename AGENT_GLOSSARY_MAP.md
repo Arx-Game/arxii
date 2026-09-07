@@ -31,7 +31,8 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [codex](src/world/codex/AGENT_GLOSSARY.md)
 - [stories](src/world/stories/AGENT_GLOSSARY.md)
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
-- [companions](src/world/companions/AGENT_GLOSSARY.md)
+- [companions](src/world/companions/AGENT_GLOSSARY.md) - also holds Savaged (#3652),
+  the companion-defeat pool's condition for surviving a lethal mauling
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step

@@ -40,7 +40,7 @@ from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterGoal` | Character's point allocation in a goal domain | `character` (ObjectDB), `domain` (ModifierTarget with category='goal'), `points`, `notes`, `status` (GoalStatus), `completed_at`, `updated_at` |
+| `CharacterGoal` | One goal, in a domain, with the points placed on it | `character` (ObjectDB), `domain` (ModifierTarget with category='goal'), `horizon` (`GoalHorizon`: short term / long term, #3621), `ordinal` (the number within its horizon, unique per character and horizon), `points`, `notes` (the goal in the player's words), `status` (GoalStatus), `completed_at`, `updated_at` |
 | `GoalRevision` | Tracks when goals were last revised (weekly limit) | `character` (OneToOne ObjectDB), `last_revised_at` |
 | `GoalInstance` | Records each time a goal was applied to a roll | `goal` (CharacterGoal), `roll_story`, `created_at` |
 
@@ -52,7 +52,7 @@ from world.goals.types import GoalInputData, GoalBonusBreakdown
 
 **Design note:** Goal domains are stored as `ModifierTarget` entries with `category='goal'`, not as a separate model. The `OPTIONAL_GOAL_DOMAINS` set (currently `{"Drives"}`) identifies domains that do not require point allocation.
 
-Characters distribute 30 points (`MAX_GOAL_POINTS`) across domains. Points in a domain add as a situational bonus when making checks that align with the goal.
+Characters distribute 30 points (`MAX_GOAL_POINTS`) across their goals. Any number of goals may sit in any domain (#3621: the one-goal-per-domain key is gone); the domain's situational bonus is the sum of points across the goals sharing it (`get_goal_bonus`). Goals are numbered within short term and long term in the order given (`set_character_goals`, CG finalize), so play can name "my third short term goal"; resolving or retiring uses `status`, and the numbers close up on the next replace.
 
 ---
 

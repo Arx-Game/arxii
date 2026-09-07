@@ -46,7 +46,8 @@ character-creation/
     │                        #   flow (#2426 Task 10; Glimpse redesign #2427)
     ├── AppearanceStage.tsx  # Stage 8: Appearance
     ├── IdentityStage.tsx    # Stage 9: Identity
-    ├── FinalTouchesStage.tsx # Stage 10: Goals
+    ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
+    │                        #   numbered goals by horizon, the priced enemy, The Introductions
     ├── ReviewStage.tsx      # Stage 11: Review and submit
     ├── FinalizeForTableDialog.tsx # Player-GM direct-to-roster flow from ReviewStage (#3268)
     ├── TraditionPicker.tsx  # Traditions as entries — mounted inside gift/TraditionStep

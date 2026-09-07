@@ -52,6 +52,25 @@ class UpbringingForm(forms.ModelForm):
             "closed_distinctions": FilteredSelectMultiple("distinctions", is_stacked=False),
         }
 
+    def clean(self):
+        """The name path needs a Family Template - the one just submitted (#3673).
+
+        This rule cannot live on the model. ``OriginTemplate.clean()`` can only
+        read ``self.family_templates`` off the database, and a ModelForm runs the
+        instance's ``full_clean()`` in ``_post_clean()``, before ``save_m2m()``.
+        So a model-level check reads the state the operator is trying to change
+        and refuses every save that turns the name path on, whatever is selected
+        in the box. Reported from production against a route with no Family
+        Templates saved: the path could not be opened at all.
+        """
+        cleaned = super().clean()
+        if cleaned.get("allows_name_family") and not cleaned.get("family_templates"):
+            self.add_error(
+                "family_templates",
+                "Offer at least one Family Template when naming is allowed.",
+            )
+        return cleaned
+
 
 class QuestionForm(forms.ModelForm):
     class Meta:

@@ -58,6 +58,7 @@ class TestClusterRegistry(TestCase):
                 "building_listings",
                 "kudos",
                 "survivability",
+                "companions",
                 "ceremonies",
                 "market",
                 "tavern_games",

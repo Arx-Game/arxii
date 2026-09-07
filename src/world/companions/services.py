@@ -339,6 +339,11 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
     combat participation). At EXTREME/LETHAL: draws from the companion-defeat
     ConsequencePool; the ``die`` outcome calls ``release_companion``.
 
+    The pool is authored content, staff-tunable in admin, not minted here.
+    A fresh database gets it from ``world.seeds.clusters._seed_companions``;
+    its absence in production is reported by the ``companion-defeat-pool``
+    sentinel (Task 8, #3652) rather than crashing this completion seam.
+
     Args:
         companion: The persistent Companion whose bridged opponent was defeated.
         risk_level: The RiskLevel of the encounter/battle the companion fought in.
@@ -354,11 +359,15 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
         return False
 
     # Lethal stakes: consult the companion-defeat pool.
+    from actions.models import ConsequencePool  # noqa: PLC0415
     from world.companions.factories_combat import (  # noqa: PLC0415
-        create_companion_defeat_pool,
+        COMPANION_DEFEAT_POOL_NAME,
+        COMPANION_STAY_INCAPACITATED_LABEL,
     )
 
-    pool = create_companion_defeat_pool()
+    pool = ConsequencePool.objects.filter(name=COMPANION_DEFEAT_POOL_NAME).first()
+    if pool is None:
+        return False
     consequences = pool.cached_consequences
     if not consequences:
         return False
@@ -379,9 +388,112 @@ def resolve_companion_defeat(companion: Companion, risk_level: str) -> bool:
             if consequence.character_loss:
                 release_companion(companion)
                 return True
+            if consequence.label == COMPANION_STAY_INCAPACITATED_LABEL:
+                _apply_savaged(companion)
             return False
 
     return False
+
+
+def _apply_savaged(companion: Companion) -> None:
+    """Apply the Savaged condition to a companion that survived a mauling.
+
+    No-ops when the companion has no live object, or when the authored
+    ConditionTemplate is absent - the required-content sentinel reports the
+    missing row; a defeat must not crash the completion seam over it.
+    """
+    from world.companions.defeat_content import SAVAGED_CONDITION_NAME  # noqa: PLC0415
+    from world.conditions.models import ConditionTemplate  # noqa: PLC0415
+    from world.conditions.services import apply_condition  # noqa: PLC0415
+
+    if companion.objectdb is None:
+        return
+    try:
+        template = ConditionTemplate.get_by_name(SAVAGED_CONDITION_NAME)
+    except ConditionTemplate.DoesNotExist:
+        return
+    apply_condition(companion.objectdb, template)
+
+
+def resolve_bonded_companion(opponent: CombatOpponent) -> Companion | None:
+    """The live, unreleased Companion behind an ALLY CombatOpponent, if any.
+
+    The one place that answers "is this ally someone's companion." A plain
+    summon, a persona-backed NPC and every ENEMY resolve to None. Extracted
+    from _emit_companion_fall (#3575), whose predicate this is, so the defeat
+    hook (#3652) does not spell it a third time.
+    """
+    from world.combat.constants import CombatAllegiance  # noqa: PLC0415
+    from world.companions.models import Companion  # noqa: PLC0415
+
+    if opponent.allegiance != CombatAllegiance.ALLY or opponent.summoned_by_id is None:
+        return None
+    if opponent.objectdb_id is None:
+        return None
+    return Companion.objects.filter(
+        objectdb_id=opponent.objectdb_id, released_at__isnull=True
+    ).first()
+
+
+def narrate_companion_loss(companion_name: str, scene, *, fallback_recipients=None) -> None:
+    """Tell the scene that a companion died.
+
+    Takes a scene rather than an encounter because both completion seams use
+    it and broadcast_action_outcome is encounter-bound. Persisted in the scene
+    log, so the owner can re-read it after the fight, and broadcast live to
+    the scene's room so the loss lands as a moment rather than something read
+    back later. Mirrors the non-concealed branch of broadcast_action_outcome
+    (there is no concealment concept here - a companion dying is public).
+
+    Battles build their backing scene with location=None by design (ADR-0081)
+    - there is no room to broadcast to. When scene.location is None and
+    fallback_recipients (a list of character ObjectDBs) is given, the same
+    payload is delivered straight to those recipients instead, plus a plain
+    character.msg(text) for telnet - the same websocket-plus-msg pairing
+    deliver_aftermath_digests uses (world/combat/aftermath.py). When
+    scene.location is None and no fallback_recipients are given, the line is
+    still persisted but not delivered anywhere, rather than raising.
+    """
+    if scene is None:
+        return
+
+    from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.constants import InteractionMode  # noqa: PLC0415
+    from world.scenes.interaction_services import (  # noqa: PLC0415
+        _broadcast_to_location,
+        _build_interaction_payload,
+        _send_to_objects,
+        create_interaction,
+    )
+
+    narrator = get_or_create_narrator_persona()
+    interaction = create_interaction(
+        persona=narrator,
+        content=f"{companion_name} does not get up.",
+        mode=InteractionMode.OUTCOME,
+        scene=scene,
+    )
+
+    room = scene.location
+    payload = _build_interaction_payload(
+        interaction_id=interaction.pk,
+        persona=narrator,
+        content=interaction.content,
+        mode=interaction.mode,
+        timestamp=interaction.timestamp.isoformat(),
+        scene_id=interaction.scene_id,
+    )
+
+    if room is not None:
+        _broadcast_to_location(room, payload)
+        return
+
+    if not fallback_recipients:
+        return
+
+    _send_to_objects(fallback_recipients, payload)
+    for character in fallback_recipients:
+        character.msg(interaction.content)
 
 
 class PromoteSummonError(Exception):

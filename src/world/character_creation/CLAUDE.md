@@ -25,8 +25,10 @@ Character creation is a multi-stage process that guides players through creating
 7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
    bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
 8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
-9. **Identity** - Name, description, personality, background
-10. **Final Touches** - Goals (optional)
+9. **Identity** - Name, description, background
+10. **Final Touches** - The Actor's Sheet (#3621): three questions, numbered goals, one
+    priced enemy, The Introductions; all optional (see `docs/systems/character_creation.md`'s
+    "The Actor's Sheet" and ADR-0279)
 11. **Review** - Final review and submission
 
 ## Key Models

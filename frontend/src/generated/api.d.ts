@@ -26333,6 +26333,18 @@ export interface components {
       readonly derived_anchors: {
         [key: string]: components['schemas']['DerivedAnchor'] | null;
       };
+      readonly enemy_offers: components['schemas']['EnemyOffer'][];
+      readonly enemy_price_tables: {
+        [key: string]: {
+          [key: string]: {
+            [key: string]: number;
+          };
+        };
+      };
+      readonly enemy_degree_grants: {
+        [key: string]: string;
+      };
+      readonly introductions_offered: components['schemas']['IntroductionsOffered'];
     };
     /** @description Serializer for creating a new draft. */
     CharacterDraftCreate: {
@@ -28887,6 +28899,16 @@ export interface components {
      * @enum {string}
      */
     EncounterTypeEnum: 'party_combat' | 'open_encounter' | 'duel';
+    /** @description One person or group a draft may name as its enemy (#3621). Read-only, schema only. */
+    EnemyOffer: {
+      readonly kind: string;
+      readonly organization_id: number | null;
+      readonly name: string;
+      readonly reach: string;
+      readonly power_tier: string;
+      readonly why: string;
+      readonly source: string;
+    };
     /**
      * @description Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
      *
@@ -29717,10 +29739,12 @@ export interface components {
     };
     /**
      * @description * `background` - Background
-     *     * `personality` - Personality
+     *     * `never_do` - What would you never do?
+     *     * `protect` - What would you protect at all costs?
+     *     * `fear` - What are you deathly afraid of?
      * @enum {string}
      */
-    FieldEnum: 'background' | 'personality';
+    FieldEnum: 'background' | 'never_do' | 'protect' | 'fear';
     /** @description Serializer for creating a first impression. */
     FirstImpressionWrite: {
       target_persona_id?: number;
@@ -31627,6 +31651,10 @@ export interface components {
      * @enum {string}
      */
     InterventionTriggerEnum: 'incapacitated' | 'near_death';
+    /** @description Which Introductions a draft is offered (#3621). Read-only, schema only. */
+    IntroductionsOffered: {
+      readonly first_journal: boolean;
+    };
     /** @description Input for issuing a new invite — write-only, not model-backed. */
     IssueInvite: {
       /** Format: email */
@@ -40222,7 +40250,9 @@ export interface components {
       readonly allow_social_actions: boolean;
       readonly guise_concept: string;
       readonly guise_quote: string;
-      readonly guise_personality: string;
+      readonly guise_never_do: string;
+      readonly guise_protect: string;
+      readonly guise_fear: string;
       readonly guise_background: string;
       readonly humiliation_mark: components['schemas']['HumiliationMark'] | null;
     };
@@ -40918,7 +40948,9 @@ export interface components {
        * @description Which Profile prose field this version belongs to.
        *
        *     * `background` - Background
-       *     * `personality` - Personality
+       *     * `never_do` - What would you never do?
+       *     * `protect` - What would you protect at all costs?
+       *     * `fear` - What are you deathly afraid of?
        */
       readonly field: components['schemas']['FieldEnum'];
       /** @description The full field text as of this version. */
@@ -42716,7 +42748,9 @@ export interface components {
       persona_id: number;
       concept?: string;
       quote?: string;
-      personality?: string;
+      never_do?: string;
+      protect?: string;
+      fear?: string;
       background?: string;
     };
     /**

@@ -7,9 +7,7 @@ import core.natural_keys
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0105_heritage_first_appeared_ic"),
-    ]
+    dependencies = [("arxii", "0108_actors_sheet_contract")]
 
     operations = [
         migrations.AddField(

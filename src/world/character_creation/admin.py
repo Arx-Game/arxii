@@ -5,6 +5,7 @@ Character Creation admin configuration.
 from django.contrib import admin
 
 from world.character_creation.models import (
+    BeginningEnemyOffer,
     Beginnings,
     BeginningTradition,
     CGExplanation,
@@ -66,6 +67,15 @@ class BeginningTraditionInline(admin.TabularInline):
     raw_id_fields = ["tradition"]
 
 
+class BeginningEnemyOfferInline(admin.TabularInline):
+    """What the Beginning itself puts in the character's way (#3621)."""
+
+    model = BeginningEnemyOffer
+    extra = 0
+    raw_id_fields = ["organization"]
+    fields = ["organization", "figure_name", "power_tier", "reach_override", "why", "sort_order"]
+
+
 @admin.register(Beginnings)
 class BeginningsAdmin(admin.ModelAdmin):
     """Admin for Beginnings - worldbuilding paths in character creation."""
@@ -91,7 +101,7 @@ class BeginningsAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
-    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline]
+    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline, BeginningEnemyOfferInline]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art", "starting_area"]}),

@@ -456,7 +456,10 @@ class AftermathDigest:
     Built from rows ``complete_encounter`` already writes; never persisted itself.
     ``conditions`` are the conditions still held that were applied during the
     fight (cleared ones leave no row). ``beat_visible_to_player`` is False for a
-    SECRET beat, whose line only a GM or staff may see.
+    SECRET beat, whose line only a GM or staff may see. ``companions_lost`` holds
+    the names of this owner's companions released inside the aftermath window
+    (#3652) - a companion defeated at EXTREME/LETHAL stakes and released when
+    the fight completes.
     """
 
     outcome: str
@@ -466,3 +469,4 @@ class AftermathDigest:
     beat_completion: BeatCompletion | None
     beat_visible_to_player: bool
     peril_round_active: bool
+    companions_lost: list[str]

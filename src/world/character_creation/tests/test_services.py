@@ -746,8 +746,9 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
         assert goals.count() == 1
         assert goals.first().domain == self.standing
 
-    def test_skips_zero_point_goals(self):
-        """Goals with 0 points are skipped."""
+    def test_skips_empty_goals_but_keeps_a_note_to_yourself(self):
+        """A goal with no points but words is kept (a note to yourself, #3621); an empty
+        row is dropped."""
         from world.goals.models import CharacterGoal
 
         draft = self._create_complete_draft()
@@ -755,14 +756,17 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
         draft.draft_data["goals"] = [
             {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
             {"domain_id": self.drives.id, "notes": "Zero point goal", "points": 0},
+            {"domain_id": self.drives.id, "notes": "", "points": 0},
         ]
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character_id=character.pk)
-        assert goals.count() == 1
-        assert goals.first().domain == self.standing
+        goals = list(CharacterGoal.objects.filter(character_id=character.pk).order_by("ordinal"))
+        assert [(g.domain, g.points, g.ordinal) for g in goals] == [
+            (self.standing, 15, 1),
+            (self.drives, 0, 2),
+        ]
 
 
 class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):

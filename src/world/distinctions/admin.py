@@ -77,6 +77,7 @@ class DistinctionAdmin(admin.ModelAdmin):
     autocomplete_fields = ["category", "parent_distinction", "trust_category"]
     filter_horizontal = ["tags", "mutually_exclusive_with"]
     inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
+    readonly_fields = ["get_resonance_grants"]
 
     fieldsets = (
         (None, {"fields": ("name", "slug", "description", "category")}),
@@ -114,6 +115,18 @@ class DistinctionAdmin(admin.ModelAdmin):
             },
         ),
         ("Status", {"fields": ("is_active",)}),
+        (
+            "Resonance Wiring",
+            {
+                "fields": ("get_resonance_grants",),
+                "description": (
+                    "Authored in world.magic (ADR-0010: the general Resonance primitive "
+                    "must not import back into distinctions), so this app can't see it "
+                    "without an explicit summary."
+                ),
+                "classes": ("collapse",),
+            },
+        ),
         CREDIT_FIELDSET,
     )
 
@@ -124,6 +137,25 @@ class DistinctionAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Trust Required")
     def has_trust_requirement(self, obj):
         return obj.trust_required
+
+    @admin.display(description="Resonance grants/thresholds")
+    def get_resonance_grants(self, obj: Distinction) -> str:
+        if not obj.pk:
+            return "-"
+        grants = ", ".join(
+            f"{g.resonance.name} (+{g.flat_amount_per_rank}/rank)"
+            for g in obj.resonance_grants.select_related("resonance")
+        )
+        thresholds = ", ".join(
+            f"{t.resonance.name} @rank{t.rank}"
+            for t in obj.resonance_rank_thresholds.select_related("resonance")
+        )
+        parts = []
+        if grants:
+            parts.append(f"Grants: {grants}")
+        if thresholds:
+            parts.append(f"Rank thresholds: {thresholds}")
+        return "; ".join(parts) or "None"
 
 
 @admin.register(DistinctionEffect)

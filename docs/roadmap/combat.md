@@ -426,6 +426,21 @@ outcome** (a closed issue or a "SHIPPED" line is not proof). See the ledger's go
   CHARACTER_INCAPACITATED; owner surges once on a companion-targeted relationship
   (world/combat/tests/test_escalation_companion_fall.py).
 
+- **A companion's defeat resolves at the end of the fight (#3652, #1873 Decision
+  4):** `resolve_companion_defeat` is now called at both completion seams -
+  `complete_encounter` (`_resolve_companion_defeats`) and battle conclusion
+  (`apply_companion_battle_outcome`, `world/companions/battle_wiring.py`). At
+  EXTREME/LETHAL risk it draws from the authored `companion_defeat`
+  `ConsequencePool` (staff-tunable in admin, seeded for a fresh database by
+  `world.seeds.clusters._seed_companions`) between recovering untouched, the new
+  **Savaged** condition (blocks `companion fight`/`companion deploy` for 72 IC
+  hours, then self-expires), or `release_companion`. A death is narrated
+  publicly in the scene and named in the owner's private aftermath digest
+  (`AftermathDigest.companions_lost`). Proven by
+  `world/companions/tests/test_defeat_consequences.py`,
+  `world/companions/tests/test_combat_bridge_e2e.py`, and
+  `world/companions/tests/test_deployment.py`.
+
 ## WIRED-UNPROVEN (treat as not-done — write the journey test, fix what it exposes)
 
 - Thread-pull final outcome in combat. (Combo full journey proven in #2017; enemy-NPC

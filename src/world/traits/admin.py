@@ -7,6 +7,7 @@ character values, and check resolution configuration.
 
 from django.contrib import admin
 
+from world.admin_utils import describe_reverse_relations
 from world.traits.models import (
     CharacterTraitValue,
     CheckOutcome,
@@ -23,6 +24,9 @@ class TraitRankDescriptionInline(admin.TabularInline):
     model = TraitRankDescription
     extra = 1
     fields = ["value", "display_value", "label", "description"]
+    # display_value is a @property, not a DB field — must be declared readonly or
+    # the inline's modelform_factory raises FieldError on every Trait change view (#3679).
+    readonly_fields = ["display_value"]
     ordering = ["value"]
 
 
@@ -33,6 +37,11 @@ class TraitAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["trait_type", "category", "name"]
     inlines = [TraitRankDescriptionInline]
+    readonly_fields = ["get_connections"]
+
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"rank_descriptions"}))
 
 
 @admin.register(CharacterTraitValue)

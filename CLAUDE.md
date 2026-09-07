@@ -34,7 +34,19 @@ Explore/research agents). Two concrete failure modes motivate this:
   across three sessions (2 stalls in #1909, 6+ on 2026-07-06/07, 6 of 7 agents in
   #2698 *despite* a capitalised block naming `run_in_background`, `&`, `Monitor`
   and poll-a-file by name); agents route around the instruction creatively, so
-  keep it but do not treat it as the control. **The control is ordering.** Put
+  keep it but do not treat it as the control. **#3652 found the mechanism:**
+  the Bash tool's default timeout is 120 seconds and the harness
+  auto-backgrounds anything that exceeds it, so an agent running a long suite
+  in the foreground gets it backgrounded out from under it and then waits on
+  a notification that only ever wakes the main loop - it never chose to
+  background the command, so telling it not to cannot prevent this. Two of
+  nine implementers on that plan stalled this way despite dispatches naming
+  `run_in_background`, `&`, `Monitor` and poll-a-file explicitly; once
+  dispatches carried an explicit `timeout` (e.g. `600000`) on the long test
+  call, the remaining implementers ran a 4.5-5 minute suite to completion in
+  the foreground with no stalls. Pass that explicit `timeout` on any
+  long-running test call in the dispatch - it is the concrete preventive
+  alongside the ordering rule below. **The control is ordering.** Put
   this in every implementer/fix dispatch:
 
   > Commit as soon as the code change is complete and the fast oracle passes,

@@ -64,7 +64,7 @@ SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
 # .state`` / ``world.character_creation.offers.tradition_is_self_taught`` instead).
 # This constant survives only for the two callers that still need to name the
 # "Unbound" row itself: ``world.seeds.character_creation`` (seeding the row plus
-# its slate line) and migration ``0107_distinction_offers_data`` (the one-time
+# its slate line) and migration ``0110_distinction_offers_data`` (the one-time
 # backfill that stamps ``state`` on it before any state-based reader exists).
 UNBOUND_TRADITION_NAME = "Unbound"
 
@@ -230,3 +230,108 @@ class AnchorSource(models.TextChoices):
     SAME_AS = "same_as", "The same group as an earlier question"
     SERVED_HOUSE = "served_house", "The house the character's family served"
     OWN_FAMILY = "own_family", "The character's own family"
+
+
+# ---------------------------------------------------------------------------
+# The Actor's Sheet and the priced enemy (#3621)
+# ---------------------------------------------------------------------------
+
+# The realm whose starts are offered the First Journal at character generation; anyone
+# else writes one at the Great Archive in play (a later verb).
+ARX_REALM_NAME = "Arx"
+
+# CG points awarded for carrying an enemy, by scale x degree. PLACEHOLDER numbers: 1 at
+# the bottom corner (a Quiescent person who wants you annoyed), 150 at the top (a realm
+# that will relentlessly try to destroy you), tuned by hand from the demo. Keyed by the
+# societies.EnemyReach / character_sheets.EnemyPowerTier / EnemyDegree values.
+ENEMY_PRICE_GROUP: dict[str, dict[str, int]] = {
+    "household": {"annoyed": 3, "thwarted": 6, "ruined": 12, "destroy": 18},
+    "house": {"annoyed": 8, "thwarted": 16, "ruined": 32, "destroy": 48},
+    "society": {"annoyed": 15, "thwarted": 30, "ruined": 60, "destroy": 90},
+    "realm": {"annoyed": 25, "thwarted": 50, "ruined": 100, "destroy": 150},
+}
+ENEMY_PRICE_PERSON: dict[str, dict[str, int]] = {
+    "quiescent": {"annoyed": 1, "thwarted": 2, "ruined": 4, "destroy": 6},
+    "prospect": {"annoyed": 2, "thwarted": 4, "ruined": 8, "destroy": 12},
+    "potential": {"annoyed": 4, "thwarted": 8, "ruined": 16, "destroy": 24},
+    "puissant": {"annoyed": 8, "thwarted": 16, "ruined": 32, "destroy": 48},
+    "true": {"annoyed": 15, "thwarted": 30, "ruined": 60, "destroy": 90},
+    "grand": {"annoyed": 15, "thwarted": 30, "ruined": 60, "destroy": 90},
+}
+# A free-written enemy nobody has placed yet is worth this until staff link it.
+ENEMY_PRICE_PENDING = 1
+
+# The worst two degrees mark the character with a Distinction, the way a Lineage answer
+# can (#3660). Resolved by name at finalize; PLACEHOLDER names, authored rows. A missing
+# row is logged and skipped, never invented.
+ENEMY_DEGREE_DISTINCTION_NAMES: dict[str, str] = {
+    "ruined": "Marked",
+    "destroy": "Hunted",
+}
+# What the group thinks of the character at finalize, by degree (OrganizationReputation
+# delta through bump_organization_reputation, the same seam as a Lineage answer's seed).
+ENEMY_REPUTATION_SEED: dict[str, int] = {
+    "annoyed": -100,
+    "thwarted": -250,
+    "ruined": -500,
+    "destroy": -1000,
+}
+# Pursuit heat seeded where the character starts, when the enemy is a society or a realm
+# whose enforcing society covers that start, from ruined upward. PLACEHOLDER magnitudes.
+ENEMY_HEAT_SEED: dict[str, int] = {"ruined": 20, "destroy": 60}
+ENEMY_HEAT_PIN_DAYS = 30  # at destroy the heat is pinned (decay-exempt) this long
+
+# Each Whispers line is a Level-1 secret with this much gossip heat in the start region,
+# so it is overhearable at a hub from day one (GOSSIP_DECAY_FLOOR is 1; public at 40).
+WHISPERS_SEED_HEAT = 5
+
+# The three questions of the Actor's Sheet, in order: (draft_data key, copy key stem).
+# The wording lives in CG copy (CG_EXPLANATION_COPY / CGExplanation rows); the set is fixed.
+ACTOR_SHEET_QUESTIONS: tuple[tuple[str, str], ...] = (
+    ("never_do", "finaltouches_never_do"),
+    ("protect", "finaltouches_protect"),
+    ("fear", "finaltouches_fear"),
+)
+
+# The Introductions (#3621): three white journals in the character's own voice. Frames and
+# questions are world-level copy; the defaults here seed CG_EXPLANATION_COPY and are the
+# finalize fallback when a copy row is missing. Wording is the reviewer's own.
+INTRODUCTION_FIRST_JOURNAL = "first_journal"
+INTRODUCTION_APPLICATION = "application"
+INTRODUCTION_WHISPERS = "whispers"
+INTRODUCTIONS_INTRO = (
+    "These are optional IC introductions that can be answered IC as another way to help "
+    "flesh out a character in their past. The First Journal is a white journal in the "
+    "Great Archive, and would be a reference point to any other character that reads "
+    "someone's profile inside the Archive. Each of these count as journals mechanically, "
+    "and award xp for writing them."
+)
+FIRST_JOURNAL_INSTITUTION = "The Great Archive of Vellichor"
+FIRST_JOURNAL_FRAME = (
+    "The Great Archive strives to collect the stories of everyone that ever lived, and to "
+    "record the journey of those on their Durance. In the First Journal, one responds to "
+    "three questions in any manner they desire."
+)
+FIRST_JOURNAL_QUESTIONS: tuple[str, ...] = (
+    "What should the world know of you first?",
+    "What is a day that made you who you are?",
+    "What do you think of the City of Arx?",
+)
+APPLICATION_TITLE = "An Application to Shroudwatch Academy"
+APPLICATION_FRAME = (
+    "All throughout the continent of Catenys, all who have their Glimpse and many who just "
+    "hope for it perform a ritual to write an application to Shroudwatch Academy, burn it, "
+    "and hope one day to receive word. Alarmingly, some people receive answers to "
+    "applications they never recall writing at all, even if it seems exactly what they "
+    "might have written."
+)
+APPLICATION_QUESTIONS: tuple[str, ...] = (
+    "What dost thou hope to become?",
+    "What are thy talents?",
+    "What drives thee to distraction?",
+)
+WHISPERS_TITLE = "The Whispers - Rumors of Deeds and Misdeeds"
+WHISPERS_FRAME = (
+    "Rumors of note about the character, and what they consider vile slander and what "
+    "might be pleasant hyperbole."
+)

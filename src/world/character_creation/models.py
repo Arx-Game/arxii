@@ -9,9 +9,10 @@ Models for the staged character creation flow:
 
 from __future__ import annotations
 
+from collections import defaultdict
 from datetime import timedelta
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
@@ -25,6 +26,8 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.handlers import CachedRowsHandler
+from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
@@ -52,11 +55,13 @@ from world.character_creation.types import (
     CGPointBreakdownEntry,
     StageValidationErrors,
 )
+from world.character_sheets.types import EnemyPowerTier
 from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
 from world.items.constants import BodyRegion
 from world.progression.constants import MATURATION_UNDERAGE_YEAR, UNDERAGE_CG_POINT_COST
+from world.societies.constants import EnemyReach
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -517,6 +522,70 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return Language.objects.filter(id__in=language_ids)
 
 
+class BeginningEnemyOffer(SharedMemoryModel):
+    """An enemy a Beginning itself puts in the character's way (#3621).
+
+    The Lineage's answered group and person questions are offered automatically; these
+    rows are only for what the Beginning adds (the Republic that does not keep the Gifted).
+    A group row is an Organization and takes its reach from its type unless
+    ``reach_override`` says the group cannot reach where the character plays (issue rule
+    2, "reach is measured where the character plays"). A person row is a name and a power
+    tier, optionally inside a group.
+    """
+
+    beginning = models.ForeignKey(
+        Beginnings,
+        on_delete=models.CASCADE,
+        related_name="enemy_offers",
+    )
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="beginning_enemy_offers",
+        help_text="The group offered, or the group the offered person belongs to.",
+    )
+    figure_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Set for a person: their name. Blank for a group.",
+    )
+    power_tier = models.CharField(
+        max_length=10,
+        choices=EnemyPowerTier.choices,
+        blank=True,
+        help_text="Set for a person: their power. Blank for a group.",
+    )
+    reach_override = models.CharField(
+        max_length=12,
+        choices=EnemyReach.choices,
+        blank=True,
+        help_text=(
+            "A group only: price it at this reach instead of its type's, when it cannot "
+            "reach the character where they play."
+        ),
+    )
+    why = models.CharField(
+        max_length=255,
+        help_text="Why they want the character to fail, as offered (a gloss on the list).",
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    class Meta:
+        ordering = ["beginning_id", "sort_order", "id"]
+        verbose_name = "Beginning enemy offer"
+        verbose_name_plural = "Beginning enemy offers"
+
+    def __str__(self) -> str:
+        who = self.figure_name or (self.organization.name if self.organization_id else "?")
+        return f"{self.beginning.name}: {who}"
+
+    @property
+    def is_person(self) -> bool:
+        return bool(self.figure_name)
+
+
 class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
@@ -566,7 +635,33 @@ class OriginTemplateManager(NaturalKeyManager):
     """Manager for OriginTemplate with natural key support."""
 
 
-class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class UpbringingQuestionsHandler(CachedRowsHandler["OriginTemplateSlot"]):
+    """The questions on one Upbringing, in the order a player answers them.
+
+    Every consumer reads the route's questions through here - the CG API
+    serializer, the questionnaire resolver, the draft validators, the Builder's
+    rail - so none of them owns a query, an ordering or a cache of its own, and
+    none of them can be handed a question the database no longer has (#3673).
+    """
+
+    attname: ClassVar[str] = "questions"
+
+    def load(self) -> list[OriginTemplateSlot]:
+        return list(self.parent.slots.order_by("sort_order", "id"))
+
+    @classmethod
+    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[OriginTemplateSlot]]:
+        """One query for every question across ``parents``, bucketed by Upbringing."""
+        grouped: dict[int, list[OriginTemplateSlot]] = defaultdict(list)
+        rows = OriginTemplateSlot.objects.filter(
+            template_id__in=[parent.pk for parent in parents]
+        ).order_by("sort_order", "id")
+        for slot in rows:
+            grouped[slot.template_id].append(slot)
+        return grouped
+
+
+class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """The Upbringing a player picks within a beginning (#2478, #3617).
 
     Content model — authored in the lore repo, exported/imported via
@@ -674,6 +769,12 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             paths.append(FamilyPath.NONE)
         return paths
 
+    @cached_property
+    def questions(self) -> UpbringingQuestionsHandler:
+        """This route's questions. Cleared by any slot save/delete through
+        ``OriginTemplateSlot.related_cache_fields``."""
+        return UpbringingQuestionsHandler(self)
+
     def is_accessible_by(self, account: AccountDB) -> bool:
         """Trust gate, mirroring ``Beginnings.is_accessible_by``."""
         if not self.is_active:
@@ -688,24 +789,34 @@ class OriginTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             return account_trust >= self.trust_required
         return True
 
-    def clean(self) -> None:
-        super().clean()
-        if self.allows_name_family and self.pk and not self.family_templates.exists():
-            raise ValidationError(
-                {"family_templates": "Offer at least one Family Template when naming is allowed."}
-            )
+    # No ``clean()`` for the name path's Family Template rule. A model's
+    # ``clean()`` can only read ``self.family_templates`` off the database, and a
+    # ModelForm runs ``full_clean()`` in ``_post_clean()`` - before
+    # ``save_m2m()`` - so the check read the state the operator was submitting a
+    # change to and refused every save that turned the name path on (#3673,
+    # reported from production). The rule is enforced where the submitted value
+    # exists, in ``UpbringingForm.clean()``, and a route already saved without
+    # one is flagged in the Builder's rail checks.
 
 
 class OriginTemplateSlotManager(NaturalKeyManager):
     """Manager for OriginTemplateSlot with natural key support."""
 
 
-class OriginTemplateSlot(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+class OriginTemplateSlot(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
     """Authored slot prompt within an origin-story template (#2478).
 
     Content model — authored in the lore repo. No slug — natural key is
     (template, name), mirroring ``BeginningTradition``.
     """
+
+    #: Saving or deleting a question drops its Upbringing's cached properties,
+    #: which is where ``OriginTemplate.questions`` lives. A cascade or a
+    #: ``queryset.delete()`` bypasses ``Model.delete()`` and never gets here -
+    #: the handler's own pk check is what covers those (#3673).
+    related_cache_fields: ClassVar[list[str]] = ["template"]
 
     template = models.ForeignKey(
         OriginTemplate,
@@ -1570,6 +1681,20 @@ class CharacterDraft(SharedMemoryModel):
                         "cost": cost,
                     }
                 )
+        # Carrying an enemy is paid for, into the shared purse (#3621): a negative cost.
+        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+
+        enemy = resolve_enemy(self)
+        if enemy is not None and enemy.price:
+            from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+
+            breakdown.append(
+                {
+                    "category": "enemy",
+                    "item": f"{enemy.name or 'Unplaced enemy'}: {EnemyDegree(enemy.degree).label}",
+                    "cost": -enemy.price,
+                }
+            )
         if self.age is not None and self.age < MATURATION_UNDERAGE_YEAR:
             # The youngest starts buy their youth with a thinner purse (#3635).
             breakdown.append(
