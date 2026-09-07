@@ -426,7 +426,6 @@ describe('ChapterOffers', () => {
         />
       </div>
     );
-    const styledElsewhere = new Set(['chosen', 'closed']);
-    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
+    expect(unreachableClasses(container)).toEqual([]);
   });
 });

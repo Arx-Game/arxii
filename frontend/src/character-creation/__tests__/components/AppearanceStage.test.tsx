@@ -222,7 +222,7 @@ describe('AppearanceStage (folio)', () => {
     // ChapterLeaf/Marginalia primitives this stage mounts unchanged, not
     // created by this task's offers markup, same escape hatch every other
     // class-guard test uses.
-    const styledElsewhere = new Set(['vh', 'leaf-body', 'note-group']);
+    const styledElsewhere = new Set(['leaf-body', 'note-group']);
     expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
   });
 });

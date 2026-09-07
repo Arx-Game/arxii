@@ -252,7 +252,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     // reaching the bare element (only a descendant selector) - not created by
     // this task's offers markup, same escape hatch every other class-guard
     // test uses.
-    const styledElsewhere = new Set(['chosen', 'closed', 'leaf-body', 'note-group', 'entry']);
+    const styledElsewhere = new Set(['leaf-body', 'chosen', 'entry', 'note-group']);
     expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
   });
 
