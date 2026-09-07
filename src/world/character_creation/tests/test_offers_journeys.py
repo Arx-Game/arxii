@@ -37,7 +37,7 @@ from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
 from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import CharacterDistinction
-from world.distinctions.types import DistinctionOrigin
+from world.distinctions.types import DistinctionOrigin, build_distinction_entry
 from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import GlimpseTagFactory, TraditionFactory, TraditionGiftGrantFactory
 from world.magic.models import CharacterAura
@@ -269,6 +269,37 @@ class TraditionStepJourneyTests(FinalizationTestMixin, TestCase):
             ).exists()
             is False
         )
+
+    def test_finalize_reconciles_carried_refund_before_purse_check(self):
+        """B1: a draft edited directly (no patch view, no offers-sync PUT) still
+        finalizes when its purse only balances once the SELF_TAUGHT drawback's
+        refund is carried in -- ``finalize_character`` must reconcile the offer
+        picks before it runs the purse check, not after."""
+        draft = self._draft()
+        draft.selected_tradition = self.self_tradition
+        draft.save(update_fields=["selected_tradition"])
+
+        # No distinctions entry yet -- draft_data was never touched by the
+        # offers-sync view, so nothing has reconciled the carried drawback in.
+        remaining_before_filler = draft.calculate_cg_points_remaining()
+        over_by = 30
+        filler = DistinctionFactory(
+            name="Filler Spend", cost_per_rank=remaining_before_filler + over_by
+        )
+        draft.draft_data["distinctions"] = [build_distinction_entry(filler, rank=1)]
+        draft.save(update_fields=["draft_data"])
+
+        # Over budget without the carried refund; the drawback's own cost
+        # (a refund, being negative) more than covers the overage once reconciled.
+        assert draft.calculate_cg_points_remaining() == -over_by
+        assert -over_by + abs(self.self_drawback.cost_per_rank) >= 0
+
+        character = finalize_character(draft, add_to_roster=True)
+        sheet = character.sheet_data
+        cd = CharacterDistinction.objects.get(character=sheet, distinction=self.self_drawback)
+        assert cd.rank == 1
+        assert cd.source_description == self.self_state_line.entry_line
+        assert cd.origin == DistinctionOrigin.CHARACTER_CREATION
 
 
 class GlimpseJourneyTests(FinalizationTestMixin, TestCase):

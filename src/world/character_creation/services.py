@@ -207,9 +207,13 @@ def finalize_character(
         msg = "This character draft has expired due to inactivity."
         raise DraftExpiredError(msg)
 
-    require_draft_complete(draft)
-
+    # Reconcile offer picks (and the enemy-worst-degree fold) BEFORE the
+    # completeness check, so a carried refund from a SELF_TAUGHT tradition's
+    # drawback is on the entry list before require_draft_complete sums the
+    # purse (#3675 final-fix B1). finalize_gm_character mirrors this order.
     _prepare_draft_entries(draft)
+
+    require_draft_complete(draft)
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
