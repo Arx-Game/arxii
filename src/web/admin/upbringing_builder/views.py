@@ -32,12 +32,19 @@ from web.admin.upbringing_builder import live
 from web.admin.upbringing_builder.credit import stamp_reviewed, stamp_written
 from web.admin.upbringing_builder.forms import (
     AnswerFormSet,
+    OfferFormSet,
     QuestionFormSet,
     UpbringingForm,
     answer_formset_for,
+    offer_formset_for,
 )
 from world.character_creation.constants import QuestionKind
-from world.character_creation.models import Beginnings, OriginTemplate, OriginTemplateSlot
+from world.character_creation.models import (
+    Beginnings,
+    OriginTemplate,
+    OriginTemplateSlot,
+    OriginTemplateSlotChoice,
+)
 from world.character_creation.serializers import CGOriginTemplateSerializer
 
 #: Only these question kinds carry priced answers (Ruling G, #3660 review): the
@@ -52,6 +59,11 @@ _ANSWERABLE_KINDS = (QuestionKind.PICK, QuestionKind.GROUP)
 #: (#3660 amendment: "every help line on the page is fixed copy identical for
 #: every Upbringing").
 NEW_QUESTION_ANSWERS_HELP = "Save the route once to add answers to a new question."
+
+#: Fixed copy shown in a new (unsaved) answer's Offers cell (#3675) - the same
+#: "save once first" limit ``NEW_QUESTION_ANSWERS_HELP`` states for questions,
+#: since a nested offers formset needs a real answer pk for its own prefix.
+NEW_ANSWER_OFFERS_HELP = "Save the route once to add offers to a new answer."
 
 
 def _answer_formsets(
@@ -71,6 +83,23 @@ def _answer_formsets(
     for slot in slots:
         data = request.POST if request is not None and request.method == "POST" else None
         out[slot.pk] = answer_formset_for(slot, data)
+    return out
+
+
+def _offer_formsets(
+    request: HttpRequest | None, template: OriginTemplate
+) -> dict[int, OfferFormSet]:
+    """One bound (POST) or unbound offers formset per saved answer (#3675).
+
+    Only a saved answer gets one - a client-cloned answer row has no pk yet
+    for a nested formset's ``o<choice.pk>`` prefix to key off, the same limit
+    a brand-new question already has for its own answers formset.
+    """
+    out: dict[int, OfferFormSet] = {}
+    choices = OriginTemplateSlotChoice.objects.filter(slot__template=template)
+    for choice in choices:
+        data = request.POST if request is not None and request.method == "POST" else None
+        out[choice.pk] = offer_formset_for(choice, data)
     return out
 
 
@@ -101,12 +130,15 @@ class _RouteForms:
     form: UpbringingForm
     questions: QuestionFormSet
     answers: dict[int, AnswerFormSet]
+    offers: dict[int, OfferFormSet]
 
     @property
     def media(self) -> Media:
         """Every autocomplete widget's JS/CSS in one bundle - loaded once, in ``extrahead``."""
         media = self.form.media + self.questions.media
         for formset in self.answers.values():
+            media = media + formset.media
+        for formset in self.offers.values():
             media = media + formset.media
         return media
 
@@ -127,9 +159,11 @@ def _render_page(
             "form": forms.form,
             "questions": forms.questions,
             "answers": forms.answers,
+            "offers": forms.offers,
             "needs_setup": needs_setup,
             "media": forms.media,
             "new_question_answers_help": NEW_QUESTION_ANSWERS_HELP,
+            "new_answer_offers_help": NEW_ANSWER_OFFERS_HELP,
             "live": live.for_template(template, request.user) if template.pk else None,
             "rail": live.rail_counts(template) if template.pk else None,
             "question_numbers": _question_numbers(template),
@@ -156,13 +190,15 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
             form_kwargs={"template": template if template.pk else None},
         )
         answers = _answer_formsets(request, template) if template.pk else {}
-        forms = _RouteForms(form, questions, answers)
+        offers = _offer_formsets(request, template) if template.pk else {}
+        forms = _RouteForms(form, questions, answers, offers)
         if contributor is None:
             return _render_page(request, template, forms, needs_setup=True)
         valid = (
             form.is_valid()
             and questions.is_valid()
             and all(fs.is_valid() for fs in answers.values())
+            and all(fs.is_valid() for fs in offers.values())
         )
         if valid:
             with transaction.atomic():
@@ -170,6 +206,8 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
                 questions.instance = saved
                 questions.save()
                 for fs in answers.values():
+                    fs.save()
+                for fs in offers.values():
                     fs.save()
                 stamp_written(saved, contributor)
             messages.success(request, "Saved and credited to you.")
@@ -180,8 +218,12 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
         instance=template, prefix="q", form_kwargs={"template": template if template.pk else None}
     )
     answers = _answer_formsets(None, template) if template.pk else {}
+    offers = _offer_formsets(None, template) if template.pk else {}
     return _render_page(
-        request, template, _RouteForms(form, questions, answers), needs_setup=contributor is None
+        request,
+        template,
+        _RouteForms(form, questions, answers, offers),
+        needs_setup=contributor is None,
     )
 
 

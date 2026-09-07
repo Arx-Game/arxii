@@ -27,6 +27,7 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.serializers import _batch_listed_groups, _batch_pool_groups
+from world.distinctions.models import Distinction
 from world.roster.models import Family
 from world.societies.vacancy_services import reachable_vacancies
 
@@ -194,6 +195,40 @@ def _distinction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
     return checks
 
 
+def _closed_contradiction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
+    """A distinction both closed by this route and offered by one of its own answers (#3675).
+
+    Scoped to active answers/offers only, matching every other check here - an
+    inactive row is never reached by a player either way, so it is not this
+    route's contradiction to flag.
+    """
+    closed_ids = set(template.closed_distinctions.values_list("id", flat=True))
+    if not closed_ids:
+        return []
+    offered_ids = set(
+        DistinctionOffer.objects.filter(
+            origin_choice__slot__template=template,
+            origin_choice__is_active=True,
+            is_active=True,
+            distinction_id__in=closed_ids,
+        ).values_list("distinction_id", flat=True)
+    )
+    if not offered_ids:
+        return []
+    names = Distinction.objects.filter(id__in=offered_ids).values_list("name", flat=True)
+    return [
+        ("warn", f"'{name}' is both closed by this route and offered by one of its answers.")
+        for name in names
+    ]
+
+
+def _closed_reason_check(template: OriginTemplate) -> list[tuple[str, str]]:
+    """A non-empty closed list with no line for the player to read is a warn (#3675)."""
+    if template.closed_distinctions.exists() and not template.closed_reason:
+        return [("warn", "This route closes distinctions but has no line for the player to read.")]
+    return []
+
+
 def _own_family_house_check(
     template: OriginTemplate, slots: list[OriginTemplateSlot], position: dict[int, int]
 ) -> list[tuple[str, str]]:
@@ -244,6 +279,8 @@ def _checks(
         checks.extend(_branch_check(slot, branch_slot_ids))
     checks.extend(_own_family_house_check(template, slots, position))
     checks.extend(_distinction_checks(template))
+    checks.extend(_closed_contradiction_checks(template))
+    checks.extend(_closed_reason_check(template))
     return checks
 
 
@@ -277,7 +314,8 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
     review Ruling 2). "Distinctions used" counts distinct active
     ``DistinctionOffer`` rows opened by this template's active answers
     (#3675), scoped by both the offer's own ``is_active`` and its
-    ``origin_choice``'s.
+    ``origin_choice``'s. "Closed by this route" is the route's own
+    ``closed_distinctions`` M2M count - unrelated to activity on any answer.
     """
     slots = list(OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "id"))
     choices = list(
@@ -318,6 +356,7 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
         "people_named": sum(1 for slot in slots if slot.kind == QuestionKind.PERSON),
         "answers": len(choices),
         "distinctions_used": distinctions_used,
+        "closed_distinctions": template.closed_distinctions.count(),
         "cheapest_complete_answer": cheapest_total,
         "dearest_complete_answer": dearest_total,
         "largest_refund": max(0, -cheapest_total),

@@ -97,28 +97,11 @@ light/dark selectors below, so the page follows the theme toggle.
   #distinction-builder-root .db-reads-editable[hidden] { display: none; }
   #distinction-builder-root .db-reads-derived .help { margin: 0.15rem 0 0; }
 
-  /* The preview: how the offer actually reads to a player, so it is set off
-     from the admin form around it rather than looking like another row. */
-  #distinction-builder-root .preview {
-    margin-top: 0.75rem;
-    padding: 0.75rem 1rem;
-    border: 1px solid var(--hairline-color);
-    border-radius: 4px;
-    background: var(--body-bg);
-    font-family: Garamond, "EB Garamond", Georgia, serif;
-    font-size: 0.9rem;
-    overflow: hidden;
-  }
-  #distinction-builder-root .preview .db-preview-price {
-    float: right;
-    font-family: "Cinzel", Georgia, serif;
-    font-size: 0.75rem;
-    color: var(--db-ok);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-  }
-  #distinction-builder-root .preview b { display: block; margin-bottom: 0.25rem; }
-  #distinction-builder-root .preview p { margin: 0; color: var(--body-quiet-color); }
+  /* The preview: "how the offer reads to a player" itself is rendered by the
+     shared `admin/authoring/_offer_preview.html` fragment (#3675), which
+     carries its own self-contained `<style>` - not scoped under this page's
+     own root, since a Glimpse tag's change form includes the same fragment
+     with no `#distinction-builder-root` wrapper around it. */
 
   /* The rail */
   #distinction-builder-root .db-rail .module { margin-bottom: 1rem; }

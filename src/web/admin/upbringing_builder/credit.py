@@ -12,6 +12,7 @@ from web.admin.authoring.credit import (
     stamp_written as _stamp_written_row,
 )
 from world.character_creation.models import (
+    DistinctionOffer,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
@@ -22,7 +23,8 @@ from world.contributors.models import ContentContributor
 def _rows(template: OriginTemplate) -> list:
     slots = list(OriginTemplateSlot.objects.filter(template=template))
     choices = list(OriginTemplateSlotChoice.objects.filter(slot__in=slots))
-    return [template, *slots, *choices]
+    offers = list(DistinctionOffer.objects.filter(origin_choice__in=choices))
+    return [template, *slots, *choices, *offers]
 
 
 def stamp_written(template: OriginTemplate, contributor: ContentContributor) -> None:

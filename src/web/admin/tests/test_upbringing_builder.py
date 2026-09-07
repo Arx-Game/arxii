@@ -72,6 +72,26 @@ class BuilderGetTest(BuilderTestCase):
         assert f"a{self.q1.pk}-__prefix__-name" in body
         assert "Add answer" in body
 
+    def test_answers_table_shows_offers_and_closes_columns(self):
+        """#3675: the answers table gains "Offers" and "Closes" columns after Cost."""
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert "<th>Offers</th>" in body
+        assert "<th>Closes</th>" in body
+        assert "route's list" in body
+        assert f"o{self.livery.pk}-__prefix__-distinction" in body
+        assert "+ Offer" in body
+
+    def test_this_route_closes_module_renders(self):
+        """#3675: "This route closes" is its own route-level module."""
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
+        body = resp.content.decode()
+        assert "This route closes" in body
+        assert 'id="closes-module"' in body
+        assert "The player reads" in body
+
 
 class BuilderAutocompleteWidgetsTest(BuilderTestCase):
     """The Builder's autocomplete widgets' AJAX calls (#3670 regression).
@@ -146,6 +166,11 @@ class BuilderSaveTest(BuilderTestCase):
             f"a{self.q1.pk}-0-trust_required": "0",
             f"a{self.q1.pk}-0-is_active": "on",
             f"a{self.q1.pk}-0-sort_order": "0",
+            # offers formset for the livery answer (#3675): empty by default
+            f"o{self.livery.pk}-TOTAL_FORMS": "0",
+            f"o{self.livery.pk}-INITIAL_FORMS": "0",
+            f"o{self.livery.pk}-MIN_NUM_FORMS": "0",
+            f"o{self.livery.pk}-MAX_NUM_FORMS": "1000",
         }
         data.update(overrides)
         return data
@@ -207,6 +232,56 @@ class BuilderSaveTest(BuilderTestCase):
         resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
         assert resp.status_code == 302
         assert OriginTemplateSlotChoice.objects.filter(slot=self.q1).count() == 2
+
+    def test_save_offer_on_an_answer_is_lineage_and_credited(self):
+        """#3675: an answer's own offer row is chapter LINEAGE, origin_choice the answer."""
+        from world.character_creation.constants import OfferArrival
+        from world.character_creation.models import DistinctionOffer
+        from world.distinctions.factories import DistinctionFactory
+
+        offered = DistinctionFactory(name="Somehow Always Broke")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                f"o{self.livery.pk}-TOTAL_FORMS": "1",
+                f"o{self.livery.pk}-0-distinction": str(offered.pk),
+                f"o{self.livery.pk}-0-arrives_as": OfferArrival.BUNDLED,
+                f"o{self.livery.pk}-0-sort_order": "0",
+            }
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 302
+        offer = DistinctionOffer.objects.get(distinction=offered, origin_choice=self.livery)
+        assert offer.chapter == "lineage"
+        assert offer.arrives_as == OfferArrival.BUNDLED
+        assert offer.written_by == self.writer
+
+    def test_offer_arrives_as_choices_drop_carried(self):
+        """An answer's own offer can't be CARRIED - that opener isn't itself a choice."""
+        from web.admin.upbringing_builder.forms import OfferForm
+        from world.character_creation.constants import OfferArrival
+
+        form = OfferForm()
+        values = [value for value, _ in form.fields["arrives_as"].choices]
+        assert OfferArrival.CARRIED not in values
+        assert OfferArrival.CHOICE in values
+        assert OfferArrival.BUNDLED in values
+
+    def test_save_closed_distinctions_and_reason(self):
+        """#3675: the route's closed list and its reason save with the Upbringing form."""
+        from world.distinctions.factories import DistinctionFactory
+
+        closed = DistinctionFactory(name="Highborn")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            closed_distinctions=[str(closed.pk)],
+            closed_reason="The yards do not make those.",
+        )
+        resp = self.client.post(reverse("admin_upbringing_builder", args=[self.template.pk]), data)
+        assert resp.status_code == 302
+        self.template.refresh_from_db()
+        assert list(self.template.closed_distinctions.all()) == [closed]
+        assert self.template.closed_reason == "The yards do not make those."
 
     def test_review_stamps_review_only(self):
         self.client.force_login(self.author)
@@ -409,6 +484,53 @@ class BuilderLiveTest(BuilderTestCase):
         panel = live.for_template(template, self.author)
         assert not any("Retired Claim" in text for _, text in panel.checks)
 
+    def test_closed_distinction_also_offered_is_a_warn_check(self):
+        """#3675: closing a distinction the route also offers is a contradiction."""
+        from web.admin.upbringing_builder import live
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        contradicted = DistinctionFactory(name="Generational Talent")
+        self.template.closed_distinctions.add(contradicted)
+        DistinctionOfferFactory(
+            distinction=contradicted,
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.BUNDLED,
+            origin_choice=self.livery,
+        )
+        panel = live.for_template(self.template, self.author)
+        assert any(kind == "warn" and "Generational Talent" in text for kind, text in panel.checks)
+
+    def test_closed_distinctions_with_no_reason_is_a_warn_check(self):
+        """#3675: a non-empty closed list with a blank reason is a warn."""
+        from web.admin.upbringing_builder import live
+
+        closed = DistinctionFactory(name="Spoiled")
+        self.template.closed_distinctions.add(closed)
+        assert self.template.closed_reason == ""
+        panel = live.for_template(self.template, self.author)
+        assert any(
+            kind == "warn" and "no line for the player to read" in text
+            for kind, text in panel.checks
+        )
+
+    def test_closed_distinctions_with_a_reason_is_not_a_warn_check(self):
+        from web.admin.upbringing_builder import live
+
+        closed = DistinctionFactory(name="Spoiled")
+        self.template.closed_distinctions.add(closed)
+        self.template.closed_reason = "The yards do not make those."
+        self.template.save(update_fields=["closed_reason"])
+        panel = live.for_template(self.template, self.author)
+        assert not any("no line for the player to read" in text for _, text in panel.checks)
+
+    def test_closed_distinctions_rail_count(self):
+        from web.admin.upbringing_builder import live
+
+        self.template.closed_distinctions.add(DistinctionFactory(name="Spoiled"))
+        counts = live.rail_counts(self.template)
+        assert counts["closed_distinctions"] == 1
+
 
 class BuilderPreviewTest(BuilderTestCase):
     def test_preview_renders_the_question_and_first_group(self):
@@ -474,7 +596,7 @@ class BuilderStylingTest(BuilderTestCase):
 
     #: A class the page's own script selects on and nothing styles. Named rather
     #: than allowlisted loosely, so a genuine missing rule cannot hide here.
-    JS_ONLY_CLASSES = frozenset({"add-answer-btn"})
+    JS_ONLY_CLASSES = frozenset({"add-answer-btn", "add-offer-btn"})
 
     def _body(self) -> str:
         self.client.force_login(self.author)

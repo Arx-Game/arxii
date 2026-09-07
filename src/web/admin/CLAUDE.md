@@ -450,16 +450,28 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
 
 - **Files** - `web/admin/upbringing_builder/`: `views.py` (`upbringing_builder`,
   `upbringing_builder_preview`, `upbringing_builder_review`), `forms.py`
-  (`UpbringingForm`, `QuestionFormSet`, `AnswerFormSet` via `inlineformset_factory`,
-  `answer_formset_for` for the per-question `a<slot.pk>`-prefixed formset), `live.py`
-  (the right rail: `for_template` -> `LivePanel`, `rail_counts`), `credit.py`
-  (`stamp_written`, `stamp_reviewed`). Templates in
-  `web/templates/admin/upbringing_builder/`: `page.html` (the form, wiring up
-  "Add question"/"Add answer" against the shared clone-a-formset-row helpers
-  in `web/static/admin/js/builder_formsets.js` (also loaded by the tradition
-  slate page, #3675) - there is no saved row to fetch an HTMX fragment for
-  until the whole route is saved), `_question.html`, `_answers.html`,
-  `_rail.html`, `_setup.html`, `_preview.html`, `_css.html`.
+  (`UpbringingForm` - now also carrying `closed_distinctions`
+  (`FilteredSelectMultiple`) and `closed_reason`, #3675 - `QuestionFormSet`,
+  `AnswerFormSet` via `inlineformset_factory`, `answer_formset_for` for the
+  per-question `a<slot.pk>`-prefixed formset, and `OfferForm`/`OfferFormSet`/
+  `offer_formset_for` for the per-answer `o<choice.pk>`-prefixed offers
+  formset (#3675) - `OfferForm` forces `chapter=LINEAGE` in `__init__` (never
+  a select) and drops CARRIED from `arrives_as`'s choices, since an answer's
+  own offer is a priced choice or bundled free, never carried by something
+  else), `live.py` (the right rail: `for_template` -> `LivePanel`,
+  `rail_counts` - now also `closed_distinctions`, #3675), `credit.py`
+  (`stamp_written`, `stamp_reviewed`, looping every `DistinctionOffer` hung
+  off the route's own answers alongside the template/slots/choices, #3675).
+  Templates in `web/templates/admin/upbringing_builder/`: `page.html` (the
+  form, wiring up "Add question"/"Add answer"/"+ Offer" against the shared
+  clone-a-formset-row helpers in `web/static/admin/js/builder_formsets.js`
+  (also loaded by the tradition slate page, #3675) - there is no saved row to
+  fetch an HTMX fragment for until the whole route is saved; also links
+  `admin/css/widgets.css` and the jsi18n script for the closes module's
+  `FilteredSelectMultiple`), `_question.html`, `_answers.html` (the answers
+  table's "Offers" column nests one small offers table per saved answer,
+  "Closes" is a static link to the route-level module below - never
+  per-answer), `_rail.html`, `_setup.html`, `_preview.html`, `_css.html`.
 - **Stylesheets** - the page links `admin/css/forms.css` itself, in its own
   `extrastyle` block. `admin/base.html` links only `base.css`, `dark_mode.css` and
   `responsive.css`; `forms.css` - where `.form-row`, `.aligned label`,
@@ -511,16 +523,30 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   has a follow-up target to gate it, a `DistinctionOffer` opened by one of this
   route's answers is active (#3675: reads offers, not a field on the answer), an
   OWN_FAMILY group question warns when a claimable family has no house org for it to
-  resolve through, #3660 fix round 2 ruling L), and backlog counts (questions, groups
-  asked about, people named, answers, distinctions used - a count of distinct active
-  offers, not a name list, cheapest/dearest/largest-refund cost spread over required
-  questions).
+  resolve through, #3660 fix round 2 ruling L; a distinction both closed by
+  `closed_distinctions` and still offered by one of this route's own active
+  answers - a contradiction; `closed_distinctions` non-empty with a blank
+  `closed_reason` - #3675), and backlog counts (questions, groups asked about,
+  people named, answers, distinctions used - a count of distinct active
+  offers, not a name list, closed by this route, cheapest/dearest/
+  largest-refund cost spread over required questions).
+- **"This route closes" module (#3675)** - a route-level panel, not per-answer:
+  `closed_distinctions` (`FilteredSelectMultiple`) names Distinctions this
+  route never offers in any chapter (a question here, a Glimpse tag, a
+  tradition step - `world.character_creation.offers._closed_ids` reads it for
+  every chapter alike) and `closed_reason` is the one line a player reads
+  where a closed one would have shown. Saved with `UpbringingForm` in the same
+  transaction as everything else; the answers table's own "Closes" column
+  is a static link to this module (`#closes-module`), never a per-answer field.
 - **What is authored here:** the Upbringing itself, its questions (including the
-  `#3660` kind/connection/anchor/follow-up fields), and their answers (including
-  `reputation_seed`). Distinctions an answer grants are authored as `DistinctionOffer`
-  rows (#3675), not on this page. **What is not:** a Vacancy - membership in
-  a staff family is still authored on the `Organization`/`Vacancy` admin page
-  (Recipes 11-12 in `family-authoring-recipes.md`), not on this one.
+  `#3660` kind/connection/anchor/follow-up fields), their answers (including
+  `reputation_seed`), and now (#3675) each answer's own `DistinctionOffer` rows
+  (chapter forced to LINEAGE, `origin_choice` forced to the answer) plus the
+  route's closed list - the same `DistinctionOffer` rows remain editable from
+  the Distinction Builder's own "Where it is offered" table too (either side
+  can add one). **What is not:** a Vacancy - membership in a staff family is
+  still authored on the `Organization`/`Vacancy` admin page (Recipes 11-12 in
+  `family-authoring-recipes.md`), not on this one.
 - Deliberate no-ADR for the page-layout/formset decisions: recorded in the approved
   #3660 spec review, the same precedent #3019 set above; ADR-0277 covers the
   questionnaire model itself.
@@ -657,14 +683,21 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   `web/admin/authoring/copy.price_text(value, *, per_rank=False)`, promoted
   out of a duplicate this page had re-implemented from the tradition slate
   page's own `price_text` in review round 1; `effect_reads`,
-  `opener_field_map`, `rail_counts`, `checks`, `preview_line`,
-  `sorted_offer_forms`/`CHAPTER_ORDER`/`_offer_sort_key` - `OfferChapter`'s
-  own declared sequence, not the `chapter` CharField's alphabetical DB order,
-  review round 1 Demo-fidelity defect B). Templates in
+  `opener_field_map`, `rail_counts`, `checks`, `sorted_offer_forms`; the
+  chapter-ordering key and the offer preview itself
+  (`CHAPTER_ORDER`/`offer_sort_key`/`PreviewLine`/`preview_from_offers`) were
+  promoted out to the shared `web/admin/authoring/offers.py` (Task 9, #3675) -
+  the Glimpse tag admin's own preview picks the same way among a tag's own
+  offers, so `preview_line` here is now a one-line delegation to
+  `preview_from_offers`). Templates in
   `web/templates/admin/distinction_builder/`:
-  `page.html`, `_css.html`, `_rail.html`, `_preview.html` (the offer preview,
-  a fragment included inside "Where it is offered", not excluded from the
-  styling guard's class scan). `templatetags/distinction_builder_tags.py`
+  `page.html`, `_css.html`, `_rail.html`. The offer preview itself is the
+  shared fragment `web/templates/admin/authoring/_offer_preview.html`
+  (included inside "Where it is offered"; carries its own self-contained
+  `<style>` rather than this page's `#distinction-builder-root` scope, so the
+  Glimpse tag admin's change form - which has no such root - renders it
+  correctly too), not a page-local `_preview.html` (retired, Task 9).
+  `templatetags/distinction_builder_tags.py`
   carries `effect_reads` (the template-side wrapper: "" for an unsaved
   formset row rather than raising on a null `target`).
 - **Stylesheets** - the page links `admin/css/forms.css` (form-row/help/
@@ -747,8 +780,9 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
 - **Offer ordering** - both the offers table (`live.sorted_offer_forms`,
   reordering the formset's already-fetched `forms` in Python rather than its
   `queryset`, which stays in DB order for `is_valid()`/`save()`) and
-  `preview_line` (picking `min(offers, key=live._offer_sort_key)` over the
-  fetched rows) sort by `OfferChapter`'s own declared sequence
+  `preview_line` (via the shared `offers.preview_from_offers`, picking
+  `min(offers, key=offer_sort_key)` over the fetched rows) sort by
+  `OfferChapter`'s own declared sequence
   (TRADITION_STEP, GLIMPSE, LINEAGE, APPEARANCE, IDENTITY) then `sort_order`
   then id - `chapter` is a plain `CharField`, so a DB `.order_by("chapter",
   ...)` sorts alphabetically, wrong order entirely (review round 1,
@@ -765,6 +799,53 @@ gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
   row that links a distinction to one of those.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660/#3675 set above.
+
+## Glimpse Tag Admin Offers (#3675, Task 9)
+
+**Purpose:** the third and last "authored from either side" surface for
+`DistinctionOffer` (the tradition slate page's schooling lines and the
+Upbringing Builder's answers are the other two) - a stock `GlimpseTag`
+change form, extended, **not** a new builder page: `GlimpseTagAdmin` already
+existed (`world/magic/admin.py`); this only adds an inline and a preview line.
+
+- **Files** - `world/magic/admin.py`: `GlimpseTagOfferForm` (forces
+  `chapter=GLIMPSE` in `__init__`, never a select - `glimpse_tag` itself
+  needs no forcing, since Django's own `BaseInlineFormSet._construct_form`
+  stamps the parent tag's pk onto a new row's fk attribute before validation
+  runs, the same plumbing every admin inline relies on; also sets a
+  per-instance `help_text` linking the selected Distinction to its own
+  Builder page, via `web.admin.authoring.links.builder_url`),
+  `DistinctionOfferInline` (`TabularInline`, `fk_name="glimpse_tag"`, fields
+  `distinction` (autocomplete) / `arrives_as` / `name` / `player_line` /
+  `sort_order` / `is_active`), and `GlimpseTagAdmin.render_change_form`
+  (injects `context["offer_preview"]`, built from
+  `web.admin.authoring.offers.preview_from_offers` over the tag's own active
+  offers) + `GlimpseTagAdmin.save_formset` (credits every saved offer via
+  `web.admin.authoring.credit.stamp_written`, mirroring the Builder pages'
+  own save). `GlimpseTagAdmin.change_form_template` points at
+  `web/templates/admin/magic/glimpsetag/change_form.html`, which extends the
+  site's own `admin/change_form.html` override (not Django's stock one - see
+  that file's own docstring precedent) and only adds one thing in
+  `after_related_objects`: `{% include "admin/authoring/_offer_preview.html" %}`.
+- **The preview fragment is shared, not copy-pasted** - both this page and
+  the Distinction Builder draw "the first active offer, as a player reads it"
+  off the same `web.admin.authoring.offers.preview_from_offers`, and both
+  render it through the same `web/templates/admin/authoring/_offer_preview.html`
+  fragment (its own self-contained `<style>`, since this page has no
+  `#distinction-builder-root` to scope under).
+- **Credit** - `save_formset` runs `formset.save(commit=False)`, deletes
+  `formset.deleted_objects`, then saves and `stamp_written`s each surviving
+  instance individually (only when the operator has a linked
+  `ContentContributor` - an unlinked operator's save simply isn't credited,
+  there is no setup-guidance gate on a stock change form the way the Builder
+  pages have one).
+- **What is authored here:** a Glimpse tag's own `DistinctionOffer` rows
+  (chapter forced to GLIMPSE, `glimpse_tag` forced to this tag). **What is
+  not:** the tag's own fields (already on this same stock change form,
+  unchanged) or the distinction's own fields/effects/exclusions (the
+  Distinction Builder).
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  the Builder pages set above.
 
 ## Game Tuning & Game Ops Dashboards (#1221)
 
