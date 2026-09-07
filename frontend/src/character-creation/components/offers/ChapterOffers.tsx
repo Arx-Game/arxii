@@ -35,12 +35,33 @@ interface ChapterOffersProps {
   heading?: string;
   /** Staff copy printed below the list, e.g. an explanatory note. */
   hint?: string;
+  /**
+   * Print the "From {opener_label}." attribution line. Defaults to true;
+   * pass false when the caller's own `heading` already disambiguates which
+   * tag opened the offer (the Glimpse's one-sub-block-per-tag layout,
+   * #3675 fix round 1; the attribution line was compensating for the
+   * per-axis heading that merged multiple tags' offers together).
+   */
+  showOpener?: boolean;
+  /**
+   * Lead-in phrase for the closed-offers hint, e.g. "Closed on this road".
+   * Threaded from the caller's own copy query (mirrors `heading`/`hint`)
+   * rather than read here; defaults to "Closed on this road".
+   */
+  closedLead?: string;
 }
 
-/** The price line: per-rank for a ranked offer, a refund, or the flat cost. */
-function PriceLine({ offer }: { offer: VisibleOffer }) {
+/** The price line: per-rank (plus a spent/refund total once picked) for a
+ * ranked offer, a refund, or the flat cost for an unranked one. */
+function PriceLine({ offer, rank }: { offer: VisibleOffer; rank: number }) {
   if (offer.max_rank > 1) {
-    return <span>{offer.cost_per_rank} per rank</span>;
+    const spent = offer.cost_per_rank * rank;
+    return (
+      <>
+        <span>{offer.cost_per_rank} per rank</span>
+        {rank > 0 && <span className={spent < 0 ? 'refund' : undefined}>{spent} spent</span>}
+      </>
+    );
   }
   if (offer.cost_per_rank < 0) {
     return <span className="refund">Refunds {-offer.cost_per_rank}</span>;
@@ -48,7 +69,15 @@ function PriceLine({ offer }: { offer: VisibleOffer }) {
   return <span>{offer.cost_per_rank}</span>;
 }
 
-export function ChapterOffers({ draft, chapter, filter, heading, hint }: ChapterOffersProps) {
+export function ChapterOffers({
+  draft,
+  chapter,
+  filter,
+  heading,
+  hint,
+  showOpener = true,
+  closedLead,
+}: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
@@ -113,12 +142,12 @@ export function ChapterOffers({ draft, chapter, filter, heading, hint }: Chapter
                 </b>
                 <span className="g">
                   {offer.player_line}
-                  {offer.opener_label && <i> From {offer.opener_label}.</i>}
+                  {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
                 </span>
                 {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
               </span>
               <span className="price">
-                <PriceLine offer={offer} />
+                <PriceLine offer={offer} rank={rank} />
               </span>
             </>
           );
@@ -151,7 +180,9 @@ export function ChapterOffers({ draft, chapter, filter, heading, hint }: Chapter
       {hint && <span className="hint">{hint}</span>}
       {closed.length > 0 && (
         <span className="hint">
-          Closed on this road: {closed.map((c) => c.name).join(', ')}. {closed[0].reason}
+          {`${closedLead ?? 'Closed on this road'}: ${closed
+            .map((c) => `${c.name}: ${c.reason}`)
+            .join('; ')}`}
         </span>
       )}
     </div>

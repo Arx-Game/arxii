@@ -5,8 +5,6 @@
  * `GlimpseTagOption` — re-export it rather than redeclaring it elsewhere.
  */
 
-import type { ReactNode } from 'react';
-
 /** A `DistinctionOffer` embedded on a glimpse tag row (#3675). */
 export interface TagOffer {
   offer_id: number;
@@ -52,12 +50,6 @@ export interface GlimpseFlowProps {
   onSkip?: () => void;
   /** Labels the deferral affordance; CG shows both buttons, sheet omits skip. */
   showDeferralControls: boolean;
-  /**
-   * Renders the distinction offers opened by an axis's current selection,
-   * mounted after that axis's tag grid (#3675). Omitted mount points render
-   * no offers section.
-   */
-  renderOffers?: (axis: GlimpseTagOption['axis'], selectedTagIds: number[]) => ReactNode;
   /**
    * Staff-authorable hint printed under the story textarea (#3675),
    * e.g. "The detail behind any of the picks above goes here; the picks

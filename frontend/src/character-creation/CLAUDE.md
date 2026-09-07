@@ -59,13 +59,23 @@ character-creation/
     │   ├── GiftSelector.tsx     # Gifts as entries (GET .../gifts/?draft_id=)
     │   ├── TechniqueSelector.tsx # Technique catalog, grouped by category, budget-capped
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
-    │   └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
-    │                            #   binds `@/magic/components/glimpse/GlimpseFlow` to
-    │                            #   draft_data.glimpse_tag_ids; prose stays on GiftStage's
-    │                            #   register('glimpse_story'); mounts `ChapterOffers` per
-    │                            #   axis via `renderOffers`, filtered to that axis's
-    │                            #   selected tag names (#3675: offers by chapter, not a
-    │                            #   linked-distinction-ids draft field anymore)
+    │   ├── GlimpseSection.tsx   # CG state binder for the Glimpse (#2427): draft reads,
+    │   │                        #   updateDraft writes (draft_data.glimpse_tag_ids), the
+    │   │                        #   isCollapsed deferral affordance, the copy query. Prose
+    │   │                        #   stays on GiftStage's register('glimpse_story'). Renders
+    │   │                        #   `GlimpseAxes`, not the shared
+    │   │                        #   `@/magic/components/glimpse/GlimpseFlow` (#3675 fix
+    │   │                        #   round 1: that shared component's shadcn accordion hid
+    │   │                        #   two axes at a time; the sheet's live editor still uses
+    │   │                        #   it, unchanged)
+    │   └── GlimpseAxes.tsx      # CG-only folio-grammar layout for the Glimpse (#3675 fix
+    │                            #   round 1): one `.field` per axis, all visible at once,
+    │                            #   `.picks` pill buttons per tag, and one `ChapterOffers`
+    │                            #   `.conditional` sub-block PER SELECTED TAG (not per
+    │                            #   axis: two tags chosen on one multi-select axis each
+    │                            #   get their own heading, matching the demo). No heading
+    │                            #   of its own; GiftStage's `section-h` above the mount
+    │                            #   carries it.
     └── lineage/             # LineageStage subsections (#3617, #3648)
         ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
         ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family

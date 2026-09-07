@@ -12,6 +12,7 @@ import { screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
 import type { DraftDistinctionEntry } from '@/types/distinctions';
+import type { OffersResponse } from '../../types';
 import {
   createMockDraft,
   mockBeginnings,
@@ -25,6 +26,7 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 
 let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
+let glimpseOffers: OffersResponse = { offers: [], closed: [] };
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
@@ -37,6 +39,7 @@ vi.mock('../../queries', async (importOriginal) => ({
   useCGGifts: () => ({ data: [], isLoading: false }),
   useCGTechniqueOptions: () => ({ data: [], isLoading: false }),
   useGlimpseTags: () => ({ data: [], isLoading: false }),
+  useDraftOffers: () => ({ data: glimpseOffers, isLoading: false }),
   useSkills: () => ({ data: [] }),
   useStatDefinitions: () => ({ data: [] }),
   usePathSkillSuggestions: () => ({ data: [] }),
@@ -50,6 +53,7 @@ vi.mock('@/hooks/useDistinctions', () => ({
 beforeEach(() => {
   traditions = [mockTradition];
   draftDistinctions = [];
+  glimpseOffers = { offers: [], closed: [] };
 });
 
 describe('GiftStage (folio)', () => {
@@ -181,5 +185,112 @@ describe('GiftStage (folio)', () => {
     const rail = within(container.querySelector('.record-rail')!);
     expect(rail.getByText('CG points')).toBeInTheDocument();
     expect(rail.getByText('42 of 100 spent')).toBeInTheDocument();
+  });
+
+  it('rail shows one row per Glimpse offer entry, ranked with its rank and spent total (#3675 fix round 1)', () => {
+    glimpseOffers = {
+      offers: [
+        {
+          offer_id: 301,
+          distinction_id: 40,
+          name: 'Magical Scar',
+          player_line: 'A scar that answers magic. Deeper answers more.',
+          chapter: 'glimpse',
+          arrives_as: 'choice',
+          opener_label: 'Mark',
+          cost_per_rank: 5,
+          max_rank: 3,
+          is_locked: false,
+          lock_reason: '',
+        },
+      ],
+      closed: [],
+    };
+    draftDistinctions = [
+      {
+        distinction_id: 40,
+        distinction_name: 'Magical Scar',
+        distinction_slug: 'magical-scar',
+        category_slug: 'magic',
+        rank: 2,
+        cost: 10,
+        notes: '',
+        offer_ids: [301],
+        sources: ['The Glimpse'],
+        arrivals: ['choice'],
+      },
+    ];
+    const draft = createMockDraft({ selected_path: mockPath });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('Magical Scar · rank 2')).toBeInTheDocument();
+    expect(rail.getByText('10')).toBeInTheDocument();
+  });
+
+  it('rail shows an unranked Glimpse offer entry as a refund, with no rank suffix', () => {
+    glimpseOffers = {
+      offers: [
+        {
+          offer_id: 302,
+          distinction_id: 41,
+          name: 'Impoverished',
+          player_line: 'Whatever you had went with it.',
+          chapter: 'glimpse',
+          arrives_as: 'choice',
+          opener_label: 'Loss',
+          cost_per_rank: -25,
+          max_rank: 1,
+          is_locked: false,
+          lock_reason: '',
+        },
+      ],
+      closed: [],
+    };
+    draftDistinctions = [
+      {
+        distinction_id: 41,
+        distinction_name: 'Impoverished',
+        distinction_slug: 'impoverished',
+        category_slug: 'magic',
+        rank: 1,
+        cost: -25,
+        notes: '',
+        offer_ids: [302],
+        sources: ['The Glimpse'],
+        arrivals: ['choice'],
+      },
+    ];
+    const draft = createMockDraft({ selected_path: mockPath });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('Impoverished')).toBeInTheDocument();
+    expect(rail.getByText('Refunds 25')).toBeInTheDocument();
+  });
+
+  it('rail shows no Glimpse rows when no draft entry carries a Glimpse offer id', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 77,
+        distinction_name: 'Tradition Training',
+        distinction_slug: 'tradition-training',
+        category_slug: 'magic',
+        rank: 1,
+        cost: 1,
+        notes: '',
+        offer_ids: [999],
+        sources: ['Trained for years'],
+        arrivals: ['choice'],
+      },
+    ];
+    const draft = createMockDraft({ selected_path: mockPath });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.queryByText('Tradition Training')).not.toBeInTheDocument();
   });
 });

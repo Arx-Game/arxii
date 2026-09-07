@@ -1014,6 +1014,65 @@
   font-size: 0.9375rem;
   font-style: italic;
 }
+.interview .tags {
+  display: inline-flex;
+  gap: 0.5rem;
+  margin-left: 0.8rem;
+  vertical-align: middle;
+}
+.interview .tag {
+  font-family: 'Cinzel', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+  border: 1px solid var(--cg-rule);
+  padding: 0.12rem 0.5rem;
+}
+.interview .tag.soft {
+  color: var(--cg-muted);
+  border-color: var(--cg-hairline-strong);
+}
+
+/* axis picks (#3675 fix round 1): the Glimpse's own field-per-axis layout,
+   pill toggle buttons standing in for the demo's static `<span>` mockup so
+   they carry native keyboard/focus/click behavior for free. */
+.interview .picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  margin: 0.6rem 0 0;
+}
+.interview .picks button {
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.78rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  background: transparent;
+  border: 1px solid var(--cg-hairline-strong);
+  padding: 0.55rem 1.1rem;
+  cursor: pointer;
+}
+.interview .picks button[aria-pressed='true'] {
+  color: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .picks button small {
+  display: block;
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 0.8rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cg-muted);
+  font-weight: 400;
+}
+.interview .conditional {
+  margin-top: 0.8rem;
+  border-left: 2px solid var(--cg-rule);
+  padding-left: 1rem;
+}
 
 /* offer stances (#3675): the CG chapters' picks, in place of the retired
    Distinctions stage. Some rows are plain `<div>`s (a ranked offer, whose

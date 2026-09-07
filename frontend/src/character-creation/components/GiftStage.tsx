@@ -5,8 +5,11 @@
  * Check — as nested index entries: each step is an `Entry` in an `EntryList`,
  * closed and unreadable (`gated`) until the step before it is done, and its
  * own body holds that step's picker. Motif is a field below the funnel;
- * the Glimpse is the guided tag-driven flow mounted via `GlimpseSection`
- * (#2427), unchanged. The record rail lists the choices made so far; it
+ * the Glimpse is mounted via `GlimpseSection` (#2427; folio-grammar
+ * `GlimpseAxes` layout, #3675 fix round 1); GiftStage's own `section-h`
+ * above it carries the chapter heading, `GlimpseSection` renders no
+ * heading of its own. The record rail lists the choices made so far
+ * (including one row per Glimpse-offer draft entry, fix round 1); it
  * explains nothing (Decision 8).
  */
 
@@ -30,12 +33,13 @@ import {
   useCGExplanations,
   useCGGifts,
   useCGPointBudget,
+  useDraftOffers,
   useResonances,
   useSkills,
   useStatDefinitions,
   useUpdateDraft,
 } from '../queries';
-import type { CharacterDraft, Tradition } from '../types';
+import type { CharacterDraft, Tradition, VisibleOffer } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
@@ -106,6 +110,38 @@ function schoolingPickName(
   )?.name;
 }
 
+/**
+ * One rail row per draft entry whose distinction came from a Glimpse offer
+ * (#3675 fix round 1): a draft entry whose `offer_ids` include an id present
+ * in the glimpse chapter's own `useDraftOffers` list. Label carries the
+ * rank only for a ranked offer (`max_rank > 1`); value is the amount spent
+ * (`cost_per_rank * rank`), shown as a refund when negative, same
+ * convention as the tradition schooling row's own refund line.
+ */
+function glimpseRailRows(
+  entries: DraftDistinctionEntry[] | undefined,
+  glimpseOffers: VisibleOffer[] | undefined
+): { label: string; value: string }[] {
+  const offerById = new Map((glimpseOffers ?? []).map((offer) => [offer.offer_id, offer]));
+  const rows: { label: string; value: string }[] = [];
+  for (const entry of entries ?? []) {
+    const offerId = entry.offer_ids.find(
+      (id): id is number => typeof id === 'number' && offerById.has(id)
+    );
+    if (offerId === undefined) continue;
+    const offer = offerById.get(offerId)!;
+    const spent = offer.cost_per_rank * entry.rank;
+    rows.push({
+      label:
+        offer.max_rank > 1
+          ? `${entry.distinction_name} · rank ${entry.rank}`
+          : entry.distinction_name,
+      value: spent < 0 ? `Refunds ${-spent}` : String(spent),
+    });
+  }
+  return rows;
+}
+
 export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
@@ -144,6 +180,11 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const traditionValue = draft.selected_tradition
     ? [draft.selected_tradition.name, schoolingName].filter(Boolean).join(' · ')
     : undefined;
+
+  // One rail row per Glimpse-offer draft entry (#3675 fix round 1); the
+  // rail carried no Glimpse lines at all before this.
+  const { data: glimpseOffersData } = useDraftOffers(draft.id, 'glimpse');
+  const glimpseRows = glimpseRailRows(draftDistinctions, glimpseOffersData?.offers);
 
   // The same CG-points source HeritageStage's rail row reads.
   const startingCGPoints = cgBudget?.starting_points ?? 100;
@@ -220,6 +261,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
           { label: 'Resonance', value: resonanceName },
           { label: 'Anima check', value: animaCheckLine },
+          ...glimpseRows,
           {
             label: 'CG points',
             value: `${draft.cg_points_spent} of ${startingCGPoints} spent`,
@@ -342,11 +384,7 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
       <h2 className="section-h" id="glimpse-heading">
         {copy?.magic_glimpse_heading ?? 'The Glimpse'}
       </h2>
-      <GlimpseSection
-        draft={draft}
-        glimpseProseField={register('glimpse_story')}
-        heading={copy?.magic_glimpse_heading}
-      />
+      <GlimpseSection draft={draft} glimpseProseField={register('glimpse_story')} />
     </ChapterLeaf>
   );
 }

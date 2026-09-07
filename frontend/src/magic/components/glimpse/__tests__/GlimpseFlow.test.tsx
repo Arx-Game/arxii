@@ -163,46 +163,6 @@ describe('GlimpseFlow', () => {
     expect(screen.queryByText('Link a distinction to your glimpse')).not.toBeInTheDocument();
   });
 
-  it('calls renderOffers per visible axis step with that axis-only selection', () => {
-    const renderOffers = vi.fn(() => null);
-    render(
-      <GlimpseFlow
-        {...makeProps({
-          // TONE_WONDER (1) and CONSEQUENCE_A (3) are selected; WITNESS has nothing.
-          selectedTagIds: [1, 3],
-          renderOffers,
-        })}
-      />
-    );
-
-    // GlimpseFlow renders every visible axis's accordion content in the same
-    // pass (Radix's Presence only decides DOM visibility, not whether the
-    // slot's children get computed) so renderOffers is called once per axis
-    // with that axis's own selection isolated from the others.
-    expect(renderOffers).toHaveBeenCalledWith('TONE', [1]);
-    expect(renderOffers).toHaveBeenCalledWith('CONSEQUENCE', [3]);
-    expect(renderOffers).toHaveBeenCalledWith('WITNESS', []);
-  });
-
-  it('renders what renderOffers returns inside the axis accordion content', () => {
-    render(
-      <GlimpseFlow
-        {...makeProps({
-          selectedTagIds: [1],
-          renderOffers: (axis, ids) => (ids.length ? <p key={axis}>Offers for {axis}</p> : null),
-        })}
-      />
-    );
-
-    expect(screen.getByText('Offers for TONE')).toBeInTheDocument();
-  });
-
-  it('renders no offers content when renderOffers is omitted', () => {
-    render(<GlimpseFlow {...makeProps({ selectedTagIds: [1] })} />);
-
-    expect(screen.queryByText(/Offers for/)).not.toBeInTheDocument();
-  });
-
   it('renders the staff-authored story hint under the story textarea', () => {
     render(<GlimpseFlow {...makeProps({ storyHint: 'The detail goes here.' })} />);
 

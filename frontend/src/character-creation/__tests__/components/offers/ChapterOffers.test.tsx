@@ -149,13 +149,122 @@ describe('ChapterOffers', () => {
     ]);
   });
 
-  it('renders the closed hint with the names and reason', () => {
+  it('renders the closed hint with the name and its own reason', () => {
     renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
     expect(
-      screen.getByText('Closed on this road: Generational Talent. The route closed it.')
+      screen.getByText('Closed on this road: Generational Talent: The route closed it.')
     ).toBeInTheDocument();
+  });
+
+  it('lists every closed item with its own reason, joined, when more than one is closed', () => {
+    offersResponse = {
+      ...offersResponse,
+      closed: [
+        { distinction_id: 9, name: 'Generational Talent', reason: 'The route closed it.' },
+        { distinction_id: 8, name: 'Highborn', reason: 'The Cradle raised this character.' },
+      ],
+    };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(
+      screen.getByText(
+        'Closed on this road: Generational Talent: The route closed it.; Highborn: The Cradle raised this character.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('the closedLead prop overrides the default lead-in phrase', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" closedLead="No longer offered" />
+    );
+    expect(
+      screen.getByText('No longer offered: Generational Talent: The route closed it.')
+    ).toBeInTheDocument();
+  });
+
+  it("a selected ranked offer's price line adds a second 'N spent' total", () => {
+    draftDistinctions = [
+      otherChapterEntry,
+      {
+        distinction_id: 2,
+        distinction_name: 'Magical Scar',
+        distinction_slug: 'magical-scar',
+        category_slug: 'magic',
+        rank: 2,
+        cost: 10,
+        notes: '',
+        offer_ids: [102],
+        sources: ['The Glimpse'],
+        arrivals: ['choice'],
+      },
+    ];
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByText('5 per rank')).toBeInTheDocument();
+    expect(screen.getByText('10 spent')).toBeInTheDocument();
+  });
+
+  it('no spent line prints for a ranked offer at rank 0', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.queryByText(/spent$/)).not.toBeInTheDocument();
+  });
+
+  it('a selected ranked offer with a per-rank refund gets the refund class on its spent line', () => {
+    const refundRanked: VisibleOffer = {
+      offer_id: 104,
+      distinction_id: 4,
+      name: 'Fading Mark',
+      player_line: 'It softens with every year you carry it.',
+      chapter: 'glimpse',
+      arrives_as: 'choice',
+      opener_label: 'Mark',
+      cost_per_rank: -5,
+      max_rank: 3,
+      is_locked: false,
+      lock_reason: '',
+    };
+    offersResponse = { ...offersResponse, offers: [...offersResponse.offers, refundRanked] };
+    draftDistinctions = [
+      otherChapterEntry,
+      {
+        distinction_id: 4,
+        distinction_name: 'Fading Mark',
+        distinction_slug: 'fading-mark',
+        category_slug: 'magic',
+        rank: 2,
+        cost: -10,
+        notes: '',
+        offer_ids: [104],
+        sources: ['The Glimpse'],
+        arrivals: ['choice'],
+      },
+    ];
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    const spentLine = screen.getByText('-10 spent');
+    expect(spentLine).toHaveClass('refund');
+  });
+
+  it('showOpener={false} omits the "From X." attribution line', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" showOpener={false} />
+    );
+    expect(screen.getByText('Silver Tongue')).toBeInTheDocument();
+    expect(screen.queryByText('From Mark.')).not.toBeInTheDocument();
+  });
+
+  it('showOpener defaults to true (the attribution line prints without the prop)', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByText('From Mark.')).toBeInTheDocument();
   });
 
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {

@@ -39,7 +39,10 @@ import type { GlimpseFlowProps, GlimpseTagOption } from './glimpseTypes';
 
 // CHOOSING tags are all path-scoped to the Path of the Chosen, so the step
 // self-hides for other paths (axes with zero catalog tags don't render).
-const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
+// Exported so GlimpseAxes (the CG mount's own folio-grammar layout, #3675
+// fix round 1) can reuse this axis order + arity without redeclaring it,
+// only this component's own question-style `label` text is GlimpseFlow-only.
+export const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
   { axis: 'TRIGGER', label: 'Trigger: what was happening?', multi: false },
   { axis: 'CHOOSING', label: 'The Choosing; how did it claim you?', multi: false },
   { axis: 'REFLECTION', label: 'The Reflection: what did you see in yourself?', multi: true },
@@ -57,7 +60,6 @@ export function GlimpseFlow({
   onChangeProse,
   onSkip,
   showDeferralControls,
-  renderOffers,
   storyHint,
 }: GlimpseFlowProps) {
   const tagsByAxis = useMemo(() => {
@@ -124,52 +126,45 @@ export function GlimpseFlow({
 
       {visibleAxisSteps.length > 0 && (
         <Accordion type="single" collapsible defaultValue={visibleAxisSteps[0].axis}>
-          {visibleAxisSteps.map((step) => {
-            // Same computation handleTagClick uses to isolate this axis's
-            // current picks from the flat selectedTagIds list.
-            const axisTagIds = new Set((tagsByAxis.get(step.axis) ?? []).map((tag) => tag.id));
-            const axisSelectedTagIds = selectedTagIds.filter((id) => axisTagIds.has(id));
-            return (
-              <AccordionItem key={step.axis} value={step.axis}>
-                <AccordionTrigger>{step.label}</AccordionTrigger>
-                <AccordionContent>
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {(tagsByAxis.get(step.axis) ?? []).map((tag) => {
-                      const isSelected = selectedTagIdSet.has(tag.id);
-                      return (
-                        <Card
-                          key={tag.id}
-                          role="button"
-                          tabIndex={0}
-                          className={cn(
-                            'cursor-pointer transition-all',
-                            isSelected && 'ring-2 ring-primary',
-                            !isSelected && 'hover:ring-1 hover:ring-primary/50'
-                          )}
-                          onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
-                          onKeyDown={(event) =>
-                            handleTagKeyDown(event, step.axis, step.multi, tag.id)
-                          }
-                        >
-                          <CardHeader className="p-3">
-                            <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                              <span>{tag.name}</span>
-                              {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                            </CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-1 px-3 pb-3 pt-0">
-                            <CardDescription className="text-xs">{tag.description}</CardDescription>
-                            <p className="text-xs italic text-muted-foreground">{tag.example}</p>
-                          </CardContent>
-                        </Card>
-                      );
-                    })}
-                  </div>
-                  {renderOffers?.(step.axis, axisSelectedTagIds)}
-                </AccordionContent>
-              </AccordionItem>
-            );
-          })}
+          {visibleAxisSteps.map((step) => (
+            <AccordionItem key={step.axis} value={step.axis}>
+              <AccordionTrigger>{step.label}</AccordionTrigger>
+              <AccordionContent>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {(tagsByAxis.get(step.axis) ?? []).map((tag) => {
+                    const isSelected = selectedTagIdSet.has(tag.id);
+                    return (
+                      <Card
+                        key={tag.id}
+                        role="button"
+                        tabIndex={0}
+                        className={cn(
+                          'cursor-pointer transition-all',
+                          isSelected && 'ring-2 ring-primary',
+                          !isSelected && 'hover:ring-1 hover:ring-primary/50'
+                        )}
+                        onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
+                        onKeyDown={(event) =>
+                          handleTagKeyDown(event, step.axis, step.multi, tag.id)
+                        }
+                      >
+                        <CardHeader className="p-3">
+                          <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                            <span>{tag.name}</span>
+                            {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-1 px-3 pb-3 pt-0">
+                          <CardDescription className="text-xs">{tag.description}</CardDescription>
+                          <p className="text-xs italic text-muted-foreground">{tag.example}</p>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          ))}
         </Accordion>
       )}
 

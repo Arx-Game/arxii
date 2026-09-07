@@ -433,41 +433,34 @@ details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respec
 
 Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
 
-### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427, offers slot #3675)
+### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427; CG mount replaced #3675 fix round 1)
 
 Shared, purely presentational guided flow for authoring "The Glimpse" — props
 in (`heading` (optional, defaults `'The Glimpse'`), `tags`, `selectedTagIds`,
 `prose`, `showDeferralControls`, `storyHint` (optional, printed under the
-story `Textarea`)), callbacks out (`onChangeAxis`, `onChangeProse`, `onSkip`),
-plus `renderOffers?: (axis, selectedTagIds) => ReactNode` (optional; called
-per axis after that axis's tag grid, with the intersection of
-`selectedTagIds` and that axis's own tag ids (the same isolation
-`handleTagClick` computes); no queries or mutations inside. `glimpseTypes.ts`
-is the single definition of `GlimpseTagOption` (backs `GET
-/api/character-creation/glimpse-tags/`, and now carries `offers: TagOffer[]`
-per tag, #3675); the character-creation module re-exports it from
-`types.ts` rather than redeclaring it. Renders the `heading` at the top
-(staff-authorable; CG threads `magic_glimpse_heading` from
-`useCGExplanations()` through, mirroring the sibling Motif field's
-`magic_motif_heading`; review fix, #2427), then a Radix accordion (TONE
-single-select, CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags
-don't render a step; each tag Card is `role="button" tabIndex={0}` with an
-explicit `onKeyDown` for Enter/Space activation, review fix), SENSORY tags
-as toggle chips (native `<button>`s, keyboard-operable for free) inside the
-always-visible story `Textarea`. Distinction offers are no longer suggested
-by tag or linked here; CG surfaces them by chapter now (`ChapterOffers`,
-`character-creation/components/offers/`) via `renderOffers`, mounted right
-after each axis's tag grid inside that axis's own `AccordionItem`; an axis
-with nothing selected renders nothing (#3675). Two mounts share
-`GlimpseFlow`: the CG `GiftStage`
-(`character-creation/components/gift/GlimpseSection.tsx`, which binds it to
-`draft_data.glimpse_tag_ids`/`glimpse_story`, threads `heading` down from
-GiftStage's copy query, and wires `renderOffers` to `ChapterOffers` filtered
-by the axis's selected tag names) and the character sheet
-(`components/glimpse/GlimpseEditorDialog.tsx`, below), which never passes
-`renderOffers` and keeps its own separate distinction link/unlink UI
-(`DistinctionLinkChips`, a different feature: linking a character's
-_existing_ distinctions, not a CG offer).
+story `Textarea`)), callbacks out (`onChangeAxis`, `onChangeProse`, `onSkip`);
+no queries or mutations inside. `glimpseTypes.ts` is the single definition of
+`GlimpseTagOption` (backs `GET /api/character-creation/glimpse-tags/`, and
+carries `offers: TagOffer[]` per tag, #3675); the character-creation module
+re-exports it from `types.ts` rather than redeclaring it. Renders the
+`heading` at the top, then a Radix accordion (TONE single-select,
+CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
+step; each tag Card is `role="button" tabIndex={0}` with an explicit
+`onKeyDown` for Enter/Space activation, review fix), SENSORY tags as toggle
+chips (native `<button>`s, keyboard-operable for free) inside the
+always-visible story `Textarea`. `AXIS_STEPS` (the axis order + arity) is
+exported so `GlimpseAxes` (below) can reuse it without redeclaring it.
+
+**Only one mount left:** the character sheet's live editor
+(`components/glimpse/GlimpseEditorDialog.tsx`, below), unchanged. The CG
+mount used to be `GiftStage` → `GlimpseSection` → this component (with a
+`renderOffers` slot, #3675 Task 13), but that shipped a demo-fidelity defect
+(the shadcn accordion hid two axes at a time, one axis' worth of offers
+merged multiple tags under one heading, and the section heading duplicated
+`GiftStage`'s own). Fix round 1 replaced the CG mount entirely with
+`character-creation/components/gift/GlimpseAxes.tsx`; see that module's own
+`CLAUDE.md` entry for its folio-grammar layout. `GlimpseFlowProps` no longer
+carries `renderOffers` at all (removed, unused now that no caller passes it).
 
 ### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6)
 
