@@ -25727,7 +25727,13 @@ export interface components {
      * @enum {string}
      */
     CanonReviewStatusEnum: 'pending' | 'cleared' | 'changes_requested';
-    /** @description One Capability a technique grants (#2898). */
+    /**
+     * @description One Capability a technique grants by being KNOWN (#2898, ADR-0248).
+     *
+     *     Standing possession, not a cast effect — the summary sentence says so in
+     *     words ("Knowing it grants ..."), so a client rendering these rows must not
+     *     file them under what the cast does (#3682).
+     */
     CapabilityEffect: {
       readonly name: string;
       readonly description: string;
@@ -45052,6 +45058,7 @@ export interface components {
       readonly applies: components['schemas']['ConditionEffect'][];
       readonly removes: components['schemas']['ConditionEffect'][];
       readonly damage: components['schemas']['DamageEffect'][];
+      readonly treatments: components['schemas']['TreatmentEffect'][];
       readonly grants: components['schemas']['CapabilityEffect'][];
       readonly summary: string;
       readonly is_underspecified: boolean;
@@ -46004,6 +46011,14 @@ export interface components {
     TreatmentCandidateResponse: {
       candidates: components['schemas']['TreatmentCandidate'][];
       scene_id: number;
+    };
+    /** @description One treatment a technique performs on cast (#3682). */
+    TreatmentEffect: {
+      readonly name: string;
+      readonly description: string;
+      readonly treats: string;
+      readonly target_kind: string;
+      readonly minimum_success_level: number;
     };
     /**
      * @description Read-only serializer for treatment template definitions.

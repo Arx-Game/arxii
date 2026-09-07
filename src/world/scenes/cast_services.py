@@ -104,11 +104,8 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
     ``castable_techniques_for_sheet``; callers wanting both read this once and
     derive, rather than paying for the same rows twice.
     """
-    from world.magic.models.techniques import (  # noqa: PLC0415
-        TechniqueAppliedCondition,
-        TechniqueCapabilityGrant,
-        TechniqueDamageProfile,
-        TechniqueRemovedCondition,
+    from world.magic.services.technique_effects import (  # noqa: PLC0415
+        technique_payload_prefetches,
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
@@ -119,26 +116,10 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
         )
         .select_related("technique", "technique__action_template", "technique__effect_type")
         .prefetch_related(
-            Prefetch(
-                "technique__condition_applications",
-                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-                to_attr="cached_condition_applications",
-            ),
-            Prefetch(
-                "technique__removed_conditions",
-                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-                to_attr="cached_removed_conditions",
-            ),
-            Prefetch(
-                "technique__damage_profiles",
-                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-                to_attr="cached_damage_profiles",
-            ),
-            Prefetch(
-                "technique__capability_grants",
-                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
-                to_attr="cached_capability_grants",
-            ),
+            # Every payload table the effect summary reads, in one shared
+            # definition (#3682) — a surface that misses one pays a query per
+            # technique for it.
+            *technique_payload_prefetches(prefix="technique__"),
             # #2901: the caster's form list walks each technique's variants.
             # select_related("resonance") because the resonance name is the token
             # a player passes to `cast ... variant=<resonance>`.

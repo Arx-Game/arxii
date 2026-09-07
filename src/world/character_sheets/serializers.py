@@ -81,12 +81,9 @@ from world.magic.models import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
     Ritual,
-    TechniqueAppliedCondition,
-    TechniqueCapabilityGrant,
-    TechniqueDamageProfile,
-    TechniqueRemovedCondition,
     TechniqueVariant,
 )
+from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
     technique_signature_payload,
@@ -796,35 +793,18 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     ),
     Prefetch(
         "character_techniques",
-        # effect_type is select_related because is_technique_hostile reads its
-        # base_power; the three payload prefetches land on the cached_property
-        # names summarize_technique_effects reads, so building the effect summary
-        # for the whole spellbook stays inside this section's zero-extra-query
-        # guarantee (#2898).
+        # effect_type is select_related for the serializer's own display of it;
+        # is_technique_hostile stopped reading its base_power in #3682 (ADR-0278).
+        # technique_payload_prefetches() lands every payload table on the
+        # cached_property name summarize_technique_effects reads, so building the
+        # effect summary for the whole spellbook stays inside this section's
+        # zero-extra-query guarantee (#2898). It is shared with the cast list so
+        # the two cannot drift apart on which tables they cover (#3682).
         queryset=CharacterTechnique.objects.select_related(
             "technique__gift",
             "technique__effect_type",
         ).prefetch_related(
-            Prefetch(
-                "technique__condition_applications",
-                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-                to_attr="cached_condition_applications",
-            ),
-            Prefetch(
-                "technique__removed_conditions",
-                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-                to_attr="cached_removed_conditions",
-            ),
-            Prefetch(
-                "technique__damage_profiles",
-                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-                to_attr="cached_damage_profiles",
-            ),
-            Prefetch(
-                "technique__capability_grants",
-                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
-                to_attr="cached_capability_grants",
-            ),
+            *technique_payload_prefetches(prefix="technique__"),
             # #2901: the per-caster form list walks the technique's variants.
             # select_related("resonance") because each form is labelled by the
             # resonance a player passes to `cast ... variant=<resonance>`; the

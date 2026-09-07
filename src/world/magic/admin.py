@@ -71,7 +71,9 @@ from world.magic.models import (
     StandingCapBand,
     StyleCapabilityRequirement,
     Technique,
+    TechniqueAppliedCondition,
     TechniqueCapabilityGrant,
+    TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueOutcomeModifier,
@@ -106,6 +108,8 @@ from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
+    technique_is_not_castable_standalone,
+    technique_payload_prefetches,
     technique_relationship_is_ambiguous,
 )
 
@@ -239,9 +243,48 @@ class IntensityTierAdmin(admin.ModelAdmin):
 
 
 class TechniqueCapabilityGrantInline(admin.TabularInline):
+    """Standing possession, NOT a cast effect (ADR-0248).
+
+    Knowing the technique grants the capability; casting it does nothing extra
+    with these rows. A capability boost that should arrive *on cast* is authored
+    as an applied condition carrying a ``ConditionCapabilityEffect`` instead.
+    """
+
     model = TechniqueCapabilityGrant
     extra = 1
     autocomplete_fields = ["capability"]
+    verbose_name = "Capability Grant (standing, from knowing it)"
+    verbose_name_plural = "Capability Grants (standing, from knowing it)"
+
+
+class TechniqueAppliedConditionInline(admin.TabularInline):
+    """Applied-condition payload rows on the Technique admin (#3682).
+
+    The technique's primary cast payload and, until now, the one authorable
+    only by someone willing to write SQL: ``TechniqueAppliedCondition`` carries
+    the ``target_kind`` that ``derive_target_relationship`` reads to decide who
+    a technique may be aimed at, plus the success thresholds and severity
+    scaling that ``compute_severity`` turns into the condition's magnitude.
+    """
+
+    model = TechniqueAppliedCondition
+    extra = 1
+    autocomplete_fields = ["condition"]
+
+
+class TechniqueDamageProfileInline(admin.TabularInline):
+    """Damage payload rows on the Technique admin (#3682).
+
+    Deliberately inline-only: ``TechniqueDamageProfile`` carries no standalone
+    ``@admin.register``, and the authoring-relations panel's neighbour links
+    depend on that (``test_admin_link_omitted_for_unregistered_neighbor_model``).
+    A damage row has no meaning apart from its technique, so the technique page
+    is the whole of its authoring surface.
+    """
+
+    model = TechniqueDamageProfile
+    extra = 1
+    autocomplete_fields = ["damage_type"]
 
 
 @admin.register(TechniqueRemovedCondition)
@@ -282,9 +325,10 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     extra = 1
 
 
-#: Query-string values for TechniqueAuthoringGapFilter's two gap kinds.
+#: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.
 _GAP_UNDERSPECIFIED = "underspecified"
 _GAP_AMBIGUOUS = "ambiguous"
+_GAP_NOT_CASTABLE = "not_castable"
 
 
 class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
@@ -300,23 +344,35 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
     title = "authoring gap"
     parameter_name = "authoring_gap"
 
+    #: Which ``TechniqueAuthoringGap`` flag each Python-computed value selects on.
+    _GAP_ATTRS = {
+        _GAP_UNDERSPECIFIED: "is_underspecified",
+        _GAP_AMBIGUOUS: "relationship_is_ambiguous",
+    }
+
     #: Django passes both hook arguments positionally, so the leading underscores
     #: mark them unused without needing a suppression.
     def lookups(self, _request, _model_admin):
         return [
             (_GAP_UNDERSPECIFIED, "No effects authored"),
             (_GAP_AMBIGUOUS, "Mixed targeting (relationship is a guess)"),
+            (_GAP_NOT_CASTABLE, "No cast template (not castable standalone)"),
         ]
 
     def queryset(self, _request, queryset):
         value = self.value()
-        if value not in {_GAP_UNDERSPECIFIED, _GAP_AMBIGUOUS}:
+        # Cast linkage is a column, so it filters in SQL rather than through the
+        # Python sweep (#3682). It is also deliberately not a
+        # ``TechniqueAuthoringGap`` member: every authored technique is missing a
+        # template today, so folding it into that audit would make membership
+        # mean "everything" and hide the two real authoring gaps.
+        if value == _GAP_NOT_CASTABLE:
+            return queryset.filter(action_template__isnull=True)
+        attr = self._GAP_ATTRS.get(value)
+        if attr is None:
             return queryset
         gaps = technique_effect_authoring_gaps()
-        if value == _GAP_UNDERSPECIFIED:
-            pks = [gap.technique_id for gap in gaps if gap.is_underspecified]
-        else:
-            pks = [gap.technique_id for gap in gaps if gap.relationship_is_ambiguous]
+        pks = [gap.technique_id for gap in gaps if getattr(gap, attr)]
         return queryset.filter(pk__in=pks)
 
 
@@ -350,11 +406,25 @@ class TechniqueAdmin(admin.ModelAdmin):
     autocomplete_fields = ["creator", "effect_type", "gift"]
     list_select_related = ["gift", "effect_type"]
     inlines = [
+        TechniqueAppliedConditionInline,
+        TechniqueDamageProfileInline,
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
         TechniqueFunctionTagInline,
     ]
+
+    def get_queryset(self, request):
+        """Prefetch every payload table the Gap/Targets columns read (#3682).
+
+        ``get_authoring_gap`` and ``get_relationship`` both walk the derived
+        effect summary, which reads four payload relations. Without this the
+        changelist paid four queries per row; the ``to_attr`` names are the
+        ``cached_*`` properties those derivations read, so the prefetched rows
+        are what answers them (and cannot go stale against the identity map,
+        #2728).
+        """
+        return super().get_queryset(request).prefetch_related(*technique_payload_prefetches())
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
@@ -367,12 +437,20 @@ class TechniqueAdmin(admin.ModelAdmin):
 
     @admin.display(description="Gap")
     def get_authoring_gap(self, obj: Technique) -> str:
-        """Flag the two states where the derived effect can't be trusted (#2898)."""
+        """Flag the states where the derived effect can't be trusted (#2898, #3682).
+
+        "no cast template" is a statement about the cast linkage, not a verdict
+        on the technique: a standing-capability technique is legitimately not
+        castable. It is reported because nothing else tells staff that a
+        perfectly valid CG pick will never appear in the player's cast list.
+        """
         gaps = []
         if obj.cached_effect_summary["is_underspecified"]:
             gaps.append("no effects authored")
         if technique_relationship_is_ambiguous(obj):
             gaps.append("mixed targeting")
+        if technique_is_not_castable_standalone(obj):
+            gaps.append("no cast template")
         return ", ".join(gaps) or "—"
 
     @admin.display(description="What this does")

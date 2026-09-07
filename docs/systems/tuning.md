@@ -222,9 +222,22 @@ live combat formulas and stays importable by future budget/simulation phases:
 
 Panel mechanics mirror the Simulation panel: a param form (level, thread level, matchup
 knobs, sort) POSTs a recompute cached 24h under an exact-param key with a
-`tuning-tech-power:last` pointer; `technique_analytics.py` adds an inner cache keyed on
-the analytics knobs only (excluding `sort`) so header-sort clicks never re-run the
-evaluator. The league table sorts by baseline DE, anchor DE, DE-per-anima, name, or
+`tuning-tech-power:last:<revision>` pointer; `technique_analytics.py` adds an inner cache
+keyed on the analytics knobs only (excluding `sort`) so header-sort clicks never re-run
+the evaluator.
+
+**Both cache layers carry the technique catalog's revision (#3682).** They used to be
+keyed on the numeric knobs alone, so re-submitting the same parameters after editing a
+technique returned the 24h-old corpus — staff tuned against numbers they had just changed
+and saw no movement. `technique_catalog_revision()` /
+`bump_technique_catalog_revision()` (`world/magic/services/technique_effects.py`) hold a
+counter in the cache; the bump rides `invalidate_technique_payload_caches`, which is the
+one seam every authoring write (the admin's `save_related`, the technique builder) already
+passes through. The last-key pointer is revision-scoped too, so a GET after an edit finds
+nothing rather than re-rendering the pre-edit panel. A cache eviction resets the counter,
+which costs a recomputation and never serves stale data — the key changes either way.
+Editing a *condition* or *capability* still does not invalidate the technique corpus, even
+though technique DE reads both; that stays a manual reckon. The league table sorts by baseline DE, anchor DE, DE-per-anima, name, or
 level (whitelisted); each row has a `<details>` drill-down showing every valuation line
 (kind, label, value, provenance, arithmetic detail). Below the table: the zero/unpriced
 bucket and provenance summary. Weapon-scaled damage profiles are flagged

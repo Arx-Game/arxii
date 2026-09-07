@@ -329,4 +329,5 @@ treat those names as hints to confirm, not gospel.
 - [0278 - Rows a parent owns live behind a handler, not a prefetch](0278-cached-rows-live-behind-a-handler-not-a-prefetch.md) (#3673; extends ADR-0263, ADR-0008)
 - [0279 - An enemy is a priced flaw the world must collect, on two scales](0279-enemies-are-priced-flaws-collected-by-the-world.md) (#3621; related ADR-0277, ADR-0269, ADR-0010)
 - [0280 - Distinctions are offered by CG chapter, not gated by a stage](0280-distinctions-are-offered-by-chapter.md) (#3675; related ADR-0136, ADR-0277, ADR-0278, ADR-0279)
+- [0281 - base_power is a magnitude knob, never a statement of hostility](0281-base-power-is-magnitude-not-hostility.md) (#3682; related ADR-0024, ADR-0064, ADR-0119, ADR-0248)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

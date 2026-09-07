@@ -41,8 +41,32 @@ class DamageEffectPayload(TypedDict):
     minimum_success_level: int
 
 
+class TreatmentEffectPayload(TypedDict):
+    """One treatment a technique performs on cast (#3682).
+
+    The fourth cast payload family. It was authorable from #2668 and readable by
+    nobody: no display surface, no relationship derivation, and no authoring-gap
+    check reached ``Technique.treatments``, so a technique whose only authored
+    effect was a treatment described itself as having none.
+    """
+
+    name: str
+    description: str
+    #: ``ConditionTemplate.name`` the treatment relieves.
+    treats: str
+    #: ``ConditionTargetKind`` value — who this particular row lands on.
+    target_kind: str
+    minimum_success_level: int
+
+
 class CapabilityEffectPayload(TypedDict):
-    """One Capability a technique grants while it is up."""
+    """One Capability a technique grants by being known (ADR-0248).
+
+    Standing possession, not a cast effect: knowing the technique gives the
+    character the capability, and casting it deliberately does nothing extra
+    with these rows. Display surfaces must not describe a grant as something the
+    cast does (#3682).
+    """
 
     name: str
     description: str
@@ -72,11 +96,16 @@ class TechniqueEffectPayload(TypedDict):
     applies: list[ConditionEffectPayload]
     removes: list[ConditionEffectPayload]
     damage: list[DamageEffectPayload]
+    treatments: list[TreatmentEffectPayload]
+    #: Standing possession, not a cast effect (ADR-0248) — see
+    #: ``CapabilityEffectPayload``.
     grants: list[CapabilityEffectPayload]
     #: The plain-words line — the same sentence on the web and over telnet.
     summary: str
-    #: True when no condition, removal, or damage profile is authored, so nothing
-    #: about this technique's effect (including its relationship) is derivable.
+    #: True when no condition, removal, damage profile or treatment is authored,
+    #: so nothing about this technique's cast effect (including its relationship)
+    #: is derivable. Capability grants are excluded deliberately: they are
+    #: standing possession, so a grant-only technique still does nothing on cast.
     #: Display surfaces render this as "not yet catalogued", never as a blank.
     is_underspecified: bool
 
@@ -139,14 +168,25 @@ class TechniqueAuthoringGap:
     Two independent gaps, either of which can be set:
 
     ``is_underspecified``
-        No applied condition, no removal, no damage profile — the technique's
-        relationship is not derivable at all and display has nothing to show.
+        No applied condition, no removal, no damage profile, no treatment — the
+        technique's relationship is not derivable at all and display has nothing
+        to show. Capability grants do not clear this: a grant is standing
+        possession (ADR-0248), so a grant-only technique genuinely does nothing
+        on cast.
 
     ``relationship_is_ambiguous``
-        The applied + removed rows carry more than one distinct ``target_kind``,
-        so the single derived relationship is a guess. This is the failure mode
-        found while authoring #2764: a self-teleport that applies Flanked to an
-        enemy derives as enemy-targeted, silently, and looks correct.
+        The applied + removed + treatment rows carry more than one distinct
+        ``target_kind``, so the single derived relationship is a guess. This is
+        the failure mode found while authoring #2764: a self-teleport that
+        applies Flanked to an enemy derives as enemy-targeted, silently, and
+        looks correct.
+
+    Missing cast linkage is deliberately NOT one of them (#3682). Every authored
+    technique lacks an ``action_template`` today, so folding it in here would
+    make membership mean "every technique" and drown the two gaps that are
+    genuinely about unreadable authored data. It is a plain queryset predicate
+    (``action_template__isnull=True``) on the admin instead — see
+    ``technique_is_not_castable_standalone``.
     """
 
     technique_id: int

@@ -38,6 +38,7 @@ from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
 from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
+from world.magic.services.technique_effects import technique_catalog_revision
 
 _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
@@ -292,9 +293,15 @@ def tuning_simulation_fragment(request: HttpRequest) -> HttpResponse:
 # 24h - mirrors `_SIMULATION_CACHE_TIMEOUT`; a full technique-catalog evaluation
 # run should outlive a single admin session by a wide margin.
 _TECHNIQUE_CACHE_TIMEOUT = 60 * 60 * 24
-# Fixed pointer key, mirroring `_SIMULATION_LAST_KEY` - GET renders "the most
-# recently cached result" via whichever exact-param key was last written here.
-_TECHNIQUE_LAST_KEY = "tuning-tech-power:last"
+
+
+# Pointer key, mirroring `_SIMULATION_LAST_KEY` - GET renders "the most recently
+# cached result" via whichever exact-param key was last written here. Scoped by the
+# technique catalog's revision (#3682): after an authoring write the pointer key
+# changes, so the GET path finds nothing rather than re-rendering the pre-edit
+# panel it would otherwise still be pointing at.
+def _technique_last_key() -> str:
+    return f"tuning-tech-power:last:{technique_catalog_revision()}"
 
 
 class TechniqueAnalyticsForm(forms.Form):
@@ -337,9 +344,15 @@ def _technique_form_defaults() -> dict[str, Any]:
 
 
 def _technique_cache_key(params: technique_analytics.TechniqueAnalyticsParams) -> str:
-    """Exact-param cache key (every knob, including `sort`) for the built panel."""
+    """Exact-param cache key (every knob, including `sort`) for the built panel.
+
+    Carries the catalog revision for the same reason the corpus key does (#3682):
+    this is the second of the two cache layers, and leaving it keyed on parameters
+    alone would serve a pre-edit panel even once the corpus underneath it rebuilt.
+    """
     return (
-        f"tuning-tech-power:{params.level}:{params.thread_level}:{params.roller_points}:"
+        f"tuning-tech-power:{technique_catalog_revision()}:"
+        f"{params.level}:{params.thread_level}:{params.roller_points}:"
         f"{params.target_difficulty}:{params.roll_modifier}:{params.sort}"
     )
 
@@ -350,7 +363,7 @@ def _cache_technique_panel(
 ) -> None:
     cache_key = _technique_cache_key(params)
     cache.set(cache_key, panel, _TECHNIQUE_CACHE_TIMEOUT)
-    cache.set(_TECHNIQUE_LAST_KEY, cache_key, _TECHNIQUE_CACHE_TIMEOUT)
+    cache.set(_technique_last_key(), cache_key, _TECHNIQUE_CACHE_TIMEOUT)
 
 
 @superuser_required
@@ -359,7 +372,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
 
     GET renders the form (seeded with `TechniqueAnalyticsParams` defaults) plus the
     most recently cached result, if any - tracked via the fixed
-    `_TECHNIQUE_LAST_KEY` pointer, mirroring the simulation panel. POST validates
+    `_technique_last_key()` pointer, mirroring the simulation panel. POST validates
     and clamps inputs through `TechniqueAnalyticsForm`, builds the panel
     synchronously, and caches it under both the exact-param key and the last-key
     pointer (24h timeout).
@@ -392,7 +405,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
             _cache_technique_panel(params, panel)
     else:
         form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
-        last_key = cache.get(_TECHNIQUE_LAST_KEY)
+        last_key = cache.get(_technique_last_key())
         cached_panel = cache.get(last_key) if last_key else None
         if cached_panel is not None:
             requested_sort = technique_analytics.resolve_sort_key(
@@ -411,7 +424,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
 
 # 24h - mirrors `_TECHNIQUE_CACHE_TIMEOUT`.
 _CAPABILITY_CACHE_TIMEOUT = 60 * 60 * 24
-# Fixed pointer key, mirroring `_TECHNIQUE_LAST_KEY`.
+# Fixed pointer key, mirroring the techniques panel's pointer.
 _CAPABILITY_LAST_KEY = "tuning-capability-power:last"
 
 

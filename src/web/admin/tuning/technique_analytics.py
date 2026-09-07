@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from django.core.cache import cache
 
 from world.magic.services import technique_power_eval
+from world.magic.services.technique_effects import technique_catalog_revision
 from world.magic.types.technique_power import (
     EvalContext,
     ReferenceFrame,
@@ -106,9 +107,17 @@ class TechniquePanelData:
 
 
 def _corpus_cache_key(params: TechniqueAnalyticsParams) -> str:
-    """Cache key for the expensive evaluator run - deliberately excludes `sort`."""
+    """Cache key for the expensive evaluator run - deliberately excludes `sort`.
+
+    Carries the technique catalog's revision (#3682). Without it the key was the
+    numeric knobs alone, so re-submitting the same parameters after editing a
+    technique served the 24h-old corpus: staff tuned against the numbers they had
+    just changed and saw no movement. `bump_technique_catalog_revision` runs on
+    every authoring write, so an edit changes this key and the next run rebuilds.
+    """
     return (
-        f"tuning-tech-power-corpus:{params.level}:{params.thread_level}:"
+        f"tuning-tech-power-corpus:{technique_catalog_revision()}:"
+        f"{params.level}:{params.thread_level}:"
         f"{params.roller_points}:{params.target_difficulty}:{params.roll_modifier}"
     )
 
