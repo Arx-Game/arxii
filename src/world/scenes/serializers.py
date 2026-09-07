@@ -41,7 +41,9 @@ class PersonaSerializer(serializers.ModelSerializer):
     # web authoring dialog can prefill and blank-clears stay safe.
     guise_concept = serializers.SerializerMethodField()
     guise_quote = serializers.SerializerMethodField()
-    guise_personality = serializers.SerializerMethodField()
+    guise_never_do = serializers.SerializerMethodField()
+    guise_protect = serializers.SerializerMethodField()
+    guise_fear = serializers.SerializerMethodField()
     guise_background = serializers.SerializerMethodField()
     # #2378 follow-up (ruling 5) — the fading reputational layer atop a
     # permanent, provenance-free brand; None once HUMILIATION_TERM_DAYS passes.
@@ -64,7 +66,9 @@ class PersonaSerializer(serializers.ModelSerializer):
             "allow_social_actions",
             "guise_concept",
             "guise_quote",
-            "guise_personality",
+            "guise_never_do",
+            "guise_protect",
+            "guise_fear",
             "guise_background",
             "humiliation_mark",
         ]
@@ -95,8 +99,14 @@ class PersonaSerializer(serializers.ModelSerializer):
     def get_guise_quote(self, obj: Persona) -> str:
         return obj.profile.quote if obj.profile_id else ""
 
-    def get_guise_personality(self, obj: Persona) -> str:
-        return obj.profile.personality if obj.profile_id else ""
+    def get_guise_never_do(self, obj: Persona) -> str:
+        return obj.profile.never_do if obj.profile_id else ""
+
+    def get_guise_protect(self, obj: Persona) -> str:
+        return obj.profile.protect if obj.profile_id else ""
+
+    def get_guise_fear(self, obj: Persona) -> str:
+        return obj.profile.fear if obj.profile_id else ""
 
     def get_guise_background(self, obj: Persona) -> str:
         return obj.profile.background if obj.profile_id else ""
@@ -716,7 +726,9 @@ class SetPersonaProfileRequestSerializer(serializers.Serializer):
     persona_id = serializers.IntegerField(min_value=1)
     concept = serializers.CharField(required=False, allow_blank=True, max_length=255)
     quote = serializers.CharField(required=False, allow_blank=True)
-    personality = serializers.CharField(required=False, allow_blank=True)
+    never_do = serializers.CharField(required=False, allow_blank=True)
+    protect = serializers.CharField(required=False, allow_blank=True)
+    fear = serializers.CharField(required=False, allow_blank=True)
     background = serializers.CharField(required=False, allow_blank=True)
 
 

@@ -155,8 +155,8 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         # Quote
         output.extend(self._build_quote_section(sheet_data))
 
-        # Personality and Background
-        output.extend(self._build_personality_background(sheet_data))
+        # The Actor's Sheet answers and Background
+        output.extend(self._build_actor_sheet_background(sheet_data))
 
         # Staff-only sections
         if self.caller.is_staff:
@@ -288,22 +288,23 @@ class CmdSheet(Command):  # ty: ignore[invalid-base]
         output.append("")
         return output
 
-    def _build_personality_background(self, sheet_data: Any) -> list[str]:
-        """Build personality and background sections."""
+    def _build_actor_sheet_background(self, sheet_data: Any) -> list[str]:
+        """Build the Actor's Sheet answers (#3621) and the background section."""
         output = []
         TRUNCATE_SUFFIX_LENGTH = 3  # "..."
 
-        # Personality (condensed view)
-        if sheet_data.personality:
-            output.append("|wPersonality|n")
-            output.append("-" * 12)
-            personality = sheet_data.personality
-            MAX_PERSONALITY_LENGTH = 200
-            if len(personality) > MAX_PERSONALITY_LENGTH:
-                truncate_at = MAX_PERSONALITY_LENGTH - TRUNCATE_SUFFIX_LENGTH
-                personality = personality[:truncate_at] + "..."
-            personality_lines = self._wrap_text(personality, width=78)
-            output.extend(personality_lines)
+        # The three answers, each on its own line under its question.
+        answers = (
+            ("Would never", sheet_data.never_do),
+            ("Protects at all costs", sheet_data.protect),
+            ("Deathly afraid of", sheet_data.fear),
+        )
+        present = [(label, text) for label, text in answers if text]
+        if present:
+            output.append("|wActor's Sheet|n")
+            output.append("-" * 13)
+            for label, text in present:
+                output.extend(self._wrap_text(f"{label}: {text}", width=78))
             output.append("")
 
         # Background (condensed view)

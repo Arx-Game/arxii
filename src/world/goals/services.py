@@ -51,15 +51,12 @@ def get_goal_bonus(
     Returns:
         Final goal bonus as integer (truncated)
     """
-    # Get base goal points for this domain
-    try:
-        goal = CharacterGoal.objects.get(
-            character=character,
-            domain=domain,
+    # Base points: every goal in this domain counts (#3621: any number per domain).
+    base_points = sum(
+        CharacterGoal.objects.filter(character=character, domain=domain).values_list(
+            "points", flat=True
         )
-        base_points = goal.points
-    except CharacterGoal.DoesNotExist:
-        base_points = 0
+    )
 
     if base_points == 0:
         return 0
@@ -145,15 +142,17 @@ def set_character_goals(
 ) -> list[CharacterGoal]:
     """Replace a character's goal allocations, enforcing the weekly revision limit.
 
-    Validates total points (<= MAX_GOAL_POINTS) and rejects duplicate domains.
+    Validates total points (<= MAX_GOAL_POINTS). Any number of goals may share a
+    domain (#3621); each is numbered within its horizon in the order given.
     First-time setup (no existing goals) skips the revision gate. Mirrors the
     former inline ``CharacterGoalViewSet.update_all`` logic; raises ``GoalError``
-    on revision-too-soon / over-cap / duplicate-domain.
+    on revision-too-soon / over-cap.
 
     Args:
         character: The character sheet whose goals are being set.
         goals: Validated goal allocations — each a ``GoalInputData`` dict
-            with ``domain`` (ModifierTarget pk or instance), ``points``, ``notes``.
+            with ``domain`` (ModifierTarget pk or instance), ``points``, ``notes``
+            and ``horizon``.
 
     Returns:
         The new ``CharacterGoal`` rows (re-fetch with domain prefetched).
@@ -169,21 +168,23 @@ def set_character_goals(
     if has_existing_goals and not revision.can_revise():
         raise GoalError(GoalError.REVISION_TOO_SOON)
 
-    # Resolve domains + validate cap/duplicates in one pass.
-    resolved: list[tuple[ModifierTarget, int, str]] = []
+    from world.goals.constants import GoalHorizon  # noqa: PLC0415
+
+    # Resolve domains + validate the cap in one pass; number within each horizon.
+    resolved: list[tuple[ModifierTarget, int, str, str, int]] = []
     total_points = 0
-    seen_domain_ids: set[int] = set()
+    next_ordinal: dict[str, int] = {}
     for goal_data in goals:
         domain = goal_data["domain"]
         if isinstance(domain, int):
             domain = ModifierTarget.objects.get(pk=domain)
-        if domain.pk in seen_domain_ids:
-            raise GoalError(GoalError.DUPLICATE_DOMAIN)
-        seen_domain_ids.add(domain.pk)
         points = goal_data.get("points", 0)
         notes = goal_data.get("notes", "")
+        horizon = goal_data.get("horizon") or GoalHorizon.SHORT_TERM
         if points > 0 or notes:
-            resolved.append((domain, points, notes))
+            ordinal = next_ordinal.get(horizon, 0) + 1
+            next_ordinal[horizon] = ordinal
+            resolved.append((domain, points, notes, horizon, ordinal))
         total_points += points
 
     if total_points > MAX_GOAL_POINTS:
@@ -191,12 +192,14 @@ def set_character_goals(
 
     with transaction.atomic():
         CharacterGoal.objects.filter(character=character).delete()
-        for domain, points, notes in resolved:
+        for domain, points, notes, horizon, ordinal in resolved:
             CharacterGoal.objects.create(
                 character=character,
                 domain=domain,
                 points=points,
                 notes=notes,
+                horizon=horizon,
+                ordinal=ordinal,
             )
         if has_existing_goals:
             revision.mark_revised()

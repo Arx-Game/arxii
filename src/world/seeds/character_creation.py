@@ -26,13 +26,22 @@ from typing import TYPE_CHECKING
 from django.conf import settings
 
 from world.character_creation.constants import (
+    APPLICATION_FRAME,
+    APPLICATION_QUESTIONS,
+    APPLICATION_TITLE,
     CG_MODIFIER_CATEGORY,
     FALLBACK_STARTING_ROOM_FIXTURE_KEY,
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
+    FIRST_JOURNAL_FRAME,
+    FIRST_JOURNAL_INSTITUTION,
+    FIRST_JOURNAL_QUESTIONS,
+    INTRODUCTIONS_INTRO,
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     UNBOUND_TRADITION_NAME,
+    WHISPERS_FRAME,
+    WHISPERS_TITLE,
 )
 from world.character_creation.models import Beginnings, StartingArea
 from world.character_sheets.models import Gender, Heritage, Pronouns
@@ -211,12 +220,8 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "Set your character's age, build, and physical traits, then write the "
         "description other players will see when they look at your character."
     ),
-    "finaltouches_heading": "Goals & Motivations",
-    "finaltouches_intro": (
-        "Choose the goals and motivations that drive your character forward. "
-        "Checks that align with a goal earn a bonus, so pick what your character "
-        "actually wants."
-    ),
+    "finaltouches_heading": "Actor's Sheet",
+    "finaltouches_intro": "Questions for the character, to flesh out their motivations.",
     "review_heading": "Review and Submit",
     "review_intro": (
         "Read through everything you have chosen and written. You can go back "
@@ -290,15 +295,59 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",
-    "identity_personality_heading": "Personality",
     "identity_worship_heading": "Worship",
+    # The Actor's Sheet (#3621): the three questions and their example lines, the
+    # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
+    # words are content.
+    "finaltouches_never_do_prompt": "What would you never do?",
+    "finaltouches_never_do_example": "Ex. Betray a secret. Break a vow. Make a pun.",
+    "finaltouches_protect_prompt": "What would you protect at all costs?",
+    "finaltouches_protect_example": (
+        "Ex. Family. Party members. My fortune. My stunning good looks."
+    ),
+    "finaltouches_fear_prompt": "What are you deathly afraid of?",
+    "finaltouches_fear_example": (
+        "Ex. Being trapped in an unending boring conversation. Drowning. Social ruin. Turtles."
+    ),
+    "finaltouches_goals_heading": "Goals",
+    "finaltouches_short_term_heading": "Short term goals",
+    "finaltouches_long_term_heading": "Long term goals",
     # Continues the margin note's lead "Goals", so it starts mid-sentence.
     "finaltouches_how_note": (
         "take points from a pool of thirty. During play a goal can be invoked to add its "
         "point value as a bonus to a roll, up to twice your total goal points per day. "
-        "Spend more on the goals that matter most; a goal with no points is a note to "
-        "yourself, not a commitment."
+        "A goal with no points is a note to yourself. Goals are numbered as you add them, "
+        "so a goal can be named in play. Add more, and change these, from your sheet as "
+        "the character goes on."
     ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_heading": "Who wants you to fail",
+    "finaltouches_enemy_intro": (
+        "A person or a group. Offered from your Lineage and your Beginning, or write your "
+        "own. The price is what the world owes you for carrying them, and the worst of "
+        "them mark you."
+    ),  # PLACEHOLDER: Apostate rewrite
+    "finaltouches_enemy_why_prompt": "Why",
+    "finaltouches_enemy_degree_prompt": "How badly",
+    "finaltouches_enemy_public_line_prompt": "As the sheet will say it",
+    "finaltouches_enemy_public_line_hint": (
+        "The public line. The name, the reach and the price are yours, your GM's and staff's."
+    ),  # PLACEHOLDER: Apostate rewrite
+    # The Introductions (#3621): world-level copy, the reviewer's own wording. The
+    # question keys (first_journal_q1.. / application_q1..) are also read at finalize.
+    "introductions_heading": "The Introductions",
+    "introductions_intro": INTRODUCTIONS_INTRO,
+    "first_journal_institution": FIRST_JOURNAL_INSTITUTION,
+    "first_journal_frame": FIRST_JOURNAL_FRAME,
+    "first_journal_q1": FIRST_JOURNAL_QUESTIONS[0],
+    "first_journal_q2": FIRST_JOURNAL_QUESTIONS[1],
+    "first_journal_q3": FIRST_JOURNAL_QUESTIONS[2],
+    "application_title": APPLICATION_TITLE,
+    "application_frame": APPLICATION_FRAME,
+    "application_q1": APPLICATION_QUESTIONS[0],
+    "application_q2": APPLICATION_QUESTIONS[1],
+    "application_q3": APPLICATION_QUESTIONS[2],
+    "whispers_title": WHISPERS_TITLE,
+    "whispers_frame": WHISPERS_FRAME,
 }
 
 

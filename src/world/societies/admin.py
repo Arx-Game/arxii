@@ -196,12 +196,14 @@ class OrganizationTypeAdmin(admin.ModelAdmin):
 
     list_display = [
         "name",
+        "reach",
         "rank_1_title",
         "rank_2_title",
         "rank_3_title",
         "rank_4_title",
         "rank_5_title",
     ]
+    list_filter = ["reach"]
     search_fields = ["name"]
     ordering = ["name"]
 

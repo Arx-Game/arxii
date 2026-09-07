@@ -38,6 +38,10 @@ from world.character_sheets.managers import CharacterSheetManager
 from world.character_sheets.types import (
     DECAY_TIER_THRESHOLDS_DAYS,
     ActivityState,
+    EnemyDegree,
+    EnemyKind,
+    EnemyPowerTier,
+    EnemyStatus,
     LifecycleState,
     MaritalStatus,
     PosthumousJournalDisposition,
@@ -188,10 +192,12 @@ class Profile(SharedMemoryModel):
         help_text="Hidden/secret character concept (staff field)",
     )
     quote = models.TextField(blank=True, help_text="Character quote/motto")
-    personality = models.TextField(
-        blank=True,
-        help_text="Character personality description",
-    )
+    # The Actor's Sheet (#3621): three answers about what the character does, in place of
+    # the free-text personality field. Versioned prose (ProfileTextField), public on the
+    # sheet; anything private about them is a Secret, never a toggle.
+    never_do = models.TextField(blank=True, help_text="What would you never do?")
+    protect = models.TextField(blank=True, help_text="What would you protect at all costs?")
+    fear = models.TextField(blank=True, help_text="What are you deathly afraid of?")
     background = models.TextField(blank=True, help_text="Character background story")
     obituary = models.TextField(
         blank=True,
@@ -253,7 +259,9 @@ _PROFILE_BIO_FIELDS: tuple[str, ...] = (
     "concept",
     "real_concept",
     "quote",
-    "personality",
+    "never_do",
+    "protect",
+    "fear",
     "background",
     "obituary",
 )
@@ -272,7 +280,7 @@ class ProfileTextVersion(SharedMemoryModel):
 
     Every write path to a versioned field (table-request approval, staff/admin
     edit) snapshots through ``services.update_profile_text``; nothing may
-    overwrite ``Profile.background``/``personality`` silently. Full text per
+    overwrite ``Profile.background`` or an Actor's Sheet answer silently. Full text per
     version (not diffs). The first post-CG write also captures the CG-approved
     original as the initial row, so the earliest version is always the CG text.
 
@@ -604,7 +612,8 @@ class CharacterSheet(SharedMemoryModel):
     )
 
     # Descriptive Text Fields
-    # NOTE: quote / personality / background / obituary moved to Profile (#1270) and are
+    # NOTE: quote / the Actor's Sheet answers / background / obituary moved to Profile
+    # (#1270) and are
     # exposed via forwarding properties below. additional_desc stays — it is appearance
     # text (read by _build_appearance), distinct from the narrative bio.
     additional_desc = models.TextField(
@@ -729,12 +738,28 @@ class CharacterSheet(SharedMemoryModel):
         self._ensure_true_profile().quote = value
 
     @property
-    def personality(self) -> str:
-        return self.true_profile.personality if self.true_profile is not None else ""
+    def never_do(self) -> str:
+        return self.true_profile.never_do if self.true_profile is not None else ""
 
-    @personality.setter
-    def personality(self, value: str) -> None:
-        self._ensure_true_profile().personality = value
+    @never_do.setter
+    def never_do(self, value: str) -> None:
+        self._ensure_true_profile().never_do = value
+
+    @property
+    def protect(self) -> str:
+        return self.true_profile.protect if self.true_profile is not None else ""
+
+    @protect.setter
+    def protect(self, value: str) -> None:
+        self._ensure_true_profile().protect = value
+
+    @property
+    def fear(self) -> str:
+        return self.true_profile.fear if self.true_profile is not None else ""
+
+    @fear.setter
+    def fear(self, value: str) -> None:
+        self._ensure_true_profile().fear = value
 
     @property
     def background(self) -> str:
@@ -1394,3 +1419,94 @@ class Pronouns(NaturalKeyMixin, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.display_name
+
+
+class CharacterEnemy(SharedMemoryModel):
+    """Who wants this character to fail, and what the world paid for it (#3621).
+
+    Written once at character generation from the draft's enemy pick; staff may place a
+    free-written one later (linking a real person's group or a real group recomputes the
+    price and flips ``status``). A person is priced on ``power_tier``, a group on
+    ``reach`` (from its ``OrganizationType``, or the Beginning offer's override); both by
+    ``degree``. The row itself is owner, staff and assigned-GM reading; every other viewer
+    of the sheet sees ``public_line`` only. ``secret`` holds the private "why" when the
+    player made one; ``why`` is then blank on the row.
+    """
+
+    character = models.ForeignKey(
+        "arxii.CharacterSheet",
+        on_delete=models.CASCADE,
+        related_name="enemies",
+    )
+    kind = models.CharField(max_length=8, choices=EnemyKind.choices)
+    organization = models.ForeignKey(
+        "arxii.Organization",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="enemies_of",
+        help_text=(
+            "The group, or the group a person belongs to. Null until staff place a "
+            "free-written enemy."
+        ),
+    )
+    family = models.ForeignKey(
+        "arxii.Family",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="enemies_of",
+        help_text="A family target, when the group is a family rather than an organization.",
+    )
+    figure_name = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="The person's name (a person), or the free-written group's name until placed.",
+    )
+    power_tier = models.CharField(
+        max_length=10, choices=EnemyPowerTier.choices, blank=True, help_text="A person's power."
+    )
+    reach = models.CharField(
+        max_length=12,
+        blank=True,
+        help_text="A group's reach (societies.EnemyReach), copied at pricing time.",
+    )
+    degree = models.CharField(max_length=10, choices=EnemyDegree.choices)
+    price = models.PositiveIntegerField(
+        default=0, help_text="CG points awarded for carrying this enemy."
+    )
+    why = models.TextField(
+        blank=True, help_text="Why they want it; blank when it lives in a Secret."
+    )
+    public_line = models.TextField(
+        blank=True, help_text="How the character's sheet says it to everyone else."
+    )
+    secret = models.ForeignKey(
+        "arxii.Secret",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="enemy_rows",
+        help_text="The private why, when the player made it a Secret.",
+    )
+    status = models.CharField(max_length=8, choices=EnemyStatus.choices, default=EnemyStatus.PLACED)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "Character enemy"
+        verbose_name_plural = "Character enemies"
+        ordering = ["character_id", "-price", "id"]
+
+    def __str__(self) -> str:
+        target = self.target_name
+        return f"{self.character}: {target} ({self.get_degree_display()})"
+
+    @property
+    def target_name(self) -> str:
+        if self.kind == EnemyKind.PERSON:
+            return self.figure_name
+        if self.organization_id is not None:
+            return self.organization.name
+        if self.family_id is not None:
+            return self.family.name
+        return self.figure_name

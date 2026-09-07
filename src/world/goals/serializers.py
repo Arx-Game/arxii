@@ -2,6 +2,7 @@
 
 from rest_framework import serializers
 
+from world.goals.constants import GoalHorizon
 from world.goals.models import OPTIONAL_GOAL_DOMAINS, CharacterGoal, GoalJournal, GoalRevision
 from world.goals.services import MAX_GOAL_POINTS
 from world.mechanics.constants import GOAL_CATEGORY_NAME
@@ -39,6 +40,8 @@ class CharacterGoalSerializer(serializers.ModelSerializer):
             "id",
             "domain",
             "domain_name",
+            "horizon",
+            "ordinal",
             "points",
             "notes",
             "updated_at",
@@ -56,6 +59,7 @@ class GoalInputSerializer(serializers.Serializer):
     domain = serializers.PrimaryKeyRelatedField(queryset=get_goal_domains_queryset())
     points = serializers.IntegerField(min_value=0)
     notes = serializers.CharField(required=False, allow_blank=True, default="")
+    horizon = serializers.ChoiceField(choices=GoalHorizon.choices, default=GoalHorizon.SHORT_TERM)
 
     def validate_points(self, value: int) -> int:
         """Validate points is non-negative."""
@@ -81,15 +85,7 @@ class CharacterGoalUpdateSerializer(serializers.Serializer):
         if total_points > MAX_GOAL_POINTS:
             msg = f"Total points ({total_points}) exceeds maximum of {MAX_GOAL_POINTS}."
             raise serializers.ValidationError(msg)
-
-        # Check for duplicate domains
-        domain_ids = [g["domain"].id for g in value]
-        if len(domain_ids) != len(set(domain_ids)):
-            duplicates = [d for d in domain_ids if domain_ids.count(d) > 1]
-            dup_names = [ModifierTarget.objects.get(id=d).name for d in set(duplicates)]
-            msg = f"Duplicate domains in request: {', '.join(dup_names)}"
-            raise serializers.ValidationError(msg)
-
+        # Any number of goals may share a domain (#3621); they are numbered in order.
         return value
 
 

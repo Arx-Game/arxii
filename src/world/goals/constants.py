@@ -3,6 +3,13 @@
 from django.db import models
 
 
+class GoalHorizon(models.TextChoices):
+    """When a goal is meant to land (#3621). Goals are numbered within a horizon."""
+
+    SHORT_TERM = "short_term", "Short term"
+    LONG_TERM = "long_term", "Long term"
+
+
 class GoalStatus(models.TextChoices):
     """Status of a character goal."""
 

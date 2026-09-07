@@ -23,6 +23,7 @@ from rest_framework import serializers
 
 from evennia_extensions.models import PlayerData
 from world.character_creation.constants import (
+    ACTOR_SHEET_QUESTIONS,
     AGE_MAX,
     AGE_MAX_ETERNAL_YOUTH,
     AGE_MIN,
@@ -52,6 +53,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser
     from evennia.accounts.models import AccountDB
 
+    from world.character_creation.enemies import ResolvedEnemy
     from world.character_creation.models import (
         Beginnings,
         DraftApplication,
@@ -283,6 +285,7 @@ def finalize_character(
     # Connection reputation seeding (#3660): each picked group answer's authored
     # seed becomes the anchor org's opinion of the new PC.
     _seed_connection_reputation(draft, primary_persona)
+    _write_actor_sheet(draft, sheet, primary_persona, character)
 
     # Kinship graph binding (#2062): claim the chosen slot / mint from the
     # chosen pool, or self-serve a node for the new PC. Runs before draft
@@ -454,6 +457,306 @@ def _seed_connection_reputation(draft: CharacterDraft, persona: Persona) -> None
         org = orgs.get(anchor_by_choice_id[choice.id])
         if org is not None:
             bump_organization_reputation(persona, org, choice.reputation_seed)
+
+
+def _write_actor_sheet(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """The Actor's Sheet's finalize writes beyond the profile answers and goals (#3621)."""
+    _create_enemy(draft, sheet, persona, character)
+    _write_introductions(draft, sheet, persona, character)
+
+
+def _create_enemy(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Write the priced enemy and collect the first of its debt (#3621).
+
+    The row itself; the group's opinion of the character (the same reputation seam a
+    Lineage answer's seed uses); a Distinction at the worst two degrees, through the same
+    bundled-Distinction write path; and, for a society- or realm-reach group whose
+    enforcing society covers where the character starts, pursuit heat there, pinned at
+    the worst degree. A free-written enemy writes the row only, pending staff placement.
+    """
+    from world.character_creation.constants import ENEMY_REPUTATION_SEED  # noqa: PLC0415
+    from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+    from world.character_sheets.models import CharacterEnemy  # noqa: PLC0415
+    from world.societies.models import Organization  # noqa: PLC0415
+    from world.societies.renown import bump_organization_reputation  # noqa: PLC0415
+
+    resolved = resolve_enemy(draft)
+    if resolved is None:
+        return
+    org = (
+        Organization.objects.filter(pk=resolved.organization_id).select_related("society").first()
+        if resolved.organization_id
+        else None
+    )
+    CharacterEnemy.objects.create(
+        character=sheet,
+        kind=resolved.kind,
+        organization=org,
+        figure_name=resolved.figure_name,
+        power_tier=resolved.power_tier,
+        reach=resolved.reach,
+        degree=resolved.degree,
+        price=resolved.price,
+        why=resolved.why,
+        public_line=resolved.public_line,
+        status=resolved.status,
+    )
+    if org is not None:
+        bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
+
+    _grant_enemy_distinction(sheet, resolved)
+    _seed_enemy_heat(resolved, org, persona, character)
+
+
+def _grant_enemy_distinction(sheet: CharacterSheet, resolved: ResolvedEnemy) -> None:
+    """Mark the character at the worst two degrees, through the bundled-Distinction path."""
+    from world.character_creation.constants import (  # noqa: PLC0415
+        ENEMY_DEGREE_DISTINCTION_NAMES,
+    )
+    from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+    from world.distinctions.models import (  # noqa: PLC0415
+        CharacterDistinction,
+        Distinction,
+        DistinctionEffect,
+    )
+    from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+
+    distinction_name = ENEMY_DEGREE_DISTINCTION_NAMES.get(resolved.degree)
+    if not distinction_name:
+        return
+    distinction = (
+        Distinction.objects.filter(name=distinction_name)
+        .prefetch_related(
+            Prefetch(
+                "effects",
+                queryset=DistinctionEffect.objects.select_related("target__category"),
+                to_attr="cached_effects",
+            )
+        )
+        .first()
+    )
+    if distinction is None:
+        logger.warning(
+            "Enemy degree %s grants Distinction %r but no such row exists; skipped for %s",
+            resolved.degree,
+            distinction_name,
+            sheet,
+        )
+        return
+    if CharacterDistinction.objects.filter(character=sheet, distinction=distinction).exists():
+        return
+    created = CharacterDistinction.objects.bulk_create(
+        [
+            CharacterDistinction(
+                character=sheet,
+                distinction=distinction,
+                rank=1,
+                origin=DistinctionOrigin.CHARACTER_CREATION,
+                source_description=f"{EnemyDegree(resolved.degree).label}: {resolved.name}",
+            )
+        ]
+    )
+    _create_distinction_modifiers_bulk(sheet, created)
+    for cd in created:
+        if cd.distinction.secret_by_default:
+            mint_distinction_secret(cd)
+
+
+def _seed_enemy_heat(
+    resolved: ResolvedEnemy,
+    org: Organization | None,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Pursuit heat where the character starts, when the enemy's society enforces there.
+
+    Only a society- or realm-reach group, from ruined upward; pinned at the worst degree.
+    A group whose enforcing society does not cover the start seeds nothing: reach is
+    measured where the character plays (issue rule 2).
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        ENEMY_HEAT_PIN_DAYS,
+        ENEMY_HEAT_SEED,
+    )
+    from world.character_sheets.types import EnemyDegree, EnemyKind  # noqa: PLC0415
+    from world.justice.models import HeatSource, PersonaHeat  # noqa: PLC0415
+    from world.justice.services import area_for_room, enforcing_society_for  # noqa: PLC0415
+    from world.societies.constants import EnemyReach  # noqa: PLC0415
+
+    heat_amount = ENEMY_HEAT_SEED.get(resolved.degree, 0)
+    if (
+        not heat_amount
+        or resolved.kind != EnemyKind.GROUP
+        or resolved.reach not in (EnemyReach.SOCIETY, EnemyReach.REALM)
+        or org is None
+        or org.society_id is None
+        or character.location is None
+    ):
+        return
+    area = area_for_room(character.location)
+    if area is None or enforcing_society_for(area) != org.society:
+        return
+    with transaction.atomic():
+        row, _ = PersonaHeat.objects.get_or_create(persona=persona, area=area, society=org.society)
+        row.value = row.value + heat_amount
+        if resolved.degree == EnemyDegree.DESTROY:
+            row.pinned_until = timezone.now() + timedelta(days=ENEMY_HEAT_PIN_DAYS)
+        row.save(update_fields=["value", "pinned_until", "updated_date"])
+        HeatSource.objects.create(heat=row, deed=None, amount=heat_amount)
+
+
+def _introduction_questions(kind: str) -> list[str]:
+    """The three questions of an Introduction: the CG copy rows, else the constants."""
+    from world.character_creation.constants import (  # noqa: PLC0415
+        APPLICATION_QUESTIONS,
+        FIRST_JOURNAL_QUESTIONS,
+        INTRODUCTION_APPLICATION,
+    )
+    from world.character_creation.models import CGExplanation  # noqa: PLC0415
+
+    defaults = (
+        APPLICATION_QUESTIONS if kind == INTRODUCTION_APPLICATION else FIRST_JOURNAL_QUESTIONS
+    )
+    keys = [f"{kind}_q{i + 1}" for i in range(len(defaults))]
+    rows = {row.key: row.text for row in CGExplanation.objects.filter(key__in=keys)}
+    return [rows.get(key) or default for key, default in zip(keys, defaults, strict=True)]
+
+
+def first_journal_offered(draft: CharacterDraft) -> bool:
+    """The First Journal is offered to an Arx start; anyone else writes one in play."""
+    from world.character_creation.constants import ARX_REALM_NAME  # noqa: PLC0415
+
+    area = draft.selected_area
+    return area is not None and area.realm is not None and area.realm.name == ARX_REALM_NAME
+
+
+def _write_introductions(
+    draft: CharacterDraft,
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+) -> None:
+    """Write the Introductions the player answered as white journals (#3621).
+
+    The First Journal and the Application assemble question and answer pairs (answered
+    ones only); the Whispers keep one rumor per line, and each line also becomes a
+    Level-1 player-flavor Secret about the character with gossip heat seeded in the
+    start region, so it is overhearable at a hub from day one. A skipped Introduction
+    writes nothing. Journal XP applies as for any entry when the character has an
+    account to award.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        APPLICATION_TITLE,
+        INTRODUCTION_APPLICATION,
+        INTRODUCTION_FIRST_JOURNAL,
+        INTRODUCTION_WHISPERS,
+        WHISPERS_TITLE,
+    )
+    from world.journals.constants import JournalKind  # noqa: PLC0415
+    from world.journals.services import create_journal_entry  # noqa: PLC0415
+
+    intros = draft.draft_data.get("introductions") or {}
+    if not intros:
+        return
+    award_xp = character.db_account is not None
+
+    def answered(kind: str) -> str:
+        answers = intros.get(kind) or []
+        pairs = [
+            f"{question}\n{answer.strip()}"
+            for question, answer in zip(_introduction_questions(kind), answers, strict=False)
+            if isinstance(answer, str) and answer.strip()
+        ]
+        return "\n\n".join(pairs)
+
+    if first_journal_offered(draft):
+        body = answered(INTRODUCTION_FIRST_JOURNAL)
+        if body:
+            first_name = draft.draft_data.get("first_name") or persona.name
+            create_journal_entry(
+                author=sheet,
+                title=f"{first_name}'s First Journal",
+                body=body,
+                is_public=True,
+                award_weekly_xp=award_xp,
+                kind=JournalKind.FIRST_JOURNAL,
+            )
+    body = answered(INTRODUCTION_APPLICATION)
+    if body:
+        create_journal_entry(
+            author=sheet,
+            title=APPLICATION_TITLE,
+            body=body,
+            is_public=True,
+            award_weekly_xp=award_xp,
+            kind=JournalKind.APPLICATION,
+        )
+    whispers = intros.get(INTRODUCTION_WHISPERS)
+    lines = (
+        [ln.strip() for ln in whispers.splitlines() if ln.strip()]
+        if isinstance(whispers, str)
+        else []
+    )
+    if not lines:
+        return
+    create_journal_entry(
+        author=sheet,
+        title=WHISPERS_TITLE,
+        body="\n".join(lines),
+        is_public=True,
+        award_weekly_xp=award_xp,
+        kind=JournalKind.WHISPERS,
+    )
+    _seed_whispers(sheet, persona, character, lines)
+
+
+def _seed_whispers(
+    sheet: CharacterSheet,
+    persona: Persona,
+    character: ObjectDB,  # noqa: OBJECTDB_PARAM - the placed character, for its start room
+    lines: list[str],
+) -> None:
+    """Each Whispers line: a Level-1 player-flavor Secret with heat in the start region."""
+    from world.areas.constants import AreaLevel  # noqa: PLC0415
+    from world.character_creation.constants import WHISPERS_SEED_HEAT  # noqa: PLC0415
+    from world.justice.services import area_for_room  # noqa: PLC0415
+    from world.secrets.constants import SecretLevel, SecretProvenance  # noqa: PLC0415
+    from world.secrets.models import SecretGossip  # noqa: PLC0415
+    from world.secrets.services import author_secret  # noqa: PLC0415
+
+    # Walk parent links (self first, cycle-safe) rather than the AreaClosure matview, which
+    # the SQLite tier's test databases do not carry (the justice heat chain does the same).
+    region = None
+    node = area_for_room(character.location) if character.location is not None else None
+    seen: set[int] = set()
+    while node is not None and node.pk not in seen:
+        if node.level == AreaLevel.REGION:
+            region = node
+            break
+        seen.add(node.pk)
+        node = node.parent
+    for line in lines:
+        secret = author_secret(
+            subject_sheet=sheet,
+            provenance=SecretProvenance.PLAYER_FLAVOR,
+            level=SecretLevel.UNCOMMON_KNOWLEDGE,
+            content=line,
+            subject_aware=True,
+            author_persona=persona,
+        )
+        if region is not None:
+            SecretGossip.objects.create(secret=secret, region=region, heat=WHISPERS_SEED_HEAT)
 
 
 def _bind_kinship_node(draft: CharacterDraft, sheet: CharacterSheet) -> None:
@@ -914,8 +1217,11 @@ def _set_descriptive_text(sheet: CharacterSheet, draft: CharacterDraft) -> bool:
     )
     if answers_present:
         profile.background = _finalize_origin_slots(sheet, draft, draft.visible_origin_slot_ids())
-    if draft_data.get("personality"):
-        profile.personality = draft_data["personality"]
+    # The Actor's Sheet answers (#3621), like concept and quote: set directly at CG; the
+    # versioned write path takes over on the first post-CG edit.
+    for key, _copy_key in ACTOR_SHEET_QUESTIONS:
+        if draft_data.get(key):
+            setattr(profile, key, draft_data[key])
     if draft_data.get("concept"):
         profile.concept = draft_data["concept"]
     if draft_data.get("quote"):
@@ -941,7 +1247,7 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     from a CharacterDraft and save it.
 
     Covers: gender/pronouns, age, species, family, tarot, heritage, origin realm,
-    descriptive text (description/background/personality/concept/quote), and
+    descriptive text (description/background/the Actor's Sheet answers/concept/quote), and
     physical characteristics (height/build/weight).
     """
     _set_demographics(sheet, draft)
@@ -1221,7 +1527,7 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
 
     Serializer validated the domain PKs; this builds instances and bulk creates.
     """
-    from world.goals.constants import GoalStatus  # noqa: PLC0415
+    from world.goals.constants import GoalHorizon, GoalStatus  # noqa: PLC0415
     from world.goals.models import CharacterGoal  # noqa: PLC0415
     from world.mechanics.models import ModifierTarget  # noqa: PLC0415
 
@@ -1233,18 +1539,34 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     domain_ids = [g.get("domain_id") for g in goals_data if g.get("domain_id")]
     domains_by_id = {d.id: d for d in ModifierTarget.objects.filter(id__in=domain_ids)}
 
-    # Build and create instances
-    goals_to_create = [
-        CharacterGoal(
-            character=character.sheet_data,
-            domain=domains_by_id[g["domain_id"]],
-            points=g["points"],
-            notes=g.get("notes", ""),
-            status=GoalStatus.ACTIVE,
+    # Build and create instances, numbered within each horizon in the order the player
+    # listed them (#3621). A goal with no points but words is a note to yourself and is
+    # kept; an empty row is dropped.
+    goals_to_create = []
+    next_ordinal: dict[str, int] = {}
+    for g in goals_data:
+        if g.get("domain_id") not in domains_by_id:
+            continue
+        points = g.get("points", 0)
+        notes = (g.get("notes") or "").strip()
+        if points <= 0 and not notes:
+            continue
+        horizon = g.get("horizon") or GoalHorizon.SHORT_TERM
+        if horizon not in GoalHorizon.values:
+            horizon = GoalHorizon.SHORT_TERM
+        ordinal = next_ordinal.get(horizon, 0) + 1
+        next_ordinal[horizon] = ordinal
+        goals_to_create.append(
+            CharacterGoal(
+                character=character.sheet_data,
+                domain=domains_by_id[g["domain_id"]],
+                horizon=horizon,
+                ordinal=ordinal,
+                points=points,
+                notes=notes,
+                status=GoalStatus.ACTIVE,
+            )
         )
-        for g in goals_data
-        if g.get("domain_id") in domains_by_id and g.get("points", 0) > 0
-    ]
 
     if not goals_to_create:
         return []
@@ -2737,6 +3059,7 @@ def finalize_gm_character(
 
     # Connection reputation seeding (#3660): mirrors the player finalize flow.
     _seed_connection_reputation(draft, primary_persona)
+    _write_actor_sheet(draft, sheet, primary_persona, character)
 
     # Finalize magic data (same as player finalize flow — GM-created
     # characters may have gift/technique/tradition/aura selections in the draft).

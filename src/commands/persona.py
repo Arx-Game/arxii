@@ -25,8 +25,8 @@ _LIST = "list"
 _CREATE = "create"
 _MASK = "mask"
 _PROFILE = "profile"
-_GUISE_FIELDS = ("concept", "quote", "personality", "background")
-_GUISE_KEY_RE = re.compile(r"\b(concept|quote|personality|background)=")
+_GUISE_FIELDS = ("concept", "quote", "never_do", "protect", "fear", "background")
+_GUISE_KEY_RE = re.compile(r"\b(concept|quote|never_do|protect|fear|background)=")
 
 
 class CmdPersona(DispatchCommand):
@@ -37,7 +37,7 @@ class CmdPersona(DispatchCommand):
         persona list          - same as bare ``persona``
         persona create <name> - create a new established (durable) identity
         persona mask <name>   - create a temporary anonymous mask and wear it
-        persona profile <name> [concept=… quote=… personality=… background=…]
+        persona profile <name> [concept=… quote=… never_do=… protect=… fear=… background=…]
                               - view or author a cover identity's own (fabricated) bio
         persona <name>        - switch your active face to the named persona
         wear-face <name>      - alias for persona <name>
@@ -110,12 +110,13 @@ class CmdPersona(DispatchCommand):
 
         A cover identity carries its own fabricated bio so its *absence* doesn't out it as fake.
         With no fields, shows the named persona's current guise bio; with ``concept=`` /
-        ``quote=`` / ``personality=`` / ``background=`` (free text to the next key), authors them.
+        ``quote=`` / ``never_do=`` / ``protect=`` / ``fear=`` / ``background=`` (free text to the
+        next key), authors them. The three answers are the guise's Actor's Sheet (#3621).
         """
         if not rest:
             self.msg(
                 "Usage: persona profile <name> "
-                "[concept=... quote=... personality=... background=...]"
+                "[concept=... quote=... never_do=... protect=... fear=... background=...]"
             )
             return
         match = _GUISE_KEY_RE.search(rest)
