@@ -292,6 +292,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # Folio stage-internal copy (#3630 Plan B): section headings and one
     # explanatory note for stages moved onto the folio primitives.
     "gift_tradition_heading": "Tradition",
+    # Read by TraditionPicker.tsx (predates #3675); the component's own
+    # fallback interpolates the chosen tradition's name, which a static seed
+    # value cannot reproduce, so this is the same generic shape without the
+    # per-tradition name.
+    "gift_schooling_label": "How you came to your tradition",
     # The Glimpse's own offered distinctions (#3675 fix round 1), one
     # sub-block per chosen tag, and the CG-only axis layout's own copy.
     "glimpse_choose_any": "choose any",
@@ -314,7 +319,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "appearance_offers_heading": "What people notice first",
     "appearance_offers_chip": "optional",
     "appearance_closed_lead": "Closed by your route",
-    "appearance_towering_hint": "needs Giant's Blood",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
     "identity_quote_heading": "Quote",

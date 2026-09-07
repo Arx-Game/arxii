@@ -631,6 +631,7 @@ export const mockHeightBandAverage: HeightBand = {
   min_inches: 64,
   max_inches: 72,
   is_cg_selectable: true,
+  cg_hint: '',
 };
 
 export const mockHeightBandTall: HeightBand = {
@@ -640,9 +641,11 @@ export const mockHeightBandTall: HeightBand = {
   min_inches: 73,
   max_inches: 78,
   is_cg_selectable: true,
+  cg_hint: '',
 };
 
-// Not normally offered to players; Giant's Blood opens it (#3675 Task 15).
+// Not normally offered to players; Giant's Blood opens it (#3675 Task 15). The
+// hint is an authored column on the row itself (fix round 1), not a name match.
 export const mockHeightBandTowering: HeightBand = {
   id: 3,
   name: 'towering',
@@ -650,6 +653,7 @@ export const mockHeightBandTowering: HeightBand = {
   min_inches: 79,
   max_inches: 96,
   is_cg_selectable: false,
+  cg_hint: "needs Giant's Blood",
 };
 
 // =============================================================================

@@ -30852,6 +30852,8 @@ export interface components {
       max_inches: number;
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
+      /** @description What character creation says about picking this band, shown on the option (for example what opens a band players cannot normally take) */
+      cg_hint?: string;
     };
     HeightBandRequest: {
       /** @description Internal key */
@@ -30864,6 +30866,8 @@ export interface components {
       max_inches: number;
       /** @description Whether players can select heights in this band during CG */
       is_cg_selectable?: boolean;
+      /** @description What character creation says about picking this band, shown on the option (for example what opens a band players cannot normally take) */
+      cg_hint?: string;
     };
     /** @description One clue a character holds — the journal row (#1575). */
     HeldClue: {

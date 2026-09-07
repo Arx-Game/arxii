@@ -53678,6 +53678,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - id
@@ -53710,6 +53715,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - max_inches

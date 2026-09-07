@@ -307,6 +307,9 @@ export interface HeightBand {
   min_inches: number;
   max_inches: number;
   is_cg_selectable: boolean;
+  /** Staff-authored copy shown on this band's option (#3675 Task 15 fix round 1),
+   * e.g. what opens a band players cannot normally take. Empty when unauthored. */
+  cg_hint: string;
 }
 
 export interface Build {

@@ -12,9 +12,10 @@
  * offered distinctions (`chapter="appearance"`, #3675 Task 15) - the
  * physical/social ones that show, in place of the retired Distinctions
  * stage. It carries its own heading (folio grammar; no separate `section-h`
- * above it, matching the demo's Screen 7). The "Towering" height band's
- * `title` reads staff's `appearance_towering_hint` only when that key
- * exists; there is never a code literal for it.
+ * above it, matching the demo's Screen 7). A height band's `title` reads its
+ * own `cg_hint` column when staff authored one (fix round 1: an authored
+ * column on the row itself, the #3676 one-to-one designation, not a name
+ * match against a literal "Towering"); otherwise the usual inches range.
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -254,18 +255,17 @@ export function AppearanceStage({
     return formTraits?.[traitName] ?? null;
   };
 
-  // The Towering band's title is staff's own hint (#3675 Task 15), not the
-  // usual inches range: `appearance_towering_hint` is authored to say what
-  // opens it (Giant's Blood). Absent that key, the option carries no title
-  // at all - never a literal. `band.name` is the authored internal key
-  // (fixed catalog row, not a display string in play, unlike a
-  // distinction's own name/opener_label - #3676 is about those).
-  const heightBandTitle = (band: HeightBand): string | undefined => {
-    if (band.name === 'towering') return copy?.appearance_towering_hint;
-    return !band.is_cg_selectable && isStaff
+  // A band's title is its own authored `cg_hint` (#3675 Task 15 fix round
+  // 1) when staff wrote one - what opens a band players cannot normally
+  // take (e.g. Towering needs Giant's Blood). This is a column on the row
+  // itself, not a name match against a literal band name (the #3676
+  // one-to-one designation the never-match-strings ruling asks for).
+  // Absent a hint, the option falls back to the usual inches range.
+  const heightBandTitle = (band: HeightBand): string | undefined =>
+    band.cg_hint ||
+    (!band.is_cg_selectable && isStaff
       ? `${band.min_inches} to ${band.max_inches} inches (not normally offered to players)`
-      : `${band.min_inches} to ${band.max_inches} inches`;
-  };
+      : `${band.min_inches} to ${band.max_inches} inches`);
 
   const buildTitle = (build: Build): string | undefined =>
     !build.is_cg_selectable && isStaff ? 'Not normally offered to players' : undefined;

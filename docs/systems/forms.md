@@ -29,7 +29,7 @@ from world.forms.models import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `HeightBand` | Height ranges mapping to descriptive bands | `name`, `display_name`, `min_inches`, `max_inches`, `weight_min`, `weight_max`, `is_cg_selectable`, `hide_build`, `sort_order` |
+| `HeightBand` | Height ranges mapping to descriptive bands | `name`, `display_name`, `min_inches`, `max_inches`, `weight_min`, `weight_max`, `is_cg_selectable`, `cg_hint` (staff copy shown on the CG option, e.g. what opens a band players cannot normally take, #3675 fix round 1), `hide_build`, `sort_order` |
 | `Build` | Body type with weight calculation factor | `name`, `display_name`, `weight_factor` (Decimal), `is_cg_selectable`, `sort_order` |
 | `FormTrait` | Physical characteristic type (e.g., hair_color) | `name`, `display_name`, `trait_type` (TraitType), `sort_order` |
 | `FormTraitOption` | Valid value for a trait (e.g., "black" for hair_color) | `trait` (FK), `name`, `display_name`, `height_modifier_inches` (nullable), `sort_order` |

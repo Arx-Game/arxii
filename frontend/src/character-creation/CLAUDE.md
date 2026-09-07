@@ -48,6 +48,10 @@ character-creation/
     │                        #   chapter's own offered distinctions (ChapterOffers
     │                        #   chapter="appearance", #3675 Task 15), the physical/social
     │                        #   ones that show, in place of the retired Distinctions stage.
+    │                        #   A height band's title reads its own authored `cg_hint`
+    │                        #   column (forms.HeightBand, #3675 fix round 1) when staff
+    │                        #   wrote one - e.g. what opens a band players cannot normally
+    │                        #   take - never a name match against a literal band name.
     ├── IdentityStage.tsx    # Stage 9: Identity
     ├── FinalTouchesStage.tsx # Stage 10: the Actor's Sheet (#3621): three questions,
     │                        #   numbered goals by horizon, the priced enemy, The Introductions.

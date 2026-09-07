@@ -39,6 +39,15 @@ class HeightBand(NaturalKeyMixin, SharedMemoryModel):
         default=False,
         help_text="Whether players can select heights in this band during CG",
     )
+    cg_hint = models.CharField(
+        max_length=200,
+        blank=True,
+        default="",
+        help_text=(
+            "What character creation says about picking this band, shown on the option "
+            "(for example what opens a band players cannot normally take)"
+        ),
+    )
     hide_build = models.BooleanField(
         default=False,
         help_text="Hide build display at this scale (e.g., dragon-size)",

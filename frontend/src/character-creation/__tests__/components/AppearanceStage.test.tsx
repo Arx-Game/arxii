@@ -190,21 +190,24 @@ describe('AppearanceStage (folio)', () => {
     ).toBeInTheDocument();
   });
 
-  it('gives the Towering band no title when appearance_towering_hint is unset', () => {
-    heightBands = [mockHeightBandAverage, mockHeightBandTall, mockHeightBandTowering];
+  it('falls back to the inches range when a band carries no cg_hint (#3675 fix round 1)', () => {
+    heightBands = [
+      mockHeightBandAverage,
+      mockHeightBandTall,
+      { ...mockHeightBandTowering, cg_hint: '' },
+    ];
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     const group = screen.getByRole('group', { name: 'Height band' });
     const towering = within(group).getByRole('button', { name: 'Towering' });
-    expect(towering).not.toHaveAttribute('title');
+    expect(towering).toHaveAttribute('title', '79 to 96 inches');
   });
 
-  it("reads the Towering band's title from appearance_towering_hint when staff authored it", () => {
+  it("reads a band's title from its own authored cg_hint column, not a name match (#3675 fix round 1)", () => {
     heightBands = [mockHeightBandAverage, mockHeightBandTall, mockHeightBandTowering];
-    copy = { ...mockCGExplanations, appearance_towering_hint: "needs Giant's Blood" };
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     const group = screen.getByRole('group', { name: 'Height band' });
     const towering = within(group).getByRole('button', { name: 'Towering' });
-    expect(towering).toHaveAttribute('title', "needs Giant's Blood");
+    expect(towering).toHaveAttribute('title', mockHeightBandTowering.cg_hint);
   });
 
   it('emits no class hook that cg.css has no rule for (#3667 shape)', () => {
