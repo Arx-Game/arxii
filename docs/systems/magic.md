@@ -385,7 +385,7 @@ through the offers system too.
   (`CGGlimpseTagViewSet`, `world.character_creation.views`, read-only,
   unpaginated, filterable by `?axis=` and `?path_id=<N>`). The `path_id` filter
   (#2611) excludes tags whose `paths` M2M is non-empty and does not contain the
-  given path — used by the CG flow to hide path-restricted trigger tags (e.g.
+  given path, used by the CG flow to hide path-restricted trigger tags (e.g.
   "Patron Chose You" is Path of the Chosen only). Omitting `path_id` returns all
   tags (post-CG editor mode). Global authored catalog, not draft-dependent, so
   the same endpoint also backs the post-CG "finish your glimpse later" surface.

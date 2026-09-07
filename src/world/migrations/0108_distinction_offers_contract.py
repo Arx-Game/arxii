@@ -1,6 +1,11 @@
 """Contract migration for #3675: the Distinctions stage and its coupling fields retire.
 
 Schema-only (no ``RunPython``/``RunSQL``); 0107 already carried every row's data across.
+The ``AlterUniqueTogether`` on ``glimpsetagdistinctionsuggestion`` is not a separate
+decision -- Django emits it mechanically ahead of the two ``RemoveField`` operations
+that follow it, since the model's ``unique_together`` named both dropped fields; it is
+schema-only like everything else here.
+
 ADR-0237 data dispositions for each destructive operation below:
 
 - ``GlimpseTagDistinctionSuggestion`` (26 authored rows, per the 2026-09-06 production

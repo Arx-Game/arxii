@@ -404,6 +404,7 @@ class BuilderLiveTest(BuilderTestCase):
         assert counts["answers"] == 1
         assert counts["cheapest_complete_answer"] == 5
         assert counts["dearest_complete_answer"] == 5
+        assert counts["distinctions_used"] == 0
 
         panel = live.for_template(template, self.author)
         assert not any("Retired Claim" in text for _, text in panel.checks)

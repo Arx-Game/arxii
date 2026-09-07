@@ -270,12 +270,14 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
     dearest total. A negative cheapest total means some required answers are
     refunds; ``largest_refund`` is that shortfall's magnitude, or 0.
 
-    "Questions", "answers", and the cost spread are scoped to active answers
-    (``is_active=True``) - an inactive answer is never offered to a player
-    (mirrors ``CGOriginTemplateSerializer.get_slots``'s own choices filter,
-    #3660 review Ruling 2). "Distinctions used" counts distinct active
-    ``DistinctionOffer`` rows opened by this template's answers (#3675),
-    scoped by the offer's own ``is_active``.
+    Every count here is scoped to active answers (``is_active=True``) - an
+    inactive answer is never offered to a player, so it counts toward none of
+    "answers", "distinctions used", or the cost spread (mirrors
+    ``CGOriginTemplateSerializer.get_slots``'s own choices filter, #3660
+    review Ruling 2). "Distinctions used" counts distinct active
+    ``DistinctionOffer`` rows opened by this template's active answers
+    (#3675), scoped by both the offer's own ``is_active`` and its
+    ``origin_choice``'s.
     """
     slots = list(OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "id"))
     choices = list(
@@ -290,6 +292,7 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
     distinctions_used = (
         DistinctionOffer.objects.filter(
             origin_choice__slot__template=template,
+            origin_choice__is_active=True,
             is_active=True,
         )
         .values("distinction")
