@@ -27,10 +27,11 @@ import { renderWithCharacterCreationProviders } from '../testUtils';
 let traditions = [mockTradition];
 let draftDistinctions: DraftDistinctionEntry[] = [];
 let glimpseOffers: OffersResponse = { offers: [], closed: [] };
+let cgExplanations = mockCGExplanations;
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
-  useCGExplanations: () => ({ data: mockCGExplanations }),
+  useCGExplanations: () => ({ data: cgExplanations }),
   useResonances: () => ({ data: mockResonances, isLoading: false }),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
   useTraditions: () => ({ data: traditions, isLoading: false }),
@@ -54,6 +55,7 @@ beforeEach(() => {
   traditions = [mockTradition];
   draftDistinctions = [];
   glimpseOffers = { offers: [], closed: [] };
+  cgExplanations = mockCGExplanations;
 });
 
 describe('GiftStage (folio)', () => {
@@ -106,6 +108,28 @@ describe('GiftStage (folio)', () => {
     expect(screen.getByText('Newly taken in')).toBeInTheDocument();
     expect(screen.getByText('Trained for years')).toBeInTheDocument();
     expect(screen.getByText('Raised within it')).toBeInTheDocument();
+  });
+
+  it('substitutes the {tradition} token in the schooling label, fallback and authored', () => {
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+    });
+    const { unmount } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('How you came to The Whispering Path')).toBeInTheDocument();
+    unmount();
+
+    cgExplanations = {
+      ...mockCGExplanations,
+      gift_schooling_label: 'How you trained with {tradition}',
+    };
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('How you trained with The Whispering Path')).toBeInTheDocument();
   });
 
   it('prints the refund and mounts no schooling for a self-taught tradition', () => {

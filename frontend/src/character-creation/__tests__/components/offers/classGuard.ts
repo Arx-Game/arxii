@@ -19,6 +19,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
+/** Escapes a string for literal use inside a `RegExp` (#3675 fix round 3): a
+ * class name can carry regex-special characters (`px-2.5`'s `.`), which would
+ * otherwise match as "any character" instead of a literal dot, loosening the
+ * candidate-selector match. Exported for its own unit test. */
+export function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /** Selector list per top-level rule header in cg.css (skips @-rule preludes). */
 function ruleSelectors(css: string): string[] {
   const stripped = css.replace(/\/\*[\s\S]*?\*\//g, '');
@@ -60,7 +68,9 @@ export function unreachableClasses(
   const unreached: string[] = [];
   for (const name of emitted) {
     if (styledElsewhere.has(name)) continue;
-    const candidates = selectors.filter((sel) => new RegExp(`\\.${name}(?![\\w-])`).test(sel));
+    const candidates = selectors.filter((sel) =>
+      new RegExp(`\\.${escapeRegExp(name)}(?![\\w-])`).test(sel)
+    );
     const elements = allElements.filter((el) => el.classList.contains(name));
     const reached = candidates.some((sel) =>
       elements.some((el) => {

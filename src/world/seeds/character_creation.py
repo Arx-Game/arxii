@@ -242,6 +242,10 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "review_testament_heading": "The Testament",
     "review_glimpse_label": "What your character would speak of themselves",
     "review_record_heading": "Summary",
+    # The Review stage's own distinction ledger (#3675 fix round 3): every
+    # entry the draft carries into the character, off the same offers system
+    # every other chapter reads.
+    "review_distinctions_heading": "What you carry",
     "review_banner_submitted": "Your character has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
     "origin_lore_intro": (
@@ -292,11 +296,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # Folio stage-internal copy (#3630 Plan B): section headings and one
     # explanatory note for stages moved onto the folio primitives.
     "gift_tradition_heading": "Tradition",
-    # Read by TraditionPicker.tsx (predates #3675); the component's own
-    # fallback interpolates the chosen tradition's name, which a static seed
-    # value cannot reproduce, so this is the same generic shape without the
-    # per-tradition name.
-    "gift_schooling_label": "How you came to your tradition",
+    # Read by TraditionPicker.tsx (predates #3675, fix round 3): the component
+    # substitutes the literal `{tradition}` token for the chosen tradition's
+    # name, so an authored override can name the tradition without a static
+    # seed value trying to reproduce it itself.
+    "gift_schooling_label": "How you came to {tradition}",
     # The Glimpse's own offered distinctions (#3675 fix round 1), one
     # sub-block per chosen tag, and the CG-only axis layout's own copy.
     "glimpse_choose_any": "choose any",
@@ -307,6 +311,16 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_story_hint": (
         "The detail behind any of the picks above goes here; the picks stay short."
     ),
+    # Per-axis chip text on GlimpseAxes.tsx (#3675 fix round 3): the axis
+    # display name printed beside each field's prompt. Values mirror
+    # `GlimpseTagAxis`'s own choice labels (`world.magic.constants`) - the
+    # component's own literal fallback must not drift from these.
+    "glimpse_axis_trigger_chip": "Trigger",
+    "glimpse_axis_choosing_chip": "The Choosing",
+    "glimpse_axis_reflection_chip": "The Reflection",
+    "glimpse_axis_tone_chip": "Tone",
+    "glimpse_axis_consequence_chip": "Consequence",
+    "glimpse_axis_witness_chip": "Witness & Secrecy",
     "appearance_age_heading": "Age",
     "appearance_birthday_heading": "Birthday",
     "appearance_height_heading": "Height",

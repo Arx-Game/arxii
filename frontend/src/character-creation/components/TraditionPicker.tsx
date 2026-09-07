@@ -91,7 +91,12 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
             )}
             {isChosen && tradition.state === 'living_masters' && (
               <div className="field">
-                <label>{copy?.gift_schooling_label ?? `How you came to ${tradition.name}`}</label>
+                <label>
+                  {(copy?.gift_schooling_label ?? 'How you came to {tradition}').replace(
+                    '{tradition}',
+                    tradition.name
+                  )}
+                </label>
                 <SchoolingStances draft={draft} tradition={tradition} />
               </div>
             )}

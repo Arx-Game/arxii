@@ -23,6 +23,8 @@ import {
 } from '@/components/ui/dialog';
 import { useTables } from '@/tables/queries';
 import type { GMTable } from '@/tables/types';
+import { useDraftDistinctions } from '@/hooks/useDistinctions';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { ExternalLink } from 'lucide-react';
 import { ChapterLeaf, Marginalia, Note, NightPlate } from '../folio';
 import { FinalizeForTableDialog } from './FinalizeForTableDialog';
@@ -39,6 +41,17 @@ import {
 import type { ApplicationStatus, CharacterDraft } from '../types';
 import { resolveFamilyPath, Stage, STAGE_LABELS } from '../types';
 import { composeFullName } from '../utils';
+
+/** How one distinction entry arrived, for the record ledger (#3675 fix round 3):
+ * a choice pick wins the label over a bundled/carried one when an entry
+ * carries more than one contributing offer. */
+function arrivalWord(entry: DraftDistinctionEntry): 'choice' | 'bundled' | 'carried' {
+  const arrivals = entry.arrivals ?? [];
+  if (arrivals.includes('choice')) return 'choice';
+  if (arrivals.includes('bundled')) return 'bundled';
+  if (arrivals.includes('carried')) return 'carried';
+  return 'choice';
+}
 
 interface ReviewStageProps {
   draft: CharacterDraft;
@@ -57,6 +70,8 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
   const resubmit = useResubmitDraft();
 
   const cgPoints = useDraftCGPoints(draft.id);
+  const draftDistinctions = useDraftDistinctions(draft.id);
+  const distinctionEntries = draftDistinctions.data ?? [];
 
   // Active tables this (non-staff) account GMs — gates the "Finalize for My
   // Table" flow (#3268). `useTables()` returns every table the requester has
@@ -248,6 +263,28 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
             </p>
           )}
         </div>
+
+        {distinctionEntries.length > 0 && (
+          <div className="field">
+            <label>{copy?.review_distinctions_heading ?? 'What you carry'}</label>
+            <ul className="stances">
+              {distinctionEntries.map((entry) => (
+                <li key={entry.distinction_id}>
+                  <div className="stance" aria-pressed="true" aria-disabled="true">
+                    <span className="dot sq" />
+                    <span>
+                      <b>{entry.distinction_name}</b>
+                      <span className="g">Rank {entry.rank}</span>
+                    </span>
+                    <span className="price">
+                      <span className="locked">{arrivalWord(entry)}</span>
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
 
         {!hasApplication && (
           <NoApplicationActions

@@ -102,7 +102,9 @@ class TestLoreOnboardingSeed(TestCase):
         the Glimpse, Lineage, Appearance and Actor's Sheet headings/chips/closed
         leads, plus gift_schooling_label (TraditionPicker.tsx, predates #3675 but
         was undeclared until the same grep that found these keys caught it),
-        none of which have a content-repo counterpart yet."""
+        none of which have a content-repo counterpart yet. Fix round 3 adds the
+        per-axis Glimpse chip keys and the Review stage's own distinctions
+        ledger heading."""
         _seed_cg_explanations()
         offers_chapter_keys = (
             "glimpse_choose_any",
@@ -111,6 +113,12 @@ class TestLoreOnboardingSeed(TestCase):
             "offers_optional_chip",
             "glimpse_story_label",
             "glimpse_story_hint",
+            "glimpse_axis_trigger_chip",
+            "glimpse_axis_choosing_chip",
+            "glimpse_axis_reflection_chip",
+            "glimpse_axis_tone_chip",
+            "glimpse_axis_consequence_chip",
+            "glimpse_axis_witness_chip",
             "lineage_bundles_word",
             "lineage_offers_word",
             "lineage_offers_heading",
@@ -123,6 +131,7 @@ class TestLoreOnboardingSeed(TestCase):
             "finaltouches_offers_chip",
             "finaltouches_closed_lead",
             "gift_schooling_label",
+            "review_distinctions_heading",
         )
         for key in offers_chapter_keys:
             assert key in CG_EXPLANATION_COPY, f"{key} missing from CG_EXPLANATION_COPY"

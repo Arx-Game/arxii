@@ -32,14 +32,17 @@ import { ChapterOffers } from '../offers/ChapterOffers';
 // `AXIS_STEPS` never carries a SENSORY entry (GlimpseAxes never renders a
 // field for it, same as GlimpseFlow), but `GlimpseTagOption['axis']` is the
 // full 7-member union; both maps carry an unreachable SENSORY entry purely
-// to satisfy `Record<GlimpseTagOption['axis'], string>`.
+// to satisfy `Record<GlimpseTagOption['axis'], string>`. These are the
+// fallback behind a `glimpse_axis_<axis>_chip` copy key (mirrors
+// `GlimpseTagAxis`'s own choice labels in `world.magic.constants`, the
+// authoritative source this literal must not drift from).
 const AXIS_DISPLAY_NAME: Record<GlimpseTagOption['axis'], string> = {
   TRIGGER: 'Trigger',
-  CHOOSING: 'Choosing',
-  REFLECTION: 'Reflection',
+  CHOOSING: 'The Choosing',
+  REFLECTION: 'The Reflection',
   TONE: 'Tone',
   CONSEQUENCE: 'Consequence',
-  WITNESS: 'Witness',
+  WITNESS: 'Witness & Secrecy',
   SENSORY: '',
 };
 
@@ -118,7 +121,10 @@ export function GlimpseAxes({
               {copy?.[`glimpse_axis_${step.axis.toLowerCase()}_prompt`] ??
                 AXIS_PROMPT_FALLBACK[step.axis]}
               <span className="tags">
-                <span className="tag soft">{AXIS_DISPLAY_NAME[step.axis]}</span>
+                <span className="tag soft">
+                  {copy?.[`glimpse_axis_${step.axis.toLowerCase()}_chip`] ??
+                    AXIS_DISPLAY_NAME[step.axis]}
+                </span>
                 <span className="tag soft">
                   {step.multi
                     ? (copy?.glimpse_choose_any ?? 'choose any')
@@ -144,24 +150,30 @@ export function GlimpseAxes({
             </div>
             {axisTags
               .filter((tag) => selectedTagIdSet.has(tag.id) && tag.offers.length > 0)
-              .map((tag) => (
-                <div className="conditional" key={tag.id}>
-                  <ChapterOffers
-                    draft={draft}
-                    chapter="glimpse"
-                    filter={(offer) => offer.opener_label === tag.name}
-                    heading={
-                      copy?.[`glimpse_offers_heading_${tag.slug}`] ??
-                      copy?.[`glimpse_offers_heading_${step.axis}`] ??
-                      copy?.glimpse_offers_heading ??
-                      'What it left in you'
-                    }
-                    headingTag={copy?.offers_optional_chip ?? 'optional'}
-                    showOpener={false}
-                    closedFilter={(closed) => closed.opener_labels.includes(tag.name)}
-                  />
-                </div>
-              ))}
+              .map((tag) => {
+                // Match by offer_id, the id the tag's own `offers` already carry -
+                // never by opener_label/tag.name, a display string that can collide
+                // or drift (#3676: never designate by matching strings in code).
+                const tagOfferIds = new Set(tag.offers.map((offer) => offer.offer_id));
+                return (
+                  <div className="conditional" key={tag.id}>
+                    <ChapterOffers
+                      draft={draft}
+                      chapter="glimpse"
+                      filter={(offer) => tagOfferIds.has(offer.offer_id)}
+                      heading={
+                        copy?.[`glimpse_offers_heading_${tag.slug}`] ??
+                        copy?.[`glimpse_offers_heading_${step.axis.toLowerCase()}`] ??
+                        copy?.glimpse_offers_heading ??
+                        'What it left in you'
+                      }
+                      headingTag={copy?.offers_optional_chip ?? 'optional'}
+                      showOpener={false}
+                      closedFilter={(closed) => closed.opener_labels.includes(tag.name)}
+                    />
+                  </div>
+                );
+              })}
           </div>
         );
       })}
