@@ -31,6 +31,7 @@ from world.distinctions.types import DraftDistinctionEntry, build_distinction_en
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
     from world.magic.models import Tradition
+    from world.societies.models import Organization
 
 
 def tradition_is_self_taught(tradition: Tradition) -> bool:
@@ -146,7 +147,7 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
     ctx = _context(draft)
     hidden = _closed_ids(draft) | _innate_ids(draft)
     rows = DistinctionOffer.objects.filter(is_active=True).select_related(
-        "distinction__category", "glimpse_tag", "origin_choice", "schooling_line"
+        "distinction__category", "glimpse_tag", "origin_choice__slot", "schooling_line"
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -234,9 +235,10 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
     route = draft.selected_origin_template
     if route is None:
         return []
-    closed_ids = set(route.closed_distinctions.values_list("id", flat=True))
-    if not closed_ids:
+    closed = list(route.closed_distinctions.all())
+    if not closed:
         return []
+    closed_ids = {d.id for d in closed}
     ctx = _context(draft)
     rows = DistinctionOffer.objects.filter(
         is_active=True,
@@ -257,7 +259,7 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
             reason=route.closed_reason,
             opener_labels=openers.get(d.id, []),
         )
-        for d in route.closed_distinctions.all()
+        for d in closed
     ]
 
 
@@ -354,6 +356,48 @@ def _apply_carried(
     return []
 
 
+def _bundled_opener_labels(offers: list[DistinctionOffer], draft: CharacterDraft) -> dict[int, str]:
+    """``opener_label(offer, draft=draft)`` for every ``offers`` row, batched.
+
+    Called by ``_apply_bundled``. Mirrors ``questionnaire.bundled_distinctions``'s
+    own batching: every GROUP-question offer's anchor is resolved first, the
+    Organizations it names are bulk-fetched once, then each label is built from
+    that shared cache -- never one ``Organization.objects.filter(pk=...)`` query
+    per offer, which the naive per-offer ``opener_label(draft=...)`` call did
+    (#3675 fix round 3).
+    """
+    if not offers:
+        return {}
+    answers = DraftAnswers.from_draft(draft)
+    anchor_by_offer: dict[int, int | None] = {}
+    org_ids: set[int] = set()
+    for offer in offers:
+        if offer.origin_choice_id:
+            slot = offer.origin_choice.slot
+            if slot.kind == QuestionKind.GROUP:
+                org_id = anchor_for(slot, draft, answers)
+                anchor_by_offer[offer.id] = org_id
+                if org_id is not None:
+                    org_ids.add(org_id)
+
+    orgs: dict[int, Organization] = {}
+    if org_ids:
+        from world.societies.models import Organization  # noqa: PLC0415
+
+        orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
+
+    labels: dict[int, str] = {}
+    for offer in offers:
+        label = opener_label(offer)
+        org_id = anchor_by_offer.get(offer.id)
+        if org_id is not None:
+            org = orgs.get(org_id)
+            if org is not None:
+                label = f"{label}, {org.name}"
+        labels[offer.id] = label
+    return labels
+
+
 def _apply_bundled(
     entries: list[DraftDistinctionEntry],
     by_dist: dict[int, DraftDistinctionEntry],
@@ -365,14 +409,13 @@ def _apply_bundled(
     Called by ``reconcile_offer_picks``.
     """
     changed: list[str] = []
-    for offer in visible.values():
-        if offer.arrives_as != OfferArrival.BUNDLED:
-            continue
+    bundled = [o for o in visible.values() if o.arrives_as == OfferArrival.BUNDLED]
+    labels = _bundled_opener_labels(bundled, draft)
+    for offer in bundled:
         entry = by_dist.get(offer.distinction_id)
+        label = labels[offer.id]
         if entry is None:
-            entry = build_distinction_entry(
-                offer.distinction, rank=1, offer=offer, source=opener_label(offer, draft=draft)
-            )
+            entry = build_distinction_entry(offer.distinction, rank=1, offer=offer, source=label)
             entries.append(entry)
             by_dist[offer.distinction_id] = entry
             changed.append(offer.distinction.name)
@@ -381,7 +424,7 @@ def _apply_bundled(
             # (no offer_ids key) into an offer-tracked one only when a live offer
             # actually needs to record itself against it.
             entry.setdefault("offer_ids", []).append(offer.id)
-            entry.setdefault("sources", []).append(opener_label(offer, draft=draft))
+            entry.setdefault("sources", []).append(label)
             entry.setdefault("arrivals", []).append(OfferArrival.BUNDLED)
             changed.append(offer.distinction.name)
     return changed

@@ -316,15 +316,14 @@ class CharacterDistinctionOtherSerializer(serializers.ModelSerializer):
 class DraftDistinctionEntrySerializer(serializers.Serializer):
     """Read shape of one distinction entry stored in draft_data.
 
-    ``offer_ids``/``sources``/``arrivals`` (#3675) were missing from this
-    descriptor entirely -- ``world.distinctions.types.DraftDistinctionEntry``
-    carries them on every offer-tracked entry, so the OpenAPI schema for
-    list/create/sync was silently undocumenting the offer-provenance fields.
-    ``required=False`` mirrors runtime reality: a legacy entry saved before
-    the offers system landed (0106) has no ``offer_ids`` key at all (see
-    ``offers._drop_vanished_sources``). ``offer_ids`` has no declared item
-    type because it mixes ``int`` (a real ``DistinctionOffer`` row) and
-    ``str`` (a tradition-state-carried drawback's synthetic
+    ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
+    ``DistinctionOffer`` rows, their display labels, and how each arrived
+    (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
+    carries them on every offer-tracked entry. ``required=False`` mirrors runtime
+    reality: a legacy entry saved before the offers system landed (0106) has no
+    ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+    has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
+    row) and ``str`` (a tradition-state-carried drawback's synthetic
     ``"state:<TraditionState>"`` key).
     """
 

@@ -151,10 +151,14 @@ class TraditionStepJourneyTests(FinalizationTestMixin, TestCase):
             self.line1_offer.id,
             self.line2_offer.id,
         }
-        for line, offer, dist in (
-            (self.line0, self.line0_offer, self.line0_dist),
-            (self.line1, self.line1_offer, self.line1_dist),
-            (self.line2, self.line2_offer, self.line2_dist),
+        for line, offer, dist, expected_price in (
+            # rank 0 * cost_per_rank 2, rank 1 * 3, rank 2 * 4 - literals pinned
+            # to the factory's own known values (test_offers_journeys.py
+            # setUpTestData), not the SchoolingLine.price formula compared to
+            # itself.
+            (self.line0, self.line0_offer, self.line0_dist, 0),
+            (self.line1, self.line1_offer, self.line1_dist, 3),
+            (self.line2, self.line2_offer, self.line2_dist, 8),
         ):
             row = rows_by_offer[offer.id]
             assert row["cost_per_rank"] == dist.cost_per_rank
@@ -162,7 +166,7 @@ class TraditionStepJourneyTests(FinalizationTestMixin, TestCase):
             assert row["opener_label"] == line.name
             # The line's own price is derived from the distinction it grants
             # (SchoolingLine.price), never a stored literal on the offer or line.
-            assert line.price == dist.cost_per_rank * line.rank
+            assert line.price == expected_price
 
         sync_resp = self.client.put(
             f"/api/distinctions/drafts/{draft.id}/distinctions/sync/",
