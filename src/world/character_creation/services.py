@@ -527,7 +527,6 @@ def _grant_enemy_distinction(sheet: CharacterSheet, resolved: ResolvedEnemy) -> 
     from world.distinctions.models import (  # noqa: PLC0415
         CharacterDistinction,
         Distinction,
-        DistinctionEffect,
     )
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -535,17 +534,9 @@ def _grant_enemy_distinction(sheet: CharacterSheet, resolved: ResolvedEnemy) -> 
     distinction_name = ENEMY_DEGREE_DISTINCTION_NAMES.get(resolved.degree)
     if not distinction_name:
         return
-    distinction = (
+    distinction = _distinctions_with_effects(
         Distinction.objects.filter(name=distinction_name)
-        .prefetch_related(
-            Prefetch(
-                "effects",
-                queryset=DistinctionEffect.objects.select_related("target__category"),
-                to_attr="cached_effects",
-            )
-        )
-        .first()
-    )
+    ).first()
     if distinction is None:
         logger.warning(
             "Enemy degree %s grants Distinction %r but no such row exists; skipped for %s",
@@ -1597,15 +1588,9 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     # has unique_together on character+distinction, so duplicates would fail)
     entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
 
-    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
-
     # Fetch all distinctions with effects prefetched in one query
-    distinctions = Distinction.objects.filter(id__in=entries_by_id.keys()).prefetch_related(
-        Prefetch(
-            "effects",
-            queryset=DistinctionEffect.objects.select_related("target__category"),
-            to_attr="cached_effects",
-        ),
+    distinctions = _distinctions_with_effects(
+        Distinction.objects.filter(id__in=entries_by_id.keys())
     )
     distinctions_by_id = {d.id: d for d in distinctions}
 
@@ -1658,7 +1643,6 @@ def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -
     from world.distinctions.models import (  # noqa: PLC0415
         CharacterDistinction,
         Distinction,
-        DistinctionEffect,
     )
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -1675,13 +1659,7 @@ def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -
     wanted = {b["distinction_id"]: b for b in bundled if b["distinction_id"] not in existing}
     if not wanted:
         return
-    distinctions = Distinction.objects.filter(id__in=wanted).prefetch_related(
-        Prefetch(
-            "effects",
-            queryset=DistinctionEffect.objects.select_related("target__category"),
-            to_attr="cached_effects",
-        ),
-    )
+    distinctions = _distinctions_with_effects(Distinction.objects.filter(id__in=wanted))
     answers = DraftAnswers.from_draft(draft)
     visible = draft.visible_origin_slot_ids()
     person_by_group_slot: dict[int, str] = {}
@@ -1711,6 +1689,24 @@ def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -
     for cd in created:
         if cd.distinction.secret_by_default:
             mint_distinction_secret(cd)
+
+
+def _distinctions_with_effects(distinctions: QuerySet) -> QuerySet:
+    """Attach each Distinction's effects as ``cached_effects`` for the bulk grant path.
+
+    The one place the CG grant paths (hand-picked, Lineage-bundled, enemy-marked) load
+    effects; ``_create_distinction_modifiers_bulk`` reads ``cached_effects`` off each row.
+    Distinction rows are content read once at finalize, never held across requests here.
+    """
+    from world.distinctions.models import DistinctionEffect  # noqa: PLC0415
+
+    return distinctions.prefetch_related(
+        Prefetch(
+            "effects",
+            queryset=DistinctionEffect.objects.select_related("target__category"),
+            to_attr="cached_effects",
+        ),
+    )
 
 
 def _create_distinction_modifiers_bulk(

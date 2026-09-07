@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.db import models
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_sheets.models import CharacterSheet
 from world.journals.constants import JournalKind, PosthumousOverride, ResponseType
 
@@ -15,8 +16,12 @@ if TYPE_CHECKING:
     from world.game_clock.models import GameWeek
 
 
-class JournalEntry(SharedMemoryModel):
+class JournalEntry(RelatedCacheClearingMixin, SharedMemoryModel):
     """A single journal entry written by a character."""
+
+    #: Saving or deleting an entry clears the author's cached handlers
+    #: (``CharacterSheet.introductions``, ADR-0278).
+    related_cache_fields: ClassVar[list[str]] = ["author"]
 
     author = models.ForeignKey(
         CharacterSheet,

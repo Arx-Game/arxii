@@ -21,7 +21,6 @@ from rest_framework.request import Request
 
 from world.character_creation.models import CharacterOriginSlot
 from world.character_sheets.models import (
-    CharacterEnemy,
     CharacterSheet,
     Profile,
     ProfileTextVersion,
@@ -71,8 +70,6 @@ from world.forms.models import (
     PersonaTraitDescriptor,
 )
 from world.goals.models import CharacterGoal
-from world.journals.constants import JournalKind
-from world.journals.models import JournalEntry
 from world.magic.constants import GlimpseState, RitualExecutionKind
 from world.magic.models import (
     CharacterAura,
@@ -1158,19 +1155,11 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     ]
 
 
+# The enemy rows and the Introductions live behind handlers on the sheet (ADR-0278):
+# ``sheet.enemy_rows`` and ``sheet.introductions`` each load once per sheet and are
+# cleared by their children's saves and deletes, so nothing is prefetched here.
 _ACTOR_SHEET_SELECT_RELATED: tuple[str, ...] = ()
-_ACTOR_SHEET_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
-    Prefetch(
-        "enemies",
-        queryset=CharacterEnemy.objects.select_related("organization", "family"),
-        to_attr="cached_enemies",
-    ),
-    Prefetch(
-        "journal_entries",
-        queryset=JournalEntry.objects.exclude(kind=JournalKind.ENTRY).order_by("created_at"),
-        to_attr="cached_introductions",
-    ),
-)
+_ACTOR_SHEET_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
 
 
 def _build_actor_sheet(
@@ -1187,15 +1176,9 @@ def _build_actor_sheet(
     the entries show only when the presented identity is revealed (a mask must not leak
     them), and the full enemy row only to the owner, staff and the assigned GM.
     """
-    enemies = (
-        sheet.cached_enemies if hasattr(sheet, "cached_enemies") else list(sheet.enemies.all())
-    )
+    enemies = sheet.enemy_rows.rows
     enemy = enemies[0] if enemies else None
-    entries = (
-        sheet.cached_introductions
-        if hasattr(sheet, "cached_introductions")
-        else list(sheet.journal_entries.exclude(kind=JournalKind.ENTRY).order_by("created_at"))
-    )
+    entries = sheet.introductions.rows
     return ActorSheetSection(
         never_do=bio_profile.never_do if bio_profile is not None else "",
         protect=bio_profile.protect if bio_profile is not None else "",
