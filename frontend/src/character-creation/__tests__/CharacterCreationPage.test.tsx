@@ -59,6 +59,15 @@ vi.mock('../api', () => ({
   // not that step is the one currently open.
   getStatDefinitions: vi.fn().mockResolvedValue([]),
   getSkillsWithSpecializations: vi.fn().mockResolvedValue([]),
+  // GiftStage's CG points row calls useCGPointBudget() unconditionally, same
+  // as the two catalogs above.
+  getCGPointBudget: vi.fn().mockResolvedValue({
+    id: 1,
+    name: 'Standard',
+    starting_points: 100,
+    xp_conversion_rate: 1,
+    is_active: true,
+  }),
 }));
 
 describe('CharacterCreationPage', () => {
