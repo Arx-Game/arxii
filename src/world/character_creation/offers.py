@@ -154,6 +154,25 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
 
+def _origin_opener_label(offer: DistinctionOffer, draft: CharacterDraft | None) -> str:
+    """Return an origin choice label, including its anchored organization."""
+    label = offer.origin_choice.name
+    if draft is None:
+        return label
+    slot = offer.origin_choice.slot
+    if slot.kind != QuestionKind.GROUP:
+        return label
+    answers = DraftAnswers.from_draft(draft)
+    org_id = anchor_for(slot, draft, answers)
+    if org_id is None:
+        return label
+
+    from world.societies.models import Organization  # noqa: PLC0415
+
+    org = Organization.objects.filter(pk=org_id).first()
+    return f"{label}, {org.name}" if org is not None else label
+
+
 def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None) -> str:
     """The name of the thing that opens this offer, for display and as a source string.
 
@@ -171,19 +190,7 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     if offer.glimpse_tag_id:
         return offer.glimpse_tag.name
     if offer.origin_choice_id:
-        label = offer.origin_choice.name
-        if draft is not None:
-            slot = offer.origin_choice.slot
-            if slot.kind == QuestionKind.GROUP:
-                answers = DraftAnswers.from_draft(draft)
-                org_id = anchor_for(slot, draft, answers)
-                if org_id is not None:
-                    from world.societies.models import Organization  # noqa: PLC0415
-
-                    org = Organization.objects.filter(pk=org_id).first()
-                    if org is not None:
-                        label = f"{label}, {org.name}"
-        return label
+        return _origin_opener_label(offer, draft)
     if offer.schooling_line_id:
         return offer.schooling_line.name
     return ""
@@ -398,6 +405,37 @@ def _apply_carried(
     return []
 
 
+def _group_offer_anchors(
+    offers: list[DistinctionOffer], draft: CharacterDraft, answers: DraftAnswers
+) -> tuple[dict[int, int | None], set[int]]:
+    """Resolve GROUP-question anchors and collect their organization ids."""
+    anchor_by_offer: dict[int, int | None] = {}
+    org_ids: set[int] = set()
+    for offer in offers:
+        if not offer.origin_choice_id:
+            continue
+        slot = offer.origin_choice.slot
+        if slot.kind != QuestionKind.GROUP:
+            continue
+        org_id = anchor_for(slot, draft, answers)
+        anchor_by_offer[offer.id] = org_id
+        if org_id is not None:
+            org_ids.add(org_id)
+    return anchor_by_offer, org_ids
+
+
+def _bundled_label(
+    offer: DistinctionOffer, anchor_by_offer: dict[int, int | None], orgs: dict[int, Organization]
+) -> str:
+    """Build a bundled offer label using the prefetched organization cache."""
+    label = opener_label(offer)
+    org_id = anchor_by_offer.get(offer.id)
+    if org_id is None:
+        return label
+    org = orgs.get(org_id)
+    return f"{label}, {org.name}" if org is not None else label
+
+
 def _bundled_opener_labels(offers: list[DistinctionOffer], draft: CharacterDraft) -> dict[int, str]:
     """``opener_label(offer, draft=draft)`` for every ``offers`` row, batched.
 
@@ -411,33 +449,12 @@ def _bundled_opener_labels(offers: list[DistinctionOffer], draft: CharacterDraft
     if not offers:
         return {}
     answers = DraftAnswers.from_draft(draft)
-    anchor_by_offer: dict[int, int | None] = {}
-    org_ids: set[int] = set()
-    for offer in offers:
-        if offer.origin_choice_id:
-            slot = offer.origin_choice.slot
-            if slot.kind == QuestionKind.GROUP:
-                org_id = anchor_for(slot, draft, answers)
-                anchor_by_offer[offer.id] = org_id
-                if org_id is not None:
-                    org_ids.add(org_id)
+    anchor_by_offer, org_ids = _group_offer_anchors(offers, draft, answers)
 
     from world.societies.models import Organization  # noqa: PLC0415
 
-    orgs: dict[int, Organization] = {}
-    if org_ids:
-        orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
-
-    labels: dict[int, str] = {}
-    for offer in offers:
-        label = opener_label(offer)
-        org_id = anchor_by_offer.get(offer.id)
-        if org_id is not None:
-            org = orgs.get(org_id)
-            if org is not None:
-                label = f"{label}, {org.name}"
-        labels[offer.id] = label
-    return labels
+    orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)} if org_ids else {}
+    return {offer.id: _bundled_label(offer, anchor_by_offer, orgs) for offer in offers}
 
 
 def _apply_bundled(
