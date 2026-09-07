@@ -57,6 +57,8 @@ export function GlimpseFlow({
   onChangeProse,
   onSkip,
   showDeferralControls,
+  renderOffers,
+  storyHint,
 }: GlimpseFlowProps) {
   const tagsByAxis = useMemo(() => {
     const map = new Map<GlimpseTagOption['axis'], GlimpseTagOption[]>();
@@ -122,45 +124,52 @@ export function GlimpseFlow({
 
       {visibleAxisSteps.length > 0 && (
         <Accordion type="single" collapsible defaultValue={visibleAxisSteps[0].axis}>
-          {visibleAxisSteps.map((step) => (
-            <AccordionItem key={step.axis} value={step.axis}>
-              <AccordionTrigger>{step.label}</AccordionTrigger>
-              <AccordionContent>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {(tagsByAxis.get(step.axis) ?? []).map((tag) => {
-                    const isSelected = selectedTagIdSet.has(tag.id);
-                    return (
-                      <Card
-                        key={tag.id}
-                        role="button"
-                        tabIndex={0}
-                        className={cn(
-                          'cursor-pointer transition-all',
-                          isSelected && 'ring-2 ring-primary',
-                          !isSelected && 'hover:ring-1 hover:ring-primary/50'
-                        )}
-                        onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
-                        onKeyDown={(event) =>
-                          handleTagKeyDown(event, step.axis, step.multi, tag.id)
-                        }
-                      >
-                        <CardHeader className="p-3">
-                          <CardTitle className="flex items-center justify-between gap-2 text-sm">
-                            <span>{tag.name}</span>
-                            {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-                          </CardTitle>
-                        </CardHeader>
-                        <CardContent className="space-y-1 px-3 pb-3 pt-0">
-                          <CardDescription className="text-xs">{tag.description}</CardDescription>
-                          <p className="text-xs italic text-muted-foreground">{tag.example}</p>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </div>
-              </AccordionContent>
-            </AccordionItem>
-          ))}
+          {visibleAxisSteps.map((step) => {
+            // Same computation handleTagClick uses to isolate this axis's
+            // current picks from the flat selectedTagIds list.
+            const axisTagIds = new Set((tagsByAxis.get(step.axis) ?? []).map((tag) => tag.id));
+            const axisSelectedTagIds = selectedTagIds.filter((id) => axisTagIds.has(id));
+            return (
+              <AccordionItem key={step.axis} value={step.axis}>
+                <AccordionTrigger>{step.label}</AccordionTrigger>
+                <AccordionContent>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {(tagsByAxis.get(step.axis) ?? []).map((tag) => {
+                      const isSelected = selectedTagIdSet.has(tag.id);
+                      return (
+                        <Card
+                          key={tag.id}
+                          role="button"
+                          tabIndex={0}
+                          className={cn(
+                            'cursor-pointer transition-all',
+                            isSelected && 'ring-2 ring-primary',
+                            !isSelected && 'hover:ring-1 hover:ring-primary/50'
+                          )}
+                          onClick={() => handleTagClick(step.axis, step.multi, tag.id)}
+                          onKeyDown={(event) =>
+                            handleTagKeyDown(event, step.axis, step.multi, tag.id)
+                          }
+                        >
+                          <CardHeader className="p-3">
+                            <CardTitle className="flex items-center justify-between gap-2 text-sm">
+                              <span>{tag.name}</span>
+                              {isSelected && <Check className="h-4 w-4 shrink-0 text-primary" />}
+                            </CardTitle>
+                          </CardHeader>
+                          <CardContent className="space-y-1 px-3 pb-3 pt-0">
+                            <CardDescription className="text-xs">{tag.description}</CardDescription>
+                            <p className="text-xs italic text-muted-foreground">{tag.example}</p>
+                          </CardContent>
+                        </Card>
+                      );
+                    })}
+                  </div>
+                  {renderOffers?.(step.axis, axisSelectedTagIds)}
+                </AccordionContent>
+              </AccordionItem>
+            );
+          })}
         </Accordion>
       )}
 
@@ -202,6 +211,7 @@ export function GlimpseFlow({
           rows={4}
           className="resize-y"
         />
+        {storyHint && <p className="text-xs text-muted-foreground">{storyHint}</p>}
       </div>
 
       {showDeferralControls && (

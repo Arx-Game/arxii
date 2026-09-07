@@ -58,4 +58,10 @@ export interface GlimpseFlowProps {
    * no offers section.
    */
   renderOffers?: (axis: GlimpseTagOption['axis'], selectedTagIds: number[]) => ReactNode;
+  /**
+   * Staff-authorable hint printed under the story textarea (#3675),
+   * e.g. "The detail behind any of the picks above goes here; the picks
+   * stay short." Omitted mount points render no hint.
+   */
+  storyHint?: string;
 }

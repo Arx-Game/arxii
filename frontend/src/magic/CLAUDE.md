@@ -433,30 +433,41 @@ details and opens `AcceptOfferDialog`. Teacher is shown via the anonymity-respec
 
 Dialog for accepting a teaching offer. Shows XP cost and calls `useAcceptTeachingOffer`.
 
-### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427)
+### `components/glimpse/GlimpseFlow.tsx` + `glimpseTypes.ts` (#2427, offers slot #3675)
 
 Shared, purely presentational guided flow for authoring "The Glimpse" — props
 in (`heading` (optional, defaults `'The Glimpse'`), `tags`, `selectedTagIds`,
-`prose`, `linkedDistinctionIds`, `linkableDistinctions`,
-`showDeferralControls`), callbacks out (`onChangeAxis`, `onChangeProse`,
-`onToggleDistinctionLink`, `onSkip`); no queries or mutations inside.
-`glimpseTypes.ts` is the single definition of `GlimpseTagOption` (backs
-`GET /api/character-creation/glimpse-tags/`) — the character-creation module
-re-exports it from `types.ts` rather than redeclaring it. Renders the
-`heading` at the top (staff-authorable — CG threads `magic_glimpse_heading`
-from `useCGExplanations()` through, mirroring the sibling Motif field's
+`prose`, `showDeferralControls`, `storyHint` (optional, printed under the
+story `Textarea`)), callbacks out (`onChangeAxis`, `onChangeProse`, `onSkip`),
+plus `renderOffers?: (axis, selectedTagIds) => ReactNode` (optional; called
+per axis after that axis's tag grid, with the intersection of
+`selectedTagIds` and that axis's own tag ids (the same isolation
+`handleTagClick` computes); no queries or mutations inside. `glimpseTypes.ts`
+is the single definition of `GlimpseTagOption` (backs `GET
+/api/character-creation/glimpse-tags/`, and now carries `offers: TagOffer[]`
+per tag, #3675); the character-creation module re-exports it from
+`types.ts` rather than redeclaring it. Renders the `heading` at the top
+(staff-authorable; CG threads `magic_glimpse_heading` from
+`useCGExplanations()` through, mirroring the sibling Motif field's
 `magic_motif_heading`; review fix, #2427), then a Radix accordion (TONE
-single-select, CONSEQUENCE/WITNESS multi-select — axes with zero catalog tags
+single-select, CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags
 don't render a step; each tag Card is `role="button" tabIndex={0}` with an
-explicit `onKeyDown` for Enter/Space activation — review fix), SENSORY tags as
-toggle chips (native `<button>`s, keyboard-operable for free) inside the
-always-visible story `Textarea`, a suggestion panel (deduped
-`suggested_distinctions` across selected tags), and an unconditional manual
-distinction-link fallback. Two mounts share it: the CG `GiftStage`
+explicit `onKeyDown` for Enter/Space activation, review fix), SENSORY tags
+as toggle chips (native `<button>`s, keyboard-operable for free) inside the
+always-visible story `Textarea`. Distinction offers are no longer suggested
+by tag or linked here; CG surfaces them by chapter now (`ChapterOffers`,
+`character-creation/components/offers/`) via `renderOffers`, mounted right
+after each axis's tag grid inside that axis's own `AccordionItem`; an axis
+with nothing selected renders nothing (#3675). Two mounts share
+`GlimpseFlow`: the CG `GiftStage`
 (`character-creation/components/gift/GlimpseSection.tsx`, which binds it to
-`draft_data.glimpse_tag_ids`/`glimpse_story`/`glimpse_linked_distinction_ids`
-and threads `heading` down from GiftStage's copy query) and the character
-sheet (`components/glimpse/GlimpseEditorDialog.tsx`, below).
+`draft_data.glimpse_tag_ids`/`glimpse_story`, threads `heading` down from
+GiftStage's copy query, and wires `renderOffers` to `ChapterOffers` filtered
+by the axis's selected tag names) and the character sheet
+(`components/glimpse/GlimpseEditorDialog.tsx`, below), which never passes
+`renderOffers` and keeps its own separate distinction link/unlink UI
+(`DistinctionLinkChips`, a different feature: linking a character's
+_existing_ distinctions, not a CG offer).
 
 ### `components/glimpse/GlimpseEditorDialog.tsx` (#2427 Task 6)
 
@@ -471,17 +482,21 @@ The "finish later" Glimpse editor on the own-character sheet — a `Dialog`
 action mutations below. `showDeferralControls={false}` — closing the dialog
 IS the deferral (unlike CG, which offers an explicit "skip" button).
 
-**ID-space note:** CG's `GlimpseSection` links glimpse suggestions by
-**catalog** `Distinction` id (`draft_data.glimpse_linked_distinction_ids`,
-reconciled at finalize). This dialog links by **CharacterDistinction row id**
-instead — the id the aura's `link-glimpse-distinction`/
-`unlink-glimpse-distinction` endpoints require, which is exactly what
-`CharacterSheetDistinction.id` already carries. `linkedDistinctionIds` is
-derived from the sheet payload's new `distinctions[*].is_from_glimpse` flag
-(`world.character_sheets.types.DistinctionEntry`, #2427 backend touch-up —
-`CharacterDistinction.from_glimpse_id is not None`); `linkableDistinctions`
-maps the same list to `{id, name}`. No separate fetch — both come from the
-sheet payload `SpellbookTab` already has.
+**ID-space note:** CG's `GlimpseSection` no longer links glimpse suggestions
+by draft-held distinction id at all (#3675 retired
+`draft_data.glimpse_linked_distinction_ids`; offers are chapter-scoped
+picks synced immediately through `useSyncDistinctions`, see
+`ChapterOffers`). This dialog's own linking is a separate, still-live
+feature: linking a character's _existing_ `CharacterDistinction` rows to
+their Glimpse, by **CharacterDistinction row id**, the id the aura's
+`link-glimpse-distinction`/`unlink-glimpse-distinction` endpoints require,
+which is exactly what `CharacterSheetDistinction.id` already carries.
+`linkedDistinctionIds` (this file's own local variable, not a `GlimpseFlow`
+prop) is derived from the sheet payload's `distinctions[*].is_from_glimpse`
+flag (`world.character_sheets.types.DistinctionEntry`, #2427 backend
+touch-up: `CharacterDistinction.from_glimpse_id is not None`);
+`linkableDistinctions` maps the same list to `{id, name}`. No separate
+fetch; both come from the sheet payload `SpellbookTab` already has.
 
 **Mutation hooks** (`@/magic/queries`, wrap the Task 4
 `CharacterAuraViewSet` actions — `src/world/magic/views.py`):

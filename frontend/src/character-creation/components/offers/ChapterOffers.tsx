@@ -13,6 +13,9 @@
  * never drops another chapter's picks; carried entries (string-only
  * `offer_ids`) and bundled entries are never sent, the server reconciles
  * those itself.
+ *
+ * Wraps ITSELF in the folio `.field`; callers pass `heading`/`hint` as
+ * props and never wrap this component in a `.field` of their own.
  */
 
 import { useCallback, useMemo } from 'react';

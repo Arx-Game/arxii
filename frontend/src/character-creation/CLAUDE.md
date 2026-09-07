@@ -61,8 +61,11 @@ character-creation/
     │   ├── AnimaCheckStep.tsx   # Anima Check stat/skill pick + ritual name
     │   └── GlimpseSection.tsx   # CG mount of the shared guided Glimpse flow (#2427);
     │                            #   binds `@/magic/components/glimpse/GlimpseFlow` to
-    │                            #   draft_data glimpse_tag_ids/glimpse_linked_distinction_ids,
-    │                            #   prose stays on GiftStage's register('glimpse_story')
+    │                            #   draft_data.glimpse_tag_ids; prose stays on GiftStage's
+    │                            #   register('glimpse_story'); mounts `ChapterOffers` per
+    │                            #   axis via `renderOffers`, filtered to that axis's
+    │                            #   selected tag names (#3675: offers by chapter, not a
+    │                            #   linked-distinction-ids draft field anymore)
     └── lineage/             # LineageStage subsections (#3617, #3648)
         ├── UpbringingPicker.tsx  # One card per OriginTemplate for the chosen Beginning
         ├── UpbringingPrompts.tsx # Slot prompts; `scope: 'any'` renders above the family

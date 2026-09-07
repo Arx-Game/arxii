@@ -5,9 +5,15 @@
  * keys (glimpse_tag_ids / glimpse_story), persisting through useUpdateDraft
  * on change (same PATCH-merge contract as the funnel steps).
  *
- * Distinction offers are surfaced by chapter now, not linked here (#3675):
- * each glimpse tag carries its own `offers`; wiring the per-axis offers
- * display (`GlimpseFlowProps.renderOffers`) is Task 13's.
+ * Distinction offers are surfaced by chapter now, not linked via a
+ * draft_data id list (#3675): `renderOffers` mounts `ChapterOffers` inside
+ * each axis's own accordion item (`GlimpseFlow` calls it right after that
+ * axis's tag grid), scoped to that axis with a `filter` keeping only offers
+ * whose `opener_label` names one of the axis's currently selected tags; an
+ * axis with nothing selected passes zero ids and `ChapterOffers` renders
+ * nothing. `useCGExplanations()` is read directly here (mirrors
+ * `AnimaCheckStep`'s own copy read) for the offers heading/hint and the
+ * story-box hint, rather than threading `copy` down from GiftStage.
  *
  * Prose stays on the parent GiftStage's shared react-hook-form instance
  * (`register('glimpse_story')`, passed down — `AnimaCheckStep`'s
@@ -20,7 +26,8 @@ import { GlimpseFlow } from '@/magic/components/glimpse/GlimpseFlow';
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
-import { useGlimpseTags, useUpdateDraft } from '../../queries';
+import { ChapterOffers } from '../offers/ChapterOffers';
+import { useCGExplanations, useGlimpseTags, useUpdateDraft } from '../../queries';
 import type { CharacterDraft, GlimpseTagOption } from '../../types';
 
 interface GlimpseSectionProps {
@@ -41,6 +48,7 @@ interface GlimpseSectionProps {
 export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSectionProps) {
   const updateDraft = useUpdateDraft();
   const { data: tags } = useGlimpseTags(draft.selected_path?.id);
+  const { data: copy } = useCGExplanations();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   // Prose is uncontrolled from RHF's point of view (no `value` on a register
@@ -62,6 +70,14 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
         },
       },
     });
+  };
+
+  // Maps an axis's selected tag ids to their names, the value a Glimpse
+  // offer's opener_label carries (the backend's opener_label for a Glimpse
+  // offer is the tag's name that opened it).
+  const selectedTagNamesForAxis = (ids: number[]): Set<string> => {
+    const idSet = new Set(ids);
+    return new Set((tags ?? []).filter((tag) => idSet.has(tag.id)).map((tag) => tag.name));
   };
 
   const handleChangeProse = (text: string) => {
@@ -99,6 +115,25 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
       onChangeProse={handleChangeProse}
       onSkip={() => setIsCollapsed(true)}
       showDeferralControls
+      storyHint={
+        copy?.glimpse_story_hint ??
+        'The detail behind any of the picks above goes here; the picks stay short.'
+      }
+      renderOffers={(axis, ids) =>
+        ids.length ? (
+          <ChapterOffers
+            draft={draft}
+            chapter="glimpse"
+            filter={(offer) => selectedTagNamesForAxis(ids).has(offer.opener_label)}
+            heading={
+              copy?.[`glimpse_offers_heading_${axis.toLowerCase()}`] ??
+              copy?.glimpse_offers_heading ??
+              'What it left in you'
+            }
+            hint={copy?.glimpse_offers_hint}
+          />
+        ) : null
+      }
     />
   );
 }
