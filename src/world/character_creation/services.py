@@ -155,6 +155,26 @@ def require_draft_complete(draft: CharacterDraft) -> None:
     raise DraftIncompleteError(msg)
 
 
+def _prepare_draft_entries(draft: CharacterDraft) -> None:
+    """Settle the draft's distinctions list before any row is written (#3675, #3621).
+
+    Two folds, shared by every finalize path (player and GM):
+
+    1. ``reconcile_offer_picks`` -- normally called after every draft PATCH that could
+       change which offers are open, but a draft created directly (a staff direct-add,
+       a GM draft, a test fixture) never went through that view, so its
+       ``draft_data["distinctions"]`` list would otherwise miss whatever the last-set
+       answer opened. Idempotent -- a draft already reconciled after its final PATCH
+       sees no change here. A legacy entry with no offer_ids key (a pre-offers pick) is
+       left untouched by this call (ruling A, offers.py's ``_drop_vanished_sources``).
+    2. ``_apply_enemy_distinction_entry`` -- folds the enemy's worst-two-degrees
+       Distinction (if any) into the same pick list, so it is created through the one
+       ``_create_distinctions`` write path instead of a second bespoke one.
+    """
+    reconcile_offer_picks(draft)
+    _apply_enemy_distinction_entry(draft)
+
+
 @transaction.atomic
 def finalize_character(
     draft: CharacterDraft,
@@ -189,20 +209,7 @@ def finalize_character(
 
     require_draft_complete(draft)
 
-    # Fold in every bundled/carried DistinctionOffer before any row is written (#3675
-    # review round 1/2). reconcile_offer_picks is normally called after every draft
-    # PATCH that could change which offers are open, but a draft created directly (a
-    # staff direct-add, a test fixture) never went through that view, so its
-    # draft_data["distinctions"] list would otherwise miss whatever the last-set
-    # answer opened. Idempotent -- a draft already reconciled after its final PATCH
-    # sees no change here. A legacy entry with no offer_ids key (a pre-offers pick)
-    # is left untouched by this call (ruling A, offers.py's _drop_vanished_sources).
-    reconcile_offer_picks(draft)
-
-    # Fold the enemy's worst-two-degrees Distinction (if any) into the same pick
-    # list before any distinction row is written (#3621, #3675) — see
-    # ``_apply_enemy_distinction_entry``.
-    _apply_enemy_distinction_entry(draft)
+    _prepare_draft_entries(draft)
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
@@ -550,8 +557,9 @@ def _create_enemy(
 def _apply_enemy_distinction_entry(draft: CharacterDraft) -> None:
     """Fold the enemy's worst-two-degrees Distinction into the draft's pick list (#3675, #3621).
 
-    Called from ``finalize_character`` right after ``reconcile_offer_picks``, before
-    ``_apply_character_mechanics`` runs ``_create_distinctions`` — so the enemy-marked
+    Called from ``_prepare_draft_entries`` (shared by ``finalize_character`` and
+    ``finalize_gm_character``) right after ``reconcile_offer_picks``, before
+    ``_apply_character_mechanics`` runs ``_create_distinctions`` - so the enemy-marked
     Distinction (``ENEMY_DEGREE_DISTINCTION_NAMES``) is created through that one write
     path instead of a second bespoke one. ``resolve_enemy`` is pure (no writes), so
     calling it again inside ``_create_enemy`` later in the same finalize is cheap and
@@ -599,6 +607,7 @@ def _apply_enemy_distinction_entry(draft: CharacterDraft) -> None:
         entry.setdefault("offer_ids", []).append(entry_key)
         entry.setdefault("sources", []).append(source)
         entry.setdefault("arrivals", []).append(OfferArrival.BUNDLED)
+        entry["cost"] = 0
 
 
 def _seed_enemy_heat(
@@ -3086,6 +3095,8 @@ def finalize_gm_character(
             check_story_npc_cap(draft.account)
         except StaffMintError as exc:
             raise ValidationError(exc.user_message) from exc
+
+    _prepare_draft_entries(draft)
 
     # NAMED-path family must exist before the name is built (#3617): the surname
     # comes from the family name.
