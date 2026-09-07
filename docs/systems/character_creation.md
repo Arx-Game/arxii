@@ -39,7 +39,7 @@ from world.character_creation.types import (
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
 | `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
-| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648) |
+| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
 | `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `trust_required`, `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
@@ -178,6 +178,74 @@ from world.character_creation.enemies import (
     price_tables,                 # Both scales, for the leaf's ledger lines
 )
 ```
+
+### Distinction offers (`offers.py`, #3675)
+
+The only reader of `DistinctionOffer` rows. Every chapter's picker (`ChapterOffers`,
+`GlimpseAxes`, the schooling stances, the Upbringing answer block) goes through this
+module, never the model directly.
+
+```python
+from world.character_creation.offers import (
+    offers_for,               # (draft, chapter) -> list[VisibleOffer]: this chapter's
+                               #   priced CHOICE offers the draft can currently see,
+                               #   each with its lock state (mutual exclusion already
+                               #   evaluated against the draft's current picks)
+    closed_for,                # (draft, chapter) -> list[ClosedDistinction]: the route's
+                               #   closed_distinctions, scoped to this chapter's own
+                               #   opener labels so a chapter mount prints the closed
+                               #   hint once, under the specific pick that would have
+                               #   opened it
+    reconcile_offer_picks,     # (draft) -> list[str]: applies carried/bundled offers,
+                               #   drops picks whose offer vanished, reprices every
+                               #   survivor; returns the names changed; saves draft_data
+                               #   when anything changed
+    visible_offers,            # (draft) -> dict[offer_id, DistinctionOffer]: every
+                               #   active offer whose opener the draft satisfies, minus
+                               #   closed and species-innate ids -- the gate every add/
+                               #   swap/sync validates offer_id against
+    opener_label,               # (offer, *, draft=None) -> str: the opener's display/
+                               #   source-string name (a GROUP-question anchor's org
+                               #   name appended when draft is given)
+    tradition_is_self_taught,  # (tradition) -> bool: whether tradition is SELF_TAUGHT
+                               #   on any Beginning's slate -- the sanctioned way to ask
+                               #   "is this the tradition-agnostic default", never a
+                               #   name match
+    slate_state,               # (beginning, tradition) -> TraditionState | None
+    self_taught_drawback,      # () -> Distinction | None: the drawback the SELF_TAUGHT
+                               #   TraditionStateLine carries, if any
+    entry_price,                # (entry, distinction) -> int: 0 if any source arrived
+                               #   bundled/carried, else distinction.calculate_total_cost
+)
+```
+
+**Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
+`reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it
+after clearing/setting the tradition -- so a Glimpse tag pick, a Lineage answer, or a
+tradition switch immediately applies whatever it opens or closes, without a separate
+"recalculate" step. `world.distinctions.views`' add/swap/sync actions on
+`DraftDistinctionViewSet` call it too, after writing the player's own CHOICE pick.
+
+**Finalize entry preparation:** both `finalize_character` and `finalize_gm_character`
+call `_prepare_draft_entries(draft)` once at their start (`services.py`), which runs
+`reconcile_offer_picks` (a draft built directly -- a staff add, a GM draft, a test
+fixture -- never PATCHed through the view, so its distinctions list could otherwise
+miss what its final answers opened) followed by `_apply_enemy_distinction_entry` (folds
+the enemy's worst-two-degrees Distinction, if any, `ENEMY_DEGREE_DISTINCTION_NAMES`,
+into the same pick list so it is created through the one `_create_distinctions` write
+path instead of a second bespoke one). A legacy entry with no `offer_ids` key (a
+pre-#3675 pick) is left untouched by either finalize path.
+
+**Offers endpoint:**
+
+- `GET /api/character-creation/drafts/{id}/offers/?chapter=<OfferChapter>` - one
+  chapter's `{"offers": [...], "closed": [...]}` (`OffersResponseSerializer`).
+  `offers` is `VisibleOfferSerializer` (`offer_id`, `distinction_id`, `name`,
+  `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
+  `is_locked`, `lock_reason`); `closed` is `ClosedDistinctionSerializer`
+  (`distinction_id`, `name`, `reason`, `opener_labels` -- this chapter's own opener
+  labels for the closed distinction, empty when this chapter's offer for it has no
+  opener or none of its openers are satisfied). An unknown `chapter` value 400s.
 
 ## The Actor's Sheet (#3621, ADR-0279)
 
@@ -422,6 +490,15 @@ Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `Beginnin
 `OriginTemplateAdmin`'s change form (Character Creation > Upbringings > a row) opens the whole
 route on one page; see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section for the
 files, URLs, gate, and credit rule.
+
+**Distinction offer builders (#3675):** four admin surfaces author `DistinctionOffer` rows,
+one click from the Authoring Workbench's Builders panel and from the row each edits: the
+Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
+it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines
+and one Beginning's `BeginningTradition` slate), the Upbringing Builder's per-answer offers and
+route-level `closed_distinctions`/`closed_reason` module, and a `GlimpseTag` change-form inline.
+See `src/web/admin/CLAUDE.md`'s "Distinction Builder", "Tradition Slate", and "Glimpse Tag Admin
+Offers" sections.
 
 ## Lineage step (#3617, #3648)
 

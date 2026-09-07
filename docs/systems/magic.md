@@ -384,12 +384,12 @@ longer read from a separate `glimpse_linked_distinction_ids` list (#3675): every
 picked distinction whose `offer_ids` name a `DistinctionOffer` with
 `glimpse_tag` set gets `link_distinction_to_glimpse` called on it, via one query
 over `DistinctionOffer.objects.filter(pk__in=<picked offer ids>,
-glimpse_tag__isnull=False)`. **Frontend note:** `GlimpseSection.tsx`'s manual
-distinction-link fallback still writes `draft_data.glimpse_linked_distinction_ids`
-as of this change; that key has no backend reader left, so a distinction linked
-only through that fallback (not through a Glimpse-chapter `DistinctionOffer` pick)
-will not carry `from_glimpse` at finalize until the frontend is updated to route
-through the offers system too.
+glimpse_tag__isnull=False)`. **Frontend note:** `GlimpseSection.tsx` never writes
+`draft_data.glimpse_linked_distinction_ids` -- that key and its manual-link fallback
+are retired; a Glimpse-chapter distinction pick syncs immediately through
+`useSyncDistinctions` (see `ChapterOffers`/`GlimpseAxes`,
+`frontend/src/character-creation/CLAUDE.md`), so `offer_ids` always carries the
+`DistinctionOffer` provenance this backend read depends on.
 
 **API surfaces:**
 
@@ -419,19 +419,28 @@ when the requester may edit this aura and `glimpse_state != COMPLETE`).
 `DistinctionEntry` gained `is_from_glimpse` (`from_glimpse_id is not None`) so
 the sheet can badge/link distinctions born in the Glimpse.
 
-**Frontend** — one shared, purely presentational guided flow with two mounts
-(see `frontend/src/magic/CLAUDE.md` for the full contract):
+**Frontend** - one shared, purely presentational guided flow, and a folio-grammar CG
+mount that no longer shares its markup (#3675 fix round 1; see
+`frontend/src/magic/CLAUDE.md` and `frontend/src/character-creation/CLAUDE.md` for the
+full contract):
 
 - `GlimpseFlow` (`frontend/src/magic/components/glimpse/GlimpseFlow.tsx` +
-  `glimpseTypes.ts`) — accordion of axis steps (TONE single-select,
+  `glimpseTypes.ts`) - accordion of axis steps (TONE single-select,
   CONSEQUENCE/WITNESS multi-select; axes with zero catalog tags don't render a
-  step), SENSORY as toggle chips inside the always-visible story textarea, a
-  deduped suggestion panel, and a manual distinction-link fallback. No
-  queries/mutations inside — purely props-in/callbacks-out.
+  step), SENSORY as toggle chips inside the always-visible story textarea, and a
+  manual link fallback for a character's *existing* `CharacterDistinction` rows
+  (`GlimpseEditorDialog`'s own linking, unrelated to CG offer picks). No
+  queries/mutations inside, purely props-in/callbacks-out. This is now the sheet's
+  live-editor mount only; the CG mount stopped using it (#3675 fix round 1, a
+  demo-fidelity defect: the single-open accordion hid two axes at a time).
 - `GlimpseSection` (`frontend/src/character-creation/components/gift/GlimpseSection.tsx`)
-  — the CG mount, binding `GlimpseFlow` to `draft_data.glimpse_tag_ids` /
-  `glimpse_linked_distinction_ids` (prose stays on `GiftStage`'s
-  `register('glimpse_story')`).
+  - the CG mount, a thin state binder: draft reads, `updateDraft` writes
+  `draft_data.glimpse_tag_ids`, the "skip for now" deferral, and the copy query.
+  Renders `GlimpseAxes` (`frontend/src/character-creation/components/gift/GlimpseAxes.tsx`),
+  the folio-grammar per-axis layout (every axis visible at once, one `ChapterOffers`
+  sub-block per chosen tag), which owns the distinction picks itself; they sync
+  immediately through `useSyncDistinctions`, never through a `draft_data` list.
+  Prose stays on `GiftStage`'s `register('glimpse_story')`.
 - `GlimpseEditorDialog` (`frontend/src/magic/components/glimpse/GlimpseEditorDialog.tsx`)
   — the "finish later" editor on the own-character sheet, opened from
   `SpellbookTab`'s aura card, gated on `isMyCharacter && aura.can_finish_glimpse`.

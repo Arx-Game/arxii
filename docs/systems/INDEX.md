@@ -415,7 +415,7 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `docs/systems/magic.md`'s Glimpse section). API: CG catalog `GET
     /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
     by `?axis=` and `?path_id=<N>` [#2611], embeds
-    `suggested_distinctions`) + four `CharacterAuraViewSet` actions
+    `offers` (its own active `DistinctionOffer` rows, #3675)) + four `CharacterAuraViewSet` actions
     (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
     `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
     `.glimpse_state` / `.glimpse_tags` / `.can_finish_glimpse` (privileged-only);
@@ -609,7 +609,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **API endpoints (guided Glimpse story — #2427):**
   - `GET /api/character-creation/glimpse-tags/` — active `GlimpseTag` catalog
     (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); embeds
-    `suggested_distinctions` per tag. Shared by CG and the post-CG "finish later" surface
+    `offers` per tag (its active `DistinctionOffer` rows, #3675). Shared by CG and the
+    post-CG "finish later" surface
   - `POST /api/magic/character-auras/{id}/set-glimpse-tags/` — body `{axis, tag_ids[]}`
   - `POST /api/magic/character-auras/{id}/set-glimpse-prose/` — body `{text}`
   - `POST /api/magic/character-auras/{id}/link-glimpse-distinction/` — body
@@ -725,7 +726,11 @@ allocations that convert AP to development points.
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
-Character advantages and disadvantages (CG Stage 6: Traits).
+Character advantages and disadvantages. No CG stage of its own since #3675: each CG
+chapter offers the distinctions that belong to it via `character_creation.DistinctionOffer`
+rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
+`reconcile_offer_picks`); see the Character Creation section below and
+[distinctions.md](distinctions.md)'s "CG Integration".
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
   (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
@@ -2218,6 +2223,27 @@ Multi-stage character creation flow with draft system.
   `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation, Distinction
   and heat seeds) and The Introductions (white journals by `JournalKind`; Whispers lines as
   Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
+- **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
+  Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
+  `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, an opener FK
+  scoped to its chapter [`schooling_line`/`glimpse_tag`/`origin_choice`]) is the one row that
+  says where a distinction is shown and how it arrives, read by `world.character_creation
+  .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
+  tradition's slate line (`BeginningTradition.state`, `TraditionState`:
+  SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
+  (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
+  LIVING_MASTERS, offers the standard schooling set (`SchoolingLine`, rank 0-2, each granting a
+  distinction at its rank, priced `grants.cost_per_rank * rank`). `OriginTemplate
+  .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
+  chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
+  `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
+  draft PATCH, `select-tradition`, and once at the start of every finalize path. Four staff
+  admin builders author this surface (Distinction Builder, tradition slate, the Upbringing
+  Builder's per-answer offers + route closes, a `GlimpseTag` change-form inline), reachable
+  from a Builders panel on the Authoring Workbench dashboard; see `src/web/admin/CLAUDE.md`.
+  See [character_creation.md](character_creation.md)'s "Distinction offers" section and
+  [distinctions.md](distinctions.md)'s "CG Integration".
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
 ### Market (#2066, standing gating #2995)

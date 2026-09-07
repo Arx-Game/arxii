@@ -1,7 +1,9 @@
 # Distinctions System
 
 Character advantages and disadvantages that mechanically modify stats, rolls, and abilities.
-Part of CG Stage 6 (Traits).
+No CG stage of its own -- since #3675 each CG chapter (the Gift tradition step, the
+Glimpse, Lineage answers, Appearance, the Actor's Sheet) offers the distinctions that
+belong to it; see "CG Integration" below and `docs/systems/character_creation.md`.
 
 **Source:** `src/world/distinctions/`
 **API Base:** `/api/distinctions/`
@@ -384,16 +386,42 @@ CharacterDistinction.objects.filter(
 - `draft_id` - Add lock status based on draft's distinctions
 
 ### Draft Distinctions
+
+Every CG add/swap/sync goes through an offer gate (#3675): the request must carry the
+`offer_id` of a `character_creation.DistinctionOffer` row the draft has actually earned
+(`world.character_creation.offers.visible_offers`), naming the same distinction and
+arriving `choice` -- a client can never pick a `bundled`/`carried` offer directly, since
+`reconcile_offer_picks` applies those on its own. An unresolvable `offer_id` is a 400, not
+a silent drop.
+
 - `GET /api/distinctions/drafts/{draft_id}/distinctions/` - List draft's distinctions
-- `POST /api/distinctions/drafts/{draft_id}/distinctions/` - Add distinction
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/` - Add a distinction; body carries
+  `distinction_id`, `rank`, `notes`, and `offer_id`
 - `DELETE /api/distinctions/drafts/{draft_id}/distinctions/{pk}/` - Remove distinction
-- `POST /api/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive;
+  body carries `remove_id`, `add_id`, `offer_id` (for the added distinction), `rank`, `notes`
+- `PUT /api/distinctions/drafts/{draft_id}/distinctions/sync/` - Replace every CHOICE-arrival
+  distinction on the draft in one call; body `{"distinctions": [{"id", "rank", "offer_id"},
+  ...]}`. The chapter mounts (`ChapterOffers`) use this rather than one POST per pick.
+  `reconcile_offer_picks` runs after every one of these four calls, so a `bundled`/`carried`
+  entry the client never sent survives the write.
 
 ---
 
 ## CG Integration
 
-During character creation, distinctions are stored in `CharacterDraft.draft_data["distinctions"]` as a list:
+There is no Distinctions stage (retired #3675). Each CG chapter offers the distinctions
+that belong to it -- a `character_creation.DistinctionOffer` row per (distinction,
+chapter, opener) -- and a chapter's own component (`ChapterOffers`, `GlimpseAxes`, the
+Upbringing answer block, the schooling stances) is where a player picks one. See
+`docs/systems/character_creation.md`'s "CG Stages" table and its `offers` endpoint for
+which chapter shows which offer, and `world.character_creation.offers` for the reader
+module (`offers_for`, `closed_for`, `reconcile_offer_picks`).
+
+During character creation, distinctions are stored in
+`CharacterDraft.draft_data["distinctions"]` as a list; each entry carries offer
+provenance (`world.distinctions.types.DraftDistinctionEntry`) rather than a single
+static cost:
 
 ```python
 draft.draft_data["distinctions"] = [
@@ -405,24 +433,36 @@ draft.draft_data["distinctions"] = [
         "rank": 2,
         "cost": 20,
         "notes": "",
+        # Offer provenance (#3675): one entry per distinction, every offer that put
+        # it there. offer_ids mixes int (a real DistinctionOffer row id) and the
+        # synthetic str key "state:<TraditionState value>" a tradition-state-carried
+        # drawback uses (it has no DistinctionOffer row of its own).
+        "offer_ids": [7],
+        "sources": ["Mark"],       # the opener's label, one per offer_id
+        "arrivals": ["choice"],    # OfferArrival value, one per offer_id
     },
-    # ...
+    # A carried drawback (e.g. the SELF_TAUGHT Unbound pick) instead reads:
+    # {"offer_ids": ["state:self_taught"], "sources": ["Self-taught"],
+    #  "arrivals": ["carried"], "cost": 0, ...}
 ]
 ```
 
-### Stage Completion
+`reconcile_offer_picks(draft)` is the only writer of that provenance: it runs after every
+draft PATCH (`CharacterDraftViewSet.perform_update`), after `select-tradition`, and once
+at the start of every finalize path (`_prepare_draft_entries`, shared by
+`finalize_character`/`finalize_gm_character`). It applies `carried`/`bundled` offers the
+draft's current answers earned, strips an entry's sources whose offer is no longer
+visible (a tradition switch, a route re-picked), drops an entry once its last source is
+gone, and reprices every survivor (`entry_price` -- free when any surviving source
+arrived `bundled`/`carried`, else `distinction.calculate_total_cost(rank)`). A legacy
+entry saved before #3675 (no `offer_ids` key at all -- a pre-offers catalogue pick) is
+left exactly as stored until the player changes it through a path that does carry
+`offer_ids`.
 
-The Traits stage is complete when:
-1. `draft.draft_data["traits_complete"]` is `True` (set by frontend when user makes any selection)
-2. CG points remaining >= 0 (not over budget)
-
-```python
-# In CharacterDraft._is_traits_complete()
-return (
-    self.draft_data.get("traits_complete", False)
-    and self.calculate_cg_points_remaining() >= 0
-)
-```
+Character creation has no per-distinction completion gate of its own: a chapter's own
+stage-completion check covers whatever it offers (e.g. the Gift stage's magic-selection
+gate), and the purse (`calculate_cg_points_remaining() >= 0`) is what actually blocks
+Final Touches/Review when a player is over budget.
 
 ---
 

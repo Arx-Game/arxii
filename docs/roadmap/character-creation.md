@@ -1,5 +1,33 @@
 # Character Creation & Identity
 
+## Built (2026-09-07, #3675: retire the Distinctions stage)
+
+The standalone Distinctions stage is gone; each CG chapter now offers the
+distinctions that belong to it, priced and explained at the moment of choice. What
+was built: (1) `character_creation.DistinctionOffer` (distinction, chapter, how it
+arrives -- choice/bundled/carried, an opener FK scoped to its chapter) replaces the
+three separate couplings that used to link a chapter to a distinction
+(`BeginningTradition.required_distinction`, `GlimpseTagDistinctionSuggestion`,
+`OriginTemplateSlotChoice.grants_distinction`), read by the one module
+`world.character_creation.offers`; (2) a tradition's slate line
+(`BeginningTradition.state`: self-taught/teachers-gone/living-masters) prints one of
+three staff-authored standard lines (`TraditionStateLine`, per-tradition
+`own_wording`, never its own price) and, for a living tradition, offers the standard
+schooling set (`SchoolingLine`, rank 0-2); (3) `OriginTemplate.closed_distinctions`/
+`closed_reason` closes distinctions by field, never by name; (4) the Gift tradition
+step, the Glimpse (`GlimpseAxes`, one offer sub-block per chosen tag), Lineage
+answers, Appearance and the Actor's Sheet each mount `ChapterOffers` against
+`GET .../drafts/{id}/offers/?chapter=`; (5) four staff admin builders (Distinction
+Builder, the tradition slate page, the Upbringing Builder's per-answer offers +
+route closes, a `GlimpseTag` change-form inline) author this surface, reachable
+from a Builders panel on the Authoring Workbench dashboard, one click from the row
+each edits. Migrations 0109-0111 expand, backfill, then drop the three retired
+couplings and the unused `DistinctionPrerequisite` model (0 rows in production,
+never wired to a live check). See ADR-0280,
+[distinctions.md](../systems/distinctions.md)'s "CG Integration" and
+[character_creation.md](../systems/character_creation.md)'s "Distinction offers"
+section.
+
 ## Built (2026-09-07, #3621: the Actor's Sheet)
 
 Final Touches replaced the free-text personality field with the Actor's Sheet: three
@@ -154,7 +182,8 @@ empty catalog, so this stage is exercisable before any lore-repo content is auth
 - **Models** (`world/magic/models/glimpse.py`): `GlimpseTag` (content model, lore-repo
   authored, no factory-seeded catalog) + `CharacterGlimpseTag` (instance data, never
   exported) + `GlimpseTagDistinctionSuggestion` (content model, grants nothing — a
-  suggestion surface only). `CharacterAura.glimpse_state` (`GlimpseState`:
+  suggestion surface only; retired #3675, replaced by `character_creation
+  .DistinctionOffer` rows opened by the tag). `CharacterAura.glimpse_state` (`GlimpseState`:
   NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
   `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
   SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
@@ -163,7 +192,8 @@ empty catalog, so this stage is exercisable before any lore-repo content is auth
   is always consistent post-CG; distinction-to-Glimpse provenance links through the
   offers system instead of a separate `glimpse_linked_distinction_ids` key (#3675).
 - **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
+  (`CGGlimpseTagViewSet`, embeds `offers` per tag as of #3675, was
+  `suggested_distinctions`) + four
   `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
   `link-glimpse-distinction` / `unlink-glimpse-distinction`) that also power the
   post-CG editor. Sheet payload: `AuraData.glimpse_story`/`.glimpse_state`/

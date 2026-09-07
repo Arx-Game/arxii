@@ -10,7 +10,7 @@ A character's soul-state expressed as percentages across the three Affinities (c
 The narrative of a character's first magical awakening — prose living on `CharacterAura.glimpse_story`. Authored at character creation via a guided, tag-driven flow (#2427) and revisable afterward through the "finish your Glimpse later" editor on the own-character sheet.
 
 **Glimpse Tag**:
-An authored catalog choice (`GlimpseTag`) on one of four narrative axes (`GlimpseTagAxis`: Tone, Consequence, Witness & Secrecy, Sensory & Discovery) that a player picks while composing their Glimpse. Content model, lore-repo authored — no factory-seeded catalog. Curated `GlimpseTagDistinctionSuggestion` rows link a tag to distinctions worth considering; the suggestion grants nothing. (#2427.)
+An authored catalog choice (`GlimpseTag`) on one of four narrative axes (`GlimpseTagAxis`: Tone, Consequence, Witness & Secrecy, Sensory & Discovery) that a player picks while composing their Glimpse. Content model, lore-repo authored, no factory-seeded catalog. A tag's distinctions are `character_creation.DistinctionOffer` rows opened by it (`chapter=glimpse`, `glimpse_tag=<this tag>`), read behind `GlimpseTag.offers` (a `CachedRowsHandler`, ADR-0278), the same offer mechanism every other CG chapter uses, replacing the retired `GlimpseTagDistinctionSuggestion` pairing table (#3675).
 _Avoid_: conflating with `Ritual.glimpse_eligible` — an unrelated ritual-gating flag (whether a `Ritual` may be performed pre-formal-training), not a tag from this catalog.
 
 **Glimpse State**:
