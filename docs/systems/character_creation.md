@@ -57,7 +57,10 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `BeginningTradition` | Maps traditions to beginnings with optional required distinction | `beginning`, `tradition`, `required_distinction`, `sort_order` |
+| `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675) | `beginning`, `tradition`, `state`, `own_wording`, `sort_order` |
+| `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
+| `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
+| `DistinctionOffer` | Where a distinction is shown in CG and how it arrives (#3675) | `distinction`, `chapter`, `arrives_as`, `glimpse_tag`/`origin_choice`/`schooling_line` |
 
 ### Draft State (models.Model - per-player)
 
@@ -448,22 +451,29 @@ resolved anchor via `societies.renown.bump_organization_reputation` at finalize)
 | Group's opinion | `reputation_seed` |
 | Grants distinction | `grants_distinction` |
 
-**Finalize order (`_finalize_origin_slots`, `_grant_connection_distinctions`,
+**Finalize order (`_finalize_origin_slots`, `_create_distinctions`,
 `_seed_connection_reputation`):** every visible answered prompt is upserted via
-`set_origin_slot` (assembling `Profile.background`), then the visible picked answers'
-bundled Distinctions are granted through the same `CharacterDistinction` write path a
-hand-picked Distinction uses (bulk-create, `_create_distinction_modifiers_bulk`,
-Secret relocation); a `person` question anchored to the granting group's answer
-names the granted Distinction's spawned `NPCAsset`
-(`world.assets.services.reconcile_distinction_asset_grants(...,
-display_name=<the named figure>)`), overriding the staff-authored placeholder, then
-each picked group answer's non-zero `reputation_seed` bumps that anchor's
-`OrganizationReputation`. `CharacterDraft.bundled_distinctions()` is the same read
-`validators.get_distinctions_errors` uses to block a player from also hand-picking an
-already-bundled Distinction, and `character_sheets.types.OriginSlotEntry` is the sheet
-read's shape for one answered slot (`kind`, `connection_kind`, `life_stage`,
-`organization_id`/`organization_name`, `figure_name`: blanked for a non-owner,
-non-staff viewer).
+`set_origin_slot` (assembling `Profile.background`). Bundled Distinctions no longer
+have their own finalize hook (#3675); `reconcile_offer_picks` already folds every
+visible answer's bundled `DistinctionOffer` into `draft.draft_data["distinctions"]`
+at cost 0 whenever a Lineage answer changes, so `_create_distinctions`'s ordinary
+bulk-create/`_create_distinction_modifiers_bulk`/Secret-relocation path covers both a
+hand-picked Distinction and a bundled one. `_connection_asset_names` (`services.py`)
+is the one piece still specific to connections: for each bundled entry whose offer's
+`origin_choice.slot` is a group question with a `person` question anchored to it, it
+resolves the named figure and passes `{distinction_id: name}` into
+`_create_distinction_modifiers_bulk`'s `asset_names`, which
+`world.assets.services.reconcile_distinction_asset_grants` uses to name the granted
+Distinction's spawned `NPCAsset` instead of the staff-authored placeholder. Then each
+picked group answer's non-zero `reputation_seed` bumps that anchor's
+`OrganizationReputation`. `world.character_creation.questionnaire.bundled_distinctions`
+is a separate live-computed read over the same `DistinctionOffer` rows (not
+`draft.draft_data`); `validators.get_distinctions_errors` diffs it against
+`draft.draft_data["distinctions"]`'s picked ids to block a player from also
+hand-picking an already-bundled Distinction. `character_sheets.types.OriginSlotEntry`
+is the sheet read's shape for one answered slot (`kind`, `connection_kind`,
+`life_stage`, `organization_id`/`organization_name`, `figure_name`: blanked for a
+non-owner, non-staff viewer).
 
 See ADR-0277 for why this landed as an authored questionnaire rather than a
 generalised single-anchor/single-mentor model, and Recipes 13-15 in

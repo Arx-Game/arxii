@@ -31,7 +31,6 @@ from world.character_creation.constants import (
     FALLBACK_STARTING_ROOM_KEY,
     FALLBACK_STARTING_ROOM_TYPECLASS,
     STARTING_TECHNIQUE_PICKS_TARGET,
-    UNBOUND_DRAWBACK_DISTINCTION_SLUG,
     UNBOUND_TRADITION_NAME,
 )
 from world.character_creation.models import Beginnings, StartingArea
@@ -74,6 +73,7 @@ from world.traits.models import Trait, TraitType
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
+    from world.distinctions.models import Distinction
     from world.societies.models import Organization
 
 logger = logging.getLogger(__name__)
@@ -418,6 +418,9 @@ def ensure_tradition_training_distinction() -> None:
     invented only under ``SEED_SAMPLE_CONTENT``. Skips wiring the category,
     distinction, or effect once any of its own dependencies (category, then
     distinction, then the ``ModifierTarget``) isn't authored.
+
+    Also seeds the LIVING_MASTERS slate line and its three schooling stances
+    (#3675), see ``_ensure_living_masters_schooling``.
     """
     from world.distinctions.models import (  # noqa: PLC0415
         Distinction,
@@ -461,6 +464,53 @@ def ensure_tradition_training_distinction() -> None:
             distinction=distinction,
             target=target,
         )
+    if distinction is not None:
+        _ensure_living_masters_schooling(distinction)
+
+
+def _ensure_living_masters_schooling(training: Distinction) -> None:
+    """Seed the LIVING_MASTERS slate line and its three schooling stances (#3675).
+
+    Rank 0 grants nothing (a fresh member); ranks 1 and 2 grant ``training`` at
+    that rank, each opening a Tradition Training ``DistinctionOffer`` in the
+    Tradition Step chapter. Staff author the same rows by hand on the
+    Distinction Builder and the tradition slate page; this seed only covers the
+    E2E/clone-bootstrap default. Never mentions ghosts, tutors, or any
+    play-time discovery, this is CG-facing, not a play reveal.
+    """
+    from world.character_creation.constants import (  # noqa: PLC0415
+        OfferArrival,
+        OfferChapter,
+        TraditionState,
+    )
+    from world.character_creation.models import (  # noqa: PLC0415
+        DistinctionOffer,
+        SchoolingLine,
+        TraditionStateLine,
+    )
+
+    TraditionStateLine.objects.get_or_create(
+        state=TraditionState.LIVING_MASTERS,
+        defaults={"entry_line": "Living masters"},
+    )
+
+    stances = [
+        (0, "Newly taken in", "Taken in after the Glimpse.", None),
+        (1, "Trained for years", "Trained since youth.", training),
+        (2, "Raised within it", "Born to it.", training),
+    ]
+    for rank, name, player_line, grants in stances:
+        line, _ = SchoolingLine.objects.get_or_create(
+            rank=rank,
+            defaults={"name": name, "player_line": player_line, "grants": grants},
+        )
+        if grants is not None:
+            DistinctionOffer.objects.get_or_create(
+                distinction=training,
+                chapter=OfferChapter.TRADITION_STEP,
+                schooling_line=line,
+                defaults={"arrives_as": OfferArrival.CHOICE},
+            )
 
 
 #: Canonical name: ``world.character_creation.constants.UNBOUND_TRADITION_NAME``
@@ -477,12 +527,12 @@ _UNBOUND_TRADITION_NAME = UNBOUND_TRADITION_NAME
 #: tests resolves this by name; the CG-finalize hook never reads it.
 _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 
-#: Canonical name: ``world.character_creation.constants.UNBOUND_DRAWBACK_DISTINCTION_SLUG``
-#: (#2442). Also referenced by name (this exact string) in
-#: ``world.magic.services.tradition_membership`` (the
-#: ``_SHED_ON_JOIN_SLUGS``/``_REAPPLY_ON_LEAVE_SLUG`` constants, #2441 Task 8/9) —
-#: keep in sync if this ever changes.
-_UNBOUND_DRAWBACK_DISTINCTION_SLUG = UNBOUND_DRAWBACK_DISTINCTION_SLUG
+#: Slug of the "Unbound" drawback Distinction (#2442). Local to this module as
+#: of #3675: ``world.character_creation.constants.UNBOUND_DRAWBACK_DISTINCTION_SLUG``
+#: is retired; ``world.magic.services.tradition_membership`` now resolves the
+#: drawback via ``world.character_creation.offers.self_taught_drawback()``
+#: (the SELF_TAUGHT ``TraditionStateLine.carries`` FK), never this slug.
+_UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
 
 #: DistinctionTag slugs for traditionless categorization (#2752).
 _TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
@@ -546,14 +596,11 @@ def ensure_unbound_drawback_distinction():
     Marks a character as self-taught/traditionless-in-play: a +50%-AP-cost
     surcharge on magic-learning activities (the "uphill battle" the Unbound codex
     lore describes — TIME, not power; resonance earning/spending is untouched, per
-    the 2026-07-17 spec correction). Wired onto the Unbound ``BeginningTradition``
-    row via ``required_distinction`` (``seed_beginning_traditions`` below) — the
-    same #2426 gate ``ensure_tradition_training_distinction``/
-    ``ensure_orphaned_tradition_distinction`` use, so selecting Unbound at CG
-    requires the drawback already be in the draft (no auto-attach — mirrors
-    Orphaned Tradition's shape exactly; ``world.character_creation.views
-    .TraditionViewSet.select_tradition``'s gate is generic and was not changed by
-    this task).
+    the 2026-07-17 spec correction). Also seeds the SELF_TAUGHT
+    ``TraditionStateLine`` carrying this drawback (#3675); picking a SELF_TAUGHT
+    tradition at CG carries it into the draft automatically via
+    ``world.character_creation.offers.reconcile_offer_picks``, never a manual
+    attach.
 
     ``cost_per_rank=-2`` mirrors ``ensure_orphaned_tradition_distinction``'s
     convention (a modest CG point refund; the drawback's teeth are the AP
@@ -631,6 +678,17 @@ def ensure_unbound_drawback_distinction():
             defaults={"name": "Traditionless Default"},
         )
         distinction.tags.add(drawback_tag, default_tag)
+
+        # The SELF_TAUGHT slate line carries this drawback into the draft (#3675),
+        # read by world.character_creation.offers.self_taught_drawback(),
+        # never by name or slug.
+        from world.character_creation.constants import TraditionState  # noqa: PLC0415
+        from world.character_creation.models import TraditionStateLine  # noqa: PLC0415
+
+        TraditionStateLine.objects.get_or_create(
+            state=TraditionState.SELF_TAUGHT,
+            defaults={"entry_line": "Self-taught, slower to learn", "carries": distinction},
+        )
     return distinction
 
 
@@ -651,20 +709,18 @@ def seed_beginning_traditions() -> None:
     seeder (formerly seeded here-adjacent by the now-retired "magic" cluster
     helper ``seed_starter_gift_catalog``, #2474), precisely so both sides of
     this join exist by the time this function runs.
-    ``required_distinction=<Unbound drawback>`` (#2442,
-    was ``None`` pre-#2442) — selecting Unbound now requires the draft already
-    hold the "Unbound" drawback distinction, exactly the same gate shape
-    ``seed_metallic_order_tradition`` uses for its orphaned-tradition example
-    (no auto-attach anywhere in the stack; see ``ensure_unbound_drawback_
-    distinction``'s docstring). Idempotent via get_or_create; never overwrites a
-    staff-adjusted row — an already-seeded pre-#2442 row keeps
-    ``required_distinction=None`` until staff (or a fresh DB) re-seeds it.
+    ``state=TraditionState.SELF_TAUGHT`` (#3675, was a ``required_distinction`` FK
+    pre-#3675); the SELF_TAUGHT slate line's own ``TraditionStateLine.carries``
+    is what carries the "Unbound" drawback into the draft now (see
+    ``ensure_unbound_drawback_distinction``'s docstring), never a per-row FK.
+    Idempotent via get_or_create; never overwrites a staff-adjusted row.
 
     Skips silently (logged) if the Unbound tradition hasn't been seeded yet —
     cluster ordering guarantees this can't happen via the Big Button; defensive
     only, mirrors the per-row skip in ``seed_durance_officiants``
     (``world.progression.seeds``).
     """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415
 
@@ -676,13 +732,13 @@ def seed_beginning_traditions() -> None:
         )
         return
 
-    unbound_drawback = ensure_unbound_drawback_distinction()
+    ensure_unbound_drawback_distinction()
 
     for beginning in Beginnings.objects.all():
         BeginningTradition.objects.get_or_create(
             beginning=beginning,
             tradition=unbound,
-            defaults={"required_distinction": unbound_drawback, "sort_order": 0},
+            defaults={"state": TraditionState.SELF_TAUGHT, "sort_order": 0},
         )
 
 
@@ -813,10 +869,11 @@ def ensure_orphaned_tradition_distinction():
     """Seed the 'Orphaned Tradition' drawback distinction (#2428 Task 5).
 
     Marks a tradition as currently teacherless (post-Vanishing Arx traditions
-    especially — see #2428's addendum). Wired onto a ``BeginningTradition`` row
-    via ``required_distinction`` (the same #2426 gate ``ensure_tradition_training_
-    distinction`` uses), so selecting an orphaned tradition at CG auto-attaches
-    this drawback. ``cost_per_rank`` is negative — the house drawback convention
+    especially, see #2428's addendum). Also seeds the TEACHERS_GONE
+    ``TraditionStateLine`` carrying this drawback (#3675); selecting a
+    TEACHERS_GONE tradition at CG carries it into the draft automatically via
+    ``world.character_creation.offers.reconcile_offer_picks``, never a manual
+    attach. ``cost_per_rank`` is negative, the house drawback convention
     (``Distinction.cost_per_rank`` docstring: "Positive costs points, negative
     reimburses"; e.g. the ``-2``/``-5``/``-10`` fixtures across
     ``world/distinctions/tests``) — refunding CG points the way any other
@@ -875,6 +932,17 @@ def ensure_orphaned_tradition_distinction():
             defaults={"name": "Orphaned Tradition Marker"},
         )
         distinction.tags.add(drawback_tag, marker_tag)
+
+        # The TEACHERS_GONE slate line carries this drawback into the draft
+        # (#3675), read by world.magic.services.tradition_membership
+        # ._tradition_is_orphaned() via BeginningTradition.state, never a tag.
+        from world.character_creation.constants import TraditionState  # noqa: PLC0415
+        from world.character_creation.models import TraditionStateLine  # noqa: PLC0415
+
+        TraditionStateLine.objects.get_or_create(
+            state=TraditionState.TEACHERS_GONE,
+            defaults={"entry_line": "Teachers gone, no living tutor", "carries": distinction},
+        )
     return distinction
 
 
@@ -894,10 +962,11 @@ def seed_metallic_order_tradition():
     - ``BeginningTradition`` rows for every Arx-realm ``Beginnings`` (``starting_
       area__realm__name="Arx"`` — the #2428 vision names Arx as the realm with
       "many orphans" and ancient traditions like this one), each carrying
-      ``required_distinction=<Orphaned Tradition>``. Per the #2428 spec ruling,
-      this is authored data staff can mutate as story unfolds (a recovery quest
-      restoring teachers => staff clears ``required_distinction`` on these rows),
-      and CG reflects the change automatically — no code change needed.
+      ``state=TraditionState.TEACHERS_GONE`` (#3675, was a ``required_distinction``
+      FK pre-#3675). Per the #2428 spec ruling, this is authored data staff can
+      mutate as story unfolds (a recovery quest restoring teachers => staff sets
+      ``state=TraditionState.LIVING_MASTERS`` on these rows), and CG reflects the
+      change automatically, no code change needed.
 
     Skips (logged) if the Unbound tradition or its starter gift grants aren't
     seeded yet — mirrors ``seed_beginning_traditions``'s defensive skip;
@@ -905,6 +974,7 @@ def seed_metallic_order_tradition():
     guarantees this can't happen via the Big Button. Idempotent throughout via
     get_or_create; never overwrites a staff-adjusted row.
     """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
     from world.magic.models import Tradition  # noqa: PLC0415
     from world.magic.models.grants import TraditionGiftGrant  # noqa: PLC0415
@@ -927,7 +997,7 @@ def seed_metallic_order_tradition():
         )
         return None
 
-    distinction = ensure_orphaned_tradition_distinction()
+    ensure_orphaned_tradition_distinction()
 
     tradition, _ = Tradition.objects.get_or_create(
         name=_METALLIC_ORDER_TRADITION_NAME,
@@ -950,7 +1020,7 @@ def seed_metallic_order_tradition():
         BeginningTradition.objects.get_or_create(
             beginning=beginning,
             tradition=tradition,
-            defaults={"required_distinction": distinction, "sort_order": 1},
+            defaults={"state": TraditionState.TEACHERS_GONE, "sort_order": 1},
         )
 
     return tradition

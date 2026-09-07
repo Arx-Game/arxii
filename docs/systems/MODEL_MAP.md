@@ -1357,6 +1357,15 @@
   - choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
   - organization -> societies.Organization [FK] (nullable)
 
+### DistinctionOffer
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - distinction -> distinctions.Distinction [FK]
+  - glimpse_tag -> magic.GlimpseTag [FK] (nullable)
+  - origin_choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
+  - schooling_line -> character_creation.SchoolingLine [FK] (nullable)
+
 ### DraftApplication
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [OneToOne] (nullable)
@@ -1382,6 +1391,7 @@
   - beginning -> character_creation.Beginnings [FK]
   - claimable_kinds -> roster.FamilyKind [M2M]
   - family_templates -> societies.HouseTemplate [M2M]
+  - closed_distinctions -> distinctions.Distinction [M2M]
 **Pointed to by:**
   - slots <- character_creation.OriginTemplateSlot
   - drafts <- character_creation.CharacterDraft
@@ -1413,6 +1423,15 @@
 **Pointed to by:**
   - branching_prompts <- character_creation.OriginTemplateSlot
   - character_rows <- character_creation.CharacterOriginSlot
+  - distinction_offers <- character_creation.DistinctionOffer
+
+### SchoolingLine
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - grants -> distinctions.Distinction [FK] (nullable)
+**Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
 
 ### StartingArea
 **Foreign Keys:**
@@ -1424,6 +1443,12 @@
 **Pointed to by:**
   - beginnings <- character_creation.Beginnings
   - drafts <- character_creation.CharacterDraft
+
+### TraditionStateLine
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - carries -> distinctions.Distinction [FK] (nullable)
 
 ### Service Functions
 - `add_application_comment(application: 'DraftApplication', *, author: 'AbstractBaseUser | AnonymousUser', text: 'str') -> 'DraftApplicationComment' - Add a message comment to an application.`
@@ -3487,7 +3512,11 @@
   - reward_definitions <- achievements.RewardDefinition
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
+  - closed_by_routes <- character_creation.OriginTemplate
   - granting_choices <- character_creation.OriginTemplateSlotChoice
+  - carried_by_state_lines <- character_creation.TraditionStateLine
+  - granted_by_schooling_lines <- character_creation.SchoolingLine
+  - offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
   - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
@@ -5325,6 +5354,7 @@
   - affinity -> magic.Affinity [FK] (nullable)
   - paths -> classes.Path [M2M]
 **Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
   - character_rows <- magic.CharacterGlimpseTag
   - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
 

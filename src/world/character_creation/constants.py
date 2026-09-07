@@ -59,29 +59,18 @@ FALLBACK_STARTING_ROOM_FIXTURE_KEY = "arx/fallback-starting-room"
 # ``Organization`` (#2426 ruling), not a Tradition itself.
 SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
 
-# Tradition identifying the tradition-agnostic default CG pick (#2426). There is
-# no boolean "is Unbound" field on ``Tradition`` — every existing caller (the
-# magic seed, ``seed_beginning_traditions`` above) matches by name, so the
-# finalize hook does the same rather than inventing a new marker.
+# Tradition identifying the tradition-agnostic default CG pick (#2426). Runtime
+# code never matches a tradition by name as of #3675 (read ``BeginningTradition
+# .state`` / ``world.character_creation.offers.tradition_is_self_taught`` instead).
+# This constant survives only for the two callers that still need to name the
+# "Unbound" row itself: ``world.seeds.character_creation`` (seeding the row plus
+# its slate line) and migration ``0107_distinction_offers_data`` (the one-time
+# backfill that stamps ``state`` on it before any state-based reader exists).
 UNBOUND_TRADITION_NAME = "Unbound"
 
 # Path of the Chosen name — mirrors the constant in worship_content.py so the
 # CG finalize hook can match without importing the seed module (#2550).
 PATH_OF_THE_CHOSEN_NAME = "Path of the Chosen"
-
-# Slug of the "Unbound" drawback Distinction (#2442) — seeded by
-# ``world.seeds.character_creation.ensure_unbound_drawback_distinction`` and
-# wired onto Unbound's own ``BeginningTradition.required_distinction`` (same
-# seeder, ``seed_beginning_traditions``). Read by ``select_tradition``
-# (views.py) to special-case Unbound's auto-add UX: unlike Orphaned Tradition
-# (a deliberate opt-in pick, #2428 Task 5), Unbound is CG's tradition-agnostic
-# default — a player must not be forced to already know about this specific
-# drawback before CG can complete (see
-# ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-# .test_tradition_step_completable_for_every_seeded_beginning``, the existing
-# "CG must remain completable via the Unbound path with zero manual steps"
-# regression proof #2426 shipped).
-UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
 
 
 class Stage(models.IntegerChoices):

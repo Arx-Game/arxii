@@ -58,6 +58,7 @@ if TYPE_CHECKING:
         DraftApplicationComment,
     )
     from world.character_sheets.models import CharacterSheet, Gender, Profile
+    from world.distinctions.types import DraftDistinctionEntry
     from world.roster.models import Kinsperson
     from world.scenes.models import Persona
     from world.societies.models import Organization
@@ -971,7 +972,6 @@ def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> No
     _create_skill_values(character, draft)
     _build_and_create_goals(character, draft)
     _create_distinctions(character, draft)
-    _grant_connection_distinctions(character, draft)
     _create_worship_declaration(character, draft)
     _create_path_history(character, draft)
     _stamp_default_class_level(character)
@@ -1252,17 +1252,73 @@ def _build_and_create_goals(character: ObjectDB, draft: CharacterDraft) -> list:
     return CharacterGoal.objects.bulk_create(goals_to_create)
 
 
+def _connection_asset_names(
+    draft: CharacterDraft, entries: Iterable[DraftDistinctionEntry]
+) -> dict[int, str]:
+    """Distinction id -> the PERSON answer's figure name, for bundled connection grants.
+
+    A PERSON question anchored (``same_anchor_as``) to a GROUP question names the
+    granted asset, when the group answer's picked ``OriginTemplateSlotChoice`` bundles
+    a Distinction via its ``DistinctionOffer`` (#3660, #3675). Called by
+    ``_create_distinctions`` before the bulk write.
+    """
+    from world.character_creation.constants import OfferArrival  # noqa: PLC0415
+    from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+    from world.character_creation.questionnaire import DraftAnswers  # noqa: PLC0415
+
+    bundled_offer_ids = {
+        offer_id
+        for entry in entries
+        for offer_id, arrival in zip(
+            entry.get("offer_ids", []), entry.get("arrivals", []), strict=True
+        )
+        if arrival == OfferArrival.BUNDLED and isinstance(offer_id, int)
+    }
+    if not bundled_offer_ids or draft.selected_origin_template_id is None:
+        return {}
+
+    offers = DistinctionOffer.objects.filter(
+        pk__in=bundled_offer_ids, origin_choice__isnull=False
+    ).select_related("origin_choice")
+    if not offers:
+        return {}
+
+    answers = DraftAnswers.from_draft(draft)
+    visible = draft.visible_origin_slot_ids()
+    person_by_group_slot: dict[int, str] = {}
+    for slot in draft.selected_origin_template.slots.filter(
+        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
+    ):
+        name = answers.figures.get(slot.id)
+        if name and slot.id in visible:
+            person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
+
+    asset_names: dict[int, str] = {}
+    for offer in offers:
+        slot_id = offer.origin_choice.slot_id
+        if slot_id in person_by_group_slot:
+            asset_names[offer.distinction_id] = person_by_group_slot[slot_id]
+    return asset_names
+
+
 def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     """
     Create CharacterDistinction records and their modifiers from draft data.
 
     Uses bulk operations to avoid per-distinction queries. The chain is:
-    1. Bulk-create CharacterDistinction records
+    1. Bulk-create CharacterDistinction records (source description is
+       ``"; ".join(entry["sources"])``, every source that granted this pick, #3675)
     2. Bulk-create ModifierSource + CharacterModifier records for all non-resonance-category
-       effects, then reconcile each distinction's resonance grants (standing/currency axis —
+       effects, then reconcile each distinction's resonance grants (standing/currency axis,
        ``reconcile_distinction_resonance_grants``, the ``DistinctionResonanceGrant`` sidecar;
        see ``_create_distinction_modifiers_bulk``, #1834)
     3. Mint a Secret for any ``secret_by_default`` distinction
+
+    Bundled connection grants (#3660) arrive in this same ``draft_data["distinctions"]``
+    list (``reconcile_offer_picks`` put them there at cost 0), so this one path covers
+    both a player's paid pick and a bundled/carried offer. ``asset_names`` (#3675)
+    resolves the connection-asset naming for any bundled offer whose group question has
+    a PERSON question anchored to it.
     """
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
@@ -1305,14 +1361,18 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
                 rank=entry.get("rank", 1),
                 notes=entry.get("notes", ""),
                 origin=DistinctionOrigin.CHARACTER_CREATION,
+                source_description="; ".join(entry.get("sources", [])),
             )
         )
 
     if not char_distinctions:
         return
 
+    asset_names = _connection_asset_names(draft, entries_by_id.values())
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
-    _create_distinction_modifiers_bulk(character.sheet_data, created_distinctions)
+    _create_distinction_modifiers_bulk(
+        character.sheet_data, created_distinctions, asset_names=asset_names
+    )
 
     # #1334 — a ``secret_by_default`` kind (criminal / scandalous) relocates into a Secret on
     # grant, so it never shows on the public distinctions list. One-time finalize over a handful
@@ -1320,73 +1380,6 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
 
     for cd in created_distinctions:
-        if cd.distinction.secret_by_default:
-            mint_distinction_secret(cd)
-
-
-def _grant_connection_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
-    """Grant the Distinctions the Upbringing answers bundle (#3660).
-
-    Same write path as picked Distinctions: bulk-create, then
-    ``_create_distinction_modifiers_bulk`` (modifiers, resonance grants, asset grants),
-    then Secret relocation for ``secret_by_default``. A person named on a PERSON
-    question in the granting group becomes the granted asset's name.
-    """
-    from world.character_creation.questionnaire import DraftAnswers  # noqa: PLC0415
-    from world.distinctions.models import (  # noqa: PLC0415
-        CharacterDistinction,
-        Distinction,
-        DistinctionEffect,
-    )
-    from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
-    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
-
-    bundled = draft.bundled_distinctions()
-    if not bundled:
-        return
-    sheet = character.sheet_data
-    existing = set(
-        CharacterDistinction.objects.filter(character=sheet).values_list(
-            "distinction_id", flat=True
-        )
-    )
-    wanted = {b["distinction_id"]: b for b in bundled if b["distinction_id"] not in existing}
-    if not wanted:
-        return
-    distinctions = Distinction.objects.filter(id__in=wanted).prefetch_related(
-        Prefetch(
-            "effects",
-            queryset=DistinctionEffect.objects.select_related("target__category"),
-            to_attr="cached_effects",
-        ),
-    )
-    answers = DraftAnswers.from_draft(draft)
-    visible = draft.visible_origin_slot_ids()
-    person_by_group_slot: dict[int, str] = {}
-    for slot in draft.selected_origin_template.slots.filter(
-        kind=QuestionKind.PERSON, same_anchor_as__isnull=False
-    ):
-        name = answers.figures.get(slot.id)
-        if name and slot.id in visible:
-            person_by_group_slot.setdefault(slot.same_anchor_as_id, name)
-    rows = []
-    asset_names: dict[int, str] = {}
-    for dist in distinctions:
-        b = wanted[dist.id]
-        rows.append(
-            CharacterDistinction(
-                character=sheet,
-                distinction=dist,
-                rank=1,
-                origin=DistinctionOrigin.CHARACTER_CREATION,
-                source_description=f"{b['choice_name']}, {b['organization_name']}".rstrip(", "),
-            )
-        )
-        if b["slot_id"] in person_by_group_slot:
-            asset_names[dist.id] = person_by_group_slot[b["slot_id"]]
-    created = CharacterDistinction.objects.bulk_create(rows)
-    _create_distinction_modifiers_bulk(sheet, created, asset_names=asset_names)
-    for cd in created:
         if cd.distinction.secret_by_default:
             mint_distinction_secret(cd)
 
@@ -1409,11 +1402,11 @@ def _create_distinction_modifiers_bulk(
     regardless of whether it has any effects at all — a distinction can carry a
     ``DistinctionResonanceGrant`` with no ``DistinctionEffect`` rows.
 
-    ``asset_names`` (#3660) maps a distinction id to the name a connection's
-    named figure should give the distinction's granted ``NPCAsset``, overriding
-    the staff-authored ``asset_display_name``: used by
-    ``_grant_connection_distinctions`` for bundled Distinctions; ``None`` (the
-    picked-Distinction path) always uses the authored name.
+    ``asset_names`` (#3660, computed by ``_connection_asset_names`` since #3675) maps a
+    distinction id to the name a connection's named figure should give the
+    distinction's granted ``NPCAsset``, overriding the staff-authored
+    ``asset_display_name``; an id with no entry (or ``None`` itself) always uses the
+    authored name.
     """
     from world.assets.services import (  # noqa: PLC0415
         reconcile_distinction_asset_grants,
@@ -2096,13 +2089,27 @@ def finalize_magic_data(draft: CharacterDraft, sheet: CharacterSheet) -> None:
 
     set_glimpse_prose(aura, draft.draft_data.get("glimpse_story", ""))
 
-    linked_ids = draft.draft_data.get("glimpse_linked_distinction_ids", [])
-    if linked_ids:
+    picked_offer_ids = {
+        offer_id
+        for entry in draft.draft_data.get("distinctions", [])
+        for offer_id in entry.get("offer_ids", [])
+        if isinstance(offer_id, int)
+    }
+    if picked_offer_ids:
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
         from world.distinctions.models import CharacterDistinction  # noqa: PLC0415
 
-        linked = CharacterDistinction.objects.filter(character=sheet, distinction_id__in=linked_ids)
-        for character_distinction in linked:
-            link_distinction_to_glimpse(character_distinction, aura)
+        glimpse_distinction_ids = set(
+            DistinctionOffer.objects.filter(
+                pk__in=picked_offer_ids, glimpse_tag__isnull=False
+            ).values_list("distinction_id", flat=True)
+        )
+        if glimpse_distinction_ids:
+            linked = CharacterDistinction.objects.filter(
+                character=sheet, distinction_id__in=glimpse_distinction_ids
+            )
+            for character_distinction in linked:
+                link_distinction_to_glimpse(character_distinction, aura)
 
     # 4b. Recompute aura now that CharacterAura exists. _apply_character_mechanics
     # (distinctions, via reconcile_distinction_resonance_grants) runs earlier in
@@ -2157,13 +2164,14 @@ def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: Characte
     mirrors ``seed_beginning_traditions``'s Unbound-tradition skip (#2444);
     cluster ordering guarantees this can't happen via the Big Button.
 
+    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
+    ``state``, #3675), never the tradition's name.
+
     Idempotent via ``get_or_create`` keyed on (debtor, creditor, origin) so
     re-finalize test paths don't create a duplicate obligation row.
     """
-    from world.character_creation.constants import (  # noqa: PLC0415
-        SHROUDWATCH_ACADEMY_NAME,
-        UNBOUND_TRADITION_NAME,
-    )
+    from world.character_creation.constants import SHROUDWATCH_ACADEMY_NAME  # noqa: PLC0415
+    from world.character_creation.offers import tradition_is_self_taught  # noqa: PLC0415
     from world.societies.constants import ObligationOrigin, ObligationState  # noqa: PLC0415
     from world.societies.models import Organization, OrganizationObligation  # noqa: PLC0415
 
@@ -2176,7 +2184,7 @@ def _finalize_academy_entrance_obligation(draft: CharacterDraft, sheet: Characte
         return
 
     tradition = draft.selected_tradition
-    is_unbound = tradition is not None and tradition.name == UNBOUND_TRADITION_NAME
+    is_unbound = tradition is not None and tradition_is_self_taught(tradition)
     if is_unbound:
         defaults = {"state": ObligationState.OWED}
     else:

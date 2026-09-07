@@ -360,14 +360,21 @@ recomputes `glimpse_state` so it never drifts from the prose+tag truth:
   — clears `from_glimpse`.
 
 **CG finalize wiring** (`world/character_creation/services.py`,
-`finalize_magic_data`) — after creating `CharacterAura`, three `draft_data`
-keys are consumed through
-the glimpse services above (never written directly to the aura/tag rows):
-`glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis and passed to
-`set_glimpse_tags` per axis), `glimpse_story` (passed to `set_glimpse_prose`,
-defaults to `""`), `glimpse_linked_distinction_ids` (catalog `Distinction`
-ids — resolved to the character's own `CharacterDistinction` rows by
-`distinction_id__in=`, then passed to `link_distinction_to_glimpse`).
+`finalize_magic_data`), after creating `CharacterAura`, two `draft_data` keys
+are consumed through the glimpse services above (never written directly to the
+aura/tag rows): `glimpse_tag_ids` (list of `GlimpseTag` ids, grouped by axis
+and passed to `set_glimpse_tags` per axis), `glimpse_story` (passed to
+`set_glimpse_prose`, defaults to `""`). Distinction-to-Glimpse provenance is no
+longer read from a separate `glimpse_linked_distinction_ids` list (#3675): every
+picked distinction whose `offer_ids` name a `DistinctionOffer` with
+`glimpse_tag` set gets `link_distinction_to_glimpse` called on it, via one query
+over `DistinctionOffer.objects.filter(pk__in=<picked offer ids>,
+glimpse_tag__isnull=False)`. **Frontend note:** `GlimpseSection.tsx`'s manual
+distinction-link fallback still writes `draft_data.glimpse_linked_distinction_ids`
+as of this change; that key has no backend reader left, so a distinction linked
+only through that fallback (not through a Glimpse-chapter `DistinctionOffer` pick)
+will not carry `from_glimpse` at finalize until the frontend is updated to route
+through the offers system too.
 
 **API surfaces:**
 
@@ -1751,16 +1758,19 @@ only slower. The "Unbound" drawback `Distinction` (slug `unbound`, seeded by
 source today: a +50 `DistinctionEffect` on the `magic_learning_ap_cost` `ModifierTarget`
 (category `magic`, seeded by `wire_magic_learning_ap_cost_target`). Applies identically to
 both `charge_and_learn` front doors (accept + TRAIN) — one read, no duplication. Every seeded
-Unbound `BeginningTradition` row now carries `required_distinction=<Unbound drawback>`
-(`seed_beginning_traditions`, was `None` pre-#2442); `select_tradition`
-(`world.character_creation.views`) auto-adds the drawback to the draft when selecting Unbound
-without it already held — a one-off exception to #2426's normal "must already hold it" gate,
-needed because Unbound is CG's tradition-agnostic default (Orphaned Tradition/Metallic Order
-keep the un-auto-added behavior — that gate is a deliberate story pick, #2428 Task 5). Shed
-automatically via `world.magic.services.tradition_membership.join_tradition` and re-applied by
-`leave_tradition` (#2441 Task 8/9) — the underlying `CharacterModifier` row cascade-deletes with
-the `CharacterDistinction` row (`ModifierSource.character_distinction` is `on_delete=CASCADE`),
-so the surcharge disappears the moment the drawback is shed, no separate cleanup needed.
+Unbound `BeginningTradition` row reads `state=TraditionState.SELF_TAUGHT`
+(`seed_beginning_traditions`, #3675; was a `required_distinction=<Unbound drawback>` FK
+pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback (`carries` FK,
+`world.character_creation.offers.self_taught_drawback()`), and `select_tradition`
+(`world.character_creation.views`) applies it to the draft via the generic
+`reconcile_offer_picks` call every tradition pick already runs, not a name-matched special
+case (Orphaned Tradition/Metallic Order carry theirs the same way, via TEACHERS_GONE). Shed
+automatically via `world.magic.services.tradition_membership.join_tradition` (checks
+`_tradition_is_orphaned`, now a `BeginningTradition.state == TEACHERS_GONE` read) and
+re-applied by `leave_tradition` (`self_taught_drawback()`, #2441 Task 8/9, #3675); the
+underlying `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+(`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge disappears
+the moment the drawback is shed, no separate cleanup needed.
 
 ### Acquisition provenance — `CharacterTechnique.origin` / `CharacterGift.origin` (#3055) [BUILT & WIRED]
 

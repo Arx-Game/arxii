@@ -408,8 +408,11 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
-    `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
-    through these services. API: CG catalog `GET
+    `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;
+    `link_distinction_to_glimpse` is now called per picked distinction whose
+    `offer_ids` name a `DistinctionOffer` with `glimpse_tag` set, not a separate
+    `glimpse_linked_distinction_ids` draft_data key (#3675, see
+    `docs/systems/magic.md`'s Glimpse section). API: CG catalog `GET
     /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
     by `?axis=` and `?path_id=<N>` [#2611], embeds
     `suggested_distinctions`) + four `CharacterAuraViewSet` actions
@@ -4056,18 +4059,20 @@ register as additional kinds.
   tradition)` was dropped (a character may rejoin a tradition they previously left,
   creating a second historical row for the same pair). `world.magic.services.
   tradition_membership`: `join_tradition(sheet, tradition, *, via_membership=None)` —
-  ends the active row (`left_at`), creates a new one, and — when the joined tradition
+  ends the active row (`left_at`), creates a new one, and, when the joined tradition
   is not orphaned (`_tradition_is_orphaned`, reading `character_creation.
-  BeginningTradition.required_distinction__slug="orphaned-tradition"`, the only place
-  "no living teachers" is recorded in the schema, per Task 5/#2428) — deletes any held
+  BeginningTradition.state == TraditionState.TEACHERS_GONE` as of #3675, was a
+  tag-matched `required_distinction` FK pre-#3675, the only place "no living
+  teachers" is recorded in the schema), deletes any held
   `unbound`/`orphaned-tradition` drawback `CharacterDistinction` row (direct queryset
   delete; `grant_distinction` has no removal counterpart, see
   `world/distinctions/CLAUDE.md`). Raises `AlreadyInTraditionError` on a no-op re-join.
   `leave_tradition(sheet)` — `left_at` only, no replacement row; re-applies the
-  `unbound` drawback via `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)`
-  (defensive no-op, logged, if the "unbound" `Distinction` isn't seeded yet — Task 9
-  ships it), catching `DistinctionExclusionError`. Raises `NoActiveTraditionError` if
-  already traditionless. **Wired trigger:** `societies.membership_services.
+  self-taught drawback (`world.character_creation.offers.self_taught_drawback()`, the
+  SELF_TAUGHT `TraditionStateLine.carries` FK, #3675) via
+  `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)` (defensive no-op, logged, if
+  no SELF_TAUGHT line carries a drawback yet), catching `DistinctionExclusionError`.
+  Raises `NoActiveTraditionError` if already traditionless. **Wired trigger:** `societies.membership_services.
   _maybe_join_tradition`, called from both `accept_invitation` and `accept_application`
   when `organization.tradition_id` is set (ruling 1 on #2441 — a tradition is joined
   through its teaching org's membership-offer accept flow); swallows
@@ -4091,13 +4096,15 @@ register as additional kinds.
   helper) and scales AP: `ceil(ap_cost × (100 + surcharge%) / 100)`, applied identically to
   both `charge_and_learn` front doors (accept + TRAIN). TIME, not power — resonance
   earning/spending is untouched (a corrected-in-review alternative: taxing resonance would
-  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row now
-  carries `required_distinction=<Unbound drawback>` (was `None` pre-#2442); unlike Orphaned
-  Tradition's deliberate "must already hold it" gate, `select_tradition`
-  (`character_creation.views`) auto-adds the Unbound drawback to the draft when missing — a
-  one-off exception preserving CG completability now that Unbound (CG's tradition-agnostic
-  default) carries a gate. Shed by `join_tradition`/re-applied by `leave_tradition` above —
-  the `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row reads
+  `state=TraditionState.SELF_TAUGHT` (#3675, was a `required_distinction=<Unbound drawback>`
+  FK pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback, and
+  `select_tradition` (`character_creation.views`) applies it to the draft through the
+  generic `reconcile_offer_picks` call every tradition pick runs, no name-matched special
+  case, and no gate the player must already hold something to clear (Orphaned
+  Tradition/Metallic Order carry theirs the identical way, via TEACHERS_GONE). Shed by
+  `join_tradition`/re-applied by `leave_tradition` above; the `CharacterModifier` row
+  cascade-deletes with the `CharacterDistinction` row
   (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge
   disappears automatically, no separate cleanup.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per

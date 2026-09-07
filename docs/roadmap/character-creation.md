@@ -144,9 +144,10 @@ empty catalog, so this stage is exercisable before any lore-repo content is auth
   NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
   `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
   SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
-- **Finalize wiring:** `finalize_magic_data` consumes three new `draft_data` keys
-  (`glimpse_tag_ids`, `glimpse_story`, `glimpse_linked_distinction_ids`) through the
-  glimpse services, so `glimpse_state` is always consistent post-CG.
+- **Finalize wiring:** `finalize_magic_data` consumes two `draft_data` keys
+  (`glimpse_tag_ids`, `glimpse_story`) through the glimpse services, so `glimpse_state`
+  is always consistent post-CG; distinction-to-Glimpse provenance links through the
+  offers system instead of a separate `glimpse_linked_distinction_ids` key (#3675).
 - **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
   (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
   `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
@@ -195,9 +196,11 @@ literally spent a Hare on their behalf (a lore-recorded deed-coin transaction, n
 item at CG time). `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
 `Organization` by name (`world.seeds.character_creation.ensure_shroudwatch_academy`,
 `tradition=None`) and is `get_or_create`-idempotent. Orphaned Traditions (no living trainer)
-carry an "Orphaned Tradition" drawback `Distinction` via `BeginningTradition
-.required_distinction` — the same authored-data mechanism as the Unbound drawback — so a
-recovery quest restoring a tradition's teachers is a staff row edit, not a code change. Paying
+read `state=TraditionState.TEACHERS_GONE` on their `BeginningTradition` row (#3675, was a
+`required_distinction` FK pre-#3675); the TEACHERS_GONE `TraditionStateLine` carries the
+"Orphaned Tradition" drawback `Distinction`, the same mechanism the Unbound drawback uses
+(SELF_TAUGHT), so a recovery quest restoring a tradition's teachers is a staff row edit
+(`state=LIVING_MASTERS`), not a code change. Paying
 down the obligation, in-play tradition switching, and the in-play technique-training loop that
 consumes it are built in `world/magic` and `world/npc_services` — see
 `docs/roadmap/magic.md`'s "Tradition sponsorship, Academy training, and the in-play loop"
@@ -295,7 +298,7 @@ The 11-stage character creation flow that takes a player from concept to approve
 - Points budget system configurable via admin
 
 ## What Exists
-- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning gate, `required_distinction`)
+- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning slate row, `state`/`own_wording`, #3675), `TraditionStateLine`, `SchoolingLine`, `DistinctionOffer`
 - **APIs:** Complete viewsets and serializers for all stages, including the Gift-stage catalog reads (`gifts`, `technique-options`, #2426)
 - **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, GiftStage, AttributesStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. GiftStage runs the Tradition → Gift → Technique → Resonance → Anima Check funnel; CG Points widget, Species cards, Tarot selection
 - CG perspective panels (#3281): see the codex roadmap for what was built.

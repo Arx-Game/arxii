@@ -12,8 +12,13 @@ from world.character_creation.constants import (
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_TRADITION_NAME,
     OfferChapter,
+    TraditionState,
 )
-from world.character_creation.factories import CharacterDraftFactory, DistinctionOfferFactory
+from world.character_creation.factories import (
+    BeginningTraditionFactory,
+    CharacterDraftFactory,
+    DistinctionOfferFactory,
+)
 from world.character_creation.services import (
     _finalize_academy_entrance_obligation,
     finalize_magic_data,
@@ -250,17 +255,24 @@ class AcademyEntranceObligationTest(TestCase):
 
     Unbound Prospects (no Tradition sponsor) start OWED to Shroudwatch
     Academy; every other tradition is sponsored and starts SETTLED_BY_SPONSOR.
-    Resolved by name — a defensive, logged skip covers an unseeded Academy.
+    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
+    state, #3675), never its name; a defensive, logged skip covers an unseeded
+    Academy.
     """
 
-    def _make_draft_and_sheet(self, *, tradition_name: str):
+    def _make_draft_and_sheet(self, *, tradition_name: str, self_taught: bool = False):
         sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(selected_tradition=TraditionFactory(name=tradition_name))
+        tradition = TraditionFactory(name=tradition_name)
+        if self_taught:
+            BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         return draft, sheet
 
     def test_unbound_tradition_creates_owed_obligation(self):
         academy = OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         finalize_magic_data(draft, sheet)
 
@@ -286,7 +298,9 @@ class AcademyEntranceObligationTest(TestCase):
         )
 
     def test_no_academy_seeded_skips_without_crash(self):
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         with self.assertLogs("world.character_creation.services", level="WARNING") as logs:
             finalize_magic_data(draft, sheet)
@@ -299,9 +313,9 @@ class AcademyEntranceObligationTest(TestCase):
 
     def test_idempotent_second_call_creates_no_duplicate(self):
         OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft = CharacterDraftFactory(
-            selected_tradition=TraditionFactory(name=UNBOUND_TRADITION_NAME)
-        )
+        tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
+        BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         sheet = CharacterSheetFactory()
 
         _finalize_academy_entrance_obligation(draft, sheet)

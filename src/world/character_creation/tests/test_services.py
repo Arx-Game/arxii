@@ -1413,8 +1413,9 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
         from world.seeds.character_creation import seed_beginning_traditions
 
         # Seed the real "Unbound" Tradition + wire it to this test's own Gift, then run
-        # the real seeder to author the BeginningTradition gate (required_distinction=
-        # the real "unbound" drawback, #2442) for this test's own Beginnings row.
+        # the real seeder to author the BeginningTradition's SELF_TAUGHT state (#3675)
+        # for this test's own Beginnings row; the SELF_TAUGHT slate line carries the
+        # real "unbound" drawback (#2442) into the draft via reconcile_offer_picks.
         unbound_tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
         TraditionGiftGrantFactory(tradition=unbound_tradition, gift=self.gift)
         seed_beginning_traditions()
@@ -1443,9 +1444,10 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
             },
         )
 
-        # Real select-tradition endpoint — auto-adds the "Unbound" drawback distinction
-        # to the draft (#2442's one deliberate exception; see
-        # TraditionViewSet.select_tradition's docstring).
+        # Real select-tradition endpoint: reconcile_offer_picks carries the "Unbound"
+        # drawback distinction into the draft for free, since the tradition's slate
+        # line reads SELF_TAUGHT (#3675; see TraditionViewSet.select_tradition's
+        # docstring).
         client = APIClient()
         client.force_authenticate(user=self.account)
         response = client.post(
@@ -1676,9 +1678,13 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.glimpse_state == GlimpseState.COMPLETE
 
     def test_finalize_links_glimpse_distinctions(self):
-        """Chosen distinctions listed in glimpse_linked_distinction_ids get from_glimpse."""
+        """A picked distinction whose offer_ids name a Glimpse offer gets from_glimpse (#3675)."""
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
         from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
         from world.distinctions.models import CharacterDistinction
+        from world.distinctions.types import build_distinction_entry
+        from world.magic.factories import GlimpseTagFactory
         from world.magic.models import CharacterAura
 
         category = DistinctionCategoryFactory(name="Glimpse Test Category")
@@ -1689,20 +1695,12 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
             max_rank=1,
             is_active=True,
         )
-        draft = self._create_draft(
-            distinctions=[
-                {
-                    "distinction_id": distinction.id,
-                    "distinction_name": distinction.name,
-                    "distinction_slug": distinction.slug,
-                    "category_slug": category.slug,
-                    "rank": 1,
-                    "cost": 5,
-                    "notes": "",
-                },
-            ],
-            glimpse_linked_distinction_ids=[distinction.pk],
+        tag = GlimpseTagFactory()
+        offer = DistinctionOfferFactory(
+            distinction=distinction, chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
         )
+        entry = build_distinction_entry(distinction, rank=1, offer=offer, source=tag.name)
+        draft = self._create_draft(distinctions=[entry], glimpse_tag_ids=[tag.pk])
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
@@ -1711,13 +1709,26 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         )
         assert cd.from_glimpse_id == aura.pk
 
-    def test_finalize_ignores_unknown_linked_distinction_ids(self):
-        """Ids that never materialized as CharacterDistinction rows are skipped."""
+    def test_finalize_ignores_unknown_offer_ids(self):
+        """A picked distinction whose offer_ids name no real Glimpse offer isn't linked."""
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.distinctions.types import build_distinction_entry
         from world.magic.models import CharacterAura
 
-        draft = self._create_draft(glimpse_linked_distinction_ids=[999999])
+        distinction = DistinctionFactory(name="Unlinked Distinction", cost_per_rank=5, max_rank=1)
+        entry = build_distinction_entry(distinction, rank=1)
+        entry["offer_ids"] = [999999]
+        entry["sources"] = ["Stale Opener"]
+        entry["arrivals"] = ["choice"]
+        draft = self._create_draft(distinctions=[entry])
         character = finalize_character(draft, add_to_roster=True)
+
         assert CharacterAura.objects.filter(character=character.sheet_data).exists()
+        cd = CharacterDistinction.objects.get(
+            character=character.sheet_data, distinction=distinction
+        )
+        assert cd.from_glimpse_id is None
 
 
 class FinalizeGMCharacterTests(TestCase):

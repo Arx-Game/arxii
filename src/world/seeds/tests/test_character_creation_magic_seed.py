@@ -13,9 +13,11 @@ Big-Button-only DB.
 
 Also covers ``wire_magic_learning_ap_cost_target()`` + ``ensure_unbound_drawback_
 distinction()`` (#2442): the "Unbound" drawback distinction (+50% AP surcharge on
-magic-learning activities) now wired onto Unbound's own ``BeginningTradition`` rows
-via ``required_distinction`` — see ``world.magic.tests.test_gift_acquisition_service``
-and ``world.npc_services.tests.test_train_offers`` for the surcharge's live-play read,
+magic-learning activities) carried into the draft by the SELF_TAUGHT
+``TraditionStateLine`` (#3675, was wired directly onto Unbound's own
+``BeginningTradition.required_distinction`` pre-#3675). See
+``world.magic.tests.test_gift_acquisition_service`` and
+``world.npc_services.tests.test_train_offers`` for the surcharge's live-play read,
 and ``world.character_creation.tests.test_traditions.UnboundTraditionSelectionTests``
 for the CG select-tradition endpoint behavior this gate produces.
 """
@@ -26,6 +28,7 @@ from world.character_creation.constants import (
     CG_MODIFIER_CATEGORY,
     SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
+    TraditionState,
 )
 from world.character_creation.factories import (
     BeginningsFactory,
@@ -240,6 +243,28 @@ class EnsureUnboundDrawbackDistinctionTests(TestCase):
         self.assertIn("traditionless-drawback", tag_slugs)
         self.assertIn("traditionless-default", tag_slugs)
 
+    def test_self_taught_slate_line_carries_the_drawback(self) -> None:
+        """The SELF_TAUGHT TraditionStateLine carries this distinction (#3675)."""
+        from world.character_creation.models import TraditionStateLine
+        from world.distinctions.models import Distinction
+
+        ensure_unbound_drawback_distinction()
+        distinction = Distinction.objects.get(slug="unbound")
+
+        line = TraditionStateLine.objects.get(state=TraditionState.SELF_TAUGHT)
+        self.assertEqual(line.carries_id, distinction.id)
+        self.assertEqual(line.entry_line, "Self-taught, slower to learn")
+
+    def test_self_taught_slate_line_survives_rerun(self) -> None:
+        from world.character_creation.models import TraditionStateLine
+
+        ensure_unbound_drawback_distinction()
+        ensure_unbound_drawback_distinction()
+
+        self.assertEqual(
+            TraditionStateLine.objects.filter(state=TraditionState.SELF_TAUGHT).count(), 1
+        )
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedBeginningTraditionsTests(TestCase):
@@ -255,7 +280,7 @@ class SeedBeginningTraditionsTests(TestCase):
     distinctions.distinction/distinctioncategory are content-repo-owned
     (#2698); ``ensure_unbound_drawback_distinction()`` only invents the
     "Unbound" drawback under SEED_SAMPLE_CONTENT — several tests here assert
-    ``required_distinction`` is the real row, so the class opts in.
+    on the real row, so the class opts in.
     """
 
     def test_creates_beginning_tradition_for_unbound(self) -> None:
@@ -268,11 +293,10 @@ class SeedBeginningTraditionsTests(TestCase):
         seed_beginning_traditions()
 
         bt = BeginningTradition.objects.get(beginning=beginning, tradition__name="Unbound")
-        # #2442: Unbound now gates on its own "Unbound" drawback distinction —
-        # was required_distiction=None pre-#2442 (see EnsureUnboundDrawbackDistinctionTests
-        # for the drawback row's own shape).
-        self.assertIsNotNone(bt.required_distinction)
-        self.assertEqual(bt.required_distinction.slug, "unbound")
+        # #3675: Unbound's slate row now reads SELF_TAUGHT (was a
+        # required_distinction FK pre-#3675; the drawback itself is carried by
+        # the SELF_TAUGHT TraditionStateLine, see EnsureUnboundDrawbackDistinctionTests).
+        self.assertEqual(bt.state, TraditionState.SELF_TAUGHT)
 
     def test_creates_a_row_for_every_beginning(self) -> None:
         from world.character_creation.models import BeginningTradition
@@ -307,31 +331,27 @@ class SeedBeginningTraditionsTests(TestCase):
         )
 
     def test_does_not_overwrite_a_staff_adjusted_row(self) -> None:
-        """A staff-set required_distinction on the seeded row survives a re-run."""
+        """A staff-set state on the seeded row survives a re-run (#3675)."""
         from world.character_creation.models import BeginningTradition
-        from world.distinctions.factories import DistinctionFactory
         from world.magic.factories import TraditionFactory
 
         TraditionFactory(name="Unbound")
         BeginningsFactory()
         seed_beginning_traditions()
 
-        distinction = DistinctionFactory()
         bt = BeginningTradition.objects.get(tradition__name="Unbound")
-        bt.required_distinction = distinction
-        bt.save(update_fields=["required_distinction"])
+        bt.state = TraditionState.LIVING_MASTERS
+        bt.save(update_fields=["state"])
 
         seed_beginning_traditions()
 
-        # BeginningTradition is a SharedMemoryModel (idmapper) — re-fetch via
+        # BeginningTradition is a SharedMemoryModel (idmapper), re-fetch via
         # .values() rather than .get() so a stale cached instance can't mask a
         # regression (mirrors EnsureTraditionTrainingDistinctionTests above).
         db_value = (
-            BeginningTradition.objects.filter(tradition__name="Unbound")
-            .values("required_distinction_id")
-            .get()
+            BeginningTradition.objects.filter(tradition__name="Unbound").values("state").get()
         )
-        self.assertEqual(db_value["required_distinction_id"], distinction.id)
+        self.assertEqual(db_value["state"], TraditionState.LIVING_MASTERS)
 
     def test_skips_silently_when_unbound_tradition_not_seeded(self) -> None:
         """Defensive skip (logged) when the magic cluster hasn't run yet."""
@@ -450,6 +470,18 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
         self.assertIn("traditionless-drawback", tag_slugs)
         self.assertIn("orphaned-tradition-marker", tag_slugs)
 
+    def test_teachers_gone_slate_line_carries_the_drawback(self) -> None:
+        """The TEACHERS_GONE TraditionStateLine carries this distinction (#3675)."""
+        from world.character_creation.models import TraditionStateLine
+        from world.distinctions.models import Distinction
+
+        ensure_orphaned_tradition_distinction()
+        distinction = Distinction.objects.get(slug="orphaned-tradition")
+
+        line = TraditionStateLine.objects.get(state=TraditionState.TEACHERS_GONE)
+        self.assertEqual(line.carries_id, distinction.id)
+        self.assertEqual(line.entry_line, "Teachers gone, no living tutor")
+
 
 @override_settings(SEED_SAMPLE_CONTENT=True)
 class SeedMetallicOrderTraditionTests(TestCase):
@@ -502,7 +534,6 @@ class SeedMetallicOrderTraditionTests(TestCase):
 
     def test_creates_tradition_grants_and_beginning_traditions(self) -> None:
         from world.character_creation.models import BeginningTradition
-        from world.distinctions.models import Distinction
         from world.magic.models.grants import TraditionGiftGrant
 
         _unbound, gifts = self._seed_unbound_with_starter_grants()
@@ -520,9 +551,8 @@ class SeedMetallicOrderTraditionTests(TestCase):
         )
         self.assertEqual(granted_gift_ids, {gift.id for gift in gifts})
 
-        distinction = Distinction.objects.get(slug="orphaned-tradition")
         bt = BeginningTradition.objects.get(beginning=beginning, tradition=tradition)
-        self.assertEqual(bt.required_distinction_id, distinction.id)
+        self.assertEqual(bt.state, TraditionState.TEACHERS_GONE)
 
         self.assertFalse(
             BeginningTradition.objects.filter(
@@ -557,21 +587,21 @@ class SeedMetallicOrderTraditionTests(TestCase):
         self._arx_beginning()
         seed_metallic_order_tradition()
 
-        # Staff clears the gate — a recovery quest restored the tradition's teachers.
+        # Staff clears the gate: a recovery quest restored the tradition's teachers.
         BeginningTradition.objects.filter(tradition__name="Metallic Order").update(
-            required_distinction=None
+            state=TraditionState.LIVING_MASTERS
         )
 
         seed_metallic_order_tradition()
 
-        # SharedMemoryModel (idmapper) — re-fetch via .values() so a stale cached
+        # SharedMemoryModel (idmapper), re-fetch via .values() so a stale cached
         # instance can't mask a regression (mirrors SeedBeginningTraditionsTests).
         db_value = (
             BeginningTradition.objects.filter(tradition__name="Metallic Order")
-            .values("required_distinction_id")
+            .values("state")
             .get()
         )
-        self.assertIsNone(db_value["required_distinction_id"])
+        self.assertEqual(db_value["state"], TraditionState.LIVING_MASTERS)
 
     def test_unbound_rows_unaffected(self) -> None:
         from world.character_creation.models import BeginningTradition
@@ -598,9 +628,8 @@ class SeedMetallicOrderTraditionTests(TestCase):
             unbound_bt_count_before,
         )
         unbound_bt = BeginningTradition.objects.get(beginning=beginning, tradition=unbound)
-        # #2442: Unbound's own row now gates on the "Unbound" drawback (not None).
-        self.assertIsNotNone(unbound_bt.required_distinction_id)
-        self.assertEqual(unbound_bt.required_distinction.slug, "unbound")
+        # #3675: Unbound's own row reads SELF_TAUGHT.
+        self.assertEqual(unbound_bt.state, TraditionState.SELF_TAUGHT)
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)

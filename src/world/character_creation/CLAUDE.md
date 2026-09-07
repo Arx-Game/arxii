@@ -84,12 +84,16 @@ resolved to right now, or `None` when it has nothing to resolve to yet
 (`derived_anchors`, exposed on `CharacterDraftSerializer` since the frontend cannot
 derive either on its own; #3660 fix round 2, controller ruling L). `models.py`,
 `validators.py`, `serializers.py`, and `services.py` all read through it rather than
-re-deriving any of these rules, so they cannot drift apart. Finalize adds
-`_grant_connection_distinctions` (grants a picked answer's `grants_distinction`
-through the same `CharacterDistinction` write path a hand-picked Distinction uses,
-naming the granted `NPCAsset` after a PERSON question's figure when one is anchored to
-the granting group) and `_seed_connection_reputation` (each picked GROUP answer's
-non-zero `reputation_seed` bumps the resolved anchor's `OrganizationReputation`).
+re-deriving any of these rules, so they cannot drift apart. Bundled connection grants
+have no dedicated finalize hook as of #3675: `reconcile_offer_picks`
+(`world.character_creation.offers`) already folds a picked answer's bundled
+`DistinctionOffer` into `draft.draft_data["distinctions"]` at cost 0, so the ordinary
+picked-Distinction path (`_create_distinctions`) creates it. `_connection_asset_names`
+(`services.py`) is the piece still specific to connections: names the granted
+`NPCAsset` after a PERSON question's figure when one is anchored to the granting group,
+feeding `_create_distinction_modifiers_bulk`'s `asset_names`. `_seed_connection_reputation`
+(each picked GROUP answer's non-zero `reputation_seed` bumps the resolved anchor's
+`OrganizationReputation`) is unchanged.
 `set_origin_slot(sheet, slot, value, choice, *, organization=_KEEP, figure_name=_KEEP)`
 defaults `organization`/`figure_name` to a `_KEEP` sentinel, not `None`/`""`: a caller
 that only edits `value` (the post-CG write-in editor) leaves an existing tie/figure

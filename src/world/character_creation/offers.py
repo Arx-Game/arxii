@@ -8,6 +8,8 @@ offers and removes picks whose offer has gone.
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
 from world.character_creation.models import (
     BeginningTradition,
@@ -19,6 +21,49 @@ from world.character_creation.questionnaire import DraftAnswers, visible_slot_id
 from world.character_creation.types import ClosedDistinction, VisibleOffer
 from world.distinctions.models import Distinction
 from world.distinctions.types import DraftDistinctionEntry, build_distinction_entry
+
+if TYPE_CHECKING:
+    from world.character_creation.models import Beginnings
+    from world.magic.models import Tradition
+
+
+def tradition_is_self_taught(tradition: Tradition) -> bool:
+    """Whether ``tradition`` is SELF_TAUGHT on any Beginning's slate (#3675).
+
+    Runtime code's only sanctioned way to answer "is this CG's tradition-agnostic
+    default" - never a name match against "Unbound." Called by
+    ``world.character_creation.services._finalize_academy_entrance_obligation``
+    and ``world.progression.services.durance_registration``.
+    """
+    return BeginningTradition.objects.filter(
+        tradition=tradition, state=TraditionState.SELF_TAUGHT
+    ).exists()
+
+
+def slate_state(beginning: Beginnings, tradition: Tradition) -> TraditionState | None:
+    """The slate state ``tradition`` reads as on ``beginning``, if the pairing exists.
+
+    ``None`` when the tradition isn't on this Beginning's slate at all. Callers that
+    already hold a ``BeginningTradition`` row should read its ``state`` field
+    directly; this is for callers that only hold the (beginning, tradition) pair.
+    """
+    raw = (
+        BeginningTradition.objects.filter(beginning=beginning, tradition=tradition)
+        .values_list("state", flat=True)
+        .first()
+    )
+    return TraditionState(raw) if raw is not None else None
+
+
+def self_taught_drawback() -> Distinction | None:
+    """The drawback the SELF_TAUGHT ``TraditionStateLine`` carries, if any (#3675).
+
+    Called by ``world.magic.services.tradition_membership._reapply_unbound_drawback``
+    on leaving a tradition - the live-play "traditionless once again" re-grant, never
+    a tag or slug lookup.
+    """
+    line = TraditionStateLine.objects.filter(state=TraditionState.SELF_TAUGHT).first()
+    return line.carries if line is not None else None
 
 
 def _slate_line(draft: CharacterDraft) -> BeginningTradition | None:

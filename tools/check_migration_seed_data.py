@@ -40,6 +40,14 @@ ALLOWED_MIGRATIONS: set[str] = {
     # The commoner_family OrganizationType and the mined HouseTemplate are
     # schema-transition targets for that backfill (expected empty in production per
     # the commit's ADR-0237 disposition), not new authored content.
+    "world/migrations/0107_distinction_offers_data.py",
+    # #3675: ADR-0237 mandatory restructure backfill, carries the existing pairings
+    # already authored on GlimpseTagDistinctionSuggestion/
+    # OriginTemplateSlotChoice.grants_distinction into the new DistinctionOffer
+    # model, and stamps the Unbound BeginningTradition row's new `state` column
+    # (the one field with no signal before this backfill runs). No authored
+    # content is invented: every DistinctionOffer row it get_or_creates mirrors
+    # a pairing that already existed in a different shape.
 }
 
 # Patterns that suggest seed data in migrations

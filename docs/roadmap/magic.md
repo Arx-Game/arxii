@@ -266,8 +266,10 @@ staff-authored catalog content instead:
 - **Tradition is a real mechanical layer.** Every character has exactly one
   Tradition, including the self-taught `Unbound` tradition (no NULL-tradition
   special-casing). `TraditionGiftGrant` (tradition × gift → signature technique
-  extras) drives the CG gift list; `BeginningTradition.required_distinction`
-  hard-gates non-Unbound traditions at tradition selection.
+  extras) drives the CG gift list; there is no selection gate, every tradition a
+  Beginning's slate offers is selectable outright, and `BeginningTradition.state`
+  (#3675, was `required_distinction`) decides which drawback the pick carries into
+  the draft for free (`TraditionStateLine`, see `docs/systems/character_creation.md`).
 - **`PathGiftGrant.starter_techniques`** (unchanged schema) is reinterpreted as
   the CG *availability pool*, not an automatic grant — the same rows
   `grant_path_magic` mints from at the level-3 Durance semi-crossing (ADR-0063,
