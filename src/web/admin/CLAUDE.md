@@ -624,6 +624,101 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660 set above.
 
+## Distinction Builder (#3675)
+
+**Purpose:** author one `Distinction` - its fields, every `DistinctionEffect`,
+its `mutually_exclusive_with` M2M, and every `DistinctionOffer` that shows it
+in a CG chapter - on one admin page in one transaction, fully replacing the
+stock `DistinctionAdmin` for authoring. Pattern mirrors the Upbringing
+Builder and the tradition slate page: `superuser_required`, the contributor
+gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
+
+- **Files** - `web/admin/distinction_builder/`: `views.py`
+  (`distinction_builder`, `distinction_builder_review`), `forms.py`
+  (`DistinctionForm` - every field the stock `DistinctionAdmin` fieldsets
+  expose today, plus `is_active`/`tags`/`secret_by_default`/
+  `default_secret_level` so this page can fully replace it, with
+  `mutually_exclusive_with` widgeted `FilteredSelectMultiple`;
+  `EffectForm`/`DistinctionEffectFormSet` and `OfferForm`/
+  `DistinctionOfferFormSet` via `inlineformset_factory`), `live.py`
+  (`price_text`, `effect_reads`, `opener_field_map`, `rail_counts`, `checks`,
+  `preview_line`). Templates in `web/templates/admin/distinction_builder/`:
+  `page.html`, `_css.html`, `_rail.html`, `_preview.html` (the offer preview,
+  a fragment included inside "Where it is offered", not excluded from the
+  styling guard's class scan). `templatetags/distinction_builder_tags.py`
+  carries `effect_reads` (the template-side wrapper: "" for an unsaved
+  formset row rather than raising on a null `target`).
+- **Stylesheets** - the page links `admin/css/forms.css` (form-row/help/
+  submit-row - not linked outside `change_form.html`, #3667) **and**
+  `admin/css/widgets.css` directly, matching what `change_form.html` links
+  for the same `FilteredSelectMultiple` widget the "Cannot be held with"
+  module uses (`forms.css` `@import`s `widgets.css` too, but this page asks
+  for both rather than relying on the transitive import). The widget also
+  needs the jsi18n catalog (`{% url 'admin:jsi18n' %}` in `extrahead`,
+  loaded automatically by `change_form.html` but not by `base_site.html`).
+- **Rendering** - the top module's five main fields and the collapsed "More"
+  fieldset (every other field the stock admin exposes) are plain
+  `tuning-table` rows, not `admin/includes/fieldset.html` - "More" is a bare
+  `<details>`/`<summary>`, native disclosure needing no admin collapse JS.
+  Effects and offers are `tuning-table`-styled formsets; "+ Add an effect" /
+  "+ Offer it somewhere else" clone the formset's own empty form client-side
+  via the shared `web/static/admin/js/builder_formsets.js` helpers (there is
+  no saved row to fetch a fragment for until the whole page is saved).
+- **The opener cascade** - an offer row always renders all three opener
+  widgets (`schooling_line` select, `glimpse_tag` autocomplete, `origin_choice`
+  autocomplete), each wrapped `<span class="db-opener" data-opener="...">`;
+  `page.html`'s inline script reads a `chapter -> opener field` map
+  (`live.opener_field_map()`, `json_script`-embedded, built off
+  `DistinctionOffer.opener_field`'s own public per-instance lookup rather than
+  its private `_OPENER_FOR_CHAPTER` table) and hides the two the row's current
+  `chapter` selection does not want, re-run on every `chapter` change and on
+  every cloned row. Server-side validation is unchanged: the model's own
+  `DistinctionOffer.clean()`, run automatically by `ModelForm._post_clean()`.
+- **`origin_choice`'s autocomplete label** reads
+  `"{template.name} › {slot.name} › {choice.name}"` via
+  `OriginTemplateSlotChoice.__str__` itself (`world/character_creation/models.py`)
+  - both the AJAX search results and the widget's own pre-selected-option
+  render call plain `str(obj)`, so overriding `__str__` covers both without a
+  custom `AutocompleteJsonView`. A bare slot name is not unique across
+  Upbringings, unlike the old `"{slot}: {name}"` form.
+- **Autocomplete registrations** - `origin_choice`/`glimpse_tag` need their
+  target models registered with `search_fields` (Django's autocomplete view
+  404s otherwise): `GlimpseTag` already was (`world/magic/admin.py`);
+  `OriginTemplateSlotChoice` got a standalone `ModelAdmin` registration
+  (`world/character_creation/admin.py`) alongside its existing
+  `OriginTemplateSlotChoiceInline` - the inline alone gives it no
+  `search_fields` of its own.
+- **URLs** (superuser-only): `_distinction_builder/new/` ->
+  `admin_distinction_builder_new`, `_distinction_builder/<pk>/` ->
+  `admin_distinction_builder`, `_distinction_builder/<pk>/review/` ->
+  `admin_distinction_builder_review` (POST).
+- **Gate** - `@superuser_required`, then `current_contributor(request.user)`;
+  an unlinked operator sees the setup guidance instead and nothing is saved.
+- **Credit** - a POST that validates saves `DistinctionForm`, the effects
+  formset and the offers formset in one `transaction.atomic()` block, then
+  `stamp_written` (`web/admin/authoring/credit.py`) credits the distinction
+  and every effect/offer the save actually touched - all three inherit
+  `CreditedContent`. "Mark reviewed" stamps the distinction plus every one of
+  its effects and offers in a separate POST.
+- **Reachability** - `web/admin/authoring/links.py:builder_url`/
+  `builder_label` add a `Distinction` branch ("Open in Distinction Builder"),
+  read generically by `change_form.html`'s object-tools block the same way
+  as `OriginTemplate`/`Beginnings`.
+- **Checks (`live.checks`)** - offered somewhere (any active offer); every
+  effect names a modifier target that exists (the FK is required, so this
+  only ever warns for a row that reached the database some other way);
+  description does not start with `PLACEHOLDER`; a LINEAGE offer whose
+  `origin_choice` answer has gone inactive; a TRADITION_STEP offer whose
+  `schooling_line` now grants a different distinction than this one.
+- **What is authored here:** the distinction's own fields, its effects, its
+  `mutually_exclusive_with` exclusions, and every `DistinctionOffer` line
+  naming it. **What is not:** the standard tradition-step lines themselves
+  (authored on the tradition slate page) or an Upbringing's questions/answers
+  (authored on the Upbringing Builder) - this page only adds/edits the offer
+  row that links a distinction to one of those.
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  #3660/#3675 set above.
+
 ## Game Tuning & Game Ops Dashboards (#1221)
 
 **Purpose:** Two superuser-only, admin-hosted HTMX dashboards linked from the Game Setup

@@ -34,6 +34,7 @@ from web.admin.content_session_views import (
     content_session_discard,
     content_session_pr,
 )
+from web.admin.distinction_builder.views import distinction_builder, distinction_builder_review
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.sphinx_views import sphinx_audit
@@ -198,6 +199,13 @@ urlpatterns = [
         "_tradition_slate/<int:beginning_pk>/review/",
         tradition_slate_review,
         name="admin_tradition_slate_review",
+    ),
+    path("_distinction_builder/new/", distinction_builder, name="admin_distinction_builder_new"),
+    path("_distinction_builder/<int:pk>/", distinction_builder, name="admin_distinction_builder"),
+    path(
+        "_distinction_builder/<int:pk>/review/",
+        distinction_builder_review,
+        name="admin_distinction_builder_review",
     ),
     path("", arx_admin_site.urls),
 ]

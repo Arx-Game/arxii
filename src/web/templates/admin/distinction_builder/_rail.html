@@ -1,0 +1,55 @@
+{% comment %}
+The live rail: what this distinction adds up to right now, what the page can
+check about it, and who is credited. Sits outside the main form - "Mark
+reviewed" is its own POST and nested forms are invalid HTML (#3675, mirrors
+the Upbringing Builder's and the tradition slate page's own rails).
+{% endcomment %}
+<div class="module">
+  <h2>This distinction</h2>
+  <div class="db-stat"><span>Effects</span><b>{{ rail.effects }}</b></div>
+  <div class="db-stat"><span>Cannot be held with</span><b>{{ rail.exclusions }}</b></div>
+  <div class="db-stat"><span>Offered in</span>
+    <b>{{ rail.offered_in }} chapter{{ rail.offered_in|pluralize }}</b></div>
+  <div class="db-stat"><span>Held by</span>
+    <b>{{ rail.held_by }} character{{ rail.held_by|pluralize }}</b></div>
+  <div class="db-stat">
+    <span>Credited to</span>
+    <b>{% if distinction.written_by %}{{ distinction.written_by.name }}
+      {% else %}Not yet written{% endif %}</b>
+  </div>
+</div>
+
+<div class="module">
+  <h2>Checks</h2>
+  {% if checks %}
+  <ul class="distinction-checks">
+    {% for kind, text in checks %}
+    <li class="distinction-check distinction-check--{{ kind }}">
+      {% if kind == "ok" %}OK{% else %}Warn{% endif %}: {{ text }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Nothing to flag yet.</p>
+  {% endif %}
+</div>
+
+<div class="module">
+  <h2>Credit</h2>
+  <div class="db-stat">
+    <span>Written by</span>
+    <b>{% if distinction.written_by %}{{ distinction.written_by.name }} on {{ distinction.written_on }}
+      {% else %}Not yet written{% endif %}</b>
+  </div>
+  <div class="db-stat">
+    <span>Reviewed by</span>
+    <b>{% if distinction.reviewed_by %}{{ distinction.reviewed_by.name }} on {{ distinction.reviewed_on }}
+      {% else %}Not yet reviewed{% endif %}</b>
+  </div>
+  <form method="post" action="{% url 'admin_distinction_builder_review' distinction.pk %}">
+    {% csrf_token %}
+    <div class="submit-row">
+      <input type="submit" value="Mark reviewed">
+    </div>
+  </form>
+</div>

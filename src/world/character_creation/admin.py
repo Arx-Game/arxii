@@ -176,6 +176,22 @@ class OriginTemplateSlotAdmin(admin.ModelAdmin):
     inlines = [OriginTemplateSlotChoiceInline]
 
 
+@admin.register(OriginTemplateSlotChoice)
+class OriginTemplateSlotChoiceAdmin(admin.ModelAdmin):
+    """Standalone registration so autocomplete widgets elsewhere can search it (#3675).
+
+    Otherwise this model is only reachable through
+    ``OriginTemplateSlotChoiceInline`` above - the Distinction Builder's
+    ``origin_choice`` autocomplete needs a plain ``ModelAdmin`` with its own
+    ``search_fields`` (Django's autocomplete view 404s without one).
+    """
+
+    list_display = ["name", "slot", "cg_point_cost", "is_active"]
+    list_filter = ["is_active", "slot__template"]
+    search_fields = ["name", "slot__name", "slot__template__name"]
+    autocomplete_fields = ["slot"]
+
+
 @admin.register(CharacterOriginSlot)
 class CharacterOriginSlotAdmin(admin.ModelAdmin):
     """Read-only admin for character origin-slot answers (#2478)."""

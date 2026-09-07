@@ -924,7 +924,11 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         dependencies = ["arxii.OriginTemplateSlot"]
 
     def __str__(self) -> str:
-        return f"{self.slot}: {self.name}"
+        # Full chain, not just "{slot}: {name}" - this is what the Distinction
+        # Builder's `origin_choice` autocomplete shows for its search results
+        # AND its pre-selected option (both read plain `str(obj)`), and a slot
+        # name alone is not unique across Upbringings (#3675).
+        return f"{self.slot.template.name} › {self.slot.name} › {self.name}"
 
     def cost_for(self, influence: int) -> int:
         """Price of this choice against a family of ``influence`` (#3617)."""

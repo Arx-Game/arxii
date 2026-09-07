@@ -14,6 +14,7 @@ from django.urls import NoReverseMatch, reverse
 
 from core.app_domains import resolve_model_by_name
 from world.character_creation.models import Beginnings, OriginTemplate
+from world.distinctions.models import Distinction
 
 
 def builder_url(obj: object) -> str:
@@ -23,12 +24,15 @@ def builder_url(obj: object) -> str:
     Beginnings change form's "Open the tradition slate" object tool (#3675)
     shares the same lookup rather than re-deriving it. ``OriginTemplate``
     opens on the Upbringing Builder; ``Beginnings`` opens on the tradition
-    slate page keyed by its own pk.
+    slate page keyed by its own pk; ``Distinction`` opens on the Distinction
+    Builder (#3675 Task 8).
     """
     if isinstance(obj, OriginTemplate) and obj.pk:
         return reverse("admin_upbringing_builder", args=[obj.pk])
     if isinstance(obj, Beginnings) and obj.pk:
         return reverse("admin_tradition_slate", args=[obj.pk])
+    if isinstance(obj, Distinction) and obj.pk:
+        return reverse("admin_distinction_builder", args=[obj.pk])
     return ""
 
 
@@ -38,6 +42,8 @@ def builder_label(obj: object) -> str:
         return "Open in Upbringing Builder"
     if isinstance(obj, Beginnings):
         return "Open the tradition slate"
+    if isinstance(obj, Distinction):
+        return "Open in Distinction Builder"
     return ""
 
 
