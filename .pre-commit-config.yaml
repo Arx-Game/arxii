@@ -295,6 +295,12 @@ repos:
             pnpm typecheck
         language: system
         files: ^frontend/.*\.(ts|tsx)$
+        # A whole-project check that never reads the filenames it is handed. Without
+        # these two lines pre-commit splits a long staged list into batches and runs
+        # the hook once per batch, concurrently: five `tsc -b --noEmit` at ~1.3 GB
+        # each on a 4 GiB devcontainer, killed at exit 137 (#3707).
+        pass_filenames: false
+        require_serial: true
       - id: prettier
         name: Prettier
         entry: bash
