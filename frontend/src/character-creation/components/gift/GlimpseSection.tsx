@@ -2,25 +2,24 @@
  * CG mount of the guided Glimpse flow (#2427).
  *
  * Reads the catalog via useGlimpseTags and binds GlimpseFlow to draft_data
- * keys (glimpse_tag_ids / glimpse_story / glimpse_linked_distinction_ids),
- * persisting through useUpdateDraft on change (same PATCH-merge contract as
- * the funnel steps). Linkable distinctions = the draft's already-chosen
- * distinctions; suggestion links to not-yet-chosen distinctions are kept in
- * glimpse_linked_distinction_ids and reconciled at finalize (unmatched ids
- * are ignored server-side).
+ * keys (glimpse_tag_ids / glimpse_story), persisting through useUpdateDraft
+ * on change (same PATCH-merge contract as the funnel steps).
+ *
+ * Distinction offers are surfaced by chapter now, not linked here (#3675):
+ * each glimpse tag carries its own `offers`; wiring the per-axis offers
+ * display (`GlimpseFlowProps.renderOffers`) is Task 13's.
  *
  * Prose stays on the parent GiftStage's shared react-hook-form instance
  * (`register('glimpse_story')`, passed down — `AnimaCheckStep`'s
  * `ritualNameField` prop is the precedent) so it still saves via
- * `saveFormFields` on stage leave; tag/link picks write immediately via
+ * `saveFormFields` on stage leave; tag picks write immediately via
  * `updateDraft`, like `GiftSelector`'s `selected_gift_id`.
  */
 
 import { GlimpseFlow } from '@/magic/components/glimpse/GlimpseFlow';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
-import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import { useGlimpseTags, useUpdateDraft } from '../../queries';
 import type { CharacterDraft, GlimpseTagOption } from '../../types';
 
@@ -42,7 +41,6 @@ interface GlimpseSectionProps {
 export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSectionProps) {
   const updateDraft = useUpdateDraft();
   const { data: tags } = useGlimpseTags(draft.selected_path?.id);
-  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   // Prose is uncontrolled from RHF's point of view (no `value` on a register
@@ -51,16 +49,6 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
   const [prose, setProse] = useState(() => draft.draft_data.glimpse_story ?? '');
 
   const selectedTagIds = draft.draft_data.glimpse_tag_ids ?? [];
-  const linkedDistinctionIds = draft.draft_data.glimpse_linked_distinction_ids ?? [];
-
-  const linkableDistinctions = useMemo(
-    () =>
-      (draftDistinctions ?? []).map((entry) => ({
-        id: entry.distinction_id,
-        name: entry.distinction_name,
-      })),
-    [draftDistinctions]
-  );
 
   const handleChangeAxis = (axis: GlimpseTagOption['axis'], tagIds: number[]) => {
     if (!tags) return;
@@ -71,20 +59,6 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
       data: {
         draft_data: {
           glimpse_tag_ids: [...otherAxisSelections, ...tagIds],
-        },
-      },
-    });
-  };
-
-  const handleToggleDistinctionLink = (distinctionId: number) => {
-    const next = linkedDistinctionIds.includes(distinctionId)
-      ? linkedDistinctionIds.filter((id) => id !== distinctionId)
-      : [...linkedDistinctionIds, distinctionId];
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          glimpse_linked_distinction_ids: next,
         },
       },
     });
@@ -121,13 +95,10 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
       tags={tags ?? []}
       selectedTagIds={selectedTagIds}
       prose={prose}
-      linkedDistinctionIds={linkedDistinctionIds}
       onChangeAxis={handleChangeAxis}
       onChangeProse={handleChangeProse}
-      onToggleDistinctionLink={handleToggleDistinctionLink}
       onSkip={() => setIsCollapsed(true)}
       showDeferralControls
-      linkableDistinctions={linkableDistinctions}
     />
   );
 }

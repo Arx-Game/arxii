@@ -135,7 +135,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt like the world cracked open.',
     example: 'Everything glowed.',
     sort_order: 1,
-    suggested_distinctions: [],
+    offers: [],
   },
   {
     id: 2,
@@ -145,7 +145,7 @@ const glimpseTagCatalog: GlimpseTagOption[] = [
     description: 'It felt wrong from the first instant.',
     example: 'The air went cold.',
     sort_order: 2,
-    suggested_distinctions: [],
+    offers: [],
   },
 ];
 
@@ -466,17 +466,11 @@ describe('SpellbookTab', () => {
       expect(setProseMutate).toHaveBeenCalledWith({ text: 'The world cracked open.' });
     });
 
-    it('toggles a distinction link via useToggleGlimpseDistinction', async () => {
-      const { toggleDistinction } = mockGlimpseQueries();
-      renderWithFinishableGlimpse();
-      await userEvent.click(screen.getByTestId('finish-glimpse-button'));
-
-      await userEvent.click(screen.getByText('Touched by the Unseen'));
-
-      // is_from_glimpse was false for this CharacterDistinction (id 7) — toggling
-      // it calls the link (not unlink) side.
-      expect(toggleDistinction).toHaveBeenCalledWith(7, false);
-    });
+    // Distinction-linking through GlimpseEditorDialog was removed when
+    // GlimpseFlowProps dropped its link props (#3675: CG offers
+    // distinctions by chapter now, not by tag suggestion). Re-wiring a
+    // post-CG distinction editor onto the offers model is a separate
+    // follow-up; see GlimpseEditorDialog.tsx's file header.
   });
 });
 

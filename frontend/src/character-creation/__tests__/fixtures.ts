@@ -250,7 +250,7 @@ export const mockUpbringingClaim: OriginTemplate = {
           cg_point_cost: 2,
           cost_per_influence: 0,
           trust_required: 0,
-          grants_distinction: null,
+          offers: [],
           sort_order: 1,
         },
         {
@@ -260,7 +260,7 @@ export const mockUpbringingClaim: OriginTemplate = {
           cg_point_cost: 0,
           cost_per_influence: 1,
           trust_required: 0,
-          grants_distinction: null,
+          offers: [],
           sort_order: 2,
         },
       ],
@@ -392,7 +392,7 @@ export const mockUpbringingConnections: OriginTemplate = {
           cg_point_cost: 0,
           cost_per_influence: 0,
           trust_required: 0,
-          grants_distinction: null,
+          offers: [],
           sort_order: 1,
         },
         {
@@ -402,12 +402,17 @@ export const mockUpbringingConnections: OriginTemplate = {
           cg_point_cost: 10,
           cost_per_influence: 0,
           trust_required: 0,
-          grants_distinction: {
-            id: 77,
-            name: 'Kept Close',
-            cost_per_rank: 15,
-            secret_by_default: false,
-          },
+          offers: [
+            {
+              offer_id: 6077,
+              distinction_id: 77,
+              name: 'Kept Close',
+              player_line: '',
+              arrives_as: 'bundled',
+              cost_per_rank: 15,
+              max_rank: 1,
+            },
+          ],
           sort_order: 2,
         },
       ],
@@ -668,7 +673,6 @@ export const mockCompleteDraftData: DraftData = {
   concept: 'A warrior seeking redemption.',
   quote: 'The dawn comes for all.',
   path_skills_complete: true,
-  traits_complete: true,
   magic_complete: true,
 };
 
@@ -1020,7 +1024,11 @@ export const mockTradition: Tradition = {
   is_active: true,
   sort_order: 1,
   codex_entry_ids: [7],
-  required_distinction_id: null,
+  state: 'living_masters',
+  state_line: 'Living masters still walk this path.',
+  own_wording: '',
+  refund: 0,
+  schooling: [],
 };
 
 export const mockCGGiftOption: CGGiftOption = {

@@ -32,6 +32,8 @@ import type {
   GlimpseTagOption,
   HeightBand,
   NamingRitualConfig,
+  OfferChapter,
+  OffersResponse,
   OriginTemplate,
   Path,
   PathSkillSuggestion,
@@ -320,6 +322,18 @@ export async function getDraftCGPoints(draftId: number): Promise<CGPointsBreakdo
   const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/cg-points/`);
   if (!res.ok) {
     throw new Error('Failed to load CG points breakdown');
+  }
+  return res.json();
+}
+
+// Distinctions are offered by CG chapter, not a standalone stage (#3675).
+export async function getDraftOffers(
+  draftId: number,
+  chapter: OfferChapter
+): Promise<OffersResponse> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/offers/?chapter=${chapter}`);
+  if (!res.ok) {
+    throw new Error('Failed to load chapter offers');
   }
   return res.json();
 }
