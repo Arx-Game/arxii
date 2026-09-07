@@ -240,14 +240,6 @@ def compute_sheet_update_xp_cost(
 compute_distinction_change_xp_cost = compute_sheet_update_xp_cost
 
 
-def _check_removal_prerequisites(character_distinction: CharacterDistinction) -> None:
-    """Check that no other held distinction depends on the one being removed.
-
-    Stub — DistinctionPrerequisite uses rule_json, no production rows reference
-    distinctions as prerequisites yet. TODO: proper rule evaluation.
-    """
-
-
 def remove_distinction(
     character_distinction: CharacterDistinction,
     *,
@@ -298,8 +290,6 @@ def remove_distinction(
     ):
         msg = "This request does not target this distinction."
         raise SheetUpdateRequestError(msg)
-
-    _check_removal_prerequisites(character_distinction)
 
     with transaction.atomic():
         delete_distinction_modifiers(character_distinction)

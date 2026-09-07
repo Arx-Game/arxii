@@ -79,7 +79,6 @@ class Stage(models.IntegerChoices):
     ORIGIN = 1, "Origin"
     HERITAGE = 2, "Heritage"
     LINEAGE = 3, "Lineage"
-    DISTINCTIONS = 4, "Distinctions"
     PATH = 5, "Path"
     GIFT = 6, "Gift"
     ATTRIBUTES = 7, "Attributes & Skills"

@@ -14,7 +14,6 @@ from world.character_creation.factories import (
     OriginTemplateSlotChoiceFactory,
     OriginTemplateSlotFactory,
 )
-from world.distinctions.factories import DistinctionFactory
 from world.societies.factories import OrganizationFactory, OrganizationTypeFactory, SocietyFactory
 
 
@@ -122,16 +121,15 @@ class ConnectionSlotSchemaTest(TestCase):
 
 
 class ConnectionChoiceSchemaTest(TestCase):
-    def test_choice_carries_grant_seed_and_trust(self):
+    def test_choice_carries_seed_and_trust(self):
         slot = OriginTemplateSlotFactory(kind=QuestionKind.GROUP, anchor_source=AnchorSource.LISTED)
         choice = OriginTemplateSlotChoiceFactory(
             slot=slot,
-            grants_distinction=DistinctionFactory(name="Kept Close"),
             reputation_seed=300,
             trust_required=0,
         )
         choice.full_clean()
-        assert choice.grants_distinction.name == "Kept Close"
+        assert choice.reputation_seed == 300
 
     def test_seed_only_on_a_group_question(self):
         slot = OriginTemplateSlotFactory(kind=QuestionKind.PICK, allows_text=False)

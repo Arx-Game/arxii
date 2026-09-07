@@ -1,10 +1,8 @@
 """Type declarations for the shared predicate engine.
 
 The rule tree is the one sanctioned dynamic-JSON case in this codebase
-(it mirrors the shape of
-``world.distinctions.models.DistinctionPrerequisite.rule_json``), so the
-evaluator accepts a plain ``dict`` as input. Everything else stays
-typed.
+(it is an AND/OR/NOT rule tree), so the evaluator accepts a plain ``dict``
+as input. Everything else stays typed.
 
 Lifted from ``world.missions.types`` when the predicate engine was
 extracted from missions into its own neutral app. Mission-specific

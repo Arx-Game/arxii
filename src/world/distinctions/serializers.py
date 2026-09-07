@@ -202,7 +202,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
     tags = DistinctionTagSerializer(source="cached_tags", many=True, read_only=True)
     effects = DistinctionEffectSerializer(source="cached_effects", many=True, read_only=True)
     variants = serializers.SerializerMethodField()
-    prerequisite_description = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
 
     class Meta:
@@ -220,7 +219,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
             "tags",
             "effects",
             "variants",
-            "prerequisite_description",
             "codex_entry_ids",
         ]
         read_only_fields = fields
@@ -239,19 +237,6 @@ class DistinctionDetailSerializer(serializers.ModelSerializer):
             many=True,
             context=self.context,
         ).data
-
-    def get_prerequisite_description(self, obj: Distinction) -> str | None:
-        """Return a human-readable description of prerequisites."""
-        prerequisites = obj.prerequisites.all()
-        if not prerequisites:
-            return None
-
-        # Combine all prerequisite descriptions
-        descriptions = [p.description for p in prerequisites if p.description]
-        if not descriptions:
-            return None
-
-        return "; ".join(descriptions)
 
 
 # =============================================================================

@@ -31,7 +31,6 @@ from world.magic.models import (
     GiftAcquisitionConfig,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -387,15 +386,6 @@ class GlimpseTagAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]
     autocomplete_fields = ["affinity"]
-
-
-@admin.register(GlimpseTagDistinctionSuggestion)
-class GlimpseTagDistinctionSuggestionAdmin(admin.ModelAdmin):
-    """Curated tag→distinction suggestion (#2427) — lore-repo content model."""
-
-    list_display = ["tag", "distinction", "sort_order"]
-    list_filter = ["tag__axis"]
-    search_fields = ["tag__name", "distinction__name"]
 
 
 @admin.action(description="Staff grant resonance to this row")

@@ -173,7 +173,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
-                "traits_complete": True,
                 "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },
@@ -327,7 +326,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "stats": DEFAULT_STATS,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
             },
         )
         # Add required magic data
@@ -1440,7 +1438,6 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
                 "stats": DEFAULT_STATS,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
             },
         )
 

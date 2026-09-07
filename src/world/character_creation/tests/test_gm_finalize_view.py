@@ -136,7 +136,6 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
-                "traits_complete": True,
                 "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },

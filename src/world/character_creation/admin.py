@@ -63,7 +63,7 @@ class BeginningsCodexGrantInline(admin.TabularInline):
 class BeginningTraditionInline(admin.TabularInline):
     model = BeginningTradition
     extra = 1
-    raw_id_fields = ["tradition", "required_distinction"]
+    raw_id_fields = ["tradition"]
 
 
 @admin.register(Beginnings)

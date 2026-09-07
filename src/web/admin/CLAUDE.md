@@ -505,14 +505,17 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   today (built on an unsaved `CharacterDraft`, never written to the database),
   authoring checks (`("ok"|"warn", text)`: a group question has a source, a
   `same_anchor_as`/`follow_up_to` points at an earlier question, a branch condition
-  has a follow-up target to gate it, a granted Distinction is active, an OWN_FAMILY
-  group question warns when a claimable family has no house org for it to resolve
-  through, #3660 fix round 2 ruling L), and backlog counts (questions, groups asked
-  about, people named, answers, distinctions used, cheapest/dearest/largest-refund
-  cost spread over required questions).
+  has a follow-up target to gate it, a `DistinctionOffer` opened by one of this
+  route's answers is active (#3675: reads offers, not a field on the answer), an
+  OWN_FAMILY group question warns when a claimable family has no house org for it to
+  resolve through, #3660 fix round 2 ruling L), and backlog counts (questions, groups
+  asked about, people named, answers, distinctions used - a count of distinct active
+  offers, not a name list, cheapest/dearest/largest-refund cost spread over required
+  questions).
 - **What is authored here:** the Upbringing itself, its questions (including the
   `#3660` kind/connection/anchor/follow-up fields), and their answers (including
-  `grants_distinction`/`reputation_seed`). **What is not:** a Vacancy - membership in
+  `reputation_seed`). Distinctions an answer grants are authored as `DistinctionOffer`
+  rows (#3675), not on this page. **What is not:** a Vacancy - membership in
   a staff family is still authored on the `Organization`/`Vacancy` admin page
   (Recipes 11-12 in `family-authoring-recipes.md`), not on this one.
 - Deliberate no-ADR for the page-layout/formset decisions: recorded in the approved

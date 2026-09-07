@@ -307,8 +307,12 @@ The Glimpse is the narrative of a character's first magical awakening
 (`CharacterAura.glimpse_story`, prose). #2427 replaced the old always-visible
 freeform textarea with a guided, tag-driven flow: pick authored tags across
 five narrative axes, then write (or keep writing) the prose, with curated
-distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
-(what *caused* the awakening) and path-gated tag filtering.
+distinction offers surfaced along the way. #2611 added the TRIGGER axis
+(what *caused* the awakening) and path-gated tag filtering. #3675 retired the
+tag's own `GlimpseTagDistinctionSuggestion` pairing table: a tag's distinctions are
+now `world.character_creation.models.DistinctionOffer` rows (`chapter=glimpse`,
+`glimpse_tag=<this tag>`), authored and read the same way every other CG chapter's
+offers are (`world.character_creation.offers`, `docs/systems/character_creation.md`).
 
 **Models** (`models/glimpse.py`):
 
@@ -316,7 +320,6 @@ distinction suggestions surfaced along the way. #2611 added the TRIGGER axis
 |-------|---------|------------|
 | `GlimpseTag` | Authored catalog choice, one per axis. Content model — `CONTENT_MODELS` (`magic.glimpsetag`), lore-repo authored, no factory-seeded catalog | `axis` (`GlimpseTagAxis`), `name`, `slug` (natural key), `description`, `example`, `sort_order`, `is_active`, `paths` (M2M to `classes.Path`, empty = all paths; #2611) |
 | `CharacterGlimpseTag` | A character's chosen tag. Instance data — never exported | `aura` FK (`CharacterAura`, `related_name="glimpse_tags"`), `tag` FK (PROTECT); unique per `(aura, tag)` |
-| `GlimpseTagDistinctionSuggestion` | Curated tag→distinction suggestion. Content model (`magic.glimpsetagdistinctionsuggestion`) — grants nothing, purely a CG-flow suggestion surface. FK points *into* `distinctions.Distinction` (specific→general, ADR-0010) | `tag` FK (CASCADE), `distinction` FK (CASCADE), `sort_order`; unique per `(tag, distinction)` |
 
 **Enums + config** (`constants.py`):
 
@@ -379,15 +382,15 @@ through the offers system too.
 **API surfaces:**
 
 - **CG catalog** — `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=` and
-  `?path_id=<N>`). The `path_id` filter (#2611) excludes tags whose `paths`
-  M2M is non-empty and does not contain the given path — used by the CG flow
-  to hide path-restricted trigger tags (e.g. "Patron Chose You" is Path of
-  the Chosen only). Omitting `path_id` returns all tags (post-CG editor mode).
-  Global authored catalog, not draft-dependent, so the same endpoint also
-  backs the post-CG "finish your glimpse later" surface. Each row embeds its
-  `suggested_distinctions` (prefetched `GlimpseTagDistinctionSuggestion` rows,
-  ordered) via `CGGlimpseTagSerializer`.
+  (`CGGlimpseTagViewSet`, `world.character_creation.views`, read-only,
+  unpaginated, filterable by `?axis=` and `?path_id=<N>`). The `path_id` filter
+  (#2611) excludes tags whose `paths` M2M is non-empty and does not contain the
+  given path — used by the CG flow to hide path-restricted trigger tags (e.g.
+  "Patron Chose You" is Path of the Chosen only). Omitting `path_id` returns all
+  tags (post-CG editor mode). Global authored catalog, not draft-dependent, so
+  the same endpoint also backs the post-CG "finish your glimpse later" surface.
+  Each row embeds its `offers` (prefetched `DistinctionOffer` rows opened by
+  this tag, #3675) via `CGGlimpseTagSerializer`.
 - **Aura actions** — four `@action`s on `CharacterAuraViewSet`
   (`world/magic/views.py`): `POST .../set-glimpse-tags/` (body
   `{axis, tag_ids[]}`, validates tags exist/are active before calling
@@ -425,7 +428,7 @@ the sheet can badge/link distinctions born in the Glimpse.
 **Out of scope (verified against code, not deferred by accident):** no
 mechanics hooks off tag picks, no LLM involvement anywhere in the flow, no new
 privacy axis beyond the existing WITNESS tags, and no authored `GlimpseTag`/
-`GlimpseTagDistinctionSuggestion` rows ship with this repo (lore-repo content,
+glimpse-chapter `DistinctionOffer` rows ship with this repo (lore-repo content,
 authored later) — the flow renders gracefully with an empty catalog (axes with
 no tags simply don't render a step).
 

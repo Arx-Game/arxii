@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.widgets import AutocompleteSelect, AutocompleteSelectMultiple
+from django.contrib.admin.widgets import AutocompleteSelectMultiple
 from django.forms import inlineformset_factory
 from django.http import QueryDict
 
@@ -100,7 +100,6 @@ class AnswerForm(forms.ModelForm):
             "description",
             "cg_point_cost",
             "cost_per_influence",
-            "grants_distinction",
             "reputation_seed",
             "trust_required",
             "is_active",
@@ -113,12 +112,6 @@ class AnswerForm(forms.ModelForm):
             "cost_per_influence": "Per point of influence",
             "reputation_seed": "Group's opinion",
             "trust_required": "Trust",
-        }
-        widgets = {
-            "grants_distinction": AutocompleteSelect(
-                OriginTemplateSlotChoice._meta.get_field("grants_distinction"),  # noqa: SLF001
-                admin.site,
-            ),
         }
 
 

@@ -1294,7 +1294,6 @@
 **Foreign Keys:**
   - beginning -> character_creation.Beginnings [FK]
   - tradition -> magic.Tradition [FK]
-  - required_distinction -> distinctions.Distinction [FK] (nullable)
 
 ### Beginnings
 **Foreign Keys:**
@@ -1419,7 +1418,6 @@
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - slot -> character_creation.OriginTemplateSlot [FK]
-  - grants_distinction -> distinctions.Distinction [FK] (nullable)
 **Pointed to by:**
   - branching_prompts <- character_creation.OriginTemplateSlot
   - character_rows <- character_creation.CharacterOriginSlot
@@ -3513,19 +3511,16 @@
   - asset_grants <- assets.DistinctionAssetGrant
   - consequence_effects <- checks.ConsequenceEffect
   - closed_by_routes <- character_creation.OriginTemplate
-  - granting_choices <- character_creation.OriginTemplateSlotChoice
   - carried_by_state_lines <- character_creation.TraditionStateLine
   - granted_by_schooling_lines <- character_creation.SchoolingLine
   - offers <- character_creation.DistinctionOffer
   - codex_grants <- codex.DistinctionCodexGrant
   - appetite_upkeep <- magic.AppetiteUpkeep
-  - glimpse_tag_suggestions <- magic.GlimpseTagDistinctionSuggestion
   - ritual_grants <- magic.DistinctionRitualGrant
   - resonance_grants <- magic.DistinctionResonanceGrant
   - resonance_rank_thresholds <- magic.DistinctionResonanceRankThreshold
   - purse_drain <- currency.DistinctionPurseDrain
   - variants <- distinctions.Distinction
-  - prerequisites <- distinctions.DistinctionPrerequisite
   - effects <- distinctions.DistinctionEffect
   - character_grants <- distinctions.CharacterDistinction
   - other_entries <- distinctions.CharacterDistinctionOther
@@ -3550,10 +3545,6 @@
   - target -> mechanics.ModifierTarget [FK]
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
-
-### DistinctionPrerequisite
-**Foreign Keys:**
-  - distinction -> distinctions.Distinction [FK]
 
 ### DistinctionTag
 **Pointed to by:**
@@ -5356,12 +5347,6 @@
 **Pointed to by:**
   - distinction_offers <- character_creation.DistinctionOffer
   - character_rows <- magic.CharacterGlimpseTag
-  - distinction_suggestions <- magic.GlimpseTagDistinctionSuggestion
-
-### GlimpseTagDistinctionSuggestion
-**Foreign Keys:**
-  - tag -> magic.GlimpseTag [FK]
-  - distinction -> distinctions.Distinction [FK]
 
 ### ImbuingProseTemplate
 **Foreign Keys:**

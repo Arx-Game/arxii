@@ -76,12 +76,12 @@ class BuilderGetTest(BuilderTestCase):
 class BuilderAutocompleteWidgetsTest(BuilderTestCase):
     """The Builder's autocomplete widgets' AJAX calls (#3670 regression).
 
-    Both ``QuestionForm.anchor_orgs`` and ``AnswerForm.grants_distinction`` are
-    built with ``Autocomplete(Select|SelectMultiple)(<field>, admin.site)``. Each
-    widget must be constructed from the **forward** field itself, not its
-    ``.remote_field`` (the reverse relation on the target model) - the reverse
-    relation has no ``get_limit_choices_to()``, so a request built off it 500s
-    inside Django's own ``AutocompleteJsonView`` (Sentry ARX2-C, filed as #3670).
+    ``QuestionForm.anchor_orgs`` is built with
+    ``AutocompleteSelectMultiple(<field>, admin.site)``. The widget must be
+    constructed from the **forward** field itself, not its ``.remote_field``
+    (the reverse relation on the target model) - the reverse relation has no
+    ``get_limit_choices_to()``, so a request built off it 500s inside Django's
+    own ``AutocompleteJsonView`` (Sentry ARX2-C, filed as #3670).
     """
 
     def test_anchor_orgs_widget_points_the_ajax_call_at_the_forward_field(self):
@@ -101,28 +101,6 @@ class BuilderAutocompleteWidgetsTest(BuilderTestCase):
         assert resp.status_code == 200
         results = resp.json()["results"]
         assert any(r["text"].startswith("House Orisant") for r in results)
-
-    def test_grants_distinction_widget_points_the_ajax_call_at_the_forward_field(self):
-        self.client.force_login(self.author)
-        resp = self.client.get(reverse("admin_upbringing_builder", args=[self.template.pk]))
-        body = resp.content.decode()
-        assert 'data-model-name="origintemplateslotchoice"' in body
-        assert 'data-field-name="grants_distinction"' in body
-
-    def test_grants_distinction_autocomplete_endpoint_returns_matching_distinctions(self):
-        DistinctionFactory(name="Kept Close")
-        self.client.force_login(self.author)
-        resp = self.client.get(
-            "/admin/autocomplete/",
-            {
-                "app_label": "arxii",
-                "model_name": "origintemplateslotchoice",
-                "field_name": "grants_distinction",
-            },
-        )
-        assert resp.status_code == 200
-        results = resp.json()["results"]
-        assert any(r["text"].startswith("Kept Close") for r in results)
 
 
 class BuilderSaveTest(BuilderTestCase):
@@ -174,17 +152,15 @@ class BuilderSaveTest(BuilderTestCase):
 
     def test_save_writes_rows_and_credits_the_operator(self):
         self.client.force_login(self.author)
-        kept = DistinctionFactory(name="Kept Close")
         resp = self.client.post(
             reverse("admin_upbringing_builder", args=[self.template.pk]),
-            self._post_data(**{f"a{self.q1.pk}-0-grants_distinction": str(kept.pk)}),
+            self._post_data(),
         )
         assert resp.status_code == 302
         self.template.refresh_from_db()
         assert self.template.written_by == self.writer
         choice = OriginTemplateSlotChoice.objects.get(pk=self.livery.pk)
         assert choice.cg_point_cost == 5
-        assert choice.grants_distinction == kept
         assert choice.written_by == self.writer
         assert OriginTemplateSlot.objects.get(pk=self.q1.pk).written_by == self.writer
 
@@ -257,16 +233,39 @@ class BuilderLiveTest(BuilderTestCase):
         assert counts["questions"] == 1
         assert counts["groups_asked_about"] == 1
         assert counts["answers"] == 1
+        assert counts["distinctions_used"] == 0
         panel = live.for_template(self.template, self.author)
         assert [org.name for org in panel.groups_by_slot[self.q1.pk]] == ["House Orisant"]
         assert any(kind == "ok" for kind, _ in panel.checks)
 
+    def test_distinctions_used_counts_distinct_active_offers(self):
+        from web.admin.upbringing_builder import live
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        offered = DistinctionFactory(name="Kept Close")
+        DistinctionOfferFactory(
+            distinction=offered,
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.BUNDLED,
+            origin_choice=self.livery,
+        )
+
+        counts = live.rail_counts(self.template)
+        assert counts["distinctions_used"] == 1
+
     def test_inactive_granted_distinction_is_a_warn_check(self):
         from web.admin.upbringing_builder import live
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
 
         inactive = DistinctionFactory(name="Faded Claim", is_active=False)
-        OriginTemplateSlotChoiceFactory(
-            slot=self.q1, name="Old promise", grants_distinction=inactive
+        choice = OriginTemplateSlotChoiceFactory(slot=self.q1, name="Old promise")
+        DistinctionOfferFactory(
+            distinction=inactive,
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.BUNDLED,
+            origin_choice=choice,
         )
         panel = live.for_template(self.template, self.author)
         assert any(kind == "warn" and "Faded Claim" in text for kind, text in panel.checks)
@@ -377,6 +376,8 @@ class BuilderLiveTest(BuilderTestCase):
     def test_inactive_answers_are_excluded_from_rail_counts_and_checks(self):
         """Ruling 2: an inactive answer is never offered to a player, so it never counts."""
         from web.admin.upbringing_builder import live
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
 
         template = OriginTemplateFactory(name="Isolated Rail Counts")
         slot = OriginTemplateSlotFactory(
@@ -386,12 +387,17 @@ class BuilderLiveTest(BuilderTestCase):
             slot=slot, name="Cheap and active", cg_point_cost=5, is_active=True
         )
         inactive_dist = DistinctionFactory(name="Retired Claim", is_active=False)
-        OriginTemplateSlotChoiceFactory(
+        retired_choice = OriginTemplateSlotChoiceFactory(
             slot=slot,
             name="Retired and pricey",
             cg_point_cost=50,
             is_active=False,
-            grants_distinction=inactive_dist,
+        )
+        DistinctionOfferFactory(
+            distinction=inactive_dist,
+            chapter=OfferChapter.LINEAGE,
+            arrives_as=OfferArrival.BUNDLED,
+            origin_choice=retired_choice,
         )
 
         counts = live.rail_counts(template)

@@ -416,11 +416,11 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def cached_beginning_traditions(self) -> list[BeginningTradition]:
         """All BeginningTradition rows for this Beginning, ordered for CG.
 
-        Returns BT rows with ``tradition`` and ``required_distinction``
-        select_related, sorted by ``(sort_order, id)``. The list is the same
-        for every caller asking about a given Beginning, so caching on the
-        SharedMemoryModel-instance is the correct location: populated once
-        per Beginning per process, reused across all subsequent requests.
+        Returns BT rows with ``tradition`` select_related, sorted by
+        ``(sort_order, id)``. The list is the same for every caller asking
+        about a given Beginning, so caching on the SharedMemoryModel-instance
+        is the correct location: populated once per Beginning per process,
+        reused across all subsequent requests.
 
         Use this from views/serializers instead of viewset-scoped helpers.
 
@@ -429,7 +429,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
-            self.beginning_traditions.select_related("tradition", "required_distinction")
+            self.beginning_traditions.select_related("tradition")
             .prefetch_related(
                 Prefetch(
                     "tradition__codex_grants",
@@ -530,14 +530,6 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
         _TRADITION_MODEL,
         on_delete=models.CASCADE,
         related_name="beginning_traditions",
-    )
-    required_distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Distinction required to select this tradition for this beginning.",
     )
     sort_order = models.PositiveIntegerField(
         default=0,
@@ -908,14 +900,6 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     cg_point_cost = models.IntegerField(default=0, help_text="Flat CG cost of this choice.")
     cost_per_influence = models.IntegerField(
         default=0, help_text="CG cost per point of the claimed family's influence."
-    )
-    grants_distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="granting_choices",
-        help_text="Picking this answer grants the Distinction, bundled at no extra cost (#3660).",
     )
     reputation_seed = models.IntegerField(
         default=0,
@@ -1773,10 +1757,6 @@ class CharacterDraft(SharedMemoryModel):
             specializations.values(), budget.max_specialization_value, "Specialization"
         )
         self._check_specialization_parents(skills, specializations, budget)
-
-    def _is_distinctions_complete(self) -> bool:
-        """Check if distinctions stage is complete."""
-        return not self.get_stage_validation_errors().get(self.Stage.DISTINCTIONS, [])
 
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""

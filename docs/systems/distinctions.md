@@ -37,7 +37,6 @@ from world.distinctions.types import (
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
-| `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
 
 **Mutual exclusion is not a separate model.** `Distinction.mutually_exclusive_with` is a
 symmetrical self-referential `ManyToManyField` — adding `a.mutually_exclusive_with.add(b)`
@@ -465,6 +464,6 @@ removeDistinction.mutate(distinctionId);
 
 All models are registered in Django admin with appropriate filters, search, and inline editing:
 
-- `DistinctionAdmin` - Full editing with effects and prerequisites inline
+- `DistinctionAdmin` - Full editing with effects inline
 - `CharacterDistinctionAdmin` - With `list_select_related` for performance
 - `CharacterDistinctionOtherAdmin` - Bulk approve action for freeform entries

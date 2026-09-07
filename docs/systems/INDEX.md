@@ -391,10 +391,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`),
     `CharacterGlimpseTag` (instance data, never exported; `aura` FK
-    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`),
-    `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
-    — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
-    suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
+    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`).
+    A tag's suggested distinctions are `character_creation.DistinctionOffer` rows
+    (`chapter=glimpse`, `glimpse_tag=<tag>`; #3675, retired the tag's own
+    `GlimpseTagDistinctionSuggestion` pairing table). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
     (`constants.py`) — five axes (TRIGGER single-select, what caused the
     awakening [#2611]; TONE single-select; CONSEQUENCE, WITNESS, SENSORY
     multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
@@ -4719,7 +4719,9 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
 ### Predicates (shared rule engine)
 Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 (`MissionTemplate.availability_rule`, `MissionOption.rule_json`), npc_services
-(`NPCServiceOffer.eligibility_rule`), distinctions (`DistinctionPrerequisite.rule_json`).
+(`NPCServiceOffer.eligibility_rule`). (`distinctions.DistinctionPrerequisite`, an
+earlier consumer, was retired #3675 -- distinctions are offered by CG chapter now,
+never gated by a prerequisite rule tree.)
 
 - **Module:** `src/world/predicates/predicates.py` (no models — pure Python)
 - **Key entry points:** `evaluate(rule: dict, ctx: PredicateContext) -> bool`,

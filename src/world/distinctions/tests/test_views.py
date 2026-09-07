@@ -145,7 +145,6 @@ class DistinctionViewSetTests(TestCase):
         assert response.status_code == status.HTTP_200_OK
         assert response.data["name"] == "Strong"
         assert "effects" in response.data
-        assert "prerequisite_description" in response.data
 
     def test_unauthenticated_access_denied(self):
         """Unauthenticated users cannot access distinctions."""

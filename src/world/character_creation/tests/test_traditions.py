@@ -25,11 +25,6 @@ class BeginningTraditionTests(TestCase):
         bt = BeginningTraditionFactory()
         assert BeginningTradition.objects.filter(pk=bt.pk).exists()
 
-    def test_with_required_distinction(self):
-        distinction = DistinctionFactory()
-        bt = BeginningTraditionFactory(required_distinction=distinction)
-        assert bt.required_distinction == distinction
-
     def test_beginning_traditions_m2m(self):
         beginning = BeginningsFactory()
         t1 = TraditionFactory(name="T1")
