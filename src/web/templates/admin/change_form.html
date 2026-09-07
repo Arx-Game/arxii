@@ -31,7 +31,7 @@
     {% endif %}{% endwith %}{% endif %}
     {% if original and request.user.is_superuser %}{% with bu=original|builder_url %}{% if bu %}
     <li>
-        <a href="{{ bu }}" class="workbench-open-link">Open in Upbringing Builder</a>
+        <a href="{{ bu }}" class="workbench-open-link">{{ original|builder_label }}</a>
     </li>
     {% endif %}{% endwith %}{% endif %}
     {% change_form_object_tools %}

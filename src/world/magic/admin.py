@@ -1,7 +1,13 @@
+from django import forms
 from django.contrib import admin
 from django.db.models import Prefetch
+from django.forms.models import BaseInlineFormSet
+from django.utils.html import format_html
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
 from world.admin_utils import describe_reverse_relations
+from world.character_creation.constants import OfferChapter
+from world.character_creation.models import DistinctionOffer
 from world.codex.models import TraditionCodexGrant
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
@@ -33,7 +39,6 @@ from world.magic.models import (
     GiftAcquisitionConfig,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -410,6 +415,87 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         refresh_glimpse_state(obj)
 
 
+class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2).
+
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review, promoted alongside the Upbringing Builder's
+    identical ``_OfferBaseFormSet``) - this class only names the owner noun.
+    """
+
+    owner_noun = "tag"
+
+
+class GlimpseTagOfferForm(forms.ModelForm):
+    """One "what it offers" row on a Glimpse tag's own change form (#3675).
+
+    ``chapter`` is forced to GLIMPSE here and never shown as a select - the
+    row exists because it hangs off this tag, so which chapter it belongs to
+    is not a choice an author makes on this page (mirrors the Distinction
+    Builder's own per-chapter opener, just fixed to one value instead of
+    picked). ``glimpse_tag`` itself needs no forcing here: Django's own
+    ``BaseInlineFormSet._construct_form`` stamps the parent's pk onto a new
+    row's fk attribute before validation runs, the same plumbing every
+    admin inline relies on.
+    """
+
+    class Meta:
+        model = DistinctionOffer
+        fields = ["distinction", "arrives_as", "name", "player_line", "sort_order", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.chapter = OfferChapter.GLIMPSE
+
+
+class DistinctionOfferInline(admin.TabularInline):
+    """ "What it offers" on a Glimpse tag's own page (#3675): every priced offer
+    this tag opens. A stock admin inline, not a new builder - the tag's own
+    change form already carries this table, matching how a Distinction's
+    Lineage offers are also editable from the Upbringing Builder's own answer
+    row (either side can add one).
+    """
+
+    model = DistinctionOffer
+    fk_name = "glimpse_tag"
+    form = GlimpseTagOfferForm
+    formset = GlimpseTagOfferFormSet
+    fields = [
+        "distinction",
+        "arrives_as",
+        "name",
+        "player_line",
+        "sort_order",
+        "is_active",
+        "builder_link",
+    ]
+    readonly_fields = ["builder_link"]
+    autocomplete_fields = ["distinction"]
+    extra = 1
+    verbose_name = "offer"
+    verbose_name_plural = "What it offers"
+
+    @admin.display(description="")
+    def builder_link(self, obj: DistinctionOffer) -> str:
+        """A saved row's link to its Distinction's own Builder page (#3675 review Important 2).
+
+        ``help_text`` set in ``GlimpseTagOfferForm.__init__`` was tried first and
+        does not reach the page: a ``TabularInline`` renders each column's help
+        text once, off the formset's own ``empty_form`` - a per-instance value
+        set in a bound form's ``__init__`` never shows for a saved row. A
+        ``readonly_fields`` callable column is the admin-native way to render
+        one link per row instead.
+        """
+        if not obj.pk or not obj.distinction_id:
+            return ""
+        from web.admin.authoring.links import builder_url  # noqa: PLC0415
+
+        url = builder_url(obj.distinction)
+        if not url:
+            return ""
+        return format_html('<a href="{}">open</a>', url)
+
+
 @admin.register(GlimpseTag)
 class GlimpseTagAdmin(admin.ModelAdmin):
     """Guided glimpse tag catalog (#2427) — lore-repo content model."""
@@ -420,15 +506,52 @@ class GlimpseTagAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]
     autocomplete_fields = ["affinity"]
+    inlines = [DistinctionOfferInline]
+    change_form_template = "admin/magic/glimpsetag/change_form.html"
 
+    def render_change_form(  # noqa: PLR0913
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        """Injects the "how it reads to a player" preview (#3675).
 
-@admin.register(GlimpseTagDistinctionSuggestion)
-class GlimpseTagDistinctionSuggestionAdmin(admin.ModelAdmin):
-    """Curated tag→distinction suggestion (#2427) — lore-repo content model."""
+        The six-argument signature matches ``ModelAdmin.render_change_form``'s
+        own (PLR0913 noqa'd rather than trimmed) - overriding it means keeping
+        every parameter Django itself declares.
 
-    list_display = ["tag", "distinction", "sort_order"]
-    list_filter = ["tag__axis"]
-    search_fields = ["tag__name", "distinction__name"]
+        Runs for both add and change so the template's include always has a
+        ``preview`` variable - an unsaved tag has no offers yet, so this is
+        ``None`` on the add page, and the shared fragment already renders its
+        own "add an active offer" line for that case.
+        """
+        from web.admin.authoring.offers import preview_from_offers  # noqa: PLC0415
+
+        preview = None
+        if obj is not None and obj.pk:
+            # obj.offers is the GlimpseTagOffersHandler (ADR-0278) - already
+            # active-only, select_related("distinction"), ordered.
+            preview = preview_from_offers(obj.offers.rows)
+        context["offer_preview"] = preview
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def save_formset(self, request, form, formset, change):
+        """Credits every saved offer row (#3675), mirroring the Builder pages' save."""
+        if formset.model is not DistinctionOffer:
+            super().save_formset(request, form, formset, change)
+            return
+        from web.admin.authoring.contributors import current_contributor  # noqa: PLC0415
+        from web.admin.authoring.credit import stamp_written  # noqa: PLC0415
+
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        contributor = current_contributor(request.user)
+        for obj in instances:
+            obj.save()
+            if contributor is not None:
+                stamp_written(obj, contributor)
+        formset.save_m2m()
 
 
 @admin.action(description="Staff grant resonance to this row")

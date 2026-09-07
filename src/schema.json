@@ -4367,6 +4367,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/HouseClaimStatus'
           description: ''
+  /api/character-creation/drafts/{id}/offers/:
+    get:
+      operationId: character_creation_drafts_offers_retrieve
+      description: The distinctions this draft can pick in one chapter, and what its
+        route closed.
+      parameters:
+      - in: query
+        name: chapter
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffersResponse'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -4397,25 +4424,14 @@ paths:
     post:
       operationId: character_creation_drafts_select_tradition_create
       description: |-
-        Select a tradition for the draft.
+        Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
-        that requires formal training may only be selected once the draft already
-        holds that distinction (added via the distinctions app). There is no
-        general auto-attach — `world.distinctions.views` only *clears* the selected
-        tradition when its required distinction is later removed
-        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
-
-        **One deliberate exception (#2442):** the "Unbound" drawback distinction
-        (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
-        of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
-        — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
-        player must not be forced to already know about this one specific drawback
-        before CG can complete; see
-        ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-        .test_tradition_step_completable_for_every_seeded_beginning`` for the
-        "CG must remain completable via the Unbound path with zero manual steps"
-        regression proof #2426 shipped, which this exception preserves.
+        There is no gate here: every tradition a Beginning's slate offers is
+        selectable outright. What the pick carries is decided by the slate line's
+        state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
+        to that state may name a drawback distinction the pick carries for free,
+        applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
+        removes whatever it carried the same way.
       parameters:
       - in: path
         name: id
@@ -4754,10 +4770,15 @@ paths:
     get:
       operationId: character_creation_glimpse_tags_list
       description: |-
-        List active glimpse tags for the CG guided glimpse flow (#2427).
+        Serialize with one batched offers query, not one per row (ADR-0278).
 
-        Global authored catalog — not draft-dependent, so it also serves the
-        post-CG "finish your glimpse later" surface on the character sheet.
+        Mirrors ``CGOriginTemplateViewSet.list()``: this ViewSet opts out of
+        pagination, so there's no ``page`` branch to preserve. Offers are read
+        through ``GlimpseTag.offers`` (``GlimpseTagOffersHandler``), primed here
+        for the whole page rather than reached via a ``Prefetch(to_attr=...)``:
+        a `to_attr` prefetch silently stops running on an identity-mapped
+        instance the second time it's warm (ADR-0263), which is what this
+        endpoint shipped with until #3675.
       parameters:
       - in: query
         name: axis
@@ -4880,14 +4901,14 @@ paths:
     get:
       operationId: character_creation_origin_templates_list
       description: |-
-        Serialize with one batched ``claimable_kind_ids`` query, not one per row.
+        Serialize with one batched ``claimable_kind_ids`` + offers query, not one per row.
 
         Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
         so there is no ``page`` branch to preserve) but materializes the
-        queryset once and passes a template-id -> kind-id grouping into the
-        serializer context (no per-request memo on ``self`` - ADR-0260; the
-        grouping is a plain argument, not state stashed on the view or
-        serializer instance).
+        queryset once and passes a template-id -> kind-id grouping and a
+        choice-id -> offers grouping into the serializer context (no per-request
+        memo on ``self`` - ADR-0260; each grouping is a plain argument, not state
+        stashed on the view or serializer instance).
       parameters:
       - in: query
         name: beginning
@@ -10648,6 +10669,7 @@ paths:
         Request body:
             {
                 "distinction_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -10711,6 +10733,7 @@ paths:
             {
                 "remove_id": int,
                 "add_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -10744,15 +10767,17 @@ paths:
     put:
       operationId: distinctions_drafts_distinctions_sync_update
       description: |-
-        Set the full list of distinctions on a draft.
+        Set the full list of CHOICE distinctions on a draft, then reconcile (#3675).
 
         Request body:
             {
-                "distinctions": [{"id": int, "rank": int}, ...]
+                "distinctions": [{"id": int, "rank": int, "offer_id": int}, ...]
             }
 
-        This replaces all distinctions on the draft with the provided list.
-        All distinctions are validated together for mutual exclusion conflicts.
+        This replaces every CHOICE-arrival distinction on the draft with the
+        provided list; every entry must resolve to an offer the draft earned
+        (``_resolve_offer``). ``reconcile_offer_picks`` runs afterward so any
+        BUNDLED/CARRIED entries the frontend never sends survive the sync.
       parameters:
       - in: path
         name: draft_id
@@ -42193,11 +42218,11 @@ components:
     CGGlimpseTag:
       type: object
       description: |-
-        Glimpse tag row for the CG guided flow (#2427).
+        Glimpse tag row for the CG guided flow (#2427, #3675).
 
-        Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
-        suggestions are embedded per tag (prefetched); the client dedupes across
-        the chosen tag set.
+        Backs ``GET /api/character-creation/glimpse-tags/``. The distinctions this tag
+        opens are embedded as offers (prefetched); the client dedupes across the chosen
+        tag set.
       properties:
         id:
           type: integer
@@ -42243,10 +42268,10 @@ components:
           nullable: true
           description: Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER
             tags to apply a small aura adjustment. Null = no affinity nudge.
-        suggested_distinctions:
+        offers:
           type: array
           items:
-            $ref: '#/components/schemas/CGGlimpseTagSuggestedDistinction'
+            $ref: '#/components/schemas/CGGlimpseTagOffer'
           readOnly: true
       required:
       - affinity
@@ -42255,23 +42280,32 @@ components:
       - example
       - id
       - name
+      - offers
       - slug
       - sort_order
-      - suggested_distinctions
-    CGGlimpseTagSuggestedDistinction:
+    CGGlimpseTagOffer:
       type: object
-      description: Distinction stub embedded in a glimpse tag's suggestion list (#2427).
+      description: A ``DistinctionOffer`` embedded on a glimpse tag row (#3675).
       properties:
-        id:
+        offer_id:
           type: integer
-          readOnly: true
+        distinction_id:
+          type: integer
         name:
           type: string
-          readOnly: true
-          description: Display name for this distinction.
+        player_line:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
       required:
-      - id
+      - cost_per_rank
+      - distinction_id
+      - max_rank
       - name
+      - offer_id
+      - player_line
     CGOriginTemplate:
       type: object
       description: |-
@@ -42387,7 +42421,7 @@ components:
         is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
         serializer context — never attached to the (SharedMemoryModel) ``Technique``
         instance itself, to avoid leaking one request's filtered flag into another's
-        cached row (see the ``required_distinction_id`` comment above).
+        cached row (see ``TraditionSerializer._beginning_tradition`` above).
       properties:
         id:
           type: integer
@@ -43806,7 +43840,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -43908,10 +43941,10 @@ components:
           description: |-
             Render the selected tradition with this draft's beginning_id in context.
 
-            TraditionSerializer.required_distinction_id resolves a BeginningTradition
-            row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
-            state directly, so we inject ``beginning_id`` into a per-draft context
-            rather than relying on the list endpoint's pre-built map.
+            TraditionSerializer._beginning_tradition resolves a BeginningTradition row
+            keyed on (beginning_id, tradition_id). Drafts carry both pieces of state
+            directly, so we inject ``beginning_id`` into a per-draft context rather than
+            relying on the list endpoint's pre-built map.
           readOnly: true
         public_worship:
           allOf:
@@ -44067,7 +44100,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -45100,6 +45132,30 @@ components:
       - phase
       - season
       - year
+    ClosedDistinction:
+      type: object
+      description: A ``world.character_creation.types.ClosedDistinction`` (#3675).
+      properties:
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        reason:
+          type: string
+        opener_labels:
+          type: array
+          items:
+            type: string
+        opener_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - distinction_id
+      - name
+      - opener_ids
+      - opener_labels
+      - reason
     ClueRevealOfferDetails:
       type: object
       description: |-
@@ -47200,7 +47256,6 @@ components:
       - 1
       - 2
       - 3
-      - 4
       - 5
       - 6
       - 7
@@ -47213,7 +47268,6 @@ components:
         * `1` - Origin
         * `2` - Heritage
         * `3` - Lineage
-        * `4` - Distinctions
         * `5` - Path
         * `6` - Gift
         * `7` - Attributes & Skills
@@ -48174,11 +48228,6 @@ components:
           nullable: true
           description: Return child variants if this is a variant parent.
           readOnly: true
-        prerequisite_description:
-          type: string
-          nullable: true
-          description: Return a human-readable description of prerequisites.
-          readOnly: true
         codex_entry_ids:
           type: array
           items:
@@ -48196,7 +48245,6 @@ components:
       - is_variant_parent
       - max_rank
       - name
-      - prerequisite_description
       - slug
       - tags
       - variants
@@ -48593,9 +48641,15 @@ components:
       - submitted_at
     DraftDistinctionCreateRequest:
       type: object
-      description: Request body for adding a distinction to a draft (create).
+      description: |-
+        Request body for adding a distinction to a draft (create).
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from, every
+        add must resolve to an offer the draft earned.
       properties:
         distinction_id:
+          type: integer
+        offer_id:
           type: integer
         rank:
           type: integer
@@ -48605,9 +48659,21 @@ components:
           default: ''
       required:
       - distinction_id
+      - offer_id
     DraftDistinctionEntry:
       type: object
-      description: Read shape of one distinction entry stored in draft_data.
+      description: |-
+        Read shape of one distinction entry stored in draft_data.
+
+        ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
+        ``DistinctionOffer`` rows, their display labels, and how each arrived
+        (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
+        carries them on every offer-tracked entry. ``required=False`` mirrors runtime
+        reality: a legacy entry saved before the offers system landed (0106) has no
+        ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+        has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
+        row) and ``str`` (a tradition-state-carried drawback's synthetic
+        ``"state:<TraditionState>"`` key).
       properties:
         distinction_id:
           type: integer
@@ -48623,6 +48689,17 @@ components:
           type: integer
         notes:
           type: string
+        offer_ids:
+          type: array
+          items: {}
+        sources:
+          type: array
+          items:
+            type: string
+        arrivals:
+          type: array
+          items:
+            type: string
       required:
       - category_slug
       - cost
@@ -48633,11 +48710,17 @@ components:
       - rank
     DraftDistinctionSwapRequest:
       type: object
-      description: Request body for swapping mutually-exclusive distinctions.
+      description: |-
+        Request body for swapping mutually-exclusive distinctions.
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
+        came from, the same offer rule ``create`` enforces.
       properties:
         remove_id:
           type: integer
         add_id:
+          type: integer
+        offer_id:
           type: integer
         rank:
           type: integer
@@ -48647,6 +48730,7 @@ components:
           default: ''
       required:
       - add_id
+      - offer_id
       - remove_id
     DraftDistinctionSwapResult:
       type: object
@@ -48660,15 +48744,23 @@ components:
       - removed
     DraftDistinctionSyncItemRequest:
       type: object
-      description: One ``{id, rank}`` pair in the sync request list.
+      description: |-
+        One ``{id, rank, offer_id}`` entry in the sync request list.
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
+        from; required, since carried/bundled entries are re-applied by
+        ``reconcile_offer_picks`` rather than sent by the client.
       properties:
         id:
           type: integer
         rank:
           type: integer
           default: 1
+        offer_id:
+          type: integer
       required:
       - id
+      - offer_id
     DraftDistinctionSyncRequest:
       type: object
       description: Request body for replacing the full distinction list (sync).
@@ -53341,24 +53433,6 @@ components:
       - content
       - heat
       - id
-    GrantedDistinction:
-      type: object
-      description: The Distinction a choice bundles at no extra cost (#3660 ruling
-        E).
-      properties:
-        id:
-          type: integer
-        name:
-          type: string
-        cost_per_rank:
-          type: integer
-        secret_by_default:
-          type: boolean
-      required:
-      - cost_per_rank
-      - id
-      - name
-      - secret_by_default
     GrievanceOption:
       type: object
       description: A preset grievance swing offered to a wronged character (#1429).
@@ -53631,6 +53705,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - id
@@ -53663,6 +53742,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - max_inches
@@ -59869,6 +59953,21 @@ components:
         * `accepted` - Accepted
         * `declined` - Declined
         * `expired` - Expired
+    OffersResponse:
+      type: object
+      description: The ``offers``/``closed`` payload the offers action returns (#3675).
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisibleOffer'
+        closed:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClosedDistinction'
+      required:
+      - closed
+      - offers
     OldLevelEnum:
       enum:
       - starting
@@ -61045,6 +61144,32 @@ components:
       required:
       - id
       - name
+    OriginChoiceOffer:
+      type: object
+      description: A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675).
+      properties:
+        offer_id:
+          type: integer
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        arrives_as:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
+      required:
+      - arrives_as
+      - cost_per_rank
+      - distinction_id
+      - max_rank
+      - name
+      - offer_id
+      - player_line
     OriginEnum:
       enum:
       - authored
@@ -61210,8 +61335,10 @@ components:
       - sort_order
     OriginTemplateSlotChoice:
       type: object
-      description: 'One priced answer on an Upbringing prompt (#3617, #3660). The
-        seed stays server-side.'
+      description: |-
+        One priced answer on an Upbringing prompt (#3617, #3660, #3675).
+
+        The seed stays server-side.
       properties:
         id:
           type: integer
@@ -61236,10 +61363,10 @@ components:
           type: integer
           readOnly: true
           description: Minimum trust to see this answer; staff always see it (#3660).
-        grants_distinction:
-          allOf:
-          - $ref: '#/components/schemas/GrantedDistinction'
-          nullable: true
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginChoiceOffer'
           readOnly: true
         sort_order:
           type: integer
@@ -61248,9 +61375,9 @@ components:
       - cg_point_cost
       - cost_per_influence
       - description
-      - grants_distinction
       - id
       - name
+      - offers
       - sort_order
       - trust_required
     OriginTemplateSlotKindEnum:
@@ -66917,7 +67044,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -75281,6 +75407,38 @@ components:
       - content
       - persona
       - scene
+    SchoolingLine:
+      type: object
+      description: One standard schooling stance under a ``living_masters`` tradition
+        (#3675).
+      properties:
+        schooling_line_id:
+          type: integer
+        rank:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        price:
+          type: integer
+        techniques:
+          type: integer
+        grants_distinction_id:
+          type: integer
+          nullable: true
+        offer_id:
+          type: integer
+          nullable: true
+      required:
+      - grants_distinction_id
+      - name
+      - offer_id
+      - player_line
+      - price
+      - rank
+      - schooling_line_id
+      - techniques
     Scope77bEnum:
       enum:
       - appear
@@ -81100,17 +81258,23 @@ components:
             every caller (no per-request filter), so attaching to the shared
             Tradition instance is safe.
           readOnly: true
-        required_distinction_id:
-          type: integer
+        state:
+          type: string
           nullable: true
-          description: |-
-            Get the required distinction ID from the BeginningTradition context.
-
-            The view computes a ``{tradition_id: BeginningTradition}`` dict per
-            request and passes it via context. We do NOT attach the BT row to
-            ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
-            because that attribute would persist across requests with different
-            ``beginning_id`` values and leak filtered data between users.
+          readOnly: true
+        state_line:
+          type: string
+          readOnly: true
+        own_wording:
+          type: string
+          readOnly: true
+        refund:
+          type: integer
+          readOnly: true
+        schooling:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolingLine'
           readOnly: true
       required:
       - codex_entry_ids
@@ -81118,8 +81282,12 @@ components:
       - id
       - is_active
       - name
-      - required_distinction_id
+      - own_wording
+      - refund
+      - schooling
       - sort_order
+      - state
+      - state_line
     TrainingAllocation:
       type: object
       description: Read-only serializer for a character's training allocation.
@@ -82645,6 +82813,44 @@ components:
           type: boolean
       required:
       - appear_offline
+    VisibleOffer:
+      type: object
+      description: A ``world.character_creation.types.VisibleOffer`` (#3675).
+      properties:
+        offer_id:
+          type: integer
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        chapter:
+          type: string
+        arrives_as:
+          type: string
+        opener_label:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
+        is_locked:
+          type: boolean
+        lock_reason:
+          type: string
+      required:
+      - arrives_as
+      - chapter
+      - cost_per_rank
+      - distinction_id
+      - is_locked
+      - lock_reason
+      - max_rank
+      - name
+      - offer_id
+      - opener_label
+      - player_line
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.

@@ -309,3 +309,69 @@ pick-list, both pre-#3660), GROUP (a Connection to an Anchor), or PERSON (a
 named figure, optionally scoped inside a GROUP question via
 `same_anchor_as`). _Avoid:_ tie, bond, mentor, patron, position, seat,
 station, role, standing, regard.
+
+**Offer** (#3675):
+One `character_creation.DistinctionOffer` row: says which chapter shows a
+distinction, what opens it there, and how it arrives. The only surface a CG
+picker reads or a player's pick validates against (`offer_id`) - there is no
+plain "add this distinction" path left in CG. Authored on the Distinction
+Builder, the tradition slate page, an Upbringing answer, or a Glimpse tag's own
+change form; any of the four may add one for the same distinction. _Avoid:_
+grant, unlock, requirement - an offer only says where a distinction is shown
+and priced, never that the player already holds it.
+
+**Opener** (#3675):
+The thing that has to be true of a draft before one of its offers shows up: a
+chosen Glimpse tag (`glimpse_tag`), a picked Upbringing answer (`origin_choice`),
+or a living tradition's schooling stance (`schooling_line`). Appearance and the
+Actor's Sheet offers have no opener at all - every active offer in those
+chapters is simply visible. `DistinctionOffer.opener_field` names which FK a
+chapter's offers use, if any; a row may set at most one.
+
+**Arrives as** (#3675):
+`DistinctionOffer.arrives_as` (`OfferArrival`): CHOICE (a priced pick a player
+must make explicitly), BUNDLED (free the moment its opener is satisfied,
+alongside the opener - a group answer's own distinction), or CARRIED (free the
+moment a tradition-state pick is made - a tradition-step drawback with no
+`DistinctionOffer` row of its own, keyed by the synthetic
+`"state:<TraditionState value>"` source). _Avoid:_ auto-add, auto-grant - both
+BUNDLED and CARRIED still go through `reconcile_offer_picks`, never a bespoke
+grant path.
+
+**Chapter** (#3675):
+`DistinctionOffer.chapter` (`OfferChapter`): which CG section shows the offer -
+the Gift tradition step, the Glimpse, a Lineage answer, Appearance, or the
+Actor's Sheet. Not a CG stage: several offer chapters can live inside one CG
+stage (Gift holds both the tradition step and the Glimpse), and a stage may
+hold no offers at all.
+
+**Tradition state** (#3675):
+`BeginningTradition.state` (`TraditionState`): SELF_TAUGHT, TEACHERS_GONE, or
+LIVING_MASTERS - which standard line a Beginning's tradition-step entry prints
+and which drawback, if any, picking it carries into the draft
+(`world.character_creation.offers.tradition_is_self_taught`/`slate_state`,
+never a name match against a tradition's own name). Replaces the pre-#3675
+`required_distinction` FK.
+
+**Standard lines** (#3675):
+The shared, staff-authored wording every Beginning's tradition-step entries
+draw from, so no CG line is ever written per-Beginning by accident:
+`TraditionStateLine` (one row per Tradition state, its `entry_line` and the
+drawback it `carries`) and `SchoolingLine` (the shared schooling set under a
+living tradition). A Beginning may override a state line's words with its own
+`own_wording`, never its own price - the price always reads through to the
+carried/granted `Distinction`.
+
+**Schooling line** (#3675):
+One `SchoolingLine` row (rank 0-2): the standard stance a player picks under a
+LIVING_MASTERS tradition, what it grants at that rank, and the derived price
+(`grants.cost_per_rank * rank`). Shared by every Beginning; a schooling line's
+own `DistinctionOffer` (chapter TRADITION_STEP) is kept in sync with it by the
+tradition slate page's save, never authored separately.
+
+**Closed by route** (#3675):
+An Upbringing's `closed_distinctions` M2M (with its own `closed_reason` line):
+distinctions this route never offers, in any chapter, regardless of whether
+some other opener would otherwise satisfy it. Read by
+`world.character_creation.offers.closed_for` for every chapter alike; a route
+closes by field on `OriginTemplate`, never by matching a distinction's name.

@@ -91,6 +91,51 @@ light/dark selectors below, so the page follows the theme toggle.
   }
   #upbringing-builder-root .answers-table td { vertical-align: top; }
 
+  /* An answer's own "Offers" cell (#3675): a mini offers table nested inside
+     the outer answers table's cell, mirroring the Distinction Builder's own
+     offers table at a smaller scale. */
+  #upbringing-builder-root .ub-offers-cell { min-width: 14rem; }
+  #upbringing-builder-root .ub-offers-cell .help { margin: 0; font-size: 0.6875rem; }
+  #upbringing-builder-root .ub-offer-table { width: 100%; }
+  #upbringing-builder-root .ub-offer-table th {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--body-quiet-color);
+    text-align: left;
+  }
+  #upbringing-builder-root .ub-offer-table td { vertical-align: top; padding: 0.15rem 0; }
+  #upbringing-builder-root .ub-offer-table td select,
+  #upbringing-builder-root .ub-offer-table td input[type="number"] {
+    width: 100%;
+    min-width: 3rem;
+    box-sizing: border-box;
+  }
+  #upbringing-builder-root .ub-offer-link { margin-left: 0.3rem; font-size: 0.6875rem; }
+
+  /* "Closes" always points at the route-level "This route closes" module
+     below - a static line, never edited per-answer (#3675). */
+  #upbringing-builder-root .ub-closes-pointer { color: var(--body-quiet-color); }
+  #upbringing-builder-root .ub-closes-pointer a { color: inherit; }
+
+  /* "This route closes" module (#3675): the FilteredSelectMultiple widget's
+     own two-list layout comes from admin/css/widgets.css; this only spaces
+     it and the reason line the way the rest of the page's modules space
+     their own field rows. */
+  #upbringing-builder-root .ub-closed-distinctions { padding: 0.5rem 0; }
+  #upbringing-builder-root .ub-closed-distinctions label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 600;
+  }
+  #upbringing-builder-root .ub-closed-reason {
+    padding: 0.5rem 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  #upbringing-builder-root .ub-closed-reason input[type="text"] { width: 100%; max-width: 30rem; }
+
   /* A live line is computed by the page from the rows it is editing - how many
      groups a rule matches today, how many of those are placeholders - never
      authored copy. It reads as a distinct kind of small text so an author does

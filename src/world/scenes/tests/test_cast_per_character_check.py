@@ -189,7 +189,6 @@ class CastUsesPerCharacterCheckTests(TestCase):
                 "stats": _STATS,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,

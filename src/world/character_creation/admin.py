@@ -64,7 +64,7 @@ class BeginningsCodexGrantInline(admin.TabularInline):
 class BeginningTraditionInline(admin.TabularInline):
     model = BeginningTradition
     extra = 1
-    raw_id_fields = ["tradition", "required_distinction"]
+    raw_id_fields = ["tradition"]
 
 
 class BeginningEnemyOfferInline(admin.TabularInline):
@@ -184,6 +184,22 @@ class OriginTemplateSlotAdmin(admin.ModelAdmin):
     list_filter = ["applies_to", "template__beginning__starting_area"]
     search_fields = ["name", "prompt"]
     inlines = [OriginTemplateSlotChoiceInline]
+
+
+@admin.register(OriginTemplateSlotChoice)
+class OriginTemplateSlotChoiceAdmin(admin.ModelAdmin):
+    """Standalone registration so autocomplete widgets elsewhere can search it (#3675).
+
+    Otherwise this model is only reachable through
+    ``OriginTemplateSlotChoiceInline`` above - the Distinction Builder's
+    ``origin_choice`` autocomplete needs a plain ``ModelAdmin`` with its own
+    ``search_fields`` (Django's autocomplete view 404s without one).
+    """
+
+    list_display = ["name", "slot", "cg_point_cost", "is_active"]
+    list_filter = ["is_active", "slot__template"]
+    search_fields = ["name", "slot__name", "slot__template__name"]
+    autocomplete_fields = ["slot"]
 
 
 @admin.register(CharacterOriginSlot)

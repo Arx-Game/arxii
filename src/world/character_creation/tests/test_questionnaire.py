@@ -2,9 +2,15 @@
 
 from django.test import TestCase
 
-from world.character_creation.constants import AnchorSource, QuestionKind
+from world.character_creation.constants import (
+    AnchorSource,
+    OfferArrival,
+    OfferChapter,
+    QuestionKind,
+)
 from world.character_creation.factories import (
     CharacterDraftFactory,
+    DistinctionOfferFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -136,8 +142,13 @@ class PricingAndBundleTest(TestCase):
             name="Courier",
             cg_point_cost=10,
             cost_per_influence=1,
-            grants_distinction=kept_close,
             reputation_seed=200,
+        )
+        DistinctionOfferFactory(
+            distinction=kept_close,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=courier,
+            arrives_as=OfferArrival.BUNDLED,
         )
         draft = _draft(
             template,

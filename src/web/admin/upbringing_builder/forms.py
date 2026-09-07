@@ -4,11 +4,19 @@ from __future__ import annotations
 
 from django import forms
 from django.contrib import admin
-from django.contrib.admin.widgets import AutocompleteSelect, AutocompleteSelectMultiple
+from django.contrib.admin.widgets import (
+    AutocompleteSelect,
+    AutocompleteSelectMultiple,
+    FilteredSelectMultiple,
+)
 from django.forms import inlineformset_factory
+from django.forms.models import BaseInlineFormSet
 from django.http import QueryDict
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
+from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.models import (
+    DistinctionOffer,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
@@ -29,10 +37,20 @@ class UpbringingForm(forms.ModelForm):
             "allows_no_family",
             "claimable_kinds",
             "family_templates",
+            "closed_distinctions",
+            "closed_reason",
             "is_active",
             "sort_order",
         ]
-        labels = {"frame_narrative": "Card text", "cg_point_cost": "Point cost"}
+        labels = {
+            "frame_narrative": "Card text",
+            "cg_point_cost": "Point cost",
+            "closed_distinctions": "Distinctions",
+            "closed_reason": "The player reads",
+        }
+        widgets = {
+            "closed_distinctions": FilteredSelectMultiple("distinctions", is_stacked=False),
+        }
 
     def clean(self):
         """The name path needs a Family Template - the one just submitted (#3673).
@@ -119,7 +137,6 @@ class AnswerForm(forms.ModelForm):
             "description",
             "cg_point_cost",
             "cost_per_influence",
-            "grants_distinction",
             "reputation_seed",
             "trust_required",
             "is_active",
@@ -132,12 +149,6 @@ class AnswerForm(forms.ModelForm):
             "cost_per_influence": "Per point of influence",
             "reputation_seed": "Group's opinion",
             "trust_required": "Trust",
-        }
-        widgets = {
-            "grants_distinction": AutocompleteSelect(
-                OriginTemplateSlotChoice._meta.get_field("grants_distinction"),  # noqa: SLF001
-                admin.site,
-            ),
         }
 
 
@@ -218,3 +229,71 @@ def answer_formset_for(slot: OriginTemplateSlot, data: QueryDict | None = None) 
     own empty form, not a server round trip (#3660 review Ruling H).
     """
     return AnswerFormSet(data, instance=slot, prefix=f"a{slot.pk}")
+
+
+class _OfferBaseFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one answer (#3675 review minor 2).
+
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review) - this class only names the owner noun.
+    """
+
+    owner_noun = "answer"
+
+
+class OfferForm(forms.ModelForm):
+    """One "offers" row hanging off an answer (#3675).
+
+    ``chapter`` is forced to LINEAGE here and never shown as a select - the
+    row exists because it hangs off this answer, so which chapter it belongs
+    to is not a choice an author makes on this page (mirrors the Glimpse tag
+    admin's own ``GlimpseTagOfferForm``, forcing GLIMPSE the same way).
+    ``origin_choice`` itself needs no forcing: Django's own
+    ``BaseInlineFormSet._construct_form`` stamps the parent answer's pk onto
+    a new row's fk attribute before validation runs. ``arrives_as`` drops
+    CARRIED - an answer's own offer is either a priced choice or bundled free
+    with picking the answer; CARRIED is for an opener that isn't itself a
+    choice (a schooling line, a Glimpse tag), which an Upbringing answer
+    already is.
+    """
+
+    class Meta:
+        model = DistinctionOffer
+        fields = ["distinction", "arrives_as", "sort_order"]
+        widgets = {
+            "distinction": AutocompleteSelect(
+                DistinctionOffer._meta.get_field("distinction"),  # noqa: SLF001
+                admin.site,
+            ),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.chapter = OfferChapter.LINEAGE
+        self.fields["arrives_as"].choices = [
+            (value, label) for value, label in OfferArrival.choices if value != OfferArrival.CARRIED
+        ]
+
+
+OfferFormSet = inlineformset_factory(
+    OriginTemplateSlotChoice,
+    DistinctionOffer,
+    form=OfferForm,
+    formset=_OfferBaseFormSet,
+    fk_name="origin_choice",
+    extra=0,
+    can_delete=True,
+)
+
+
+def offer_formset_for(
+    choice: OriginTemplateSlotChoice, data: QueryDict | None = None
+) -> OfferFormSet:
+    """One ``OfferFormSet`` instance for ``choice``, prefixed ``o<choice.pk>``.
+
+    Mirrors ``answer_formset_for``'s own prefix convention. Only ever called
+    for a saved answer - a client-cloned answer row has no pk yet for the
+    prefix to key off (`NEW_ANSWER_OFFERS_HELP` is what the page shows in
+    that row's Offers cell instead).
+    """
+    return OfferFormSet(data, instance=choice, prefix=f"o{choice.pk}")

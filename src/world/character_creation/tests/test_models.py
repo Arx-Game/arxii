@@ -344,6 +344,21 @@ class CharacterDraftStatsValidationTests(TestCase):
         assert CharacterDraft.Stage.ATTRIBUTES in stage_completion
         assert stage_completion[CharacterDraft.Stage.ATTRIBUTES] is True
 
+    def test_stage_completion_has_no_distinctions_stage(self):
+        """The Distinctions stage is retired (#3675): 4 is not a Stage member any more."""
+        stage_completion = self.draft.get_stage_completion()
+        assert 4 not in stage_completion
+
+    def test_over_budget_shows_on_final_touches(self):
+        """Final Touches is the purse check now: over budget blocks it (#3675)."""
+        self.draft.draft_data = {
+            "distinctions": [{"distinction_name": "Extravagant Claim", "cost": 500}]
+        }
+        self.draft.save()
+        assert self.draft.calculate_cg_points_remaining() < 0
+        stage_completion = self.draft.get_stage_completion()
+        assert stage_completion[CharacterDraft.Stage.FINAL_TOUCHES] is False
+
     # --- calculate_final_stats ---
 
     def test_calculate_final_stats_returns_allocated_values(self):

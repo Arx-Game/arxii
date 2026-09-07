@@ -1,66 +1,56 @@
 /**
  * CG mount of the guided Glimpse flow (#2427).
  *
- * Reads the catalog via useGlimpseTags and binds GlimpseFlow to draft_data
- * keys (glimpse_tag_ids / glimpse_story / glimpse_linked_distinction_ids),
- * persisting through useUpdateDraft on change (same PATCH-merge contract as
- * the funnel steps). Linkable distinctions = the draft's already-chosen
- * distinctions; suggestion links to not-yet-chosen distinctions are kept in
- * glimpse_linked_distinction_ids and reconciled at finalize (unmatched ids
- * are ignored server-side).
+ * Reads the catalog via useGlimpseTags and binds `GlimpseAxes` (#3675 fix
+ * round 1's folio-grammar redesign, replacing the shared `GlimpseFlow`'s
+ * shadcn accordion for this one mount; the sheet's live editor still uses
+ * `GlimpseFlow` unchanged) to draft_data keys (glimpse_tag_ids /
+ * glimpse_story), persisting through useUpdateDraft on change (same
+ * PATCH-merge contract as the funnel steps). `GlimpseAxes` owns its own
+ * per-tag offers layout and story box; `GlimpseSection` stays the thin
+ * state binder: draft reads, `updateDraft` writes, the isCollapsed
+ * deferral affordance, and the copy query (threaded straight to
+ * `GlimpseAxes` rather than resolved into individual strings here, since
+ * `GlimpseAxes` needs several per-axis/per-tag copy keys, not just one
+ * heading).
+ *
+ * No heading of its own: GiftStage's own `section-h` already prints the
+ * chapter heading above this mount (`copy?.magic_glimpse_heading`); a
+ * second heading rendered in here was a demo-fidelity defect (fix round 1).
  *
  * Prose stays on the parent GiftStage's shared react-hook-form instance
  * (`register('glimpse_story')`, passed down — `AnimaCheckStep`'s
  * `ritualNameField` prop is the precedent) so it still saves via
- * `saveFormFields` on stage leave; tag/link picks write immediately via
+ * `saveFormFields` on stage leave; tag picks write immediately via
  * `updateDraft`, like `GiftSelector`'s `selected_gift_id`.
  */
 
-import { GlimpseFlow } from '@/magic/components/glimpse/GlimpseFlow';
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 import type { UseFormRegisterReturn } from 'react-hook-form';
-import { useDraftDistinctions } from '@/hooks/useDistinctions';
-import { useGlimpseTags, useUpdateDraft } from '../../queries';
+import { useCGExplanations, useGlimpseTags, useUpdateDraft } from '../../queries';
 import type { CharacterDraft, GlimpseTagOption } from '../../types';
+import { GlimpseAxes } from './GlimpseAxes';
 
 interface GlimpseSectionProps {
   draft: CharacterDraft;
   /** Registration for the prose field — owned by GiftStage's shared form so a
    * single beforeLeave save covers ritual name + motif + glimpse. */
   glimpseProseField: UseFormRegisterReturn<'glimpse_story'>;
-  /**
-   * Staff-authorable section heading, threaded down from GiftStage's
-   * `copy?.magic_glimpse_heading` (GiftStage holds the `useCGExplanations()`
-   * query — GlimpseSection stays a thin pass-through so GlimpseFlow itself
-   * stays presentational). Falls back to GlimpseFlow's own default when
-   * omitted.
-   */
-  heading?: string;
 }
 
-export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSectionProps) {
+export function GlimpseSection({ draft, glimpseProseField }: GlimpseSectionProps) {
   const updateDraft = useUpdateDraft();
   const { data: tags } = useGlimpseTags(draft.selected_path?.id);
-  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
+  const { data: copy } = useCGExplanations();
 
   const [isCollapsed, setIsCollapsed] = useState(false);
   // Prose is uncontrolled from RHF's point of view (no `value` on a register
-  // return) — this local copy exists purely to give GlimpseFlow a controlled
+  // return) so this local copy exists purely to give GlimpseAxes a controlled
   // display value that starts from the last-saved draft_data.
   const [prose, setProse] = useState(() => draft.draft_data.glimpse_story ?? '');
 
   const selectedTagIds = draft.draft_data.glimpse_tag_ids ?? [];
-  const linkedDistinctionIds = draft.draft_data.glimpse_linked_distinction_ids ?? [];
-
-  const linkableDistinctions = useMemo(
-    () =>
-      (draftDistinctions ?? []).map((entry) => ({
-        id: entry.distinction_id,
-        name: entry.distinction_name,
-      })),
-    [draftDistinctions]
-  );
 
   const handleChangeAxis = (axis: GlimpseTagOption['axis'], tagIds: number[]) => {
     if (!tags) return;
@@ -71,20 +61,6 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
       data: {
         draft_data: {
           glimpse_tag_ids: [...otherAxisSelections, ...tagIds],
-        },
-      },
-    });
-  };
-
-  const handleToggleDistinctionLink = (distinctionId: number) => {
-    const next = linkedDistinctionIds.includes(distinctionId)
-      ? linkedDistinctionIds.filter((id) => id !== distinctionId)
-      : [...linkedDistinctionIds, distinctionId];
-    updateDraft.mutate({
-      draftId: draft.id,
-      data: {
-        draft_data: {
-          glimpse_linked_distinction_ids: next,
         },
       },
     });
@@ -113,21 +89,24 @@ export function GlimpseSection({ draft, glimpseProseField, heading }: GlimpseSec
     );
   }
 
-  // GlimpseFlow renders its own top-of-flow heading (defaults to 'The
-  // Glimpse' when `heading` is omitted) — no extra wrapping heading here.
   return (
-    <GlimpseFlow
-      heading={heading}
-      tags={tags ?? []}
-      selectedTagIds={selectedTagIds}
-      prose={prose}
-      linkedDistinctionIds={linkedDistinctionIds}
-      onChangeAxis={handleChangeAxis}
-      onChangeProse={handleChangeProse}
-      onToggleDistinctionLink={handleToggleDistinctionLink}
-      onSkip={() => setIsCollapsed(true)}
-      showDeferralControls
-      linkableDistinctions={linkableDistinctions}
-    />
+    <>
+      <GlimpseAxes
+        draft={draft}
+        tags={tags ?? []}
+        selectedTagIds={selectedTagIds}
+        copy={copy}
+        onChangeAxis={handleChangeAxis}
+        prose={prose}
+        onChangeProse={handleChangeProse}
+      />
+      {/* The pre-#3675-fix-round-1 deferral affordance (write the tags now,
+          finish the prose later); GlimpseAxes' own contract doesn't render
+          this (not in the demo), so it stays here, one level up, the same
+          way "Resume" above already does. */}
+      <button type="button" className="btn-small" onClick={() => setIsCollapsed(true)}>
+        Skip for now
+      </button>
+    </>
   );
 }

@@ -57,7 +57,6 @@ from world.magic.models import (
     Gift,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     MagicalAlterationEvent,
@@ -1537,15 +1536,6 @@ class CharacterGlimpseTagFactory(factory.django.DjangoModelFactory):
 
     aura = factory.SubFactory(CharacterAuraFactory)
     tag = factory.SubFactory(GlimpseTagFactory)
-
-
-class GlimpseTagDistinctionSuggestionFactory(factory.django.DjangoModelFactory):
-    class Meta:
-        model = GlimpseTagDistinctionSuggestion
-
-    tag = factory.SubFactory(GlimpseTagFactory)
-    distinction = factory.SubFactory(_DISTINCTION_FACTORY)
-    sort_order = 0
 
 
 # =============================================================================

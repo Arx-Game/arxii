@@ -112,17 +112,10 @@ class ContentExportTests(TestCase):
                 export_to_content_repo(None)
 
     def test_glimpse_catalog_round_trips(self) -> None:
-        """GlimpseTag + suggestion export then import = updates, no creates (#2427)."""
-        from world.distinctions.factories import DistinctionFactory
-        from world.magic.factories import (
-            GlimpseTagDistinctionSuggestionFactory,
-            GlimpseTagFactory,
-        )
+        """GlimpseTag export then import = updates, no creates (#2427)."""
+        from world.magic.factories import GlimpseTagFactory
 
-        tag = GlimpseTagFactory(slug="round-trip-tag")
-        GlimpseTagDistinctionSuggestionFactory(
-            tag=tag, distinction=DistinctionFactory(slug="round-trip-distinction")
-        )
+        GlimpseTagFactory(slug="round-trip-tag")
 
         from core_management.content_fixtures import build_all, load_entries
 

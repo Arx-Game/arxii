@@ -44,9 +44,12 @@ from world.character_creation.constants import (
     ConnectionKind,
     FamilyPath,
     LifeStage,
+    OfferArrival,
+    OfferChapter,
     QuestionKind,
     Stage,
     StartingAreaAccessLevel,
+    TraditionState,
 )
 from world.character_creation.types import (
     CGPointBreakdownEntry,
@@ -418,11 +421,11 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def cached_beginning_traditions(self) -> list[BeginningTradition]:
         """All BeginningTradition rows for this Beginning, ordered for CG.
 
-        Returns BT rows with ``tradition`` and ``required_distinction``
-        select_related, sorted by ``(sort_order, id)``. The list is the same
-        for every caller asking about a given Beginning, so caching on the
-        SharedMemoryModel-instance is the correct location: populated once
-        per Beginning per process, reused across all subsequent requests.
+        Returns BT rows with ``tradition`` select_related, sorted by
+        ``(sort_order, id)``. The list is the same for every caller asking
+        about a given Beginning, so caching on the SharedMemoryModel-instance
+        is the correct location: populated once per Beginning per process,
+        reused across all subsequent requests.
 
         Use this from views/serializers instead of viewset-scoped helpers.
 
@@ -431,7 +434,7 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         from world.codex.models import TraditionCodexGrant  # noqa: PLC0415
 
         return list(
-            self.beginning_traditions.select_related("tradition", "required_distinction")
+            self.beginning_traditions.select_related("tradition")
             .prefetch_related(
                 Prefetch(
                     "tradition__codex_grants",
@@ -583,7 +586,7 @@ class BeginningEnemyOffer(SharedMemoryModel):
         return bool(self.figure_name)
 
 
-class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
+class BeginningTradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
 
@@ -597,17 +600,20 @@ class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="beginning_traditions",
     )
-    required_distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="+",
-        help_text="Distinction required to select this tradition for this beginning.",
-    )
     sort_order = models.PositiveIntegerField(
         default=0,
         help_text="Display order within this beginning's tradition list.",
+    )
+    state = models.CharField(
+        max_length=20,
+        choices=TraditionState.choices,
+        default=TraditionState.LIVING_MASTERS,
+        help_text="Which standard line this entry shows and which drawback it carries (#3675).",
+    )
+    own_wording = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text="Replaces the standard state line's words for this tradition only.",
     )
 
     class Meta:
@@ -714,6 +720,17 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
         blank=True,
         related_name="upbringings",
         help_text="Family Templates the name path offers (#3648); one is auto-picked.",
+    )
+    closed_distinctions = models.ManyToManyField(
+        "arxii.Distinction",
+        blank=True,
+        related_name="closed_by_routes",
+        help_text="Distinctions this route never offers, in any chapter (#3675).",
+    )
+    closed_reason = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="The line the player reads where a closed distinction would have been.",
     )
 
     objects = OriginTemplateManager()
@@ -995,14 +1012,6 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     cost_per_influence = models.IntegerField(
         default=0, help_text="CG cost per point of the claimed family's influence."
     )
-    grants_distinction = models.ForeignKey(
-        "arxii.Distinction",
-        on_delete=models.PROTECT,
-        null=True,
-        blank=True,
-        related_name="granting_choices",
-        help_text="Picking this answer grants the Distinction, bundled at no extra cost (#3660).",
-    )
     reputation_seed = models.IntegerField(
         default=0,
         help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
@@ -1026,7 +1035,16 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
         dependencies = ["arxii.OriginTemplateSlot"]
 
     def __str__(self) -> str:
-        return f"{self.slot}: {self.name}"
+        # Full chain plus the question's ordinal, not just "{slot}: {name}" -
+        # this is what the Distinction Builder's `origin_choice` autocomplete
+        # shows for its search results AND its pre-selected option (both read
+        # plain `str(obj)`), and a slot name alone is not unique across
+        # Upbringings (#3675; ordinal added in review round 1, matching the
+        # demo's own "Q2 · Who taught you" wording).
+        return (
+            f"{self.slot.template.name} › Q{self.slot.sort_order + 1} · "
+            f"{self.slot.name} › {self.name}"
+        )
 
     def cost_for(self, influence: int) -> int:
         """Price of this choice against a family of ``influence`` (#3617)."""
@@ -1874,10 +1892,6 @@ class CharacterDraft(SharedMemoryModel):
         )
         self._check_specialization_parents(skills, specializations, budget)
 
-    def _is_distinctions_complete(self) -> bool:
-        """Check if distinctions stage is complete."""
-        return not self.get_stage_validation_errors().get(self.Stage.DISTINCTIONS, [])
-
     def _is_appearance_complete(self) -> bool:
         """Check if appearance stage is complete."""
         return not self.get_stage_validation_errors().get(self.Stage.APPEARANCE, [])
@@ -2080,3 +2094,200 @@ class CGExplanation(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
 
     def __str__(self) -> str:
         return self.key
+
+
+class TraditionStateLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """The standard words for one tradition state, and the drawback it carries (#3675).
+
+    Three rows, one per ``TraditionState``, shared by every Beginning. The price a
+    player sees is the carried distinction's own ``cost_per_rank``; nothing here is
+    typed as a number. Must never name what a character discovers in play.
+    """
+
+    state = models.CharField(max_length=20, choices=TraditionState.choices, unique=True)
+    entry_line = models.CharField(
+        max_length=120,
+        help_text="The line printed on every tradition entry in this state.",
+    )
+    carries = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="carried_by_state_lines",
+        help_text="The drawback picking a tradition in this state carries into the draft.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Tradition state line"
+        verbose_name_plural = "Tradition state lines"
+        ordering = ["state"]
+
+    class NaturalKeyConfig:
+        fields = ["state"]
+
+    def __str__(self) -> str:
+        return self.get_state_display()
+
+    @property
+    def price(self) -> int:
+        return self.carries.cost_per_rank if self.carries_id else 0
+
+
+class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """One line of the standard schooling set under a living tradition (#3675).
+
+    Rank 0 grants nothing; rank N grants ``grants`` at rank N. Price is derived:
+    ``grants.cost_per_rank * rank``. Staff author the three rows on the tradition
+    slate page; read by the tradition serializer to draw the stances under a
+    living tradition and by the offers module to open a Tradition Training offer.
+    """
+
+    rank = models.PositiveSmallIntegerField(unique=True)
+    name = models.CharField(max_length=80, help_text="The stance name the player picks.")
+    player_line = models.CharField(max_length=200, help_text="The line under the name.")
+    grants = models.ForeignKey(
+        "arxii.Distinction",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="granted_by_schooling_lines",
+        help_text="The distinction this line grants, at this line's rank.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Schooling line"
+        verbose_name_plural = "Schooling lines"
+        ordering = ["rank"]
+
+    class NaturalKeyConfig:
+        fields = ["rank"]
+
+    def __str__(self) -> str:
+        return f"{self.rank}: {self.name}"
+
+    @property
+    def price(self) -> int:
+        return self.grants.cost_per_rank * self.rank if self.grants_id else 0
+
+
+class DistinctionOffer(
+    RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
+):
+    """One line that shows a distinction in one CG chapter (#3675).
+
+    Lets staff say where a distinction is offered, what opens it there, and how
+    it arrives. Read by ``world.character_creation.offers`` for every chapter;
+    a distinction with no active offer is never shown in CG. FK direction per
+    ADR-0010: this row is the specific side.
+    """
+
+    #: Saving or deleting an offer drops its opener's cached properties, which
+    #: is where ``GlimpseTag.offers`` (``world.magic.models.glimpse``) lives.
+    #: A cascade or a ``queryset.delete()`` bypasses ``Model.delete()`` and
+    #: never gets here - the handler's own pk check is what covers those
+    #: (ADR-0278, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    related_cache_fields: ClassVar[list[str]] = [
+        "glimpse_tag",
+        "origin_choice",
+        "schooling_line",
+    ]
+
+    distinction = models.ForeignKey(
+        "arxii.Distinction", on_delete=models.PROTECT, related_name="offers"
+    )
+    chapter = models.CharField(max_length=20, choices=OfferChapter.choices)
+    arrives_as = models.CharField(
+        max_length=10, choices=OfferArrival.choices, default=OfferArrival.CHOICE
+    )
+    name = models.CharField(
+        max_length=80, blank=True, help_text="Stance name; blank means the distinction's name."
+    )
+    player_line = models.CharField(max_length=200, blank=True)
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+    glimpse_tag = models.ForeignKey(
+        "arxii.GlimpseTag",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Glimpse chapter only: the tag that opens this offer.",
+    )
+    origin_choice = models.ForeignKey(
+        OriginTemplateSlotChoice,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Lineage chapter only: the answer that opens this offer.",
+    )
+    schooling_line = models.ForeignKey(
+        SchoolingLine,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Tradition step only: the schooling line that opens this offer.",
+    )
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        verbose_name = "Distinction offer"
+        verbose_name_plural = "Distinction offers"
+        ordering = ["chapter", "sort_order", "id"]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(glimpse_tag__isnull=True, origin_choice__isnull=True)
+                    | models.Q(glimpse_tag__isnull=True, schooling_line__isnull=True)
+                    | models.Q(origin_choice__isnull=True, schooling_line__isnull=True)
+                ),
+                name="distinctionoffer_at_most_one_opener",
+            )
+        ]
+
+    class NaturalKeyConfig:
+        fields = ["distinction", "chapter", "glimpse_tag", "origin_choice", "schooling_line"]
+        dependencies = ["arxii.Distinction"]
+
+    _OPENER_FOR_CHAPTER = {
+        OfferChapter.TRADITION_STEP: "schooling_line",
+        OfferChapter.GLIMPSE: "glimpse_tag",
+        OfferChapter.LINEAGE: "origin_choice",
+        OfferChapter.APPEARANCE: None,
+        OfferChapter.ACTORS_SHEET: None,
+    }
+
+    def __str__(self) -> str:
+        return f"{self.distinction} in {self.get_chapter_display()}"
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        if not self.name:
+            self.name = self.distinction.name
+        super().save(*args, **kwargs)
+
+    @property
+    def opener_field(self) -> str | None:
+        return self._OPENER_FOR_CHAPTER[OfferChapter(self.chapter)]
+
+    def clean(self) -> None:
+        super().clean()
+        set_openers = [
+            f
+            for f in ("glimpse_tag", "origin_choice", "schooling_line")
+            if getattr(self, f"{f}_id")
+        ]
+        if len(set_openers) > 1:
+            at_most_one_opener_message = "An offer is opened by at most one thing."
+            raise ValidationError(at_most_one_opener_message)
+        wanted = self.opener_field
+        if wanted is None and set_openers:
+            raise ValidationError({set_openers[0]: "This chapter's offers have no opener."})
+        if wanted is not None and set_openers != [wanted]:
+            raise ValidationError({wanted: "This chapter's offers are opened by this field."})

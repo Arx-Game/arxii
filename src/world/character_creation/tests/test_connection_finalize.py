@@ -6,8 +6,9 @@ from evennia.accounts.models import AccountDB
 
 from world.assets.factories import DistinctionAssetGrantFactory
 from world.assets.models import NPCAsset
-from world.character_creation.constants import QuestionKind
+from world.character_creation.constants import OfferArrival, OfferChapter, QuestionKind
 from world.character_creation.factories import (
+    DistinctionOfferFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -39,8 +40,12 @@ class ConnectionFinalizeTest(FinalizationTestMixin, TestCase):
         q1.anchor_orgs.add(crew)
         kept = DistinctionFactory(name="Kept Close")
         grant = DistinctionAssetGrantFactory(distinction=kept, asset_display_name="A courier")
-        courier = OriginTemplateSlotChoiceFactory(
-            slot=q1, name="Courier", grants_distinction=kept, reputation_seed=200
+        courier = OriginTemplateSlotChoiceFactory(slot=q1, name="Courier", reputation_seed=200)
+        DistinctionOfferFactory(
+            distinction=kept,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=courier,
+            arrives_as=OfferArrival.BUNDLED,
         )
         who = OriginTemplateSlotFactory(
             template=template,

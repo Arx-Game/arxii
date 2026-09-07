@@ -59,29 +59,18 @@ FALLBACK_STARTING_ROOM_FIXTURE_KEY = "arx/fallback-starting-room"
 # ``Organization`` (#2426 ruling), not a Tradition itself.
 SHROUDWATCH_ACADEMY_NAME = "Shroudwatch Academy"
 
-# Tradition identifying the tradition-agnostic default CG pick (#2426). There is
-# no boolean "is Unbound" field on ``Tradition`` — every existing caller (the
-# magic seed, ``seed_beginning_traditions`` above) matches by name, so the
-# finalize hook does the same rather than inventing a new marker.
+# Tradition identifying the tradition-agnostic default CG pick (#2426). Runtime
+# code never matches a tradition by name as of #3675 (read ``BeginningTradition
+# .state`` / ``world.character_creation.offers.tradition_is_self_taught`` instead).
+# This constant survives only for the two callers that still need to name the
+# "Unbound" row itself: ``world.seeds.character_creation`` (seeding the row plus
+# its slate line) and migration ``0110_distinction_offers_data`` (the one-time
+# backfill that stamps ``state`` on it before any state-based reader exists).
 UNBOUND_TRADITION_NAME = "Unbound"
 
 # Path of the Chosen name — mirrors the constant in worship_content.py so the
 # CG finalize hook can match without importing the seed module (#2550).
 PATH_OF_THE_CHOSEN_NAME = "Path of the Chosen"
-
-# Slug of the "Unbound" drawback Distinction (#2442) — seeded by
-# ``world.seeds.character_creation.ensure_unbound_drawback_distinction`` and
-# wired onto Unbound's own ``BeginningTradition.required_distinction`` (same
-# seeder, ``seed_beginning_traditions``). Read by ``select_tradition``
-# (views.py) to special-case Unbound's auto-add UX: unlike Orphaned Tradition
-# (a deliberate opt-in pick, #2428 Task 5), Unbound is CG's tradition-agnostic
-# default — a player must not be forced to already know about this specific
-# drawback before CG can complete (see
-# ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-# .test_tradition_step_completable_for_every_seeded_beginning``, the existing
-# "CG must remain completable via the Unbound path with zero manual steps"
-# regression proof #2426 shipped).
-UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
 
 
 class Stage(models.IntegerChoices):
@@ -90,7 +79,6 @@ class Stage(models.IntegerChoices):
     ORIGIN = 1, "Origin"
     HERITAGE = 2, "Heritage"
     LINEAGE = 3, "Lineage"
-    DISTINCTIONS = 4, "Distinctions"
     PATH = 5, "Path"
     GIFT = 6, "Gift"
     ATTRIBUTES = 7, "Attributes & Skills"
@@ -98,6 +86,46 @@ class Stage(models.IntegerChoices):
     IDENTITY = 9, "Identity"
     FINAL_TOUCHES = 10, "Final Touches"
     REVIEW = 11, "Review"
+
+
+class TraditionState(models.TextChoices):
+    """How a tradition on a Beginning's slate reads at the tradition step (#3675).
+
+    Decides which standard line the entry prints and which drawback, if any,
+    picking it carries into the draft. Read by the tradition serializer, the
+    offers module, the Golden Hare obligation and tradition membership; never
+    matched by a tradition's name.
+    """
+
+    SELF_TAUGHT = "self_taught", "Self-taught"
+    TEACHERS_GONE = "teachers_gone", "Teachers gone"
+    LIVING_MASTERS = "living_masters", "Living masters"
+
+
+class OfferChapter(models.TextChoices):
+    """The CG chapter an offer line is shown in (#3675).
+
+    Staff pick it on the Distinction Builder; read by
+    ``world.character_creation.offers`` to decide which chapter shows the line.
+    """
+
+    TRADITION_STEP = "tradition_step", "Gift, tradition step"
+    GLIMPSE = "glimpse", "Gift, the Glimpse"
+    LINEAGE = "lineage", "Lineage"
+    APPEARANCE = "appearance", "Appearance"
+    ACTORS_SHEET = "actors_sheet", "The actor's sheet"
+
+
+class OfferArrival(models.TextChoices):
+    """How an offered distinction arrives in the draft (#3675).
+
+    Staff pick it per offer; read by ``offers.reconcile_offer_picks`` to decide
+    whether the pick is priced, free, or imposed.
+    """
+
+    CHOICE = "choice", "A choice, priced"
+    BUNDLED = "bundled", "Bundled free with its opener"
+    CARRIED = "carried", "Carried by its opener"
 
 
 class StartingAreaAccessLevel(models.TextChoices):

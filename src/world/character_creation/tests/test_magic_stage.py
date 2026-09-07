@@ -11,8 +11,14 @@ from world.character_creation.constants import (
     SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_TRADITION_NAME,
+    OfferChapter,
+    TraditionState,
 )
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import (
+    BeginningTraditionFactory,
+    CharacterDraftFactory,
+    DistinctionOfferFactory,
+)
 from world.character_creation.services import (
     _finalize_academy_entrance_obligation,
     finalize_magic_data,
@@ -25,7 +31,6 @@ from world.fatigue.models import FatiguePool
 from world.magic.constants import GlimpseTagAxis
 from world.magic.factories import (
     GiftFactory,
-    GlimpseTagDistinctionSuggestionFactory,
     GlimpseTagFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
@@ -250,17 +255,24 @@ class AcademyEntranceObligationTest(TestCase):
 
     Unbound Prospects (no Tradition sponsor) start OWED to Shroudwatch
     Academy; every other tradition is sponsored and starts SETTLED_BY_SPONSOR.
-    Resolved by name — a defensive, logged skip covers an unseeded Academy.
+    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
+    state, #3675), never its name; a defensive, logged skip covers an unseeded
+    Academy.
     """
 
-    def _make_draft_and_sheet(self, *, tradition_name: str):
+    def _make_draft_and_sheet(self, *, tradition_name: str, self_taught: bool = False):
         sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(selected_tradition=TraditionFactory(name=tradition_name))
+        tradition = TraditionFactory(name=tradition_name)
+        if self_taught:
+            BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         return draft, sheet
 
     def test_unbound_tradition_creates_owed_obligation(self):
         academy = OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         finalize_magic_data(draft, sheet)
 
@@ -286,7 +298,9 @@ class AcademyEntranceObligationTest(TestCase):
         )
 
     def test_no_academy_seeded_skips_without_crash(self):
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         with self.assertLogs("world.character_creation.services", level="WARNING") as logs:
             finalize_magic_data(draft, sheet)
@@ -299,9 +313,9 @@ class AcademyEntranceObligationTest(TestCase):
 
     def test_idempotent_second_call_creates_no_duplicate(self):
         OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft = CharacterDraftFactory(
-            selected_tradition=TraditionFactory(name=UNBOUND_TRADITION_NAME)
-        )
+        tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
+        BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         sheet = CharacterSheetFactory()
 
         _finalize_academy_entrance_obligation(draft, sheet)
@@ -648,16 +662,30 @@ class CGGlimpseTagEndpointTest(TestCase):
         # Meta.ordering = ["axis", "sort_order", "name"] — CONSEQUENCE < TONE alphabetically.
         assert slugs == [consequence_a.slug, tone_a.slug, tone_b.slug]
 
-    def test_embeds_suggested_distinctions(self):
+    def test_embeds_offers(self):
         tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-x")
         distinction = DistinctionFactory(name="Fated")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=distinction)
+        offer = DistinctionOfferFactory(
+            distinction=distinction,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag,
+            player_line="A line.",
+        )
 
         response = self.client.get("/api/character-creation/glimpse-tags/")
 
         assert response.status_code == status.HTTP_200_OK
         row = next(r for r in response.data if r["slug"] == "tone-x")
-        assert row["suggested_distinctions"] == [{"id": distinction.id, "name": "Fated"}]
+        assert row["offers"] == [
+            {
+                "offer_id": offer.id,
+                "distinction_id": distinction.id,
+                "name": "Fated",
+                "player_line": "A line.",
+                "cost_per_rank": distinction.cost_per_rank,
+                "max_rank": distinction.max_rank,
+            }
+        ]
 
     def test_axis_filter(self):
         GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-only")
@@ -682,10 +710,10 @@ class CGGlimpseTagEndpointTest(TestCase):
         )
 
     def test_query_count_constant_as_tags_grow(self):
-        """Prefetch guard: same query count with 2 tags (+suggestions) as with 6.
+        """Prefetch guard: same query count with 2 tags (+offers) as with 6.
 
-        ``GlimpseTag``/``GlimpseTagDistinctionSuggestion`` are SharedMemoryModel
-        (idmapper) rows — once an instance is fetched with its prefetch populated,
+        ``GlimpseTag``/``DistinctionOffer`` are SharedMemoryModel (idmapper)
+        rows, once an instance is fetched with its prefetch populated,
         re-fetching the *same* identity-mapped row skips the prefetch query
         entirely (a feature, not a bug: see the ``sharedmemory-model`` skill).
         That would make the second capture look artificially cheaper rather than
@@ -695,7 +723,8 @@ class CGGlimpseTagEndpointTest(TestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        from world.magic.models import GlimpseTag, GlimpseTagDistinctionSuggestion
+        from world.character_creation.models import DistinctionOffer
+        from world.magic.models import GlimpseTag
 
         url = "/api/character-creation/glimpse-tags/"
 
@@ -706,8 +735,12 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc-a")
         tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc-b")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_a, distinction=DistinctionFactory())
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_b, distinction=DistinctionFactory())
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
 
         with CaptureQueriesContext(connection) as small:
             response = self.client.get(url)
@@ -715,16 +748,39 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         for i in range(4):
             tag = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug=f"qc-extra-{i}")
-            GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=DistinctionFactory())
+            DistinctionOfferFactory(
+                distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
+            )
 
         GlimpseTag.flush_instance_cache()
-        GlimpseTagDistinctionSuggestion.flush_instance_cache()
+        DistinctionOffer.flush_instance_cache()
 
         with CaptureQueriesContext(connection) as big:
             response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
         assert len(big.captured_queries) == len(small.captured_queries)
+
+    def test_list_is_three_queries_offers_primed_not_prefetched(self):
+        """Session lookup + tags query + one batched
+        ``GlimpseTagOffersHandler.prime()`` query (ADR-0278) - never a
+        ``Prefetch(to_attr=...)`` and never one query per tag."""
+        url = "/api/character-creation/glimpse-tags/"
+        self.client.get(url)  # warm the session row's first-request INSERT
+
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc3-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc3-b")
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
+
+        with self.assertNumQueries(3):
+            response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
 
     def test_path_filter_excludes_tags_not_on_path(self):
         """Tags with a non-empty paths M2M not containing path_id are excluded."""

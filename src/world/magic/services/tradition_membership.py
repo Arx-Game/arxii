@@ -31,10 +31,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-#: DistinctionTag slugs for traditionless categorization (#2752).
+#: DistinctionTag slug for the "sheds on joining a living tradition" set (#2752).
 _TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
-_TRADITIONLESS_DEFAULT_TAG = "traditionless-default"
-_ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
 
 
 def _active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
@@ -45,23 +43,22 @@ def _active_tradition_row(sheet: CharacterSheet) -> CharacterTradition | None:
 
 
 def _tradition_is_orphaned(tradition: Tradition) -> bool:
-    """Whether ``tradition`` currently has no living teachers (#2441).
+    """Whether ``tradition`` currently has no living teachers (#2441, #3675).
 
-    Checks whether the tradition's ``BeginningTradition`` row has a
-    ``required_distinction`` tagged ``'orphaned-tradition-marker'`` (#2752 —
-    was a hardcoded slug lookup, now tag-driven). That authored gate is the
-    only place "this tradition lacks teachers" is recorded anywhere in the
-    schema, so it doubles as the live-game truth read here. A lazy import
-    keeps ``magic`` from taking a module-level dependency on
-    ``character_creation`` (documented as a "CG-only concern" on
-    ``BeginningTradition`` itself — this is the one read that deliberately
-    reaches back across that boundary for a live-game answer).
+    Checks whether the tradition's ``BeginningTradition`` row is in the
+    TEACHERS_GONE slate state. That authored gate is the only place "this
+    tradition lacks teachers" is recorded anywhere in the schema, so it
+    doubles as the live-game truth read here. A lazy import keeps ``magic``
+    from taking a module-level dependency on ``character_creation``
+    (documented as a "CG-only concern" on ``BeginningTradition`` itself,
+    this is the one read that deliberately reaches back across that boundary
+    for a live-game answer).
     """
+    from world.character_creation.constants import TraditionState  # noqa: PLC0415
     from world.character_creation.models import BeginningTradition  # noqa: PLC0415
 
     return BeginningTradition.objects.filter(
-        tradition=tradition,
-        required_distinction__tags__slug=_ORPHANED_TRADITION_MARKER_TAG,
+        tradition=tradition, state=TraditionState.TEACHERS_GONE
     ).exists()
 
 
@@ -88,12 +85,13 @@ def _shed_traditionless_drawbacks(sheet: CharacterSheet) -> None:
 
 
 def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
-    """Re-grant the traditionless-default drawback on leaving a tradition (#2441 ruling 4).
+    """Re-grant the self-taught drawback on leaving a tradition (#2441 ruling 4, #3675).
 
-    Queries by the ``'traditionless-default'`` DistinctionTag instead of
-    the hardcoded ``'unbound'`` slug (#2752).
+    Reads ``world.character_creation.offers.self_taught_drawback()``, the
+    SELF_TAUGHT ``TraditionStateLine.carries`` FK, instead of a DistinctionTag or
+    hardcoded slug.
 
-    Defensive skip (logged) if no distinction carries that tag yet — the
+    Defensive skip (logged) if no SELF_TAUGHT line carries a drawback yet, the
     seed may not have run. Catches ``DistinctionExclusionError`` and skips
     (logs) rather than propagating, per the ``grant_distinction`` seam's
     documented contract for non-GM/telnet callers (see
@@ -107,19 +105,16 @@ def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
     ``ENDORSEMENT_THRESHOLD``) describes an automatic system consequence of a
     player's own leave-tradition action.
     """
+    from world.character_creation.offers import self_taught_drawback  # noqa: PLC0415
     from world.distinctions.exceptions import DistinctionExclusionError  # noqa: PLC0415
-    from world.distinctions.models import Distinction  # noqa: PLC0415
     from world.distinctions.services import grant_distinction  # noqa: PLC0415
     from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
 
-    distinction = Distinction.objects.filter(
-        tags__slug=_TRADITIONLESS_DEFAULT_TAG,
-    ).first()
+    distinction = self_taught_drawback()
     if distinction is None:
         logger.info(
-            "leave_tradition: no distinction tagged %r found "
-            "(not seeded yet?) — skipping re-application for character sheet #%s.",
-            _TRADITIONLESS_DEFAULT_TAG,
+            "leave_tradition: no SELF_TAUGHT TraditionStateLine carries a drawback "
+            "(not seeded yet?), skipping re-application for character sheet #%s.",
             sheet.pk,
         )
         return
@@ -133,9 +128,9 @@ def _reapply_unbound_drawback(sheet: CharacterSheet) -> None:
         )
     except DistinctionExclusionError:
         logger.warning(
-            "leave_tradition: re-applying distinction tagged %r blocked by "
-            "exclusion conflict on character sheet #%s — skipping.",
-            _TRADITIONLESS_DEFAULT_TAG,
+            "leave_tradition: re-applying %r blocked by exclusion conflict on "
+            "character sheet #%s, skipping.",
+            distinction.slug,
             sheet.pk,
         )
 

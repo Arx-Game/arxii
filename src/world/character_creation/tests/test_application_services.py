@@ -779,7 +779,6 @@ class ApproveApplicationIntegrationTests(TestCase):
                 },
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
             },
         )
         self._create_complete_magic(draft)

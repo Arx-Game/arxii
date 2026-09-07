@@ -90,7 +90,7 @@ class UpbringingListTest(TestCase):
             "cg_point_cost": 0,
             "cost_per_influence": 3,
             "trust_required": 0,
-            "grants_distinction": None,
+            "offers": [],
             "sort_order": self.choice.sort_order,
         }
 

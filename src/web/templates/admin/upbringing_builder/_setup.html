@@ -1,7 +1,12 @@
 {% load i18n %}
-<section class="tuning-panel" id="panel-upbringing-builder-setup">
+{% comment %}
+Shared by every builder-shaped admin page (the Upbringing Builder, the
+tradition slate page, the Distinction Builder) - generic wording and a
+generic id, not named for any one of them (#3675 review round 1).
+{% endcomment %}
+<section class="tuning-panel" id="panel-builder-setup">
   <h2>Link a contributor first.</h2>
   <p>Rows saved here are credited to a contributor name. Link one in the
-    Authoring Workbench, then come back to save this Upbringing.</p>
+    Authoring Workbench, then come back to save this page.</p>
   <p><a href="{% url 'admin_authoring' %}">Open the Authoring Workbench</a></p>
 </section>

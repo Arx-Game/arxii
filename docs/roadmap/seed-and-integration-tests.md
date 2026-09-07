@@ -88,7 +88,7 @@ A new player cannot complete character creation today without these. Listed in d
 | **2E — Stat & skill spine** | 12 stat `Trait` rows; `TraitRankDescription` rows; `Skill` catalog; `SkillPointBudget` row | CG Attributes stage. CG Stage 5 skill allocation. Without `SkillPointBudget` row, Stage 5 validation **raises DoesNotExist**. |
 | **2F — Resolution tables** | Tuned `PointConversionRange`, `CheckRank`, `ResultChart` + `ResultChartOutcome`, `CheckOutcome` rows | Every system using `perform_check` returns real outcomes. Today integration tests use placeholders; fresh DB has no rows. **Needs design pass on tuning curves first.** |
 | **2G — Class & path** | `CharacterClass` rows; 5 PROSPECT `Path` rows (Steel/Whispers/Voice/Chosen/Tome); `Aspect` + `PathAspect` rows | CG Stage 5 path picker. `sheet.current_level`. Path-aspect check bonuses. |
-| **2H — Distinctions starter** | `DistinctionCategory` (6 categories); ~20 `Distinction` rows for MVP; `DistinctionEffect` rows wiring to `ModifierTarget` | CG Distinctions stage. **Needs design pass on the starter catalog first.** |
+| **2H - Distinctions offers** | Superseded by #2698 (`DistinctionCategory`/`Distinction`/`DistinctionEffect` are `CONTENT_MODELS`, looked up via `authored_or_sample()`, invented only under `SEED_SAMPLE_CONTENT`) and #3675 (the CG Distinctions stage this row unblocked is retired; distinctions are offered per CG chapter via `character_creation.DistinctionOffer` rows, never a stage of their own). What clone-bootstrap still seeds: `world.seeds.character_creation._ensure_living_masters_schooling` / `ensure_unbound_drawback_distinction` / `ensure_orphaned_tradition_distinction` create the `TraditionStateLine` (SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) and `SchoolingLine` rows and their `DistinctionOffer` rows, E2E/clone-bootstrap defaults only, gated `SEED_SAMPLE_CONTENT`. | Every CG chapter (Gift tradition step, Glimpse, Lineage, Appearance, Actor's Sheet) offers its own distinctions; no design pass needed to unblock CG. |
 | **2I — Naming ritual** | `TarotCard` deck (full 78 cards: 22 Major Arcana with Latin names + 56 Minor Arcana). Authorable from canonical reference, no design pass needed. | Naming ritual works for orphan/Misbegotten characters. |
 | **2J — Relationships library** | Canonical `RelationshipTrack` rows (Trust/Respect/Romance/Antagonism); `RelationshipTier` milestones per track | First-impression flow. Track advancement. |
 | **2K — Codex starter** | `CodexCategory` rows; `CodexSubject` rows; `CodexEntry` starter set; CG codex-grant tables (BeginningsCodexGrant, PathCodexGrant, DistinctionCodexGrant) referencing real entries | CG codex grants. Knowledge browser has content. Today CG grants FK to nothing → silent failures or FK violations. |
@@ -125,10 +125,11 @@ Each test starts from a focused seed slice and walks an actor through a complete
 ### Phase 2 design decisions needed (block specific tasks)
 
 - **PointConversionRange / CheckRank / ResultChart tuning values** (blocks 2F). Integration test values are placeholders. Real game values need a design call on the conversion curve.
-- **Distinction starter catalog** (~20 entries) (blocks 2H). Roadmap acknowledges "hundreds need authoring" — pick 20 covering 6 categories to unblock CG.
+- ~~**Distinction starter catalog** (~20 entries) (blocks 2H)~~. Resolved: `Distinction`/`DistinctionCategory`/`DistinctionEffect` are lore-repo `CONTENT_MODELS` since #2698; 29 active distinctions exist in production as of #3675's design pass (2026-09-06 database check).
 - **ClassLevelUnlock content** (blocks parts of 2Y). What does each class level give? No spec exists. Can be deferred — XP-spend can land without unlocks authored.
 
-These three can run in parallel with the mechanical seeding work.
+The two remaining (PointConversionRange tuning, ClassLevelUnlock content) can run in
+parallel with the mechanical seeding work.
 
 ---
 

@@ -1,0 +1,206 @@
+{% extends "admin/base_site.html" %}
+{% load i18n static authoring_tags %}
+
+{% block title %}{{ title }} | {% translate 'Site administration' %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+{% comment %}
+`admin/base.html` links base.css, dark_mode.css and responsive.css. `forms.css` -
+where `.form-row`, `.aligned label`, `.flex-container`, `.checkbox-row` and
+`.submit-row` are defined - is linked by `change_form.html`'s own extrastyle
+block, so a custom admin page extending `base_site.html` has to ask for it
+itself. Without it this page renders admin's markup with no rules behind it
+(#3667, the Upbringing Builder's second round).
+{% endcomment %}
+<link rel="stylesheet" href="{% static 'admin/css/forms.css' %}">
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+{{ media }}
+{% comment %}
+The shared clone-a-formset-row helpers (nextFormIndex/announceFormsetAdded/
+cloneFromTemplate), also loaded by the Upbringing Builder's page.html - #3675
+review: this page used to carry a verbatim copy of that script inline.
+{% endcomment %}
+<script src="{% static 'admin/js/builder_formsets.js' %}"></script>
+{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% translate 'Home' %}</a>
+  &rsaquo; Character creation
+  &rsaquo; <a href="{% url 'admin:arxii_beginnings_changelist' %}">Beginnings</a>
+  &rsaquo; <a href="{% url 'admin:arxii_beginnings_change' beginning.pk %}">{{ beginning.name }}</a>
+  &rsaquo; Traditions
+</div>
+{% endblock %}
+
+{% block content %}
+{% include "admin/tuning/_panel_css.html" %}
+{% include "admin/tradition_slate/_css.html" %}
+<div id="tradition-slate-root">
+  <h1>Traditions offered to {{ beginning.name }}</h1>
+
+  {% if needs_setup %}
+    {% include "admin/upbringing_builder/_setup.html" %}
+  {% else %}
+
+  <div class="ts-columns">
+    <div class="ts-main">
+      <form method="post">
+        {% csrf_token %}
+
+        <div class="module" id="standard-lines-module">
+          <h2>Standard lines
+            <span class="ts-chips"><span class="ts-chip">shared by every Beginning</span></span>
+          </h2>
+          <div class="description">Written once. Every tradition step shows these words and
+            these prices; a slate line below may carry its own wording, never its own price.
+            Nothing here should name what a character discovers in play.</div>
+
+          {{ state_formset.management_form }}
+          {% if state_formset.non_form_errors %}
+          <p class="errornote">{{ state_formset.non_form_errors }}</p>
+          {% endif %}
+          <table class="tuning-table ts-table">
+            <thead>
+              <tr><th>State</th><th>Line on the entry</th><th>Carries</th><th>Price</th></tr>
+            </thead>
+            <tbody>
+              {% for form, label, display in state_rows %}
+              <tr>
+                <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                  {{ label }}</td>
+                <td>{{ form.entry_line }}</td>
+                <td>{{ form.carries }} {% builder_link form.instance.carries %}</td>
+                <td>{{ display.text }}<br><span class="help">{{ display.help }}</span></td>
+              </tr>
+              {% if form.errors %}<tr><td colspan="4">{{ form.errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+
+          {{ schooling_formset.management_form }}
+          {% if schooling_formset.non_form_errors %}
+          <p class="errornote">{{ schooling_formset.non_form_errors }}</p>
+          {% endif %}
+          <table class="tuning-table ts-table" style="margin-top: .6rem">
+            <thead>
+              <tr>
+                <th>Schooling line</th><th>Name</th><th>The player reads</th>
+                <th>Grants</th><th>Price (derived)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for form, rank, display in schooling_rows %}
+              <tr>
+                <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                  {{ rank }}</td>
+                <td>{{ form.name }}</td>
+                <td>{{ form.player_line }}</td>
+                <td>{{ form.grants }} {% builder_link form.instance.grants %}</td>
+                <td>{{ display.text }}<br><span class="help">{{ display.help }}</span></td>
+              </tr>
+              {% if form.errors %}<tr><td colspan="5">{{ form.errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="description">Prices on this page are never typed here. A price lives on
+            the distinction's Builder page and is read back wherever the distinction is
+            offered, so it is the same in every Beginning.</div>
+        </div>
+
+        <div class="module" id="slate-module">
+          <h2>The slate
+            <span class="ts-chips">
+              <span class="ts-chip">{{ rail.traditions }} tradition{{ rail.traditions|pluralize }}</span>
+            </span>
+          </h2>
+          <div class="description">One line per tradition this Beginning may join. Its state
+            picks which standard lines the player sees. Own wording replaces the standard
+            line's words for this tradition only.</div>
+
+          {{ slate_formset.management_form }}
+          {% if slate_formset.non_form_errors %}
+          <p class="errornote">{{ slate_formset.non_form_errors }}</p>
+          {% endif %}
+          <table class="tuning-table ts-table">
+            <thead>
+              <tr>
+                <th>Tradition</th><th>State</th><th>Own wording (optional)</th>
+                <th>Order</th><th>Remove</th>
+              </tr>
+            </thead>
+            <tbody id="slate-body">
+              {% for form in slate_formset.forms %}
+              <tr>
+                <td>{% for hidden in form.hidden_fields %}{{ hidden }}{% endfor %}
+                  {{ form.tradition }}</td>
+                <td>{{ form.state }}</td>
+                <td>{{ form.own_wording }}</td>
+                <td>{{ form.sort_order }}</td>
+                <td>{% if form.instance.pk %}{{ form.DELETE }}{% endif %}</td>
+              </tr>
+              {% if form.errors %}<tr><td colspan="5">{{ form.errors }}</td></tr>{% endif %}
+              {% endfor %}
+            </tbody>
+          </table>
+          <template id="empty-slate-template">
+            <tr>
+              <td>{% for hidden in slate_formset.empty_form.hidden_fields %}{{ hidden }}{% endfor %}
+                {{ slate_formset.empty_form.tradition }}</td>
+              <td>{{ slate_formset.empty_form.state }}</td>
+              <td>{{ slate_formset.empty_form.own_wording }}</td>
+              <td>{{ slate_formset.empty_form.sort_order }}</td>
+              <td></td>
+            </tr>
+          </template>
+          <div class="ts-addrow">
+            <button type="button" class="button" id="add-slate-btn"
+                    data-prefix="{{ slate_formset.prefix }}"
+                    data-target="slate-body"
+                    data-template="empty-slate-template">
+              + Add a tradition to this slate
+            </button>
+          </div>
+
+          {% include "admin/tradition_slate/_preview.html" %}
+        </div>
+
+        <div class="submit-row">
+          <input type="submit" name="save" value="Save" class="default">
+          <input type="submit" name="save_continue" value="Save and continue editing">
+        </div>
+      </form>
+    </div>
+
+    <aside class="ts-rail">
+      {% include "admin/tradition_slate/_rail.html" %}
+    </aside>
+  </div>
+
+  {% endif %}
+</div>
+
+<script>
+(function () {
+  // The shared clone helpers (nextFormIndex/announceFormsetAdded/cloneFromTemplate)
+  // live in admin/js/builder_formsets.js, loaded in extrahead above - there is no
+  // saved row to fetch an HTMX fragment for until the whole page is saved, so "Add
+  // a tradition to this slate" clones the formset's own empty form client-side.
+  var formsets = window.arxBuilderFormsets;
+
+  var addBtn = document.getElementById("add-slate-btn");
+  if (addBtn) {
+    addBtn.addEventListener("click", function () {
+      var index = formsets.nextFormIndex(addBtn.dataset.prefix);
+      var row = formsets.cloneFromTemplate(addBtn.dataset.template, index, "tbody");
+      document.getElementById(addBtn.dataset.target).appendChild(row);
+      formsets.announceFormsetAdded(addBtn.dataset.prefix, row);
+    });
+  }
+})();
+</script>
+{% endblock %}

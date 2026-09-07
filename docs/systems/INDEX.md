@@ -391,10 +391,10 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     `CONTENT_MODELS` `magic.glimpsetag` — `axis` (`GlimpseTagAxis`), `name`, `slug`
     natural key, `description`, `example`, `sort_order`, `is_active`),
     `CharacterGlimpseTag` (instance data, never exported; `aura` FK
-    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`),
-    `GlimpseTagDistinctionSuggestion` (content model — `magic.glimpsetagdistinctionsuggestion`
-    — `tag`/`distinction` FKs, specific→general per ADR-0010, grants nothing, purely a
-    suggestion surface). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
+    `related_name="glimpse_tags"`, `tag` FK PROTECT, unique per `(aura, tag)`).
+    A tag's suggested distinctions are `character_creation.DistinctionOffer` rows
+    (`chapter=glimpse`, `glimpse_tag=<tag>`; #3675, retired the tag's own
+    `GlimpseTagDistinctionSuggestion` pairing table). `GlimpseTagAxis`/`GlimpseState`/`GLIMPSE_AXIS_CONFIG`
     (`constants.py`) — five axes (TRIGGER single-select, what caused the
     awakening [#2611]; TONE single-select; CONSEQUENCE, WITNESS, SENSORY
     multi-select, SENSORY renders as prose prompts) and the NOT_STARTED/TAGS_ONLY/
@@ -408,11 +408,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
     axis)`, `set_glimpse_prose(aura, text)`, `link_distinction_to_glimpse(character_distinction,
     aura)` / `unlink_distinction_from_glimpse(character_distinction)`. CG finalize
     (`world.character_creation.services.finalize_magic_data`) consumes
-    `draft_data["glimpse_tag_ids"/"glimpse_story"/"glimpse_linked_distinction_ids"]`
-    through these services. API: CG catalog `GET
+    `draft_data["glimpse_tag_ids"/"glimpse_story"]` through these services;
+    `link_distinction_to_glimpse` is now called per picked distinction whose
+    `offer_ids` name a `DistinctionOffer` with `glimpse_tag` set, not a separate
+    `glimpse_linked_distinction_ids` draft_data key (#3675, see
+    `docs/systems/magic.md`'s Glimpse section). API: CG catalog `GET
     /api/character-creation/glimpse-tags/` (`CGGlimpseTagViewSet`, filterable
     by `?axis=` and `?path_id=<N>` [#2611], embeds
-    `suggested_distinctions`) + four `CharacterAuraViewSet` actions
+    `offers` (its own active `DistinctionOffer` rows, #3675)) + four `CharacterAuraViewSet` actions
     (`set-glimpse-tags` / `set-glimpse-prose` / `link-glimpse-distinction` /
     `unlink-glimpse-distinction`). Sheet payload: `AuraData.glimpse_story` /
     `.glimpse_state` / `.glimpse_tags` / `.can_finish_glimpse` (privileged-only);
@@ -606,7 +609,8 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
 - **API endpoints (guided Glimpse story — #2427):**
   - `GET /api/character-creation/glimpse-tags/` — active `GlimpseTag` catalog
     (`CGGlimpseTagViewSet`, read-only, unpaginated, filterable by `?axis=`); embeds
-    `suggested_distinctions` per tag. Shared by CG and the post-CG "finish later" surface
+    `offers` per tag (its active `DistinctionOffer` rows, #3675). Shared by CG and the
+    post-CG "finish later" surface
   - `POST /api/magic/character-auras/{id}/set-glimpse-tags/` — body `{axis, tag_ids[]}`
   - `POST /api/magic/character-auras/{id}/set-glimpse-prose/` — body `{text}`
   - `POST /api/magic/character-auras/{id}/link-glimpse-distinction/` — body
@@ -722,7 +726,11 @@ allocations that convert AP to development points.
 - **Source:** `src/world/skills/`
 - **Details:** [skills.md](skills.md)
 ### Distinctions
-Character advantages and disadvantages (CG Stage 6: Traits).
+Character advantages and disadvantages. No CG stage of its own since #3675: each CG
+chapter offers the distinctions that belong to it via `character_creation.DistinctionOffer`
+rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
+`reconcile_offer_picks`); see the Character Creation section below and
+[distinctions.md](distinctions.md)'s "CG Integration".
 
 - **Models:** `DistinctionCategory`, `Distinction`, `DistinctionEffect`, `CharacterDistinction`
   (`from_glimpse` nullable FK → `magic.CharacterAura`, SET_NULL, #2427 — FK presence is
@@ -2215,6 +2223,27 @@ Multi-stage character creation flow with draft system.
   `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation, Distinction
   and heat seeds) and The Introductions (white journals by `JournalKind`; Whispers lines as
   Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
+- **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
+  Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
+  `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
+  `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, an opener FK
+  scoped to its chapter [`schooling_line`/`glimpse_tag`/`origin_choice`]) is the one row that
+  says where a distinction is shown and how it arrives, read by `world.character_creation
+  .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
+  tradition's slate line (`BeginningTradition.state`, `TraditionState`:
+  SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
+  (`TraditionStateLine`, per-tradition `own_wording` override, never its own price) and, for
+  LIVING_MASTERS, offers the standard schooling set (`SchoolingLine`, rank 0-2, each granting a
+  distinction at its rank, priced `grants.cost_per_rank * rank`). `OriginTemplate
+  .closed_distinctions`/`.closed_reason` names distinctions a route never offers, in any
+  chapter. `GET /api/character-creation/drafts/{id}/offers/?chapter=<chapter>` returns
+  `{"offers": [...], "closed": [...]}` for one chapter; `reconcile_offer_picks` runs after every
+  draft PATCH, `select-tradition`, and once at the start of every finalize path. Four staff
+  admin builders author this surface (Distinction Builder, tradition slate, the Upbringing
+  Builder's per-answer offers + route closes, a `GlimpseTag` change-form inline), reachable
+  from a Builders panel on the Authoring Workbench dashboard; see `src/web/admin/CLAUDE.md`.
+  See [character_creation.md](character_creation.md)'s "Distinction offers" section and
+  [distinctions.md](distinctions.md)'s "CG Integration".
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
 ### Market (#2066, standing gating #2995)
@@ -4065,18 +4094,20 @@ register as additional kinds.
   tradition)` was dropped (a character may rejoin a tradition they previously left,
   creating a second historical row for the same pair). `world.magic.services.
   tradition_membership`: `join_tradition(sheet, tradition, *, via_membership=None)` —
-  ends the active row (`left_at`), creates a new one, and — when the joined tradition
+  ends the active row (`left_at`), creates a new one, and, when the joined tradition
   is not orphaned (`_tradition_is_orphaned`, reading `character_creation.
-  BeginningTradition.required_distinction__slug="orphaned-tradition"`, the only place
-  "no living teachers" is recorded in the schema, per Task 5/#2428) — deletes any held
+  BeginningTradition.state == TraditionState.TEACHERS_GONE` as of #3675, was a
+  tag-matched `required_distinction` FK pre-#3675, the only place "no living
+  teachers" is recorded in the schema), deletes any held
   `unbound`/`orphaned-tradition` drawback `CharacterDistinction` row (direct queryset
   delete; `grant_distinction` has no removal counterpart, see
   `world/distinctions/CLAUDE.md`). Raises `AlreadyInTraditionError` on a no-op re-join.
   `leave_tradition(sheet)` — `left_at` only, no replacement row; re-applies the
-  `unbound` drawback via `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)`
-  (defensive no-op, logged, if the "unbound" `Distinction` isn't seeded yet — Task 9
-  ships it), catching `DistinctionExclusionError`. Raises `NoActiveTraditionError` if
-  already traditionless. **Wired trigger:** `societies.membership_services.
+  self-taught drawback (`world.character_creation.offers.self_taught_drawback()`, the
+  SELF_TAUGHT `TraditionStateLine.carries` FK, #3675) via
+  `grant_distinction(origin=DistinctionOrigin.GAMEPLAY)` (defensive no-op, logged, if
+  no SELF_TAUGHT line carries a drawback yet), catching `DistinctionExclusionError`.
+  Raises `NoActiveTraditionError` if already traditionless. **Wired trigger:** `societies.membership_services.
   _maybe_join_tradition`, called from both `accept_invitation` and `accept_application`
   when `organization.tradition_id` is set (ruling 1 on #2441 — a tradition is joined
   through its teaching org's membership-offer accept flow); swallows
@@ -4100,13 +4131,15 @@ register as additional kinds.
   helper) and scales AP: `ceil(ap_cost × (100 + surcharge%) / 100)`, applied identically to
   both `charge_and_learn` front doors (accept + TRAIN). TIME, not power — resonance
   earning/spending is untouched (a corrected-in-review alternative: taxing resonance would
-  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row now
-  carries `required_distinction=<Unbound drawback>` (was `None` pre-#2442); unlike Orphaned
-  Tradition's deliberate "must already hold it" gate, `select_tradition`
-  (`character_creation.views`) auto-adds the Unbound drawback to the draft when missing — a
-  one-off exception preserving CG completability now that Unbound (CG's tradition-agnostic
-  default) carries a gate. Shed by `join_tradition`/re-applied by `leave_tradition` above —
-  the `CharacterModifier` row cascade-deletes with the `CharacterDistinction` row
+  have made the Unbound weaker, not slower). Every Unbound `BeginningTradition` row reads
+  `state=TraditionState.SELF_TAUGHT` (#3675, was a `required_distinction=<Unbound drawback>`
+  FK pre-#3675); the SELF_TAUGHT `TraditionStateLine` carries the drawback, and
+  `select_tradition` (`character_creation.views`) applies it to the draft through the
+  generic `reconcile_offer_picks` call every tradition pick runs, no name-matched special
+  case, and no gate the player must already hold something to clear (Orphaned
+  Tradition/Metallic Order carry theirs the identical way, via TEACHERS_GONE). Shed by
+  `join_tradition`/re-applied by `leave_tradition` above; the `CharacterModifier` row
+  cascade-deletes with the `CharacterDistinction` row
   (`ModifierSource.character_distinction` is `on_delete=CASCADE`), so the surcharge
   disappears automatically, no separate cleanup.
 - **Disposition (#1591):** two-tier model. Durable `NPCStanding.affection` (per
@@ -4721,7 +4754,9 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
 ### Predicates (shared rule engine)
 Structural rule-tree evaluator + leaf-resolver registry. Consumers: missions
 (`MissionTemplate.availability_rule`, `MissionOption.rule_json`), npc_services
-(`NPCServiceOffer.eligibility_rule`), distinctions (`DistinctionPrerequisite.rule_json`).
+(`NPCServiceOffer.eligibility_rule`). (`distinctions.DistinctionPrerequisite`, an
+earlier consumer, was retired #3675 -- distinctions are offered by CG chapter now,
+never gated by a prerequisite rule tree.)
 
 - **Module:** `src/world/predicates/predicates.py` (no models — pure Python)
 - **Key entry points:** `evaluate(rule: dict, ctx: PredicateContext) -> bool`,

@@ -2,16 +2,14 @@
  * FinalTouchesStage Component Tests: the Actor's Sheet (#3621).
  */
 
-/// <reference types="node" />
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { FinalTouchesStage } from '../../components/FinalTouchesStage';
 import { createMockDraft, mockCGExplanations } from '../fixtures';
 import { renderWithCharacterCreationProviders } from '../testUtils';
-import type { EnemyOffer } from '../../types';
+import type { EnemyOffer, OffersResponse, VisibleOffer } from '../../types';
+import { unreachableClasses } from './offers/classGuard';
 
 vi.mock('../../goals', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../goals')>()),
@@ -31,11 +29,45 @@ vi.mock('../../goals', async (importOriginal) => ({
   }),
 }));
 const mutateAsync = vi.fn().mockResolvedValue({});
+let offersResponse: OffersResponse;
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: mockCGExplanations }),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync }),
+  useDraftOffers: () => ({ data: offersResponse, isLoading: false }),
 }));
+vi.mock('@/hooks/useDistinctions', () => ({
+  useDraftDistinctions: () => ({ data: [] }),
+  useSyncDistinctions: () => ({ mutate: vi.fn() }),
+}));
+
+const hedonistic: VisibleOffer = {
+  offer_id: 301,
+  distinction_id: 31,
+  name: 'Hedonistic',
+  player_line: 'If the vibes are good, you are good.',
+  chapter: 'actors_sheet',
+  arrives_as: 'choice',
+  opener_label: '',
+  cost_per_rank: 25,
+  max_rank: 1,
+  is_locked: false,
+  lock_reason: '',
+};
+
+const voracious: VisibleOffer = {
+  offer_id: 302,
+  distinction_id: 32,
+  name: 'Voracious',
+  player_line: 'Need that borders on compulsion.',
+  chapter: 'actors_sheet',
+  arrives_as: 'choice',
+  opener_label: '',
+  cost_per_rank: 5,
+  max_rank: 3,
+  is_locked: false,
+  lock_reason: '',
+};
 
 const rouault: EnemyOffer = {
   kind: 'group',
@@ -57,6 +89,9 @@ const republic: EnemyOffer = {
 };
 
 describe("FinalTouchesStage (Actor's Sheet)", () => {
+  beforeEach(() => {
+    offersResponse = { offers: [hedonistic, voracious], closed: [] };
+  });
   afterEach(() => mutateAsync.mockClear());
 
   it('asks the three questions with their example lines', () => {
@@ -150,18 +185,57 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     ).toBeInTheDocument();
   });
 
+  it("offers this chapter's distinctions between the three questions and the Goals heading (#3675 Task 15)", () => {
+    const { container } = renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('Is it a hunger')).toBeInTheDocument();
+    expect(screen.getByText('Hedonistic')).toBeInTheDocument();
+    expect(screen.getByText('Voracious')).toBeInTheDocument();
+    const order = container.textContent ?? '';
+    const questionsIdx = order.indexOf('What are you deathly afraid of?');
+    const offersIdx = order.indexOf('Is it a hunger');
+    const goalsIdx = order.indexOf('Goals');
+    expect(questionsIdx).toBeGreaterThan(-1);
+    expect(offersIdx).toBeGreaterThan(questionsIdx);
+    expect(goalsIdx).toBeGreaterThan(offersIdx);
+  });
+
+  it('prints the closed hint with the closedLead fallback', () => {
+    offersResponse = {
+      offers: [hedonistic],
+      closed: [
+        {
+          distinction_id: 40,
+          name: 'Indolent',
+          reason: 'Your route closed it.',
+          opener_labels: [],
+          opener_ids: [],
+        },
+      ],
+    };
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(
+      screen.getByText('Closed by your route: Indolent: Your route closed it.')
+    ).toBeInTheDocument();
+  });
+
   it('emits no class hook that cg.css has no rule for (#3667 shape)', async () => {
     const user = userEvent.setup();
     const { container } = renderWithCharacterCreationProviders(
-      <FinalTouchesStage
-        draft={createMockDraft({
-          enemy_offers: [rouault],
-          draft_data: {
-            goals: [{ domain_id: 1, notes: 'A', points: 1, horizon: 'short_term' }],
-          },
-        })}
-        onRegisterBeforeLeave={vi.fn()}
-      />
+      <div className="interview">
+        <FinalTouchesStage
+          draft={createMockDraft({
+            enemy_offers: [rouault],
+            draft_data: {
+              goals: [{ domain_id: 1, notes: 'A', points: 1, horizon: 'short_term' }],
+            },
+          })}
+          onRegisterBeforeLeave={vi.fn()}
+        />
+      </div>
     );
     await user.click(screen.getByRole('button', { name: 'Name them' }));
     await user.click(screen.getByRole('button', { name: /ruined/ }));
@@ -171,21 +245,16 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     // The person kind and the free-written path emit their own hooks.
     await user.click(screen.getByRole('button', { name: 'A person' }));
     await user.click(screen.getByRole('button', { name: 'Write your own' }));
-    // Read the sheet from disk: vitest mocks CSS modules (raw imports included) to nothing.
-    const css = readFileSync(resolve(__dirname, '../../cg.css'), 'utf8');
-    const emitted = new Set<string>();
-    container.querySelectorAll('[class]').forEach((el) => {
-      el.className
-        .split(/\s+/)
-        .filter(Boolean)
-        .forEach((name) => emitted.add(name));
-    });
-    // App-wide utilities styled outside the folio sheet.
-    const styledElsewhere = new Set(['chosen', 'closed']);
-    const unstyled = [...emitted].filter(
-      (name) => !styledElsewhere.has(name) && !new RegExp(`\\.${name}(?![\\w-])`).test(css)
-    );
-    expect(unstyled).toEqual([]);
+    // Ranked offer's control raises its rank, and toggle the unranked one, so
+    // ChapterOffers's rank-control and pressed-stance markup both render.
+    await user.click(screen.getByRole('button', { name: 'Raise Voracious' }));
+    await user.click(screen.getByRole('button', { name: /Hedonistic/ }));
+    // App-wide utilities and pre-existing folio-chassis classes with no rule
+    // reaching the bare element (only a descendant selector) - not created by
+    // this task's offers markup, same escape hatch every other class-guard
+    // test uses.
+    const styledElsewhere = new Set(['leaf-body', 'chosen', 'entry', 'note-group']);
+    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
   });
 
   it('saves the answers, goals, enemy and introductions in one PATCH on leave', async () => {

@@ -19,17 +19,6 @@ class DistinctionExclusionError(Exception):
         super().__init__(self.user_message)
 
 
-class DistinctionPrerequisiteError(Exception):
-    """Raised when removing a distinction that another held distinction depends on."""
-
-    user_message: str = "Cannot remove this distinction — another distinction depends on it."
-
-    def __init__(self, user_message: str | None = None) -> None:
-        if user_message is not None:
-            self.user_message = user_message
-        super().__init__(self.user_message)
-
-
 class SheetUpdateRequestError(Exception):
     """Raised when a SheetUpdateRequest is invalid or already processed."""
 

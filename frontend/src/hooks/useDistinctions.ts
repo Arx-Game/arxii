@@ -7,6 +7,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '@/evennia_replacements/api';
+import { characterCreationKeys } from '@/character-creation/queries';
 import type {
   AddDistinctionRequest,
   Distinction,
@@ -302,13 +303,19 @@ export function useSyncDistinctions(draftId: number) {
       });
       // Invalidate draft to refresh stat_bonuses after cap enforcement
       queryClient.invalidateQueries({
-        queryKey: ['character-creation', 'draft'],
+        queryKey: characterCreationKeys.draft(),
       });
       // Distinction spends move the CG point budget (2026-07 audit): without
       // this, the Review page's "unspent points -> bonus XP" banner and the
       // submit-confirmation numbers stayed stale for up to 5 minutes.
       queryClient.invalidateQueries({
-        queryKey: ['character-creation', 'draft-cg-points', draftId],
+        queryKey: characterCreationKeys.draftCGPoints(draftId),
+      });
+      // Every chapter's offers can shift after a sync (a taken CHOICE closes
+      // its siblings, a state drawback carries/vanishes, #3675): invalidate
+      // every chapter's cached offers for this draft with one prefix match.
+      queryClient.invalidateQueries({
+        queryKey: [...characterCreationKeys.all, 'draft-offers', draftId],
       });
     },
   });

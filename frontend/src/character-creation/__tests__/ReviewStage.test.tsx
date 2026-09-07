@@ -10,8 +10,10 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { ReviewStage } from '../components/ReviewStage';
 import { Stage } from '../types';
+import { unreachableClasses } from './components/offers/classGuard';
 import {
   createMockDraft,
   mockCGExplanations,
@@ -25,6 +27,11 @@ import {
   renderWithCharacterCreationProviders,
   seedCharacterCreationQueries,
 } from './testUtils';
+
+let draftDistinctions: DraftDistinctionEntry[] = [];
+vi.mock('@/hooks/useDistinctions', () => ({
+  useDraftDistinctions: () => ({ data: draftDistinctions }),
+}));
 
 const submit = vi.fn();
 vi.mock('../queries', async (importOriginal) => {
@@ -80,11 +87,12 @@ function renderReview(
     isStaff?: boolean;
     onStageSelect?: (stage: Stage) => void;
     account?: typeof mockPlayerAccount;
+    explanations?: Record<string, string>;
   } = {}
 ) {
-  const { isStaff = false, onStageSelect = vi.fn(), account } = options;
+  const { isStaff = false, onStageSelect = vi.fn(), account, explanations } = options;
   const queryClient = createTestQueryClient();
-  seedCharacterCreationQueries(queryClient, { explanations: mockCGExplanations });
+  seedCharacterCreationQueries(queryClient, { explanations: explanations ?? mockCGExplanations });
   return renderWithCharacterCreationProviders(
     <ReviewStage draft={draft} isStaff={isStaff} onStageSelect={onStageSelect} />,
     { queryClient, account }
@@ -95,6 +103,7 @@ describe('ReviewStage', () => {
   beforeEach(() => {
     submit.mockClear();
     mockNavigate.mockClear();
+    draftDistinctions = [];
     vi.mocked(useTables).mockReturnValue({
       data: { results: [] },
     } as unknown as ReturnType<typeof useTables>);
@@ -139,6 +148,113 @@ describe('ReviewStage', () => {
       await screen.findByRole('button', { name: mockCompleteDraft.selected_area!.name })
     );
     expect(onStageSelect).toHaveBeenCalledWith(Stage.ORIGIN);
+  });
+
+  it('lists the draft distinction entries as a ledger of what you carry (#3675 fix round 3)', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 10,
+        distinction_name: 'Keen Senses',
+        distinction_slug: 'keen-senses',
+        category_slug: 'advantages',
+        rank: 2,
+        cost: 4,
+        notes: '',
+        offer_ids: [201],
+        sources: ['Wonder'],
+        arrivals: ['choice'],
+      },
+      {
+        distinction_id: 11,
+        distinction_name: 'Orphaned Stances',
+        distinction_slug: 'orphaned-stances',
+        category_slug: 'drawbacks',
+        rank: 1,
+        cost: -30,
+        notes: '',
+        offer_ids: ['state:TEACHERS_GONE'],
+        sources: ['No masters remain to teach it.'],
+        arrivals: ['carried'],
+      },
+    ];
+    renderReview(mockCompleteDraft);
+    expect(screen.getByText('What you carry')).toBeInTheDocument();
+    expect(screen.getByText('Keen Senses')).toBeInTheDocument();
+    expect(screen.getByText('Rank 2')).toBeInTheDocument();
+    expect(screen.getByText('choice')).toBeInTheDocument();
+    expect(screen.getByText('Orphaned Stances')).toBeInTheDocument();
+    expect(screen.getByText('carried')).toBeInTheDocument();
+  });
+
+  it('the arrival words route through their own copy keys (#3675 final fix F5)', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 10,
+        distinction_name: 'Keen Senses',
+        distinction_slug: 'keen-senses',
+        category_slug: 'advantages',
+        rank: 2,
+        cost: 4,
+        notes: '',
+        offer_ids: [201],
+        sources: ['Wonder'],
+        arrivals: ['choice'],
+      },
+    ];
+    renderReview(mockCompleteDraft, {
+      explanations: { ...mockCGExplanations, review_arrival_choice: 'Choisi' },
+    });
+    expect(screen.getByText('Choisi')).toBeInTheDocument();
+    expect(screen.queryByText('choice')).not.toBeInTheDocument();
+  });
+
+  it('prints no distinctions ledger when the draft carries none', () => {
+    draftDistinctions = [];
+    renderReview(mockCompleteDraft);
+    expect(screen.queryByText('What you carry')).not.toBeInTheDocument();
+  });
+
+  it('emits no class hook that cg.css has no rule for, in the distinctions ledger (#3667 shape)', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 10,
+        distinction_name: 'Keen Senses',
+        distinction_slug: 'keen-senses',
+        category_slug: 'advantages',
+        rank: 1,
+        cost: 2,
+        notes: '',
+        offer_ids: [201],
+        sources: ['Wonder'],
+        arrivals: ['choice'],
+      },
+    ];
+    const queryClient = createTestQueryClient();
+    seedCharacterCreationQueries(queryClient, { explanations: mockCGExplanations });
+    const { container } = renderWithCharacterCreationProviders(
+      <div className="interview">
+        <ReviewStage draft={mockCompleteDraft} isStaff={false} onStageSelect={vi.fn()} />
+      </div>,
+      { queryClient }
+    );
+    // Pre-existing folio-chassis/review classes with no rule reaching the bare
+    // element (only a descendant selector) - ChapterLeaf/Marginalia/record-frame
+    // primitives this stage already mounts, not created by this task's ledger
+    // markup, same escape hatch every other class-guard test uses.
+    const styledElsewhere = new Set([
+      'review',
+      'leaf-body',
+      'note-group',
+      'plate-name',
+      'plate-kicker',
+      'written',
+      'written-label',
+      'quiet-link',
+      'record-frame',
+      'frame-ledger',
+      'unwritten',
+    ]);
+    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
   });
 
   it('shows "Unknown" as the family when the Upbringing takes the none path', () => {

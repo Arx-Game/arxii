@@ -34,9 +34,19 @@ from web.admin.content_session_views import (
     content_session_discard,
     content_session_pr,
 )
+from web.admin.distinction_builder.views import (
+    distinction_builder,
+    distinction_builder_pick,
+    distinction_builder_review,
+)
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.sphinx_views import sphinx_audit
+from web.admin.tradition_slate.views import (
+    tradition_slate,
+    tradition_slate_pick,
+    tradition_slate_review,
+)
 from web.admin.tuning.ops_views import (
     ops_dashboard,
     ops_economy_fragment,
@@ -57,6 +67,7 @@ from web.admin.tuning.views import (
 )
 from web.admin.upbringing_builder.views import (
     upbringing_builder,
+    upbringing_builder_pick,
     upbringing_builder_preview,
     upbringing_builder_review,
 )
@@ -177,6 +188,11 @@ urlpatterns = [
     path("_authoring/mentions/", authoring_mentions_fragment, name="admin_authoring_mentions"),
     path("_authoring/reference/", authoring_reference, name="admin_authoring_reference"),
     path("_upbringing_builder/new/", upbringing_builder, name="admin_upbringing_builder_new"),
+    path(
+        "_upbringing_builder/pick/",
+        upbringing_builder_pick,
+        name="admin_upbringing_builder_pick",
+    ),
     path("_upbringing_builder/<int:pk>/", upbringing_builder, name="admin_upbringing_builder"),
     path(
         "_upbringing_builder/<int:pk>/review/",
@@ -187,6 +203,33 @@ urlpatterns = [
         "_upbringing_builder/<int:pk>/preview/",
         upbringing_builder_preview,
         name="admin_upbringing_builder_preview",
+    ),
+    path(
+        "_tradition_slate/pick/",
+        tradition_slate_pick,
+        name="admin_tradition_slate_pick",
+    ),
+    path(
+        "_tradition_slate/<int:beginning_pk>/",
+        tradition_slate,
+        name="admin_tradition_slate",
+    ),
+    path(
+        "_tradition_slate/<int:beginning_pk>/review/",
+        tradition_slate_review,
+        name="admin_tradition_slate_review",
+    ),
+    path("_distinction_builder/new/", distinction_builder, name="admin_distinction_builder_new"),
+    path(
+        "_distinction_builder/pick/",
+        distinction_builder_pick,
+        name="admin_distinction_builder_pick",
+    ),
+    path("_distinction_builder/<int:pk>/", distinction_builder, name="admin_distinction_builder"),
+    path(
+        "_distinction_builder/<int:pk>/review/",
+        distinction_builder_review,
+        name="admin_distinction_builder_review",
     ),
     path("", arx_admin_site.urls),
 ]

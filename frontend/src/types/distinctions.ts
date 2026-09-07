@@ -90,6 +90,15 @@ export interface DraftDistinctionEntry {
   rank: number;
   cost: number;
   notes: string;
+  /**
+   * Offer provenance (#3675): one entry per distinction, every contributing
+   * offer. A real `DistinctionOffer` row is a `number`; a tradition-state
+   * drawback with no offer row carries the synthetic `"state:<...>"` string
+   * key instead.
+   */
+  offer_ids: (number | string)[];
+  sources: string[];
+  arrivals: ('choice' | 'bundled' | 'carried')[];
 }
 
 /**
@@ -121,10 +130,15 @@ export interface SwapDistinctionResponse {
 
 /**
  * Entry in the sync request payload, pairing a distinction ID with its rank.
+ *
+ * `offer_id` (#3675) names the `DistinctionOffer` this CHOICE pick came from;
+ * carried/bundled entries are re-applied server-side by
+ * `reconcile_offer_picks` rather than sent by the client.
  */
 export interface SyncDistinctionEntry {
   id: number;
   rank: number;
+  offer_id: number;
 }
 
 /**

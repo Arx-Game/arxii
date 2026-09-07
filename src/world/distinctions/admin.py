@@ -2,7 +2,7 @@
 Django admin interface for the distinctions system.
 
 Provides administrative interfaces for managing distinction definitions,
-effects, prerequisites, and character distinction grants.
+effects, and character distinction grants.
 """
 
 from django.contrib import admin
@@ -15,7 +15,6 @@ from world.distinctions.models import (
     Distinction,
     DistinctionCategory,
     DistinctionEffect,
-    DistinctionPrerequisite,
     DistinctionTag,
     SheetUpdateRequest,
 )
@@ -54,12 +53,6 @@ class DistinctionEffectInline(admin.TabularInline):
     autocomplete_fields = ["target"]
 
 
-class DistinctionPrerequisiteInline(admin.TabularInline):
-    model = DistinctionPrerequisite
-    extra = 0
-    fields = ["rule_json", "description"]
-
-
 class DistinctionCodexGrantInline(admin.TabularInline):
     model = DistinctionCodexGrant
     extra = 1
@@ -83,7 +76,7 @@ class DistinctionAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     autocomplete_fields = ["category", "parent_distinction", "trust_category"]
     filter_horizontal = ["tags", "mutually_exclusive_with"]
-    inlines = [DistinctionEffectInline, DistinctionPrerequisiteInline, DistinctionCodexGrantInline]
+    inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
     readonly_fields = ["get_resonance_grants"]
 
     fieldsets = (

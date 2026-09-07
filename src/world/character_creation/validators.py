@@ -45,13 +45,12 @@ def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
         Stage.ORIGIN: get_origin_errors(draft),
         Stage.HERITAGE: get_heritage_errors(draft),
         Stage.LINEAGE: get_lineage_errors(draft),
-        Stage.DISTINCTIONS: get_distinctions_errors(draft),
         Stage.PATH: get_path_errors(draft),
         Stage.GIFT: compute_magic_errors(draft),
         Stage.ATTRIBUTES: get_attributes_errors(draft),
         Stage.APPEARANCE: get_appearance_errors(draft),
         Stage.IDENTITY: get_identity_errors(draft),
-        Stage.FINAL_TOUCHES: [],
+        Stage.FINAL_TOUCHES: get_purse_errors(draft),
     }
 
 
@@ -320,21 +319,18 @@ def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate) -> list[
     ]
 
 
-def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Distinctions stage."""
-    errors: list[str] = []
-    if not draft.draft_data.get("traits_complete", False):
-        errors.append("Confirm your distinction selections")
-    picked_ids = {d.get("distinction_id") for d in draft.draft_data.get("distinctions", [])}
-    errors.extend(
-        f"{bundled['name']} is already granted by your Upbringing"
-        for bundled in draft.bundled_distinctions()
-        if bundled["distinction_id"] in picked_ids
-    )
+def get_purse_errors(draft: CharacterDraft) -> list[str]:
+    """Return validation errors for the Final Touches stage.
+
+    Distinctions are offered by CG chapter now (#3675), not picked as their own
+    stage, so completion here is purely the purse: every prior stage already
+    checks its own CG-point cost as it is spent, and this is the final check
+    that the running total is still in balance.
+    """
     remaining = draft.calculate_cg_points_remaining()
     if remaining < 0:
-        errors.append(f"CG points over budget by {abs(remaining)}")
-    return errors
+        return [f"CG points over budget by {abs(remaining)}"]
+    return []
 
 
 def get_path_errors(draft: CharacterDraft) -> list[str]:

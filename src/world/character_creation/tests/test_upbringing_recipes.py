@@ -24,11 +24,14 @@ from world.character_creation.constants import (
     ConnectionKind,
     FamilyPath,
     LifeStage,
+    OfferArrival,
+    OfferChapter,
     QuestionKind,
 )
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
+    DistinctionOfferFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -358,8 +361,13 @@ class UpbringingRecipesTest(TestCase):
             slot=q1,
             name="Favored ward",
             cg_point_cost=10,
-            grants_distinction=kept_close,
             reputation_seed=200,
+        )
+        DistinctionOfferFactory(
+            distinction=kept_close,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=favored,
+            arrives_as=OfferArrival.BUNDLED,
         )
         draft = _draft(
             template,

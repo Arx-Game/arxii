@@ -22,10 +22,12 @@ from evennia.accounts.models import AccountDB
 from world.character_creation.constants import AnchorSource, QuestionKind
 from world.character_creation.models import (
     CharacterDraft,
+    DistinctionOffer,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
 )
 from world.character_creation.serializers import _batch_listed_groups, _batch_pool_groups
+from world.distinctions.models import Distinction
 from world.roster.models import Family
 from world.societies.vacancy_services import reachable_vacancies
 
@@ -170,24 +172,61 @@ def _branch_check(slot: OriginTemplateSlot, branch_slot_ids: set[int]) -> list[t
 
 
 def _distinction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
-    """Every granted Distinction is active, or a warn; one flat query.
+    """Every offered Distinction is active, or a warn; one flat query (#3675).
 
     Scoped to active answers only - an inactive answer is never offered to a
-    player, so a Distinction it would grant is not this route's problem
+    player, so a Distinction offered through it is not this route's problem
     (mirrors ``CGOriginTemplateSerializer.get_slots``'s own ``is_active=True``
     filter on choices, #3660 review Ruling 2).
     """
     checks: list[tuple[str, str]] = []
-    rows = OriginTemplateSlotChoice.objects.filter(
-        slot__template=template, is_active=True, grants_distinction__isnull=False
-    ).select_related("grants_distinction")
-    for choice in rows:
-        dist = choice.grants_distinction
+    offers = DistinctionOffer.objects.filter(
+        origin_choice__slot__template=template,
+        origin_choice__is_active=True,
+        is_active=True,
+    ).select_related("distinction", "origin_choice")
+    for offer in offers:
+        dist = offer.distinction
+        choice_name = offer.origin_choice.name
         if dist.is_active:
-            checks.append(("ok", f"'{choice.name}' grants '{dist.name}', which is active."))
+            checks.append(("ok", f"'{choice_name}' grants '{dist.name}', which is active."))
         else:
-            checks.append(("warn", f"'{choice.name}' grants '{dist.name}', which is inactive."))
+            checks.append(("warn", f"'{choice_name}' grants '{dist.name}', which is inactive."))
     return checks
+
+
+def _closed_contradiction_checks(template: OriginTemplate) -> list[tuple[str, str]]:
+    """A distinction both closed by this route and offered by one of its own answers (#3675).
+
+    Scoped to active answers/offers only, matching every other check here - an
+    inactive row is never reached by a player either way, so it is not this
+    route's contradiction to flag.
+    """
+    closed_ids = set(template.closed_distinctions.values_list("id", flat=True))
+    if not closed_ids:
+        return []
+    offered_ids = set(
+        DistinctionOffer.objects.filter(
+            origin_choice__slot__template=template,
+            origin_choice__is_active=True,
+            is_active=True,
+            distinction_id__in=closed_ids,
+        ).values_list("distinction_id", flat=True)
+    )
+    if not offered_ids:
+        return []
+    names = Distinction.objects.filter(id__in=offered_ids).values_list("name", flat=True)
+    return [
+        ("warn", f"'{name}' is both closed by this route and offered by one of its answers.")
+        for name in names
+    ]
+
+
+def _closed_reason_check(template: OriginTemplate) -> list[tuple[str, str]]:
+    """A non-empty closed list with no line for the player to read is a warn (#3675)."""
+    if template.closed_distinctions.exists() and not template.closed_reason:
+        return [("warn", "This route closes distinctions but has no line for the player to read.")]
+    return []
 
 
 def _own_family_house_check(
@@ -258,6 +297,8 @@ def _checks(
     checks.extend(_name_path_check(template))
     checks.extend(_own_family_house_check(template, slots, position))
     checks.extend(_distinction_checks(template))
+    checks.extend(_closed_contradiction_checks(template))
+    checks.extend(_closed_reason_check(template))
     return checks
 
 
@@ -288,20 +329,31 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
     inactive answer is never offered to a player, so it counts toward none of
     "answers", "distinctions used", or the cost spread (mirrors
     ``CGOriginTemplateSerializer.get_slots``'s own choices filter, #3660
-    review Ruling 2).
+    review Ruling 2). "Distinctions used" counts distinct active
+    ``DistinctionOffer`` rows opened by this template's active answers
+    (#3675), scoped by both the offer's own ``is_active`` and its
+    ``origin_choice``'s. "Closed by this route" is the route's own
+    ``closed_distinctions`` M2M count - unrelated to activity on any answer.
     """
     slots = list(OriginTemplateSlot.objects.filter(template=template).order_by("sort_order", "id"))
     choices = list(
         OriginTemplateSlotChoice.objects.filter(slot__in=slots, is_active=True).select_related(
-            "slot", "grants_distinction"
+            "slot"
         )
     )
     choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
     for choice in choices:
         choices_by_slot[choice.slot_id].append(choice)
 
-    distinction_names = sorted(
-        {choice.grants_distinction.name for choice in choices if choice.grants_distinction_id}
+    distinctions_used = (
+        DistinctionOffer.objects.filter(
+            origin_choice__slot__template=template,
+            origin_choice__is_active=True,
+            is_active=True,
+        )
+        .values("distinction")
+        .distinct()
+        .count()
     )
 
     cheapest_total = 0
@@ -321,7 +373,8 @@ def rail_counts(template: OriginTemplate) -> dict[str, int | str]:
         "groups_asked_about": sum(1 for slot in slots if slot.kind == QuestionKind.GROUP),
         "people_named": sum(1 for slot in slots if slot.kind == QuestionKind.PERSON),
         "answers": len(choices),
-        "distinctions_used": ", ".join(distinction_names),
+        "distinctions_used": distinctions_used,
+        "closed_distinctions": template.closed_distinctions.count(),
         "cheapest_complete_answer": cheapest_total,
         "dearest_complete_answer": dearest_total,
         "largest_refund": max(0, -cheapest_total),

@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { ChapterLeaf, Field, Marginalia, Note, RecordRail } from '../folio';
+import { ChapterLeaf, Field, Marginalia, Note, RecordRail, stageEyebrow } from '../folio';
 import { useCGExplanations, useUpdateDraft, useWorshippedBeings } from '../queries';
 import type { CharacterDraft } from '../types';
 import { Stage } from '../types';
@@ -98,7 +98,7 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           { label: 'Public worship', value: draft.public_worship?.name },
           { label: 'Secret worship', value: draft.secret_worship?.name },
         ]}
-        ledger="Stage 9 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-identity">
         {/* PLACEHOLDER: Apostate rewrite */}

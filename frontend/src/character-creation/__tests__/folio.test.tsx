@@ -31,7 +31,7 @@ describe('ChapterLeaf', () => {
         <p>body</p>
       </ChapterLeaf>
     );
-    expect(screen.getByText('Stage 1 of 11')).toHaveClass('chapter-no');
+    expect(screen.getByText('Stage 1 of 10')).toHaveClass('chapter-no');
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     expect(screen.getByRole('complementary', { name: /marginalia/i })).toHaveTextContent('note');
   });
