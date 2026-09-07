@@ -13,19 +13,23 @@ import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
 import {
   createMockDraft,
+  mockBeginnings,
   mockCGExplanations,
   mockPath,
   mockResonances,
+  mockSelfTaughtTradition,
   mockTradition,
 } from '../fixtures';
 import { renderWithCharacterCreationProviders } from '../testUtils';
+
+let traditions = [mockTradition];
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
   useCGExplanations: () => ({ data: mockCGExplanations }),
   useResonances: () => ({ data: mockResonances, isLoading: false }),
   useUpdateDraft: () => ({ mutate: vi.fn(), mutateAsync: vi.fn() }),
-  useTraditions: () => ({ data: [mockTradition], isLoading: false }),
+  useTraditions: () => ({ data: traditions, isLoading: false }),
   useSelectTradition: () => ({ mutate: vi.fn(), isPending: false }),
   useTraditionPerspectives: () => ({ data: [] }),
   useCGGifts: () => ({ data: [], isLoading: false }),
@@ -35,7 +39,14 @@ vi.mock('../../queries', async (importOriginal) => ({
   useStatDefinitions: () => ({ data: [] }),
   usePathSkillSuggestions: () => ({ data: [] }),
 }));
-vi.mock('@/hooks/useDistinctions', () => ({ useDraftDistinctions: () => ({ data: [] }) }));
+vi.mock('@/hooks/useDistinctions', () => ({
+  useDraftDistinctions: () => ({ data: [] }),
+  useSyncDistinctions: () => ({ mutate: vi.fn() }),
+}));
+
+beforeEach(() => {
+  traditions = [mockTradition];
+});
 
 describe('GiftStage (folio)', () => {
   it('shows the five steps as entries, later steps gated until the earlier is done', () => {
@@ -57,5 +68,49 @@ describe('GiftStage (folio)', () => {
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
     expect(screen.getByLabelText(/motif/i)).toBeInTheDocument();
+  });
+
+  it("prints the tradition's state line on its entry", () => {
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: null,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(
+      screen.getByText(
+        'Living masters. They will teach you, and they will ask what you do with it.'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('mounts the schooling stances under a chosen living-masters tradition', () => {
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('Newly taken in')).toBeInTheDocument();
+    expect(screen.getByText('Trained for years')).toBeInTheDocument();
+    expect(screen.getByText('Raised within it')).toBeInTheDocument();
+  });
+
+  it('prints the refund and mounts no schooling for a self-taught tradition', () => {
+    traditions = [mockSelfTaughtTradition];
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockSelfTaughtTradition,
+    });
+    renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    expect(screen.getByText('Self-taught · slower to learn · Refunds 75')).toBeInTheDocument();
+    expect(screen.queryByText('Newly taken in')).not.toBeInTheDocument();
   });
 });

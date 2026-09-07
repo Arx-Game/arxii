@@ -9,8 +9,14 @@
  */
 
 import { CodexLine, Entry, EntryDoors, EntryList, Paragraphs } from '../folio';
-import { useSelectTradition, useTraditionPerspectives, useTraditions } from '../queries';
-import type { CharacterDraft } from '../types';
+import {
+  useCGExplanations,
+  useSelectTradition,
+  useTraditionPerspectives,
+  useTraditions,
+} from '../queries';
+import type { CharacterDraft, Tradition } from '../types';
+import { SchoolingStances } from './offers/SchoolingStances';
 import { PerspectivesPanel } from './PerspectivesPanel';
 
 interface TraditionPickerProps {
@@ -18,10 +24,25 @@ interface TraditionPickerProps {
   beginningId: number;
 }
 
+/**
+ * The refund/cost bite appended to a tradition's state line, if any:
+ * `refund` is the carried drawback's `cost_per_rank` (negative = the player
+ * is refunded points, positive = the tradition costs points to join).
+ */
+function bite(refund: number): string {
+  if (refund === 0) return '';
+  return refund < 0 ? ` · Refunds ${-refund}` : ` · ${refund}`;
+}
+
+function tagFor(tradition: Tradition): string {
+  return `${tradition.state_line}${bite(tradition.refund)}`;
+}
+
 export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
   const { data: traditions, isLoading, error } = useTraditions(beginningId);
   const selectTradition = useSelectTradition();
   const { data: perspectives } = useTraditionPerspectives(draft.selected_tradition?.id);
+  const { data: copy } = useCGExplanations();
 
   const handleSelect = (traditionId: number) => {
     if (selectTradition.isPending) return;
@@ -56,7 +77,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
           <Entry
             key={tradition.id}
             name={tradition.name}
-            tag={tradition.required_distinction_id ? 'Requires a distinction' : 'Open to you'}
+            tag={tagFor(tradition)}
             chosen={isChosen}
             open={isChosen}
           >
@@ -66,6 +87,12 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
               // here would render unstyled; this is Marginalia's own markup.
               <div className="note-group">
                 <PerspectivesPanel perspectives={perspectives} />
+              </div>
+            )}
+            {isChosen && tradition.state === 'living_masters' && (
+              <div className="field">
+                <label>{copy?.gift_schooling_label ?? `How you came to ${tradition.name}`}</label>
+                <SchoolingStances draft={draft} tradition={tradition} />
               </div>
             )}
             <CodexLine entryId={tradition.codex_entry_ids?.[0]} name={tradition.name} />

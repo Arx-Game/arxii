@@ -1015,6 +1015,130 @@
   font-style: italic;
 }
 
+/* offer stances (#3675): the CG chapters' picks, in place of the retired
+   Distinctions stage. Some rows are plain `<div>`s (a ranked offer, whose
+   own +/- buttons carry the interaction); others are the whole row as a
+   `<button>` (an unranked offer, toggled by pressing it) — the reset
+   properties below cover both. */
+.interview .stances {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+}
+.interview .stance {
+  display: grid;
+  grid-template-columns: 1.1rem 1fr auto;
+  column-gap: 0.6rem;
+  align-items: baseline;
+  width: 100%;
+  padding: 0.75rem 0.25rem 0.75rem 0;
+  border: none;
+  border-top: 1px solid var(--cg-hairline);
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.interview .stance:disabled {
+  cursor: not-allowed;
+}
+.interview .stances > li:last-child .stance {
+  border-bottom: 1px solid var(--cg-hairline);
+}
+.interview .stance .dot {
+  width: 0.7rem;
+  height: 0.7rem;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  display: inline-block;
+  transform: translateY(0.1rem);
+}
+.interview .stance .dot.sq {
+  border-radius: 1px;
+}
+.interview .stance[aria-pressed='true'] .dot {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+}
+.interview .stance[aria-disabled='true'] {
+  opacity: 0.55;
+}
+.interview .stance b {
+  display: block;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  color: var(--cg-accent);
+}
+.interview .stance[aria-pressed='false'] b {
+  color: var(--cg-muted);
+}
+.interview .stance .g {
+  display: block;
+  color: var(--cg-text-soft);
+  font-size: 0.98rem;
+}
+.interview .stance .g i {
+  color: var(--cg-muted);
+}
+.interview .stance .price {
+  text-align: right;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.74rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: flex-end;
+}
+.interview .stance .price .grant {
+  color: var(--cg-orn);
+}
+.interview .stance .price .refund {
+  color: var(--cg-accent);
+}
+.interview .stance .rank {
+  display: inline-flex;
+  gap: 0.35rem;
+  margin-left: 0.6rem;
+  vertical-align: middle;
+}
+.interview .stance .rank button {
+  width: 1.4rem;
+  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 0;
+  background: transparent;
+  color: var(--cg-text-soft);
+  font: inherit;
+  line-height: 1;
+  cursor: pointer;
+}
+.interview .stance .rank button:hover {
+  border-color: var(--cg-accent);
+  color: var(--cg-accent);
+}
+.interview .stance .rank button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+  color: var(--cg-muted);
+}
+.interview .stances .locked {
+  color: var(--cg-muted);
+  font-style: italic;
+}
+
 /* doors */
 .interview .btn {
   display: inline-block;

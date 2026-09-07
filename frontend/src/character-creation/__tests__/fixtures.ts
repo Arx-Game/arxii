@@ -23,6 +23,7 @@ import type {
   Resonance,
   ResonanceAssociation,
   Restriction,
+  SchoolingLineRow,
   Species,
   Stage,
   StartingArea,
@@ -1017,6 +1018,43 @@ export const mockPath: Path = {
   codex_entry_ids: [],
 };
 
+/**
+ * The standard schooling set (#3675): three stances, rank 0 through 2,
+ * authored once and shared by every `living_masters` tradition.
+ */
+export const mockSchoolingRows: SchoolingLineRow[] = [
+  {
+    schooling_line_id: 1,
+    rank: 0,
+    name: 'Newly taken in',
+    player_line: 'Taken in after the Glimpse.',
+    price: 0,
+    techniques: 1,
+    grants_distinction_id: null,
+    offer_id: null,
+  },
+  {
+    schooling_line_id: 2,
+    rank: 1,
+    name: 'Trained for years',
+    player_line: 'Trained since youth.',
+    price: 1,
+    techniques: 2,
+    grants_distinction_id: 77,
+    offer_id: 201,
+  },
+  {
+    schooling_line_id: 3,
+    rank: 2,
+    name: 'Raised within it',
+    player_line: 'Born to it.',
+    price: 2,
+    techniques: 3,
+    grants_distinction_id: 77,
+    offer_id: 202,
+  },
+];
+
 export const mockTradition: Tradition = {
   id: 1,
   name: 'The Whispering Path',
@@ -1025,9 +1063,24 @@ export const mockTradition: Tradition = {
   sort_order: 1,
   codex_entry_ids: [7],
   state: 'living_masters',
-  state_line: 'Living masters still walk this path.',
+  state_line: 'Living masters. They will teach you, and they will ask what you do with it.',
   own_wording: '',
   refund: 0,
+  schooling: mockSchoolingRows,
+};
+
+/** A self-taught tradition (#3675): no schooling set, a refund on the entry. */
+export const mockSelfTaughtTradition: Tradition = {
+  id: 2,
+  name: 'Unbound',
+  description: 'No tradition; you taught yourself, badly and alone.',
+  is_active: true,
+  sort_order: 2,
+  codex_entry_ids: [],
+  state: 'self_taught',
+  state_line: 'Self-taught · slower to learn',
+  own_wording: '',
+  refund: -75,
   schooling: [],
 };
 
