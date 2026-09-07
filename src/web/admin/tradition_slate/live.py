@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from django.db.models import Case, IntegerField, Value, When
+
 from world.character_creation.constants import OfferChapter, TraditionState
 from world.character_creation.models import (
     Beginnings,
@@ -48,7 +50,7 @@ class LinePriceDisplay:
 
 def state_line_display(line: TraditionStateLine) -> LinePriceDisplay:
     help_text = (
-        f"read from {line.carries.name}'s price; edit it on its page"
+        f"read from {line.carries.name}'s price; edit it on its Builder page"
         if line.carries_id
         else "nothing carried, nothing to price"
     )
@@ -100,8 +102,8 @@ def _exclusion_check(state_lines: dict[str, TraditionStateLine]) -> list[tuple[s
     return [
         (
             "warn",
-            "The self-taught and teachers-gone drawbacks are not each other's "
-            "mutually_exclusive_with.",
+            "The self-taught and teachers-gone drawbacks can be held together; "
+            "see the Distinction Builder's 'Cannot be held with' chips.",
         )
     ]
 
@@ -146,11 +148,23 @@ def checks(beginning: Beginnings) -> list[tuple[str, str]]:
 
 
 def preview_line(beginning: Beginnings) -> dict[str, object] | None:
-    """The first teachers-gone or self-taught slate line, as the player would read it."""
+    """The first teachers-gone or self-taught slate line, as the player would read it.
+
+    Ranked by ``_PREVIEW_STATES``'s own priority first, then by the slate's
+    ``sort_order`` - a teachers-gone line takes priority over a self-taught one
+    regardless of which sits earlier on the slate (the demo's own worked
+    example: Unbound at self-taught/order-0 must lose to Metallic Order at
+    teachers-gone/order-2).
+    """
+    priority = Case(
+        *(When(state=state, then=Value(index)) for index, state in enumerate(_PREVIEW_STATES)),
+        output_field=IntegerField(),
+    )
     slate = (
         BeginningTradition.objects.filter(beginning=beginning, state__in=_PREVIEW_STATES)
         .select_related("tradition")
-        .order_by("sort_order", "id")
+        .annotate(_preview_priority=priority)
+        .order_by("_preview_priority", "sort_order", "id")
         .first()
     )
     if slate is None:

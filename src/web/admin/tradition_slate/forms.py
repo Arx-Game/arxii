@@ -55,6 +55,10 @@ class SlateForm(forms.ModelForm):
                 BeginningTradition._meta.get_field("tradition"),  # noqa: SLF001
                 admin.site,
             ),
+            # An empty cell alone doesn't tell an author the shared state line's
+            # words apply here - "standard" is the same placeholder copy the
+            # demo shows for a slate line with no override (#3675 review).
+            "own_wording": forms.TextInput(attrs={"placeholder": "standard"}),
         }
 
 

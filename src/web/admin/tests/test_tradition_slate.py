@@ -96,6 +96,42 @@ class SlateGetTest(SlateTestCase):
         assert "Link a contributor first" in body
         assert "Standard lines" not in body
 
+    def test_preview_prefers_teachers_gone_over_self_taught_regardless_of_sort_order(self):
+        """The demo's own worked example (#3675 review): state priority beats slate order.
+
+        Self-taught sits at sort_order 0 and teachers-gone at sort_order 2 on the
+        same slate - a plain "first by sort_order" preview would show the
+        self-taught line, but teachers-gone must win: it is a state the player
+        never chooses or fills in themselves, so it is the more informative
+        preview.
+        """
+        TraditionStateLineFactory(state=TraditionState.SELF_TAUGHT, entry_line="Self-taught line")
+        TraditionStateLineFactory(
+            state=TraditionState.TEACHERS_GONE, entry_line="Teachers gone line"
+        )
+        self_taught_tradition = TraditionFactory(name="Unbound")
+        teachers_gone_tradition = TraditionFactory(name="Metallic Order")
+        BeginningTraditionFactory(
+            beginning=self.beginning,
+            tradition=self_taught_tradition,
+            state=TraditionState.SELF_TAUGHT,
+            sort_order=0,
+        )
+        BeginningTraditionFactory(
+            beginning=self.beginning,
+            tradition=teachers_gone_tradition,
+            state=TraditionState.TEACHERS_GONE,
+            sort_order=2,
+        )
+
+        self.client.force_login(self.author)
+        resp = self.client.get(reverse("admin_tradition_slate", args=[self.beginning.pk]))
+        assert resp.status_code == 200
+        body = resp.content.decode()
+        preview = body[body.index('class="preview"') :]
+        assert "Metallic Order" in preview
+        assert "Unbound" not in preview
+
 
 class SlatePostTest(SlateTestCase):
     def _post_data(self, *, state_lines, schooling_lines, slate_rows, state_overrides=None):
