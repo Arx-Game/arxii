@@ -7,9 +7,6 @@
  * closed list with its reason.
  */
 
-/// <reference types="node" />
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
@@ -18,6 +15,7 @@ import type { DraftDistinctionEntry } from '@/types/distinctions';
 import type { OffersResponse, VisibleOffer } from '../../../types';
 import { createMockDraft } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
+import { unreachableClasses } from './classGuard';
 
 const mutate = vi.fn();
 
@@ -160,27 +158,18 @@ describe('ChapterOffers', () => {
     ).toBeInTheDocument();
   });
 
-  it('emits no class hook that cg.css has no rule for (#3667 shape)', () => {
+  it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
     const { container } = renderWithCharacterCreationProviders(
-      <ChapterOffers
-        draft={createMockDraft()}
-        chapter="glimpse"
-        heading="What it left in you"
-        hint="staff copy"
-      />
+      <div className="interview">
+        <ChapterOffers
+          draft={createMockDraft()}
+          chapter="glimpse"
+          heading="What it left in you"
+          hint="staff copy"
+        />
+      </div>
     );
-    const css = readFileSync(resolve(__dirname, '../../../cg.css'), 'utf8');
-    const emitted = new Set<string>();
-    container.querySelectorAll('[class]').forEach((el) => {
-      el.className
-        .split(/\s+/)
-        .filter(Boolean)
-        .forEach((name) => emitted.add(name));
-    });
     const styledElsewhere = new Set(['chosen', 'closed']);
-    const unstyled = [...emitted].filter(
-      (name) => !styledElsewhere.has(name) && !new RegExp(`\\.${name}(?![\\w-])`).test(css)
-    );
-    expect(unstyled).toEqual([]);
+    expect(unreachableClasses(container, styledElsewhere)).toEqual([]);
   });
 });

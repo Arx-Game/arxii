@@ -13,6 +13,8 @@
 import { useCallback, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import type { ReactNode } from 'react';
+import { useDraftDistinctions } from '@/hooks/useDistinctions';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import {
   ChapterLeaf,
   CodexLine,
@@ -27,12 +29,13 @@ import {
 import {
   useCGExplanations,
   useCGGifts,
+  useCGPointBudget,
   useResonances,
   useSkills,
   useStatDefinitions,
   useUpdateDraft,
 } from '../queries';
-import type { CharacterDraft } from '../types';
+import type { CharacterDraft, Tradition } from '../types';
 import { Stage } from '../types';
 import { AnimaCheckStep } from './gift/AnimaCheckStep';
 import { GiftSelector } from './gift/GiftSelector';
@@ -80,10 +83,35 @@ function FunnelStep({ n, name, value, done, gated, gateReason, open, children }:
   );
 }
 
+/**
+ * The name of the schooling stance the draft currently holds under a chosen
+ * tradition, if any: the draft entry whose `offer_ids` include one of the
+ * tradition's schooling offers, mapped back to that row's name (same lookup
+ * `SchoolingStances` itself uses to find its own current pick, #3675).
+ */
+function schoolingPickName(
+  tradition: Tradition | null,
+  entries: DraftDistinctionEntry[] | undefined
+): string | undefined {
+  if (!tradition) return undefined;
+  const offerIds = new Set(
+    tradition.schooling.map((row) => row.offer_id).filter((id): id is number => id != null)
+  );
+  const entry = (entries ?? []).find((e) =>
+    e.offer_ids.some((id) => typeof id === 'number' && offerIds.has(id))
+  );
+  if (!entry) return undefined;
+  return tradition.schooling.find(
+    (row) => row.offer_id != null && entry.offer_ids.includes(row.offer_id)
+  )?.name;
+}
+
 export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
   const { data: resonances = [] } = useResonances();
+  const { data: cgBudget } = useCGPointBudget();
+  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
 
   const draftData = draft.draft_data;
   const giftId = draftData.selected_gift_id ?? null;
@@ -108,6 +136,17 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
   const giftName = cgGifts?.find((gift) => gift.id === giftId)?.name;
   const resonanceName = resonances.find((r) => r.id === selectedResonanceId)?.name;
   const techniqueCountLine = `${selectedTechniqueIds.length} of ${picks} chosen`;
+
+  // The Tradition row names the schooling stance under it, when one is
+  // picked (the tradition step's own SchoolingStances, #3675): the same "How
+  // you came to it" line the tradition step itself asks.
+  const schoolingName = schoolingPickName(draft.selected_tradition, draftDistinctions);
+  const traditionValue = draft.selected_tradition
+    ? [draft.selected_tradition.name, schoolingName].filter(Boolean).join(' · ')
+    : undefined;
+
+  // The same CG-points source HeritageStage's rail row reads.
+  const startingCGPoints = cgBudget?.starting_points ?? 100;
 
   // The Anima Check step's gloss and rail row need the names behind the two
   // ids the draft stores, so read the same two catalogs AnimaCheckStep picks
@@ -172,11 +211,19 @@ export function GiftStage({ draft, onRegisterBeforeLeave }: GiftStageProps) {
           { label: 'Beginnings', value: draft.selected_beginnings?.name },
           { label: 'Species', value: draft.selected_species?.name },
           { label: 'Path', value: draft.selected_path?.name },
-          { label: 'Tradition', value: draft.selected_tradition?.name },
+          { label: 'Tradition', value: traditionValue },
+          {
+            label: 'Techniques to pick',
+            value: completion.tradition ? String(picks) : undefined,
+          },
           { label: 'Gift', value: giftName },
           { label: 'Techniques', value: completion.gift ? techniqueCountLine : undefined },
           { label: 'Resonance', value: resonanceName },
           { label: 'Anima check', value: animaCheckLine },
+          {
+            label: 'CG points',
+            value: `${draft.cg_points_spent} of ${startingCGPoints} spent`,
+          },
         ]}
         ledger="Stage 6 of 11"
       />

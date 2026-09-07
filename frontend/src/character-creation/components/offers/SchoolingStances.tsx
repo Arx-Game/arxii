@@ -1,5 +1,5 @@
 /**
- * SchoolingStances (#3675) — the standard schooling set under a
+ * SchoolingStances (#3675), the standard schooling set under a
  * `living_masters` tradition: three stances (rank 0, 1, 2), authored once
  * and shown under every tradition with living teachers. Wording is staff's;
  * prices are the set's, never the tradition's own.
@@ -11,26 +11,12 @@
 
 import { useCallback } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
-import type { DraftDistinctionEntry, SyncDistinctionEntry } from '@/types/distinctions';
 import type { CharacterDraft, SchoolingLineRow, Tradition } from '../../types';
+import { choiceEntries } from './syncHelpers';
 
 interface SchoolingStancesProps {
   draft: CharacterDraft;
   tradition: Tradition;
-}
-
-function choiceOfferId(entry: DraftDistinctionEntry): number | undefined {
-  return entry.offer_ids.find((id): id is number => typeof id === 'number');
-}
-
-function choiceEntries(entries: DraftDistinctionEntry[] | undefined): SyncDistinctionEntry[] {
-  const result: SyncDistinctionEntry[] = [];
-  for (const entry of entries ?? []) {
-    const offerId = choiceOfferId(entry);
-    if (offerId === undefined) continue;
-    result.push({ id: entry.distinction_id, rank: entry.rank, offer_id: offerId });
-  }
-  return result;
 }
 
 export function SchoolingStances({ draft, tradition }: SchoolingStancesProps) {

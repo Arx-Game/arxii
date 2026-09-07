@@ -8,9 +8,10 @@
  * GlimpseSection) have their own test files.
  */
 
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import { vi } from 'vitest';
 import { GiftStage } from '../../components/GiftStage';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import {
   createMockDraft,
   mockBeginnings,
@@ -23,6 +24,7 @@ import {
 import { renderWithCharacterCreationProviders } from '../testUtils';
 
 let traditions = [mockTradition];
+let draftDistinctions: DraftDistinctionEntry[] = [];
 
 vi.mock('../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../queries')>()),
@@ -38,14 +40,16 @@ vi.mock('../../queries', async (importOriginal) => ({
   useSkills: () => ({ data: [] }),
   useStatDefinitions: () => ({ data: [] }),
   usePathSkillSuggestions: () => ({ data: [] }),
+  useCGPointBudget: () => ({ data: { starting_points: 100 } }),
 }));
 vi.mock('@/hooks/useDistinctions', () => ({
-  useDraftDistinctions: () => ({ data: [] }),
+  useDraftDistinctions: () => ({ data: draftDistinctions }),
   useSyncDistinctions: () => ({ mutate: vi.fn() }),
 }));
 
 beforeEach(() => {
   traditions = [mockTradition];
+  draftDistinctions = [];
 });
 
 describe('GiftStage (folio)', () => {
@@ -112,5 +116,70 @@ describe('GiftStage (folio)', () => {
     );
     expect(screen.getByText('Self-taught · slower to learn · Refunds 75')).toBeInTheDocument();
     expect(screen.queryByText('Newly taken in')).not.toBeInTheDocument();
+  });
+
+  it('rail shows the tradition name plainly with no schooling picked', () => {
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+    });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('The Whispering Path')).toBeInTheDocument();
+  });
+
+  it('rail appends the schooling pick to the tradition name', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 77,
+        distinction_name: 'Tradition Training',
+        distinction_slug: 'tradition-training',
+        category_slug: 'magic',
+        rank: 1,
+        cost: 1,
+        notes: '',
+        offer_ids: [201],
+        sources: ['Trained for years'],
+        arrivals: ['choice'],
+      },
+    ];
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+    });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('The Whispering Path · Trained for years')).toBeInTheDocument();
+  });
+
+  it('rail shows techniques to pick once a tradition is chosen', () => {
+    const draft = createMockDraft({
+      selected_beginnings: mockBeginnings,
+      selected_path: mockPath,
+      selected_tradition: mockTradition,
+      starting_technique_picks: 3,
+    });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('Techniques to pick')).toBeInTheDocument();
+    expect(rail.getByText('3')).toBeInTheDocument();
+  });
+
+  it('rail shows CG points from the same source HeritageStage uses', () => {
+    const draft = createMockDraft({ selected_path: mockPath, cg_points_spent: 42 });
+    const { container } = renderWithCharacterCreationProviders(
+      <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
+    );
+    const rail = within(container.querySelector('.record-rail')!);
+    expect(rail.getByText('CG points')).toBeInTheDocument();
+    expect(rail.getByText('42 of 100 spent')).toBeInTheDocument();
   });
 });

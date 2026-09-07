@@ -1,5 +1,5 @@
 /**
- * ChapterOffers (#3675) — the reusable offers block every CG chapter mounts
+ * ChapterOffers (#3675), the reusable offers block every CG chapter mounts
  * in place of the retired Distinctions stage.
  *
  * A chapter (the tradition step, the Glimpse, Lineage, Appearance, the
@@ -7,19 +7,21 @@
  * visible/closed distinctions and hands them here. Selection reads
  * `useDraftDistinctions` (an offer is picked when a draft entry's
  * `offer_ids` includes it) and writes through `useSyncDistinctions`
- * immediately on toggle or rank change — there is no deferred save; the
+ * immediately on toggle or rank change, there is no deferred save: the
  * stage that deferred is gone. Every current CHOICE entry (one with an
  * integer `offer_id`) is resent on every sync so a toggle in one chapter
  * never drops another chapter's picks; carried entries (string-only
- * `offer_ids`) and bundled entries are never sent — the server reconciles
+ * `offer_ids`) and bundled entries are never sent, the server reconciles
  * those itself.
  */
 
 import { useCallback, useMemo } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
-import type { DraftDistinctionEntry, SyncDistinctionEntry } from '@/types/distinctions';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
 import type { CharacterDraft, OfferChapter, VisibleOffer } from '../../types';
+import { RankControl } from './RankControl';
+import { choiceEntries } from './syncHelpers';
 
 interface ChapterOffersProps {
   draft: CharacterDraft;
@@ -30,26 +32,6 @@ interface ChapterOffersProps {
   heading?: string;
   /** Staff copy printed below the list, e.g. an explanatory note. */
   hint?: string;
-}
-
-/** The first integer id in an entry's `offer_ids` — the CHOICE offer it came from, if any. */
-function choiceOfferId(entry: DraftDistinctionEntry): number | undefined {
-  return entry.offer_ids.find((id): id is number => typeof id === 'number');
-}
-
-/**
- * Every current CHOICE entry as a sync payload row. Carried entries (no
- * integer offer id) and bundled entries are dropped — the server re-applies
- * those on its own (`reconcile_offer_picks`).
- */
-function choiceEntries(entries: DraftDistinctionEntry[] | undefined): SyncDistinctionEntry[] {
-  const result: SyncDistinctionEntry[] = [];
-  for (const entry of entries ?? []) {
-    const offerId = choiceOfferId(entry);
-    if (offerId === undefined) continue;
-    result.push({ id: entry.distinction_id, rank: entry.rank, offer_id: offerId });
-  }
-  return result;
 }
 
 /** The price line: per-rank for a ranked offer, a refund, or the flat cost. */
@@ -102,7 +84,7 @@ export function ChapterOffers({ draft, chapter, filter, heading, hint }: Chapter
   if (offers.length === 0 && closed.length === 0) return null;
 
   return (
-    <>
+    <div className="field">
       {heading && <label>{heading}</label>}
       <ul className="stances">
         {offers.map((offer) => {
@@ -117,30 +99,13 @@ export function ChapterOffers({ draft, chapter, filter, heading, hint }: Chapter
                 <b>
                   {offer.name}
                   {ranked && (
-                    <span className="rank" aria-label={`rank ${rank} of ${offer.max_rank}`}>
-                      <button
-                        type="button"
-                        disabled={offer.is_locked || rank <= 0}
-                        aria-label={`Lower ${offer.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          applyRank(offer, rank - 1);
-                        }}
-                      >
-                        −
-                      </button>
-                      <button
-                        type="button"
-                        disabled={offer.is_locked || rank >= offer.max_rank}
-                        aria-label={`Raise ${offer.name}`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          applyRank(offer, rank + 1);
-                        }}
-                      >
-                        +
-                      </button>
-                    </span>
+                    <RankControl
+                      name={offer.name}
+                      rank={rank}
+                      max={offer.max_rank}
+                      disabled={offer.is_locked}
+                      onChange={(next) => applyRank(offer, next)}
+                    />
                   )}
                 </b>
                 <span className="g">
@@ -186,6 +151,6 @@ export function ChapterOffers({ draft, chapter, filter, heading, hint }: Chapter
           Closed on this road: {closed.map((c) => c.name).join(', ')}. {closed[0].reason}
         </span>
       )}
-    </>
+    </div>
   );
 }

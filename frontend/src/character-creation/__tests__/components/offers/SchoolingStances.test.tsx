@@ -14,6 +14,7 @@ import type { DraftDistinctionEntry } from '@/types/distinctions';
 import type { SchoolingLineRow, Tradition } from '../../../types';
 import { createMockDraft, mockTradition } from '../../fixtures';
 import { renderWithCharacterCreationProviders } from '../../testUtils';
+import { unreachableClasses } from './classGuard';
 
 const mutate = vi.fn();
 let draftDistinctions: DraftDistinctionEntry[];
@@ -108,5 +109,17 @@ describe('SchoolingStances', () => {
     );
     await user.click(screen.getByRole('button', { name: /Newly taken in/ }));
     expect(mutate).toHaveBeenCalledWith([]);
+  });
+
+  it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {
+    const { container } = renderWithCharacterCreationProviders(
+      <div className="interview">
+        <div className="field">
+          <label>How you came to it</label>
+          <SchoolingStances draft={createMockDraft()} tradition={tradition} />
+        </div>
+      </div>
+    );
+    expect(unreachableClasses(container)).toEqual([]);
   });
 });

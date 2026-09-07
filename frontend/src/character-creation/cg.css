@@ -1018,7 +1018,7 @@
 /* offer stances (#3675): the CG chapters' picks, in place of the retired
    Distinctions stage. Some rows are plain `<div>`s (a ranked offer, whose
    own +/- buttons carry the interaction); others are the whole row as a
-   `<button>` (an unranked offer, toggled by pressing it) — the reset
+   `<button>` (an unranked offer, toggled by pressing it): the reset
    properties below cover both. */
 .interview .stances {
   list-style: none;
