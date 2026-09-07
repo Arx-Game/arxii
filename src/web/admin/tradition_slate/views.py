@@ -195,6 +195,29 @@ def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor
             stamp_written(offer, contributor)
 
 
+def _save_slate(
+    request: HttpRequest,
+    beginning: Beginnings,
+    forms: _SlateForms,
+    contributor: ContentContributor | None,
+) -> HttpResponse:
+    """Validate and save a submitted slate, or render its errors."""
+    if contributor is None:
+        return _render_page(request, beginning, forms, needs_setup=True)
+    if not (forms.state.is_valid() and forms.schooling.is_valid() and forms.slate.is_valid()):
+        return _render_page(request, beginning, forms)
+
+    with transaction.atomic():
+        saved_state = forms.state.save()
+        saved_schooling = forms.schooling.save()
+        saved_slate = forms.slate.save()
+        _sync_schooling_offers(request, contributor)
+        for row in (*saved_state, *saved_schooling, *saved_slate):
+            stamp_written(row, contributor)
+    messages.success(request, "Saved and credited to you.")
+    return redirect(reverse("admin_tradition_slate", args=[beginning.pk]))
+
+
 @superuser_required
 def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
     """GET renders the page; POST saves every formset atomically and credits the operator."""
@@ -202,20 +225,7 @@ def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
     contributor = current_contributor(request.user)
     forms = _build_forms(request, beginning)
     if request.method == "POST":
-        if contributor is None:
-            return _render_page(request, beginning, forms, needs_setup=True)
-        valid = forms.state.is_valid() and forms.schooling.is_valid() and forms.slate.is_valid()
-        if valid:
-            with transaction.atomic():
-                saved_state = forms.state.save()
-                saved_schooling = forms.schooling.save()
-                saved_slate = forms.slate.save()
-                _sync_schooling_offers(request, contributor)
-                for row in (*saved_state, *saved_schooling, *saved_slate):
-                    stamp_written(row, contributor)
-            messages.success(request, "Saved and credited to you.")
-            return redirect(reverse("admin_tradition_slate", args=[beginning.pk]))
-        return _render_page(request, beginning, forms)
+        return _save_slate(request, beginning, forms, contributor)
     return _render_page(request, beginning, forms, needs_setup=contributor is None)
 
 
