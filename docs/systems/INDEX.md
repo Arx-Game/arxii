@@ -1520,7 +1520,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 ### Goals
 Goal domain allocation and journal-based XP progression.
 
-- **Models:** `CharacterGoal`, `GoalJournal`, `GoalRevision`
+- **Models:** `CharacterGoal` (with `horizon` + `ordinal`, #3621: any number per domain, numbered within short and long term, bonus summed), `GoalJournal`, `GoalRevision`
 - **Goal Domains:** Stored as `ModifierTarget(category='goal')` in mechanics system
 - **Six Domains:** Standing, Wealth, Knowledge, Mastery, Bonds, Needs
 - **Write services:** `set_character_goals` (revision-gated replace) + `log_goal_progress` in `services.py`; `GoalError` user-safe exception in `types.py`
@@ -1568,6 +1568,9 @@ Character journal entries (public/private), praises, retorts, freeform tags, wee
   by a reveal); a bequest recipient browses the deceased's non-sealed private corpus via
   `GET /api/journals/entries/?deceased=<sheet_id>`; `GET/PATCH /api/journals/entries/disposition/`
   reads/sets the caller's sheet-level default.
+- **Kinds (#3621):** `JournalEntry.kind` (`JournalKind`: entry, first_journal, application,
+  whispers) marks the three CG Introductions so the sheet and, later, an institution's reading
+  room can find them; `create_journal_entry(kind=...)`.
 - **Source:** `src/world/journals/` (no dedicated `docs/systems/journals.md`; see the app's
   `CLAUDE.md` and `AGENT_GLOSSARY.md`)
 ### Action Points
@@ -2086,7 +2089,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
 ### Character Sheets
 Character identity, appearance, demographics, and guise system.
 
-- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270), `ProfileTextVersion`
+- **Models:** `CharacterSheet`, `Profile` (bio + lineage, #1270; the Actor's Sheet answers `never_do`/`protect`/`fear` replaced `personality`, #3621), `CharacterEnemy` (the priced enemy, #3621, ADR-0279), `ProfileTextVersion`
   (#2631 — snapshot-on-write history for `ProfileTextField` prose (background,
   personality): full text per version, stamped with IC datetime + active `stories.Era`;
   written ONLY through `services.update_profile_text`, which also captures the CG
@@ -2206,6 +2209,12 @@ Multi-stage character creation flow with draft system.
   life-stage-tagged. See [character_creation.md](character_creation.md)'s "Question
   kinds and connections" subsection and ADR-0277.
 - **Integrates with:** All character-related systems (traits, skills, magic, sheets)
+- **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
+  (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
+  (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
+  `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation, Distinction
+  and heat seeds) and The Introductions (white journals by `JournalKind`; Whispers lines as
+  Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
 - **Source:** `src/world/character_creation/`
 - **Details:** [character_creation.md](character_creation.md)
 ### Market (#2066, standing gating #2995)

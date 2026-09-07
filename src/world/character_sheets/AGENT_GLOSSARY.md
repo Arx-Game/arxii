@@ -39,6 +39,27 @@ Domain-local vocabulary. Cross-cutting terms live in the root
   The first Misbegotten were born in 980 AS. _Avoid_: heritage start date,
   age cap field.
 
+## The Actor's Sheet (#3621, ADR-0279)
+
+- **Actor's Sheet** — the out-of-character half of Chapter 10: three questions about what
+  the character does ("What would you never do?", "What would you protect at all costs?",
+  "What are you deathly afraid of?"), stored as `Profile.never_do` / `protect` / `fear`,
+  versioned prose like `background`, public on the sheet; plus the goals and the enemy.
+  Replaces the free-text personality field. _Avoid_: personality, traits, character sheet
+  (that is the whole `CharacterSheet`).
+- **Enemy** — `CharacterEnemy`: who wants the character to fail, a **person** rated by
+  power (`EnemyPowerTier`, Quiescent below Prospect) or a **group** by reach
+  (`societies.EnemyReach`, from its `OrganizationType`), at a **degree** (`EnemyDegree`:
+  annoyed, thwarted, ruined, "will relentlessly try to destroy you"), awarding CG points
+  (the price) that the world collects. **Placed** when linked to a real person or group;
+  **pending** until staff link a free-written one. The row is owner, staff and assigned-GM
+  reading; the sheet shows the **public line**. _Avoid_: antagonist, nemesis (a nemesis is
+  the destroy degree), rival (relationships' Rivalry track), obstacle.
+- **Reach** — how far a group can reach a character who made an enemy of it: a household,
+  a house or company, a society or church, a realm. Set once per `OrganizationType`; a
+  Beginning's enemy offer may override it for a group that cannot reach where the character
+  plays. _Avoid_: scope, scale (the general word for either axis).
+
 ## Mood (#2994)
 
 - **Mood** — a character's declared internal emotional state (`feel <state>`,

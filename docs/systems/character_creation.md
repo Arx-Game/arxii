@@ -90,7 +90,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | 7 | Attributes & Skills | All 12 primary stats present, valid range (1-5), points remaining = 0; skill point allocation validated against budget (moved in from Path, #2426 Task 9). Draft allocations are display-scale; finalization stores stats ×10 and bridges each CG skill into a matching `CharacterTraitValue` row so checks and DP progression read them (ADR-0193, #2894) |
 | 8 | Appearance | Age (within `age_bounds`, below), height band, height inches, build all set |
 | 9 | Identity | `first_name` in draft_data |
-| 10 | Final Touches | Always complete (goals are optional) |
+| 10 | Final Touches | Always complete: the Actor's Sheet, goals, enemy and Introductions are all optional (#3621) |
 | 11 | Review | Never "complete" -- final submission step |
 
 ---
@@ -167,8 +167,73 @@ from world.character_creation.services import (
     finalize_magic_data,          # Link the draft's chosen catalog Gift/Techniques to the character
     age_bounds,                   # AgeBounds(minimum, maximum, heritage_first_year) for a
                                   #   (species, beginnings, ic_now); the one place the CG age rule lives
+    first_journal_offered,        # Whether a draft is offered the First Journal (an Arx start, #3621)
+)
+from world.character_creation.enemies import (
+    enemy_price,                  # CG points awarded: (kind, reach or power tier, degree) (#3621)
+    enemy_offers,                 # The persons and groups a draft may name (Lineage answers + Beginning offers)
+    resolve_enemy,                # The draft's pick, priced and placed (or pending staff placement)
+    price_tables,                 # Both scales, for the leaf's ledger lines
 )
 ```
+
+## The Actor's Sheet (#3621, ADR-0279)
+
+Chapter 10 (Final Touches) replaced the free-text personality field. Everything on the leaf
+is optional for an original character and nothing blocks finalize; a roster character
+arrives with all of it written by staff through the same leaf on the GM path. Empty items
+do not render on a viewed sheet.
+
+**The three questions.** "What would you never do?", "What would you protect at all
+costs?", "What are you deathly afraid of?" (`ACTOR_SHEET_QUESTIONS`; wording and the
+example lines are CG copy keys `finaltouches_<key>_prompt` / `_example`). Stored in
+`draft_data` as `never_do` / `protect` / `fear`; finalize writes them to
+`Profile.never_do` / `protect` / `fear`, versioned prose fields (`ProfileTextField`) that
+the update-request flow and `ProfileAdmin` route through `update_profile_text`. Cover
+personas answer the same three questions on their guise sheet (`set_persona_profile`).
+
+**Goals.** `draft_data.goals` rows carry `horizon` (`GoalHorizon`: short term, long term);
+finalize numbers them within each horizon in list order (`CharacterGoal.ordinal`), keeps a
+goal with words and no points as a note to yourself, and drops an empty row. Any number of
+goals may share a domain; the domain bonus sums across them (see [goals.md](goals.md)).
+
+**Who wants you to fail.** `draft_data.enemy` is `{kind, organization_id, name, power_tier,
+degree, why, public_line}`. `enemy_offers(draft)` assembles what may be picked: every
+visible answered GROUP question's organization and every PERSON question's figure from the
+Lineage (`source: lineage`), plus the Beginning's `BeginningEnemyOffer` rows (`source:
+beginning`; a group takes its reach from `OrganizationType.reach` unless the offer's
+`reach_override` says it cannot reach where the character plays; a person row fixes a
+power tier). `resolve_enemy(draft)` prices the pick with `enemy_price` (`ENEMY_PRICE_GROUP`
+by reach, `ENEMY_PRICE_PERSON` by `EnemyPowerTier`, both by `EnemyDegree`); a pick with no
+real group and no rated person is `pending` at `ENEMY_PRICE_PENDING` until staff link it in
+`CharacterEnemyAdmin`, whose `save_model` recomputes the price. The purse breakdown carries
+one `enemy` line with a negative cost ("Awards N CG points"). The draft API exposes
+`enemy_offers`, `enemy_price_tables` and `introductions_offered`.
+
+Finalize (`_create_enemy`) writes `CharacterEnemy` (owner, staff and assigned-GM reading;
+everyone else sees `public_line`), seeds the group's opinion through
+`bump_organization_reputation` (`ENEMY_REPUTATION_SEED` by degree), grants the degree's
+Distinction (`ENEMY_DEGREE_DISTINCTION_NAMES`, placeholder names Marked and Hunted, resolved
+by name and skipped with a log when unauthored) through the same bulk write path a Lineage
+answer's bundled Distinction uses, and, for a society- or realm-reach group whose
+`Organization.society` enforces the start room's area (`enforcing_society_for`), accrues
+`PersonaHeat` there (`ENEMY_HEAT_SEED` from ruined upward, pinned `ENEMY_HEAT_PIN_DAYS` at
+destroy).
+
+**The Introductions.** `draft_data.introductions` is `{first_journal: [a1, a2, a3],
+application: [a1, a2, a3], whispers: "one rumor per line"}`. Frames and questions are
+world-level CG copy (`introductions_intro`, `first_journal_*`, `application_*`,
+`whispers_*`; defaults in `constants.py`). The First Journal is offered only when the
+draft's starting area's realm is `ARX_REALM_NAME` (`first_journal_offered`); anyone else
+writes one at the Great Archive in play, a later verb. Finalize (`_write_introductions`)
+assembles answered question-and-answer pairs and writes each as a public `JournalEntry`
+of its `JournalKind` ("<first name>'s First Journal", `APPLICATION_TITLE`, `WHISPERS_TITLE`),
+journal XP as for any entry when the character has an account; each Whispers line also
+becomes a Level-1 `PLAYER_FLAVOR` Secret about the character with a `SecretGossip` row at
+`WHISPERS_SEED_HEAT` in the start region (walked up parent links, not the closure view), so
+it is overhearable at a hub from day one (#1572). The sheet API's `actor_sheet` section
+carries the answers, the enemy's public line (full row when privileged) and the
+Introductions by kind.
 
 **CG age rule (#3663, one place: `age_bounds`).** The ceiling is `AGE_MAX` (65),
 tightened to `AGE_MAX_ETERNAL_YOUTH` (29) for an `eternal_youth` species (#2756) and,
@@ -269,7 +334,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
   Python and passed through serializer context, rather than a per-instance
   `.claimable_kinds.all()`. Neither uses a `to_attr` or bare-string prefetch: both go stale on
   an identity-mapped row, and a question deleted in between used to come back with a null id
-  (ADR-0263, ADR-0278; #3617, #3673). Each
+  (ADR-0263, ADR-0279; #3617, #3673). Each
   slot (`OriginTemplateSlotSerializer`) carries `kind`, `connection_kind`, `life_stage`,
   `anchor_source`, `same_anchor_as`, `follow_up_to`, `shown_for_choice_ids`, and `groups` (the
   offered `Organization`s for a POOL/LISTED slot, batched across the whole template; empty for
@@ -344,7 +409,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ## Admin
 
-Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline`), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
+Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `BeginningTraditionInline` and `BeginningEnemyOfferInline`, #3621), `OriginTemplateAdmin` (with `OriginTemplateSlotInline`), `OriginTemplateSlotAdmin` (with `OriginTemplateSlotChoiceInline`), `CharacterOriginSlotAdmin`, `CharacterDraftAdmin` (stage tracking and JSON draft data), `DraftApplicationAdmin` (review status with `DraftApplicationCommentInline`). CGPointBudget is not registered in admin.
 `CharacterOriginSlotAdmin`'s `list_display` also carries `organization` and `figure_name`
 (#3660), and `list_filter` adds `slot__kind`/`organization`.
 

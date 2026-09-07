@@ -1,5 +1,19 @@
 # Character Creation & Identity
 
+## Built (2026-09-07, #3621: the Actor's Sheet)
+
+Final Touches replaced the free-text personality field with the Actor's Sheet: three
+questions ("What would you never do?", "What would you protect at all costs?", "What are
+you deathly afraid of?") on the profile as versioned prose; goals numbered within short and
+long term, any number per domain; one enemy, a person priced by power or a group by reach at
+one of four degrees, awarding CG points into the shared purse and collected at finalize
+through the group's opinion, a Distinction at the worst two degrees and pinned pursuit heat
+(ADR-0279); and The Introductions, three white journals in the character's voice (First
+Journal on an Arx start, Application, Whispers), the Whispers' lines seeded as Level-1
+secrets with gossip heat. The sheet shows the block above Origins, the enemy as its public
+line. Later: institution reading rooms for the First Journal and the Application, and
+writing a First Journal at the Archive in play.
+
 ## Built (2026-09-06, #3663: Misbegotten CG age ceiling grows with IC time)
 
 `Heritage.first_appeared_ic` (Misbegotten: 980 AS) anchors a computed CG age ceiling:
