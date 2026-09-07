@@ -2129,28 +2129,31 @@ class TestCharacterSheetQueryCount(TestCase):
                 select_related onto the catalog tag)
          32.   origin_slots prefetch (#2478 — origin-story slot answers for
                 the guided-flow "finish your origin story" affordance)
-        33-36. technique payload prefetches (#2898 — applied conditions, removed
-                conditions, damage profiles, capability grants, each landing on the
-                cached_property name the effect summary reads). Four fixed queries
-                for the whole spellbook, not four per technique: the alternative
-                was showing the player a technique list that says nothing about
-                what any of the techniques do.
-        37.    technique variants prefetch (#2901 — the resonance-specialized forms
+        33-37. technique payload prefetches (#2898, #3682 — applied conditions,
+                removed conditions, damage profiles, capability grants and
+                treatments, each landing on the cached_property name the effect
+                summary reads). Five fixed queries for the whole spellbook, not
+                five per technique: the alternative was showing the player a
+                technique list that says nothing about what any of the techniques
+                do. Treatments joined in #3682 — without the prefetch the summary
+                would fall back to the cached_property and pay one query per
+                technique for the fifth table.
+        38.    technique variants prefetch (#2901 — the resonance-specialized forms
                 each known technique offers, select_related onto the resonance that
                 labels them). One fixed query, and it carries no payload prefetch of
                 its own: each form's effect summary is cached on its TechniqueVariant
                 row, so it is built once per variant for the process rather than once
                 per sheet read.
-        38.    character.threads (CharacterThreadHandler._all, #2901) — which of
+        39.    character.threads (CharacterThreadHandler._all, #2901) — which of
                 those variants this caster has actually unlocked. A per-Character
                 cached handler, so one query however many techniques are known.
-        39.    identity vacancy membership prefetch, #3648 (organization_memberships,
+        40.    identity vacancy membership prefetch, #3648 (organization_memberships,
                 nested inside the same personas Prefetch already fetched for #21, not a
                 second top-level lookup): one fixed query for every persona's active,
                 vacancy-bearing membership, not one per persona.
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(39):
+        with self.assertNumQueries(40):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated

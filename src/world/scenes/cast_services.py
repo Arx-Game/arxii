@@ -109,6 +109,7 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
         TechniqueCapabilityGrant,
         TechniqueDamageProfile,
         TechniqueRemovedCondition,
+        TechniqueTreatment,
     )
     from world.magic.specialization.models import TechniqueVariant  # noqa: PLC0415
 
@@ -138,6 +139,15 @@ def castable_technique_links_for_sheet(character_sheet_id: int) -> list[Characte
                 "technique__capability_grants",
                 queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
                 to_attr="cached_capability_grants",
+            ),
+            # #3682: the effect summary reads treatments too, so without this the
+            # cast list pays one query per technique for the fifth payload table.
+            Prefetch(
+                "technique__treatments",
+                queryset=TechniqueTreatment.objects.select_related(
+                    "treatment_template__target_condition"
+                ),
+                to_attr="cached_treatments",
             ),
             # #2901: the caster's form list walks each technique's variants.
             # select_related("resonance") because the resonance name is the token
