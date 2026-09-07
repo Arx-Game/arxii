@@ -637,6 +637,14 @@ def _batch_listed_groups(
     return grouped
 
 
+def _pool_slot_matches(slot: OriginTemplateSlot, org: Organization) -> bool:
+    if slot.anchor_org_type_id and org.org_type_id != slot.anchor_org_type_id:
+        return False
+    if slot.anchor_society_id and org.society_id != slot.anchor_society_id:
+        return False
+    return not (slot.exclude_covert and org.org_type is not None and org.org_type.is_covert)
+
+
 def _batch_pool_groups(
     slots: list[OriginTemplateSlot],
 ) -> dict[int, list[Organization]]:
@@ -665,19 +673,7 @@ def _batch_pool_groups(
     rows = list(
         Organization.objects.filter(combined).select_related("org_type", "family").order_by("name")
     )
-    grouped: dict[int, list[Organization]] = {}
-    for slot in pool_slots:
-        matches = []
-        for org in rows:
-            if slot.anchor_org_type_id and org.org_type_id != slot.anchor_org_type_id:
-                continue
-            if slot.anchor_society_id and org.society_id != slot.anchor_society_id:
-                continue
-            if slot.exclude_covert and org.org_type is not None and org.org_type.is_covert:
-                continue
-            matches.append(org)
-        grouped[slot.id] = matches
-    return grouped
+    return {slot.id: [org for org in rows if _pool_slot_matches(slot, org)] for slot in pool_slots}
 
 
 class OriginChoiceOfferSerializer(serializers.Serializer):

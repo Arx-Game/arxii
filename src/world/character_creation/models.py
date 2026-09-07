@@ -1645,6 +1645,95 @@ class CharacterDraft(SharedMemoryModel):
         spent = sum(stats.values())
         return budget - spent
 
+    def _append_beginnings_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the selected Beginnings cost, when it has one."""
+        beginnings = self.selected_beginnings
+        if beginnings is None or not beginnings.cg_point_cost:
+            return
+        breakdown.append(
+            {
+                "category": "heritage",
+                "item": beginnings.name,
+                "cost": beginnings.cg_point_cost,
+            }
+        )
+
+    def _append_upbringing_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the selected Upbringing cost, when one is selected and priced."""
+        if self.selected_origin_template_id is None:
+            return
+        upbringing_cost = self.calculate_upbringing_cost()
+        if not upbringing_cost:
+            return
+        breakdown.append(
+            {
+                "category": "upbringing",
+                "item": self.selected_origin_template.name,
+                "cost": upbringing_cost,
+            }
+        )
+
+    def _append_distinction_costs(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add each priced distinction from the draft data."""
+        for distinction in self.draft_data.get("distinctions", []):
+            cost = distinction.get("cost", 0)
+            if not cost:
+                continue
+            breakdown.append(
+                {
+                    "category": "distinction",
+                    "item": distinction.get("distinction_name", "Unknown"),
+                    "cost": cost,
+                }
+            )
+
+    def _append_enemy_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the negative CG cost for carrying an enemy."""
+        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+
+        enemy = resolve_enemy(self)
+        if enemy is None or not enemy.price:
+            return
+        from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
+
+        breakdown.append(
+            {
+                "category": "enemy",
+                "item": f"{enemy.name or 'Unplaced enemy'}: {EnemyDegree(enemy.degree).label}",
+                "cost": -enemy.price,
+            }
+        )
+
+    def _append_age_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the underage CG cost when the draft starts below maturity."""
+        if self.age is None or self.age >= MATURATION_UNDERAGE_YEAR:
+            return
+        # The youngest starts buy their youth with a thinner purse (#3635).
+        breakdown.append(
+            {
+                "category": "age",
+                "item": f"Starting under {MATURATION_UNDERAGE_YEAR}",
+                "cost": UNDERAGE_CG_POINT_COST,
+            }
+        )
+
+    def _append_species_cost(self, breakdown: list[CGPointBreakdownEntry]) -> None:
+        """Add the total gift cost for the selected species."""
+        if self.selected_species_id is None:
+            return
+        from world.species.services import total_species_gift_cost  # noqa: PLC0415
+
+        species_cost = total_species_gift_cost(self.selected_species)
+        if not species_cost:
+            return
+        breakdown.append(
+            {
+                "category": "species",
+                "item": self.selected_species.name,
+                "cost": species_cost,
+            }
+        )
+
     def calculate_cg_points_breakdown(self) -> list[CGPointBreakdownEntry]:
         """
         Build itemized breakdown of CG point costs from actual data sources.
@@ -1653,69 +1742,12 @@ class CharacterDraft(SharedMemoryModel):
             List of typed dicts with category, item, and cost keys.
         """
         breakdown: list[CGPointBreakdownEntry] = []
-        if self.selected_beginnings and self.selected_beginnings.cg_point_cost:
-            breakdown.append(
-                {
-                    "category": "heritage",
-                    "item": self.selected_beginnings.name,
-                    "cost": self.selected_beginnings.cg_point_cost,
-                }
-            )
-        if self.selected_origin_template_id is not None:
-            upbringing_cost = self.calculate_upbringing_cost()
-            if upbringing_cost:
-                breakdown.append(
-                    {
-                        "category": "upbringing",
-                        "item": self.selected_origin_template.name,
-                        "cost": upbringing_cost,
-                    }
-                )
-        for d in self.draft_data.get("distinctions", []):
-            cost = d.get("cost", 0)
-            if cost:
-                breakdown.append(
-                    {
-                        "category": "distinction",
-                        "item": d.get("distinction_name", "Unknown"),
-                        "cost": cost,
-                    }
-                )
-        # Carrying an enemy is paid for, into the shared purse (#3621): a negative cost.
-        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
-
-        enemy = resolve_enemy(self)
-        if enemy is not None and enemy.price:
-            from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
-
-            breakdown.append(
-                {
-                    "category": "enemy",
-                    "item": f"{enemy.name or 'Unplaced enemy'}: {EnemyDegree(enemy.degree).label}",
-                    "cost": -enemy.price,
-                }
-            )
-        if self.age is not None and self.age < MATURATION_UNDERAGE_YEAR:
-            # The youngest starts buy their youth with a thinner purse (#3635).
-            breakdown.append(
-                {
-                    "category": "age",
-                    "item": f"Starting under {MATURATION_UNDERAGE_YEAR}",
-                    "cost": UNDERAGE_CG_POINT_COST,
-                }
-            )
-        if self.selected_species_id is not None:
-            from world.species.services import total_species_gift_cost  # noqa: PLC0415
-
-            species_cost = total_species_gift_cost(self.selected_species)
-            if species_cost:
-                breakdown.append(
-                    {
-                        "category": "species",
-                        "item": self.selected_species.name,
-                        "cost": species_cost,
-                    }
-                )
+        self._append_beginnings_cost(breakdown)
+        self._append_upbringing_cost(breakdown)
+        self._append_distinction_costs(breakdown)
+        self._append_enemy_cost(breakdown)
+        self._append_age_cost(breakdown)
+        self._append_species_cost(breakdown)
         return breakdown
 
     def calculate_cg_points_spent(self) -> int:

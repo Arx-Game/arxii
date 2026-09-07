@@ -211,11 +211,7 @@ class Command(BaseCommand):
         if not GENERATIONS_PATH.exists():
             message = f"{GENERATIONS_PATH} is missing; see core_management.migration_generations"
             raise CommandError(message)
-        try:
-            call_command("makemigrations", APP_LABEL, check=True, dry_run=True, verbosity=0)
-        except SystemExit as exc:
-            message = "models have changes with no migration; run makemigrations first"
-            raise CommandError(message) from exc
+        call_command("makemigrations", APP_LABEL, check=True, dry_run=True, verbosity=0)
         tip = (MIGRATIONS_DIR / "max_migration.txt").read_text(encoding="utf-8").strip()
         recorded = {
             name

@@ -52,6 +52,52 @@ export async function fetchAccount(): Promise<AccountData | null> {
   }
 }
 
+function getErrorMessages(errorData: { errors?: unknown }): string | null {
+  if (!Array.isArray(errorData.errors)) {
+    return null;
+  }
+
+  const errorMessages = errorData.errors
+    .map((err: { message?: string }) => err.message)
+    .filter(Boolean)
+    .join(', ');
+  return errorMessages || null;
+}
+
+async function handleLoginFailure(res: Response): Promise<LoginResult> {
+  // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
+  const errorData = (await res.json().catch(() => null)) ?? {};
+  console.error('Login error response:', res.status, errorData);
+
+  // A 401 whose pending flows include mfa_authenticate means the password
+  // was correct and a second factor is needed, not that login failed.
+  if (
+    res.status === 401 &&
+    (errorData as SignupResponse).data?.flows?.some(
+      (f) => f.id === 'mfa_authenticate' && f.is_pending
+    )
+  ) {
+    return { kind: 'mfa_required' };
+  }
+
+  // Handle different error response formats
+  if (errorData.detail) {
+    throw new Error(errorData.detail);
+  }
+
+  const errorMessages = getErrorMessages(errorData);
+  if (errorMessages) {
+    throw new Error(errorMessages);
+  }
+
+  if (res.status >= 500) {
+    throw new Error('The server hit an error during login. Please try again shortly.');
+  }
+
+  // Fallback to generic message
+  throw new Error('Login failed');
+}
+
 export async function postLogin(data: { login: string; password: string }): Promise<LoginResult> {
   // Django-allauth headless API expects 'username' or 'email' fields, not 'login'
   // Transform the login field to the appropriate field type
@@ -65,43 +111,7 @@ export async function postLogin(data: { login: string; password: string }): Prom
     body: JSON.stringify(requestData),
   });
   if (!res.ok) {
-    // A 500 returns Django's HTML error page — never feed that to res.json() (#3193)
-    const errorData = (await res.json().catch(() => null)) ?? {};
-    console.error('Login error response:', res.status, errorData);
-
-    // A 401 whose pending flows include mfa_authenticate means the password
-    // was correct and a second factor is needed, not that login failed.
-    if (
-      res.status === 401 &&
-      (errorData as SignupResponse).data?.flows?.some(
-        (f) => f.id === 'mfa_authenticate' && f.is_pending
-      )
-    ) {
-      return { kind: 'mfa_required' };
-    }
-
-    // Handle different error response formats
-    if (errorData.detail) {
-      throw new Error(errorData.detail);
-    }
-
-    // Check for errors array (allauth validation errors)
-    if (errorData.errors && Array.isArray(errorData.errors)) {
-      const errorMessages = errorData.errors
-        .map((err: { message?: string }) => err.message)
-        .filter(Boolean)
-        .join(', ');
-      if (errorMessages) {
-        throw new Error(errorMessages);
-      }
-    }
-
-    if (res.status >= 500) {
-      throw new Error('The server hit an error during login. Please try again shortly.');
-    }
-
-    // Fallback to generic message
-    throw new Error('Login failed');
+    return handleLoginFailure(res);
   }
 
   // Login successful, now fetch the user data in our expected format

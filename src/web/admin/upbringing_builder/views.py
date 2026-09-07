@@ -46,6 +46,7 @@ from world.character_creation.models import (
     OriginTemplateSlotChoice,
 )
 from world.character_creation.serializers import CGOriginTemplateSerializer
+from world.contributors.models import ContentContributor
 
 #: Only these question kinds carry priced answers (Ruling G, #3660 review): the
 #: template only ever renders an ``_answers.html`` block for PICK/GROUP
@@ -161,6 +162,58 @@ class _RouteForms:
         return media
 
 
+def _build_route_forms(request: HttpRequest, template: OriginTemplate) -> _RouteForms:
+    """Build the bound or unbound forms for one route page."""
+    data = request.POST if request.method == "POST" else None
+    form = UpbringingForm(data, instance=template)
+    questions = QuestionFormSet(
+        data,
+        instance=template,
+        prefix="q",
+        form_kwargs={"template": template if template.pk else None},
+    )
+    answers = _answer_formsets(request, template) if template.pk else {}
+    offers = _offer_formsets(request, template) if template.pk else {}
+    return _RouteForms(form, questions, answers, offers)
+
+
+def _route_forms_valid(forms: _RouteForms) -> bool:
+    """Validate the route form layers in the same order as the page renders them."""
+    return (
+        forms.form.is_valid()
+        and forms.questions.is_valid()
+        and all(fs.is_valid() for fs in forms.answers.values())
+        and all(fs.is_valid() for fs in forms.offers.values())
+    )
+
+
+def _save_route(
+    request: HttpRequest,
+    template: OriginTemplate,
+    forms: _RouteForms,
+    contributor: ContentContributor | None,
+) -> HttpResponse:
+    """Validate and save a submitted route, or render its errors."""
+    if contributor is None:
+        return _render_page(request, template, forms, needs_setup=True)
+    if not _route_forms_valid(forms):
+        return _render_page(request, template, forms)
+
+    deleted_choice_pks = _deleted_choice_pks(forms.answers)
+    with transaction.atomic():
+        saved = forms.form.save()
+        forms.questions.instance = saved
+        forms.questions.save()
+        for formset in forms.answers.values():
+            formset.save()
+        for choice_pk, formset in forms.offers.items():
+            if choice_pk not in deleted_choice_pks:
+                formset.save()
+        stamp_written(saved, contributor)
+    messages.success(request, "Saved and credited to you.")
+    return redirect(reverse("admin_upbringing_builder", args=[saved.pk]))
+
+
 def _render_page(
     request: HttpRequest,
     template: OriginTemplate,
@@ -199,53 +252,10 @@ def upbringing_builder(request: HttpRequest, pk: int | None = None) -> HttpRespo
     else:
         template = get_object_or_404(OriginTemplate, pk=pk)
     contributor = current_contributor(request.user)
+    forms = _build_route_forms(request, template)
     if request.method == "POST":
-        form = UpbringingForm(request.POST, instance=template)
-        questions = QuestionFormSet(
-            request.POST,
-            instance=template,
-            prefix="q",
-            form_kwargs={"template": template if template.pk else None},
-        )
-        answers = _answer_formsets(request, template) if template.pk else {}
-        offers = _offer_formsets(request, template) if template.pk else {}
-        forms = _RouteForms(form, questions, answers, offers)
-        if contributor is None:
-            return _render_page(request, template, forms, needs_setup=True)
-        valid = (
-            form.is_valid()
-            and questions.is_valid()
-            and all(fs.is_valid() for fs in answers.values())
-            and all(fs.is_valid() for fs in offers.values())
-        )
-        if valid:
-            deleted_choice_pks = _deleted_choice_pks(answers)
-            with transaction.atomic():
-                saved = form.save()
-                questions.instance = saved
-                questions.save()
-                for fs in answers.values():
-                    fs.save()
-                for choice_pk, fs in offers.items():
-                    if choice_pk in deleted_choice_pks:
-                        continue
-                    fs.save()
-                stamp_written(saved, contributor)
-            messages.success(request, "Saved and credited to you.")
-            return redirect(reverse("admin_upbringing_builder", args=[saved.pk]))
-        return _render_page(request, template, forms)
-    form = UpbringingForm(instance=template)
-    questions = QuestionFormSet(
-        instance=template, prefix="q", form_kwargs={"template": template if template.pk else None}
-    )
-    answers = _answer_formsets(None, template) if template.pk else {}
-    offers = _offer_formsets(None, template) if template.pk else {}
-    return _render_page(
-        request,
-        template,
-        _RouteForms(form, questions, answers, offers),
-        needs_setup=contributor is None,
-    )
+        return _save_route(request, template, forms, contributor)
+    return _render_page(request, template, forms, needs_setup=contributor is None)
 
 
 @superuser_required
