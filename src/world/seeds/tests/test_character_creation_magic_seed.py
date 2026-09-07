@@ -233,15 +233,20 @@ class EnsureUnboundDrawbackDistinctionTests(TestCase):
         db_value = Distinction.objects.filter(slug="unbound").values("description").get()
         self.assertEqual(db_value["description"], "staff-edited description")
 
-    def test_unbound_distinction_has_traditionless_tags(self) -> None:
-        """The Unbound distinction carries both traditionless tags (#2752)."""
+    def test_unbound_distinction_has_traditionless_drawback_tag(self) -> None:
+        """The Unbound distinction carries the shed-on-join tag (#2752).
+
+        The "default" tag this once also carried is retired (#3675); SELF_TAUGHT
+        identification is state-driven now (see the SELF_TAUGHT
+        TraditionStateLine test below); nothing reads it any more.
+        """
         from world.distinctions.models import Distinction
 
         ensure_unbound_drawback_distinction()
         distinction = Distinction.objects.get(slug="unbound")
         tag_slugs = set(distinction.tags.values_list("slug", flat=True))
         self.assertIn("traditionless-drawback", tag_slugs)
-        self.assertIn("traditionless-default", tag_slugs)
+        self.assertNotIn("traditionless-default", tag_slugs)
 
     def test_self_taught_slate_line_carries_the_drawback(self) -> None:
         """The SELF_TAUGHT TraditionStateLine carries this distinction (#3675)."""
@@ -460,15 +465,20 @@ class EnsureOrphanedTraditionDistinctionTests(TestCase):
         db_value = Distinction.objects.filter(slug="orphaned-tradition").values("description").get()
         self.assertEqual(db_value["description"], "staff-edited description")
 
-    def test_orphaned_tradition_distinction_has_traditionless_tags(self) -> None:
-        """The Orphaned Tradition distinction carries the drawback + marker tags (#2752)."""
+    def test_orphaned_tradition_distinction_has_traditionless_drawback_tag(self) -> None:
+        """The Orphaned Tradition distinction carries the shed-on-join tag (#2752).
+
+        The "marker" tag this once also carried is retired (#3675); TEACHERS_GONE
+        identification is state-driven now (see the TEACHERS_GONE TraditionStateLine
+        test below); nothing reads it any more.
+        """
         from world.distinctions.models import Distinction
 
         ensure_orphaned_tradition_distinction()
         distinction = Distinction.objects.get(slug="orphaned-tradition")
         tag_slugs = set(distinction.tags.values_list("slug", flat=True))
         self.assertIn("traditionless-drawback", tag_slugs)
-        self.assertIn("orphaned-tradition-marker", tag_slugs)
+        self.assertNotIn("orphaned-tradition-marker", tag_slugs)
 
     def test_teachers_gone_slate_line_carries_the_drawback(self) -> None:
         """The TEACHERS_GONE TraditionStateLine carries this distinction (#3675)."""

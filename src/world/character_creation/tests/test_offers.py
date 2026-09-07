@@ -12,7 +12,12 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
     TraditionStateLineFactory,
 )
-from world.character_creation.offers import closed_for, offers_for, reconcile_offer_picks
+from world.character_creation.offers import (
+    closed_for,
+    offers_for,
+    reconcile_offer_picks,
+    slate_state,
+)
 from world.distinctions.factories import DistinctionFactory
 from world.magic.factories import GlimpseTagFactory, TraditionFactory
 
@@ -84,6 +89,21 @@ class OffersForTests(TestCase):
         offer = offers_for(draft, OfferChapter.GLIMPSE)[0]
         assert offer.is_locked
         assert "Other" in offer.lock_reason
+
+
+class SlateStateTests(TestCase):
+    def test_returns_the_slate_lines_state(self):
+        beginning = BeginningsFactory()
+        tradition = TraditionFactory(name="Vigil")
+        BeginningTraditionFactory(
+            beginning=beginning, tradition=tradition, state=TraditionState.TEACHERS_GONE
+        )
+        assert slate_state(beginning, tradition) == TraditionState.TEACHERS_GONE
+
+    def test_none_when_tradition_not_on_the_slate(self):
+        beginning = BeginningsFactory()
+        tradition = TraditionFactory(name="Elsewhere")
+        assert slate_state(beginning, tradition) is None
 
 
 class ReconcileTests(TestCase):

@@ -195,11 +195,13 @@ for the five-branch validation gate this data must satisfy before submission.
   `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
   `Organization` by name (seeded by `world.seeds.character_creation.
   ensure_shroudwatch_academy`) and creates a `societies.OrganizationObligation`:
-  `OWED` when `draft.selected_tradition.name == "Unbound"`, else
-  `SETTLED_BY_SPONSOR` (`settled_at` stamped, `settled_by_token` left `NULL` —
-  the sponsor's Hare is lore-recorded, not minted at CG time). Defensive logged
-  skip if the Academy isn't seeded (mirrors `seed_beginning_traditions`'s
-  Unbound-tradition skip); `get_or_create`-idempotent.
+  `OWED` when `world.character_creation.offers.tradition_is_self_taught(draft
+  .selected_tradition)` (#3675, reads `BeginningTradition.state ==
+  TraditionState.SELF_TAUGHT`; was a `draft.selected_tradition.name == "Unbound"`
+  name match pre-#3675), else `SETTLED_BY_SPONSOR` (`settled_at` stamped,
+  `settled_by_token` left `NULL`, the sponsor's Hare is lore-recorded, not minted
+  at CG time). Defensive logged skip if the Academy isn't seeded (mirrors
+  `seed_beginning_traditions`'s Unbound-tradition skip); `get_or_create`-idempotent.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.

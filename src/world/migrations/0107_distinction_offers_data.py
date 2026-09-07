@@ -1,7 +1,14 @@
 """Data step for #3675: pairings and bundles become offers; slate lines get a state.
 
-The one place a tradition is identified by its display name: the Unbound row has
-no field-based signal before ``state`` lands. Runtime code reads ``state``.
+Two lines in ``forwards()`` are the only place a tradition row is identified by
+name or by its old drawback's tag, rather than by ``state``: the Unbound row (by
+tradition name) and any row whose ``required_distinction`` carries the
+``orphaned-tradition-marker`` tag (the pre-#3675 orphaned-tradition signal). Both
+are migration-only, never repeated in runtime code, which reads ``state``. A
+production dump checked on 2026-09-06 showed all 40 slate rows with
+``required_distinction`` null, so both lines are expected no-ops in production
+today; they exist so a database that does hold rows in this shape (a staff
+edit, a fixture, a differently-seeded environment) still migrates correctly.
 """
 
 from django.db import migrations
@@ -35,6 +42,9 @@ def forwards(apps, schema_editor):
             origin_choice_id=choice.id,
             defaults={"arrives_as": "bundled", "name": choice.grants_distinction.name},
         )
+    Slate.objects.filter(required_distinction__tags__slug="orphaned-tradition-marker").update(
+        state="teachers_gone"
+    )
     Slate.objects.filter(tradition__name=UNBOUND_TRADITION_NAME).update(state="self_taught")
     Draft.objects.filter(current_stage=4).update(current_stage=5)
 

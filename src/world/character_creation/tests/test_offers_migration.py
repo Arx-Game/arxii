@@ -22,6 +22,7 @@ from world.character_creation.factories import (
 )
 from world.character_creation.models import BeginningTradition, CharacterDraft, DistinctionOffer
 from world.distinctions.factories import DistinctionFactory
+from world.distinctions.models import DistinctionTag
 from world.magic.factories import GlimpseTagDistinctionSuggestionFactory, TraditionFactory
 
 _forwards = importlib.import_module("world.migrations.0107_distinction_offers_data").forwards
@@ -88,6 +89,32 @@ class DistinctionOffersMigrationTests(TestCase):
             .first()
         )
         assert other_draft_stage == Stage.PATH
+
+    def test_forwards_backfills_teachers_gone_from_the_orphaned_marker_tag(self):
+        """A slate row whose ``required_distinction`` carries the pre-#3675
+        ``orphaned-tradition-marker`` tag ends up TEACHERS_GONE."""
+        beginning = BeginningsFactory()
+        marker_tag, _ = DistinctionTag.objects.get_or_create(
+            slug="orphaned-tradition-marker",
+            defaults={"name": "Orphaned Tradition Marker"},
+        )
+        drawback = DistinctionFactory(name="Orphaned Tradition")
+        drawback.tags.add(marker_tag)
+        orphaned_tradition = TraditionFactory(name="Metallic Order")
+        slate_row = BeginningTraditionFactory(
+            beginning=beginning,
+            tradition=orphaned_tradition,
+            required_distinction=drawback,
+        )
+
+        _forwards(django.apps.apps, None)
+
+        db_state = (
+            BeginningTradition.objects.filter(pk=slate_row.pk)
+            .values_list("state", flat=True)
+            .first()
+        )
+        assert db_state == TraditionState.TEACHERS_GONE
 
     def test_forwards_is_idempotent(self):
         distinction = DistinctionFactory(name="Repeat Offer")

@@ -534,10 +534,10 @@ _ORPHANED_TRADITION_DISTINCTION_SLUG = "orphaned-tradition"
 #: (the SELF_TAUGHT ``TraditionStateLine.carries`` FK), never this slug.
 _UNBOUND_DRAWBACK_DISTINCTION_SLUG = "unbound"
 
-#: DistinctionTag slugs for traditionless categorization (#2752).
+#: DistinctionTag slug for the shed-on-joining-a-living-tradition set (#2752). The
+#: sibling "default"/"marker" tags this once also created are retired (#3675);
+#: SELF_TAUGHT/TEACHERS_GONE identification is state-driven now; nothing reads them.
 _TRADITIONLESS_DRAWBACK_TAG = "traditionless-drawback"
-_TRADITIONLESS_DEFAULT_TAG = "traditionless-default"
-_ORPHANED_TRADITION_MARKER_TAG = "orphaned-tradition-marker"
 
 #: Name for the one example orphaned Arx tradition seeded alongside the
 #: drawback (#2428 Task 5). Richer lore ("ancient Traditions for the Metallic
@@ -664,8 +664,10 @@ def ensure_unbound_drawback_distinction():
             distinction=distinction,
             target=target,
         )
-    # Attach traditionless tags so tradition_membership can identify this
-    # distinction by tag instead of hardcoded slug (#2752).
+    # Attach the shed-on-join tag so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752). The SELF_TAUGHT
+    # identification itself is state-driven (#3675, below); no "default" tag
+    # is created any more; nothing reads it.
     if distinction is not None:
         from world.distinctions.models import DistinctionTag  # noqa: PLC0415
 
@@ -673,11 +675,7 @@ def ensure_unbound_drawback_distinction():
             slug=_TRADITIONLESS_DRAWBACK_TAG,
             defaults={"name": "Traditionless Drawback"},
         )
-        default_tag, _ = DistinctionTag.objects.get_or_create(
-            slug=_TRADITIONLESS_DEFAULT_TAG,
-            defaults={"name": "Traditionless Default"},
-        )
-        distinction.tags.add(drawback_tag, default_tag)
+        distinction.tags.add(drawback_tag)
 
         # The SELF_TAUGHT slate line carries this drawback into the draft (#3675),
         # read by world.character_creation.offers.self_taught_drawback(),
@@ -918,8 +916,11 @@ def ensure_orphaned_tradition_distinction():
         },
         slug=_ORPHANED_TRADITION_DISTINCTION_SLUG,
     )
-    # Attach traditionless tags so tradition_membership can identify this
-    # distinction by tag instead of hardcoded slug (#2752).
+    # Attach the shed-on-join tag so tradition_membership can identify this
+    # distinction by tag instead of hardcoded slug (#2752). No "marker" tag is
+    # created any more (#3675); TEACHERS_GONE identification is state-driven,
+    # below; a legacy database's already-tagged rows are carried across by
+    # migration 0107's one-time backfill, not by this seed re-tagging anything.
     if distinction is not None:
         from world.distinctions.models import DistinctionTag  # noqa: PLC0415
 
@@ -927,11 +928,7 @@ def ensure_orphaned_tradition_distinction():
             slug=_TRADITIONLESS_DRAWBACK_TAG,
             defaults={"name": "Traditionless Drawback"},
         )
-        marker_tag, _ = DistinctionTag.objects.get_or_create(
-            slug=_ORPHANED_TRADITION_MARKER_TAG,
-            defaults={"name": "Orphaned Tradition Marker"},
-        )
-        distinction.tags.add(drawback_tag, marker_tag)
+        distinction.tags.add(drawback_tag)
 
         # The TEACHERS_GONE slate line carries this drawback into the draft
         # (#3675), read by world.magic.services.tradition_membership
