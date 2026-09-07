@@ -522,6 +522,69 @@ change forms and inlines for each. Pattern mirrors the Authoring Workbench above
   #3660 spec review, the same precedent #3019 set above; ADR-0277 covers the
   questionnaire model itself.
 
+## Tradition Slate (#3675)
+
+**Purpose:** author the standard tradition-step lines once (shared by every
+Beginning), and one Beginning's own slate (which traditions it offers, in
+which state, with which own wording), on one admin page. Pattern mirrors the
+Upbringing Builder: `superuser_required`, the contributor gate, plain Django
+forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
+
+- **Files** - `web/admin/tradition_slate/`: `views.py` (`tradition_slate`,
+  `tradition_slate_review`), `forms.py` (`TraditionStateLineForm`/
+  `StateLineFormSet`, `SchoolingLineForm`/`SchoolingLineFormSet` - both
+  `modelformset_factory(..., extra=0)`, always bound against every row in
+  the table since the standard lines are shared, not per-Beginning -
+  `SlateForm`/`SlateFormSet`, an `inlineformset_factory(Beginnings,
+  BeginningTradition, extra=1, can_delete=True)`, the one formset actually
+  scoped to the page's Beginning), `live.py` (`rail_counts`, `checks`,
+  `preview_line`, `price_text`, `state_line_display`/`schooling_line_display`
+  for the derived-price + help-text pair each standard line's row shows).
+  Templates in `web/templates/admin/tradition_slate/`: `page.html`, `_css.html`,
+  `_rail.html`, `_preview.html` (the entry-line preview, a fragment included
+  inside "The slate" module - deliberately not excluded from the styling
+  guard's class scan, unlike the Upbringing Builder's standalone
+  `_preview.html`).
+- **Credit** - `web/admin/authoring/credit.py:stamp_written`/`stamp_reviewed`
+  now take a single `CreditedContent` row rather than a whole route; the
+  Upbringing Builder's own `credit.py` was generalised to loop its route's
+  rows through these instead of stamping inline. The tradition slate page
+  calls them directly on every `TraditionStateLine`/`SchoolingLine` a save
+  actually changed (via each formset's own `.save()` return value) -
+  `BeginningTradition` carries no authorship fields, so slate rows are never
+  stamped. "Mark reviewed" likewise stamps every standard line, not the
+  Beginning's own slate rows - the standard lines are shared, so review here
+  is not per-Beginning.
+- **Save-time side effect** - a POST that validates saves all three formsets in
+  one `transaction.atomic()` block, then for every `SchoolingLine` with a
+  `grants` distinction, `get_or_create`s its `DistinctionOffer(chapter=
+  TRADITION_STEP, schooling_line=line)` (updating an existing offer's
+  `distinction` in step if the grant changed) and flashes a message for each
+  one newly created.
+- **Reachability** - `web/admin/authoring/links.py:builder_url`/`builder_label`
+  (generalised from `upbringing_builder_tags.builder_url`, which now
+  delegates to it) resolve the "Open the tradition slate" object tool on the
+  `Beginnings` change form (`admin_tradition_slate`, keyed by the Beginning's
+  own pk) the same way they resolve "Open in Upbringing Builder" for
+  `OriginTemplate`.
+- **URLs** (superuser-only): `_tradition_slate/<beginning_pk>/` ->
+  `admin_tradition_slate`, `_tradition_slate/<beginning_pk>/review/` ->
+  `admin_tradition_slate_review` (POST).
+- **Checks (`live.checks`)** - every self-taught/teachers-gone standard line
+  carries a drawback; those two drawbacks are each other's
+  `mutually_exclusive_with`; how many of this Beginning's slate lines are
+  still at the model's default state (living masters); every schooling line
+  with a grant has its TRADITION_STEP offer (a warn that clears itself once
+  the page is saved, since save is what creates the missing offer).
+- **What is authored here:** the three `TraditionStateLine` rows, the three
+  `SchoolingLine` rows, and one Beginning's `BeginningTradition` slate
+  (state, own wording, sort order). **What is not:** the `Tradition` row
+  itself (name, description) - authored on its own stock admin page - and a
+  `DistinctionOffer`'s own fields beyond what this page derives for the
+  TRADITION_STEP chapter.
+- Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
+  #3660 set above.
+
 ## Game Tuning & Game Ops Dashboards (#1221)
 
 **Purpose:** Two superuser-only, admin-hosted HTMX dashboards linked from the Game Setup

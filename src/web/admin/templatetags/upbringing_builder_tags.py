@@ -1,9 +1,12 @@
 """Template helpers for the Upbringing Builder (#3660).
 
-``builder_url`` backs the change-form "Open in Upbringing Builder" object
-tool, mirroring ``authoring_tags.workbench_url``. ``dict_get`` is the page's
-own lookup helper: ``live.groups_by_slot`` and the per-slot answers formsets
-are both keyed by a slot's pk, and Django's template variable resolution only
+``builder_url``/``builder_label`` back the change-form "Open in Upbringing
+Builder"/"Open the tradition slate" object tool, mirroring
+``authoring_tags.workbench_url`` - both now delegate to
+``web.admin.authoring.links`` (#3675), which knows every model with a
+builder-style page, not just this one. ``dict_get`` is the page's own lookup
+helper: ``live.groups_by_slot`` and the per-slot answers formsets are both
+keyed by a slot's pk, and Django's template variable resolution only
 supports a literal dict key written into the template, never one held in
 another context variable - so looking either dict up by
 ``question_form.instance.pk`` needs this filter.
@@ -25,13 +28,16 @@ register = template.Library()
 
 @register.filter
 def builder_url(obj) -> str:
-    from django.urls import reverse  # noqa: PLC0415
+    from web.admin.authoring.links import builder_url as _builder_url  # noqa: PLC0415
 
-    from world.character_creation.models import OriginTemplate  # noqa: PLC0415
+    return _builder_url(obj)
 
-    if not isinstance(obj, OriginTemplate) or not obj.pk:
-        return ""
-    return reverse("admin_upbringing_builder", args=[obj.pk])
+
+@register.filter
+def builder_label(obj) -> str:
+    from web.admin.authoring.links import builder_label as _builder_label  # noqa: PLC0415
+
+    return _builder_label(obj)
 
 
 @register.filter

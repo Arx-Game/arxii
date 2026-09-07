@@ -1,0 +1,44 @@
+{% load i18n %}
+{% comment %}
+The tradition slate's rail: this Beginning's slate stats, the standard-line
+checks (mostly system-wide, not scoped to one Beginning), and who is
+credited for the standard lines. Mirrors the Upbringing Builder's rail
+(#3660/#3667); "Mark reviewed" marks the shared standard lines, not this one
+Beginning's slate rows - `BeginningTradition` carries no authorship fields of
+its own. Sits outside the main form - nested forms are invalid HTML.
+{% endcomment %}
+<div class="module">
+  <h2>This slate</h2>
+  <div class="ts-stat"><span>Traditions</span><b>{{ rail.traditions }}</b></div>
+  <div class="ts-stat"><span>Self-taught</span><b>{{ rail.self_taught }}</b></div>
+  <div class="ts-stat"><span>Teachers gone</span><b>{{ rail.teachers_gone }}</b></div>
+  <div class="ts-stat"><span>Living masters</span><b>{{ rail.living_masters }}</b></div>
+  <div class="ts-stat"><span>Lines with own wording</span><b>{{ rail.own_wording }}</b></div>
+</div>
+
+<div class="module">
+  <h2>Checks</h2>
+  {% if checks %}
+  <ul class="tradition-checks">
+    {% for kind, text in checks %}
+    <li class="tradition-check tradition-check--{{ kind }}">
+      {% if kind == "ok" %}OK{% else %}Warn{% endif %}: {{ text }}
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>Nothing to flag yet.</p>
+  {% endif %}
+</div>
+
+<div class="module">
+  <h2>Credit</h2>
+  <p>The standard lines are shared by every Beginning; credit and review here
+    cover all six rows, not just this Beginning's slate.</p>
+  <form method="post" action="{% url 'admin_tradition_slate_review' beginning.pk %}">
+    {% csrf_token %}
+    <div class="submit-row">
+      <input type="submit" value="Mark reviewed">
+    </div>
+  </form>
+</div>

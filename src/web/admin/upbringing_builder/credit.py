@@ -1,9 +1,16 @@
-"""Credit stamping for the Upbringing Builder (#3660): the Workbench's Save-and-credit rule."""
+"""Credit stamping for the Upbringing Builder (#3660): the Workbench's Save-and-credit rule.
+
+The per-row stamp itself lives in ``web.admin.authoring.credit`` (#3675), shared
+with the tradition slate page - this module only knows which rows make up one
+route.
+"""
 
 from __future__ import annotations
 
-from django.utils import timezone
-
+from web.admin.authoring.credit import (
+    stamp_reviewed as _stamp_reviewed_row,
+    stamp_written as _stamp_written_row,
+)
 from world.character_creation.models import (
     OriginTemplate,
     OriginTemplateSlot,
@@ -20,17 +27,11 @@ def _rows(template: OriginTemplate) -> list:
 
 def stamp_written(template: OriginTemplate, contributor: ContentContributor) -> None:
     """Every row on the route is written by ``contributor`` today."""
-    today = timezone.now().date()
     for row in _rows(template):
-        row.written_by = contributor
-        row.written_on = today
-        row.save(update_fields=["written_by", "written_on"])
+        _stamp_written_row(row, contributor)
 
 
 def stamp_reviewed(template: OriginTemplate, contributor: ContentContributor) -> None:
     """Every row on the route is reviewed by ``contributor`` today; authorship untouched."""
-    today = timezone.now().date()
     for row in _rows(template):
-        row.reviewed_by = contributor
-        row.reviewed_on = today
-        row.save(update_fields=["reviewed_by", "reviewed_on"])
+        _stamp_reviewed_row(row, contributor)

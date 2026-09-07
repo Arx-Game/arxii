@@ -1,0 +1,16 @@
+{% comment %}
+Drawn like the player would read it: the tradition's own name plus this
+slate line's state words (its own wording if set, else the standard entry
+line), and the price the state line's drawback carries - never typed here,
+always read back from `TraditionStateLine.price` (#3675). A fragment, not a
+standalone document - included inside "The slate" module.
+{% endcomment %}
+{% if preview %}
+<div class="preview">
+  <span class="ts-preview-price">{{ preview.price_text }}</span>
+  <b>{{ preview.tradition.name }}{% if preview.words %} &middot; {{ preview.words }}{% endif %}</b>
+  <p>{{ preview.tradition.description }}</p>
+</div>
+{% else %}
+<p class="help">Add a self-taught or teachers-gone tradition to preview its entry line.</p>
+{% endif %}

@@ -37,6 +37,7 @@ from web.admin.content_session_views import (
 from web.admin.game_setup_views import game_setup
 from web.admin.seed_views import seed_confirm, seed_run
 from web.admin.sphinx_views import sphinx_audit
+from web.admin.tradition_slate.views import tradition_slate, tradition_slate_review
 from web.admin.tuning.ops_views import (
     ops_dashboard,
     ops_economy_fragment,
@@ -187,6 +188,16 @@ urlpatterns = [
         "_upbringing_builder/<int:pk>/preview/",
         upbringing_builder_preview,
         name="admin_upbringing_builder_preview",
+    ),
+    path(
+        "_tradition_slate/<int:beginning_pk>/",
+        tradition_slate,
+        name="admin_tradition_slate",
+    ),
+    path(
+        "_tradition_slate/<int:beginning_pk>/review/",
+        tradition_slate_review,
+        name="admin_tradition_slate_review",
     ),
     path("", arx_admin_site.urls),
 ]
