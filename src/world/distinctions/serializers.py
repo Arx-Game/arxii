@@ -342,7 +342,7 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
 class DraftDistinctionCreateSerializer(serializers.Serializer):
     """Request body for adding a distinction to a draft (create).
 
-    ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from — every
+    ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from, every
     add must resolve to an offer the draft earned.
     """
 
@@ -356,7 +356,7 @@ class DraftDistinctionSwapSerializer(serializers.Serializer):
     """Request body for swapping mutually-exclusive distinctions.
 
     ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
-    came from — the same offer rule ``create`` enforces.
+    came from, the same offer rule ``create`` enforces.
     """
 
     remove_id = serializers.IntegerField()

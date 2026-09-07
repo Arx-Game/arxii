@@ -72,6 +72,7 @@ describe('character-creation/api getDraftOffers', () => {
           name: 'Kept Close',
           reason: 'This tradition has no living masters.',
           opener_labels: [],
+          opener_ids: [],
         },
       ],
     };

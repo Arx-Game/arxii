@@ -181,6 +181,7 @@ describe('AppearanceStage (folio)', () => {
           name: 'Impoverished',
           reason: 'Your route closed it.',
           opener_labels: [],
+          opener_ids: [],
         },
       ],
     };

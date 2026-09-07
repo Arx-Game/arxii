@@ -1,4 +1,6 @@
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 
 from evennia_extensions.factories import AccountFactory
 from world.character_creation.constants import OfferArrival, OfferChapter, TraditionState
@@ -139,6 +141,27 @@ class OffersForTests(TestCase):
         offer = offers_for(draft, OfferChapter.GLIMPSE)[0]
         assert offer.is_locked
         assert "Other" in offer.lock_reason
+
+    def test_mutual_exclusion_query_count_stays_flat_as_offers_grow(self):
+        """B2 (#3675 final fix): exclusions are fetched in one flat query, not
+        one ``mutually_exclusive_with.all()`` per visible offer."""
+        draft = self._draft()
+        first = DistinctionFactory(name="First", cost_per_rank=1)
+        second = DistinctionFactory(name="Second", cost_per_rank=1)
+        third = DistinctionFactory(name="Third", cost_per_rank=1)
+        first.mutually_exclusive_with.add(second)
+        DistinctionOfferFactory(distinction=first, chapter=OfferChapter.APPEARANCE)
+        DistinctionOfferFactory(distinction=second, chapter=OfferChapter.APPEARANCE)
+        DistinctionOfferFactory(distinction=third, chapter=OfferChapter.APPEARANCE)
+
+        with CaptureQueriesContext(connection) as three_offers:
+            offers_for(draft, OfferChapter.APPEARANCE)
+
+        fourth = DistinctionFactory(name="Fourth", cost_per_rank=1)
+        DistinctionOfferFactory(distinction=fourth, chapter=OfferChapter.APPEARANCE)
+
+        with self.assertNumQueries(len(three_offers.captured_queries)):
+            offers_for(draft, OfferChapter.APPEARANCE)
 
 
 class SlateStateTests(TestCase):

@@ -1027,7 +1027,7 @@ class CharacterDraftViewSet(viewsets.ModelViewSet):
     def select_tradition(self, request: Request, pk: int | None = None) -> Response:
         """Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        There is no gate here — every tradition a Beginning's slate offers is
+        There is no gate here: every tradition a Beginning's slate offers is
         selectable outright. What the pick carries is decided by the slate line's
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,

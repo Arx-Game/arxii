@@ -98,6 +98,7 @@ beforeEach(() => {
         name: 'Generational Talent',
         reason: 'The route closed it.',
         opener_labels: [],
+        opener_ids: [],
       },
     ],
   };
@@ -201,12 +202,14 @@ describe('ChapterOffers', () => {
           name: 'Generational Talent',
           reason: 'The route closed it.',
           opener_labels: [],
+          opener_ids: [],
         },
         {
           distinction_id: 8,
           name: 'Highborn',
           reason: 'The Cradle raised this character.',
           opener_labels: ['Public'],
+          opener_ids: [103],
         },
       ],
     };
@@ -341,12 +344,14 @@ describe('ChapterOffers', () => {
           name: 'Generational Talent',
           reason: 'The route closed it.',
           opener_labels: ['Mark'],
+          opener_ids: [101],
         },
         {
           distinction_id: 8,
           name: 'Highborn',
           reason: 'The Cradle raised this character.',
           opener_labels: ['Public'],
+          opener_ids: [103],
         },
       ],
     };

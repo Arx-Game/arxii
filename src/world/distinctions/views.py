@@ -227,7 +227,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         id isn't an int (carried sources are string keys a client never sends),
         when the offer isn't visible to this draft or names a different
         distinction, or when the offer doesn't arrive as a CHOICE (a client may
-        never pick a BUNDLED or CARRIED offer directly — those are applied only
+        never pick a BUNDLED or CARRIED offer directly, those are applied only
         by ``reconcile_offer_picks``).
         """
         if not isinstance(offer_id, int):

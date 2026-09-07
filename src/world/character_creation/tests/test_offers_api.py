@@ -62,6 +62,10 @@ class OffersEndpointTests(TestCase):
         assert resp.status_code == status.HTTP_200_OK
         (closed,) = resp.data["closed"]
         assert closed["opener_labels"] == ["Mark"]
+        # B4 (#3675 final fix): the offer ids behind those labels, index-aligned,
+        # so a caller can match a closed row to a specific offer without a
+        # name/label match.
+        assert closed["opener_ids"] == [self.offer.id]
 
     def test_rejects_an_unknown_chapter(self):
         resp = self.client.get(

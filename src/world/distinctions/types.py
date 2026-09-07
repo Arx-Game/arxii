@@ -16,7 +16,7 @@ class ValidatedDistinction:
     """Validated distinction data for adding to a draft.
 
     ``offer`` is the ``DistinctionOffer`` row the pick was validated against
-    (#3675) — every CG add goes through an offer now, so it is required.
+    (#3675), every CG add goes through an offer now, so it is required.
     """
 
     distinction: Distinction
@@ -31,7 +31,7 @@ class DraftDistinctionEntry(TypedDict):
     ``offer_ids`` mixes ``int`` (a real ``DistinctionOffer`` row) and ``str``
     (a tradition-state-carried drawback has no offer row, so its source key is
     the synthetic string ``"state:<TraditionState value>"`` built by
-    ``world.character_creation.offers.reconcile_offer_picks`` — #3675).
+    ``world.character_creation.offers.reconcile_offer_picks`` (#3675).
     """
 
     distinction_id: int
@@ -63,7 +63,7 @@ def build_distinction_entry(
     ``carried``, since that pick isn't paid for out of CG points.
 
     ``offer_ids``/``sources``/``arrivals`` are kept in lockstep by ``offer``
-    alone (never by whether ``source`` happens to be a non-empty string) — an
+    alone (never by whether ``source`` happens to be a non-empty string): an
     APPEARANCE/ACTORS_SHEET CHOICE offer has no opener, so ``source`` is
     routinely ``""``, and a length mismatch between the three lists would blow
     up the ``zip(..., strict=True)`` in ``offers._drop_vanished_sources``.

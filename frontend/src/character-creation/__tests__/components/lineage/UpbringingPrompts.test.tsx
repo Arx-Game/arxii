@@ -190,9 +190,16 @@ beforeEach(() => {
         name: 'Highborn',
         reason: 'The yards do not make those.',
         opener_labels: [],
+        opener_ids: [],
       },
-      { distinction_id: 91, name: 'Generational Talent', reason: '', opener_labels: [] },
-      { distinction_id: 92, name: 'Spoiled', reason: '', opener_labels: [] },
+      {
+        distinction_id: 91,
+        name: 'Generational Talent',
+        reason: '',
+        opener_labels: [],
+        opener_ids: [],
+      },
+      { distinction_id: 92, name: 'Spoiled', reason: '', opener_labels: [], opener_ids: [] },
     ],
   };
 });

@@ -956,6 +956,7 @@ class ClosedDistinctionSerializer(serializers.Serializer):
     name = serializers.CharField()
     reason = serializers.CharField()
     opener_labels = serializers.ListField(child=serializers.CharField())
+    opener_ids = serializers.ListField(child=serializers.IntegerField())
 
 
 class OffersResponseSerializer(serializers.Serializer):

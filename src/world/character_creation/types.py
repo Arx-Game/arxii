@@ -48,6 +48,10 @@ class ClosedDistinction:
     #: pick. Empty when this chapter's offer for it carries no opener at all
     #: (Appearance, the Actor's Sheet) or no offer in this chapter opens it.
     opener_labels: list[str]
+    #: The same offers' ids, index-aligned with ``opener_labels`` (#3675 final fix
+    #: B4). A caller that needs to match a closed row to a specific offer (a
+    #: Glimpse tag's own offer ids) uses this, never a name/label match.
+    opener_ids: list[int]
 
 
 class StatAdjustment(TypedDict):

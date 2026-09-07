@@ -122,7 +122,7 @@ class TraditionListLeakTests(TestCase):
     and SKIPPED the new prefetch, so requests with a different
     ``beginning_id`` would inherit the previous request's filtered data.
 
-    The list response varies by ``beginning_id`` — different beginnings can
+    The list response varies by ``beginning_id``: different beginnings can
     show the same Tradition with a different ``BeginningTradition`` row (own
     wording, state, sort order). ``test_repeat_request_with_same_beginning_hits_cache``
     below guards the SharedMemoryModel cache-hit path this leak's fix relies on.
@@ -341,7 +341,7 @@ class SelectTraditionTests(TestCase):
 class DistinctionSyncClearsTraditionTests(TestCase):
     """The slate line's carried drawback survives a sync that omits it (#3675).
 
-    There is no more "required distinction" gate to remove a pick from under —
+    There is no more "required distinction" gate to remove a pick from under:
     ``select_tradition`` no longer gates, and the carried drawback is applied by
     ``reconcile_offer_picks`` rather than stored independently of the pick. So a
     sync that omits the carried drawback does nothing (the next reconcile just

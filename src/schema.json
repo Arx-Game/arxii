@@ -4426,7 +4426,7 @@ paths:
       description: |-
         Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        There is no gate here — every tradition a Beginning's slate offers is
+        There is no gate here: every tradition a Beginning's slate offers is
         selectable outright. What the pick carries is decided by the slate line's
         state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
         to that state may name a drawback distinction the pick carries for free,
@@ -45146,9 +45146,14 @@ components:
           type: array
           items:
             type: string
+        opener_ids:
+          type: array
+          items:
+            type: integer
       required:
       - distinction_id
       - name
+      - opener_ids
       - opener_labels
       - reason
     ClueRevealOfferDetails:
@@ -48639,7 +48644,7 @@ components:
       description: |-
         Request body for adding a distinction to a draft (create).
 
-        ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from — every
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from, every
         add must resolve to an offer the draft earned.
       properties:
         distinction_id:
@@ -48660,15 +48665,14 @@ components:
       description: |-
         Read shape of one distinction entry stored in draft_data.
 
-        ``offer_ids``/``sources``/``arrivals`` (#3675) were missing from this
-        descriptor entirely -- ``world.distinctions.types.DraftDistinctionEntry``
-        carries them on every offer-tracked entry, so the OpenAPI schema for
-        list/create/sync was silently undocumenting the offer-provenance fields.
-        ``required=False`` mirrors runtime reality: a legacy entry saved before
-        the offers system landed (0106) has no ``offer_ids`` key at all (see
-        ``offers._drop_vanished_sources``). ``offer_ids`` has no declared item
-        type because it mixes ``int`` (a real ``DistinctionOffer`` row) and
-        ``str`` (a tradition-state-carried drawback's synthetic
+        ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
+        ``DistinctionOffer`` rows, their display labels, and how each arrived
+        (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
+        carries them on every offer-tracked entry. ``required=False`` mirrors runtime
+        reality: a legacy entry saved before the offers system landed (0106) has no
+        ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+        has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
+        row) and ``str`` (a tradition-state-carried drawback's synthetic
         ``"state:<TraditionState>"`` key).
       properties:
         distinction_id:
@@ -48710,7 +48714,7 @@ components:
         Request body for swapping mutually-exclusive distinctions.
 
         ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
-        came from — the same offer rule ``create`` enforces.
+        came from, the same offer rule ``create`` enforces.
       properties:
         remove_id:
           type: integer

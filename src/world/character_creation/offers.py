@@ -11,6 +11,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
+
 from world.character_creation.constants import (
     OfferArrival,
     OfferChapter,
@@ -187,18 +189,52 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     return ""
 
 
+def _mutual_exclusions(dist_ids: set[int]) -> dict[int, set[int]]:
+    """Every id in ``dist_ids``'s mutual-exclusion partners, in one flat query.
+
+    Reads the symmetrical M2M's through table directly instead of
+    ``Distinction.mutually_exclusive_with.all()`` per distinction (#3675 final fix
+    B2) -- never a to-attr ``Prefetch`` (ADR-0278) and never
+    ``cached_mutually_exclusive_with``, both of which only help a query already
+    scoped to one model's rows. Checks both through-table columns rather than
+    trusting Django's symmetrical-insert behavior to have written both directions.
+    Called by ``offers_for``.
+    """
+    if not dist_ids:
+        return {}
+    through = Distinction.mutually_exclusive_with.through
+    rows = through.objects.filter(
+        Q(from_distinction_id__in=dist_ids) | Q(to_distinction_id__in=dist_ids)
+    ).values_list("from_distinction_id", "to_distinction_id")
+    exclusions: dict[int, set[int]] = defaultdict(set)
+    for from_id, to_id in rows:
+        if from_id in dist_ids:
+            exclusions[from_id].add(to_id)
+        if to_id in dist_ids:
+            exclusions[to_id].add(from_id)
+    return exclusions
+
+
 def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffer]:
     """The priced choices this draft can see in one chapter, with lock state.
 
     Called by each chapter's view/serializer to render its offer list.
     """
     held = {d["distinction_id"] for d in draft.draft_data.get("distinctions", [])}
+    chapter_offers = [
+        offer
+        for offer in visible_offers(draft).values()
+        if offer.chapter == chapter and offer.arrives_as == OfferArrival.CHOICE
+    ]
+    exclusions = _mutual_exclusions({offer.distinction_id for offer in chapter_offers})
+    conflict_ids = {cid for ids in exclusions.values() for cid in ids if cid in held}
+    conflict_names = dict(Distinction.objects.filter(id__in=conflict_ids).values_list("id", "name"))
+
     out: list[VisibleOffer] = []
-    for offer in visible_offers(draft).values():
-        if offer.chapter != chapter or offer.arrives_as != OfferArrival.CHOICE:
-            continue
+    for offer in chapter_offers:
         dist = offer.distinction
-        conflict = next((x for x in dist.mutually_exclusive_with.all() if x.id in held), None)
+        conflict_id = next((x for x in exclusions.get(dist.id, ()) if x in held), None)
+        conflict_name = conflict_names.get(conflict_id) if conflict_id is not None else None
         out.append(
             VisibleOffer(
                 offer_id=offer.id,
@@ -210,8 +246,8 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 opener_label=opener_label(offer),
                 cost_per_rank=dist.cost_per_rank,
                 max_rank=dist.max_rank,
-                is_locked=conflict is not None,
-                lock_reason=f"Cannot be held with {conflict.name}" if conflict else "",
+                is_locked=conflict_name is not None,
+                lock_reason=f"Cannot be held with {conflict_name}" if conflict_name else "",
             )
         )
     out.sort(key=lambda o: o.offer_id)
@@ -231,6 +267,9 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
     opens it (the route closed something a different chapter offers). A chapter
     mount (``GlimpseAxes``) uses this to print the closed hint once, under the
     specific pick that would have opened it, instead of under every pick.
+    ``opener_ids`` (#3675 final fix B4) carries the same offers' ids, index-aligned
+    with ``opener_labels``, so a caller can match a closed row to a specific offer
+    (e.g. a Glimpse tag's own offer ids) without a name/label match.
     """
     route = draft.selected_origin_template
     if route is None:
@@ -247,17 +286,20 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
         distinction_id__in=closed_ids,
     ).select_related("glimpse_tag", "origin_choice", "schooling_line")
     openers: dict[int, list[str]] = defaultdict(list)
+    opener_ids: dict[int, list[int]] = defaultdict(list)
     for offer in rows:
         if _opener_satisfied(offer, ctx):
             label = opener_label(offer)
             if label:
                 openers[offer.distinction_id].append(label)
+                opener_ids[offer.distinction_id].append(offer.id)
     return [
         ClosedDistinction(
             distinction_id=d.id,
             name=d.name,
             reason=route.closed_reason,
             opener_labels=openers.get(d.id, []),
+            opener_ids=opener_ids.get(d.id, []),
         )
         for d in closed
     ]

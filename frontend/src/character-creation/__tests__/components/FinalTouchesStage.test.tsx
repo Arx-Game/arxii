@@ -210,6 +210,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
           name: 'Indolent',
           reason: 'Your route closed it.',
           opener_labels: [],
+          opener_ids: [],
         },
       ],
     };
