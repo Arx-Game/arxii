@@ -297,6 +297,9 @@ class SlatePostTest(SlateTestCase):
         slate_row = BeginningTradition.objects.get(beginning=self.beginning, tradition=tradition)
         assert slate_row.state == TraditionState.TEACHERS_GONE
         assert slate_row.own_wording == "Its books outlived its people."
+        # own_wording is player-facing prose, so the slate row is credited too.
+        assert slate_row.written_by_id == self.writer.pk
+        assert slate_row.written_on is not None
 
     def test_post_creates_missing_standard_lines_from_unsaved_extra_rows(self):
         """The demo-fidelity ruling's other half: Save is what writes a new row.

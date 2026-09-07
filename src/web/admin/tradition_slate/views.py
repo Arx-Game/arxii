@@ -209,9 +209,9 @@ def tradition_slate(request: HttpRequest, beginning_pk: int) -> HttpResponse:
             with transaction.atomic():
                 saved_state = forms.state.save()
                 saved_schooling = forms.schooling.save()
-                forms.slate.save()
+                saved_slate = forms.slate.save()
                 _sync_schooling_offers(request, contributor)
-                for row in (*saved_state, *saved_schooling):
+                for row in (*saved_state, *saved_schooling, *saved_slate):
                     stamp_written(row, contributor)
             messages.success(request, "Saved and credited to you.")
             return redirect(reverse("admin_tradition_slate", args=[beginning.pk]))

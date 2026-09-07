@@ -57,7 +57,7 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675) | `beginning`, `tradition`, `state`, `own_wording`, `sort_order` |
+| `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
 | `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
 | `DistinctionOffer` | Where a distinction is shown in CG and how it arrives (#3675) | `distinction`, `chapter`, `arrives_as`, `glimpse_tag`/`origin_choice`/`schooling_line` |

@@ -1297,6 +1297,8 @@
 
 ### BeginningTradition
 **Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - beginning -> character_creation.Beginnings [FK]
   - tradition -> magic.Tradition [FK]
 
@@ -3899,6 +3901,9 @@
   - option -> forms.FormTraitOption [FK]
 
 ### HeightBand
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - drafts <- character_creation.CharacterDraft
 

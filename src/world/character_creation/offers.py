@@ -422,10 +422,10 @@ def _bundled_opener_labels(offers: list[DistinctionOffer], draft: CharacterDraft
                 if org_id is not None:
                     org_ids.add(org_id)
 
+    from world.societies.models import Organization  # noqa: PLC0415
+
     orgs: dict[int, Organization] = {}
     if org_ids:
-        from world.societies.models import Organization  # noqa: PLC0415
-
         orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)}
 
     labels: dict[int, str] = {}

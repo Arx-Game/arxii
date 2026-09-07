@@ -6,7 +6,7 @@ GET - not an HTMX fragment like the stats/queue/reference panels below it,
 since its four option lists are built once by `authoring_dashboard` itself
 and never refresh on their own.
 
-Each row is a small GET form: the `<select>` posts nothing of its own, it
+Each row is a small GET form: the picker (a labelled select) posts nothing of its own, it
 only names which existing row to open, and its own `*_pick` view (a plain
 redirect, 400 on a missing/unknown pk) does the rest. Takes `builders`, a
 dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
@@ -32,7 +32,7 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Distinction Builder</th>
       <td>
         <form method="get" action="{% url 'admin_distinction_builder_pick' %}" class="ab-picker">
-          <select name="pk">
+          <select name="pk" aria-label="Distinction to open in the builder">
             {% for distinction in builders.distinctions %}
             <option value="{{ distinction.pk }}">{{ distinction.name }}</option>
             {% endfor %}
@@ -47,7 +47,7 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Tradition slate</th>
       <td>
         <form method="get" action="{% url 'admin_tradition_slate_pick' %}" class="ab-picker">
-          <select name="pk">
+          <select name="pk" aria-label="Beginning whose tradition slate to open">
             {% for beginning in builders.beginnings %}
             <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
             {% endfor %}
@@ -62,7 +62,7 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
       <th>Upbringing Builder</th>
       <td>
         <form method="get" action="{% url 'admin_upbringing_builder_pick' %}" class="ab-picker">
-          <select name="pk">
+          <select name="pk" aria-label="Upbringing to open in the builder">
             {% for upbringing in builders.upbringings %}
             <option value="{{ upbringing.pk }}">{{ upbringing.label }}</option>
             {% endfor %}
@@ -70,7 +70,7 @@ dict of `distinctions`/`beginnings`/`upbringings`/`glimpse_tag_count` built by
           <button type="submit">Open</button>
         </form>
         <form method="get" action="{% url 'admin_upbringing_builder_new' %}" class="ab-picker">
-          <select name="beginning">
+          <select name="beginning" aria-label="Beginning for the new Upbringing">
             {% for beginning in builders.beginnings %}
             <option value="{{ beginning.pk }}">{{ beginning.name }}</option>
             {% endfor %}

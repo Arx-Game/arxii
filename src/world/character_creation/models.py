@@ -586,7 +586,7 @@ class BeginningEnemyOffer(SharedMemoryModel):
         return bool(self.figure_name)
 
 
-class BeginningTradition(NaturalKeyMixin, SharedMemoryModel):
+class BeginningTradition(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """Maps which traditions are available for each beginning during CG.
     CG-only concern -- traditions exist independently post-CG."""
 
