@@ -7,7 +7,7 @@
  * closed list with its reason.
  */
 
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { ChapterOffers } from '../../../components/offers/ChapterOffers';
@@ -18,6 +18,10 @@ import { renderWithCharacterCreationProviders } from '../../testUtils';
 import { unreachableClasses } from './classGuard';
 
 const mutate = vi.fn();
+// Mutable so a test can flip isPending/isError before rendering (F2, #3675
+// final fix): a real useMutation() exposes both while a PUT is in flight or
+// after it fails.
+let syncState = { isPending: false, isError: false };
 
 vi.mock('../../../queries', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../queries')>()),
@@ -26,7 +30,7 @@ vi.mock('../../../queries', async (importOriginal) => ({
 
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: draftDistinctions }),
-  useSyncDistinctions: () => ({ mutate }),
+  useSyncDistinctions: () => ({ mutate, ...syncState }),
 }));
 
 const silverTongue: VisibleOffer = {
@@ -90,6 +94,7 @@ let draftDistinctions: DraftDistinctionEntry[];
 
 beforeEach(() => {
   mutate.mockClear();
+  syncState = { isPending: false, isError: false };
   offersResponse = {
     offers: [silverTongue, magicalScar, highborn],
     closed: [
@@ -116,6 +121,34 @@ describe('ChapterOffers', () => {
     expect(screen.getByText('Refunds 25')).toBeInTheDocument();
     expect(screen.getByText('Magical Scar')).toBeInTheDocument();
     expect(screen.getByText('5 per rank')).toBeInTheDocument();
+  });
+
+  it('the price-grammar words route through their own props (#3675 final fix F5)', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        wordPerRank="par la marque"
+        wordRefunds="Rembourse"
+      />
+    );
+    expect(screen.getByText('Rembourse 25')).toBeInTheDocument();
+    expect(screen.getByText('5 par la marque')).toBeInTheDocument();
+    expect(screen.queryByText('Refunds 25')).not.toBeInTheDocument();
+    expect(screen.queryByText('5 per rank')).not.toBeInTheDocument();
+  });
+
+  it('a bundled row prints its own wordBundled override', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        wordBundled="groupé"
+        bundled={[{ offer_id: 700, name: 'A Bundled Grant', cost_per_rank: 0, max_rank: 1 }]}
+      />
+    );
+    expect(screen.getByText('groupé')).toBeInTheDocument();
+    expect(screen.queryByText('bundled')).not.toBeInTheDocument();
   });
 
   it('toggling an offer syncs every CHOICE entry, including the new offer_id', async () => {
@@ -157,6 +190,44 @@ describe('ChapterOffers', () => {
     expect(syncBody.some((row: { id: number }) => row.id === 60)).toBe(false);
   });
 
+  it('disables the toggle and rank controls while the sync mutation is pending (#3675 final fix F2)', () => {
+    syncState = { isPending: true, isError: false };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByRole('button', { name: /Silver Tongue/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Raise Magical Scar' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Lower Magical Scar' })).toBeDisabled();
+  });
+
+  it('prints the sync error hint when the mutation fails', () => {
+    syncState = { isPending: false, isError: true };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByText('That pick did not save. Try again.')).toBeInTheDocument();
+  });
+
+  it('the syncErrorHint prop overrides the default error copy', () => {
+    syncState = { isPending: false, isError: true };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers
+        draft={createMockDraft()}
+        chapter="glimpse"
+        syncErrorHint="Staff-authored fallback"
+      />
+    );
+    expect(screen.getByText('Staff-authored fallback')).toBeInTheDocument();
+    expect(screen.queryByText('That pick did not save. Try again.')).not.toBeInTheDocument();
+  });
+
+  it('prints no error hint while the mutation has not failed', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.queryByText('That pick did not save. Try again.')).not.toBeInTheDocument();
+  });
+
   it('a locked row is aria-disabled, shows its reason, and cannot be toggled', async () => {
     const user = userEvent.setup();
     renderWithCharacterCreationProviders(
@@ -182,6 +253,21 @@ describe('ChapterOffers', () => {
       { id: 50, rank: 2, offer_id: 999 },
       { id: 2, rank: 1, offer_id: 102 },
     ]);
+  });
+
+  it("a ranked offer's row is a group labeled by its name, never aria-pressed (#3675 final fix F6)", () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    const group = screen.getByRole('group', { name: 'Magical Scar' });
+    expect(group).toHaveClass('stance');
+    expect(group).not.toHaveAttribute('aria-pressed');
+    expect(group).not.toHaveAttribute('aria-disabled');
+    // Only the row's own interactive controls (the rank stepper) carry a
+    // button role; aria-pressed appears only on those, never on the group.
+    for (const button of within(group).getAllByRole('button')) {
+      expect(button).not.toHaveAttribute('aria-pressed');
+    }
   });
 
   it('renders the closed hint with the name and its own reason', () => {

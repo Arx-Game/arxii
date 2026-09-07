@@ -18,10 +18,12 @@ import { unreachableClasses } from './classGuard';
 
 const mutate = vi.fn();
 let draftDistinctions: DraftDistinctionEntry[];
+// Mutable so a test can flip isPending before rendering (F2, #3675 final fix).
+let syncState = { isPending: false, isError: false };
 
 vi.mock('@/hooks/useDistinctions', () => ({
   useDraftDistinctions: () => ({ data: draftDistinctions }),
-  useSyncDistinctions: () => ({ mutate }),
+  useSyncDistinctions: () => ({ mutate, ...syncState }),
 }));
 
 const newlyTakenIn: SchoolingLineRow = {
@@ -65,6 +67,7 @@ const tradition: Tradition = {
 
 beforeEach(() => {
   mutate.mockClear();
+  syncState = { isPending: false, isError: false };
   draftDistinctions = [];
 });
 
@@ -109,6 +112,35 @@ describe('SchoolingStances', () => {
     );
     await user.click(screen.getByRole('button', { name: /Newly taken in/ }));
     expect(mutate).toHaveBeenCalledWith([]);
+  });
+
+  it('disables every stance while the sync mutation is pending (#3675 final fix F2)', () => {
+    syncState = { isPending: true, isError: false };
+    renderWithCharacterCreationProviders(
+      <SchoolingStances draft={createMockDraft()} tradition={tradition} />
+    );
+    expect(screen.getByRole('button', { name: /Newly taken in/ })).toBeDisabled();
+    expect(screen.getByRole('button', { name: /Raised within it/ })).toBeDisabled();
+  });
+
+  it('prints the sync error hint when the mutation fails', () => {
+    syncState = { isPending: false, isError: true };
+    renderWithCharacterCreationProviders(
+      <SchoolingStances draft={createMockDraft()} tradition={tradition} />
+    );
+    expect(screen.getByText('That pick did not save. Try again.')).toBeInTheDocument();
+  });
+
+  it('the Free word routes through copy key offers_word_free (#3675 final fix F5)', () => {
+    renderWithCharacterCreationProviders(
+      <SchoolingStances
+        draft={createMockDraft()}
+        tradition={tradition}
+        copy={{ offers_word_free: 'Gratuit' }}
+      />
+    );
+    expect(screen.getByText('Gratuit')).toBeInTheDocument();
+    expect(screen.queryByText('Free')).not.toBeInTheDocument();
   });
 
   it('emits no class hook that cg.css has no rule reaching it (#3667 shape)', () => {

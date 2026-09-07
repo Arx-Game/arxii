@@ -246,6 +246,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # entry the draft carries into the character, off the same offers system
     # every other chapter reads.
     "review_distinctions_heading": "What you carry",
+    # The record ledger's own arrival word per entry (#3675 final fix F5):
+    # a CHOICE pick wins the label over a bundled/carried one on an entry
+    # with more than one contributing offer (`arrivalWord`, ReviewStage.tsx).
+    "review_arrival_choice": "choice",
+    "review_arrival_bundled": "bundled",
+    "review_arrival_carried": "carried",
     "review_banner_submitted": "Your character has been submitted for review.",
     "review_approved_enter_world": "Enter the World",
     "origin_lore_intro": (
@@ -307,6 +313,19 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_choose_one": "choose one",
     "glimpse_offers_heading": "What it left in you",
     "offers_optional_chip": "optional",
+    # Printed under ChapterOffers/SchoolingStances (#3675 final fix F2) when
+    # the sync mutation that writes a pick fails, so a rejected save is never
+    # silent.
+    "offers_sync_error": "That pick did not save. Try again.",
+    # The price-grammar words every offer/bundled row is built from (#3675
+    # final fix F5): ChapterOffers.tsx's PriceLine/BundledPriceLine and the
+    # bundled row's own "bundled" tag; offers_word_free is SchoolingStances.tsx's
+    # rank-0 stance. Values are the literals that printed before this fix.
+    "offers_word_bundled": "bundled",
+    "offers_word_free": "Free",
+    "offers_word_per_rank": "per rank",
+    "offers_word_spent": "spent",
+    "offers_word_refunds": "Refunds",
     "glimpse_story_label": "Your story",
     "glimpse_story_hint": (
         "The detail behind any of the picks above goes here; the picks stay short."
@@ -321,6 +340,16 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "glimpse_axis_tone_chip": "Tone",
     "glimpse_axis_consequence_chip": "Consequence",
     "glimpse_axis_witness_chip": "Witness & Secrecy",
+    # Per-axis prompt text on GlimpseAxes.tsx (#3675 final fix F3): the
+    # question label above each field, read via `glimpse_axis_<axis>_prompt`.
+    # Values mirror the component's own AXIS_PROMPT_FALLBACK literal - must
+    # not drift from it.
+    "glimpse_axis_trigger_prompt": "What was happening",
+    "glimpse_axis_choosing_prompt": "How it claimed you",
+    "glimpse_axis_reflection_prompt": "What you saw in yourself",
+    "glimpse_axis_tone_prompt": "How it felt",
+    "glimpse_axis_consequence_prompt": "What it left behind",
+    "glimpse_axis_witness_prompt": "Who saw",
     "appearance_age_heading": "Age",
     "appearance_birthday_heading": "Birthday",
     "appearance_height_heading": "Height",

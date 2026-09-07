@@ -97,22 +97,63 @@ interface ChapterOffersProps {
    * redundant div.
    */
   className?: string;
+  /**
+   * `.hint` line printed when the sync mutation fails (#3675 final fix F2).
+   * Threaded from the caller's own copy query (mirrors `closedLead`) off
+   * copy key `offers_sync_error`; defaults to 'That pick did not save. Try
+   * again.'.
+   */
+  syncErrorHint?: string;
+  /**
+   * The price-grammar words below (#3675 final fix F5), each threaded from
+   * the caller's own copy query the same way `closedLead` is; every default
+   * is the word that printed before this fix, so the demo-fidelity
+   * assertions still hold with no caller override at all.
+   */
+  wordBundled?: string;
+  wordPerRank?: string;
+  wordSpent?: string;
+  wordRefunds?: string;
+}
+
+interface PriceWords {
+  perRank: string;
+  spent: string;
+  refunds: string;
 }
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
  * ranked offer, a refund, or the flat cost for an unranked one. */
-function PriceLine({ offer, rank }: { offer: VisibleOffer; rank: number }) {
+function PriceLine({
+  offer,
+  rank,
+  words,
+}: {
+  offer: VisibleOffer;
+  rank: number;
+  words: PriceWords;
+}) {
   if (offer.max_rank > 1) {
     const spent = offer.cost_per_rank * rank;
     return (
       <>
-        <span>{offer.cost_per_rank} per rank</span>
-        {rank > 0 && <span className={spent < 0 ? 'refund' : undefined}>{spent} spent</span>}
+        <span>
+          {offer.cost_per_rank} {words.perRank}
+        </span>
+        {rank > 0 && (
+          <span className={spent < 0 ? 'refund' : undefined}>
+            {spent} {words.spent}
+          </span>
+        )}
       </>
     );
   }
   if (offer.cost_per_rank < 0) {
-    return <span className="refund">Refunds {-offer.cost_per_rank}</span>;
+    return (
+      <span className="refund">
+        {words.refunds} {-offer.cost_per_rank}
+      </span>
+    );
   }
   return <span>{offer.cost_per_rank}</span>;
 }
@@ -120,12 +161,26 @@ function PriceLine({ offer, rank }: { offer: VisibleOffer; rank: number }) {
 /** The price line for a `bundled` row: same shape as `PriceLine`, off a
  * plain `{cost_per_rank, max_rank}` pair rather than a full `VisibleOffer` -
  * a bundled distinction carries no rank state of its own to spend against. */
-function BundledPriceLine({ item }: { item: { cost_per_rank: number; max_rank: number } }) {
+function BundledPriceLine({
+  item,
+  words,
+}: {
+  item: { cost_per_rank: number; max_rank: number };
+  words: PriceWords;
+}) {
   if (item.max_rank > 1) {
-    return <span>{item.cost_per_rank} per rank</span>;
+    return (
+      <span>
+        {item.cost_per_rank} {words.perRank}
+      </span>
+    );
   }
   if (item.cost_per_rank < 0) {
-    return <span className="refund">Refunds {-item.cost_per_rank}</span>;
+    return (
+      <span className="refund">
+        {words.refunds} {-item.cost_per_rank}
+      </span>
+    );
   }
   return <span>{item.cost_per_rank}</span>;
 }
@@ -143,10 +198,20 @@ export function ChapterOffers({
   showClosed = true,
   bundled = [],
   className,
+  syncErrorHint,
+  wordBundled,
+  wordPerRank,
+  wordSpent,
+  wordRefunds,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
+  const priceWords: PriceWords = {
+    perRank: wordPerRank ?? 'per rank',
+    spent: wordSpent ?? 'spent',
+    refunds: wordRefunds ?? 'Refunds',
+  };
 
   const entryByOfferId = useMemo(() => {
     const map = new Map<number, DraftDistinctionEntry>();
@@ -203,8 +268,8 @@ export function ChapterOffers({
                 {item.player_line && <span className="g">{item.player_line}</span>}
               </span>
               <span className="price">
-                <span className="locked">bundled</span>
-                <BundledPriceLine item={item} />
+                <span className="locked">{wordBundled ?? 'bundled'}</span>
+                <BundledPriceLine item={item} words={priceWords} />
               </span>
             </div>
           </li>
@@ -225,7 +290,7 @@ export function ChapterOffers({
                       name={offer.name}
                       rank={rank}
                       max={offer.max_rank}
-                      disabled={offer.is_locked}
+                      disabled={offer.is_locked || syncDistinctions.isPending}
                       onChange={(next) => applyRank(offer, next)}
                     />
                   )}
@@ -237,7 +302,7 @@ export function ChapterOffers({
                 {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
               </span>
               <span className="price">
-                <PriceLine offer={offer} rank={rank} />
+                <PriceLine offer={offer} rank={rank} words={priceWords} />
               </span>
             </>
           );
@@ -246,8 +311,9 @@ export function ChapterOffers({
               {ranked ? (
                 <div
                   className="stance"
-                  aria-pressed={selected}
-                  aria-disabled={offer.is_locked || undefined}
+                  role="group"
+                  aria-label={offer.name}
+                  aria-disabled={offer.is_locked || syncDistinctions.isPending || undefined}
                 >
                   {body}
                 </div>
@@ -256,8 +322,8 @@ export function ChapterOffers({
                   type="button"
                   className="stance"
                   aria-pressed={selected}
-                  aria-disabled={offer.is_locked || undefined}
-                  disabled={offer.is_locked}
+                  aria-disabled={offer.is_locked || syncDistinctions.isPending || undefined}
+                  disabled={offer.is_locked || syncDistinctions.isPending}
                   onClick={() => applyRank(offer, selected ? 0 : 1)}
                 >
                   {body}
@@ -268,6 +334,9 @@ export function ChapterOffers({
         })}
       </ul>
       {hint && <span className="hint">{hint}</span>}
+      {syncDistinctions.isError && (
+        <span className="hint">{syncErrorHint ?? 'That pick did not save. Try again.'}</span>
+      )}
       {showClosed && closed.length > 0 && (
         <span className="hint">
           {`${closedLead ?? 'Closed on this road'}: ${closed

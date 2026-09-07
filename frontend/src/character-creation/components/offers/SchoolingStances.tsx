@@ -11,15 +11,16 @@
 
 import { useCallback } from 'react';
 import { useDraftDistinctions, useSyncDistinctions } from '@/hooks/useDistinctions';
-import type { CharacterDraft, SchoolingLineRow, Tradition } from '../../types';
+import type { CGExplanations, CharacterDraft, SchoolingLineRow, Tradition } from '../../types';
 import { choiceEntries } from './syncHelpers';
 
 interface SchoolingStancesProps {
   draft: CharacterDraft;
   tradition: Tradition;
+  copy?: CGExplanations;
 }
 
-export function SchoolingStances({ draft, tradition }: SchoolingStancesProps) {
+export function SchoolingStances({ draft, tradition, copy }: SchoolingStancesProps) {
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
   const syncDistinctions = useSyncDistinctions(draft.id);
 
@@ -49,35 +50,43 @@ export function SchoolingStances({ draft, tradition }: SchoolingStancesProps) {
   );
 
   return (
-    <ul className="stances">
-      {tradition.schooling.map((row) => {
-        const pressed = selectedRank === row.rank;
-        const disabled =
-          row.rank > 0 && (row.grants_distinction_id == null || row.offer_id == null);
-        return (
-          <li key={row.schooling_line_id}>
-            <button
-              type="button"
-              className="stance"
-              aria-pressed={pressed}
-              disabled={disabled}
-              onClick={() => handlePick(row)}
-            >
-              <span className="dot" />
-              <span>
-                <b>{row.name}</b>
-                <span className="g">{row.player_line}</span>
-              </span>
-              <span className="price">
-                <span>{row.rank === 0 ? 'Free' : row.price}</span>
-                <span className={row.rank > 0 ? 'grant' : undefined}>
-                  {row.techniques} technique{row.techniques === 1 ? '' : 's'}
+    <>
+      <ul className="stances">
+        {tradition.schooling.map((row) => {
+          const pressed = selectedRank === row.rank;
+          const disabled =
+            (row.rank > 0 && (row.grants_distinction_id == null || row.offer_id == null)) ||
+            syncDistinctions.isPending;
+          return (
+            <li key={row.schooling_line_id}>
+              <button
+                type="button"
+                className="stance"
+                aria-pressed={pressed}
+                disabled={disabled}
+                onClick={() => handlePick(row)}
+              >
+                <span className="dot" />
+                <span>
+                  <b>{row.name}</b>
+                  <span className="g">{row.player_line}</span>
                 </span>
-              </span>
-            </button>
-          </li>
-        );
-      })}
-    </ul>
+                <span className="price">
+                  <span>{row.rank === 0 ? (copy?.offers_word_free ?? 'Free') : row.price}</span>
+                  <span className={row.rank > 0 ? 'grant' : undefined}>
+                    {row.techniques} technique{row.techniques === 1 ? '' : 's'}
+                  </span>
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+      {syncDistinctions.isError && (
+        <span className="hint">
+          {copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+        </span>
+      )}
+    </>
   );
 }

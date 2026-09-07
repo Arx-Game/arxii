@@ -237,6 +237,11 @@ function ChosenAnswerOffers({
       showClosed={false}
       bundled={bundled}
       className="conditional"
+      syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+      wordBundled={copy?.offers_word_bundled}
+      wordPerRank={copy?.offers_word_per_rank}
+      wordSpent={copy?.offers_word_spent}
+      wordRefunds={copy?.offers_word_refunds}
     />
   );
 }

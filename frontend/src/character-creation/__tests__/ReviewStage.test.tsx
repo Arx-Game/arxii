@@ -87,11 +87,12 @@ function renderReview(
     isStaff?: boolean;
     onStageSelect?: (stage: Stage) => void;
     account?: typeof mockPlayerAccount;
+    explanations?: Record<string, string>;
   } = {}
 ) {
-  const { isStaff = false, onStageSelect = vi.fn(), account } = options;
+  const { isStaff = false, onStageSelect = vi.fn(), account, explanations } = options;
   const queryClient = createTestQueryClient();
-  seedCharacterCreationQueries(queryClient, { explanations: mockCGExplanations });
+  seedCharacterCreationQueries(queryClient, { explanations: explanations ?? mockCGExplanations });
   return renderWithCharacterCreationProviders(
     <ReviewStage draft={draft} isStaff={isStaff} onStageSelect={onStageSelect} />,
     { queryClient, account }
@@ -183,6 +184,28 @@ describe('ReviewStage', () => {
     expect(screen.getByText('choice')).toBeInTheDocument();
     expect(screen.getByText('Orphaned Stances')).toBeInTheDocument();
     expect(screen.getByText('carried')).toBeInTheDocument();
+  });
+
+  it('the arrival words route through their own copy keys (#3675 final fix F5)', () => {
+    draftDistinctions = [
+      {
+        distinction_id: 10,
+        distinction_name: 'Keen Senses',
+        distinction_slug: 'keen-senses',
+        category_slug: 'advantages',
+        rank: 2,
+        cost: 4,
+        notes: '',
+        offer_ids: [201],
+        sources: ['Wonder'],
+        arrivals: ['choice'],
+      },
+    ];
+    renderReview(mockCompleteDraft, {
+      explanations: { ...mockCGExplanations, review_arrival_choice: 'Choisi' },
+    });
+    expect(screen.getByText('Choisi')).toBeInTheDocument();
+    expect(screen.queryByText('choice')).not.toBeInTheDocument();
   });
 
   it('prints no distinctions ledger when the draft carries none', () => {

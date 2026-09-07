@@ -445,6 +445,11 @@ export function AppearanceStage({
         heading={copy?.appearance_offers_heading ?? 'What people notice first'}
         headingTag={copy?.appearance_offers_chip ?? 'optional'}
         closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+        syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+        wordBundled={copy?.offers_word_bundled}
+        wordPerRank={copy?.offers_word_per_rank}
+        wordSpent={copy?.offers_word_spent}
+        wordRefunds={copy?.offers_word_refunds}
       />
 
       <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>

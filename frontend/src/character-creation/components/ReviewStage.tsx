@@ -44,13 +44,18 @@ import { composeFullName } from '../utils';
 
 /** How one distinction entry arrived, for the record ledger (#3675 fix round 3):
  * a choice pick wins the label over a bundled/carried one when an entry
- * carries more than one contributing offer. */
-function arrivalWord(entry: DraftDistinctionEntry): 'choice' | 'bundled' | 'carried' {
+ * carries more than one contributing offer. Words are staff-authored copy
+ * (#3675 final fix F5: `review_arrival_choice`/`_bundled`/`_carried`), the
+ * literals below only the fallback. */
+function arrivalWord(
+  entry: DraftDistinctionEntry,
+  copy: Record<string, string> | undefined
+): string {
   const arrivals = entry.arrivals ?? [];
-  if (arrivals.includes('choice')) return 'choice';
-  if (arrivals.includes('bundled')) return 'bundled';
-  if (arrivals.includes('carried')) return 'carried';
-  return 'choice';
+  if (arrivals.includes('choice')) return copy?.review_arrival_choice ?? 'choice';
+  if (arrivals.includes('bundled')) return copy?.review_arrival_bundled ?? 'bundled';
+  if (arrivals.includes('carried')) return copy?.review_arrival_carried ?? 'carried';
+  return copy?.review_arrival_choice ?? 'choice';
 }
 
 interface ReviewStageProps {
@@ -277,7 +282,7 @@ export function ReviewStage({ draft, isStaff, onStageSelect }: ReviewStageProps)
                       <span className="g">Rank {entry.rank}</span>
                     </span>
                     <span className="price">
-                      <span className="locked">{arrivalWord(entry)}</span>
+                      <span className="locked">{arrivalWord(entry, copy)}</span>
                     </span>
                   </div>
                 </li>

@@ -97,7 +97,7 @@ export function TraditionPicker({ draft, beginningId }: TraditionPickerProps) {
                     tradition.name
                   )}
                 </label>
-                <SchoolingStances draft={draft} tradition={tradition} />
+                <SchoolingStances draft={draft} tradition={tradition} copy={copy} />
               </div>
             )}
             <CodexLine entryId={tradition.codex_entry_ids?.[0]} name={tradition.name} />

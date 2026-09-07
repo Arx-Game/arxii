@@ -119,6 +119,12 @@ class TestLoreOnboardingSeed(TestCase):
             "glimpse_axis_tone_chip",
             "glimpse_axis_consequence_chip",
             "glimpse_axis_witness_chip",
+            "glimpse_axis_trigger_prompt",
+            "glimpse_axis_choosing_prompt",
+            "glimpse_axis_reflection_prompt",
+            "glimpse_axis_tone_prompt",
+            "glimpse_axis_consequence_prompt",
+            "glimpse_axis_witness_prompt",
             "lineage_bundles_word",
             "lineage_offers_word",
             "lineage_offers_heading",
@@ -132,6 +138,15 @@ class TestLoreOnboardingSeed(TestCase):
             "finaltouches_closed_lead",
             "gift_schooling_label",
             "review_distinctions_heading",
+            "offers_sync_error",
+            "offers_word_bundled",
+            "offers_word_free",
+            "offers_word_per_rank",
+            "offers_word_spent",
+            "offers_word_refunds",
+            "review_arrival_choice",
+            "review_arrival_bundled",
+            "review_arrival_carried",
         )
         for key in offers_chapter_keys:
             assert key in CG_EXPLANATION_COPY, f"{key} missing from CG_EXPLANATION_COPY"

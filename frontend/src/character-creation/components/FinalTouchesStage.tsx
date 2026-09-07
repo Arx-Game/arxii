@@ -462,6 +462,11 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         heading={copy?.finaltouches_offers_heading ?? 'Is it a hunger'}
         headingTag={copy?.finaltouches_offers_chip ?? 'optional'}
         closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
+        syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+        wordBundled={copy?.offers_word_bundled}
+        wordPerRank={copy?.offers_word_per_rank}
+        wordSpent={copy?.offers_word_spent}
+        wordRefunds={copy?.offers_word_refunds}
         className="conditional"
       />
 
