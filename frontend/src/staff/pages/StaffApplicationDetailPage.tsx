@@ -70,12 +70,9 @@ export function StaffApplicationDetailPage() {
               <p className="whitespace-pre-wrap">{summary.description}</p>
             </div>
           )}
-          {summary.personality && (
-            <div>
-              <p className="font-medium text-muted-foreground">Personality</p>
-              <p className="whitespace-pre-wrap">{summary.personality}</p>
-            </div>
-          )}
+          {summary.never_do && <InfoRow label="Would never" value={summary.never_do} />}
+          {summary.protect && <InfoRow label="Protects at all costs" value={summary.protect} />}
+          {summary.fear && <InfoRow label="Deathly afraid of" value={summary.fear} />}
           {summary.background && (
             <div>
               <p className="font-medium text-muted-foreground">Background</p>

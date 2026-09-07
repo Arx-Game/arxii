@@ -17,15 +17,19 @@ export interface SwitchablePersona {
   /** #1682 — the guise's fabricated bio (empty strings when unauthored). */
   guise_concept: string;
   guise_quote: string;
-  guise_personality: string;
+  guise_never_do: string;
+  guise_protect: string;
+  guise_fear: string;
   guise_background: string;
 }
 
-/** #1682 — the four authorable Guise-Sheet fields. */
+/** #1682 — the authorable Guise-Sheet fields (the three answers replace personality, #3621). */
 export interface GuiseProfileBody {
   concept: string;
   quote: string;
-  personality: string;
+  never_do: string;
+  protect: string;
+  fear: string;
   background: string;
 }
 
@@ -49,7 +53,9 @@ async function fetchCharacterPersonas(characterSheetId: number): Promise<Switcha
       thumbnail_media_url?: string | null;
       guise_concept?: string;
       guise_quote?: string;
-      guise_personality?: string;
+      guise_never_do?: string;
+      guise_protect?: string;
+      guise_fear?: string;
       guise_background?: string;
     }>;
   };
@@ -62,7 +68,9 @@ async function fetchCharacterPersonas(characterSheetId: number): Promise<Switcha
     thumbnail_media_url: p.thumbnail_media_url ?? null,
     guise_concept: p.guise_concept ?? '',
     guise_quote: p.guise_quote ?? '',
-    guise_personality: p.guise_personality ?? '',
+    guise_never_do: p.guise_never_do ?? '',
+    guise_protect: p.guise_protect ?? '',
+    guise_fear: p.guise_fear ?? '',
     guise_background: p.guise_background ?? '',
   }));
 }

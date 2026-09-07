@@ -29,6 +29,9 @@ import { MechanicsSection } from '@/character_sheets/components/MechanicsSection
 import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
 import { OriginsSection } from '@/character_sheets/components/OriginsSection';
+import { ActorSheetSection } from '@/character_sheets/components/ActorSheetSection';
+
+type ActorSheetGoal = Parameters<typeof ActorSheetSection>[0]['goals'][number];
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
@@ -167,6 +170,12 @@ export function CharacterSheetPage() {
             />
           ) : (
             <BackgroundSection background={entry.character.background} />
+          )}
+          {sheetPayload && (
+            <ActorSheetSection
+              block={sheetPayload.actor_sheet}
+              goals={sheetPayload.goals as ActorSheetGoal[]}
+            />
           )}
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />

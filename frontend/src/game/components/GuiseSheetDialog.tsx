@@ -2,7 +2,7 @@
  * GuiseSheetDialog — author a cover persona's fabricated bio (#1682).
  *
  * The web face of the #1270 Guise Sheet: a cover/established persona needs its
- * OWN concept/quote/personality/background so the absence of a bio doesn't
+ * OWN concept/quote/answers/background so the absence of a bio doesn't
  * instantly out it as fake. Prefills from the persona's current guise fields;
  * saving writes the full four-field state (clearing a field is a real edit).
  * Never offered for the PRIMARY face — the real bio lives on the sheet.
@@ -41,7 +41,9 @@ export function GuiseSheetDialog({
   const save = useSetPersonaProfileMutation(characterSheetId);
   const [concept, setConcept] = useState(persona.guise_concept);
   const [quote, setQuote] = useState(persona.guise_quote);
-  const [personality, setPersonality] = useState(persona.guise_personality);
+  const [neverDo, setNeverDo] = useState(persona.guise_never_do);
+  const [protect, setProtect] = useState(persona.guise_protect);
+  const [fear, setFear] = useState(persona.guise_fear);
   const [background, setBackground] = useState(persona.guise_background);
 
   // Re-prefill whenever the dialog opens (the persona's saved bio may have changed).
@@ -49,7 +51,9 @@ export function GuiseSheetDialog({
     if (open) {
       setConcept(persona.guise_concept);
       setQuote(persona.guise_quote);
-      setPersonality(persona.guise_personality);
+      setNeverDo(persona.guise_never_do);
+      setProtect(persona.guise_protect);
+      setFear(persona.guise_fear);
       setBackground(persona.guise_background);
       save.reset();
     }
@@ -58,7 +62,10 @@ export function GuiseSheetDialog({
 
   const submit = () => {
     save.mutate(
-      { personaId: persona.id, body: { concept, quote, personality, background } },
+      {
+        personaId: persona.id,
+        body: { concept, quote, never_do: neverDo, protect, fear, background },
+      },
       { onSuccess: () => onOpenChange(false) }
     );
   };
@@ -93,13 +100,24 @@ export function GuiseSheetDialog({
             />
           </div>
           <div className="space-y-1">
-            <Label htmlFor="guise-personality">Personality</Label>
-            <Textarea
-              id="guise-personality"
-              value={personality}
-              onChange={(e) => setPersonality(e.target.value)}
-              rows={3}
+            <Label htmlFor="guise-never-do">What would you never do?</Label>
+            <Input
+              id="guise-never-do"
+              value={neverDo}
+              onChange={(e) => setNeverDo(e.target.value)}
             />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="guise-protect">What would you protect at all costs?</Label>
+            <Input
+              id="guise-protect"
+              value={protect}
+              onChange={(e) => setProtect(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1">
+            <Label htmlFor="guise-fear">What are you deathly afraid of?</Label>
+            <Input id="guise-fear" value={fear} onChange={(e) => setFear(e.target.value)} />
           </div>
           <div className="space-y-1">
             <Label htmlFor="guise-background">Background</Label>

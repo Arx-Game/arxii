@@ -663,7 +663,7 @@ export const mockEmptyDraftData: DraftData = {};
 export const mockCompleteDraftData: DraftData = {
   first_name: 'Testchar',
   description: 'A tall figure with piercing eyes.',
-  personality: 'Bold and adventurous.',
+  never_do: 'Bold and adventurous.',
   background: 'Born to humble origins but destined for greatness.',
   concept: 'A warrior seeking redemption.',
   quote: 'The dawn comes for all.',
@@ -728,6 +728,24 @@ export const mockEmptyDraft: CharacterDraft = {
   age_max: 65,
   bundled_distinctions: [],
   derived_anchors: {},
+  enemy_offers: [],
+  enemy_price_tables: {
+    group: {
+      household: { annoyed: 3, thwarted: 6, ruined: 12, destroy: 18 },
+      house: { annoyed: 8, thwarted: 16, ruined: 32, destroy: 48 },
+      society: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+      realm: { annoyed: 25, thwarted: 50, ruined: 100, destroy: 150 },
+    },
+    person: {
+      quiescent: { annoyed: 1, thwarted: 2, ruined: 4, destroy: 6 },
+      prospect: { annoyed: 2, thwarted: 4, ruined: 8, destroy: 12 },
+      potential: { annoyed: 4, thwarted: 8, ruined: 16, destroy: 24 },
+      puissant: { annoyed: 8, thwarted: 16, ruined: 32, destroy: 48 },
+      true: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+      grand: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+    },
+  },
+  introductions_offered: { first_journal: true },
 };
 
 export const mockDraftWithArea: CharacterDraft = {

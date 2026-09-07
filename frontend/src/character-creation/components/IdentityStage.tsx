@@ -1,7 +1,7 @@
 /**
  * Stage 9: Identity (#3630).
  *
- * Name, concept, quote and personality as writing fields on the hairline;
+ * Name, concept, quote and background as writing fields on the hairline;
  * worship stays a native select (the catalog is long). The record rail lists
  * the choices made so far, including the full-name preview this stage
  * computes; the one mechanically-loaded explanation (a secret worship mints
@@ -26,7 +26,6 @@ interface IdentityFormValues {
   first_name: string;
   concept: string;
   quote: string;
-  personality: string;
   background: string;
 }
 
@@ -51,7 +50,6 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
       first_name: draftData.first_name ?? '',
       concept: draftData.concept ?? '',
       quote: draftData.quote ?? '',
-      personality: draftData.personality ?? '',
       background: draftData.background ?? '',
     },
   });
@@ -160,20 +158,6 @@ export function IdentityStage({ draft, onRegisterBeforeLeave }: IdentityStagePro
           {...register('quote')}
           placeholder="A signature quote or motto..."
           maxLength={500}
-        />
-      </Field>
-
-      <h2 className="section-h">{copy?.identity_personality_heading ?? 'Personality'}</h2>
-      <Field
-        id="personality"
-        label="Personality traits"
-        hint="How does your character think, feel, and behave?"
-      >
-        <textarea
-          id="personality"
-          rows={6}
-          {...register('personality')}
-          placeholder="Describe your character's personality..."
         />
       </Field>
 

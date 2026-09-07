@@ -34,7 +34,16 @@ vi.mock('../queries', () => ({
 
 import * as goalsQueries from '../queries';
 
-const goal = { id: 1, domain: 5, domain_name: 'Wealth', points: 10, notes: '', updated_at: '' };
+const goal = {
+  id: 1,
+  domain: 5,
+  domain_name: 'Wealth',
+  horizon: 'short_term' as const,
+  ordinal: 1,
+  points: 10,
+  notes: '',
+  updated_at: '',
+};
 
 function setupMocks(options?: {
   goals?: (typeof goal)[];
