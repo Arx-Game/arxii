@@ -210,3 +210,40 @@ class ReconcileTests(TestCase):
         entry = self._ids(draft)[legacy.id]
         assert entry == legacy_entry
         assert "offer_ids" not in entry
+
+    def test_legacy_entry_gains_a_bundled_source_for_the_same_distinction(self):
+        """A legacy pick (no offer_ids) merges with a live bundled offer, not duplicates.
+
+        Review round 2's ``_apply_bundled`` fix: when a legacy entry (see
+        ``test_legacy_entry_with_no_offer_ids_key_survives_unchanged``) shares a
+        distinction with an answer the draft now holds that bundles the same
+        distinction, ``_apply_bundled``'s ``setdefault`` must extend that entry in
+        place rather than crashing on a missing ``offer_ids`` key -- one row
+        survives, carrying the new bundled source.
+        """
+        legacy_entry = {
+            "distinction_id": self.poor.id,
+            "distinction_name": self.poor.name,
+            "distinction_slug": self.poor.slug,
+            "category_slug": self.poor.category.slug,
+            "rank": 1,
+            "cost": -25,
+            "notes": "",
+        }
+        draft = self._draft(
+            distinctions=[dict(legacy_entry)],
+            origin_choices={str(self.slot.id): self.ran.id},
+        )
+        draft.selected_origin_template = self.route
+        draft.save(update_fields=["selected_origin_template"])
+
+        reconcile_offer_picks(draft)
+
+        entries = draft.draft_data["distinctions"]
+        assert len(entries) == 1
+        entry = entries[0]
+        assert entry["distinction_id"] == self.poor.id
+        assert entry["offer_ids"] == [self.bundle.id]
+        assert entry["sources"] == ["Ran"]
+        assert entry["arrivals"] == [OfferArrival.BUNDLED]
+        assert entry["cost"] == 0

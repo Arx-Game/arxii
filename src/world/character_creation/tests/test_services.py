@@ -1706,26 +1706,51 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         )
         assert cd.from_glimpse_id == aura.pk
 
-    def test_finalize_ignores_unknown_offer_ids(self):
-        """A picked distinction whose offer_ids name no real Glimpse offer isn't linked."""
+    def test_finalize_drops_an_entry_whose_offers_no_longer_exist(self):
+        """An entry whose offer_ids name only vanished offers is dropped, not linked (#3675).
+
+        finalize_character now calls reconcile_offer_picks before any row is written
+        (review round 1/2): a pick whose last source no longer resolves to a real
+        offer is treated the same as a live-PATCH reconcile would treat it -- its
+        last source is gone, so the entry itself is dropped and no
+        CharacterDistinction is created for it. This must not crash finalize, and
+        every other pick on the same draft still lands (review round 3).
+        """
         from world.distinctions.factories import DistinctionFactory
         from world.distinctions.models import CharacterDistinction
         from world.distinctions.types import build_distinction_entry
         from world.magic.models import CharacterAura
 
-        distinction = DistinctionFactory(name="Unlinked Distinction", cost_per_rank=5, max_rank=1)
-        entry = build_distinction_entry(distinction, rank=1)
-        entry["offer_ids"] = [999999]
-        entry["sources"] = ["Stale Opener"]
-        entry["arrivals"] = ["choice"]
-        draft = self._create_draft(distinctions=[entry])
+        gone = DistinctionFactory(name="Vanished Offer Distinction", cost_per_rank=5, max_rank=1)
+        gone_entry = build_distinction_entry(gone, rank=1)
+        gone_entry["offer_ids"] = [999999]
+        gone_entry["sources"] = ["Stale Opener"]
+        gone_entry["arrivals"] = ["choice"]
+
+        # A legacy-shaped pick (no offer_ids key at all, review round 2 ruling A) --
+        # not what this test is about, but proves finalize keeps processing the rest
+        # of the draft's picks after dropping the one above.
+        kept = DistinctionFactory(name="Legacy Kept Distinction", cost_per_rank=5, max_rank=1)
+        kept_entry = {
+            "distinction_id": kept.id,
+            "distinction_name": kept.name,
+            "distinction_slug": kept.slug,
+            "category_slug": kept.category.slug,
+            "rank": 1,
+            "cost": 5,
+            "notes": "",
+        }
+
+        draft = self._create_draft(distinctions=[gone_entry, kept_entry])
         character = finalize_character(draft, add_to_roster=True)
 
         assert CharacterAura.objects.filter(character=character.sheet_data).exists()
-        cd = CharacterDistinction.objects.get(
-            character=character.sheet_data, distinction=distinction
-        )
-        assert cd.from_glimpse_id is None
+        assert not CharacterDistinction.objects.filter(
+            character=character.sheet_data, distinction=gone
+        ).exists()
+        assert CharacterDistinction.objects.filter(
+            character=character.sheet_data, distinction=kept
+        ).exists()
 
 
 class FinalizeGMCharacterTests(TestCase):
