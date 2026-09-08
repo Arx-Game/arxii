@@ -298,6 +298,60 @@ def _probe_mfa_secrets_key() -> ProbeResult:
     return ProbeResult(present=True)
 
 
+def _probe_path_gift_starter_pools() -> ProbeResult:
+    """Every (path, gift) a tradition makes pickable has path starter techniques.
+
+    Consumer: `world/magic/services/cg_catalog.py:28` `get_technique_options()`.
+    A gift becomes pickable at character creation if EITHER the path's
+    `PathGiftGrant.starter_techniques` or the tradition's
+    `TraditionGiftGrant.special_techniques` is non-empty. Ruled on #3682: there
+    will never be a gift a path offers nothing for, so an empty path pool is
+    missing authored content rather than a case to branch on. This reports it
+    instead of the code hiding it.
+
+    Deliberately NOT reported: a `TraditionGiftGrant` carrying no specials. That
+    is a legitimate authored state meaning "this tradition teaches this gift and
+    adds no unique extras of its own", the gift still reaches the player through
+    the path pool, and 39 of 69 authored rows are in it - folding them in would
+    bury the real gaps.
+    """
+    from world.classes.models import Path  # noqa: PLC0415
+    from world.magic.models import PathGiftGrant, TraditionGiftGrant  # noqa: PLC0415
+
+    # Gifts a tradition can put in front of a player, i.e. those whose grant
+    # actually carries specials. A tradition grant with an empty pool adds no
+    # availability of its own and cannot create this gap.
+    offered_gifts = set(
+        TraditionGiftGrant.objects.filter(special_techniques__isnull=False)
+        .values_list("gift_id", "gift__name")
+        .distinct()
+    )
+    if not offered_gifts:
+        return ProbeResult(present=True)
+
+    stocked = set(
+        PathGiftGrant.objects.filter(starter_techniques__isnull=False)
+        .values_list("path_id", "gift_id")
+        .distinct()
+    )
+    paths = list(Path.objects.values_list("id", "name"))
+
+    missing = tuple(
+        f"{path_name} / {gift_name}"
+        for path_id, path_name in paths
+        for gift_id, gift_name in sorted(offered_gifts, key=lambda row: row[1])
+        if (path_id, gift_id) not in stocked
+    )
+    if not missing:
+        return ProbeResult(present=True)
+    detail = (
+        f"{len(missing)} (path, gift) pair(s) are pickable through a tradition "
+        "with no path starter techniques: the gift appears in character creation "
+        "and delivers only that tradition's extras."
+    )
+    return ProbeResult(present=False, missing=missing, detail=detail)
+
+
 def _probe_audere_majora_thresholds() -> ProbeResult:
     """`AudereMajoraThreshold` rows exist for every tier-crossing boundary level.
 
@@ -1243,6 +1297,18 @@ def _declarations() -> tuple[ContentDependency, ...]:
             ),
         ),
         # --- CustomProbe: composite invariants a name/existence probe can't express ------
+        ContentDependency(
+            key="path-gift-starter-pools",
+            label="Path starter technique pools",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/magic/services/cg_catalog.py:28 get_technique_options()",
+            consequence=(
+                "The gift is offered at character creation on the strength of the "
+                "tradition alone, and a player who picks it receives only that "
+                "tradition's extras - the path contributes nothing it was meant to."
+            ),
+            probe=CustomProbe(fn=_probe_path_gift_starter_pools),
+        ),
         ContentDependency(
             key="audere-majora-thresholds",
             label="Audere Majora tier-crossing thresholds",
