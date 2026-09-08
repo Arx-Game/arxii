@@ -11,13 +11,17 @@ either one.
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from django.contrib import admin
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect, ConditionTemplate
+from world.magic.admin import wire_technique_cast_templates
+from world.magic.factories import TechniqueFactory
 from world.magic.models.techniques import (
     Technique,
     TechniqueAppliedCondition,
@@ -121,3 +125,24 @@ class TechniqueConditionDiagnosticTests(TestCase):
 
         self.assertIn("applies Unwired applied condition", text)
         self.assertIn("requires manual verification", text)
+
+
+class TechniqueCastTemplateActionTests(TestCase):
+    """The filtered admin action wires unfinished techniques in one operation."""
+
+    def test_action_wires_shared_template_and_invalidates_caches(self):
+        technique = TechniqueFactory(action_template=None)
+        request = RequestFactory().post("/admin/arxii/technique/")
+        modeladmin = admin.site._registry[Technique]
+
+        with (
+            patch("world.magic.admin.invalidate_technique_payload_caches") as invalidate,
+            patch.object(modeladmin, "message_user"),
+        ):
+            wire_technique_cast_templates(
+                modeladmin, request, Technique.objects.filter(pk=technique.pk)
+            )
+
+        technique.refresh_from_db()
+        self.assertEqual(technique.action_template.name, "Technique Cast")
+        invalidate.assert_called_once()

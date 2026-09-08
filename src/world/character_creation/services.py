@@ -2047,8 +2047,9 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
     Techniques from a species-granted gift are linked with
     ``AcquisitionOrigin.SPECIES_GRANT``.
     Outcome-flavor consequence-pool selection is dropped entirely (spec
-    correction on #2426): every catalog technique already carries its own
-    authored ``action_template``.
+    correction on #2426): catalog techniques must carry an authored
+    ``action_template`` before they are offered as CG picks. Staff can wire
+    unfinished rows in bulk through ``TechniqueAdmin``.
 
     No-op when the draft has no selected gift (legacy/test-only draft_data —
     ``compute_magic_errors`` requires ``selected_gift_id`` on any draft that

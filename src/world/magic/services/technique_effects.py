@@ -325,15 +325,9 @@ def technique_is_not_castable_standalone(technique: SummarizableTechnique) -> bo
 
     ``request_technique_cast`` rejects such a technique ("not castable
     standalone") and ``castable_technique_links_for_sheet`` filters it out of
-    both the web and telnet cast lists — but ``get_technique_options`` still
-    offers it as a valid CG pick and ``compute_magic_errors`` still accepts it,
-    so a player can spend a pick on something that never appears in their cast
-    interface. Every one of the 306 authored techniques was in this state when
-    this was written.
-
-    This reports the linkage's state; it does not judge it. Whether a technique
-    is *meant* to be castable — as opposed to carrying only standing capability
-    value — is an authoring decision, and no readiness policy is enforced here.
+    both the web and telnet cast lists. Character creation applies the same
+    readiness rule: every technique must be activatable, so a missing template
+    marks the technique unfinished rather than standing-only.
     """
     return not technique.action_template_id
 
