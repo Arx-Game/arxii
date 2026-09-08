@@ -22,11 +22,10 @@ export function ScenesChapter() {
         <span className="gatefold-chapter-no">Chapter the Third</span>
         <h2>Of the Testaments</h2>
         <div className="gatefold-leaf-body">
-          {/* PLACEHOLDER: Apostate rewrite */}
+          {/* Apostate's prose, verbatim (#3723). */}
           <p>
-            Stories here are played in written scenes, and scenes leave records. The public scenes
-            are open to any reader, before you ever make an account; the Great Archive keeps the
-            testaments of an age of heroes, and the public record keeps yours.
+            All public roleplay is viewable, with anyone able to browse records of journals, scenes
+            and events. Feel free to look through the latest roleplay.
           </p>
         </div>
         {data && (
@@ -56,9 +55,10 @@ export function ScenesChapter() {
         </p>
       </div>
       <aside>
+        {/* Apostate's prose, verbatim (#3723). */}
         <span className="gatefold-note">
-          <b>Public scenes</b> are open to any reader. Watch how the game is actually played before
-          you commit a word.
+          <b>Public scenes</b> are open to any read. You can see how people are engaging with the
+          world before you choose or design a character.
         </span>
       </aside>
     </div>
