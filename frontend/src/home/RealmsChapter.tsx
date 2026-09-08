@@ -1,5 +1,5 @@
 /**
- * RealmsChapter — "Chapter the First: Of Those Who Wake" (#3305).
+ * RealmsChapter — "Chapter the Second: Of Those Who Wake" (#3305; second since #3723).
  *
  * Replaces the reference mockup's five static Beginnings with live
  * StartingArea rows (one per realm), accented in that realm's own palette
@@ -96,13 +96,13 @@ export function RealmsChapter() {
   return (
     <div className="gatefold-leaf" id="beginnings">
       <div className="gatefold-leaf-main">
-        <span className="gatefold-chapter-no">Chapter the First</span>
+        <span className="gatefold-chapter-no">Chapter the Second</span>
         <h2>Of Those Who Wake</h2>
         <div className="gatefold-leaf-body">
-          {/* PLACEHOLDER: Apostate rewrite */}
+          {/* Apostate's prose, verbatim (#3723). */}
           <p>
-            Every character begins somewhere the world has already noticed. These are Beginnings:
-            written doors into the story, each with its questions left open for you to answer.
+            Each of the following starting cities has different Beginnings: Walks of life that have
+            shaped the character and their experiences.
           </p>
         </div>
         {renderStartingAreas()}
@@ -113,12 +113,10 @@ export function RealmsChapter() {
         </p>
       </div>
       <aside>
+        {/* Apostate's prose, verbatim (#3723); the Roster word links where it leads. */}
         <span className="gatefold-note">
-          <b>The Roster</b> keeps established characters as well: lives the world already knows,
-          with kin, debts, and rivals in place. <Link to="/roster">See who waits.</Link>
-        </span>
-        <span className="gatefold-note">
-          <b>Two ways in.</b> Begin a life of your own, or take up one the world already knows.
+          <b>Two ways to play:</b> Create your own character or take a pre-made character from our
+          available <Link to="/roster">Roster</Link>, each with their own stories and connections.
         </span>
       </aside>
     </div>
