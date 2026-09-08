@@ -34,6 +34,7 @@ from web.admin.content_session_views import (
     content_session_discard,
     content_session_pr,
 )
+from web.admin.distinction_builder.paste import distinction_paste
 from web.admin.distinction_builder.views import (
     distinction_builder,
     distinction_builder_pick,
@@ -220,6 +221,7 @@ urlpatterns = [
         name="admin_tradition_slate_review",
     ),
     path("_distinction_builder/new/", distinction_builder, name="admin_distinction_builder_new"),
+    path("_distinction_builder/paste/", distinction_paste, name="admin_distinction_paste"),
     path(
         "_distinction_builder/pick/",
         distinction_builder_pick,

@@ -113,14 +113,31 @@ interface ChapterOffersProps {
   wordBundled?: string;
   wordPerRank?: string;
   wordSpent?: string;
-  wordRefunds?: string;
+  wordAwards?: string;
+  /**
+   * The fold (#3709): with `firstLook` (default true) a block of `foldUnder`
+   * (default 5) or more offers shows the Beginning's pinned lines at rest, or
+   * the first three by the server's order when none is pinned, and the rest
+   * under one "See N more" line (`wordSeeMore`, with `{count}` filled in). A
+   * shorter block never folds. `wordHeld` prints on a line whose distinction
+   * the draft already holds from another offer.
+   */
+  firstLook?: boolean;
+  foldUnder?: number;
+  wordSeeMore?: string;
+  wordHeld?: string;
 }
 
 interface PriceWords {
   perRank: string;
   spent: string;
-  refunds: string;
+  awards: string;
 }
+
+/** Lines shown at rest when a folding block has no pinned line (#3709 fork a). */
+const FIRST_LOOK_FALLBACK = 3;
+/** A block shorter than this never folds (#3709 fork e). */
+const FOLD_UNDER = 5;
 
 /** The price line: per-rank (plus a spent/refund total once picked) for a
  * ranked offer, a refund, or the flat cost for an unranked one. */
@@ -137,11 +154,11 @@ function PriceLine({
     const spent = offer.cost_per_rank * rank;
     return (
       <>
-        <span>
+        <span className={offer.cost_per_rank < 0 ? 'award' : 'cost'}>
           {offer.cost_per_rank} {words.perRank}
         </span>
         {rank > 0 && (
-          <span className={spent < 0 ? 'refund' : undefined}>
+          <span className={spent < 0 ? 'award' : 'cost'}>
             {spent} {words.spent}
           </span>
         )}
@@ -150,12 +167,12 @@ function PriceLine({
   }
   if (offer.cost_per_rank < 0) {
     return (
-      <span className="refund">
-        {words.refunds} {-offer.cost_per_rank}
+      <span className="award">
+        {words.awards} {-offer.cost_per_rank}
       </span>
     );
   }
-  return <span>{offer.cost_per_rank}</span>;
+  return <span className="cost">{offer.cost_per_rank}</span>;
 }
 
 /** The price line for a `bundled` row: same shape as `PriceLine`, off a
@@ -170,19 +187,19 @@ function BundledPriceLine({
 }) {
   if (item.max_rank > 1) {
     return (
-      <span>
+      <span className={item.cost_per_rank < 0 ? 'award' : 'cost'}>
         {item.cost_per_rank} {words.perRank}
       </span>
     );
   }
   if (item.cost_per_rank < 0) {
     return (
-      <span className="refund">
-        {words.refunds} {-item.cost_per_rank}
+      <span className="award">
+        {words.awards} {-item.cost_per_rank}
       </span>
     );
   }
-  return <span>{item.cost_per_rank}</span>;
+  return <span className="cost">{item.cost_per_rank}</span>;
 }
 
 export function ChapterOffers({
@@ -202,7 +219,11 @@ export function ChapterOffers({
   wordBundled,
   wordPerRank,
   wordSpent,
-  wordRefunds,
+  wordAwards,
+  firstLook = true,
+  foldUnder = FOLD_UNDER,
+  wordSeeMore,
+  wordHeld,
 }: ChapterOffersProps) {
   const { data: offersData, isLoading } = useDraftOffers(draft.id, chapter);
   const { data: draftDistinctions } = useDraftDistinctions(draft.id);
@@ -210,7 +231,7 @@ export function ChapterOffers({
   const priceWords: PriceWords = {
     perRank: wordPerRank ?? 'per rank',
     spent: wordSpent ?? 'spent',
-    refunds: wordRefunds ?? 'Refunds',
+    awards: wordAwards ?? 'Awards',
   };
 
   const entryByOfferId = useMemo(() => {
@@ -246,6 +267,92 @@ export function ChapterOffers({
 
   if (offers.length === 0 && closed.length === 0 && bundled.length === 0) return null;
 
+  // The fold (#3709): the Beginning's pinned lines show at rest; when none is
+  // pinned the first three by the server's order stand in; everything else waits
+  // under one "See N more" line. A short block never folds.
+  let atRest = offers;
+  let folded: VisibleOffer[] = [];
+  if (firstLook && offers.length >= foldUnder) {
+    const pinned = offers.filter((o) => o.first_look);
+    atRest = pinned.length > 0 ? pinned : offers.slice(0, FIRST_LOOK_FALLBACK);
+    folded =
+      pinned.length > 0 ? offers.filter((o) => !o.first_look) : offers.slice(FIRST_LOOK_FALLBACK);
+  }
+  const seeMore = (wordSeeMore ?? 'See {count} more').replace('{count}', String(folded.length));
+
+  const renderOffer = (offer: VisibleOffer) => {
+    const entry = entryByOfferId.get(offer.offer_id);
+    const rank = entry?.rank ?? 0;
+    const selected = rank > 0;
+    const ranked = offer.max_rank > 1;
+    const busy = offer.is_locked || syncDistinctions.isPending;
+    const body = (
+      <>
+        <span className="dot sq" />
+        <span>
+          <b>
+            {offer.name}
+            {ranked && !offer.held && (
+              <RankControl
+                name={offer.name}
+                rank={rank}
+                max={offer.max_rank}
+                disabled={busy}
+                onChange={(next) => applyRank(offer, next)}
+              />
+            )}
+          </b>
+          <span className="g">
+            {offer.player_line}
+            {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
+          </span>
+          {offer.effect_line && <span className="fx">{offer.effect_line}</span>}
+          {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
+        </span>
+        <span className="price">
+          {offer.held && <span className="locked">{wordHeld ?? 'held'}</span>}
+          <PriceLine offer={offer} rank={rank} words={priceWords} />
+        </span>
+      </>
+    );
+    // Held elsewhere (#3709): the draft already has this distinction from
+    // another line, so this one reads held and offers no toggle.
+    if (offer.held) {
+      return (
+        <li key={offer.offer_id}>
+          <div className="stance" aria-pressed="true" aria-disabled="true">
+            {body}
+          </div>
+        </li>
+      );
+    }
+    return (
+      <li key={offer.offer_id}>
+        {ranked ? (
+          <div
+            className="stance"
+            role="group"
+            aria-label={offer.name}
+            aria-disabled={busy || undefined}
+          >
+            {body}
+          </div>
+        ) : (
+          <button
+            type="button"
+            className="stance"
+            aria-pressed={selected}
+            aria-disabled={busy || undefined}
+            disabled={busy}
+            onClick={() => applyRank(offer, selected ? 0 : 1)}
+          >
+            {body}
+          </button>
+        )}
+      </li>
+    );
+  };
+
   return (
     <div className={cn('field', className)}>
       {heading && (
@@ -274,65 +381,14 @@ export function ChapterOffers({
             </div>
           </li>
         ))}
-        {offers.map((offer) => {
-          const entry = entryByOfferId.get(offer.offer_id);
-          const rank = entry?.rank ?? 0;
-          const selected = rank > 0;
-          const ranked = offer.max_rank > 1;
-          const body = (
-            <>
-              <span className="dot sq" />
-              <span>
-                <b>
-                  {offer.name}
-                  {ranked && (
-                    <RankControl
-                      name={offer.name}
-                      rank={rank}
-                      max={offer.max_rank}
-                      disabled={offer.is_locked || syncDistinctions.isPending}
-                      onChange={(next) => applyRank(offer, next)}
-                    />
-                  )}
-                </b>
-                <span className="g">
-                  {offer.player_line}
-                  {showOpener && offer.opener_label && <i> From {offer.opener_label}.</i>}
-                </span>
-                {offer.is_locked && <span className="locked">{offer.lock_reason}</span>}
-              </span>
-              <span className="price">
-                <PriceLine offer={offer} rank={rank} words={priceWords} />
-              </span>
-            </>
-          );
-          return (
-            <li key={offer.offer_id}>
-              {ranked ? (
-                <div
-                  className="stance"
-                  role="group"
-                  aria-label={offer.name}
-                  aria-disabled={offer.is_locked || syncDistinctions.isPending || undefined}
-                >
-                  {body}
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  className="stance"
-                  aria-pressed={selected}
-                  aria-disabled={offer.is_locked || syncDistinctions.isPending || undefined}
-                  disabled={offer.is_locked || syncDistinctions.isPending}
-                  onClick={() => applyRank(offer, selected ? 0 : 1)}
-                >
-                  {body}
-                </button>
-              )}
-            </li>
-          );
-        })}
+        {atRest.map(renderOffer)}
       </ul>
+      {folded.length > 0 && (
+        <details className="more">
+          <summary>{seeMore}</summary>
+          <ul className="stances">{folded.map(renderOffer)}</ul>
+        </details>
+      )}
       {hint && <span className="hint">{hint}</span>}
       {syncDistinctions.isError && (
         <span className="hint">{syncErrorHint ?? 'That pick did not save. Try again.'}</span>

@@ -320,13 +320,57 @@ change form; any of the four may add one for the same distinction. _Avoid:_
 grant, unlock, requirement - an offer only says where a distinction is shown
 and priced, never that the player already holds it.
 
-**Opener** (#3675):
-The thing that has to be true of a draft before one of its offers shows up: a
-chosen Glimpse tag (`glimpse_tag`), a picked Upbringing answer (`origin_choice`),
-or a living tradition's schooling stance (`schooling_line`). Appearance and the
-Actor's Sheet offers have no opener at all - every active offer in those
-chapters is simply visible. `DistinctionOffer.opener_field` names which FK a
-chapter's offers use, if any; a row may set at most one.
+**Opener** (#3675, #3709):
+The thing an offer line hangs off, which both gates it and groups it on the leaf: a
+chosen Glimpse tag (`glimpse_tag`), a picked Upbringing answer (`origin_choice`), a
+living tradition's schooling stance (`schooling_line`), the question it answers on the
+Actor's Sheet (`prompt`, `ActorSheetPrompt`), the enemy's picked reason (`enemy_reason`)
+or marking degree (`enemy_degree`, ruined or destroy) on the enemy chapter, or the
+section it sits in on Appearance (`appearance_section`). Every chapter's offers have
+one; `DistinctionOffer.opener_fields` names the kinds a chapter accepts (the enemy
+chapter accepts two), a row sets exactly one, and `opener_key` is the stable string
+(`prompt:fear`, `reason:<id>`, `degree:ruined`, `section:<id>`) the leaf groups by.
+_Avoid_: trigger, gate, tag (the Glimpse's tag is one kind of opener, not the word for all)
+
+**Enemy reason** (#3709):
+One row of the shared, authored list of why a person or group wants the character to
+fail (`character_creation.EnemyReason`: `name`, `player_line`, `fits` person/group/
+either). Picked on the Actor's Sheet before the character's own words; pinned per
+Beginning enemy offer (`BeginningEnemyOffer.reason`); carried on `CharacterEnemy.reason`;
+the enemy chapter's opener. Never seeded, always authored.
+_Avoid_: motive, grudge, why (the free-text box is "in your own words", not the reason)
+
+**Appearance section** (#3709):
+An authored heading the Appearance chapter groups its offers under
+(`character_creation.AppearanceSection`: `name`, `player_line`, `sort_order`); the
+Appearance chapter's opener. Three or four rows for the whole game.
+_Avoid_: category (the catalogue's own `DistinctionCategory` is a different axis), group
+
+**First look** (#3709):
+The few offer lines a block shows at rest. A Beginning pins a line into its first look
+(`DistinctionOffer.first_look`, M2M through `OfferFirstLook`); a Beginning that pinned
+nothing sees the first three by `sort_order`. The rest fold under "See N more"
+(`ChapterOffers`); a block under five lines never folds.
+_Avoid_: featured, recommended, suggested (the game never speaks for the player)
+
+**Held** (#3709):
+An offer line whose distinction the draft already has from a different line
+(`VisibleOffer.held`); the leaf prints it pressed with the held word and no toggle,
+never offers it twice. Distinct from a locked line (mutual exclusion).
+_Avoid_: taken, owned, duplicate
+
+**Awards** (#3709):
+The price word for a negative cost, "Awards N": what the world owes the character for
+carrying the trait, printed green; a cost prints in the realm ink. Every offer line,
+tradition entry, Upbringing card and rail line uses it.
+_Avoid_: refunds, reimburses, rebate
+
+**Add from a table** (#3709):
+The Distinction Builder's additions-only bulk entry (`web/admin/distinction_builder/
+paste.py`): pasted rows resolved against existing rows, previewed (create / skip / error),
+created in one transaction behind a digest-guarded confirm. Never updates, deletes or
+creates a referenced row.
+_Avoid_: import, load, bulk edit (there is no edit mode)
 
 **Arrives as** (#3675):
 `DistinctionOffer.arrives_as` (`OfferArrival`): CHOICE (a priced pick a player

@@ -172,15 +172,18 @@ reason; a page extending `base_site.html` directly does not get it for free.
           </h2>
           <div class="description">A distinction with no offer line is never shown to a
             player in CG. Each line says which chapter shows it, what opens it there, and
-            how it arrives. The same lines appear on the chapter's own page (the slate, the
-            Glimpse tag, the Upbringing Builder), and either side can add one.</div>
+            how it arrives, and which Beginnings put it in the first look (the few shown at
+            rest; the rest fold under See more). The same lines appear on the chapter's own
+            page (the slate, the Glimpse tag, the Upbringing Builder), and either side can
+            add one. To land many distinctions at once, use
+            <a href="{% url 'admin_distinction_paste' %}">Add from a table</a>.</div>
           {{ offers.management_form }}
           {% if offers.non_form_errors %}
           <p class="errornote">{{ offers.non_form_errors }}</p>
           {% endif %}
           <table class="tuning-table db-table">
             <thead><tr><th>Chapter</th><th>Opened by</th><th>Arrives as</th>
-              <th>The player reads</th><th>Order</th><th>Remove</th></tr></thead>
+              <th>The player reads</th><th>First look for</th><th>Order</th><th>Remove</th></tr></thead>
             <tbody id="offers-body">
               {% for f in offer_rows %}
               <tr class="db-offer-row">
@@ -190,6 +193,10 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   <span class="db-opener" data-opener="schooling_line">{{ f.schooling_line }}</span>
                   <span class="db-opener" data-opener="glimpse_tag">{{ f.glimpse_tag }}</span>
                   <span class="db-opener" data-opener="origin_choice">{{ f.origin_choice }}</span>
+                  <span class="db-opener" data-opener="prompt">{{ f.prompt }}</span>
+                  <span class="db-opener" data-opener="enemy_reason">{{ f.enemy_reason }}</span>
+                  <span class="db-opener" data-opener="enemy_degree">{{ f.enemy_degree }}</span>
+                  <span class="db-opener" data-opener="appearance_section">{{ f.appearance_section }}</span>
                   {% with url=f.instance|opener_link:default_slate_url %}
                   {% if url %}<a class="db-opener-link" href="{{ url }}">open</a>{% endif %}
                   {% endwith %}
@@ -202,10 +209,11 @@ reason; a page extending `base_site.html` directly does not get it for free.
                     <div class="help">read from the schooling set; edit it there</div>
                   </span>
                 </td>
+                <td class="db-first-look">{{ f.first_look }}</td>
                 <td>{{ f.sort_order }}</td>
                 <td>{% if f.instance.pk %}{{ f.DELETE }}{% endif %}</td>
               </tr>
-              {% if f.errors %}<tr><td colspan="6">{{ f.errors }}</td></tr>{% endif %}
+              {% if f.errors %}<tr><td colspan="7">{{ f.errors }}</td></tr>{% endif %}
               {% endfor %}
             </tbody>
           </table>
@@ -220,6 +228,14 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   {{ offers.empty_form.glimpse_tag }}</span>
                 <span class="db-opener" data-opener="origin_choice">
                   {{ offers.empty_form.origin_choice }}</span>
+                <span class="db-opener" data-opener="prompt">
+                  {{ offers.empty_form.prompt }}</span>
+                <span class="db-opener" data-opener="enemy_reason">
+                  {{ offers.empty_form.enemy_reason }}</span>
+                <span class="db-opener" data-opener="enemy_degree">
+                  {{ offers.empty_form.enemy_degree }}</span>
+                <span class="db-opener" data-opener="appearance_section">
+                  {{ offers.empty_form.appearance_section }}</span>
               </td>
               <td>{{ offers.empty_form.arrives_as }}</td>
               <td>
@@ -229,6 +245,7 @@ reason; a page extending `base_site.html` directly does not get it for free.
                   <div class="help">read from the schooling set; edit it there</div>
                 </span>
               </td>
+              <td class="db-first-look">{{ offers.empty_form.first_look }}</td>
               <td>{{ offers.empty_form.sort_order }}</td>
               <td></td>
             </tr>
@@ -280,16 +297,16 @@ reason; a page extending `base_site.html` directly does not get it for free.
   function updateOpeners(row) {
     var chapterSelect = row.querySelector('[name$="-chapter"]');
     if (!chapterSelect) { return; }
-    var wanted = openerMap[chapterSelect.value];
+    var wanted = openerMap[chapterSelect.value] || [];
     var openers = row.querySelectorAll(".db-opener");
     for (var i = 0; i < openers.length; i++) {
-      openers[i].hidden = openers[i].dataset.opener !== wanted;
+      openers[i].hidden = wanted.indexOf(openers[i].dataset.opener) === -1;
     }
     // Derived, not typed, precisely for the chapter whose opener is the
     // schooling set (TRADITION_STEP) - tied to `wanted` rather than a
     // hardcoded chapter value, since that IS why this chapter's wording
     // is not authored on this page.
-    var isTraditionStep = wanted === "schooling_line";
+    var isTraditionStep = wanted.indexOf("schooling_line") !== -1;
     var editable = row.querySelector(".db-reads-editable");
     var derived = row.querySelector(".db-reads-derived");
     if (editable) { editable.hidden = isTraditionStep; }

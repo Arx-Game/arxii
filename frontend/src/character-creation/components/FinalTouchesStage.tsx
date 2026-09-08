@@ -61,23 +61,32 @@ const QUESTIONS: ReadonlyArray<{
   copy: string;
   prompt: string;
   example: string;
+  /** The offers block under the question (#3709): its copy key stem and fallback heading. */
+  block: string;
+  blockHeading: string;
 }> = [
   {
     key: 'never_do',
     copy: 'finaltouches_never_do',
     prompt: 'What would you never do?',
     example: 'Ex. Betray a secret. Break a vow. Make a pun.',
+    block: 'finaltouches_rules',
+    blockHeading: 'Rules',
   },
   {
     key: 'protect',
     copy: 'finaltouches_protect',
     prompt: 'What would you protect at all costs?',
     example: 'Ex. Family. Party members. My fortune. My stunning good looks.',
+    block: 'finaltouches_devotions',
+    blockHeading: 'Devotions',
   },
   {
     key: 'fear',
     copy: 'finaltouches_fear',
     prompt: 'What are you deathly afraid of?',
+    block: 'finaltouches_fears',
+    blockHeading: 'Fears',
     example:
       'Ex. Being trapped in an unending boring conversation. Drowning. Social ruin. Turtles.',
   },
@@ -360,6 +369,8 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       degree: enemy?.degree ?? '',
       why: enemy?.why ?? '',
       public_line: enemy?.public_line ?? '',
+      // A Beginning's offer arrives with its reason set (#3709); otherwise keep the pick.
+      reason_id: offer.reason_id ?? enemy?.reason_id ?? null,
     });
   const writeOwn = () =>
     setEnemy({
@@ -370,7 +381,12 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
       degree: enemy?.degree ?? '',
       why: enemy?.why ?? '',
       public_line: enemy?.public_line ?? '',
+      reason_id: enemy?.reason_id ?? null,
     });
+  // The shared reason list, filtered to the enemy's kind (#3709).
+  const reasons = (draft.enemy_reasons ?? []).filter(
+    (r) => r.fits === 'either' || r.fits === enemyKind
+  );
   const patchEnemy = (patch: Partial<DraftEnemy>) =>
     setEnemy((prev) => (prev ? { ...prev, ...patch } : prev));
   const enemyLine =
@@ -440,35 +456,42 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
         {announce}
       </span>
 
-      {QUESTIONS.map((q) => (
-        <Field
-          key={q.key}
-          id={`actor-${q.key}`}
-          label={copy?.[`${q.copy}_prompt`] ?? q.prompt}
-          hint={copy?.[`${q.copy}_example`] ?? q.example}
-        >
-          <textarea
+      {QUESTIONS.map((q, index) => (
+        <div key={q.key}>
+          <Field
             id={`actor-${q.key}`}
-            rows={2}
-            value={answers[q.key]}
-            onChange={(e) => setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))}
+            label={copy?.[`${q.copy}_prompt`] ?? q.prompt}
+            hint={copy?.[`${q.copy}_example`] ?? q.example}
+          >
+            <textarea
+              id={`actor-${q.key}`}
+              rows={2}
+              value={answers[q.key]}
+              onChange={(e) => setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))}
+            />
+          </Field>
+          {/* The distinctions that answer this question (#3709): one block per prompt,
+              its first look at rest, the closed hint printed once under the last. */}
+          <ChapterOffers
+            draft={draft}
+            chapter="actors_sheet"
+            filter={(o) => o.opener_key === `prompt:${q.key}`}
+            heading={copy?.[`${q.block}_heading`] ?? q.blockHeading}
+            headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
+            showOpener={false}
+            showClosed={index === QUESTIONS.length - 1}
+            closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
+            syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+            wordBundled={copy?.offers_word_bundled}
+            wordPerRank={copy?.offers_word_per_rank}
+            wordSpent={copy?.offers_word_spent}
+            wordAwards={copy?.offers_word_awards}
+            wordSeeMore={copy?.offers_word_see_more}
+            wordHeld={copy?.offers_word_held}
+            className="conditional"
           />
-        </Field>
+        </div>
       ))}
-
-      <ChapterOffers
-        draft={draft}
-        chapter="actors_sheet"
-        heading={copy?.finaltouches_offers_heading ?? 'Is it a hunger'}
-        headingTag={copy?.finaltouches_offers_chip ?? 'optional'}
-        closedLead={copy?.finaltouches_closed_lead ?? 'Closed by your route'}
-        syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
-        wordBundled={copy?.offers_word_bundled}
-        wordPerRank={copy?.offers_word_per_rank}
-        wordSpent={copy?.offers_word_spent}
-        wordRefunds={copy?.offers_word_refunds}
-        className="conditional"
-      />
 
       <h2 className="section-h">{copy?.finaltouches_goals_heading ?? 'Goals'}</h2>
       <InstrumentFrame
@@ -617,7 +640,46 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
               onChange={(value) => patchEnemy({ power_tier: value ?? '' })}
             />
           )}
-          <Field id="enemy-why" label={copy?.finaltouches_enemy_why_prompt ?? 'Why'}>
+          {reasons.length > 0 && (
+            <div className="field">
+              <label id="enemy-reason-label">
+                {copy?.finaltouches_enemy_reason_prompt ?? 'Why they want it'}
+                <span className="tags">
+                  <span className="tag soft">
+                    {copy?.finaltouches_enemy_reason_chip ?? 'pick one, or none'}
+                  </span>
+                </span>
+              </label>
+              <ChoiceRow<number>
+                label="Why they want it"
+                labelledBy="enemy-reason-label"
+                options={reasons.map((r) => ({ value: r.id, label: r.name, title: r.player_line }))}
+                value={enemy.reason_id}
+                onChange={(value) => patchEnemy({ reason_id: value })}
+                clearable
+              />
+            </div>
+          )}
+          {enemy.reason_id !== null && (
+            <ChapterOffers
+              draft={draft}
+              chapter="enemy"
+              filter={(o) => o.opener_key === `reason:${enemy.reason_id}`}
+              heading={copy?.finaltouches_enemy_reason_offers_heading ?? 'What it left you with'}
+              headingTag={copy?.finaltouches_enemy_reason_offers_chip ?? 'offered by your reason'}
+              showOpener={false}
+              showClosed={false}
+              syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+              wordBundled={copy?.offers_word_bundled}
+              wordPerRank={copy?.offers_word_per_rank}
+              wordSpent={copy?.offers_word_spent}
+              wordAwards={copy?.offers_word_awards}
+              wordSeeMore={copy?.offers_word_see_more}
+              wordHeld={copy?.offers_word_held}
+              className="conditional"
+            />
+          )}
+          <Field id="enemy-why" label={copy?.finaltouches_enemy_why_prompt ?? 'In your own words'}>
             <textarea
               id="enemy-why"
               rows={3}
@@ -636,7 +698,7 @@ export function FinalTouchesStage({ draft, onRegisterBeforeLeave }: FinalTouches
                 const grant = draft.enemy_degree_grants?.[d.value];
                 return {
                   value: d.value,
-                  label: `${d.label} · ${awardLabel(priceAt(d.value))}${grant ? ` · grants ${grant}` : ''}`,
+                  label: `${d.label} · ${awardLabel(priceAt(d.value))}${grant ? ` · bundles ${grant}` : ''}`,
                   title: d.gloss,
                 };
               })}

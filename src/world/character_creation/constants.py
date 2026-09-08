@@ -114,6 +114,32 @@ class OfferChapter(models.TextChoices):
     LINEAGE = "lineage", "Lineage"
     APPEARANCE = "appearance", "Appearance"
     ACTORS_SHEET = "actors_sheet", "The actor's sheet"
+    ENEMY = "enemy", "Who wants you to fail"
+
+
+class ActorSheetPrompt(models.TextChoices):
+    """The question an actor's-sheet offer hangs off (#3709).
+
+    The opener for ``OfferChapter.ACTORS_SHEET``: staff pick it per offer line on the
+    Distinction Builder; ``offers.offers_for`` groups the chapter's lines by it so the
+    leaf mounts one block under each question. Values are ``ACTOR_SHEET_QUESTIONS``'
+    draft_data keys, so the two never drift.
+    """
+
+    NEVER_DO = "never_do", "What would you never do?"
+    PROTECT = "protect", "What would you protect at all costs?"
+    FEAR = "fear", "What are you deathly afraid of?"
+
+
+class EnemyReasonFits(models.TextChoices):
+    """Which enemy kinds an ``EnemyReason`` is offered for (#3709).
+
+    Staff set it per reason; the leaf filters the shared list by the draft's pick.
+    """
+
+    PERSON = "person", "A person"
+    GROUP = "group", "A group"
+    EITHER = "either", "Either"
 
 
 class OfferArrival(models.TextChoices):
@@ -262,12 +288,9 @@ ENEMY_PRICE_PERSON: dict[str, dict[str, int]] = {
 ENEMY_PRICE_PENDING = 1
 
 # The worst two degrees mark the character with a Distinction, the way a Lineage answer
-# can (#3660). Resolved by name at finalize; PLACEHOLDER names, authored rows. A missing
-# row is logged and skipped, never invented.
-ENEMY_DEGREE_DISTINCTION_NAMES: dict[str, str] = {
-    "ruined": "Marked",
-    "destroy": "Hunted",
-}
+# can (#3660): authored as ``DistinctionOffer`` lines on ``OfferChapter.ENEMY`` opened by
+# ``enemy_degree`` (#3709), never named in code. Only these degrees may open one.
+ENEMY_MARKING_DEGREES: tuple[str, ...] = ("ruined", "destroy")
 # What the group thinks of the character at finalize, by degree (OrganizationReputation
 # delta through bump_organization_reputation, the same seam as a Lineage answer's seed).
 ENEMY_REPUTATION_SEED: dict[str, int] = {

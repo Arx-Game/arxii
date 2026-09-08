@@ -42,16 +42,16 @@ def sorted_offer_forms(offers_formset: BaseInlineFormSet) -> list:
     return sorted(offers_formset.forms, key=lambda form: offer_sort_key(form.instance))
 
 
-def opener_field_map() -> dict[str, str | None]:
-    """Chapter value -> the opener field its offers use; ``None`` for no opener.
+def opener_field_map() -> dict[str, list[str]]:
+    """Chapter value -> the opener fields its offers may use (exactly one is set).
 
-    Built off ``DistinctionOffer.opener_field`` (the model's own public lookup)
-    rather than reaching for its private ``_OPENER_FOR_CHAPTER`` table, so the
+    Built off ``DistinctionOffer.opener_fields`` (the model's own public lookup)
+    rather than reaching for its private ``_OPENERS_FOR_CHAPTER`` table, so the
     page's chapter-cascade JS always matches whatever the model's ``clean()``
-    actually enforces.
+    actually enforces. The enemy chapter lists two (a reason or a degree, #3709).
     """
     return {
-        chapter.value: DistinctionOffer(chapter=chapter.value).opener_field
+        chapter.value: list(DistinctionOffer(chapter=chapter.value).opener_fields)
         for chapter in OfferChapter
     }
 
@@ -95,6 +95,20 @@ def _effect_target_check(distinction: Distinction) -> tuple[str, str]:
     return ("ok", "Every effect names a modifier target that exists.")
 
 
+def _opener_checks(distinction: Distinction) -> list[tuple[str, str]]:
+    """An offer line whose chapter wants an opener and has none is never shown (#3709)."""
+    offers = DistinctionOffer.objects.filter(distinction=distinction, is_active=True)
+    return [
+        (
+            "warn",
+            f"The {offer.get_chapter_display()} offer is not opened by anything; "
+            "a player never sees it until it is.",
+        )
+        for offer in offers
+        if not offer.set_openers
+    ]
+
+
 def _placeholder_check(distinction: Distinction) -> tuple[str, str]:
     if distinction.description.startswith(PLACEHOLDER_PREFIX):
         return ("warn", f"Description is a placeholder (starts with {PLACEHOLDER_PREFIX}).")
@@ -134,6 +148,7 @@ def checks(distinction: Distinction) -> list[tuple[str, str]]:
     ]
     result.extend(_lineage_offer_checks(distinction))
     result.extend(_schooling_offer_checks(distinction))
+    result.extend(_opener_checks(distinction))
     return result
 
 
@@ -184,4 +199,16 @@ def opener_link(offer: DistinctionOffer, *, default_slate_url: str) -> str:
         return f"{url}#question-{offer.origin_choice.slot_id}" if url else ""
     if offer.schooling_line_id:
         return default_slate_url
+    if offer.enemy_reason_id:
+        try:
+            return reverse("admin:arxii_enemyreason_change", args=[offer.enemy_reason_id])
+        except NoReverseMatch:
+            return ""
+    if offer.appearance_section_id:
+        try:
+            return reverse(
+                "admin:arxii_appearancesection_change", args=[offer.appearance_section_id]
+            )
+        except NoReverseMatch:
+            return ""
     return ""

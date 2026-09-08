@@ -1511,6 +1511,14 @@ class CharacterEnemy(RelatedCacheClearingMixin, SharedMemoryModel):
         related_name="enemy_rows",
         help_text="The private why, when the player made it a Secret.",
     )
+    reason = models.ForeignKey(
+        "arxii.EnemyReason",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="character_enemies",
+        help_text="Why they want it, from the authored list (#3709); ``why`` is the own words.",
+    )
     status = models.CharField(max_length=8, choices=EnemyStatus.choices, default=EnemyStatus.PLACED)
     created_at = models.DateTimeField(auto_now_add=True)
 

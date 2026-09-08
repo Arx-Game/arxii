@@ -44043,6 +44043,11 @@ components:
           additionalProperties:
             type: string
           readOnly: true
+        enemy_reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnemyReason'
+          readOnly: true
         introductions_offered:
           allOf:
           - $ref: '#/components/schemas/IntroductionsOffered'
@@ -44060,6 +44065,7 @@ components:
       - enemy_degree_grants
       - enemy_offers
       - enemy_price_tables
+      - enemy_reasons
       - family
       - has_existing_characters
       - height_band
@@ -49765,14 +49771,41 @@ components:
         source:
           type: string
           readOnly: true
+        reason_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - kind
       - name
       - organization_id
       - power_tier
       - reach
+      - reason_id
       - source
       - why
+    EnemyReason:
+      type: object
+      description: One authored reason an enemy wants the character to fail (#3709).
+        Read-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        player_line:
+          type: string
+          readOnly: true
+        fits:
+          type: string
+          readOnly: true
+      required:
+      - fits
+      - id
+      - name
+      - player_line
     EngagementLock:
       type: object
       description: |-
@@ -82875,16 +82908,28 @@ components:
           type: boolean
         lock_reason:
           type: string
+        opener_key:
+          type: string
+        first_look:
+          type: boolean
+        held:
+          type: boolean
+        effect_line:
+          type: string
       required:
       - arrives_as
       - chapter
       - cost_per_rank
       - distinction_id
+      - effect_line
+      - first_look
+      - held
       - is_locked
       - lock_reason
       - max_rank
       - name
       - offer_id
+      - opener_key
       - opener_label
       - player_line
     VitalsFatigue:

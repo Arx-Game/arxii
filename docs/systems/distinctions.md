@@ -2,8 +2,11 @@
 
 Character advantages and disadvantages that mechanically modify stats, rolls, and abilities.
 No CG stage of its own -- since #3675 each CG chapter (the Gift tradition step, the
-Glimpse, Lineage answers, Appearance, the Actor's Sheet) offers the distinctions that
-belong to it; see "CG Integration" below and `docs/systems/character_creation.md`.
+Glimpse, Lineage answers, Appearance, the Actor's Sheet, and since #3709 the enemy)
+offers the distinctions that belong to it, each line hanging off the thing the player is
+answering (a tag, an answer, a schooling line, a question, an enemy reason or degree, an
+Appearance section) with a first look pinned per Beginning; see "CG Integration" below,
+`docs/systems/character_creation.md` and ADR-0282.
 
 **Source:** `src/world/distinctions/`
 **API Base:** `/api/distinctions/`

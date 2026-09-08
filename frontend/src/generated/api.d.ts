@@ -26367,6 +26367,7 @@ export interface components {
       readonly enemy_degree_grants: {
         [key: string]: string;
       };
+      readonly enemy_reasons: components['schemas']['EnemyReason'][];
       readonly introductions_offered: components['schemas']['IntroductionsOffered'];
     };
     /** @description Serializer for creating a new draft. */
@@ -28969,6 +28970,14 @@ export interface components {
       readonly power_tier: string;
       readonly why: string;
       readonly source: string;
+      readonly reason_id: number | null;
+    };
+    /** @description One authored reason an enemy wants the character to fail (#3709). Read-only. */
+    EnemyReason: {
+      readonly id: number;
+      readonly name: string;
+      readonly player_line: string;
+      readonly fits: string;
     };
     /**
      * @description Schema-only shape of get_engagement_locks rows on EncounterDetailSerializer (#3386).
@@ -46508,6 +46517,10 @@ export interface components {
       max_rank: number;
       is_locked: boolean;
       lock_reason: string;
+      opener_key: string;
+      first_look: boolean;
+      held: boolean;
+      effect_line: string;
     };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {

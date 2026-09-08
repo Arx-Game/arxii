@@ -172,6 +172,56 @@ class BuilderSaveTest(BuilderTestCase):
         assert offer.player_line == "Drilled by the arms-master"
         assert offer.written_by == self.writer
 
+    def test_offer_row_renders_every_opener_widget_and_the_first_look_column(self):
+        """#3709: the prompt, reason, degree and section openers, and the pins column."""
+        self.client.force_login(self.author)
+        body = self.client.get(
+            reverse("admin_distinction_builder", args=[self.distinction.pk])
+        ).content.decode()
+        for opener in ("prompt", "enemy_reason", "enemy_degree", "appearance_section"):
+            assert f'data-opener="{opener}"' in body, opener
+        assert "First look for" in body
+        assert 'name="offers-__prefix__-first_look"' in body
+        opener_map = re.search(r'id="opener-field-map"[^>]*>(.*?)</script>', body, re.DOTALL).group(
+            1
+        )
+        assert '"enemy": ["enemy_reason", "enemy_degree"]' in opener_map
+        assert '"actors_sheet": ["prompt"]' in opener_map
+
+    def test_save_writes_an_actors_sheet_offer_with_its_prompt_and_first_look_pins(self):
+        from world.character_creation.factories import BeginningsFactory
+
+        household = BeginningsFactory(name="Born to a Household")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "offers-0-chapter": OfferChapter.ACTORS_SHEET,
+                "offers-0-origin_choice": "",
+                "offers-0-prompt": "fear",
+                "offers-0-first_look": [str(household.pk)],
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302
+        offer = DistinctionOffer.objects.get(
+            distinction=self.distinction, chapter=OfferChapter.ACTORS_SHEET
+        )
+        assert offer.prompt == "fear"
+        assert list(offer.first_look.all()) == [household]
+
+    def test_save_rejects_an_actors_sheet_offer_with_no_prompt(self):
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{"offers-0-chapter": OfferChapter.ACTORS_SHEET, "offers-0-origin_choice": ""}
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 200
+        assert "need an opener" in resp.content.decode()
+
     def test_unlinked_contributor_cannot_save(self):
         self.client.force_login(self.unlinked)
         resp = self.client.post(
@@ -383,6 +433,18 @@ class BuilderLiveTest(BuilderTestCase):
         result = live.checks(self.distinction)
         assert any(kind == "warn" and "PLACEHOLDER" in text for kind, text in result)
 
+    def test_checks_warn_when_an_offer_has_no_opener(self):
+        from web.admin.distinction_builder import live
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.ACTORS_SHEET,
+            prompt="",
+        )
+        result = live.checks(self.distinction)
+        assert any(kind == "warn" and "not opened by anything" in text for kind, text in result)
+
     def test_checks_ok_once_offered(self):
         from web.admin.distinction_builder import live
         from world.character_creation.factories import DistinctionOfferFactory
@@ -454,6 +516,45 @@ class BuilderObjectToolTest(BuilderTestCase):
         assert reverse("admin_distinction_builder", args=[self.distinction.pk]) in body
 
 
+def stylesheet_hrefs(body: str) -> list[str]:
+    """Every stylesheet a rendered page links, in order."""
+    hrefs = []
+    for tag in re.findall(r"<link[^>]*>", body):
+        if 'rel="stylesheet"' not in tag:
+            continue
+        match = re.search(r'href="([^"]+)"', tag)
+        if match is not None:
+            hrefs.append(match.group(1))
+    return hrefs
+
+
+def reachable_css(body: str) -> str:
+    """The CSS that actually reaches a rendered page: its inline styles plus every
+    linked stylesheet resolved off disk (#3667). Shared with the paste page's guard
+    (``test_distinction_paste``), which renders a different page under the same rule."""
+    css = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", body, flags=re.DOTALL))
+    missing: list[str] = []
+    for href in stylesheet_hrefs(body):
+        if not href.startswith(settings.STATIC_URL):
+            continue
+        found = finders.find(href[len(settings.STATIC_URL) :])
+        if found is None:
+            missing.append(href)
+            continue
+        css += "\n" + Path(found).read_text()
+    assert not missing, f"the page links stylesheets that do not resolve: {missing}"
+    return css
+
+
+def emitted_classes(template_path: Path) -> set[str]:
+    """Every class token a template emits, template tags stripped."""
+    markup = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", "", template_path.read_text(), flags=re.DOTALL)
+    emitted: set[str] = set()
+    for attr in re.findall(r'class="([^"]*)"', markup):
+        emitted.update(token for token in attr.split() if token)
+    return emitted
+
+
 class DistinctionBuilderStylingTest(BuilderTestCase):
     """Every rule the page's layout needs must REACH the page (#3667, mirrored for #3675).
 
@@ -493,31 +594,13 @@ class DistinctionBuilderStylingTest(BuilderTestCase):
         return resp.content.decode()
 
     def _stylesheet_hrefs(self, body: str) -> list[str]:
-        hrefs = []
-        for tag in re.findall(r"<link[^>]*>", body):
-            if 'rel="stylesheet"' not in tag:
-                continue
-            match = re.search(r'href="([^"]+)"', tag)
-            if match is not None:
-                hrefs.append(match.group(1))
-        return hrefs
+        return stylesheet_hrefs(body)
 
     def _script_srcs(self, body: str) -> list[str]:
         return re.findall(r'<script[^>]*\bsrc="([^"]+)"', body)
 
     def _reachable_css(self, body: str) -> str:
-        css = "\n".join(re.findall(r"<style[^>]*>(.*?)</style>", body, flags=re.DOTALL))
-        missing: list[str] = []
-        for href in self._stylesheet_hrefs(body):
-            if not href.startswith(settings.STATIC_URL):
-                continue
-            found = finders.find(href[len(settings.STATIC_URL) :])
-            if found is None:
-                missing.append(href)
-                continue
-            css += "\n" + Path(found).read_text()
-        assert not missing, f"the page links stylesheets that do not resolve: {missing}"
-        return css
+        return reachable_css(body)
 
     def test_the_page_links_the_stylesheets_its_layout_needs(self):
         linked = self._stylesheet_hrefs(self._body())
@@ -560,10 +643,12 @@ class DistinctionBuilderStylingTest(BuilderTestCase):
     def test_every_class_the_page_emits_has_a_rule_that_reaches_the_page(self):
         template_dir = Path(__file__).resolve().parents[2] / "templates/admin/distinction_builder"
         emitted: set[str] = set()
+        # paste.html is its own page with its own reachable CSS; test_distinction_paste
+        # guards it against the CSS that reaches THAT page, never this one (#3709).
         for path in sorted(template_dir.glob("*.html")):
-            markup = re.sub(r"\{\{.*?\}\}|\{%.*?%\}", "", path.read_text(), flags=re.DOTALL)
-            for attr in re.findall(r'class="([^"]*)"', markup):
-                emitted.update(token for token in attr.split() if token)
+            if path.name == "paste.html":
+                continue
+            emitted |= emitted_classes(path)
 
         css = self._reachable_css(self._body())
         undefined = sorted(

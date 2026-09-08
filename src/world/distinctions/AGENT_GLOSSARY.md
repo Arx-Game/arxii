@@ -25,4 +25,5 @@ Not a `distinctions` app concept: CG-time distinction picks are gated by a
 `character_creation.DistinctionOffer` row, never added directly. See "Offer" in
 `src/world/roster/AGENT_GLOSSARY.md`, which holds the Character Creation
 domain's own vocabulary (offer, opener, arrives as, chapter, tradition state,
-standard lines, schooling line, closed by route).
+standard lines, schooling line, closed by route, and since #3709 enemy reason,
+Appearance section, first look, held, awards, add from a table).

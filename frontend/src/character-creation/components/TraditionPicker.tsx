@@ -31,7 +31,7 @@ interface TraditionPickerProps {
  */
 function bite(refund: number): string {
   if (refund === 0) return '';
-  return refund < 0 ? ` · Refunds ${-refund}` : ` · ${refund}`;
+  return refund < 0 ? ` · Awards ${-refund}` : ` · ${refund}`;
 }
 
 function tagFor(tradition: Tradition): string {

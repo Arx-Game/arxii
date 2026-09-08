@@ -32,16 +32,19 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MIN,
     CG_MODIFIER_CATEGORY,
+    ENEMY_MARKING_DEGREES,
     REPUTATION_SEED_MAX,
     REPUTATION_SEED_MIN,
     REQUIRED_STATS,
     STARTING_TECHNIQUE_PICKS_TARGET,
     STAT_DEFAULT_VALUE,
     STAT_DISPLAY_DIVISOR,
+    ActorSheetPrompt,
     AnchorSource,
     ApplicationStatus,
     CommentType,
     ConnectionKind,
+    EnemyReasonFits,
     FamilyPath,
     LifeStage,
     OfferArrival,
@@ -55,7 +58,7 @@ from world.character_creation.types import (
     CGPointBreakdownEntry,
     StageValidationErrors,
 )
-from world.character_sheets.types import EnemyPowerTier
+from world.character_sheets.types import EnemyDegree, EnemyPowerTier
 from world.classes.models import PathStage
 from world.contributors.models import CreditedContent
 from world.forms.constants import MarkingKind
@@ -522,6 +525,73 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return Language.objects.filter(id__in=language_ids)
 
 
+class EnemyReason(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Why a person or group wants the character to fail, as staff wrote it (#3709).
+
+    One shared list for every enemy, filtered by ``fits``; a Beginning's enemy offer may
+    pin one (``BeginningEnemyOffer.reason``) and the finished character carries the one
+    picked (``CharacterEnemy.reason``). A reason is the enemy chapter's opener: a
+    ``DistinctionOffer`` on ``OfferChapter.ENEMY`` with ``enemy_reason`` set is shown
+    only when the draft picked that reason (``offers._opener_satisfied``). Never seeded;
+    every row is authored on the admin change list.
+    """
+
+    name = models.CharField(max_length=120, unique=True, help_text="The reason, as a line.")
+    player_line = models.CharField(
+        max_length=200, blank=True, help_text="The gloss under the reason on the leaf."
+    )
+    fits = models.CharField(
+        max_length=8, choices=EnemyReasonFits.choices, default=EnemyReasonFits.EITHER
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "Enemy reason"
+        verbose_name_plural = "Enemy reasons"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+    def fits_kind(self, kind: str) -> bool:
+        """Whether this reason is offered for an enemy of ``kind`` (person or group)."""
+        return self.fits in {EnemyReasonFits.EITHER, kind}
+
+
+class AppearanceSection(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A heading the Appearance chapter groups its offers under (#3709).
+
+    The opener for ``OfferChapter.APPEARANCE``: an offer line names the section it sits
+    in, and the leaf renders one block per section in ``sort_order``. Three or four rows
+    for the whole game (Frame; Face and voice; What the Gift left), authored in admin.
+    """
+
+    name = models.CharField(max_length=80, unique=True)
+    player_line = models.CharField(
+        max_length=200, blank=True, help_text="A line under the section heading, if any."
+    )
+    sort_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class Meta:
+        ordering = ["sort_order", "id"]
+        verbose_name = "Appearance section"
+        verbose_name_plural = "Appearance sections"
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
+    def __str__(self) -> str:
+        return self.name
+
+
 class BeginningEnemyOffer(SharedMemoryModel):
     """An enemy a Beginning itself puts in the character's way (#3621).
 
@@ -569,6 +639,14 @@ class BeginningEnemyOffer(SharedMemoryModel):
     why = models.CharField(
         max_length=255,
         help_text="Why they want the character to fail, as offered (a gloss on the list).",
+    )
+    reason = models.ForeignKey(
+        EnemyReason,
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="beginning_enemy_offers",
+        help_text="The reason this offer arrives with already set (#3709); blank leaves the pick.",
     )
     sort_order = models.PositiveSmallIntegerField(default=0)
 
@@ -2207,6 +2285,20 @@ class SchoolingLine(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return self.grants.cost_per_rank * self.rank if self.grants_id else 0
 
 
+def _at_most_one_of(unset_values: dict[str, object]) -> models.Q:
+    """A ``Q`` true when at most one of ``unset_values``' fields is set.
+
+    Each key is a field and its value what "unset" looks like (``None`` for an FK,
+    ``""`` for a choice). Every pair of fields must have at least one side unset.
+    """
+    fields = list(unset_values)
+    q = models.Q()
+    for i, a in enumerate(fields):
+        for b in fields[i + 1 :]:
+            q &= models.Q(**{a: unset_values[a]}) | models.Q(**{b: unset_values[b]})
+    return q
+
+
 class DistinctionOffer(
     RelatedCacheClearingMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel
 ):
@@ -2227,6 +2319,8 @@ class DistinctionOffer(
         "glimpse_tag",
         "origin_choice",
         "schooling_line",
+        "enemy_reason",
+        "appearance_section",
     ]
 
     distinction = models.ForeignKey(
@@ -2266,8 +2360,59 @@ class DistinctionOffer(
         related_name="distinction_offers",
         help_text="Tradition step only: the schooling line that opens this offer.",
     )
+    prompt = models.CharField(
+        max_length=10,
+        choices=ActorSheetPrompt.choices,
+        blank=True,
+        help_text="The actor's sheet only: the question this offer sits under (#3709).",
+    )
+    enemy_reason = models.ForeignKey(
+        EnemyReason,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Who wants you to fail only: the reason that opens this offer (#3709).",
+    )
+    enemy_degree = models.CharField(
+        max_length=10,
+        choices=EnemyDegree.choices,
+        blank=True,
+        help_text=(
+            "Who wants you to fail only: the degree (ruined or destroy) that opens this "
+            "offer; the mark a degree bundles (#3709)."
+        ),
+    )
+    appearance_section = models.ForeignKey(
+        AppearanceSection,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="distinction_offers",
+        help_text="Appearance only: the section this offer sits in (#3709).",
+    )
+    #: The Beginnings that pin this line into the few shown at rest (#3709); every
+    #: other line in the block folds under "See N more". Read by ``offers.offers_for``.
+    first_look = models.ManyToManyField(
+        Beginnings,
+        through="OfferFirstLook",
+        blank=True,
+        related_name="first_look_offers",
+    )
 
     objects = NaturalKeyManager()
+
+    #: Every opener field, and the chapter each belongs to. An FK opener is set when
+    #: its id is; a choice opener when its value is non-blank.
+    OPENER_FIELDS: ClassVar[tuple[str, ...]] = (
+        "schooling_line",
+        "glimpse_tag",
+        "origin_choice",
+        "prompt",
+        "enemy_reason",
+        "enemy_degree",
+        "appearance_section",
+    )
 
     class Meta:
         verbose_name = "Distinction offer"
@@ -2275,25 +2420,43 @@ class DistinctionOffer(
         ordering = ["chapter", "sort_order", "id"]
         constraints = [
             models.CheckConstraint(
-                condition=(
-                    models.Q(glimpse_tag__isnull=True, origin_choice__isnull=True)
-                    | models.Q(glimpse_tag__isnull=True, schooling_line__isnull=True)
-                    | models.Q(origin_choice__isnull=True, schooling_line__isnull=True)
+                # At most one opener set: every pair has at least one side unset.
+                condition=_at_most_one_of(
+                    {
+                        "glimpse_tag": None,
+                        "origin_choice": None,
+                        "schooling_line": None,
+                        "enemy_reason": None,
+                        "appearance_section": None,
+                        "prompt": "",
+                        "enemy_degree": "",
+                    }
                 ),
                 name="distinctionoffer_at_most_one_opener",
             )
         ]
 
     class NaturalKeyConfig:
-        fields = ["distinction", "chapter", "glimpse_tag", "origin_choice", "schooling_line"]
+        fields = [
+            "distinction",
+            "chapter",
+            "glimpse_tag",
+            "origin_choice",
+            "schooling_line",
+            "prompt",
+            "enemy_reason",
+            "enemy_degree",
+            "appearance_section",
+        ]
         dependencies = ["arxii.Distinction"]
 
-    _OPENER_FOR_CHAPTER = {
-        OfferChapter.TRADITION_STEP: "schooling_line",
-        OfferChapter.GLIMPSE: "glimpse_tag",
-        OfferChapter.LINEAGE: "origin_choice",
-        OfferChapter.APPEARANCE: None,
-        OfferChapter.ACTORS_SHEET: None,
+    _OPENERS_FOR_CHAPTER: ClassVar[dict[OfferChapter, tuple[str, ...]]] = {
+        OfferChapter.TRADITION_STEP: ("schooling_line",),
+        OfferChapter.GLIMPSE: ("glimpse_tag",),
+        OfferChapter.LINEAGE: ("origin_choice",),
+        OfferChapter.APPEARANCE: ("appearance_section",),
+        OfferChapter.ACTORS_SHEET: ("prompt",),
+        OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
     }
 
     def __str__(self) -> str:
@@ -2305,21 +2468,72 @@ class DistinctionOffer(
         super().save(*args, **kwargs)
 
     @property
-    def opener_field(self) -> str | None:
-        return self._OPENER_FOR_CHAPTER[OfferChapter(self.chapter)]
+    def opener_fields(self) -> tuple[str, ...]:
+        """The opener fields this offer's chapter accepts (exactly one must be set)."""
+        return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
+
+    def _opener_is_set(self, field: str) -> bool:
+        if field in ("prompt", "enemy_degree"):
+            return bool(getattr(self, field))
+        return getattr(self, f"{field}_id") is not None
+
+    @property
+    def set_openers(self) -> list[str]:
+        """The opener fields that carry a value right now."""
+        return [f for f in self.OPENER_FIELDS if self._opener_is_set(f)]
+
+    @property
+    def opener_key(self) -> str:
+        """A stable string naming what opens this offer, for grouping on the leaf (#3709).
+
+        ``prompt:never_do``, ``reason:<id>``, ``degree:ruined``, ``section:<id>``; the
+        opener's own id for the older chapters; ``""`` when nothing is set.
+        """
+        if self.prompt:
+            return f"prompt:{self.prompt}"
+        if self.enemy_reason_id is not None:
+            return f"reason:{self.enemy_reason_id}"
+        if self.enemy_degree:
+            return f"degree:{self.enemy_degree}"
+        if self.appearance_section_id is not None:
+            return f"section:{self.appearance_section_id}"
+        if self.glimpse_tag_id is not None:
+            return f"tag:{self.glimpse_tag_id}"
+        if self.origin_choice_id is not None:
+            return f"choice:{self.origin_choice_id}"
+        if self.schooling_line_id is not None:
+            return f"schooling:{self.schooling_line_id}"
+        return ""
 
     def clean(self) -> None:
         super().clean()
-        set_openers = [
-            f
-            for f in ("glimpse_tag", "origin_choice", "schooling_line")
-            if getattr(self, f"{f}_id")
-        ]
+        set_openers = self.set_openers
         if len(set_openers) > 1:
             at_most_one_opener_message = "An offer is opened by at most one thing."
             raise ValidationError(at_most_one_opener_message)
-        wanted = self.opener_field
-        if wanted is None and set_openers:
-            raise ValidationError({set_openers[0]: "This chapter's offers have no opener."})
-        if wanted is not None and set_openers != [wanted]:
-            raise ValidationError({wanted: "This chapter's offers are opened by this field."})
+        wanted = self.opener_fields
+        if set_openers and set_openers[0] not in wanted:
+            raise ValidationError(
+                {set_openers[0]: "This chapter's offers are not opened by this field."}
+            )
+        if not set_openers:
+            raise ValidationError({wanted[0]: "This chapter's offers need an opener."})
+        if self.enemy_degree and self.enemy_degree not in ENEMY_MARKING_DEGREES:
+            raise ValidationError({"enemy_degree": "Only ruined and destroy mark the character."})
+
+
+class OfferFirstLook(SharedMemoryModel):
+    """One Beginning pinning one offer line into its chapter's first look (#3709)."""
+
+    offer = models.ForeignKey(DistinctionOffer, on_delete=models.CASCADE, related_name="pins")
+    beginning = models.ForeignKey(Beginnings, on_delete=models.CASCADE, related_name="offer_pins")
+
+    class Meta:
+        verbose_name = "Offer first look"
+        verbose_name_plural = "Offer first looks"
+        constraints = [
+            models.UniqueConstraint(fields=["offer", "beginning"], name="offerfirstlook_unique")
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.offer} first look for {self.beginning}"

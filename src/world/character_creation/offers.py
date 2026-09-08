@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Q
 
 from world.character_creation.constants import (
+    ActorSheetPrompt,
     OfferArrival,
     OfferChapter,
     QuestionKind,
@@ -23,11 +24,13 @@ from world.character_creation.models import (
     BeginningTradition,
     CharacterDraft,
     DistinctionOffer,
+    OfferFirstLook,
     TraditionStateLine,
 )
 from world.character_creation.questionnaire import DraftAnswers, anchor_for, visible_slot_ids
 from world.character_creation.types import ClosedDistinction, VisibleOffer
-from world.distinctions.models import Distinction
+from world.character_sheets.types import EnemyDegree
+from world.distinctions.models import Distinction, DistinctionEffect
 from world.distinctions.types import DraftDistinctionEntry, build_distinction_entry
 
 if TYPE_CHECKING:
@@ -107,7 +110,16 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
     if chapter == OfferChapter.TRADITION_STEP:
         line = ctx["slate_line"]
         return line is not None and line.state == TraditionState.LIVING_MASTERS
-    return True
+    if chapter == OfferChapter.ACTORS_SHEET:
+        # The question is always on the leaf; the prompt only says which block (#3709).
+        return bool(offer.prompt)
+    if chapter == OfferChapter.APPEARANCE:
+        return offer.appearance_section_id is not None
+    if chapter == OfferChapter.ENEMY:
+        if offer.enemy_reason_id is not None:
+            return offer.enemy_reason_id == ctx["enemy_reason_id"]
+        return bool(offer.enemy_degree) and offer.enemy_degree == ctx["enemy_degree"]
+    return False
 
 
 def _context(draft: CharacterDraft) -> dict:
@@ -117,10 +129,14 @@ def _context(draft: CharacterDraft) -> dict:
     """
     answers = DraftAnswers.from_draft(draft)
     visible = visible_slot_ids(draft)
+    enemy = draft.draft_data.get("enemy") or {}
     return {
         "tag_ids": set(draft.draft_data.get("glimpse_tag_ids", [])),
         "choice_ids": {cid for sid, cid in answers.picks.items() if sid in visible},
         "slate_line": _slate_line(draft),
+        # The enemy chapter's two openers (#3709): the reason picked, the degree picked.
+        "enemy_reason_id": enemy.get("reason_id"),
+        "enemy_degree": enemy.get("degree", ""),
     }
 
 
@@ -149,7 +165,12 @@ def visible_offers(draft: CharacterDraft) -> dict[int, DistinctionOffer]:
     ctx = _context(draft)
     hidden = _closed_ids(draft) | _innate_ids(draft)
     rows = DistinctionOffer.objects.filter(is_active=True).select_related(
-        "distinction__category", "glimpse_tag", "origin_choice__slot", "schooling_line"
+        "distinction__category",
+        "glimpse_tag",
+        "origin_choice__slot",
+        "schooling_line",
+        "enemy_reason",
+        "appearance_section",
     )
     return {o.id: o for o in rows if o.distinction_id not in hidden and _opener_satisfied(o, ctx)}
 
@@ -187,6 +208,14 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
     provenance. Only a LINEAGE offer on a GROUP question carries an anchor to
     resolve; every other opener is unaffected by ``draft``.
     """
+    if offer.prompt:
+        return ActorSheetPrompt(offer.prompt).label
+    if offer.enemy_reason_id:
+        return offer.enemy_reason.name
+    if offer.enemy_degree:
+        return EnemyDegree(offer.enemy_degree).label
+    if offer.appearance_section_id:
+        return offer.appearance_section.name
     if offer.glimpse_tag_id:
         return offer.glimpse_tag.name
     if offer.origin_choice_id:
@@ -222,12 +251,57 @@ def _mutual_exclusions(dist_ids: set[int]) -> dict[int, set[int]]:
     return exclusions
 
 
+def _effect_word(effect: DistinctionEffect) -> str:
+    """One effect as the leaf prints it: ``+Deception``, ``-Willpower``, ``Immune to X``."""
+    name = effect.target.name.replace("_", " ").strip().capitalize()
+    if effect.grants_immunity_to_negative:
+        return f"Immune to negative {name}"
+    value = effect.value_per_rank
+    if value is None and effect.scaling_values:
+        value = effect.scaling_values[0]
+    if value is None and effect.amplifies_sources_by is not None:
+        value = effect.amplifies_sources_by
+    if value is None:
+        return name
+    sign = "-" if value < 0 else "+"
+    return f"{sign}{name}"
+
+
+def effect_line(effects: list[DistinctionEffect]) -> str:
+    """The compact mechanics line under an offer, ``+Deception; -Willpower`` (#3709).
+
+    Called by ``offers_for``. Sign and target name only: the numbers are the
+    distinction's own business and the leaf is not a rules sheet.
+    """
+    return "; ".join(_effect_word(e) for e in effects)
+
+
+def _effects_by_distinction(dist_ids: set[int]) -> dict[int, list[DistinctionEffect]]:
+    out: dict[int, list[DistinctionEffect]] = defaultdict(list)
+    rows = DistinctionEffect.objects.filter(distinction_id__in=dist_ids).select_related("target")
+    for effect in rows.order_by("id"):
+        out[effect.distinction_id].append(effect)
+    return out
+
+
+def _pinned_offer_ids(draft: CharacterDraft, offer_ids: set[int]) -> set[int]:
+    """The offers the draft's Beginning pinned into the first look (#3709)."""
+    if draft.selected_beginnings_id is None or not offer_ids:
+        return set()
+    rows = OfferFirstLook.objects.filter(
+        beginning_id=draft.selected_beginnings_id, offer_id__in=offer_ids
+    )
+    return set(rows.values_list("offer_id", flat=True))
+
+
 def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffer]:
     """The priced choices this draft can see in one chapter, with lock state.
 
-    Called by each chapter's view/serializer to render its offer list.
+    Called by each chapter's view/serializer to render its offer list. Pinned
+    (first look) offers sort first, then ``sort_order``, then id (#3709).
     """
-    held = {d["distinction_id"] for d in draft.draft_data.get("distinctions", [])}
+    entries = {d["distinction_id"]: d for d in draft.draft_data.get("distinctions", [])}
+    held = set(entries)
     chapter_offers = [
         offer
         for offer in visible_offers(draft).values()
@@ -236,12 +310,18 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
     exclusions = _mutual_exclusions({offer.distinction_id for offer in chapter_offers})
     conflict_ids = {cid for ids in exclusions.values() for cid in ids if cid in held}
     conflict_names = dict(Distinction.objects.filter(id__in=conflict_ids).values_list("id", "name"))
+    effects = _effects_by_distinction({offer.distinction_id for offer in chapter_offers})
+    pinned = _pinned_offer_ids(draft, {offer.id for offer in chapter_offers})
 
     out: list[VisibleOffer] = []
     for offer in chapter_offers:
         dist = offer.distinction
         conflict_id = next((x for x in exclusions.get(dist.id, ()) if x in held), None)
         conflict_name = conflict_names.get(conflict_id) if conflict_id is not None else None
+        entry = entries.get(dist.id)
+        # Held elsewhere: the draft has it, and not from this line (a legacy entry with
+        # no offer_ids key counts as elsewhere too).
+        held_elsewhere = entry is not None and offer.id not in entry.get("offer_ids", [])
         out.append(
             VisibleOffer(
                 offer_id=offer.id,
@@ -255,10 +335,45 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 max_rank=dist.max_rank,
                 is_locked=conflict_name is not None,
                 lock_reason=f"Cannot be held with {conflict_name}" if conflict_name else "",
+                opener_key=offer.opener_key,
+                first_look=offer.id in pinned,
+                held=held_elsewhere,
+                effect_line=effect_line(effects.get(dist.id, [])),
             )
         )
-    out.sort(key=lambda o: o.offer_id)
+    # Appearance groups by section, in the sections' own order; within a group the
+    # pinned lines lead, then sort_order, then id.
+    group_orders = {
+        offer.id: (offer.appearance_section.sort_order if offer.appearance_section_id else 0)
+        for offer in chapter_offers
+    }
+    sort_orders = {offer.id: offer.sort_order for offer in chapter_offers}
+    out.sort(
+        key=lambda o: (
+            group_orders[o.offer_id],
+            not o.first_look,
+            sort_orders[o.offer_id],
+            o.offer_id,
+        )
+    )
     return out
+
+
+def degree_marks() -> dict[str, list[str]]:
+    """Degree value -> the distinction names its bundled enemy-chapter lines carry (#3709).
+
+    Called by ``enemies.degree_grants`` so the leaf's degree row can say "bundles X"
+    before anyone picks. Read from the authored offer lines, never from a constant.
+    """
+    rows = DistinctionOffer.objects.filter(
+        is_active=True,
+        chapter=OfferChapter.ENEMY,
+        arrives_as=OfferArrival.BUNDLED,
+    ).exclude(enemy_degree="")
+    out: dict[str, list[str]] = defaultdict(list)
+    for offer in rows.select_related("distinction").order_by("sort_order", "id"):
+        out[offer.enemy_degree].append(offer.distinction.name)
+    return dict(out)
 
 
 def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDistinction]:
@@ -269,9 +384,9 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
     CHOICE offers for the closed distinction whose opener the draft has satisfied
     (the same ``_opener_satisfied`` check ``visible_offers`` applies, evaluated
     directly here since ``visible_offers`` itself excludes anything closed before
-    a caller ever sees it). Empty when this chapter's offer for it carries no
-    opener at all (Appearance, the Actor's Sheet) or no offer in this chapter
-    opens it (the route closed something a different chapter offers). A chapter
+    a caller ever sees it). Empty when no offer in this chapter opens it (the
+    route closed something a different chapter offers); since #3709 every
+    chapter's offers carry an opener (a prompt, a reason or degree, a section). A chapter
     mount (``GlimpseAxes``) uses this to print the closed hint once, under the
     specific pick that would have opened it, instead of under every pick.
     ``opener_ids`` (#3675 final fix B4) carries the same offers' ids, index-aligned
@@ -291,7 +406,9 @@ def closed_for(draft: CharacterDraft, chapter: OfferChapter) -> list[ClosedDisti
         chapter=chapter,
         arrives_as=OfferArrival.CHOICE,
         distinction_id__in=closed_ids,
-    ).select_related("glimpse_tag", "origin_choice", "schooling_line")
+    ).select_related(
+        "glimpse_tag", "origin_choice", "schooling_line", "enemy_reason", "appearance_section"
+    )
     openers: dict[int, list[str]] = defaultdict(list)
     opener_ids: dict[int, list[int]] = defaultdict(list)
     for offer in rows:
@@ -425,10 +542,20 @@ def _group_offer_anchors(
 
 
 def _bundled_label(
-    offer: DistinctionOffer, anchor_by_offer: dict[int, int | None], orgs: dict[int, Organization]
+    offer: DistinctionOffer,
+    anchor_by_offer: dict[int, int | None],
+    orgs: dict[int, Organization],
+    enemy_name: str = "",
 ) -> str:
-    """Build a bundled offer label using the prefetched organization cache."""
+    """Build a bundled offer label using the prefetched organization cache.
+
+    An enemy-chapter line's source names the enemy too ("They want you ruined: the
+    Rouault"), the way a Lineage line names its anchored organization (#3709);
+    ``enemy_name`` is resolved once by the caller.
+    """
     label = opener_label(offer)
+    if offer.chapter == OfferChapter.ENEMY:
+        return f"{label}: {enemy_name}" if enemy_name else label
     org_id = anchor_by_offer.get(offer.id)
     if org_id is None:
         return label
@@ -454,7 +581,13 @@ def _bundled_opener_labels(offers: list[DistinctionOffer], draft: CharacterDraft
     from world.societies.models import Organization  # noqa: PLC0415
 
     orgs = {o.pk: o for o in Organization.objects.filter(pk__in=org_ids)} if org_ids else {}
-    return {offer.id: _bundled_label(offer, anchor_by_offer, orgs) for offer in offers}
+    enemy_name = ""
+    if any(offer.chapter == OfferChapter.ENEMY for offer in offers):
+        from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
+
+        resolved = resolve_enemy(draft)
+        enemy_name = resolved.name if resolved is not None else ""
+    return {offer.id: _bundled_label(offer, anchor_by_offer, orgs, enemy_name) for offer in offers}
 
 
 def _apply_bundled(

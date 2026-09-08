@@ -63,11 +63,15 @@ const giantsBlood: VisibleOffer = {
   player_line: 'Unusual size and strength; the towering band opens.',
   chapter: 'appearance',
   arrives_as: 'choice',
-  opener_label: '',
+  opener_label: 'Frame',
   cost_per_rank: 20,
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: 'section:1',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 const attractive: VisibleOffer = {
@@ -77,11 +81,15 @@ const attractive: VisibleOffer = {
   player_line: 'Heads turn.',
   chapter: 'appearance',
   arrives_as: 'choice',
-  opener_label: '',
+  opener_label: 'Frame',
   cost_per_rank: 1,
   max_rank: 3,
   is_locked: false,
   lock_reason: '',
+  opener_key: 'section:1',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 let offersResponse: OffersResponse;
@@ -158,8 +166,12 @@ describe('AppearanceStage (folio)', () => {
 
   it("offers this chapter's distinctions after the height block, with the heading fallback (#3675 Task 15)", () => {
     const { container } = renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
-    const heading = screen.getByText('What people notice first');
+    const heading = screen.getByRole('heading', { name: /What people notice first/ });
     expect(heading).toBeInTheDocument();
+    expect(within(heading).getByText('offered here')).toBeInTheDocument();
+    // Grouped by section (#3709): the section heading carries the Distinctions chip.
+    expect(screen.getByText('Frame')).toBeInTheDocument();
+    expect(screen.getByText('Distinctions')).toBeInTheDocument();
     expect(screen.getByText("Giant's Blood")).toBeInTheDocument();
     expect(screen.getByText('Attractive')).toBeInTheDocument();
     // After the height block (the height-in-inches field), before Build.

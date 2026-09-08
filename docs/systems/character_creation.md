@@ -60,7 +60,10 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
 | `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
-| `DistinctionOffer` | Where a distinction is shown in CG and how it arrives (#3675) | `distinction`, `chapter`, `arrives_as`, `glimpse_tag`/`origin_choice`/`schooling_line` |
+| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`; `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `opener_fields`, `set_openers` |
+| `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
+| `AppearanceSection` | A heading Appearance groups its offers under (#3709); the Appearance chapter's opener | `name`, `player_line`, `sort_order`, credit |
+| `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709) | `offer`, `beginning` (unique together) |
 
 ### Draft State (models.Model - per-player)
 
@@ -190,7 +193,14 @@ from world.character_creation.offers import (
     offers_for,               # (draft, chapter) -> list[VisibleOffer]: this chapter's
                                #   priced CHOICE offers the draft can currently see,
                                #   each with its lock state (mutual exclusion already
-                               #   evaluated against the draft's current picks)
+                               #   evaluated against the draft's current picks), its
+                               #   opener_key (the block it belongs in), first_look
+                               #   (the draft's Beginning pinned it), held (the draft
+                               #   has the distinction from another line) and
+                               #   effect_line ("+Deception; -Willpower"); pinned
+                               #   first, then sort_order, Appearance by section (#3709)
+    degree_marks,              # () -> dict[degree, [names]]: the enemy chapter's
+                               #   bundled lines opened by each marking degree (#3709)
     closed_for,                # (draft, chapter) -> list[ClosedDistinction]: the route's
                                #   closed_distinctions, scoped to this chapter's own
                                #   opener labels so a chapter mount prints the closed
@@ -230,11 +240,11 @@ tradition switch immediately applies whatever it opens or closes, without a sepa
 call `_prepare_draft_entries(draft)` once at their start (`services.py`), which runs
 `reconcile_offer_picks` (a draft built directly -- a staff add, a GM draft, a test
 fixture -- never PATCHed through the view, so its distinctions list could otherwise
-miss what its final answers opened) followed by `_apply_enemy_distinction_entry` (folds
-the enemy's worst-two-degrees Distinction, if any, `ENEMY_DEGREE_DISTINCTION_NAMES`,
-into the same pick list so it is created through the one `_create_distinctions` write
-path instead of a second bespoke one). A legacy entry with no `offer_ids` key (a
-pre-#3675 pick) is left untouched by either finalize path.
+miss what its final answers opened). The enemy's degree mark arrives the same way
+(#3709): it is a bundled `DistinctionOffer` on the enemy chapter opened by the picked
+degree, so the reconcile applies it like any other bundle and no second fold exists. A
+legacy entry with no `offer_ids` key (a pre-#3675 pick) is left untouched by either
+finalize path.
 
 **Offers endpoint:**
 
@@ -242,10 +252,15 @@ pre-#3675 pick) is left untouched by either finalize path.
   chapter's `{"offers": [...], "closed": [...]}` (`OffersResponseSerializer`).
   `offers` is `VisibleOfferSerializer` (`offer_id`, `distinction_id`, `name`,
   `player_line`, `chapter`, `arrives_as`, `opener_label`, `cost_per_rank`, `max_rank`,
-  `is_locked`, `lock_reason`); `closed` is `ClosedDistinctionSerializer`
-  (`distinction_id`, `name`, `reason`, `opener_labels` -- this chapter's own opener
-  labels for the closed distinction, empty when this chapter's offer for it has no
-  opener or none of its openers are satisfied). An unknown `chapter` value 400s.
+  `is_locked`, `lock_reason`, `opener_key`, `first_look`, `held`, `effect_line`, #3709);
+  `closed` is `ClosedDistinctionSerializer` (`distinction_id`, `name`, `reason`,
+  `opener_labels` -- this chapter's own opener labels for the closed distinction, empty
+  when none of its openers are satisfied). An unknown `chapter` value 400s. The leaf
+  (`ChapterOffers`) groups by `opener_key` (one block per prompt, reason or section),
+  shows the pinned lines at rest (or the first three when none is pinned), folds the
+  rest under "See N more" once a block has five or more, prints a held line as held,
+  and reads "Awards N" (green) or a cost (realm ink) with the `+X; -Y` line under the
+  player line (#3709).
 
 ## The Actor's Sheet (#3621, ADR-0279)
 
@@ -279,15 +294,19 @@ real group and no rated person is `pending` at `ENEMY_PRICE_PENDING` until staff
 `CharacterEnemyAdmin`, whose `save_model` recomputes the price. The purse breakdown carries
 one `enemy` line with a negative cost ("Awards N CG points"). The draft API exposes
 `enemy_offers` (a Lineage offer's gloss is the picked answer's name, or the person question's prompt),
-`enemy_price_tables`, `enemy_degree_grants` (degree -> the Distinction it grants, so the leaf's
-row says "grants Hunted") and `introductions_offered`.
+`enemy_price_tables`, `enemy_degree_grants` (degree -> the Distinction(s) the degree's bundled
+offer lines carry, `offers.degree_marks`, so the leaf's row says "bundles Marked"),
+`enemy_reasons` (the authored `EnemyReason` list, #3709; the leaf filters it by the enemy's
+kind and writes the pick as `draft_data.enemy.reason_id`, validated by `resolve_enemy` against an
+active row whose `fits` matches; a Beginning's offer arrives with its `reason_id` set) and
+`introductions_offered`.
 
 Finalize (`_create_enemy`) writes `CharacterEnemy` (owner, staff and assigned-GM reading;
 everyone else sees `public_line`), seeds the group's opinion through
-`bump_organization_reputation` (`ENEMY_REPUTATION_SEED` by degree), grants the degree's
-Distinction (`ENEMY_DEGREE_DISTINCTION_NAMES`, placeholder names Marked and Hunted, resolved
-by name and skipped with a log when unauthored) through the same bulk write path a Lineage
-answer's bundled Distinction uses, and, for a society- or realm-reach group whose
+`bump_organization_reputation` (`ENEMY_REPUTATION_SEED` by degree), carries the picked
+`reason` (#3709), leaves the degree's mark to the reconcile (it is a bundled offer line on
+`OfferChapter.ENEMY` opened by `enemy_degree`, never a name in code), and, for a society- or
+realm-reach group whose
 `Organization.society` enforces the start room's area (`enforcing_society_for`), accrues
 `PersonaHeat` there (`ENEMY_HEAT_SEED` from ruined upward, pinned `ENEMY_HEAT_PIN_DAYS` at
 destroy).
@@ -491,7 +510,13 @@ Registered admin classes: `StartingAreaAdmin`, `BeginningsAdmin` (with `Beginnin
 route on one page; see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section for the
 files, URLs, gate, and credit rule.
 
-**Distinction offer builders (#3675):** four admin surfaces author `DistinctionOffer` rows,
+**Distinction offer builders (#3675, #3709):** four admin surfaces author `DistinctionOffer` rows
+(the Builder's row shows the prompt, reason, degree or section widget its chapter wants and a
+"First look for" column of Beginnings), two plain change lists hold the openers themselves
+(`EnemyReason`, `AppearanceSection`), and the Builder's "Add from a table"
+(`web/admin/distinction_builder/paste.py`) lands scores of new distinctions at once, additions
+only (a row whose slug exists is skipped, never updated; nothing deleted; every referenced row must
+already exist; preview, then one transaction behind a digest-guarded confirm; superuser only):
 one click from the Authoring Workbench's Builders panel and from the row each edits: the
 Distinction Builder (a distinction's own fields, effects, exclusions, and every offer naming
 it), the tradition slate page (the shared `TraditionStateLine`/`SchoolingLine` standard lines

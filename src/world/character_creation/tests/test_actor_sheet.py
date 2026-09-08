@@ -16,6 +16,8 @@ from world.areas.factories import AreaFactory
 from world.character_creation.constants import (
     ENEMY_PRICE_PENDING,
     WHISPERS_SEED_HEAT,
+    OfferArrival,
+    OfferChapter,
 )
 from world.character_creation.enemies import (
     EnemyOffer,
@@ -24,6 +26,8 @@ from world.character_creation.enemies import (
     resolve_enemy,
 )
 from world.character_creation.factories import (
+    DistinctionOfferFactory,
+    EnemyReasonFactory,
     GroupPromptFactory,
     OriginTemplateFactory,
     OriginTemplateSlotChoiceFactory,
@@ -194,10 +198,20 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
         self.republic = OrganizationFactory(
             name="The Republic of Luxen", org_type=self.realm_type, society=self.society
         )
+        self.reason = EnemyReasonFactory(name="It does not keep the Gifted", fits="group")
         BeginningEnemyOffer.objects.create(
-            beginning=self.beginnings, organization=self.republic, why="does not keep the Gifted"
+            beginning=self.beginnings,
+            organization=self.republic,
+            why="does not keep the Gifted",
+            reason=self.reason,
         )
-        DistinctionFactory(name="Hunted")
+        # The destroy mark is an authored offer line on the enemy chapter (#3709).
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Hunted"),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree=EnemyDegree.DESTROY,
+        )
 
     def _full_draft(self, **extra):
         data = {
@@ -232,6 +246,7 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
                 "degree": "destroy",
                 "why": "It does not keep the Gifted.",
                 "public_line": "The Republic and I are not on speaking terms.",
+                "reason_id": self.reason.id,
             },
             "introductions": {
                 "first_journal": ["Not seen.", "The night the glass stopped falling.", ""],
@@ -265,6 +280,7 @@ class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
         assert enemy.price == 150
         assert enemy.status == EnemyStatus.PLACED
         assert enemy.public_line == "The Republic and I are not on speaking terms."
+        assert enemy.reason == self.reason
 
         persona = sheet.primary_persona
         rep = OrganizationReputation.objects.get(persona=persona, organization=self.republic)

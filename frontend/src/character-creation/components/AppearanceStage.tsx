@@ -32,6 +32,7 @@ import {
 import {
   useBuilds,
   useCGExplanations,
+  useDraftOffers,
   useFormOptions,
   useHeightBands,
   useUpdateDraft,
@@ -81,6 +82,19 @@ export function AppearanceStage({
 }: AppearanceStageProps) {
   const updateDraft = useUpdateDraft();
   const { data: copy } = useCGExplanations();
+  // The chapter's own offers, read once here to know its sections (#3709); each
+  // section's block re-reads the same cached query through `ChapterOffers`.
+  const { data: appearanceOffers } = useDraftOffers(draft.id, 'appearance');
+  const sections = useMemo(() => {
+    const seen = new Map<string, string>();
+    for (const offer of appearanceOffers?.offers ?? []) {
+      if (offer.opener_key && !seen.has(offer.opener_key)) {
+        seen.set(offer.opener_key, offer.opener_label);
+      }
+    }
+    return Array.from(seen, ([key, label]) => ({ key, label }));
+  }, [appearanceOffers]);
+  const hasClosedAppearance = (appearanceOffers?.closed ?? []).length > 0;
   const { data: heightBands, isLoading: heightBandsLoading } = useHeightBands();
   const { data: builds, isLoading: buildsLoading } = useBuilds();
   const { data: formOptions, isLoading: formOptionsLoading } = useFormOptions(
@@ -439,18 +453,44 @@ export function AppearanceStage({
         </Field>
       )}
 
-      <ChapterOffers
-        draft={draft}
-        chapter="appearance"
-        heading={copy?.appearance_offers_heading ?? 'What people notice first'}
-        headingTag={copy?.appearance_offers_chip ?? 'optional'}
-        closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
-        syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
-        wordBundled={copy?.offers_word_bundled}
-        wordPerRank={copy?.offers_word_per_rank}
-        wordSpent={copy?.offers_word_spent}
-        wordRefunds={copy?.offers_word_refunds}
-      />
+      {/* What shows, in sections (#3709): one offers block per authored Appearance
+          section, in the sections' own order; the closed hint prints once under the
+          last. The chapter heading stays even when only the closed hint remains. */}
+      {(sections.length > 0 || hasClosedAppearance) && (
+        <h2 className="section-h">
+          {copy?.appearance_offers_heading ?? 'What people notice first'}
+          <small>{copy?.appearance_offers_note ?? 'offered here'}</small>
+        </h2>
+      )}
+      {sections.map((section, index) => (
+        <ChapterOffers
+          key={section.key}
+          draft={draft}
+          chapter="appearance"
+          filter={(o) => o.opener_key === section.key}
+          heading={section.label}
+          headingTag={copy?.offers_chip_distinctions ?? 'Distinctions'}
+          showOpener={false}
+          showClosed={index === sections.length - 1}
+          closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+          syncErrorHint={copy?.offers_sync_error ?? 'That pick did not save. Try again.'}
+          wordBundled={copy?.offers_word_bundled}
+          wordPerRank={copy?.offers_word_per_rank}
+          wordSpent={copy?.offers_word_spent}
+          wordAwards={copy?.offers_word_awards}
+          wordSeeMore={copy?.offers_word_see_more}
+          wordHeld={copy?.offers_word_held}
+          className="conditional"
+        />
+      ))}
+      {sections.length === 0 && hasClosedAppearance && (
+        <ChapterOffers
+          draft={draft}
+          chapter="appearance"
+          filter={() => false}
+          closedLead={copy?.appearance_closed_lead ?? 'Closed by your route'}
+        />
+      )}
 
       <h2 className="section-h">{copy?.appearance_build_heading ?? 'Build'}</h2>
       {buildsLoading ? (

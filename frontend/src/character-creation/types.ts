@@ -444,6 +444,8 @@ export interface CharacterDraft {
   enemy_price_tables: Record<'group' | 'person', Record<string, Record<string, number>>>;
   /** Degree value -> the Distinction that degree grants (#3621), so the row can say so. */
   enemy_degree_grants: Record<string, string>;
+  /** The authored reason list (#3709); the leaf filters it by the enemy's kind. */
+  enemy_reasons: EnemyReason[];
   /** Which Introductions this draft is offered; the First Journal needs an Arx start (#3621). */
   introductions_offered: { first_journal: boolean };
 }
@@ -802,6 +804,8 @@ export interface DraftEnemy {
   degree: string;
   why: string;
   public_line: string;
+  /** The authored reason picked (#3709), or null for none. */
+  reason_id: number | null;
 }
 
 /** The Introductions' answers (#3621): three per journal, one rumor per line for the Whispers. */
@@ -820,6 +824,8 @@ export interface EnemyOffer {
   power_tier: string;
   why: string;
   source: 'lineage' | 'beginning';
+  /** The reason a Beginning's offer arrives with already set (#3709), or null. */
+  reason_id: number | null;
 }
 
 export interface DraftData {
@@ -1314,10 +1320,19 @@ export function questionInfluence(
 // =============================================================================
 
 /** Which CG chapter's `GET .../offers/?chapter=` is being requested (#3675). */
-export type OfferChapter = 'tradition_step' | 'glimpse' | 'lineage' | 'appearance' | 'actors_sheet';
+export type OfferChapter =
+  | 'tradition_step'
+  | 'glimpse'
+  | 'lineage'
+  | 'appearance'
+  | 'actors_sheet'
+  | 'enemy';
 
 /** A distinction offer visible to the draft in the requested chapter (#3675). */
 export type VisibleOffer = components['schemas']['VisibleOffer'];
+
+/** One authored reason an enemy wants the character to fail (#3709). */
+export type EnemyReason = components['schemas']['EnemyReason'];
 
 /** A distinction the draft can no longer take, and why (#3675). */
 export type ClosedDistinction = components['schemas']['ClosedDistinction'];
