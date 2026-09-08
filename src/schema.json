@@ -42446,6 +42446,10 @@ components:
           description: True when this technique came from the tradition's special
             technique set.
           readOnly: true
+        is_species_technique:
+          type: boolean
+          description: True when this technique belongs to a gift granted by the species.
+          readOnly: true
         effect_summary:
           allOf:
           - $ref: '#/components/schemas/TechniqueEffectSummary'
@@ -42456,6 +42460,7 @@ components:
       - description
       - effect_summary
       - id
+      - is_species_technique
       - is_tradition_technique
       - name
     CGVacancy:

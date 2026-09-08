@@ -15,9 +15,11 @@ class TechniqueOptions:
 
     ``pool`` is the path's curated starter set (``PathGiftGrant.starter_techniques``);
     ``tradition`` is the tradition's special technique set
-    (``TraditionGiftGrant.special_techniques``). The two lists are not deduplicated
-    here — callers treat availability as the union ``pool`` U ``tradition``.
+    (``TraditionGiftGrant.special_techniques``). ``species`` contains techniques
+    belonging to the selected species' granted gifts. The lists are not deduplicated
+    here — callers treat availability as their union.
     """
 
     pool: list[Technique] = field(default_factory=list)
     tradition: list[Technique] = field(default_factory=list)
+    species: list[Technique] = field(default_factory=list)

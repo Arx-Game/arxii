@@ -10,15 +10,19 @@ _build_bulk_context which uses DISTINCT ON (PG-only). CI PG shard covers these.
 from django.test import TestCase, tag
 
 from world.character_creation.factories import CharacterDraftFactory
-from world.character_creation.services import finalize_magic_data
+from world.character_creation.services import (
+    _finalize_gift_and_techniques,
+    finalize_magic_data,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.distinctions.factories import DistinctionFactory
 from world.distinctions.models import CharacterDistinction
 from world.distinctions.types import DistinctionOrigin
-from world.magic.constants import GiftKind, TargetKind
-from world.magic.factories import GiftFactory, ResonanceFactory, TraditionFactory
+from world.magic.constants import AcquisitionOrigin, GiftKind, TargetKind
+from world.magic.factories import GiftFactory, ResonanceFactory, TechniqueFactory, TraditionFactory
 from world.magic.models import Thread
 from world.magic.models.gifts import CharacterGift
+from world.magic.models.techniques import CharacterTechnique
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.species.services import provision_species_gifts, total_species_gift_cost
 
@@ -285,6 +289,11 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
         cls.resonance = ResonanceFactory()
         cls.minor_gift = GiftFactory(name="Test Elven Sight", kind=GiftKind.MINOR)
         cls.minor_gift.resonances.add(cls.resonance)
+        cls.minor_technique = TechniqueFactory(
+            gift=cls.minor_gift, name="Test Elven Sight Technique"
+        )
+        cls.major_gift = GiftFactory(name="Test Major Gift", kind=GiftKind.MAJOR)
+        cls.major_gift.resonances.add(cls.resonance)
         cls.species = SpeciesFactory(name="TestFinalizeElven")
         SpeciesGiftGrantFactory(species=cls.species, gift=cls.minor_gift, drawback_condition=None)
         cls.tradition = TraditionFactory()
@@ -314,6 +323,26 @@ class ProvisionSpeciesGiftsFinalizeIntegrationTest(TestCase):
             self.resonance,
             "Species gift thread should use the CG-chosen resonance",
         )
+
+    def test_finalize_links_selected_species_technique_with_species_origin(self):
+        """A selected Minor-Gift technique is linked and provenance is preserved."""
+        sheet = CharacterSheetFactory(species=self.species)
+        draft = CharacterDraftFactory(
+            selected_tradition=self.tradition,
+            selected_species=self.species,
+            draft_data={
+                "selected_gift_id": self.major_gift.id,
+                "selected_technique_ids": [self.minor_technique.id],
+                "selected_gift_resonance_id": self.resonance.id,
+            },
+        )
+
+        _finalize_gift_and_techniques(draft, sheet)
+        _finalize_gift_and_techniques(draft, sheet)
+
+        links = CharacterTechnique.objects.filter(character=sheet, technique=self.minor_technique)
+        self.assertEqual(links.count(), 1)
+        self.assertEqual(links.get().origin, AcquisitionOrigin.SPECIES_GRANT)
 
 
 @tag("postgres")

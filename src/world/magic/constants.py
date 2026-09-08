@@ -677,8 +677,8 @@ class AcquisitionOrigin(models.TextChoices):
     enum (not one per model) because the vocabulary overlaps heavily and both models
     answer the same question — "how did this land on the sheet" — for the same
     acquisition-provenance ledger; neither model is expected to use every value
-    (e.g. no ``CharacterTechnique`` site sets ``SPECIES_GRANT`` today — species
-    provisioning only grants the ``CharacterGift``, not its techniques individually).
+    (e.g. species provisioning grants the ``CharacterGift`` while CG-selected
+    techniques from that gift use ``SPECIES_GRANT`` on their ``CharacterTechnique`` link).
     Named after the real creation sites, inventoried against code, not invented:
 
     - ``CHARACTER_CREATION`` — CG finalize links the catalog pick (gift stage).

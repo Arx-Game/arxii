@@ -481,7 +481,7 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     """Technique row for the CG technique-options list (#2426).
 
     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-    — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+    — the pool ∪ tradition ∪ species availability set for one CG pick
     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
     is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
     serializer context — never attached to the (SharedMemoryModel) ``Technique``
@@ -492,6 +492,7 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source="effect_type.category", read_only=True)
     codex_entry_id = serializers.IntegerField(read_only=True, allow_null=True)
     is_tradition_technique = serializers.SerializerMethodField()
+    is_species_technique = serializers.SerializerMethodField()
     # #2898: CG was the thinnest surface of the four — no cost, no reach, no
     # targeting, no hostility — at the moment the pick is least reversible. The
     # shared effect block carries all of it, so this one field closes every gap.
@@ -509,6 +510,7 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
             "category",
             "codex_entry_id",
             "is_tradition_technique",
+            "is_species_technique",
             "effect_summary",
         ]
         read_only_fields = fields
@@ -516,6 +518,10 @@ class CGTechniqueOptionSerializer(serializers.ModelSerializer):
     def get_is_tradition_technique(self, obj: Technique) -> bool:
         """True when this technique came from the tradition's special technique set."""
         return obj.id in self.context.get("tradition_technique_ids", set())
+
+    def get_is_species_technique(self, obj: Technique) -> bool:
+        """True when this technique belongs to a gift granted by the species."""
+        return obj.id in self.context.get("species_technique_ids", set())
 
 
 def _offer_row(offer: DistinctionOffer, *, with_arrival: bool) -> dict:

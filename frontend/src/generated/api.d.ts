@@ -25657,6 +25657,8 @@ export interface components {
       readonly codex_entry_id: number | null;
       /** @description True when this technique came from the tradition's special technique set. */
       readonly is_tradition_technique: boolean;
+      /** @description True when this technique belongs to a gift granted by the species. */
+      readonly is_species_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /** @description An opening reachable from the draft, priced for it (#3648). */

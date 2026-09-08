@@ -14,15 +14,17 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import Prefetch
+from django.db.models import Prefetch, Q
 
 from world.magic.models.grants import PathGiftGrant, TraditionGiftGrant
 from world.magic.models.techniques import Technique
 from world.magic.types.cg_catalog import TechniqueOptions
+from world.species.models import SpeciesGiftGrant
 
 if TYPE_CHECKING:
     from world.classes.models import Path
     from world.magic.models.gifts import Gift, Tradition
+    from world.species.models import Species
 
 
 def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> TechniqueOptions:
@@ -59,6 +61,29 @@ def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> Techn
     pool = path_grant.cached_starter_techniques if path_grant else []
     tradition_techniques = tradition_grant.cached_special_techniques if tradition_grant else []
     return TechniqueOptions(pool=pool, tradition=tradition_techniques)
+
+
+def get_species_technique_options(species: Species | None) -> list[Technique]:
+    """Return techniques belonging to the gifts granted by a species.
+
+    A species receives its own grants plus inheritable grants from every ancestor.
+    An empty result is valid while a species gift is still unwritten.
+    """
+    if species is None:
+        return []
+
+    lineage = species.lineage
+    own_species = lineage[0]
+    ancestor_species = lineage[1:]
+    grant_filter = Q(species_id=own_species.id) | Q(
+        species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
+    )
+    gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
+    return list(
+        Technique.objects.filter(gift_id__in=gift_ids)
+        .select_related("effect_type")
+        .order_by("name", "id")
+    )
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:

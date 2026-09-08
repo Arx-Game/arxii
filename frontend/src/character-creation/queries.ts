@@ -101,8 +101,14 @@ export const characterCreationKeys = {
   gift: (giftId: number) => [...characterCreationKeys.all, 'gift', giftId] as const,
   // CG gift/technique options (GiftStage funnel, #2426 Task 10)
   cgGifts: (draftId: number) => [...characterCreationKeys.all, 'cg-gifts', draftId] as const,
-  cgTechniqueOptions: (draftId: number, giftId: number) =>
-    [...characterCreationKeys.all, 'cg-technique-options', draftId, giftId] as const,
+  cgTechniqueOptions: (draftId: number, giftId: number, speciesId?: number | null) =>
+    [
+      ...characterCreationKeys.all,
+      'cg-technique-options',
+      draftId,
+      giftId,
+      speciesId ?? null,
+    ] as const,
   // Glimpse tag catalog (guided Glimpse flow, #2427)
   glimpseTags: (pathId?: number) =>
     [...characterCreationKeys.all, 'glimpse-tags', pathId ?? null] as const,
@@ -450,12 +456,16 @@ export function useCGGifts(draftId: number | undefined) {
 }
 
 /**
- * Technique options (pool ∪ signature) for a draft's (path, gift, tradition) pick
+ * Technique options (pool ∪ signature ∪ species gift) for a draft pick
  * (GiftStage funnel, #2426).
  */
-export function useCGTechniqueOptions(draftId: number | undefined, giftId: number | undefined) {
+export function useCGTechniqueOptions(
+  draftId: number | undefined,
+  giftId: number | undefined,
+  speciesId?: number | null
+) {
   return useQuery({
-    queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!),
+    queryKey: characterCreationKeys.cgTechniqueOptions(draftId!, giftId!, speciesId),
     queryFn: () => getCGTechniqueOptions(draftId!, giftId!),
     enabled: !!draftId && !!giftId,
   });

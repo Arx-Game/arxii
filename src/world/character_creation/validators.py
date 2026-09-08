@@ -488,8 +488,8 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     2. Must have selected_gift_id, and it must be one of the gifts available for
        the draft's (tradition, path) per ``cg_catalog.get_gift_options``.
     3. Must have >=1 selected_technique_ids, each drawn from the chosen gift's
-       pool ∪ signature availability set, and no more than
-       ``draft.starting_technique_picks``.
+       pool ∪ signature availability set ∪ the selected species' gift techniques,
+       and no more than ``draft.starting_technique_picks``.
     4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill) — the character's Anima Check.
@@ -497,6 +497,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_gift_options,
+        get_species_technique_options,
         get_technique_options,
     )
     from world.skills.models import Skill  # noqa: PLC0415
@@ -519,9 +520,11 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
         return ["Select at least one technique"]
 
     technique_options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
-    available_ids = {t.id for t in technique_options.pool} | {
-        t.id for t in technique_options.tradition
-    }
+    available_ids = (
+        {t.id for t in technique_options.pool}
+        | {t.id for t in technique_options.tradition}
+        | {t.id for t in get_species_technique_options(draft.selected_species)}
+    )
     if any(technique_id not in available_ids for technique_id in technique_ids):
         return ["Selected technique is not available"]
 
