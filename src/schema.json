@@ -42416,7 +42416,7 @@ components:
         Technique row for the CG technique-options list (#2426).
 
         Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-        — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+        — the pool ∪ tradition ∪ species availability set for one CG pick
         (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
         is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
         serializer context — never attached to the (SharedMemoryModel) ``Technique``
