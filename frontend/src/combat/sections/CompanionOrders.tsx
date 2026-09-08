@@ -176,7 +176,8 @@ function CompanionOrderCard({
           </p>
         </div>
       </div>
-      <div className="grid grid-cols-3 gap-1" role="group" aria-label={`Order ${companion.name}`}>
+      <fieldset className="grid grid-cols-3 gap-1">
+        <legend className="sr-only">Order {companion.name}</legend>
         {(Object.keys(ORDER_LABELS) as CompanionOrderKind[]).map((kind) => {
           const selected = draft.kind === kind;
           return (
@@ -197,7 +198,7 @@ function CompanionOrderCard({
             </button>
           );
         })}
-      </div>
+      </fieldset>
       <p className="text-[10px] text-muted-foreground">
         Choose another order to switch. Inactive choices remain clickable.
       </p>
