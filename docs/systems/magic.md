@@ -207,6 +207,18 @@ drift apart.
   `TraditionGiftGrant.special_techniques` / `PathGiftGrant.starter_techniques` rows at
   *technique* granularity, never from `gift.techniques`, so a child gift whose pool is
   authored inherited techniques is already included.
+
+**An empty path pool is missing content, not a design case** (ruled on #3682, ADR-0283).
+A gift becomes pickable if *either* the path's `starter_techniques` or the tradition's
+`special_techniques` is non-empty, so a tradition special can carry a gift onto a path
+that offers nothing for it. That union stays; there will never be a gift a path offers
+nothing for, so the empty pool is an authoring gap. The `path-gift-starter-pools`
+required-content sentinel (`web/admin/tuning/required_content.py`, #3712) reports each
+such `(path, gift)` pair and names the traditions it leaks through — 8 pairs across 17
+combinations at the time it was added. A `TraditionGiftGrant` carrying no specials is
+deliberately never reported: that is a legitimate authored state meaning "this tradition
+teaches this gift and adds no extras of its own", it creates no availability of its own,
+and 39 of 69 authored rows are in it.
 - `CharacterTechniqueHandler._state` (`handlers.py`) — reads explicit `CharacterTechnique`
   rows. Once an inherited technique is learned the row exists. Inheritance is an
   acquisition-eligibility concern, not an inventory one.
@@ -1724,7 +1736,7 @@ consequence of Path membership per ADR-0050, not an XP purchase).
 
 | Surface | Role | Notes |
 |---|---|---|
-| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. |
+| `PathGiftGrant` (`models/grants.py`) | Authored `(path, gift)` → curated `starter_techniques` M2M | Mirrors the `PathRitualGrant` through-model shape. Same authored Gift, different set per path (warrior vs spy from one Pyromancy). A path may grant the character's *existing* gift (new techniques of it) AND a new gift. `clean()` rejects a technique not of the grant's gift; unique per `(path, gift)`. **Authorable since #3712**: a standalone `PathGiftGrantAdmin` (`filter_horizontal` on `starter_techniques`, which is where a pool is composed) plus a `PathAdmin` inline as the way in from the path. Until then only the tradition half of the CG menu had a page, so the 76 authored path pools were fixture-loaded and uneditable. |
 | `grant_path_magic(sheet, path) -> PathMagicGrantResult` (`services/path_magic.py`) | Idempotent grant | Mints `CharacterGift` + latent GIFT thread (via the shared `grant_gift_to_character` primitive) + `CharacterTechnique` rows; announces via `announce_access_change` (`AccessChangeSource.PATH_ADVANCEMENT`). Already-owned gifts/techniques are skipped (kept), so the character retains everything and only *gains*. |
 | Path-change seam `cross_into_path(sheet, path)` (`world/progression/services/advancement.py`) | Wiring | Writes `CharacterPathHistory` + fires `grant_path_magic`. Used by **both** `cross_threshold` (Audere Majora, levels 5/10/15/20 → PUISSANT+) **and** the **Ritual of the Durance** when it advances into the POTENTIAL stage (level 3 — the "semi-crossing", no Audere Majora). So *which* levels grant is authored data; the level-3 rite reuses the identical grant machinery with no crossing ceremony. |
 
@@ -2943,7 +2955,9 @@ value = round(base * 2 ** (sensitivity * power / power_per_doubling))
 ```
 
 Gated on the `CapabilityPowerConfig` singleton (pk=1, `power_per_doubling` — power
-required to double the value, default 10) existing at all — no row means every consumer
+required to double the value, default 10) existing at all (registered in the admin,
+singleton-guarded, in #3712; before that the required-content dashboard reported the
+row missing and there was no page on which to create it) — no row means every consumer
 returns its pre-#2708 number unchanged, so the migration that ships the model is inert
 on landing. `intensity_multiplier` (technique grants) / `thread_level_multiplier(level)`
 (thread grants) is the curve's exponent sensitivity, not an additive term — a grant

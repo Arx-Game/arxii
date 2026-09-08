@@ -3,6 +3,7 @@ from django.contrib import admin
 from world.classes.models import Aspect, Path, PathAspect
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
+from world.magic.models import PathGiftGrant
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -52,6 +53,24 @@ class PathCodexKnowledgeRequirementInline(admin.TabularInline):
     autocomplete_fields = ["codex_entry"]
 
 
+class PathGiftGrantInline(admin.TabularInline):
+    """The path's curated starter technique pool per gift (#3712).
+
+    The path half of the CG technique menu. Its tradition-side sibling has been
+    inline-editable on ``TraditionAdmin`` since #2426; this half had no
+    authoring surface at all, so the authored path pools could not be edited.
+    ``filter_horizontal`` does not apply to an inline, so the standalone
+    ``PathGiftGrantAdmin`` is where a pool is actually composed; this inline is
+    the way in from the path, and shows which gifts the path grants.
+    """
+
+    model = PathGiftGrant
+    extra = 0
+    fields = ["gift"]
+    autocomplete_fields = ["gift"]
+    show_change_link = True
+
+
 @admin.register(Path)
 class PathAdmin(admin.ModelAdmin):
     """Admin for character paths."""
@@ -76,6 +95,7 @@ class PathAdmin(admin.ModelAdmin):
         PathSkillSuggestionInline,
         PathTraitRequirementInline,
         PathCodexKnowledgeRequirementInline,
+        PathGiftGrantInline,
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),

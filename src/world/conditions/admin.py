@@ -237,6 +237,28 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         ConditionConditionInteractionInline,
     ]
 
+    def save_related(self, request, form, formsets, change):
+        """Bump the technique catalog revision after a delivery-channel edit (#3712).
+
+        A condition's mechanical effect rows are an input to what every technique
+        that applies it is worth, and the tuning panel caches the evaluated
+        corpus for 24 hours keyed on that revision. #3683 wired the bump into
+        every technique-side authoring write; the condition side was never in its
+        scope, so changing a ``ConditionModifierEffect``'s value left staff
+        tuning against the pre-edit number with no way to tell.
+
+        This is the whole-catalog revision only. The per-technique ``cached_*``
+        payload lists are lists of the technique's own rows and are unaffected by
+        editing the condition those rows point at, so there is nothing
+        per-instance to drop here.
+        """
+        super().save_related(request, form, formsets, change)
+        from world.magic.services.technique_effects import (  # noqa: PLC0415
+            bump_technique_catalog_revision,
+        )
+
+        bump_technique_catalog_revision()
+
 
 @admin.register(ConditionStage)
 class ConditionStageAdmin(admin.ModelAdmin):

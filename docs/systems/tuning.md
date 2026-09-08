@@ -236,8 +236,19 @@ one seam every authoring write (the admin's `save_related`, the technique builde
 passes through. The last-key pointer is revision-scoped too, so a GET after an edit finds
 nothing rather than re-rendering the pre-edit panel. A cache eviction resets the counter,
 which costs a recomputation and never serves stale data — the key changes either way.
-Editing a *condition* or *capability* still does not invalidate the technique corpus, even
-though technique DE reads both; that stays a manual reckon. The league table sorts by baseline DE, anchor DE, DE-per-anima, name, or
+
+**Two write paths joined that seam in #3712.** `TechniqueRemovedConditionAdmin` is a
+standalone changelist and had no save hook at all, so a dispel row edited *there* never
+invalidated its technique while the identical edit through the Technique page's inline
+did — the same change had two outcomes depending on which page staff used. It now
+invalidates on save, on delete, and on the changelist's bulk-delete action (which bypasses
+`delete_model`). And `ConditionTemplateAdmin.save_related` bumps the catalog revision,
+because a condition's delivery-channel rows (`ConditionModifierEffect`,
+`ConditionDamageOverTime`, and the rest) are an input to what every technique applying that
+condition is worth. That is a whole-catalog bump only: a technique's `cached_*` payload
+lists hold the technique's *own* rows, so editing the condition they point at leaves
+nothing per-instance to drop. Editing a `CapabilityType` row itself still does not
+invalidate the corpus; that stays a manual reckon. The league table sorts by baseline DE, anchor DE, DE-per-anima, name, or
 level (whitelisted); each row has a `<details>` drill-down showing every valuation line
 (kind, label, value, provenance, arithmetic detail). Below the table: the zero/unpriced
 bucket and provenance summary. Weapon-scaled damage profiles are flagged

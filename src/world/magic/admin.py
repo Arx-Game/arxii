@@ -1,6 +1,6 @@
 from django import forms
 from django.contrib import admin
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
 from django.forms.models import BaseInlineFormSet
 from django.utils.html import format_html
 
@@ -20,6 +20,8 @@ from world.magic.models import (
     AffinityInteraction,
     AnimaRitualBudgetAward,
     AnimaRitualPerformance,
+    AuraPowerConfig,
+    CapabilityPowerConfig,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -47,6 +49,7 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceStyle,
+    PathGiftGrant,
     PoseEndorsement,
     Reincarnation,
     RelationshipBondPullTuning,
@@ -301,6 +304,32 @@ class TechniqueRemovedConditionAdmin(admin.ModelAdmin):
     list_filter = ["target_kind", "remove_all_stacks"]
     search_fields = ["technique__name", "condition__name"]
     autocomplete_fields = ["technique", "condition"]
+
+    def save_model(self, request, obj, form, change):
+        """Invalidate the owning technique's caches (#3712).
+
+        The identical edit made through the Technique page's inline invalidates
+        correctly (``TechniqueAdmin.save_related``); made here it did not, so the
+        same change had two different outcomes depending on which page staff
+        used. Techniques are SharedMemoryModels, so the stale ``cached_*``
+        payload lists answer every later read in the process, and the tuning
+        corpus keys on the catalog revision this also bumps.
+        """
+        super().save_model(request, obj, form, change)
+        invalidate_technique_payload_caches(obj.technique)
+
+    def delete_model(self, request, obj):
+        """Removing a dispel row changes the summary as much as adding one."""
+        technique = obj.technique
+        super().delete_model(request, obj)
+        invalidate_technique_payload_caches(technique)
+
+    def delete_queryset(self, request, queryset):
+        """The changelist's bulk-delete action bypasses ``delete_model``."""
+        techniques = list({row.technique for row in queryset.select_related("technique")})
+        super().delete_queryset(request, queryset)
+        for technique in techniques:
+            invalidate_technique_payload_caches(technique)
 
 
 class TechniqueRemovedConditionInline(admin.TabularInline):
@@ -778,6 +807,37 @@ class TraditionGiftGrantAdmin(admin.ModelAdmin):
     filter_horizontal = ["special_techniques"]
 
 
+@admin.register(PathGiftGrant)
+class PathGiftGrantAdmin(admin.ModelAdmin):
+    """The path half of the CG technique menu (#3712).
+
+    ``get_technique_options`` unions this grant's ``starter_techniques`` with the
+    tradition's specials, and only the tradition half had an authoring surface:
+    the 76 authored path pools were fixture-loaded and could not be edited at
+    all. Mirrors ``TraditionGiftGrantAdmin`` above deliberately, so the two
+    halves of one menu are authored the same way.
+
+    ``PathGiftGrant.clean()`` already rejects a starter technique that does not
+    belong to the grant's gift, and the admin runs it on save.
+    """
+
+    list_display = ["path", "gift", "get_technique_count"]
+    list_filter = ["path", "gift"]
+    search_fields = ["path__name", "gift__name"]
+    autocomplete_fields = ["gift"]
+    filter_horizontal = ["starter_techniques"]
+    list_select_related = ["path", "gift"]
+
+    def get_queryset(self, request):
+        """Count the pool in SQL rather than fetching it for a display column."""
+        return super().get_queryset(request).annotate(technique_count=Count("starter_techniques"))
+
+    @admin.display(description="Starter techniques", ordering="technique_count")
+    def get_technique_count(self, obj: PathGiftGrant) -> int:
+        """An empty pool is the gap the required-content sentinel reports (#3682)."""
+        return obj.technique_count
+
+
 @admin.register(CharacterTradition)
 class CharacterTraditionAdmin(admin.ModelAdmin):
     list_display = ["character", "tradition", "acquired_at", "left_at"]
@@ -953,6 +1013,43 @@ class LevelPowerConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not LevelPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(AuraPowerConfig)
+class AuraPowerConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the aura power term (#768, registered #3712).
+
+    Unregistered until now, while the required-content dashboard reported the
+    missing row: staff were told to create a row through a page that did not
+    exist. Both axes default to 0, which disables them, so the row existing is
+    not the same as the term being on.
+    """
+
+    list_display = ("pk", "affinity_alignment_bonus", "resonance_standing_bonus")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not AuraPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(CapabilityPowerConfig)
+class CapabilityPowerConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the capability power curve (#2708, registered #3712).
+
+    No row means the curve is disabled and every capability consumer falls back
+    to its pre-#2708 additive arithmetic, so the feature is turned on by tuning
+    rather than by deploying. That is the state production is in today.
+    """
+
+    list_display = ("pk", "power_per_doubling")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not CapabilityPowerConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
