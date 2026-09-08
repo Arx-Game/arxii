@@ -39,6 +39,7 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.magic.models import CharacterAnima
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
@@ -63,12 +64,16 @@ class MagicStageValidationTest(TestCase):
         cls.tradition = TraditionFactory()
         cls.gift = GiftFactory(name="Shadow Majesty")
 
+        cast_template = get_standalone_cast_template()
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
-        path_grant.starter_techniques.set(cls.pool_techniques)
+        cls.pool_techniques = TechniqueFactory.create_batch(
+            2, gift=cls.gift, action_template=cast_template
+        )
+        cls.unready_technique = TechniqueFactory(gift=cls.gift)
+        path_grant.starter_techniques.set([*cls.pool_techniques, cls.unready_technique])
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
 
         # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
@@ -76,7 +81,9 @@ class MagicStageValidationTest(TestCase):
         cls.species = SpeciesFactory(name="Species Technique Test")
         cls.species_gift = GiftFactory(name="Species Minor Gift", kind=GiftKind.MINOR)
         SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
-        cls.species_technique = TechniqueFactory(gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(
+            gift=cls.species_gift, action_template=get_standalone_cast_template()
+        )
 
         # A technique belonging to the gift but attached to neither the pool nor
         # the tradition technique set — outside the (path, gift, tradition) availability set.
@@ -147,6 +154,13 @@ class MagicStageValidationTest(TestCase):
         )
         errors = compute_magic_errors(draft)
         assert errors == []
+
+    def test_unready_technique_fails_with_readiness_reason(self):
+        draft = self._draft(selected_technique_ids=[self.unready_technique.id])
+
+        errors = compute_magic_errors(draft)
+
+        self.assertEqual(errors, ["Selected technique is unfinished (no action template)"])
 
     def test_too_many_techniques_fails(self):
         """starting_technique_picks defaults to 1 — picking 2 is over budget."""
@@ -448,7 +462,13 @@ class CGGiftOptionEndpointTest(TestCase):
 
         cls.available_gift = GiftFactory(name="Shadow Majesty")
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.available_gift)
-        path_grant.starter_techniques.set(TechniqueFactory.create_batch(2, gift=cls.available_gift))
+        path_grant.starter_techniques.set(
+            TechniqueFactory.create_batch(
+                2,
+                gift=cls.available_gift,
+                action_template=get_standalone_cast_template(),
+            )
+        )
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.available_gift)
 
         # Authored tradition grant, but neither pool nor signature techniques attached.
@@ -536,16 +556,21 @@ class CGTechniqueOptionEndpointTest(TestCase):
         cls.gift = GiftFactory()
 
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
+        cast_template = get_standalone_cast_template()
+        cls.pool_techniques = TechniqueFactory.create_batch(
+            2, gift=cls.gift, action_template=cast_template
+        )
         path_grant.starter_techniques.set(cls.pool_techniques)
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
         cls.species = SpeciesFactory(name="Endpoint Species Technique Test")
         cls.species_gift = GiftFactory(name="Endpoint Species Gift", kind=GiftKind.MINOR)
         SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
-        cls.species_technique = TechniqueFactory(gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(
+            gift=cls.species_gift, action_template=get_standalone_cast_template()
+        )
 
     def setUp(self):
         self.client = APIClient()

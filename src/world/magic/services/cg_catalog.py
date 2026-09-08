@@ -27,15 +27,24 @@ if TYPE_CHECKING:
     from world.species.models import Species
 
 
-def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> TechniqueOptions:
-    """The pool U tradition availability set for one (path, gift, tradition) pick.
+def get_technique_options(
+    path: Path, gift: Gift, tradition: Tradition, *, include_unready: bool = False
+) -> TechniqueOptions:
+    """Return the ready technique pool for one CG pick.
 
     ``pool`` comes from the path's curated starter set (``PathGiftGrant``);
     ``tradition`` comes from the tradition's special technique set
     (``TraditionGiftGrant``). Either grant row may be absent (no authored row
     for that combination), in which case that half of the pool is simply empty.
+
+    A technique without an action template is unfinished and is not offered as
+    a CG pick. ``include_unready`` is reserved for validation, which needs to
+    distinguish an unavailable technique from an unfinished one when reporting
+    a stale or tampered selection.
     """
     technique_qs = Technique.objects.select_related("effect_type")
+    if not include_unready:
+        technique_qs = technique_qs.filter(action_template__isnull=False)
 
     path_grant = (
         PathGiftGrant.objects.filter(path=path, gift=gift)
@@ -63,11 +72,15 @@ def get_technique_options(path: Path, gift: Gift, tradition: Tradition) -> Techn
     return TechniqueOptions(pool=pool, tradition=tradition_techniques)
 
 
-def get_species_technique_options(species: Species | None) -> list[Technique]:
+def get_species_technique_options(
+    species: Species | None, *, include_unready: bool = False
+) -> list[Technique]:
     """Return techniques belonging to the gifts granted by a species.
 
     A species receives its own grants plus inheritable grants from every ancestor.
-    An empty result is valid while a species gift is still unwritten.
+    An empty result is valid while a species gift is still unwritten. Set
+    ``include_unready`` for validation or finalization paths that need to
+    classify a stale selection rather than treat it as unavailable.
     """
     if species is None:
         return []
@@ -79,11 +92,10 @@ def get_species_technique_options(species: Species | None) -> list[Technique]:
         species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
     )
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
-    return list(
-        Technique.objects.filter(gift_id__in=gift_ids)
-        .select_related("effect_type")
-        .order_by("name", "id")
-    )
+    technique_qs = Technique.objects.filter(gift_id__in=gift_ids)
+    if not include_unready:
+        technique_qs = technique_qs.filter(action_template__isnull=False)
+    return list(technique_qs.select_related("effect_type").order_by("name", "id"))
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
@@ -94,7 +106,9 @@ def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:
     excluded. Resolves both grant tables in two queries total — no per-gift
     query loop.
     """
-    technique_qs = Technique.objects.select_related("effect_type")
+    technique_qs = Technique.objects.select_related("effect_type").filter(
+        action_template__isnull=False
+    )
 
     tradition_grants = list(
         TraditionGiftGrant.objects.filter(tradition=tradition)

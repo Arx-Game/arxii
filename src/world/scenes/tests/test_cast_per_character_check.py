@@ -45,10 +45,11 @@ from world.magic.models import CharacterTechnique
 from world.magic.seeds_cast import TECHNIQUE_CAST_CHECK_TYPE_NAME, get_standalone_cast_template
 from world.magic.seeds_checks import character_magic_check_type_name
 from world.magic.services.anima import get_character_cast_check
+from world.magic.services.cg_catalog import get_technique_options
 from world.realms.models import Realm
 from world.roster.seeds import ensure_rosters
 from world.scenes import cast_services
-from world.scenes.cast_services import request_technique_cast
+from world.scenes.cast_services import castable_technique_links_for_sheet, request_technique_cast
 from world.scenes.factories import PersonaFactory, SceneFactory
 from world.skills.factories import SkillFactory
 from world.species.models import Species
@@ -151,8 +152,9 @@ class CastUsesPerCharacterCheckTests(TestCase):
         cls.technique = TechniqueFactory(
             gift=cls.gift, action_template=get_standalone_cast_template()
         )
+        cls.unready_technique = TechniqueFactory(gift=cls.gift)
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        path_grant.starter_techniques.set([cls.technique])
+        path_grant.starter_techniques.set([cls.technique, cls.unready_technique])
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
 
     def setUp(self) -> None:
@@ -206,8 +208,12 @@ class CastUsesPerCharacterCheckTests(TestCase):
         return character, sheet, account
 
     def test_finalized_character_casts_with_personal_check(self) -> None:
-        """A CG-finalized character can self-cast their starter technique, and the
-        cast rolls their per-character magic check rather than the fallback."""
+        """A ready CG pick finalizes, appears in the cast list, and resolves."""
+        options = get_technique_options(self.path, self.gift, self.tradition)
+        offered_ids = {technique.id for technique in [*options.pool, *options.tradition]}
+        self.assertIn(self.technique.pk, offered_ids)
+        self.assertNotIn(self.unready_technique.pk, offered_ids)
+
         character, sheet, _account = self._finalize_caster()
 
         # The catalog pick finalized into a linked CharacterTechnique with the
@@ -217,6 +223,13 @@ class CastUsesPerCharacterCheckTests(TestCase):
             char_technique, "Finalized character should know a starter-catalog technique"
         )
         technique = char_technique.technique
+        castable_links = castable_technique_links_for_sheet(sheet.pk)
+        self.assertEqual([link.technique_id for link in castable_links], [technique.pk])
+        self.assertNotIn(
+            self.unready_technique.pk,
+            [link.technique_id for link in castable_links],
+            "An unfinished technique must not reach the player's cast list",
+        )
         self.assertIsNotNone(
             technique.action_template_id,
             "Starter-catalog technique must carry the default cast template (Task 6)",

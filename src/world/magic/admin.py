@@ -393,9 +393,8 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
         value = self.value()
         # Cast linkage is a column, so it filters in SQL rather than through the
         # Python sweep (#3682). It is also deliberately not a
-        # ``TechniqueAuthoringGap`` member: every authored technique is missing a
-        # template today, so folding it into that audit would make membership
-        # mean "everything" and hide the two real authoring gaps.
+        # ``TechniqueAuthoringGap`` member: cast readiness is its own policy
+        # gate, while the gap audit covers effect-authoring data.
         if value == _GAP_NOT_CASTABLE:
             return queryset.filter(action_template__isnull=True)
         attr = self._GAP_ATTRS.get(value)
@@ -406,8 +405,40 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
         return queryset.filter(pk__in=pks)
 
 
+@admin.action(description="Wire selected techniques to the shared Technique Cast")
+def wire_technique_cast_templates(modeladmin, request, queryset):  # type: ignore[no-untyped-def]
+    """Give selected unfinished techniques the shared standalone cast template.
+
+    Staff choose the rows through the ``No cast template`` filter; the action
+    only updates rows that are still missing a template and invalidates each
+    affected technique's shared-memory payload caches.
+    """
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+
+    techniques = list(queryset.filter(action_template__isnull=True))
+    if not techniques:
+        modeladmin.message_user(request, "No selected techniques need a cast template.")
+        return
+
+    template = get_standalone_cast_template()
+    Technique.objects.filter(pk__in=[technique.pk for technique in techniques]).update(
+        action_template_id=template.pk
+    )
+    for technique in techniques:
+        technique.action_template_id = template.pk
+        invalidate_technique_payload_caches(technique)
+    # Bulk update bypasses Evennia's identity map; discard any other stale
+    # Technique instances that may still carry a null action_template_id.
+    Technique.flush_instance_cache()
+    modeladmin.message_user(
+        request,
+        f"Wired {len(techniques)} technique(s) to the shared Technique Cast template.",
+    )
+
+
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
+    actions = [wire_technique_cast_templates]
     list_display = [
         "name",
         "gift",
@@ -473,10 +504,9 @@ class TechniqueAdmin(admin.ModelAdmin):
     def get_authoring_gap(self, obj: Technique) -> str:
         """Flag the states where the derived effect can't be trusted (#2898, #3682).
 
-        "no cast template" is a statement about the cast linkage, not a verdict
-        on the technique: a standing-capability technique is legitimately not
-        castable. It is reported because nothing else tells staff that a
-        perfectly valid CG pick will never appear in the player's cast list.
+        "no cast template" marks an unfinished technique. Every technique must
+        be activatable; capability grants are standing possession but do not
+        create a standing-only exception to the cast readiness rule.
         """
         gaps = []
         if obj.cached_effect_summary["is_underspecified"]:

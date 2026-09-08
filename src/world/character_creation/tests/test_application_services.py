@@ -42,6 +42,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
 from world.tarot.constants import ArcanaType
@@ -715,7 +716,11 @@ class ApproveApplicationIntegrationTests(TestCase):
         # with a pool technique, plus a Skill and the STAT trait for the anima check.
         cls.gift = GiftFactory(name="Approve Integration Gift")
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.technique = TechniqueFactory(gift=cls.gift, effect_type=cls.effect_type)
+        cls.technique = TechniqueFactory(
+            gift=cls.gift,
+            effect_type=cls.effect_type,
+            action_template=get_standalone_cast_template(),
+        )
         path_grant.starter_techniques.set([cls.technique])
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.skill = SkillFactory()

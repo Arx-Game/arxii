@@ -10,6 +10,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.magic.services.cg_catalog import get_gift_options, get_technique_options
 
 
@@ -23,12 +24,16 @@ class TechniqueOptionsTest(TestCase):
         cls.tradition = TraditionFactory()
         cls.other_tradition = TraditionFactory()
 
+        cast_template = get_standalone_cast_template()
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
-        path_grant.starter_techniques.set(cls.pool_techniques)
+        cls.pool_techniques = TechniqueFactory.create_batch(
+            2, gift=cls.gift, action_template=cast_template
+        )
+        cls.unready_technique = TechniqueFactory(gift=cls.gift)
+        path_grant.starter_techniques.set([*cls.pool_techniques, cls.unready_technique])
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
 
         # A second tradition has an authored grant row but no signature techniques.
@@ -39,6 +44,18 @@ class TechniqueOptionsTest(TestCase):
 
         self.assertCountEqual(options.pool, self.pool_techniques)
         self.assertEqual(options.tradition, [self.special_technique])
+
+    def test_unready_techniques_are_not_offered(self):
+        options = get_technique_options(self.path, self.gift, self.tradition)
+
+        offered_ids = {technique.id for technique in [*options.pool, *options.tradition]}
+        self.assertNotIn(self.unready_technique.id, offered_ids)
+
+        all_options = get_technique_options(
+            self.path, self.gift, self.tradition, include_unready=True
+        )
+        all_ids = {technique.id for technique in [*all_options.pool, *all_options.tradition]}
+        self.assertIn(self.unready_technique.id, all_ids)
 
     def test_pool_present_signature_empty_for_other_tradition(self):
         options = get_technique_options(self.path, self.gift, self.other_tradition)
@@ -66,7 +83,11 @@ class GiftOptionsTest(TestCase):
 
         cls.available_gift = GiftFactory()
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.available_gift)
-        path_grant.starter_techniques.set(TechniqueFactory.create_batch(2, gift=cls.available_gift))
+        path_grant.starter_techniques.set(
+            TechniqueFactory.create_batch(
+                2, gift=cls.available_gift, action_template=get_standalone_cast_template()
+            )
+        )
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.available_gift)
 
         # Authored tradition grant, but neither pool nor signature techniques attached.

@@ -488,8 +488,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     2. Must have selected_gift_id, and it must be one of the gifts available for
        the draft's (tradition, path) per ``cg_catalog.get_gift_options``.
     3. Must have >=1 selected_technique_ids, each drawn from the chosen gift's
-       pool ∪ signature availability set ∪ the selected species' gift techniques,
-       and no more than ``draft.starting_technique_picks``.
+       ready pool ∪ signature availability set ∪ the selected species' gift
+       techniques, and no more than ``draft.starting_technique_picks``. An
+       available technique without an action template is rejected as unfinished.
     4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill) — the character's Anima Check.
@@ -519,14 +520,26 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     if not technique_ids:
         return ["Select at least one technique"]
 
-    technique_options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
-    available_ids = (
-        {t.id for t in technique_options.pool}
-        | {t.id for t in technique_options.tradition}
-        | {t.id for t in get_species_technique_options(draft.selected_species)}
+    technique_options = get_technique_options(
+        draft.selected_path,
+        gift,
+        draft.selected_tradition,
+        include_unready=True,
     )
-    if any(technique_id not in available_ids for technique_id in technique_ids):
+    available_techniques = [
+        *technique_options.pool,
+        *technique_options.tradition,
+        *get_species_technique_options(draft.selected_species, include_unready=True),
+    ]
+    available_ids = {technique.id for technique in available_techniques}
+    selected_ids = set(technique_ids)
+    if selected_ids - available_ids:
         return ["Selected technique is not available"]
+    unfinished_ids = {
+        technique.id for technique in available_techniques if not technique.action_template_id
+    }
+    if selected_ids & unfinished_ids:
+        return ["Selected technique is unfinished (no action template)"]
 
     picks = draft.starting_technique_picks
     if len(technique_ids) > picks:
