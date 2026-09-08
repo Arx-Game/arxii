@@ -72,11 +72,15 @@ def get_technique_options(
     return TechniqueOptions(pool=pool, tradition=tradition_techniques)
 
 
-def get_species_technique_options(species: Species | None) -> list[Technique]:
+def get_species_technique_options(
+    species: Species | None, *, include_unready: bool = False
+) -> list[Technique]:
     """Return techniques belonging to the gifts granted by a species.
 
     A species receives its own grants plus inheritable grants from every ancestor.
-    An empty result is valid while a species gift is still unwritten.
+    An empty result is valid while a species gift is still unwritten. Set
+    ``include_unready`` for validation or finalization paths that need to
+    classify a stale selection rather than treat it as unavailable.
     """
     if species is None:
         return []
@@ -88,11 +92,10 @@ def get_species_technique_options(species: Species | None) -> list[Technique]:
         species_id__in=[ancestor.id for ancestor in ancestor_species], inheritable=True
     )
     gift_ids = SpeciesGiftGrant.objects.filter(grant_filter).values_list("gift_id", flat=True)
-    return list(
-        Technique.objects.filter(gift_id__in=gift_ids, action_template__isnull=False)
-        .select_related("effect_type")
-        .order_by("name", "id")
-    )
+    technique_qs = Technique.objects.filter(gift_id__in=gift_ids)
+    if not include_unready:
+        technique_qs = technique_qs.filter(action_template__isnull=False)
+    return list(technique_qs.select_related("effect_type").order_by("name", "id"))
 
 
 def get_gift_options(tradition: Tradition, path: Path) -> list[Gift]:

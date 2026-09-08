@@ -529,7 +529,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     available_techniques = [
         *technique_options.pool,
         *technique_options.tradition,
-        *get_species_technique_options(draft.selected_species),
+        *get_species_technique_options(draft.selected_species, include_unready=True),
     ]
     available_ids = {technique.id for technique in available_techniques}
     selected_ids = set(technique_ids)
