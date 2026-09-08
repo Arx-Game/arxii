@@ -449,7 +449,8 @@ others.
   `{"pk": ..., "label": "{beginning} › {name}"}` dicts, ordered by beginning
   then name; and the active `GlimpseTag` count.
 - **Four rows** - Distinction Builder (a `<select>` of distinctions + Open,
-  plus a "New distinction" link to `admin_distinction_builder_new`);
+  plus a "New distinction" link to `admin_distinction_builder_new` and, since
+  #3709, an "Add from a table" link to `admin_distinction_paste`);
   tradition slate (a `<select>` of Beginnings + Open); Upbringing Builder (a
   `<select>` of Upbringings + Open, plus a second `<select>` of Beginnings +
   "New Upbringing" - `admin_upbringing_builder_new?beginning=` already reads
@@ -733,7 +734,7 @@ forms, `base_site.html`, a page-owned `extrastyle` link to `forms.css`.
 - Deliberate no-ADR: recorded in the approved #3675 spec, the same precedent
   #3660 set above.
 
-## Distinction Builder (#3675)
+## Distinction Builder (#3675, #3709)
 
 **Purpose:** author one `Distinction` - its fields, every `DistinctionEffect`,
 its `mutually_exclusive_with` M2M, and every `DistinctionOffer` that shows it
@@ -741,6 +742,39 @@ in a CG chapter - on one admin page in one transaction, fully replacing the
 stock `DistinctionAdmin` for authoring. Pattern mirrors the Upbringing
 Builder and the tradition slate page: `superuser_required`, the contributor
 gate, plain Django forms, `base_site.html`, a page-owned `extrastyle` link.
+
+- **Openers per chapter and the first look (#3709)** - the "Where it is
+  offered" row renders every opener widget (`schooling_line`, `glimpse_tag`,
+  `origin_choice`, `prompt`, `enemy_reason`, `enemy_degree`,
+  `appearance_section`) and `page.html`'s cascade shows the one(s) the row's
+  chapter accepts (`live.opener_field_map` is chapter -> list now; the enemy
+  chapter lists two). `OfferForm.__init__` limits `enemy_degree` to the two
+  marking degrees. A "First look for" column (`OfferForm.first_look`, a
+  `ModelMultipleChoiceField` of active Beginnings declared outside
+  `Meta.fields`) is written by `views._set_first_look_pins` after the row is
+  saved (`offer.first_look.set(...)` on the through model), never by
+  `save_m2m`. `live._opener_checks` warns on a line with no opener ("not
+  opened by anything; a player never sees it"). The reason and section
+  pickers are `AutocompleteSelect`s, which is why `EnemyReasonAdmin` and
+  `AppearanceSectionAdmin` (`world/character_creation/admin.py`) carry
+  `search_fields`; `live.opener_link` links either to its change form.
+- **Add from a table (#3709)** - `web/admin/distinction_builder/paste.py`
+  (`distinction_paste`, one URL `admin_distinction_paste`; template
+  `paste.html`): superuser-only, additions-only bulk entry. `parse_table`
+  reads pipe-separated rows in `COLUMNS` order (name, category, cost per
+  rank, max rank, player line, description, effects as `+Target; -Target;
+  immune:Target`, offered under as `rules|devotions|fears|reason:<name>|
+  degree:ruined|degree:destroy|appearance:<section>|glimpse:<tag>|
+  lineage:<answer>|schooling:<line>`, first look for as Beginning names),
+  resolves every name against existing rows (`_one`: unknown or ambiguous is
+  an error), marks a row `create`, `skip` (slug exists, or the slug repeats
+  in the table) or `error`; `table_digest` hashes exactly what the preview
+  showed; the create POST re-parses, refuses a stale digest, any error row,
+  or an operator with no linked contributor, then `_create_rows` writes
+  everything in one `transaction.atomic()` (distinction, effects, offer
+  lines, pins; `stamp_written` on each; one admin `LogEntry` per
+  distinction). No update path, no delete path, no created reference rows;
+  a bulk edit would need its own ruling (ADR-0282).
 
 - **Files** - `web/admin/distinction_builder/`: `views.py`
   (`distinction_builder`, `distinction_builder_review`), `forms.py`

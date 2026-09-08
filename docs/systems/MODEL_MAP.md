@@ -1290,10 +1290,18 @@
 
 ## world.character_creation
 
+### AppearanceSection
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - distinction_offers <- character_creation.DistinctionOffer
+
 ### BeginningEnemyOffer
 **Foreign Keys:**
   - beginning -> character_creation.Beginnings [FK]
   - organization -> societies.Organization [FK] (nullable)
+  - reason -> character_creation.EnemyReason [FK] (nullable)
 
 ### BeginningTradition
 **Foreign Keys:**
@@ -1321,6 +1329,8 @@
   - beginning_traditions <- character_creation.BeginningTradition
   - origin_templates <- character_creation.OriginTemplate
   - drafts <- character_creation.CharacterDraft
+  - first_look_offers <- character_creation.DistinctionOffer
+  - offer_pins <- character_creation.OfferFirstLook
   - codex_grants <- codex.BeginningsCodexGrant
   - ritual_grants <- magic.BeginningsRitualGrant
 
@@ -1372,6 +1382,11 @@
   - glimpse_tag -> magic.GlimpseTag [FK] (nullable)
   - origin_choice -> character_creation.OriginTemplateSlotChoice [FK] (nullable)
   - schooling_line -> character_creation.SchoolingLine [FK] (nullable)
+  - enemy_reason -> character_creation.EnemyReason [FK] (nullable)
+  - appearance_section -> character_creation.AppearanceSection [FK] (nullable)
+  - first_look -> character_creation.Beginnings [M2M]
+**Pointed to by:**
+  - pins <- character_creation.OfferFirstLook
 
 ### DraftApplication
 **Foreign Keys:**
@@ -1390,6 +1405,20 @@
 ### DraftMarking
 **Foreign Keys:**
   - draft -> character_creation.CharacterDraft [FK]
+
+### EnemyReason
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+**Pointed to by:**
+  - beginning_enemy_offers <- character_creation.BeginningEnemyOffer
+  - distinction_offers <- character_creation.DistinctionOffer
+  - character_enemies <- character_sheets.CharacterEnemy
+
+### OfferFirstLook
+**Foreign Keys:**
+  - offer -> character_creation.DistinctionOffer [FK]
+  - beginning -> character_creation.Beginnings [FK]
 
 ### OriginTemplate
 **Foreign Keys:**
@@ -1495,6 +1524,7 @@
   - organization -> societies.Organization [FK] (nullable)
   - family -> roster.Family [FK] (nullable)
   - secret -> secrets.Secret [FK] (nullable)
+  - reason -> character_creation.EnemyReason [FK] (nullable)
 
 ### CharacterSheet
 **Foreign Keys:**

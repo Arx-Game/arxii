@@ -1,5 +1,25 @@
 # Character Creation & Identity
 
+## Built (2026-09-08, #3709: offers hang off the question and the reason)
+
+Every chapter's offer line now names what opens it, and the leaf groups by it:
+the Actor's Sheet mounts one block per question (Rules, Devotions, Fears), the
+enemy asks why from an authored reason list (`EnemyReason`) before the own words
+and the picked reason opens its offers, the two worst degrees bundle their marks
+as offer lines (the `ENEMY_DEGREE_DISTINCTION_NAMES` constant is gone), and
+Appearance renders one block per authored section (`AppearanceSection`). A
+Beginning pins a first look per line (`OfferFirstLook`); `ChapterOffers` folds
+the rest under "See N more", prints a held distinction as held, carries the
+compact `+X; -Y` effect line, and reads "Awards N" in green against costs in the
+realm ink. The Distinction Builder shows the openers and a "First look for"
+column, two change lists hold the reasons and sections, and "Add from a table"
+lands scores of new distinctions at once, additions only. Migration 0114. The
+catalogue itself (rewriting the 29 rows and adding the rest) is the reviewer's
+own later content pass, in the reviewer's voice; nothing is seeded. See
+ADR-0282, [character_creation.md](../systems/character_creation.md)'s
+"Distinction offers" and "The Actor's Sheet", and `src/web/admin/CLAUDE.md`'s
+"Distinction Builder".
+
 ## Built (2026-09-07, #3675: retire the Distinctions stage)
 
 The standalone Distinctions stage is gone; each CG chapter now offers the

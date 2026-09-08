@@ -24,11 +24,14 @@ Character creation is a multi-stage process that guides players through creating
    stat/skill (renders the `GiftStage` funnel component; #2426 Task 10)
 7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
    bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
-8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
+8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
+   distinctions in authored sections (`AppearanceSection`, #3709)
 9. **Identity** - Name, description, background
-10. **Final Touches** - The Actor's Sheet (#3621): three questions, numbered goals, one
-    priced enemy, The Introductions; all optional (see `docs/systems/character_creation.md`'s
-    "The Actor's Sheet" and ADR-0279)
+10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
+    distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
+    why is picked from the authored `EnemyReason` list before the own words and whose
+    reason and degree open offers, The Introductions; all optional (see
+    `docs/systems/character_creation.md`'s "The Actor's Sheet", ADR-0279, ADR-0282)
 11. **Review** - Final review and submission
 
 ## Key Models

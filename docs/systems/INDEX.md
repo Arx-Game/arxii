@@ -2231,15 +2231,25 @@ Multi-stage character creation flow with draft system.
 - **Actor's Sheet (#3621, ADR-0279):** Final Touches replaced personality with three questions
   (`Profile.never_do`/`protect`/`fear`), goals with a horizon and number, one priced enemy
   (`character_creation/enemies.py`: `enemy_price`, `enemy_offers`, `resolve_enemy`;
-  `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation, Distinction
-  and heat seeds) and The Introductions (white journals by `JournalKind`; Whispers lines as
-  Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
+  `BeginningEnemyOffer` rows; `CharacterEnemy` written at finalize with reputation and heat
+  seeds and, since #3709, the picked `EnemyReason`; the degree's mark is a bundled offer line
+  on `OfferChapter.ENEMY`) and The Introductions (white journals by `JournalKind`; Whispers
+  lines as Level-1 secrets with gossip heat). See character_creation.md's "The Actor's Sheet".
+- **Offers hang off the question and the reason (#3709, ADR-0282):** every chapter's offer line
+  names its opener (`ActorSheetPrompt` on the Actor's Sheet; an `EnemyReason` row or a marking
+  degree on the enemy chapter; an `AppearanceSection` row on Appearance), the Beginning pins a
+  first look (`OfferFirstLook`), `offers_for` returns `opener_key`/`first_look`/`held`/
+  `effect_line`, `degree_marks` replaces the retired `ENEMY_DEGREE_DISTINCTION_NAMES`, and the
+  Distinction Builder's "Add from a table" (`web/admin/distinction_builder/paste.py`) lands new
+  rows in bulk, additions only.
 - **Distinctions are offered by CG chapter, not gated by a stage (#3675, ADR-0280):** the
   Distinctions stage is retired; `character_creation.DistinctionOffer` (`distinction`,
   `chapter` [`OfferChapter`: tradition_step/glimpse/lineage/appearance/actors_sheet],
-  `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, an opener FK
-  scoped to its chapter [`schooling_line`/`glimpse_tag`/`origin_choice`]) is the one row that
-  says where a distinction is shown and how it arrives, read by `world.character_creation
+  `arrives_as` [`OfferArrival`: choice/bundled/carried], `name`, `player_line`, exactly one opener
+  of its chapter's kind [`schooling_line`/`glimpse_tag`/`origin_choice`/`prompt`/`enemy_reason`/
+  `enemy_degree`/`appearance_section`, #3709], `first_look` [M2M `Beginnings` through
+  `OfferFirstLook`, #3709]) is the one row that says where a distinction is shown, what opens
+  it there and how it arrives, read by `world.character_creation
   .offers` (`offers_for`, `closed_for`, `reconcile_offer_picks`, `visible_offers`). A
   tradition's slate line (`BeginningTradition.state`, `TraditionState`:
   SELF_TAUGHT/TEACHERS_GONE/LIVING_MASTERS) prints one of three staff-authored standard lines
