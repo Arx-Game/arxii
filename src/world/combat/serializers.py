@@ -152,6 +152,9 @@ class OpponentSerializer(serializers.ModelSerializer):
     # applicable-pulls API consumes as ``target_object_id``. Plain FK column —
     # no query. Null for opponents with no backing ObjectDB.
     objectdb_id = serializers.IntegerField(read_only=True, allow_null=True)
+    # Public combat-side classification lets target pickers omit friendly summons.
+    # Optional here keeps cached clients compatible while exposing the public side.
+    allegiance = serializers.CharField(required=False, allow_null=True, default=None)
     # Duel mirror: FK PK column — no query. Non-null iff this opponent is a
     # passive surface mirroring a PC participant (is_duel_mirror == True).
     # The UI uses this to render the opponent as the opposing duelist rather
@@ -184,6 +187,7 @@ class OpponentSerializer(serializers.ModelSerializer):
             "is_enraged",
             "is_wall_broken",
             "status",
+            "allegiance",
             "active_conditions",
             "thumbnail_url",
             "thumbnail_media_url",
@@ -1098,6 +1102,16 @@ class PendingAttackSerializer(serializers.Serializer):
     cancelled = serializers.BooleanField()
 
 
+class CompanionOrderSummarySerializer(serializers.Serializer):
+    """Current-round companion directive exposed on an encounter read."""
+
+    companion_id = serializers.IntegerField()
+    companion_name = serializers.CharField()
+    order_kind = serializers.CharField()
+    target_opponent_id = serializers.IntegerField(allow_null=True)
+    defending_participant_id = serializers.IntegerField(allow_null=True)
+
+
 class EncounterDetailSerializer(serializers.ModelSerializer):
     """Full encounter state with covenant-filtered action visibility."""
 
@@ -1118,6 +1132,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
     clashes = serializers.SerializerMethodField()
     engagement_locks = serializers.SerializerMethodField()
     pending_attacks = serializers.SerializerMethodField()
+    companion_orders = serializers.SerializerMethodField()
     resolution_order = serializers.SerializerMethodField()
     position_adjacency = serializers.SerializerMethodField()
     position_nodes = serializers.SerializerMethodField()
@@ -1176,6 +1191,7 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
             "clashes",
             "engagement_locks",
             "pending_attacks",
+            "companion_orders",
             "resolution_order",
             "escalation_curve",
             "escalation_curve_name",
@@ -1452,6 +1468,27 @@ class EncounterDetailSerializer(serializers.ModelSerializer):
                 "cancelled": row.downgrades >= WINDUP_FIZZLE_DOWNGRADES,
             }
             for row in rows
+        ]
+
+    @extend_schema_field(CompanionOrderSummarySerializer(many=True))
+    def get_companion_orders(self, obj: CombatEncounter) -> list[dict[str, Any]]:
+        """Return current-round companion directives for the encounter."""
+        try:
+            orders = obj.companion_orders_cached.rows
+        except AttributeError:
+            from world.companions.models import CompanionOrder  # noqa: PLC0415
+
+            orders = CompanionOrder.objects.filter(encounter=obj).select_related("companion")
+        return [
+            {
+                "companion_id": order.companion_id,
+                "companion_name": order.companion.name,
+                "order_kind": order.order_kind,
+                "target_opponent_id": order.target_opponent_id,
+                "defending_participant_id": order.defending_participant_id,
+            }
+            for order in orders
+            if order.round_number == obj.round_number
         ]
 
     @extend_schema_field(PositionAdjacencyItemSerializer(many=True))

@@ -17,10 +17,20 @@ class CompanionArchetypeSerializer(serializers.ModelSerializer):
 class CompanionSerializer(serializers.ModelSerializer):
     archetype = CompanionArchetypeSerializer(read_only=True)
     is_present = serializers.SerializerMethodField()
+    # ObjectDB pk links this persistent companion to its deployed combat row.
+    objectdb_id = serializers.IntegerField(read_only=True, allow_null=True)
 
     class Meta:
         model = Companion
-        fields = ["id", "name", "archetype", "bonded_at", "released_at", "is_present"]
+        fields = [
+            "id",
+            "name",
+            "archetype",
+            "bonded_at",
+            "released_at",
+            "is_present",
+            "objectdb_id",
+        ]
         read_only_fields = fields
 
     def get_is_present(self, obj: Companion) -> bool:

@@ -209,6 +209,25 @@ describe('CombatantsList', () => {
     expect(screen.getByText('Lyris')).toBeInTheDocument();
   });
 
+  it('shows companion guard badges on defended participants', () => {
+    const encounter = {
+      ...makeEncounter([makeParticipant({ id: 1, character_name: 'Aerande' })]),
+      companion_orders: [
+        {
+          companion_id: 7,
+          companion_name: 'Ash',
+          order_kind: 'defend_ally',
+          target_opponent_id: null,
+          defending_participant_id: 1,
+        },
+      ],
+    };
+
+    render(<CombatantsList encounter={encounter} />, { wrapper: createWrapper() });
+
+    expect(screen.getByTestId('companion-guard-badge')).toHaveTextContent('Guarded by Ash');
+  });
+
   it('renders NPC rows from opponents', () => {
     const encounter = makeEncounter(
       [],

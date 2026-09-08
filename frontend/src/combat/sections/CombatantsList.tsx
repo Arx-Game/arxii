@@ -151,9 +151,11 @@ interface ParticipantRowProps {
   participant: Participant;
   /** Name of the opponent this PC is engagement-locked to, if any (#3555). */
   lockedToName?: string;
+  /** Names of companions currently ordered to defend this participant (#3576). */
+  guardedByNames?: string[];
 }
 
-function ParticipantRow({ participant, lockedToName }: ParticipantRowProps) {
+function ParticipantRow({ participant, lockedToName, guardedByNames = [] }: ParticipantRowProps) {
   return (
     <div
       className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/30"
@@ -192,6 +194,15 @@ function ParticipantRow({ participant, lockedToName }: ParticipantRowProps) {
               Locked: {lockedToName}
             </span>
           )}
+          {guardedByNames.map((name) => (
+            <span
+              key={name}
+              data-testid="companion-guard-badge"
+              className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300"
+            >
+              Guarded by {name}
+            </span>
+          ))}
         </div>
         {/* HP mini-bar */}
         <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
@@ -435,7 +446,21 @@ export function CombatantsList({
   characterId,
   canDeclareManeuvers = false,
 }: CombatantsListProps) {
-  const { participants, opponents, engagement_locks: engagementLocks } = encounter;
+  const {
+    participants,
+    opponents,
+    engagement_locks: engagementLocks,
+    companion_orders: companionOrders,
+  } = encounter;
+
+  // Map participant id -> companion names currently ordered to defend them (#3576).
+  const guardedByNames = new Map<number, string[]>();
+  for (const order of companionOrders ?? []) {
+    if (order.defending_participant_id === null) continue;
+    const names = guardedByNames.get(order.defending_participant_id) ?? [];
+    names.push(order.companion_name);
+    guardedByNames.set(order.defending_participant_id, names);
+  }
 
   // Map opponent id -> locked PC's display name (#3386, read-only visibility),
   // and participant id -> locked opponent's name for the PC row (#3555).
@@ -503,6 +528,7 @@ export function CombatantsList({
                   key={p.id}
                   participant={p}
                   lockedToName={lockedParticipantNames.get(p.id)}
+                  guardedByNames={guardedByNames.get(p.id)}
                 />
               ))}
             </div>

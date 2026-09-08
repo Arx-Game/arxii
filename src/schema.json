@@ -45622,12 +45622,17 @@ components:
             is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
             with no resolvable actor location, every companion reads as absent.
           readOnly: true
+        objectdb_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - archetype
       - bonded_at
       - id
       - is_present
       - name
+      - objectdb_id
       - released_at
     CompanionArchetype:
       type: object
@@ -45660,6 +45665,28 @@ components:
       - domain
       - id
       - name
+    CompanionOrderSummary:
+      type: object
+      description: Current-round companion directive exposed on an encounter read.
+      properties:
+        companion_id:
+          type: integer
+        companion_name:
+          type: string
+        order_kind:
+          type: string
+        target_opponent_id:
+          type: integer
+          nullable: true
+        defending_participant_id:
+          type: integer
+          nullable: true
+      required:
+      - companion_id
+      - companion_name
+      - defending_participant_id
+      - order_kind
+      - target_opponent_id
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -49531,6 +49558,11 @@ components:
           items:
             $ref: '#/components/schemas/PendingAttack'
           readOnly: true
+        companion_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanionOrderSummary'
+          readOnly: true
         resolution_order:
           type: array
           items:
@@ -49597,6 +49629,7 @@ components:
           nullable: true
       required:
       - clashes
+      - companion_orders
       - completed_at
       - created_at
       - current_round_actions
@@ -60101,6 +60134,9 @@ components:
           readOnly: true
         status:
           $ref: '#/components/schemas/OpponentStatusEnum'
+        allegiance:
+          type: string
+          nullable: true
         active_conditions:
           type: array
           items:
@@ -60271,6 +60307,10 @@ components:
           minimum: 0
         status:
           $ref: '#/components/schemas/OpponentStatusEnum'
+        allegiance:
+          type: string
+          nullable: true
+          minLength: 1
       required:
       - health
       - max_health

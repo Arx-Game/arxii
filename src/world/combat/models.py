@@ -19,6 +19,7 @@ from world.achievements.models import DiscoverableContent
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
+    from world.companions.handlers import CompanionOrderHandler
 
 from world.combat.constants import (
     COMBO_MIN_SLOTS,
@@ -241,6 +242,13 @@ class CombatEncounter(AbstractRound):
         from world.combat.handlers import EncounterCombatHandler  # noqa: PLC0415
 
         return EncounterCombatHandler(self)
+
+    @cached_property
+    def companion_orders_cached(self) -> "CompanionOrderHandler":
+        """Current-round companion directives for this encounter."""
+        from world.companions.handlers import CompanionOrderHandler  # noqa: PLC0415
+
+        return CompanionOrderHandler(self)
 
     @cached_property
     def is_lethal(self) -> bool:
