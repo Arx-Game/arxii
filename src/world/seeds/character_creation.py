@@ -325,7 +325,15 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     "offers_word_free": "Free",
     "offers_word_per_rank": "per rank",
     "offers_word_spent": "spent",
-    "offers_word_refunds": "Refunds",
+    # "Awards N", never "Refunds" (#3709, the reviewer's grammar ruling): a negative
+    # cost is what the world owes the character for carrying the trait.
+    "offers_word_awards": "Awards",
+    # The fold (#3709): the first look shows at rest, the rest under this line; {count}
+    # is the number folded. "held": the distinction is already the draft's from
+    # another line. The chip every offers block carries after its heading.
+    "offers_word_see_more": "See {count} more",
+    "offers_word_held": "held",
+    "offers_chip_distinctions": "Distinctions",
     "glimpse_story_label": "Your story",
     "glimpse_story_hint": (
         "The detail behind any of the picks above goes here; the picks stay short."
@@ -360,7 +368,6 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # The Appearance chapter's own offered distinctions (#3675 Task 15): what
     # shows offers here, in place of the retired Distinctions stage.
     "appearance_offers_heading": "What people notice first",
-    "appearance_offers_chip": "optional",
     "appearance_closed_lead": "Closed by your route",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",
@@ -369,10 +376,11 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # The Actor's Sheet (#3621): the three questions and their example lines, the
     # reviewer's own wording. The set is fixed in code (ACTOR_SHEET_QUESTIONS); the
     # words are content.
-    # The Actor's Sheet's own offered distinctions (#3675 Task 15): the
-    # personality-flavored offers mounted under the three questions.
-    "finaltouches_offers_heading": "Is it a hunger",
-    "finaltouches_offers_chip": "optional",
+    # The Actor's Sheet's own offered distinctions (#3675 Task 15, #3709): one block
+    # under each question, headed by the plural noun for what it holds.
+    "finaltouches_rules_heading": "Rules",
+    "finaltouches_devotions_heading": "Devotions",
+    "finaltouches_fears_heading": "Fears",
     "finaltouches_closed_lead": "Closed by your route",
     "finaltouches_never_do_prompt": "What would you never do?",
     "finaltouches_never_do_example": "Ex. Betray a secret. Break a vow. Make a pun.",
@@ -401,7 +409,12 @@ CG_EXPLANATION_COPY: dict[str, str] = {
         "own. The price is what the world owes you for carrying them, and the worst of "
         "them mark you."
     ),  # PLACEHOLDER: Apostate rewrite
-    "finaltouches_enemy_why_prompt": "Why",
+    # The enemy's why (#3709): the authored reason list first, then the own words.
+    "finaltouches_enemy_reason_prompt": "Why they want it",
+    "finaltouches_enemy_reason_chip": "pick one, or none",
+    "finaltouches_enemy_reason_offers_heading": "What it left you with",
+    "finaltouches_enemy_reason_offers_chip": "offered by your reason",
+    "finaltouches_enemy_why_prompt": "In your own words",
     "finaltouches_enemy_degree_prompt": "How badly",
     "finaltouches_enemy_mark_hint": (
         "Reach is fixed by the group picked; only how badly is the player's choice. The two "

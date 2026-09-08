@@ -36,6 +36,10 @@
   --cg-bg: hsl(var(--background));
   --cg-bg-shade: hsl(var(--muted));
   --cg-orn: hsl(var(--accent));
+  /* The price grammar (#3709): an award (a negative cost, what the world owes the
+   * character) prints green; a cost prints in the realm ink. */
+  --cg-award: #4f8a5a;
+  --cg-cost: hsl(var(--primary));
   --cg-btn-bg: hsl(var(--primary));
   --cg-btn-fg: hsl(var(--primary-foreground));
   --cg-btn-border: hsl(var(--primary));
@@ -1150,8 +1154,57 @@
 .interview .stance .price .grant {
   color: var(--cg-orn);
 }
-.interview .stance .price .refund {
-  color: var(--cg-accent);
+.interview .stance .price .award {
+  color: var(--cg-award);
+}
+.interview .stance .price .cost {
+  color: var(--cg-cost);
+}
+/* The compact mechanics line under an offer, "+Deception; -Willpower" (#3709):
+   slightly smaller and set in the monospace face so it reads as a game fact. */
+.interview .stance .g + .fx,
+.interview .stance .fx {
+  display: block;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  letter-spacing: 0.03em;
+  color: var(--cg-muted);
+  margin-top: 0.15rem;
+}
+/* The fold (#3709): the first look shows at rest, the rest behind one line. */
+.interview details.more {
+  margin: 0;
+}
+.interview details.more > summary {
+  cursor: pointer;
+  list-style: none;
+  font-family: 'Cinzel', serif;
+  font-weight: 600;
+  font-size: 0.74rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--cg-orn);
+  padding: 0.7rem 0.25rem 0.5rem 1.7rem;
+  position: relative;
+}
+.interview details.more > summary::-webkit-details-marker {
+  display: none;
+}
+.interview details.more > summary::before {
+  content: '▸';
+  position: absolute;
+  left: 0.2rem;
+  color: var(--cg-label);
+}
+.interview details.more[open] > summary::before {
+  content: '▾';
+}
+.interview details.more > summary:hover {
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+.interview details.more > .stances {
+  margin-top: 0;
 }
 .interview .stance .rank {
   display: inline-flex;

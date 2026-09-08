@@ -45,6 +45,10 @@ const silverTongue: VisibleOffer = {
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 const magicalScar: VisibleOffer = {
@@ -59,6 +63,10 @@ const magicalScar: VisibleOffer = {
   max_rank: 3,
   is_locked: false,
   lock_reason: '',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 const highborn: VisibleOffer = {
@@ -73,6 +81,10 @@ const highborn: VisibleOffer = {
   max_rank: 1,
   is_locked: true,
   lock_reason: 'The Cradle raised this character; the route closed it.',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 /** A CHOICE entry from a different chapter's offer, to prove a toggle never drops it. */
@@ -111,14 +123,14 @@ beforeEach(() => {
 });
 
 describe('ChapterOffers', () => {
-  it('renders offers with their price, opener label and refund/per-rank formats', () => {
+  it('renders offers with their price, opener label and award/per-rank formats', () => {
     renderWithCharacterCreationProviders(
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
     expect(screen.getByText('Silver Tongue')).toBeInTheDocument();
     expect(screen.getByText('You always know the right thing to say.')).toBeInTheDocument();
     expect(screen.getByText('From Mark.')).toBeInTheDocument();
-    expect(screen.getByText('Refunds 25')).toBeInTheDocument();
+    expect(screen.getByText('Awards 25')).toBeInTheDocument();
     expect(screen.getByText('Magical Scar')).toBeInTheDocument();
     expect(screen.getByText('5 per rank')).toBeInTheDocument();
   });
@@ -129,12 +141,12 @@ describe('ChapterOffers', () => {
         draft={createMockDraft()}
         chapter="glimpse"
         wordPerRank="par la marque"
-        wordRefunds="Rembourse"
+        wordAwards="Rembourse"
       />
     );
     expect(screen.getByText('Rembourse 25')).toBeInTheDocument();
     expect(screen.getByText('5 par la marque')).toBeInTheDocument();
-    expect(screen.queryByText('Refunds 25')).not.toBeInTheDocument();
+    expect(screen.queryByText('Awards 25')).not.toBeInTheDocument();
     expect(screen.queryByText('5 per rank')).not.toBeInTheDocument();
   });
 
@@ -348,7 +360,7 @@ describe('ChapterOffers', () => {
     expect(screen.queryByText(/spent$/)).not.toBeInTheDocument();
   });
 
-  it('a selected ranked offer with a per-rank refund gets the refund class on its spent line', () => {
+  it('a selected ranked offer with a per-rank award gets the award class on its spent line', () => {
     const refundRanked: VisibleOffer = {
       offer_id: 104,
       distinction_id: 4,
@@ -361,6 +373,10 @@ describe('ChapterOffers', () => {
       max_rank: 3,
       is_locked: false,
       lock_reason: '',
+      opener_key: '',
+      first_look: false,
+      held: false,
+      effect_line: '',
     };
     offersResponse = { ...offersResponse, offers: [...offersResponse.offers, refundRanked] };
     draftDistinctions = [
@@ -382,7 +398,7 @@ describe('ChapterOffers', () => {
       <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
     );
     const spentLine = screen.getByText('-10 spent');
-    expect(spentLine).toHaveClass('refund');
+    expect(spentLine).toHaveClass('award');
   });
 
   it('showOpener={false} omits the "From X." attribution line', () => {
@@ -500,7 +516,7 @@ describe('ChapterOffers', () => {
     expect(stance).toHaveAttribute('aria-pressed', 'true');
     expect(stance).toHaveAttribute('aria-disabled', 'true');
     expect(stance?.querySelector('.locked')).toHaveTextContent('bundled');
-    expect(stance?.querySelector('.refund')).toHaveTextContent('Refunds 25');
+    expect(stance?.querySelector('.award')).toHaveTextContent('Awards 25');
     expect(screen.getByText('Nothing but the clothes.')).toBeInTheDocument();
     // The bundled row prints before the offered ones.
     const stances = Array.from(document.querySelectorAll('.stances > li'));
@@ -545,5 +561,102 @@ describe('ChapterOffers', () => {
       </div>
     );
     expect(unreachableClasses(container)).toEqual([]);
+  });
+});
+
+describe('ChapterOffers fold, held state and effect line (#3709)', () => {
+  const many = (count: number, pinned: number[] = []): VisibleOffer[] =>
+    Array.from({ length: count }, (_, i) => ({
+      ...silverTongue,
+      offer_id: 200 + i,
+      distinction_id: 20 + i,
+      name: `Trait ${i}`,
+      cost_per_rank: 5,
+      first_look: pinned.includes(200 + i),
+    }));
+
+  it('a block of five or more shows the pinned lines at rest and folds the rest', () => {
+    offersResponse = { offers: many(6, [203, 205]), closed: [] };
+    const { container } = renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    const atRest = container.querySelector<HTMLElement>('ul.stances')!;
+    expect(within(atRest).getByText('Trait 3')).toBeInTheDocument();
+    expect(within(atRest).getByText('Trait 5')).toBeInTheDocument();
+    expect(within(atRest).queryByText('Trait 0')).not.toBeInTheDocument();
+    const fold = container.querySelector<HTMLElement>('details.more')!;
+    expect(fold).not.toBeNull();
+    expect(within(fold).getByText('See 4 more')).toBeInTheDocument();
+    expect(within(fold).getByText('Trait 0')).toBeInTheDocument();
+  });
+
+  it('with nothing pinned the first three stand in for the first look', () => {
+    offersResponse = { offers: many(7), closed: [] };
+    const { container } = renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordSeeMore="{count} further" />
+    );
+    const atRest = container.querySelector<HTMLElement>('ul.stances')!;
+    expect(within(atRest).getByText('Trait 2')).toBeInTheDocument();
+    expect(within(atRest).queryByText('Trait 3')).not.toBeInTheDocument();
+    expect(screen.getByText('4 further')).toBeInTheDocument();
+  });
+
+  it('a block under five never folds', () => {
+    offersResponse = { offers: many(4), closed: [] };
+    const { container } = renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(container.querySelector('details.more')).toBeNull();
+    expect(screen.getByText('Trait 3')).toBeInTheDocument();
+  });
+
+  it('firstLook={false} shows everything at rest', () => {
+    offersResponse = { offers: many(6, [200]), closed: [] };
+    const { container } = renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" firstLook={false} />
+    );
+    expect(container.querySelector('details.more')).toBeNull();
+    expect(screen.getByText('Trait 5')).toBeInTheDocument();
+  });
+
+  it('a held line renders pressed and disabled with the held word and no toggle', async () => {
+    const user = userEvent.setup();
+    offersResponse = {
+      offers: [{ ...magicalScar, held: true }, silverTongue],
+      closed: [],
+    };
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" wordHeld="yours already" />
+    );
+    const stance = screen.getByText('Magical Scar').closest('.stance')!;
+    expect(stance).toHaveAttribute('aria-pressed', 'true');
+    expect(stance).toHaveAttribute('aria-disabled', 'true');
+    expect(stance.querySelector('.locked')).toHaveTextContent('yours already');
+    expect(stance.querySelector('.rank')).toBeNull();
+    await user.click(stance as HTMLElement);
+    expect(mutate).not.toHaveBeenCalled();
+  });
+
+  it('prints the effect line in its own fx span under the player line', () => {
+    offersResponse = {
+      offers: [{ ...silverTongue, effect_line: '+Deception; -Willpower' }],
+      closed: [],
+    };
+    const { container } = renderWithCharacterCreationProviders(
+      <div className="interview">
+        <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+      </div>
+    );
+    const fx = screen.getByText('+Deception; -Willpower');
+    expect(fx).toHaveClass('fx');
+    expect(unreachableClasses(container)).toEqual([]);
+  });
+
+  it('a plain cost carries the cost class and an award the award class', () => {
+    renderWithCharacterCreationProviders(
+      <ChapterOffers draft={createMockDraft()} chapter="glimpse" />
+    );
+    expect(screen.getByText('Awards 25')).toHaveClass('award');
+    expect(screen.getByText('20')).toHaveClass('cost');
   });
 });

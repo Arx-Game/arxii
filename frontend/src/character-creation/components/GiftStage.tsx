@@ -137,7 +137,7 @@ function glimpseRailRows(
         offer.max_rank > 1
           ? `${entry.distinction_name} · rank ${entry.rank}`
           : entry.distinction_name,
-      value: spent < 0 ? `Refunds ${-spent}` : String(spent),
+      value: spent < 0 ? `Awards ${-spent}` : String(spent),
     });
   }
   return rows;

@@ -142,7 +142,7 @@ describe('GiftStage (folio)', () => {
     renderWithCharacterCreationProviders(
       <GiftStage draft={draft} onRegisterBeforeLeave={vi.fn()} />
     );
-    expect(screen.getByText('Self-taught · slower to learn · Refunds 75')).toBeInTheDocument();
+    expect(screen.getByText('Self-taught · slower to learn · Awards 75')).toBeInTheDocument();
     expect(screen.queryByText('Newly taken in')).not.toBeInTheDocument();
   });
 
@@ -226,6 +226,10 @@ describe('GiftStage (folio)', () => {
           max_rank: 3,
           is_locked: false,
           lock_reason: '',
+          opener_key: '',
+          first_look: false,
+          held: false,
+          effect_line: '',
         },
       ],
       closed: [],
@@ -268,6 +272,10 @@ describe('GiftStage (folio)', () => {
           max_rank: 1,
           is_locked: false,
           lock_reason: '',
+          opener_key: '',
+          first_look: false,
+          held: false,
+          effect_line: '',
         },
       ],
       closed: [],
@@ -292,7 +300,7 @@ describe('GiftStage (folio)', () => {
     );
     const rail = within(container.querySelector('.record-rail')!);
     expect(rail.getByText('Impoverished')).toBeInTheDocument();
-    expect(rail.getByText('Refunds 25')).toBeInTheDocument();
+    expect(rail.getByText('Awards 25')).toBeInTheDocument();
   });
 
   it('rail shows no Glimpse rows when no draft entry carries a Glimpse offer id', () => {

@@ -134,6 +134,10 @@ function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = 
     max_rank: catalogOffer.max_rank,
     is_locked: false,
     lock_reason: '',
+    opener_key: '',
+    first_look: false,
+    held: false,
+    effect_line: '',
     ...overrides,
   };
 }

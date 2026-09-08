@@ -341,8 +341,21 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 effect_line=effect_line(effects.get(dist.id, [])),
             )
         )
+    # Appearance groups by section, in the sections' own order; within a group the
+    # pinned lines lead, then sort_order, then id.
+    group_orders = {
+        offer.id: (offer.appearance_section.sort_order if offer.appearance_section_id else 0)
+        for offer in chapter_offers
+    }
     sort_orders = {offer.id: offer.sort_order for offer in chapter_offers}
-    out.sort(key=lambda o: (not o.first_look, sort_orders[o.offer_id], o.offer_id))
+    out.sort(
+        key=lambda o: (
+            group_orders[o.offer_id],
+            not o.first_look,
+            sort_orders[o.offer_id],
+            o.offer_id,
+        )
+    )
     return out
 
 

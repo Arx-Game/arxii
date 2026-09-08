@@ -53,6 +53,10 @@ const hedonistic: VisibleOffer = {
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: 'prompt:protect',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 const voracious: VisibleOffer = {
@@ -67,6 +71,10 @@ const voracious: VisibleOffer = {
   max_rank: 3,
   is_locked: false,
   lock_reason: '',
+  opener_key: 'prompt:fear',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 const rouault: EnemyOffer = {
@@ -77,6 +85,7 @@ const rouault: EnemyOffer = {
   power_tier: '',
   why: '',
   source: 'lineage',
+  reason_id: null,
 };
 const republic: EnemyOffer = {
   kind: 'group',
@@ -86,6 +95,7 @@ const republic: EnemyOffer = {
   power_tier: '',
   why: 'it does not keep the Gifted',
   source: 'beginning',
+  reason_id: null,
 };
 
 describe("FinalTouchesStage (Actor's Sheet)", () => {
@@ -147,7 +157,7 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       within(degrees).getByRole('button', { name: /destroy you · Awards 48 CG points/ })
     ).toBeInTheDocument();
     expect(
-      within(degrees).getByRole('button', { name: /ruined · Awards 32 CG points · grants Marked/ })
+      within(degrees).getByRole('button', { name: /ruined · Awards 32 CG points · bundles Marked/ })
     ).toBeInTheDocument();
     await user.click(within(degrees).getByRole('button', { name: /thwarted/ }));
     expect(
@@ -185,20 +195,91 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
     ).toBeInTheDocument();
   });
 
-  it("offers this chapter's distinctions between the three questions and the Goals heading (#3675 Task 15)", () => {
+  it("offers each question's distinctions under that question, headed by its plural noun (#3709)", () => {
     const { container } = renderWithCharacterCreationProviders(
       <FinalTouchesStage draft={createMockDraft()} onRegisterBeforeLeave={vi.fn()} />
     );
-    expect(screen.getByText('Is it a hunger')).toBeInTheDocument();
-    expect(screen.getByText('Hedonistic')).toBeInTheDocument();
-    expect(screen.getByText('Voracious')).toBeInTheDocument();
+    expect(screen.getByText('Devotions')).toBeInTheDocument();
+    expect(screen.getByText('Fears')).toBeInTheDocument();
+    expect(screen.queryByText('Rules')).not.toBeInTheDocument();
+    expect(screen.queryByText('Is it a hunger')).not.toBeInTheDocument();
+    expect(screen.getAllByText('Distinctions')).toHaveLength(2);
     const order = container.textContent ?? '';
-    const questionsIdx = order.indexOf('What are you deathly afraid of?');
-    const offersIdx = order.indexOf('Is it a hunger');
+    const protectIdx = order.indexOf('What would you protect at all costs?');
+    const devotionsIdx = order.indexOf('Devotions');
+    const hedonisticIdx = order.indexOf('Hedonistic');
+    const fearIdx = order.indexOf('What are you deathly afraid of?');
+    const fearsIdx = order.indexOf('Fears');
+    const voraciousIdx = order.indexOf('Voracious');
     const goalsIdx = order.indexOf('Goals');
-    expect(questionsIdx).toBeGreaterThan(-1);
-    expect(offersIdx).toBeGreaterThan(questionsIdx);
-    expect(goalsIdx).toBeGreaterThan(offersIdx);
+    expect(protectIdx).toBeGreaterThan(-1);
+    expect(devotionsIdx).toBeGreaterThan(protectIdx);
+    expect(hedonisticIdx).toBeGreaterThan(devotionsIdx);
+    expect(fearIdx).toBeGreaterThan(hedonisticIdx);
+    expect(fearsIdx).toBeGreaterThan(fearIdx);
+    expect(voraciousIdx).toBeGreaterThan(fearsIdx);
+    expect(goalsIdx).toBeGreaterThan(voraciousIdx);
+  });
+
+  it('asks why from the reason list, filtered to the kind, and the picked reason opens its offers (#3709)', async () => {
+    const user = userEvent.setup();
+    const lightSleeper: VisibleOffer = {
+      ...hedonistic,
+      offer_id: 401,
+      distinction_id: 41,
+      name: 'Light Sleeper',
+      player_line: 'No whole night since.',
+      chapter: 'enemy',
+      opener_key: 'reason:1',
+      cost_per_rank: -5,
+      effect_line: '-Daily AP',
+    };
+    offersResponse = { offers: [hedonistic, voracious, lightSleeper], closed: [] };
+    let leave: (() => Promise<boolean>) | null = null;
+    renderWithCharacterCreationProviders(
+      <FinalTouchesStage
+        draft={createMockDraft({
+          enemy_offers: [rouault],
+          enemy_reasons: [
+            {
+              id: 1,
+              name: 'You know what they did',
+              player_line: 'And they know.',
+              fits: 'either',
+            },
+            { id: 2, name: 'You were meant to marry', player_line: '', fits: 'person' },
+          ],
+        })}
+        onRegisterBeforeLeave={(check) => {
+          leave = check;
+        }}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: 'Name them' }));
+    const reasons = screen.getByRole('group', { name: /Why they want it/ });
+    expect(
+      within(reasons).getByRole('button', { name: 'You know what they did' })
+    ).toBeInTheDocument();
+    expect(
+      within(reasons).queryByRole('button', { name: 'You were meant to marry' })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Light Sleeper')).not.toBeInTheDocument();
+    await user.click(within(reasons).getByRole('button', { name: 'You know what they did' }));
+    expect(screen.getByText('What it left you with')).toBeInTheDocument();
+    expect(screen.getByText('Light Sleeper')).toBeInTheDocument();
+    expect(screen.getByText('-Daily AP')).toHaveClass('fx');
+    expect(screen.getByText('Awards 5')).toHaveClass('award');
+    expect(screen.getByLabelText('In your own words')).toBeInTheDocument();
+    await leave!();
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          draft_data: expect.objectContaining({
+            enemy: expect.objectContaining({ organization_id: 7, reason_id: 1 }),
+          }),
+        },
+      })
+    );
   });
 
   it('prints the closed hint with the closedLead fallback', () => {

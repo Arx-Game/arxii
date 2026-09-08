@@ -241,7 +241,7 @@ function ChosenAnswerOffers({
       wordBundled={copy?.offers_word_bundled}
       wordPerRank={copy?.offers_word_per_rank}
       wordSpent={copy?.offers_word_spent}
-      wordRefunds={copy?.offers_word_refunds}
+      wordAwards={copy?.offers_word_awards}
     />
   );
 }

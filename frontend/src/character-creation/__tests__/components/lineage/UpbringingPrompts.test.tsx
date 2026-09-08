@@ -142,6 +142,10 @@ const somehowAlwaysBroke: VisibleOffer = {
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 /** Its `offer_id` (14) is in the chosen choice's own `offers`, but its
@@ -159,6 +163,10 @@ const waryOfDebts: VisibleOffer = {
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 /** Its `opener_label` matches the chosen choice's own name, but its
@@ -176,6 +184,10 @@ const decoyMatchingLabel: VisibleOffer = {
   max_rank: 1,
   is_locked: false,
   lock_reason: '',
+  opener_key: '',
+  first_look: false,
+  held: false,
+  effect_line: '',
 };
 
 let offersResponse: OffersResponse;
@@ -285,7 +297,7 @@ describe('UpbringingPrompts', () => {
     expect(stance).toHaveAttribute('aria-pressed', 'true');
     expect(stance).toHaveAttribute('aria-disabled', 'true');
     expect(stance?.querySelector('.locked')).toHaveTextContent('bundled');
-    expect(stance?.querySelector('.refund')).toHaveTextContent('Refunds 25');
+    expect(stance?.querySelector('.award')).toHaveTextContent('Awards 25');
     // Impoverished stays under the chosen answer's own `.conditional` block.
     expect(container.querySelector('.conditional')?.contains(impoverished)).toBe(true);
   });
