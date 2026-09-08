@@ -39,6 +39,18 @@ integration**, not engine mechanics.
 Ordered by priority. These are the gaps between "the engine works" and "a player can do
 magic." Each is a filed issue — work these, not micro-hardening tickets.
 
+0. **✅ #3712 — DONE (2026-09-08): the path half of the CG menu became authorable.**
+   `PathGiftGrant` had no admin registration at all, so `get_technique_options`' path pool
+   (76 authored rows) was fixture-loaded and uneditable while its tradition-side sibling
+   had both an inline and a standalone page. Both now exist. `AuraPowerConfig` and
+   `CapabilityPowerConfig` were likewise unregistered while the required-content dashboard
+   reported their missing rows, so staff were told to create a row through a page that did
+   not exist; both are now singleton-guarded admin pages. The `path-gift-starter-pools`
+   sentinel (ADR-0282) reports each `(path, gift)` pair a tradition makes pickable with no
+   path pool behind it — 8 pairs today. Two stale-cache holes closed alongside: a dispel
+   row edited on its own changelist, and a condition delivery-channel edit that changes
+   what every technique applying it is worth.
+
 1. **✅ #1306 — RESOLVED: every technique minted through the builder is castable**
    (`priority:now` → done).
    `create_technique` defaults `action_template` to the shared **Technique Cast**
@@ -50,7 +62,14 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
    picks. `technique_is_not_castable_standalone` and the `TechniqueAdmin` "No cast
    template" filter now make that visible to staff; deciding which of them are meant to be
    active casts (as opposed to standing-capability techniques) and wiring those rows is
-   content work, tracked on #3682's work package B. Cast
+   content work, tracked on #3713. **Ruled 2026-09-08 (#3682 ruling 2):** there is no
+   standing-only category — every technique must be activatable, because it must be
+   amplifiable by pulling threads, must cost anima, and must be able to decide a
+   life-or-death moment. A passive is the latent weaker tier of the *same* technique
+   (`TechniqueCapabilityGrant` is the floor, an applied condition carrying a
+   `ConditionCapabilityEffect` is the activated tier, scaled by `compute_severity` off the
+   `effective_power` a pull raises). So all 306 need a template and no staff judgement
+   picks which — that is #3713's bulk action, not a decision. Cast
    resolution rolls the **caster's own per-character magic check**
    (`ensure_character_magic_check_type` / `get_character_cast_check` in
    `seeds_checks.py` / `services/anima.py`); the same check is used by the anima ritual
