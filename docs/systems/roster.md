@@ -353,7 +353,10 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   fire. Sole mutator: `world.roster.services.selection.set_selected_entry`. Response
   mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
 
-**Filters:** `RosterEntryFilterSet` via DjangoFilterBackend
+**Filters:** `RosterEntryFilterSet` via DjangoFilterBackend — `gender`, `char_class`, `name`,
+`roster`, and `realm` (#3725: a realm slug, matched on the sheet's true profile
+`origin_realm`; an unknown slug matches nothing). The roster page reads `?realm=` and
+offers a realm select; a realm page's Characters section hands off with it.
 
 ### Tenures (`/api/roster/tenures/`)
 - `GET /api/roster/tenures/` - List tenures with search by character name

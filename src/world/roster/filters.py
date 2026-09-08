@@ -22,10 +22,22 @@ class RosterEntryFilterSet(django_filters.FilterSet):
         lookup_expr="icontains",
     )
     roster = django_filters.NumberFilter(field_name="roster_id")
+    realm = django_filters.CharFilter(method="filter_realm")
 
     class Meta:
         model = RosterEntry
-        fields = ["gender", "char_class", "name", "roster"]
+        fields = ["gender", "char_class", "name", "roster", "realm"]
+
+    def filter_realm(
+        self, queryset: QuerySet[RosterEntry], name: str, value: str
+    ) -> QuerySet[RosterEntry]:
+        """Entries whose sheet is from the realm with this slug (#3725); unknown slug, none."""
+        from world.realms.services import realm_by_slug  # noqa: PLC0415
+
+        realm = realm_by_slug(value)
+        if realm is None:
+            return queryset.none()
+        return queryset.filter(character_sheet__true_profile__origin_realm=realm)
 
     def filter_gender(
         self, queryset: QuerySet[RosterEntry], name: str, value: str

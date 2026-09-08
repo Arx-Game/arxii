@@ -24,6 +24,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md)
+- [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)
 - [secrets](src/world/secrets/AGENT_GLOSSARY.md)
 - [justice](src/world/justice/AGENT_GLOSSARY.md)

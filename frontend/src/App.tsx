@@ -29,6 +29,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AccountSettingsPage } from './account/pages/AccountSettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { TidingsPage } from './tidings/pages/TidingsPage';
+import { RealmsHubPage } from './realms/pages/RealmsHubPage';
+import { RealmPage } from './realms/pages/RealmPage';
 import { JournalPage } from './missions/pages/JournalPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import { BattleMapPage } from './battles/pages/BattleMapPage';
@@ -454,6 +456,8 @@ function App() {
             }
           />
           <Route path="/tidings" element={<TidingsPage />} />
+          <Route path="/realms" element={<RealmsHubPage />} />
+          <Route path="/realms/:slug" element={<RealmPage />} />
           <Route path="/scenes" element={<ScenesListPage />} />
           <Route path="/scenes/:id" element={<SceneDetailPage />} />
           <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />

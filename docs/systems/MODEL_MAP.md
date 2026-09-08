@@ -7557,6 +7557,16 @@
   - titles <- societies.Title
   - house_templates <- societies.HouseTemplate
   - market_squares <- items.MarketSquare
+  - testament_sections <- realms.RealmTestamentSection
+
+### RealmTestamentSection
+**Foreign Keys:**
+  - written_by -> contributors.ContentContributor [FK] (nullable)
+  - reviewed_by -> contributors.ContentContributor [FK] (nullable)
+  - realm -> realms.Realm [FK]
+
+### Service Functions
+- `realm_by_slug(slug: 'str') -> 'Realm | None' - The realm whose ``slug`` (slugified name) is ``slug``, or None.`
 
 
 ## world.registration

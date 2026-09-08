@@ -11,6 +11,7 @@
 
 import { useRealmTheme } from '@/components/realm-theme-provider';
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import {
   ChapterLeaf,
   ConfirmDialog,
@@ -122,6 +123,13 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                 open={isChosen}
               >
                 <Paragraphs text={area.description} />
+                {area.realm_slug && (
+                  <p className="ledger-line">
+                    <Link to={`/realms/${area.realm_slug}`}>
+                      About {area.realm_name ?? realmName} <span aria-hidden="true">→</span>
+                    </Link>
+                  </p>
+                )}
                 {closed ? (
                   // The trust threshold that gates access is not on the serializer yet.
                   <p className="ledger-line">

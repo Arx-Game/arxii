@@ -180,6 +180,8 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: /crossover/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /codex/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /tidings/i })).toBeInTheDocument();
+    // The Realms hub (#3725): one plain link, no per-realm jumps under it.
+    expect(screen.getByRole('link', { name: /realms/i })).toHaveAttribute('href', '/realms');
   });
 
   // ---------------------------------------------------------------------------

@@ -241,6 +241,18 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     per the standard recipe (`arx manage rebase_migration arxii` /
     renumber-at-merge) — not a defect of this slice.
 
+- **Realm pages (#3725, complete, ADR-0285):** each realm's testament (the reviewer's
+  pitch prose, authored as `RealmTestamentSection` movements with motto lines through a
+  `RealmAdmin` inline) becomes `/realms/<slug>`, the realm's page in its own palette with
+  a rail to Societies, Houses and organizations (shop-window fields; covert kinds to
+  members only), Names spoken here (two top tens, renown and legend, Active-roster
+  characters of the realm, names and band labels only, #676's per-realm addition) and
+  Characters (the roster filtered by realm). `/realms` is the hub: six cards, name,
+  formal name, first motto, each a link, reached from World › Realms. The front page's
+  realm row and the Origin index entry link to the page. `/api/realms/` amends
+  ADR-0227. **Remains:** the six testaments are entered by the reviewer (18 rows, three
+  per realm); trust gates on starting areas come out under #3726, after which Begin here
+  never hides.
 - **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0245):** ships
   the page slice 1 deferred. Backend: `unread_narrative_count` annotated onto
   `RosterEntryViewSet.mine`'s queryset (single aggregated JOIN/GROUP BY, not a

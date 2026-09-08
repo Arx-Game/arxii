@@ -18065,6 +18065,80 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/realms/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List the realms (the hub) and retrieve one by slug (the page). */
+    get: operations['realms_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/realms/{slug}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description List the realms (the hub) and retrieve one by slug (the page). */
+    get: operations['realms_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/realms/{slug}/notables/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description The names spoken in the realm: top ten by renown and by legend (#676's addition). */
+    get: operations['realms_notables_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/realms/{slug}/organizations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description The realm's houses and organizations as a gate would show them.
+     *
+     *     Covert kinds (#2820) are excluded unless the viewer's active persona holds a
+     *     live membership in that row; an anonymous viewer gets the plain exclusion.
+     *     Covenants are not organizations here, as on the members' list.
+     */
+    get: operations['realms_organizations_list'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/register/availability/': {
     parameters: {
       query?: never;
@@ -34659,6 +34733,28 @@ export interface components {
       id: number;
       name: string;
     };
+    /**
+     * @description What a realm page shows of an organization to anyone (#3725).
+     *
+     *     Name, words, colours, sigil, description, kind and society: the fields a house
+     *     would put on its gate. Nothing else from ``OrganizationSerializer`` is reused, so
+     *     members, ranks, treasury, crises, vacancies and boards cannot reach a visitor.
+     */
+    OrganizationShopWindow: {
+      readonly id: number;
+      /** @description The organization's name */
+      readonly name: string;
+      /** @description A description of the organization's purpose and history */
+      readonly description: string;
+      /** @description Words / motto — house words, gang credo, guild maxim (#2079). */
+      readonly words: string;
+      /** @description The organization's colors, in prose (#2079). */
+      readonly colors: string;
+      /** @description Sigil / emblem, described (#2079). */
+      readonly sigil_description: string;
+      readonly org_type_name: string;
+      readonly society_name: string;
+    };
     /** @description A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675). */
     OriginChoiceOffer: {
       offer_id: number;
@@ -41366,6 +41462,85 @@ export interface components {
       valence?: components['schemas']['ValenceEnum'];
       sort_order?: number;
     };
+    /** @description The realm's two boards. Rows carry a name and a phrase; no numeric field exists. */
+    RealmBoards: {
+      renown: components['schemas']['RankingRow'][];
+      legend: components['schemas']['RankingRow'][];
+    };
+    /** @description One card on the Realms hub: name, formal name, first motto, and the route key. */
+    RealmDetail: {
+      readonly id: number;
+      readonly name: string;
+      readonly slug: string;
+      /** @description The long name the realm page shows under the title (#3725), e.g. 'The Umbral Empire'. Blank shows nothing. */
+      readonly formal_name: string;
+      /**
+       * @description Visual theme applied in the frontend when this realm is active.
+       *
+       *     * `default` - Default
+       *     * `arx` - Arx
+       *     * `umbros` - Umbros
+       *     * `luxen` - Luxen
+       *     * `inferna` - Inferna
+       *     * `ariwn` - Ariwn
+       *     * `aythirmok` - Aythirmok
+       */
+      readonly theme: components['schemas']['ThemeEnum'];
+      /** @description The motto of the lowest-ordered movement, or blank when none is authored. */
+      readonly first_motto: string;
+      readonly threshold_line: string;
+      readonly sections: components['schemas']['RealmTestamentSection'][];
+      societies: components['schemas']['RealmSociety'][];
+      readonly starting_area: components['schemas']['RealmStartingArea'] | null;
+    };
+    /** @description One card on the Realms hub: name, formal name, first motto, and the route key. */
+    RealmList: {
+      readonly id: number;
+      readonly name: string;
+      readonly slug: string;
+      /** @description The long name the realm page shows under the title (#3725), e.g. 'The Umbral Empire'. Blank shows nothing. */
+      readonly formal_name: string;
+      /**
+       * @description Visual theme applied in the frontend when this realm is active.
+       *
+       *     * `default` - Default
+       *     * `arx` - Arx
+       *     * `umbros` - Umbros
+       *     * `luxen` - Luxen
+       *     * `inferna` - Inferna
+       *     * `ariwn` - Ariwn
+       *     * `aythirmok` - Aythirmok
+       */
+      readonly theme: components['schemas']['ThemeEnum'];
+      /** @description The motto of the lowest-ordered movement, or blank when none is authored. */
+      readonly first_motto: string;
+    };
+    /**
+     * @description A society as the realm page names it: what it says of itself and who enforces.
+     *
+     *     Principles, reputation and the fame offset stay off the wire (hidden mechanics).
+     */
+    RealmSociety: {
+      readonly id: number;
+      readonly name: string;
+      readonly description: string;
+      /** @description Admin-editable flavor: who hunts the wanted in this society's dominion (heat surfaces render it — e.g. Luxen's 'The Honest'). Phrase it as a collective plural: '<name> have been looking …'. */
+      readonly enforcer_name: string;
+    };
+    /** @description The way into a realm: its starting area and crest, from the accessible set. */
+    RealmStartingArea: {
+      id: number;
+      name: string;
+      crest_image: string | null;
+    };
+    RealmTestamentSection: {
+      /** @description Position of this movement in the testament, from 1. */
+      readonly sort_order: number;
+      /** @description The movement's paragraphs; blank lines separate paragraphs. */
+      readonly body: string;
+      /** @description The line the movement ends on, shown in the display face. Blank shows nothing. */
+      readonly motto: string;
+    };
     /** @description A character's Archive profile sittings + recorded history (#2632). */
     RecordedProfile: {
       readonly id: number;
@@ -43943,6 +44118,8 @@ export interface components {
       readonly is_accessible: boolean;
       /** @default default */
       readonly realm_theme: string;
+      readonly realm_slug: string | null;
+      readonly realm_name: string | null;
     };
     /** @description Serializer for starting areas with accessibility check. */
     StartingAreaRequest: {
@@ -45239,6 +45416,17 @@ export interface components {
       | 'urban'
       | 'water'
       | 'aerial';
+    /**
+     * @description * `default` - Default
+     *     * `arx` - Arx
+     *     * `umbros` - Umbros
+     *     * `luxen` - Luxen
+     *     * `inferna` - Inferna
+     *     * `ariwn` - Ariwn
+     *     * `aythirmok` - Aythirmok
+     * @enum {string}
+     */
+    ThemeEnum: 'default' | 'arx' | 'umbros' | 'luxen' | 'inferna' | 'ariwn' | 'aythirmok';
     /**
      * @description Serializer for Thread records (Spec A §4.5).
      *
@@ -71941,6 +72129,114 @@ export interface operations {
       };
     };
   };
+  realms_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Visual theme applied in the frontend when this realm is active.
+         *
+         *     * `default` - Default
+         *     * `arx` - Arx
+         *     * `umbros` - Umbros
+         *     * `luxen` - Luxen
+         *     * `inferna` - Inferna
+         *     * `ariwn` - Ariwn
+         *     * `aythirmok` - Aythirmok
+         */
+        theme?: 'ariwn' | 'arx' | 'aythirmok' | 'default' | 'inferna' | 'luxen' | 'umbros';
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RealmList'][];
+        };
+      };
+    };
+  };
+  realms_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RealmDetail'];
+        };
+      };
+    };
+  };
+  realms_notables_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['RealmBoards'];
+        };
+      };
+    };
+  };
+  realms_organizations_list: {
+    parameters: {
+      query?: {
+        /**
+         * @description Visual theme applied in the frontend when this realm is active.
+         *
+         *     * `default` - Default
+         *     * `arx` - Arx
+         *     * `umbros` - Umbros
+         *     * `luxen` - Luxen
+         *     * `inferna` - Inferna
+         *     * `ariwn` - Ariwn
+         *     * `aythirmok` - Aythirmok
+         */
+        theme?: 'ariwn' | 'arx' | 'aythirmok' | 'default' | 'inferna' | 'luxen' | 'umbros';
+      };
+      header?: never;
+      path: {
+        slug: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['OrganizationShopWindow'][];
+        };
+      };
+    };
+  };
   register_availability_retrieve: {
     parameters: {
       query?: never;
@@ -72903,6 +73199,7 @@ export interface operations {
         name?: string;
         /** @description A page number within the paginated result set. */
         page?: number;
+        realm?: string;
         roster?: number;
       };
       header?: never;
