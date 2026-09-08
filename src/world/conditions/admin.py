@@ -1,6 +1,10 @@
 from django.contrib import admin
 
 from world.admin_utils import describe_reverse_relations
+from world.conditions.inspection import (
+    condition_template_prefetches,
+    inspect_condition_template,
+)
 from world.conditions.models import (
     CapabilityType,
     ConditionCapabilityEffect,
@@ -153,9 +157,13 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
     ]
     search_fields = ["name", "description"]
     filter_horizontal = ["reactive_triggers"]
+    readonly_fields = ["get_mechanics_diagnostic"]
 
     fieldsets = [
-        (None, {"fields": ["name", "category", "description"]}),
+        (
+            None,
+            {"fields": ["name", "category", "description", "get_mechanics_diagnostic"]},
+        ),
         (
             "Player Descriptions",
             {
@@ -225,6 +233,22 @@ class ConditionTemplateAdmin(admin.ModelAdmin):
         ),
         CREDIT_FIELDSET,
     ]
+
+    def get_queryset(self, request):
+        """Prefetch every channel shown by the mechanics diagnostic."""
+        return (
+            super()
+            .get_queryset(request)
+            .select_related("category")
+            .prefetch_related(*condition_template_prefetches())
+        )
+
+    @admin.display(description="Mechanics diagnostic")
+    def get_mechanics_diagnostic(self, obj: ConditionTemplate) -> str:
+        """Show recognized wiring, or explicitly request manual verification."""
+        if not obj.pk:
+            return "Save the condition before inspecting mechanics."
+        return inspect_condition_template(obj).as_text()
 
     inlines = [
         ConditionStageInline,

@@ -16,6 +16,7 @@ from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
+from world.conditions.factories import ConditionCategoryFactory, ConditionTemplateFactory
 from world.conditions.models import ConditionModifierEffect, ConditionTemplate
 from world.magic.models.techniques import (
     Technique,
@@ -82,3 +83,41 @@ class TechniqueChangeFormRendersPayloadInlinesTests(TestCase):
 
         self.assertEqual(resp.status_code, 200)
         self.assertIn("conditionmodifiereffect_set-TOTAL_FORMS", resp.content.decode())
+
+    def test_condition_change_form_shows_manual_mechanics_diagnostic(self):
+        self.client.force_login(self.super)
+        condition = ConditionTemplateFactory(
+            name="Manual review condition",
+            category=ConditionCategoryFactory(is_negative=False),
+        )
+
+        resp = self.client.get(reverse("admin:arxii_conditiontemplate_change", args=[condition.pk]))
+
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Mechanics diagnostic", body)
+        self.assertIn("requires manual verification", body)
+
+
+class TechniqueConditionDiagnosticTests(TestCase):
+    def test_technique_gap_column_names_condition_wiring_state(self):
+        from world.magic.admin import TechniqueAdmin
+        from world.magic.factories import (
+            BinaryEffectTypeFactory,
+            TechniqueAppliedConditionFactory,
+            TechniqueFactory,
+        )
+
+        technique = TechniqueFactory(
+            effect_type=BinaryEffectTypeFactory(), damage_profile=False, name="Review technique"
+        )
+        condition = ConditionTemplateFactory(
+            name="Unwired applied condition",
+            category=ConditionCategoryFactory(is_negative=False),
+        )
+        TechniqueAppliedConditionFactory(technique=technique, condition=condition)
+
+        text = TechniqueAdmin(Technique, admin.site).get_authoring_gap(technique)
+
+        self.assertIn("applies Unwired applied condition", text)
+        self.assertIn("requires manual verification", text)
