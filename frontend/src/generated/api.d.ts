@@ -27065,6 +27065,7 @@ export interface components {
        *     with no resolvable actor location, every companion reads as absent.
        */
       readonly is_present: boolean;
+      readonly objectdb_id: number | null;
     };
     CompanionArchetype: {
       readonly id: number;
@@ -27075,6 +27076,14 @@ export interface components {
       readonly bind_difficulty: number;
       /** @description Companion Capacity consumed while this archetype is bonded. */
       readonly capacity_cost: number;
+    };
+    /** @description Current-round companion directive exposed on an encounter read. */
+    CompanionOrderSummary: {
+      companion_id: number;
+      companion_name: string;
+      order_kind: string;
+      target_opponent_id: number | null;
+      defending_participant_id: number | null;
     };
     /** @description Serializer for condition categories. */
     ConditionCategory: {
@@ -28876,6 +28885,7 @@ export interface components {
       readonly clashes: components['schemas']['ClashState'][];
       readonly engagement_locks: components['schemas']['EngagementLock'][];
       readonly pending_attacks: components['schemas']['PendingAttack'][];
+      readonly companion_orders: components['schemas']['CompanionOrderSummary'][];
       /**
        * @description ACTIVE PC participant PKs in initiative (speed-rank) order.
        *
@@ -34173,6 +34183,7 @@ export interface components {
       /** @description Public: the break celebration named this boss and the window is open. */
       readonly is_wall_broken: boolean;
       status?: components['schemas']['OpponentStatusEnum'];
+      allegiance?: string | null;
       /**
        * @description Active conditions on this opponent's in-world ObjectDB.
        *
@@ -34251,6 +34262,7 @@ export interface components {
       probing_current?: number;
       current_phase?: number;
       status?: components['schemas']['OpponentStatusEnum'];
+      allegiance?: string | null;
     };
     /**
      * @description * `active` - Active

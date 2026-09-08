@@ -28,6 +28,7 @@ import { PendingAttacks } from './components/PendingAttacks';
 import { ResonanceBudget } from './sections/ResonanceBudget';
 import { VitalPools, findOwnParticipant } from './sections/VitalPools';
 import { CombatantsList } from './sections/CombatantsList';
+import { CompanionOrders } from './sections/CompanionOrders';
 import { ActiveState } from './sections/ActiveState';
 import { RoundFlow } from './sections/RoundFlow';
 import { EncounterOutcomeBanner } from './components/EncounterOutcomeBanner';
@@ -70,6 +71,7 @@ type SectionName =
   | 'resonanceBudget'
   | 'vitalPools'
   | 'combatantsList'
+  | 'companionOrders'
   | 'activeState'
   | 'roundFlow'
   | 'outcomeRoulette';
@@ -79,6 +81,7 @@ const DEFAULT_COLLAPSE_STATE: Record<SectionName, boolean> = {
   resonanceBudget: false,
   vitalPools: false,
   combatantsList: false,
+  companionOrders: false,
   activeState: false,
   roundFlow: false,
   outcomeRoulette: false,
@@ -340,7 +343,16 @@ export function CombatTurnPanel({
         data-testid="section-combatants-list"
       />
 
-      {/* 5. ActiveState */}
+      {/* 5. CompanionOrders — free directives for deployed companions (#3576). */}
+      <CompanionOrders
+        encounter={encounter}
+        encounterId={encounterId}
+        characterId={characterId}
+        collapsed={collapsed.companionOrders}
+        onToggleCollapse={() => toggleSection('companionOrders')}
+      />
+
+      {/* 6. ActiveState */}
       <ActiveState
         encounter={encounter}
         collapsed={collapsed.activeState}
@@ -348,7 +360,7 @@ export function CombatTurnPanel({
         data-testid="section-active-state"
       />
 
-      {/* 6. RoundFlow */}
+      {/* 7. RoundFlow */}
       <RoundFlow
         encounter={encounter}
         collapsed={collapsed.roundFlow}
