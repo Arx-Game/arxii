@@ -75,6 +75,8 @@ const startingAreas: StartingArea[] = [
     crest_image: null,
     is_accessible: true,
     realm_theme: 'arx',
+    realm_slug: 'arx',
+    realm_name: 'Arx',
   },
   {
     id: 2,
@@ -83,6 +85,8 @@ const startingAreas: StartingArea[] = [
     crest_image: null,
     is_accessible: true,
     realm_theme: 'umbros',
+    realm_slug: 'umbros',
+    realm_name: 'Umbros',
   },
 ];
 

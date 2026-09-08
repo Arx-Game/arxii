@@ -125,10 +125,15 @@ export async function updateTenureGallery(
   return res.json();
 }
 
+/** The roster entries read's filters; `realm` is a realm slug (#3725). */
+export type RosterEntryFilters = Partial<Pick<CharacterData, 'name' | 'char_class' | 'gender'>> & {
+  realm?: string;
+};
+
 export async function fetchRosterEntries(
   rosterId: RosterData['id'] | undefined,
   page = 1,
-  filters: Partial<Pick<CharacterData, 'name' | 'char_class' | 'gender'>> = {}
+  filters: RosterEntryFilters = {}
 ): Promise<PaginatedResponse<RosterEntryData>> {
   const params = new URLSearchParams({ page: String(page) });
   // `roster` is optional server-side (world/roster/filters.py's RosterEntryFilterSet) —
@@ -138,6 +143,8 @@ export async function fetchRosterEntries(
   if (filters.name) params.set('name', filters.name);
   if (filters.char_class) params.set('char_class', filters.char_class);
   if (filters.gender) params.set('gender', filters.gender);
+  // Realm slug (#3725): entries whose sheet is from that realm, across every roster.
+  if (filters.realm) params.set('realm', filters.realm);
   const res = await apiFetch(`/api/roster/entries/?${params.toString()}`);
   if (!res.ok) {
     throw new Error('Failed to load roster entries');

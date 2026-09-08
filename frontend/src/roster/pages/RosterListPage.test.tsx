@@ -19,6 +19,15 @@ vi.mock('../queries', () => ({
   }),
 }));
 
+vi.mock('@/realms/queries', () => ({
+  useRealms: () => ({
+    data: [
+      { id: 1, name: 'Umbros', slug: 'umbros', formal_name: '', theme: 'umbros', first_motto: '' },
+    ],
+    isLoading: false,
+  }),
+}));
+
 vi.mock('@/character-creation/queries', () => ({
   useCGExplanations: () => ({
     data: {
@@ -34,7 +43,7 @@ describe('RosterListPage', () => {
     renderWithProviders(<RosterListPage />);
 
     // If we got this far without throwing, the fix worked
-    expect(screen.getByRole('combobox')).toBeInTheDocument();
+    expect(screen.getAllByRole('combobox').length).toBeGreaterThan(0);
   });
 
   it('should not throw error after fixing empty string value', () => {

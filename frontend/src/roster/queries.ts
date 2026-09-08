@@ -15,13 +15,8 @@ import {
   createTenureGallery,
   updateTenureGallery,
 } from './api';
-import type {
-  RosterEntryData,
-  RosterData,
-  CharacterData,
-  PlayerMedia,
-  TenureGallery,
-} from './types';
+import type { RosterEntryFilters } from './api';
+import type { RosterEntryData, RosterData, PlayerMedia, TenureGallery } from './types';
 import type { PaginatedResponse } from '@/shared/types';
 import { useAccount } from '@/store/hooks';
 
@@ -65,7 +60,7 @@ export function useRostersQuery() {
 export function useRosterEntriesQuery(
   rosterId: RosterData['id'] | undefined,
   page: number,
-  filters: Partial<Pick<CharacterData, 'name' | 'char_class' | 'gender'>>
+  filters: RosterEntryFilters
 ) {
   return useQuery<PaginatedResponse<RosterEntryData>>({
     queryKey: ['roster-entries', rosterId, page, filters],

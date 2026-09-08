@@ -7,6 +7,7 @@ reads another app's rows goes through that app's serializers, never through thes
 
 from __future__ import annotations
 
+from drf_spectacular.utils import extend_schema_field
 from rest_framework import serializers
 
 from world.realms.constants import TESTAMENT_THRESHOLD_LINE
@@ -77,11 +78,13 @@ class RealmDetailSerializer(RealmListSerializer):
     def get_threshold_line(self, _obj: Realm) -> str:
         return TESTAMENT_THRESHOLD_LINE
 
+    @extend_schema_field(RealmTestamentSectionSerializer(many=True))
     def get_sections(self, obj: Realm) -> list[dict]:
         """The movements in order."""
         sections = obj.testament_sections.order_by("sort_order")
         return RealmTestamentSectionSerializer(sections, many=True).data
 
+    @extend_schema_field(RealmStartingAreaSerializer(allow_null=True))
     def get_starting_area(self, obj: Realm) -> dict | None:
         """The viewer-accessible starting area of the realm, first by name, or None.
 

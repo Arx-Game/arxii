@@ -62,6 +62,7 @@ const dropdownGroups: NavDropdown[] = [
       { to: '/crossover/inbox', label: 'Crossover' },
       { to: '/codex', label: 'Codex' },
       { to: '/tidings', label: 'Tidings' },
+      { to: '/realms', label: 'Realms' },
     ],
   },
 ];

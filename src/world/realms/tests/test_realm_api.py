@@ -84,8 +84,9 @@ class RealmListAndDetailTests(TestCase):
     def test_starting_area_read_carries_the_realm_slug(self):
         response = APIClient().get("/api/character-creation/starting-areas/")
         self.assertEqual(response.status_code, 200)
-        slugs = {row["name"]: row["realm_slug"] for row in response.json()}
-        self.assertEqual(slugs["Tenebrum"], "umbros")
+        rows = {row["name"]: row for row in response.json()}
+        self.assertEqual(rows["Tenebrum"]["realm_slug"], "umbros")
+        self.assertEqual(rows["Tenebrum"]["realm_name"], "Umbros")
 
 
 class RealmOrganizationsTests(TestCase):

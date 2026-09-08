@@ -11,6 +11,8 @@ function makeArea(realm_theme: string): StartingArea {
     crest_image: null,
     is_accessible: true,
     realm_theme,
+    realm_slug: realm_theme,
+    realm_name: realm_theme,
   };
 }
 

@@ -29397,6 +29397,146 @@ paths:
               schema:
                 $ref: '#/components/schemas/WindowReactInput'
           description: ''
+  /api/realms/:
+    get:
+      operationId: realms_list
+      description: List the realms (the hub) and retrieve one by slug (the page).
+      parameters:
+      - in: query
+        name: theme
+        schema:
+          type: string
+          enum:
+          - ariwn
+          - arx
+          - aythirmok
+          - default
+          - inferna
+          - luxen
+          - umbros
+        description: |-
+          Visual theme applied in the frontend when this realm is active.
+
+          * `default` - Default
+          * `arx` - Arx
+          * `umbros` - Umbros
+          * `luxen` - Luxen
+          * `inferna` - Inferna
+          * `ariwn` - Ariwn
+          * `aythirmok` - Aythirmok
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RealmList'
+          description: ''
+  /api/realms/{slug}/:
+    get:
+      operationId: realms_retrieve
+      description: List the realms (the hub) and retrieve one by slug (the page).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealmDetail'
+          description: ''
+  /api/realms/{slug}/notables/:
+    get:
+      operationId: realms_notables_retrieve
+      description: 'The names spoken in the realm: top ten by renown and by legend
+        (#676''s addition).'
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealmBoards'
+          description: ''
+  /api/realms/{slug}/organizations/:
+    get:
+      operationId: realms_organizations_list
+      description: |-
+        The realm's houses and organizations as a gate would show them.
+
+        Covert kinds (#2820) are excluded unless the viewer's active persona holds a
+        live membership in that row; an anonymous viewer gets the plain exclusion.
+        Covenants are not organizations here, as on the members' list.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      - in: query
+        name: theme
+        schema:
+          type: string
+          enum:
+          - ariwn
+          - arx
+          - aythirmok
+          - default
+          - inferna
+          - luxen
+          - umbros
+        description: |-
+          Visual theme applied in the frontend when this realm is active.
+
+          * `default` - Default
+          * `arx` - Arx
+          * `umbros` - Umbros
+          * `luxen` - Luxen
+          * `inferna` - Inferna
+          * `ariwn` - Ariwn
+          * `aythirmok` - Aythirmok
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationShopWindow'
+          description: ''
   /api/register/availability/:
     get:
       operationId: register_availability_retrieve
@@ -30462,6 +30602,10 @@ paths:
         description: A page number within the paginated result set.
         schema:
           type: integer
+      - in: query
+        name: realm
+        schema:
+          type: string
       - in: query
         name: roster
         schema:
@@ -61227,6 +61371,53 @@ components:
       required:
       - id
       - name
+    OrganizationShopWindow:
+      type: object
+      description: |-
+        What a realm page shows of an organization to anyone (#3725).
+
+        Name, words, colours, sigil, description, kind and society: the fields a house
+        would put on its gate. Nothing else from ``OrganizationSerializer`` is reused, so
+        members, ranks, treasury, crises, vacancies and boards cannot reach a visitor.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: The organization's name
+        description:
+          type: string
+          readOnly: true
+          description: A description of the organization's purpose and history
+        words:
+          type: string
+          readOnly: true
+          description: Words / motto — house words, gang credo, guild maxim (#2079).
+        colors:
+          type: string
+          readOnly: true
+          description: The organization's colors, in prose (#2079).
+        sigil_description:
+          type: string
+          readOnly: true
+          description: Sigil / emblem, described (#2079).
+        org_type_name:
+          type: string
+          readOnly: true
+        society_name:
+          type: string
+          readOnly: true
+      required:
+      - colors
+      - description
+      - id
+      - name
+      - org_type_name
+      - sigil_description
+      - society_name
+      - words
     OriginChoiceOffer:
       type: object
       description: A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675).
@@ -72639,6 +72830,196 @@ components:
           minimum: 0
       required:
       - emoji
+    RealmBoards:
+      type: object
+      description: The realm's two boards. Rows carry a name and a phrase; no numeric
+        field exists.
+      properties:
+        renown:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingRow'
+        legend:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingRow'
+      required:
+      - legend
+      - renown
+    RealmDetail:
+      type: object
+      description: 'One card on the Realms hub: name, formal name, first motto, and
+        the route key.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+        formal_name:
+          type: string
+          readOnly: true
+          description: The long name the realm page shows under the title (#3725),
+            e.g. 'The Umbral Empire'. Blank shows nothing.
+        theme:
+          allOf:
+          - $ref: '#/components/schemas/ThemeEnum'
+          readOnly: true
+          description: |-
+            Visual theme applied in the frontend when this realm is active.
+
+            * `default` - Default
+            * `arx` - Arx
+            * `umbros` - Umbros
+            * `luxen` - Luxen
+            * `inferna` - Inferna
+            * `ariwn` - Ariwn
+            * `aythirmok` - Aythirmok
+        first_motto:
+          type: string
+          description: The motto of the lowest-ordered movement, or blank when none
+            is authored.
+          readOnly: true
+        threshold_line:
+          type: string
+          readOnly: true
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealmTestamentSection'
+          readOnly: true
+        societies:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealmSociety'
+        starting_area:
+          allOf:
+          - $ref: '#/components/schemas/RealmStartingArea'
+          nullable: true
+          readOnly: true
+      required:
+      - first_motto
+      - formal_name
+      - id
+      - name
+      - sections
+      - slug
+      - societies
+      - starting_area
+      - theme
+      - threshold_line
+    RealmList:
+      type: object
+      description: 'One card on the Realms hub: name, formal name, first motto, and
+        the route key.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+        formal_name:
+          type: string
+          readOnly: true
+          description: The long name the realm page shows under the title (#3725),
+            e.g. 'The Umbral Empire'. Blank shows nothing.
+        theme:
+          allOf:
+          - $ref: '#/components/schemas/ThemeEnum'
+          readOnly: true
+          description: |-
+            Visual theme applied in the frontend when this realm is active.
+
+            * `default` - Default
+            * `arx` - Arx
+            * `umbros` - Umbros
+            * `luxen` - Luxen
+            * `inferna` - Inferna
+            * `ariwn` - Ariwn
+            * `aythirmok` - Aythirmok
+        first_motto:
+          type: string
+          description: The motto of the lowest-ordered movement, or blank when none
+            is authored.
+          readOnly: true
+      required:
+      - first_motto
+      - formal_name
+      - id
+      - name
+      - slug
+      - theme
+    RealmSociety:
+      type: object
+      description: |-
+        A society as the realm page names it: what it says of itself and who enforces.
+
+        Principles, reputation and the fame offset stay off the wire (hidden mechanics).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        enforcer_name:
+          type: string
+          readOnly: true
+          description: 'Admin-editable flavor: who hunts the wanted in this society''s
+            dominion (heat surfaces render it — e.g. Luxen''s ''The Honest''). Phrase
+            it as a collective plural: ''<name> have been looking …''.'
+      required:
+      - description
+      - enforcer_name
+      - id
+      - name
+    RealmStartingArea:
+      type: object
+      description: 'The way into a realm: its starting area and crest, from the accessible
+        set.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        crest_image:
+          type: string
+          nullable: true
+      required:
+      - crest_image
+      - id
+      - name
+    RealmTestamentSection:
+      type: object
+      properties:
+        sort_order:
+          type: integer
+          readOnly: true
+          description: Position of this movement in the testament, from 1.
+        body:
+          type: string
+          readOnly: true
+          description: The movement's paragraphs; blank lines separate paragraphs.
+        motto:
+          type: string
+          readOnly: true
+          description: The line the movement ends on, shown in the display face. Blank
+            shows nothing.
+      required:
+      - body
+      - motto
+      - sort_order
     RecordedProfile:
       type: object
       description: A character's Archive profile sittings + recorded history (#2632).
@@ -77998,12 +78379,22 @@ components:
           type: string
           readOnly: true
           default: default
+        realm_slug:
+          type: string
+          readOnly: true
+          nullable: true
+        realm_name:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - crest_image
       - description
       - id
       - is_accessible
       - name
+      - realm_name
+      - realm_slug
       - realm_theme
     StartingAreaRequest:
       type: object
@@ -80722,6 +81113,24 @@ components:
         * `urban` - Urban
         * `water` - Open water
         * `aerial` - Open sky
+    ThemeEnum:
+      enum:
+      - default
+      - arx
+      - umbros
+      - luxen
+      - inferna
+      - ariwn
+      - aythirmok
+      type: string
+      description: |-
+        * `default` - Default
+        * `arx` - Arx
+        * `umbros` - Umbros
+        * `luxen` - Luxen
+        * `inferna` - Inferna
+        * `ariwn` - Ariwn
+        * `aythirmok` - Aythirmok
     Thread:
       type: object
       description: |-

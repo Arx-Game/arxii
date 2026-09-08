@@ -84,6 +84,14 @@ export function RealmsChapter() {
               <AccordionContent>
                 <p className="gatefold-realm-desc">{area.description}</p>
                 <BeginningsList startingAreaId={area.id} />
+                {area.realm_slug && (
+                  <p className="gatefold-more-line">
+                    <Link to={`/realms/${area.realm_slug}`}>
+                      Read the testament of {area.realm_name ?? area.name}{' '}
+                      <span aria-hidden="true">→</span>
+                    </Link>
+                  </p>
+                )}
               </AccordionContent>
             </AccordionItem>
           ))}

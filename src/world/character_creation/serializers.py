@@ -194,6 +194,9 @@ class StartingAreaSerializer(serializers.ModelSerializer):
     realm_slug = serializers.CharField(
         source="realm.slug", read_only=True, allow_null=True, default=None
     )
+    realm_name = serializers.CharField(
+        source="realm.name", read_only=True, allow_null=True, default=None
+    )
     crest_image = serializers.SerializerMethodField()
 
     class Meta:
@@ -206,6 +209,7 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "is_accessible",
             "realm_theme",
             "realm_slug",
+            "realm_name",
         ]
 
     def get_is_accessible(self, obj: StartingArea) -> bool:
