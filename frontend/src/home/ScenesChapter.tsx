@@ -57,7 +57,7 @@ export function ScenesChapter() {
       <aside>
         {/* Apostate's prose, verbatim (#3723). */}
         <span className="gatefold-note">
-          <b>Public scenes</b> are open to any read. You can see how people are engaging with the
+          <b>Public scenes</b> are open to any reader. You can see how people are engaging with the
           world before you choose or design a character.
         </span>
       </aside>
