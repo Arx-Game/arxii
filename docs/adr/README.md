@@ -333,4 +333,5 @@ treat those names as hints to confirm, not gospel.
 - [0282 - An offer line hangs off the thing the player is answering; the Beginning pins the first look; bulk entry is additions only](0282-offers-hang-off-the-question-first-look-additions-only-paste.md) (#3709; amends ADR-0280, supersedes ADR-0279's constant marks; related ADR-0010, ADR-0238)
 - [0283 - An empty path starter pool is missing content, not a design case](0283-an-empty-path-starter-pool-is-missing-content-not-a-design-case.md) (#3682; related ADR-0055, ADR-0136, ADR-0281)
 - [0284 - Every technique must have an activatable cast; capability grants are not passive techniques](0284-every-technique-must-have-an-activatable-cast.md) (#3713; related ADR-0248)
+- [0285 - Realm pages read a realm API because the realm now owns content; the realm boards are #676's per-realm addition, diegetic in shape](0285-realm-pages-read-a-realm-api-and-carry-public-realm-boards.md) (#3725; amends ADR-0227 and the #676 diegetic-discovery invariant; related ADR-0201, ADR-0238, ADR-0224)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

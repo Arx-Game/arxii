@@ -507,6 +507,15 @@ Read-only endpoints under `/api/societies/`:
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
 
+**Realm pages (#3725, [realms.md](realms.md)):** `/api/realms/<slug>/organizations/` serves
+a realm's non-covert organizations to anyone through `OrganizationShopWindowSerializer`
+(name, words, colours, sigil, description, kind, society; nothing else), a covert kind
+only to its own members; `/api/realms/<slug>/notables/` serves the realm's two boards
+from `ranking_services.get_realm_renown_top_n` / `get_realm_legend_top_n` (Active-roster
+PRIMARY personas whose sheet is from the realm; renown = `total_prestige` × fame-tier
+multiplier with no society lens; labels from the global `RankingBandLabel` set; the
+value never renders). Diegetic `RankingDisplay` boards are untouched.
+
 ---
 
 ## Key Constraints
