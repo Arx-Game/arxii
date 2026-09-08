@@ -29,6 +29,7 @@ from django.core.cache import cache
 from django.db.models import Prefetch
 
 from actions.constants import ActionTargetType
+from world.conditions.inspection import condition_template_prefetches
 from world.magic.constants import TechniqueReach
 from world.magic.models.techniques import (
     ConditionTargetKind,
@@ -229,7 +230,9 @@ def _capability_payload(row: AbstractCapabilityGrant) -> CapabilityEffectPayload
     )
 
 
-def technique_payload_prefetches(*, prefix: str = "") -> list[Prefetch]:
+def technique_payload_prefetches(
+    *, prefix: str = "", include_condition_diagnostics: bool = False
+) -> list[Prefetch]:
     """The five payload prefetches any queryset feeding the effect summary needs.
 
     ``summarize_technique_effects`` reads five sibling tables, so a surface that
@@ -251,12 +254,24 @@ def technique_payload_prefetches(*, prefix: str = "") -> list[Prefetch]:
     return [
         Prefetch(
             f"{prefix}condition_applications",
-            queryset=TechniqueAppliedCondition.objects.select_related("condition"),
+            queryset=(
+                TechniqueAppliedCondition.objects.select_related("condition")
+                if not include_condition_diagnostics
+                else TechniqueAppliedCondition.objects.select_related(
+                    "condition__category"
+                ).prefetch_related(*condition_template_prefetches(prefix="condition__"))
+            ),
             to_attr="cached_condition_applications",
         ),
         Prefetch(
             f"{prefix}removed_conditions",
-            queryset=TechniqueRemovedCondition.objects.select_related("condition"),
+            queryset=(
+                TechniqueRemovedCondition.objects.select_related("condition")
+                if not include_condition_diagnostics
+                else TechniqueRemovedCondition.objects.select_related(
+                    "condition__category"
+                ).prefetch_related(*condition_template_prefetches(prefix="condition__"))
+            ),
             to_attr="cached_removed_conditions",
         ),
         Prefetch(

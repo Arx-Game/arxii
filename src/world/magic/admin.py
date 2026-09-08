@@ -9,6 +9,7 @@ from world.admin_utils import describe_reverse_relations
 from world.character_creation.constants import OfferChapter
 from world.character_creation.models import DistinctionOffer
 from world.codex.models import TraditionCodexGrant
+from world.conditions.inspection import inspect_condition_template
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
@@ -453,7 +454,11 @@ class TechniqueAdmin(admin.ModelAdmin):
         are what answers them (and cannot go stale against the identity map,
         #2728).
         """
-        return super().get_queryset(request).prefetch_related(*technique_payload_prefetches())
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(*technique_payload_prefetches(include_condition_diagnostics=True))
+        )
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
@@ -480,6 +485,19 @@ class TechniqueAdmin(admin.ModelAdmin):
             gaps.append("mixed targeting")
         if technique_is_not_castable_standalone(obj):
             gaps.append("no cast template")
+
+        # A condition FK proves only that the named template exists. Show each
+        # applied/removed condition here so an empty template is never mistaken
+        # for a fully specified mechanic, while recognized and custom wiring are
+        # kept distinct by the shared inspector (#3715).
+        gaps.extend(
+            f"applies {inspect_condition_template(row.condition).as_text()}"
+            for row in obj.cached_condition_applications
+        )
+        gaps.extend(
+            f"removes {inspect_condition_template(row.condition).as_text()}"
+            for row in obj.cached_removed_conditions
+        )
         return ", ".join(gaps) or "—"
 
     @admin.display(description="What this does")
