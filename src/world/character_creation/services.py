@@ -158,21 +158,18 @@ def require_draft_complete(draft: CharacterDraft) -> None:
 def _prepare_draft_entries(draft: CharacterDraft) -> None:
     """Settle the draft's distinctions list before any row is written (#3675, #3621).
 
-    Two folds, shared by every finalize path (player and GM):
-
-    1. ``reconcile_offer_picks`` -- normally called after every draft PATCH that could
-       change which offers are open, but a draft created directly (a staff direct-add,
-       a GM draft, a test fixture) never went through that view, so its
-       ``draft_data["distinctions"]`` list would otherwise miss whatever the last-set
-       answer opened. Idempotent -- a draft already reconciled after its final PATCH
-       sees no change here. A legacy entry with no offer_ids key (a pre-offers pick) is
-       left untouched by this call (ruling A, offers.py's ``_drop_vanished_sources``).
-    2. ``_apply_enemy_distinction_entry`` -- folds the enemy's worst-two-degrees
-       Distinction (if any) into the same pick list, so it is created through the one
-       ``_create_distinctions`` write path instead of a second bespoke one.
+    One fold, shared by every finalize path (player and GM): ``reconcile_offer_picks``
+    is normally called after every draft PATCH that could change which offers are open,
+    but a draft created directly (a staff direct-add, a GM draft, a test fixture) never
+    went through that view, so its ``draft_data["distinctions"]`` list would otherwise
+    miss whatever the last-set answer opened. Idempotent -- a draft already reconciled
+    after its final PATCH sees no change here. A legacy entry with no offer_ids key (a
+    pre-offers pick) is left untouched by this call (ruling A, offers.py's
+    ``_drop_vanished_sources``). The enemy's degree mark arrives the same way (#3709):
+    it is a bundled offer line opened by the picked degree, so the reconcile applies it
+    like any other bundle and no second fold exists.
     """
     reconcile_offer_picks(draft)
-    _apply_enemy_distinction_entry(draft)
 
 
 @transaction.atomic
@@ -520,10 +517,10 @@ def _create_enemy(
     enforcing society covers where the character starts, pursuit heat there, pinned at
     the worst degree. A free-written enemy writes the row only, pending staff placement.
 
-    The worst-two-degrees Distinction (``ENEMY_DEGREE_DISTINCTION_NAMES``) is no longer
-    granted here: ``_apply_enemy_distinction_entry`` folds it into the draft's
-    ``distinctions`` list before ``_apply_character_mechanics`` runs, so it goes through
-    the one ``_create_distinctions`` write path (#3675) rather than a second one.
+    The degree's mark is not granted here: it is a bundled ``DistinctionOffer`` line on
+    the enemy chapter opened by the degree (#3709), which ``reconcile_offer_picks`` folds
+    into the draft's ``distinctions`` list before ``_apply_character_mechanics`` runs,
+    so it goes through the one ``_create_distinctions`` write path (#3675).
     """
     from world.character_creation.constants import ENEMY_REPUTATION_SEED  # noqa: PLC0415
     from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
@@ -551,67 +548,12 @@ def _create_enemy(
         why=resolved.why,
         public_line=resolved.public_line,
         status=resolved.status,
+        reason_id=resolved.reason_id,
     )
     if org is not None:
         bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
 
     _seed_enemy_heat(resolved, org, persona, character)
-
-
-def _apply_enemy_distinction_entry(draft: CharacterDraft) -> None:
-    """Fold the enemy's worst-two-degrees Distinction into the draft's pick list (#3675, #3621).
-
-    Called from ``_prepare_draft_entries`` (shared by ``finalize_character`` and
-    ``finalize_gm_character``) right after ``reconcile_offer_picks``, before
-    ``_apply_character_mechanics`` runs ``_create_distinctions`` - so the enemy-marked
-    Distinction (``ENEMY_DEGREE_DISTINCTION_NAMES``) is created through that one write
-    path instead of a second bespoke one. ``resolve_enemy`` is pure (no writes), so
-    calling it again inside ``_create_enemy`` later in the same finalize is cheap and
-    gives the identical row. The synthetic offer id ``enemy:<degree>`` mirrors the
-    ``state:<TraditionState>`` pattern ``offers._apply_carried`` uses for a source that
-    has no real ``DistinctionOffer`` row.
-    """
-    from world.character_creation.constants import (  # noqa: PLC0415
-        ENEMY_DEGREE_DISTINCTION_NAMES,
-        OfferArrival,
-    )
-    from world.character_creation.enemies import resolve_enemy  # noqa: PLC0415
-    from world.character_sheets.types import EnemyDegree  # noqa: PLC0415
-    from world.distinctions.models import Distinction  # noqa: PLC0415
-    from world.distinctions.types import build_distinction_entry  # noqa: PLC0415
-
-    resolved = resolve_enemy(draft)
-    if resolved is None:
-        return
-    distinction_name = ENEMY_DEGREE_DISTINCTION_NAMES.get(resolved.degree)
-    if not distinction_name:
-        return
-    distinction = Distinction.objects.filter(name=distinction_name).first()
-    if distinction is None:
-        logger.warning(
-            "Enemy degree %s grants Distinction %r but no such row exists; skipped for %s",
-            resolved.degree,
-            distinction_name,
-            draft,
-        )
-        return
-
-    entry_key = f"enemy:{resolved.degree}"
-    source = f"{EnemyDegree(resolved.degree).label}: {resolved.name}"
-    entries = draft.draft_data.setdefault("distinctions", [])
-    entry = next((e for e in entries if e["distinction_id"] == distinction.id), None)
-    if entry is None:
-        entry = build_distinction_entry(distinction, rank=1)
-        entry["offer_ids"] = [entry_key]
-        entry["sources"] = [source]
-        entry["arrivals"] = [OfferArrival.BUNDLED]
-        entry["cost"] = 0
-        entries.append(entry)
-    elif entry_key not in entry.get("offer_ids", []):
-        entry.setdefault("offer_ids", []).append(entry_key)
-        entry.setdefault("sources", []).append(source)
-        entry.setdefault("arrivals", []).append(OfferArrival.BUNDLED)
-        entry["cost"] = 0
 
 
 def _seed_enemy_heat(
@@ -1748,7 +1690,7 @@ def _distinctions_with_effects(distinctions: QuerySet) -> QuerySet:
     Distinction rows are content read once at finalize, never held across requests here.
 
     Bundled/carried Upbringing offers no longer have a separate grant path (#3675):
-    ``_apply_enemy_distinction_entry`` and ``offers.reconcile_offer_picks`` both fold
+    ``offers.reconcile_offer_picks`` folds
     their picks into the draft's ``distinctions`` list, so ``_create_distinctions`` is
     the one write path and this is the one effects loader for all of them.
     """

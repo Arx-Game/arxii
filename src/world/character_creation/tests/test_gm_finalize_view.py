@@ -231,7 +231,12 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         from world.distinctions.models import CharacterDistinction
         from world.societies.factories import OrganizationFactory
 
-        DistinctionFactory(name="Hunted")
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Hunted"),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="destroy",
+        )
         bundled = DistinctionFactory(name="GM Bundled Connection")
         template = OriginTemplateFactory(
             beginning=self.beginnings, allows_name_family=False, allows_no_family=True

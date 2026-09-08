@@ -116,6 +116,16 @@ class EnemyOfferSerializer(serializers.Serializer):
     power_tier = serializers.CharField(read_only=True)
     why = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
+    reason_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class EnemyReasonSerializer(serializers.Serializer):
+    """One authored reason an enemy wants the character to fail (#3709). Read-only."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    player_line = serializers.CharField(read_only=True)
+    fits = serializers.CharField(read_only=True)
 
 
 class IntroductionsOfferedSerializer(serializers.Serializer):
@@ -943,6 +953,10 @@ class VisibleOfferSerializer(serializers.Serializer):
     max_rank = serializers.IntegerField()
     is_locked = serializers.BooleanField()
     lock_reason = serializers.CharField()
+    opener_key = serializers.CharField()
+    first_look = serializers.BooleanField()
+    held = serializers.BooleanField()
+    effect_line = serializers.CharField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):
@@ -1144,6 +1158,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
     enemy_offers = serializers.SerializerMethodField()
     enemy_price_tables = serializers.SerializerMethodField()
     enemy_degree_grants = serializers.SerializerMethodField()
+    enemy_reasons = serializers.SerializerMethodField()
     introductions_offered = serializers.SerializerMethodField()
     # OWN_FAMILY/SERVED_HOUSE GROUP questions' resolved org, since the frontend has
     # no way to derive these itself (#3660 ruling L; see questionnaire.derived_anchors).
@@ -1211,6 +1226,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_offers",
             "enemy_price_tables",
             "enemy_degree_grants",
+            "enemy_reasons",
             "introductions_offered",
         ]
         read_only_fields = [
@@ -1220,6 +1236,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             "enemy_offers",
             "enemy_price_tables",
             "enemy_degree_grants",
+            "enemy_reasons",
             "introductions_offered",
             "has_existing_characters",
             "cg_points_spent",
@@ -1317,10 +1334,20 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(serializers.DictField(child=serializers.CharField()))
     def get_enemy_degree_grants(self, obj: CharacterDraft) -> dict[str, str]:  # noqa: ARG002
-        """Degree value -> the Distinction it grants, so the row says "grants Hunted"."""
+        """Degree value -> the Distinction(s) it bundles, so the row says "bundles Marked"."""
         from world.character_creation.enemies import degree_grants  # noqa: PLC0415
 
         return degree_grants()
+
+    @extend_schema_field(EnemyReasonSerializer(many=True))
+    def get_enemy_reasons(self, obj: CharacterDraft) -> list[dict]:  # noqa: ARG002
+        """The authored reason list (#3709); the leaf filters it by the enemy's kind."""
+        from world.character_creation.models import EnemyReason  # noqa: PLC0415
+
+        return [
+            {"id": r.pk, "name": r.name, "player_line": r.player_line, "fits": r.fits}
+            for r in EnemyReason.objects.filter(is_active=True)
+        ]
 
     @extend_schema_field(IntroductionsOfferedSerializer())
     def get_introductions_offered(self, obj: CharacterDraft) -> dict[str, bool]:
@@ -1579,6 +1606,9 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         for key in ("name", "why", "public_line"):
             if not isinstance(enemy.get(key, ""), str):
                 raise serializers.ValidationError({"enemy": f"{key} must be text."})
+        reason_id = enemy.get("reason_id")
+        if reason_id is not None and not isinstance(reason_id, int):
+            raise serializers.ValidationError({"enemy": "reason_id must be an id or null."})
 
     @staticmethod
     def _validate_introductions(intros: object) -> None:

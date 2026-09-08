@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from world.character_creation.constants import (
-    ENEMY_DEGREE_DISTINCTION_NAMES,
     ENEMY_PRICE_GROUP,
     ENEMY_PRICE_PENDING,
     ENEMY_PRICE_PERSON,
     QuestionKind,
 )
+from world.character_creation.models import EnemyReason
 from world.character_creation.questionnaire import DraftAnswers, anchor_for
 from world.character_sheets.types import EnemyDegree, EnemyKind, EnemyPowerTier, EnemyStatus
 from world.societies.models import Organization
@@ -41,6 +41,7 @@ class EnemyOffer:
     power_tier: str  # a person's power when the offer fixes it; "" when the player rates them
     why: str  # the Beginning's gloss; "" for a Lineage offer
     source: str  # SOURCE_LINEAGE or SOURCE_BEGINNING
+    reason_id: int | None = None  # the Beginning pinned this reason (#3709); None leaves the pick
 
 
 @dataclass(frozen=True)
@@ -58,6 +59,7 @@ class ResolvedEnemy:
     status: str
     why: str
     public_line: str
+    reason_id: int | None = None  # the authored reason picked (#3709), validated for the kind
 
 
 def enemy_price(kind: str, scale: str, degree: str) -> int:
@@ -79,8 +81,14 @@ def price_tables() -> dict[str, dict[str, dict[str, int]]]:
 
 
 def degree_grants() -> dict[str, str]:
-    """Which degrees mark the character, and with what: the leaf says so on the row."""
-    return dict(ENEMY_DEGREE_DISTINCTION_NAMES)
+    """Which degrees mark the character, and with what: the leaf says so on the row.
+
+    Read from the enemy chapter's bundled offer lines (#3709), never a constant; a
+    degree with several marks lists them comma-joined.
+    """
+    from world.character_creation.offers import degree_marks  # noqa: PLC0415
+
+    return {degree: ", ".join(names) for degree, names in degree_marks().items()}
 
 
 def _reach_of(org: Organization, override: str = "") -> str:
@@ -174,6 +182,7 @@ def _beginning_offers(draft: CharacterDraft) -> list[EnemyOffer]:
                     power_tier=row.power_tier,
                     why=row.why,
                     source=SOURCE_BEGINNING,
+                    reason_id=row.reason_id,
                 )
             )
         elif row.organization_id is not None:
@@ -186,9 +195,20 @@ def _beginning_offers(draft: CharacterDraft) -> list[EnemyOffer]:
                     power_tier="",
                     why=row.why,
                     source=SOURCE_BEGINNING,
+                    reason_id=row.reason_id,
                 )
             )
     return offers
+
+
+def _reason_for(kind: str, reason_id: object) -> int | None:
+    """The picked reason's id when it is an active row that fits ``kind``, else None."""
+    if not isinstance(reason_id, int):
+        return None
+    reason = EnemyReason.objects.filter(pk=reason_id, is_active=True).first()
+    if reason is None or not reason.fits_kind(kind):
+        return None
+    return reason.pk
 
 
 def enemy_offers(draft: CharacterDraft) -> list[EnemyOffer]:
@@ -254,4 +274,5 @@ def resolve_enemy(draft: CharacterDraft) -> ResolvedEnemy | None:
         status=EnemyStatus.PLACED if placed else EnemyStatus.PENDING,
         why=(data.get("why") or "").strip(),
         public_line=(data.get("public_line") or "").strip(),
+        reason_id=_reason_for(kind, data.get("reason_id")),
     )

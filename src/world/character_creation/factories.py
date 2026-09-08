@@ -17,12 +17,15 @@ from world.character_creation.constants import (
     TraditionState,
 )
 from world.character_creation.models import (
+    AppearanceSection,
     Beginnings,
     BeginningTradition,
     CharacterDraft,
     DistinctionOffer,
     DraftApplication,
     DraftApplicationComment,
+    EnemyReason,
+    OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
@@ -220,10 +223,48 @@ class SchoolingLineFactory(factory_django.DjangoModelFactory):
     player_line = "A line."
 
 
+class EnemyReasonFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = EnemyReason
+
+    name = factory.Sequence(lambda n: f"You know what they did {n}")
+    player_line = "And they know that you know."
+
+
+class AppearanceSectionFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = AppearanceSection
+
+    name = factory.Sequence(lambda n: f"Frame {n}")
+
+
 class DistinctionOfferFactory(factory_django.DjangoModelFactory):
+    """An offer line with the opener its chapter wants already set (#3709).
+
+    An Appearance line gets a section and an actor's-sheet line the never-do prompt
+    unless the test passes its own, so every chapter's offer is valid out of the box;
+    the older chapters' openers (tag, answer, schooling line) are the test's to pass.
+    """
+
     class Meta:
         model = DistinctionOffer
 
     distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
     chapter = OfferChapter.APPEARANCE
     arrives_as = OfferArrival.CHOICE
+    appearance_section = factory.Maybe(
+        factory.LazyAttribute(lambda o: o.chapter == OfferChapter.APPEARANCE),
+        yes_declaration=factory.SubFactory(AppearanceSectionFactory),
+        no_declaration=None,
+    )
+    prompt = factory.LazyAttribute(
+        lambda o: "never_do" if o.chapter == OfferChapter.ACTORS_SHEET else ""
+    )
+
+
+class OfferFirstLookFactory(factory_django.DjangoModelFactory):
+    class Meta:
+        model = OfferFirstLook
+
+    offer = factory.SubFactory(DistinctionOfferFactory)
+    beginning = factory.SubFactory(BeginningsFactory)

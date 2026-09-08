@@ -71,6 +71,36 @@ class OfferModelTests(TestCase):
         with self.assertRaises(ValidationError):
             offer.full_clean()
 
+    def test_actors_sheet_offer_needs_a_prompt(self):
+        """The actor's sheet and Appearance have openers now (#3709)."""
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.ACTORS_SHEET,
+            arrives_as=OfferArrival.CHOICE,
+        )
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.prompt = "protect"
+        offer.full_clean()
+
+    def test_enemy_offer_is_opened_by_a_reason_or_a_marking_degree(self):
+        from world.character_creation.factories import EnemyReasonFactory
+
+        offer = DistinctionOffer(
+            distinction=DistinctionFactory(),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="thwarted",
+        )
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+        offer.enemy_degree = "destroy"
+        offer.full_clean()
+        assert offer.opener_key == "degree:destroy"
+        offer.enemy_reason = EnemyReasonFactory()
+        with self.assertRaises(ValidationError):
+            offer.full_clean()
+
     def test_offer_name_defaults_to_distinction_name(self):
         offer = DistinctionOfferFactory(distinction=DistinctionFactory(name="Impoverished"))
         assert offer.name == "Impoverished"
