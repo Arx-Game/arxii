@@ -131,6 +131,7 @@ class TestLoreOnboardingSeed(TestCase):
             "lineage_offers_chip",
             "lineage_closed_lead",
             "appearance_offers_heading",
+            "appearance_offers_note",
             "appearance_closed_lead",
             "finaltouches_rules_heading",
             "finaltouches_devotions_heading",

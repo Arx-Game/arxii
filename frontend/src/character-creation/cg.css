@@ -1061,6 +1061,16 @@
   color: var(--cg-muted);
   font-weight: 400;
 }
+/* The note after a chapter heading over offer sections ("offered here", #3709). */
+.interview .section-h small {
+  font-family: 'EB Garamond', Garamond, Georgia, serif;
+  font-size: 0.9rem;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--cg-muted);
+  font-weight: 400;
+  margin-left: 0.8rem;
+}
 .interview .conditional {
   margin-top: 0.8rem;
   border-left: 2px solid var(--cg-rule);

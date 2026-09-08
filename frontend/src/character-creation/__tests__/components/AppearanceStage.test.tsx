@@ -166,8 +166,9 @@ describe('AppearanceStage (folio)', () => {
 
   it("offers this chapter's distinctions after the height block, with the heading fallback (#3675 Task 15)", () => {
     const { container } = renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
-    const heading = screen.getByText('What people notice first');
+    const heading = screen.getByRole('heading', { name: /What people notice first/ });
     expect(heading).toBeInTheDocument();
+    expect(within(heading).getByText('offered here')).toBeInTheDocument();
     // Grouped by section (#3709): the section heading carries the Distinctions chip.
     expect(screen.getByText('Frame')).toBeInTheDocument();
     expect(screen.getByText('Distinctions')).toBeInTheDocument();

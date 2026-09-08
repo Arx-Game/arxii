@@ -368,6 +368,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # The Appearance chapter's own offered distinctions (#3675 Task 15): what
     # shows offers here, in place of the retired Distinctions stage.
     "appearance_offers_heading": "What people notice first",
+    "appearance_offers_note": "offered here",
     "appearance_closed_lead": "Closed by your route",
     "identity_name_heading": "Name",
     "identity_concept_heading": "Concept",

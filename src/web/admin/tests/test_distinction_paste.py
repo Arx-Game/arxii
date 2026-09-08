@@ -1,11 +1,18 @@
 """Add from a table on the Distinction Builder (#3709): additions only, previewed, digested."""
 
+from pathlib import Path
+
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
 from web.admin.distinction_builder.paste import parse_table, table_digest
+from web.admin.tests.test_distinction_builder import (
+    DistinctionBuilderStylingTest,
+    emitted_classes,
+    reachable_css,
+)
 from world.character_creation.constants import OfferArrival, OfferChapter
 from world.character_creation.factories import (
     AppearanceSectionFactory,
@@ -189,3 +196,35 @@ class PasteViewTest(PasteTestCase):
         resp = self.client.post(self.url, {"text": ROW, "action": "create", "digest": again})
         assert resp.status_code == 200
         assert Distinction.objects.filter(slug="oath-bound").count() == 1
+
+
+class PasteStylingTest(PasteTestCase):
+    """Every class paste.html emits must have a rule reaching THIS page (#3667 shape).
+
+    The Builder page's own guard (``DistinctionBuilderStylingTest``) resolves classes
+    against the Builder page's CSS, which is not what this page links: a class the
+    Builder's ``_css.html`` styles under ``#distinction-builder-root`` never reaches
+    here. Found by the demo-fidelity review of #3709, hence its own guard.
+    """
+
+    ADMIN_PROVIDED_CLASSES = DistinctionBuilderStylingTest.ADMIN_PROVIDED_CLASSES | {
+        # forms.css widget classes, linked by this page's own extrastyle
+        "vLargeTextField",
+    }
+
+    def _rendered(self) -> str:
+        self.client.force_login(self.author)
+        resp = self.client.post(self.url, {"text": ROW + "\n" + SKIP_ROW, "action": "check"})
+        assert resp.status_code == 200
+        return resp.content.decode()
+
+    def test_every_class_the_page_emits_has_a_rule_that_reaches_the_page(self):
+        template = (
+            Path(__file__).resolve().parents[2] / "templates/admin/distinction_builder/paste.html"
+        )
+        emitted = emitted_classes(template)
+        css = reachable_css(self._rendered())
+        undefined = sorted(
+            token for token in emitted - self.ADMIN_PROVIDED_CLASSES if f".{token}" not in css
+        )
+        assert not undefined, f"class hooks with no CSS rule reaching the page: {undefined}"

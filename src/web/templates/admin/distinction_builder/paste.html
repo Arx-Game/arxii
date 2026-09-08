@@ -54,10 +54,8 @@
 
     {% if rows is not None %}
     <div class="module">
-      <h2>Preview
-        <span class="db-chips">{{ rows|length }} row(s) read &middot; {{ counts.create }} to create
-          &middot; {{ counts.skip }} skipped &middot; {{ counts.error }} error(s)</span>
-      </h2>
+      <h2>Preview: {{ rows|length }} row(s) read &middot; {{ counts.create }} to create
+        &middot; {{ counts.skip }} skipped &middot; {{ counts.error }} error(s)</h2>
       <table class="tuning-table">
         <thead><tr><th>Line</th><th>Row</th><th>Result</th><th>Will create</th></tr></thead>
         <tbody>

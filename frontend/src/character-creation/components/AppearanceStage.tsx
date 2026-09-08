@@ -459,6 +459,7 @@ export function AppearanceStage({
       {(sections.length > 0 || hasClosedAppearance) && (
         <h2 className="section-h">
           {copy?.appearance_offers_heading ?? 'What people notice first'}
+          <small>{copy?.appearance_offers_note ?? 'offered here'}</small>
         </h2>
       )}
       {sections.map((section, index) => (
