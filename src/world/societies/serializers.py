@@ -162,6 +162,32 @@ class HouseDetailSerializer(serializers.Serializer):
     vacancies = VacancyOfferSerializer(many=True)
 
 
+class OrganizationShopWindowSerializer(serializers.ModelSerializer):
+    """What a realm page shows of an organization to anyone (#3725).
+
+    Name, words, colours, sigil, description, kind and society: the fields a house
+    would put on its gate. Nothing else from ``OrganizationSerializer`` is reused, so
+    members, ranks, treasury, crises, vacancies and boards cannot reach a visitor.
+    """
+
+    society_name = serializers.CharField(source="society.name", read_only=True)
+    org_type_name = serializers.CharField(source="org_type.name", read_only=True)
+
+    class Meta:
+        model = Organization
+        fields = [
+            "id",
+            "name",
+            "description",
+            "words",
+            "colors",
+            "sigil_description",
+            "org_type_name",
+            "society_name",
+        ]
+        read_only_fields = fields
+
+
 class OrganizationSerializer(serializers.ModelSerializer):
     society_name = serializers.CharField(source="society.name", read_only=True)
     org_type_name = serializers.CharField(source="org_type.name", read_only=True)
