@@ -7,7 +7,9 @@ from django.contrib import admin
 from django.contrib.admin.widgets import AutocompleteSelect, FilteredSelectMultiple
 from django.forms import inlineformset_factory
 
-from world.character_creation.models import DistinctionOffer
+from world.character_creation.constants import ENEMY_MARKING_DEGREES
+from world.character_creation.models import Beginnings, DistinctionOffer
+from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
 
 
@@ -44,7 +46,7 @@ class DistinctionForm(forms.ModelForm):
             # Admin-only literals (player-facing words stay on the model field):
             # what an author sees is not what a player reads for the same value.
             "cost_per_rank": (
-                'Negative refunds. Shown to the player as "1 per rank" or "Refunds 2".'
+                'Negative awards. Shown to the player as "1 per rank" or "Awards 2".'
             ),
             "max_rank": "1 for a plain yes or no.",
         }
@@ -101,11 +103,21 @@ class EffectForm(forms.ModelForm):
 class OfferForm(forms.ModelForm):
     """One "where it is offered" row.
 
-    All three openers are always rendered; ``page.html``'s inline script shows
-    only the one this row's chapter wants and hides the other two - server-side
-    validation of "at most one, the right one for the chapter" is the model's
+    Every opener widget is always rendered; ``page.html``'s inline script shows
+    only the one(s) this row's chapter wants and hides the rest - server-side
+    validation of "exactly one, of the right kind for the chapter" is the model's
     own ``DistinctionOffer.clean()``, run automatically by ``ModelForm._post_clean``.
+    ``first_look`` (#3709) is declared here rather than through ``Meta.fields`` so
+    the through-model M2M is written explicitly by the view (``views.distinction_builder``
+    sets the pins after the row is saved), never by ``save_m2m``.
     """
+
+    first_look = forms.ModelMultipleChoiceField(
+        queryset=Beginnings.objects.filter(is_active=True).order_by("name"),
+        required=False,
+        label="First look for",
+        help_text="Beginnings that show this line at rest; the rest fold under See more.",
+    )
 
     class Meta:
         model = DistinctionOffer
@@ -117,6 +129,10 @@ class OfferForm(forms.ModelForm):
             "schooling_line",
             "glimpse_tag",
             "origin_choice",
+            "prompt",
+            "enemy_reason",
+            "enemy_degree",
+            "appearance_section",
             "sort_order",
         ]
         widgets = {
@@ -128,7 +144,27 @@ class OfferForm(forms.ModelForm):
                 DistinctionOffer._meta.get_field("origin_choice"),  # noqa: SLF001
                 admin.site,
             ),
+            "enemy_reason": AutocompleteSelect(
+                DistinctionOffer._meta.get_field("enemy_reason"),  # noqa: SLF001
+                admin.site,
+            ),
+            "appearance_section": AutocompleteSelect(
+                DistinctionOffer._meta.get_field("appearance_section"),  # noqa: SLF001
+                admin.site,
+            ),
         }
+
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        super().__init__(*args, **kwargs)
+        # Only the two marking degrees open an offer (the model's clean() says so
+        # too); the select offers no others.
+        self.fields["enemy_degree"].choices = [("", "---------")] + [
+            (value, label) for value, label in EnemyDegree.choices if value in ENEMY_MARKING_DEGREES
+        ]
+        if self.instance.pk:
+            self.fields["first_look"].initial = list(
+                self.instance.first_look.values_list("pk", flat=True)
+            )
 
 
 DistinctionEffectFormSet = inlineformset_factory(

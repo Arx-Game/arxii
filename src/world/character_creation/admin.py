@@ -5,6 +5,7 @@ Character Creation admin configuration.
 from django.contrib import admin
 
 from world.character_creation.models import (
+    AppearanceSection,
     BeginningEnemyOffer,
     Beginnings,
     BeginningTradition,
@@ -14,6 +15,7 @@ from world.character_creation.models import (
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
+    EnemyReason,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
@@ -73,7 +75,16 @@ class BeginningEnemyOfferInline(admin.TabularInline):
     model = BeginningEnemyOffer
     extra = 0
     raw_id_fields = ["organization"]
-    fields = ["organization", "figure_name", "power_tier", "reach_override", "why", "sort_order"]
+    autocomplete_fields = ["reason"]
+    fields = [
+        "organization",
+        "figure_name",
+        "power_tier",
+        "reach_override",
+        "reason",
+        "why",
+        "sort_order",
+    ]
 
 
 @admin.register(Beginnings)
@@ -308,3 +319,37 @@ class CGExplanationAdmin(admin.ModelAdmin):
         if len(obj.text) > truncate_at:
             return obj.text[:truncate_at] + "..."
         return obj.text
+
+
+@admin.register(EnemyReason)
+class EnemyReasonAdmin(admin.ModelAdmin):
+    """The shared list of why an enemy wants the character to fail (#3709).
+
+    A plain change list: written once for the whole game, filtered by ``fits`` on the
+    leaf, pinned per Beginning enemy offer, and the enemy chapter's opener on the
+    Distinction Builder (its ``enemy_reason`` autocomplete needs ``search_fields``).
+    """
+
+    list_display = ["name", "player_line", "fits", "offers", "sort_order", "is_active"]
+    list_filter = ["fits", "is_active"]
+    search_fields = ["name", "player_line"]
+    fieldsets = [
+        (None, {"fields": ("name", "player_line", "fits", "sort_order", "is_active")}),
+        CREDIT_FIELDSET,
+    ]
+
+    @admin.display(description="Offers")
+    def offers(self, obj: EnemyReason) -> int:
+        return obj.distinction_offers.count()
+
+
+@admin.register(AppearanceSection)
+class AppearanceSectionAdmin(admin.ModelAdmin):
+    """The headings the Appearance chapter groups its offers under (#3709)."""
+
+    list_display = ["name", "player_line", "sort_order"]
+    search_fields = ["name"]
+    fieldsets = [
+        (None, {"fields": ("name", "player_line", "sort_order")}),
+        CREDIT_FIELDSET,
+    ]

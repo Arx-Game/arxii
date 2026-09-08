@@ -172,6 +172,56 @@ class BuilderSaveTest(BuilderTestCase):
         assert offer.player_line == "Drilled by the arms-master"
         assert offer.written_by == self.writer
 
+    def test_offer_row_renders_every_opener_widget_and_the_first_look_column(self):
+        """#3709: the prompt, reason, degree and section openers, and the pins column."""
+        self.client.force_login(self.author)
+        body = self.client.get(
+            reverse("admin_distinction_builder", args=[self.distinction.pk])
+        ).content.decode()
+        for opener in ("prompt", "enemy_reason", "enemy_degree", "appearance_section"):
+            assert f'data-opener="{opener}"' in body, opener
+        assert "First look for" in body
+        assert 'name="offers-__prefix__-first_look"' in body
+        opener_map = re.search(r'id="opener-field-map"[^>]*>(.*?)</script>', body, re.DOTALL).group(
+            1
+        )
+        assert '"enemy": ["enemy_reason", "enemy_degree"]' in opener_map
+        assert '"actors_sheet": ["prompt"]' in opener_map
+
+    def test_save_writes_an_actors_sheet_offer_with_its_prompt_and_first_look_pins(self):
+        from world.character_creation.factories import BeginningsFactory
+
+        household = BeginningsFactory(name="Born to a Household")
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{
+                "offers-0-chapter": OfferChapter.ACTORS_SHEET,
+                "offers-0-origin_choice": "",
+                "offers-0-prompt": "fear",
+                "offers-0-first_look": [str(household.pk)],
+            }
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 302
+        offer = DistinctionOffer.objects.get(
+            distinction=self.distinction, chapter=OfferChapter.ACTORS_SHEET
+        )
+        assert offer.prompt == "fear"
+        assert list(offer.first_look.all()) == [household]
+
+    def test_save_rejects_an_actors_sheet_offer_with_no_prompt(self):
+        self.client.force_login(self.author)
+        data = self._post_data(
+            **{"offers-0-chapter": OfferChapter.ACTORS_SHEET, "offers-0-origin_choice": ""}
+        )
+        resp = self.client.post(
+            reverse("admin_distinction_builder", args=[self.distinction.pk]), data
+        )
+        assert resp.status_code == 200
+        assert "need an opener" in resp.content.decode()
+
     def test_unlinked_contributor_cannot_save(self):
         self.client.force_login(self.unlinked)
         resp = self.client.post(
@@ -382,6 +432,18 @@ class BuilderLiveTest(BuilderTestCase):
         self.distinction.description = "PLACEHOLDER needs real prose"
         result = live.checks(self.distinction)
         assert any(kind == "warn" and "PLACEHOLDER" in text for kind, text in result)
+
+    def test_checks_warn_when_an_offer_has_no_opener(self):
+        from web.admin.distinction_builder import live
+        from world.character_creation.factories import DistinctionOfferFactory
+
+        DistinctionOfferFactory(
+            distinction=self.distinction,
+            chapter=OfferChapter.ACTORS_SHEET,
+            prompt="",
+        )
+        result = live.checks(self.distinction)
+        assert any(kind == "warn" and "not opened by anything" in text for kind, text in result)
 
     def test_checks_ok_once_offered(self):
         from web.admin.distinction_builder import live

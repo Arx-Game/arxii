@@ -89,6 +89,8 @@ light/dark selectors below, so the page follows the theme toggle.
   #distinction-builder-root .db-offer-row td { vertical-align: top; }
   #distinction-builder-root .db-openers { display: flex; flex-direction: column; gap: 0.25rem; }
   #distinction-builder-root .db-opener[hidden] { display: none; }
+  /* The "First look for" multi-select (#3709): a short list of Beginnings, kept narrow. */
+  #distinction-builder-root .db-first-look select { min-width: 9rem; max-width: 14rem; }
   /* Links the opener out to where it is actually edited (#3675 Task 10):
      a Glimpse tag's own change form, the Upbringing Builder question that
      carries an answer, or the tradition slate page for a schooling line. */

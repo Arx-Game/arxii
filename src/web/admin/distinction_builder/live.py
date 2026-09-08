@@ -95,6 +95,20 @@ def _effect_target_check(distinction: Distinction) -> tuple[str, str]:
     return ("ok", "Every effect names a modifier target that exists.")
 
 
+def _opener_checks(distinction: Distinction) -> list[tuple[str, str]]:
+    """An offer line whose chapter wants an opener and has none is never shown (#3709)."""
+    offers = DistinctionOffer.objects.filter(distinction=distinction, is_active=True)
+    return [
+        (
+            "warn",
+            f"The {offer.get_chapter_display()} offer is not opened by anything; "
+            "a player never sees it until it is.",
+        )
+        for offer in offers
+        if not offer.set_openers
+    ]
+
+
 def _placeholder_check(distinction: Distinction) -> tuple[str, str]:
     if distinction.description.startswith(PLACEHOLDER_PREFIX):
         return ("warn", f"Description is a placeholder (starts with {PLACEHOLDER_PREFIX}).")
@@ -134,6 +148,7 @@ def checks(distinction: Distinction) -> list[tuple[str, str]]:
     ]
     result.extend(_lineage_offer_checks(distinction))
     result.extend(_schooling_offer_checks(distinction))
+    result.extend(_opener_checks(distinction))
     return result
 
 

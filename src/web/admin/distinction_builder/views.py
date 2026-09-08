@@ -63,7 +63,11 @@ def _build_forms(request: HttpRequest, distinction: Distinction) -> _BuilderForm
         instance=distinction,
         prefix="offers",
         queryset=DistinctionOffer.objects.select_related(
-            "schooling_line", "glimpse_tag", "origin_choice__slot__template"
+            "schooling_line",
+            "glimpse_tag",
+            "origin_choice__slot__template",
+            "enemy_reason",
+            "appearance_section",
         ),
     )
     return _BuilderForms(form, effects, offers)
@@ -91,6 +95,27 @@ def _sync_tradition_step_offer_copy(
             offer.player_line = line.player_line
             offer.save(update_fields=["name", "player_line"])
             stamp_written(offer, contributor)
+
+
+#: The formset's own delete flag and the form-only pins field (#3709).
+_DELETE_KEY = "DELETE"
+FIRST_LOOK_FIELD = "first_look"
+
+
+def _set_first_look_pins(offers: DistinctionOfferFormSet) -> None:
+    """Write each surviving offer row's "First look for" pins (#3709).
+
+    The pins are a through-model M2M (``OfferFirstLook``), declared on ``OfferForm``
+    outside ``Meta.fields`` so ``save_m2m`` never touches them; ``set()`` writes the
+    through rows itself (no extra fields on the through). A deleted row is skipped:
+    its pins went with it.
+    """
+    for form in offers.forms:
+        if not form.is_valid() or form.cleaned_data.get(_DELETE_KEY) or not form.instance.pk:
+            continue
+        if not form.has_changed() and FIRST_LOOK_FIELD not in form.changed_data:
+            continue
+        form.instance.first_look.set(form.cleaned_data.get(FIRST_LOOK_FIELD, []))
 
 
 def _render_page(
@@ -141,6 +166,7 @@ def distinction_builder(request: HttpRequest, pk: int | None = None) -> HttpResp
                 stamp_written(saved, contributor)
                 for row in (*saved_effects, *saved_offers):
                     stamp_written(row, contributor)
+                _set_first_look_pins(forms.offers)
                 _sync_tradition_step_offer_copy(saved, contributor)
             messages.success(request, "Saved and credited to you.")
             return redirect(reverse("admin_distinction_builder", args=[saved.pk]))
