@@ -7,6 +7,7 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
+from world.character_creation.constants import StartingAreaAccessLevel
 from world.character_creation.factories import RealmFactory, StartingAreaFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.realms.constants import TESTAMENT_THRESHOLD_LINE
@@ -77,6 +78,16 @@ class RealmListAndDetailTests(TestCase):
         self.assertEqual(set(data["societies"][0]), {"id", "name", "description", "enforcer_name"})
         self.assertEqual(data["starting_area"]["name"], "Tenebrum")
         self.assertIsNone(data["starting_area"]["crest_image"])
+
+    def test_gated_starting_area_is_null_for_a_visitor_and_the_realm_still_lists(self):
+        gated = RealmFactory(name="Ariwn")
+        StartingAreaFactory(
+            name="Kys G'Sheer", realm=gated, access_level=StartingAreaAccessLevel.TRUST_REQUIRED
+        )
+        client = APIClient()
+        self.assertIn("ariwn", [row["slug"] for row in client.get("/api/realms/").json()])
+        detail = client.get("/api/realms/ariwn/").json()
+        self.assertIsNone(detail["starting_area"])
 
     def test_unknown_slug_is_404(self):
         self.assertEqual(APIClient().get("/api/realms/nowhere/").status_code, 404)
