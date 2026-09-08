@@ -1143,6 +1143,7 @@ export const mockCGTechniqueOptionPool: CGTechniqueOption = {
   category: 'attack',
   codex_entry_id: null,
   is_tradition_technique: false,
+  is_species_technique: false,
   effect_summary: mockTechniqueEffectSummary,
 };
 
@@ -1153,6 +1154,7 @@ export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
   category: 'utility',
   codex_entry_id: 20,
   is_tradition_technique: true,
+  is_species_technique: false,
   effect_summary: mockTechniqueEffectSummary,
 };
 
@@ -1166,6 +1168,7 @@ export const mockCGTechniqueOptions: CGTechniqueOption[] = [
     category: 'defense',
     codex_entry_id: null,
     is_tradition_technique: false,
+    is_species_technique: false,
     effect_summary: mockTechniqueEffectSummary,
   },
 ];

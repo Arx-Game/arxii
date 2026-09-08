@@ -541,7 +541,7 @@ export interface CGGiftOption {
 }
 
 /**
- * Technique row for the CG technique-options list (pool ∪ signature).
+ * Technique row for the CG technique-options list (pool ∪ signature ∪ species gift).
  * From GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>
  */
 export interface CGTechniqueOption {
@@ -551,6 +551,7 @@ export interface CGTechniqueOption {
   category: 'attack' | 'defense' | 'buff' | 'debuff' | 'utility';
   codex_entry_id: number | null;
   is_tradition_technique: boolean;
+  is_species_technique: boolean;
   /**
    * The shared effect block (#2898) — cost, reach, targeting, hostility, and
    * the plain-words summary line. CG is where a technique pick is least

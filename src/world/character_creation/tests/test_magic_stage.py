@@ -28,7 +28,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
-from world.magic.constants import GlimpseTagAxis
+from world.magic.constants import GiftKind, GlimpseTagAxis
 from world.magic.factories import (
     GiftFactory,
     GlimpseTagFactory,
@@ -46,6 +46,7 @@ from world.skills.factories import SkillFactory
 from world.societies.constants import ObligationOrigin, ObligationState
 from world.societies.factories import OrganizationFactory
 from world.societies.models import OrganizationObligation
+from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.traits.factories import SkillTraitFactory, StatTraitFactory
 
 
@@ -72,6 +73,10 @@ class MagicStageValidationTest(TestCase):
 
         # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
         cls.other_gift = GiftFactory(name="Not Granted")
+        cls.species = SpeciesFactory(name="Species Technique Test")
+        cls.species_gift = GiftFactory(name="Species Minor Gift", kind=GiftKind.MINOR)
+        SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(gift=cls.species_gift)
 
         # A technique belonging to the gift but attached to neither the pool nor
         # the tradition technique set — outside the (path, gift, tradition) availability set.
@@ -84,6 +89,7 @@ class MagicStageValidationTest(TestCase):
         cls.inactive_skill = SkillFactory(is_active=False)
 
     def _draft(self, **draft_data_overrides):
+        selected_species = draft_data_overrides.pop("selected_species", None)
         draft_data = {
             "selected_gift_id": self.gift.id,
             "selected_technique_ids": [self.pool_techniques[0].id],
@@ -95,6 +101,7 @@ class MagicStageValidationTest(TestCase):
         return CharacterDraftFactory(
             selected_path=self.path,
             selected_tradition=self.tradition,
+            selected_species=selected_species,
             draft_data=draft_data,
         )
 
@@ -130,6 +137,14 @@ class MagicStageValidationTest(TestCase):
     def test_signature_technique_is_available(self):
         """Signature techniques (tradition grant) are pickable, not just pool ones."""
         draft = self._draft(selected_technique_ids=[self.special_technique.id])
+        errors = compute_magic_errors(draft)
+        assert errors == []
+
+    def test_species_gift_technique_is_available(self):
+        draft = self._draft(
+            selected_species=self.species,
+            selected_technique_ids=[self.species_technique.id],
+        )
         errors = compute_magic_errors(draft)
         assert errors == []
 
@@ -527,6 +542,10 @@ class CGTechniqueOptionEndpointTest(TestCase):
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
         cls.special_technique = TechniqueFactory(gift=cls.gift)
         tradition_grant.special_techniques.set([cls.special_technique])
+        cls.species = SpeciesFactory(name="Endpoint Species Technique Test")
+        cls.species_gift = GiftFactory(name="Endpoint Species Gift", kind=GiftKind.MINOR)
+        SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(gift=cls.species_gift)
 
     def setUp(self):
         self.client = APIClient()
@@ -558,6 +577,19 @@ class CGTechniqueOptionEndpointTest(TestCase):
         assert by_id[self.special_technique.id]["is_tradition_technique"] is True
         for pool_technique in self.pool_techniques:
             assert by_id[pool_technique.id]["is_tradition_technique"] is False
+
+    def test_species_techniques_are_listed_and_flagged(self):
+        draft = self._draft(selected_species=self.species)
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        row = next(row for row in response.data if row["id"] == self.species_technique.id)
+        assert row["is_species_technique"] is True
+        assert row["is_tradition_technique"] is False
 
     def test_category_resolved_from_effect_type(self):
         draft = self._draft()

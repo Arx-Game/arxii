@@ -110,7 +110,11 @@ from world.magic.models import (
     Technique,
     Tradition,
 )
-from world.magic.services.cg_catalog import get_gift_options, get_technique_options
+from world.magic.services.cg_catalog import (
+    get_gift_options,
+    get_species_technique_options,
+    get_technique_options,
+)
 from world.magic.types.cg_catalog import TechniqueOptions
 from world.roster.models import FamilyKind
 from world.societies.models import Vacancy
@@ -605,8 +609,13 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
                 draft = get_object_or_404(CharacterDraft, pk=draft_id, account=request.user)
                 if draft.selected_tradition_id is not None and draft.selected_path_id is not None:
                     gift = get_object_or_404(Gift, pk=gift_id)
-                    options = get_technique_options(
+                    base_options = get_technique_options(
                         draft.selected_path, gift, draft.selected_tradition
+                    )
+                    options = TechniqueOptions(
+                        pool=base_options.pool,
+                        tradition=base_options.tradition,
+                        species=get_species_technique_options(draft.selected_species),
                     )
 
         return options
@@ -617,7 +626,7 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         if options is None:
             return Technique.objects.none()
 
-        technique_ids = {t.id for t in [*options.pool, *options.tradition]}
+        technique_ids = {t.id for t in [*options.pool, *options.tradition, *options.species]}
         return Technique.objects.filter(id__in=technique_ids).select_related("effect_type")
 
     def get_serializer_context(self) -> dict[str, Any]:
@@ -625,6 +634,9 @@ class CGTechniqueOptionViewSet(viewsets.ReadOnlyModelViewSet):
         options = self._resolve_options()
         context["tradition_technique_ids"] = (
             {t.id for t in options.tradition} if options is not None else set()
+        )
+        context["species_technique_ids"] = (
+            {t.id for t in options.species} if options is not None else set()
         )
         return context
 

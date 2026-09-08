@@ -25640,7 +25640,7 @@ export interface components {
      * @description Technique row for the CG technique-options list (#2426).
      *
      *     Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-     *     — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+     *     — the pool ∪ tradition ∪ species availability set for one CG pick
      *     (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
      *     is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
      *     serializer context — never attached to the (SharedMemoryModel) ``Technique``
@@ -25657,6 +25657,8 @@ export interface components {
       readonly codex_entry_id: number | null;
       /** @description True when this technique came from the tradition's special technique set. */
       readonly is_tradition_technique: boolean;
+      /** @description True when this technique belongs to a gift granted by the species. */
+      readonly is_species_technique: boolean;
       readonly effect_summary: components['schemas']['TechniqueEffectSummary'];
     };
     /** @description An opening reachable from the draft, priced for it (#3648). */

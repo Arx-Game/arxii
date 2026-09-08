@@ -2044,6 +2044,8 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
     Techniques are staff-authored catalog rows the player picked via the CG
     option endpoints (``get_gift_options``/``get_technique_options``) —
     finalize only links them, it never mints new ``Gift``/``Technique`` rows.
+    Techniques from a species-granted gift are linked with
+    ``AcquisitionOrigin.SPECIES_GRANT``.
     Outcome-flavor consequence-pool selection is dropped entirely (spec
     correction on #2426): every catalog technique already carries its own
     authored ``action_template``.
@@ -2063,6 +2065,7 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
         Resonance,
         Technique,
     )
+    from world.magic.services.cg_catalog import get_species_technique_options  # noqa: PLC0415
     from world.magic.specialization.services import grant_gift_to_character  # noqa: PLC0415
 
     gift = Gift.objects.get(pk=gift_id)
@@ -2078,19 +2081,46 @@ def _finalize_gift_and_techniques(draft: CharacterDraft, sheet: CharacterSheet) 
 
     technique_ids = draft.draft_data.get("selected_technique_ids") or []
     techniques = list(Technique.objects.filter(pk__in=technique_ids))
-    for technique in techniques:
-        CharacterTechnique.objects.get_or_create(
+    species_technique_ids = {
+        technique.id for technique in get_species_technique_options(draft.selected_species)
+    }
+    species_techniques = [
+        technique for technique in techniques if technique.id in species_technique_ids
+    ]
+    major_techniques = [
+        technique for technique in techniques if technique.id not in species_technique_ids
+    ]
+    gained_techniques = []
+    for technique in major_techniques:
+        _, created = CharacterTechnique.objects.get_or_create(
             character=sheet,
             technique=technique,
             defaults={"origin": AcquisitionOrigin.CHARACTER_CREATION},
         )
+        if created:
+            gained_techniques.append(technique)
+    for technique in species_techniques:
+        link, created = CharacterTechnique.objects.get_or_create(
+            character=sheet,
+            technique=technique,
+            defaults={"origin": AcquisitionOrigin.SPECIES_GRANT},
+        )
+        if not created and link.origin != AcquisitionOrigin.SPECIES_GRANT:
+            link.origin = AcquisitionOrigin.SPECIES_GRANT
+            link.save(update_fields=["origin"])
+        if created:
+            gained_techniques.append(technique)
 
     from world.achievements.constants import AccessChangeSource  # noqa: PLC0415
     from world.achievements.discovery import announce_access_change  # noqa: PLC0415
 
-    announce_access_change(
-        sheet, gained=techniques, lost=[], source=AccessChangeSource.CHARACTER_CREATION
-    )
+    if gained_techniques:
+        announce_access_change(
+            sheet,
+            gained=gained_techniques,
+            lost=[],
+            source=AccessChangeSource.CHARACTER_CREATION,
+        )
 
 
 def _grant_codex_entries(sheet: CharacterSheet, entry_ids: Iterable[int]) -> None:
