@@ -25,6 +25,7 @@ from world.magic.factories import (
     TraditionFactory,
     TraditionGiftGrantFactory,
 )
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.realms.models import Realm
 from world.roster.seeds import ensure_rosters
 from world.skills.factories import SkillFactory
@@ -132,7 +133,11 @@ class FinalizationTestMixin:
         # with a pool technique, plus a Skill for the anima check.
         target.gift = GiftFactory(name=f"{prefix} Gift")
         path_grant = PathGiftGrantFactory(path=target.path, gift=target.gift)
-        target.technique = TechniqueFactory(gift=target.gift, effect_type=target.effect_type)
+        target.technique = TechniqueFactory(
+            gift=target.gift,
+            effect_type=target.effect_type,
+            action_template=get_standalone_cast_template(),
+        )
         path_grant.starter_techniques.set([target.technique])
         TraditionGiftGrantFactory(tradition=target.tradition, gift=target.gift)
         target.skill = SkillFactory()
