@@ -73,6 +73,7 @@ class WareListingAdmin(admin.ModelAdmin):
 
 @admin.register(CraftingServiceOffer)
 class CraftingServiceOfferAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["shop_room"]  # rooms are searched, never scrolled
     list_display = [
         "crafter_persona",
         "recipe_kind",
@@ -82,7 +83,7 @@ class CraftingServiceOfferAdmin(admin.ModelAdmin):
         "is_active",
     ]
     list_filter = ["is_active"]
-    raw_id_fields = ["crafter_persona", "shop_room"]
+    raw_id_fields = ["crafter_persona"]
 
 
 @admin.register(MarketSale)
