@@ -59,7 +59,14 @@ class SceneFilter(django_filters.FilterSet):
 class PersonaFilter(django_filters.FilterSet):
     scene = django_filters.NumberFilter(field_name="interactions_written__scene__id", distinct=True)
     character = django_filters.NumberFilter(field_name="character_sheet__character__id")
-    character_sheet = django_filters.NumberFilter(field_name="character_sheet__id")
+    # NOT ``character_sheet__id``: CharacterSheet's pk IS its ``character`` OneToOne
+    # (``primary_key=True``), so the model has no ``id`` field and Django parses the
+    # ``id`` segment as a *lookup* on the ForeignKey - "Unsupported lookup 'id__exact'
+    # for ForeignKey", a 500 on every ``GET /api/personas/?character_sheet=N``. That is
+    # the request the in-game PersonaSwitcher, SelectedCharacterChip and PersonaTiles
+    # all make (frontend/src/game/personaQueries.ts). Filter the FK's own column
+    # instead; by that same pk-sharing it holds the character's ObjectDB pk.
+    character_sheet = django_filters.NumberFilter(field_name="character_sheet_id")
     persona_type = django_filters.CharFilter(field_name="persona_type")
 
     class Meta:
