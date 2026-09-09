@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, create_autospec, patch
 
 from django.conf import settings
 from django.test import TestCase
@@ -37,6 +37,54 @@ class CommandUpdateTests(TestCase):
         combined = "\n".join(texts)
         self.assertIn(settings.FRONTEND_URL, combined)
         self.assertIn("no available characters", combined.lower())
+
+    def test_at_post_login_completes_against_a_real_session_signature(self):
+        """The session is a ServerSession, and its hooks must be called as such.
+
+        Every other test in this class passes a bare ``MagicMock`` as the
+        session, which answers any attribute with any arity - so
+        ``session.at_login()`` succeeded here while raising
+        ``TypeError: ServerSession.at_login() missing 1 required positional
+        argument: 'account'`` on every real login in production, taking the
+        cmdset payload and the character list down with it (digest #3736).
+        ``create_autospec`` is the difference: it enforces Evennia's real
+        signatures, so a call this method cannot legally make fails the test.
+        """
+        from evennia.server.serversession import ServerSession
+
+        session = create_autospec(ServerSession, instance=True)
+        account = AccountFactory(typeclass="typeclasses.accounts.Account")
+        account.sessions.all = MagicMock(return_value=[session])
+        account.get_available_characters = MagicMock(return_value=[])
+
+        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+            with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
+                account.at_post_login(session=session)
+
+        session.msg.assert_any_call(commands=(["cmd"], {}))
+
+    def test_at_post_login_leaves_portal_side_autologin_to_evennia(self):
+        """Never call the Portal's ``at_login()`` from this Server-side hook.
+
+        ``sessionhandler.login()`` sends the SLOGIN AMP op before invoking this
+        hook, and the Portal answers it in ``server_logged_in()`` by calling its
+        own ``session.at_login()`` - the no-argument
+        ``SecureWebSocketClient.at_login`` that stores the autologin uid and
+        nonce. Reaching for that name from the Server hits ``ServerSession``'s
+        two-argument hook of the same name instead.
+        """
+        from evennia.server.serversession import ServerSession
+
+        session = create_autospec(ServerSession, instance=True)
+        account = AccountFactory(typeclass="typeclasses.accounts.Account")
+        account.sessions.all = MagicMock(return_value=[session])
+        account.get_available_characters = MagicMock(return_value=[])
+
+        with patch("typeclasses.accounts.serialize_cmdset", return_value=["cmd"]):
+            with patch("typeclasses.accounts.DefaultAccount.at_post_login"):
+                account.at_post_login(session=session)
+
+        session.at_login.assert_not_called()
 
     def test_at_post_puppet_sends_commands(self):
         session1 = MagicMock()
