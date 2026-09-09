@@ -41,11 +41,13 @@ export function fetchPlayContext(params: {
   scene?: string;
   timestamp?: string;
   conversation?: string;
+  from?: string;
 }) {
   const query = new URLSearchParams({ id: params.id });
   if (params.scene) query.set('scene', params.scene);
   if (params.timestamp) query.set('timestamp', params.timestamp);
   if (params.conversation) query.set('conversation', params.conversation);
+  if (params.from) query.set('from', params.from);
   return getJson<{ results: Interaction[]; threadId: string | null }>(
     `/api/play/context/?${query}`
   );

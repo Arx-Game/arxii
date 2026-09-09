@@ -511,6 +511,13 @@ export function GamePage() {
             scene: referenceSceneId,
             timestamp: reference.timestamp,
             conversation: reference.key,
+            from: reference.timestamp
+              ? (() => {
+                  const start = new Date(reference.timestamp);
+                  start.setDate(start.getDate() - 90);
+                  return start.toISOString();
+                })()
+              : undefined,
           }).then((context) => ({
             results: context.results,
             before: null,

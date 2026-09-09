@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { GameMessage, GameMessageType } from '@/hooks/types';
-import { EvenniaMessage } from './EvenniaMessage';
 
 interface NarrativeMessageReaderProps {
   messages: Array<GameMessage & { id: string }>;
@@ -66,10 +65,7 @@ export function NarrativeMessageReader({ messages }: NarrativeMessageReaderProps
                   })}
                 </time>
               </header>
-              <EvenniaMessage
-                content={message.content}
-                className="whitespace-pre-wrap text-sm leading-relaxed"
-              />
+              <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
             </article>
           ))
         )}
