@@ -8,14 +8,11 @@
 
 {{followup_list}}
 
-<!-- review-evidence-required -->
+{{evidence_marker}}
 
 ## Review evidence
 
-- Report: `{{evidence_file}}`
-- The report is validated against the exact reviewed code revision before this PR is opened.
-- A PASS requires every mandatory criterion to have concrete evidence and no unresolved findings.
-- A scoped or partial change uses `Refs` and links the remaining work; it does not claim umbrella completion.
+{{evidence_status}}
 
 ## Notes
 

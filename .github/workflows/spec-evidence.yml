@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   review-evidence:
@@ -15,38 +16,49 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
-      - name: Validate exact-revision evidence report
+      - name: Validate labeled review evidence
         env:
           EVENT_PATH: ${{ github.event_path }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           readarray -t values < <(python3 - <<'PY'
           import json
-          import re
           import os
+          import re
 
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               event = json.load(stream)
           body = event["pull_request"].get("body") or ""
-          # Ordinary PRs do not need spec/demo evidence. The issue-to-merged-pr
-          # template opts in explicitly, so only that flow is hard-gated.
-          if "<!-- review-evidence-required -->" not in body:
-              print("review evidence not required for this PR")
-              raise SystemExit(0)
           with open("/tmp/pr-body.md", "w", encoding="utf-8") as stream:
               stream.write(body)
-          match = re.search(r"^- Report: `([^`]+)`$", body, re.MULTILINE)
+          match = re.search(r"^(?:Refs|Closes) #([0-9]+)$", body, re.MULTILINE)
           if not match:
-              raise SystemExit("PR body is missing the committed review report link")
+              raise SystemExit("PR body must link an issue with Refs or Closes")
           print(match.group(1))
-          head_sha = event["pull_request"]["head"]["sha"]
-          print(head_sha)
-          print(f"{head_sha}^1")
+          print(event["pull_request"]["head"]["sha"])
           PY
           )
-          report_path="${values[0]}"
+          issue_number="${values[0]}"
           head_sha="${values[1]}"
+          labels="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${issue_number}/labels" --paginate --jq '.[].name')"
+          if ! grep -qx "review:evidence-required" <<<"$labels"; then
+              echo "review evidence not required for issue #${issue_number}"
+              exit 0
+          fi
+          readarray -t report_values < <(python3 - <<'PY'
+          import re
+
+          body = open("/tmp/pr-body.md", encoding="utf-8").read()
+          if "<!-- review-evidence-required -->" not in body:
+              raise SystemExit("labeled issue requires the review-evidence-required PR marker")
+          match = re.search(r"^- Report: `([^`]+)`$", body, re.MULTILINE)
+          if not match:
+              raise SystemExit("labeled issue requires a committed review report link")
+          print(match.group(1))
+          PY
+          )
+          report_path="${report_values[0]}"
           reviewed_sha="$(git rev-parse "${head_sha}^1")"
-          test "$reviewed_sha" = "${values[2]}"
           python3 tools/validate_review_evidence.py "$report_path" \
               --revision "$reviewed_sha" --pr-body /tmp/pr-body.md

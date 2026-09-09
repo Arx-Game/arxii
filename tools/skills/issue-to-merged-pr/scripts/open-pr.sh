@@ -53,21 +53,39 @@ TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 SUMMARY="${PR_SUMMARY:-(no summary provided)}"
 RAN_OR_SKIPPED="${PR_RAN_OR_SKIPPED:-ran}"
 SYNC_SUMMARY="${PR_SYNC_SUMMARY:-(no rebase performed)}"
+ISSUE_LABELS=$(gh issue view "$ISSUE" --json labels --jq '.labels[].name')
+EVIDENCE_REQUIRED=0
+if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
+  EVIDENCE_REQUIRED=1
+fi
 EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
-if [[ -z "$EVIDENCE_FILE" ]]; then
-  echo "ERROR: PR_EVIDENCE_FILE is required; provide a committed review report." >&2
-  exit 1
+if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
+  if [[ -z "$EVIDENCE_FILE" ]]; then
+    echo "ERROR: issue #$ISSUE requires review evidence; set PR_EVIDENCE_FILE." >&2
+    exit 1
+  fi
+  if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
+    echo "ERROR: PR_EVIDENCE_FILE must be repository-relative without '..'." >&2
+    exit 1
+  fi
+  if ! git ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
+    echo "ERROR: PR_EVIDENCE_FILE must name a tracked file: $EVIDENCE_FILE" >&2
+    exit 1
+  fi
+  REVIEWED_SHA=$(git rev-parse HEAD^1)
+  uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+else
+  EVIDENCE_FILE="${EVIDENCE_FILE:-not required for this issue}"
 fi
-if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
-  echo "ERROR: PR_EVIDENCE_FILE must be a repository-relative path without '..'." >&2
-  exit 1
+EVIDENCE_MARKER=""
+EVIDENCE_STATUS="- Review evidence is not required; this issue is not labeled \`review:evidence-required\`."
+if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
+  EVIDENCE_MARKER="<!-- review-evidence-required -->"
+  EVIDENCE_STATUS="- Report: \`$EVIDENCE_FILE\`
+- The report is validated against the exact reviewed code revision before this PR is opened.
+- A PASS requires every mandatory criterion to have concrete evidence and no unresolved findings.
+- A scoped or partial change uses \`Refs\` and links the remaining work; it does not claim umbrella completion."
 fi
-if ! git ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
-  echo "ERROR: PR_EVIDENCE_FILE must name a tracked file: $EVIDENCE_FILE" >&2
-  exit 1
-fi
-REVIEWED_SHA=$(git rev-parse HEAD^1)
-uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
 LINK_VERB="Refs"
 if [[ "${PR_CLOSE_ISSUE:-0}" == "1" ]]; then
   LINK_VERB="Closes"
@@ -96,6 +114,8 @@ BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
 BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
 BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_FILE}
+BODY=${BODY//\{\{evidence_marker\}\}/$EVIDENCE_MARKER}
+BODY=${BODY//\{\{evidence_status\}\}/$EVIDENCE_STATUS}
 BODY=${BODY//\{\{link_verb\}\}/$LINK_VERB}
 
 # Derive a PR title if not explicitly given.

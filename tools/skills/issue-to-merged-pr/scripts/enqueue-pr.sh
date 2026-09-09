@@ -30,31 +30,40 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$SCRIPT_DIR/_wt-helpers.sh"
 HEAD_REF=$(gh pr view "$PR" --json headRefName --jq .headRefName)
 PR_BODY=$(gh pr view "$PR" --json body --jq .body)
-EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
-if [[ -z "$EVIDENCE_FILE" ]]; then
-  EVIDENCE_LINE=$(grep -F -- "- Report: \`" <<<"$PR_BODY" | head -1 || true)
-  EVIDENCE_FILE="${EVIDENCE_LINE#- Report: \`}"
-  EVIDENCE_FILE="${EVIDENCE_FILE%\`}"
+LINKED_ISSUE=$(grep -oE '^(Refs|Closes) #[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | head -1 || true)
+ISSUE_LABELS=""
+if [[ -n "$LINKED_ISSUE" ]]; then
+  ISSUE_LABELS=$(gh issue view "$LINKED_ISSUE" --json labels --jq '.labels[].name')
 fi
-if [[ -z "$EVIDENCE_FILE" ]]; then
-  echo "ERROR: PR #$PR has no committed review evidence report." >&2
-  exit 1
+if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
+  EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
+  if [[ -z "$EVIDENCE_FILE" ]]; then
+    EVIDENCE_LINE=$(grep -F -- "- Report: \`" <<<"$PR_BODY" | head -1 || true)
+    EVIDENCE_FILE="${EVIDENCE_LINE#- Report: \`}"
+    EVIDENCE_FILE="${EVIDENCE_FILE%\`}"
+  fi
+  if [[ -z "$EVIDENCE_FILE" ]]; then
+    echo "ERROR: labeled issue #$LINKED_ISSUE requires a review evidence report." >&2
+    exit 1
+  fi
+  if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
+    echo "ERROR: evidence report path must be repository-relative without '..'." >&2
+    exit 1
+  fi
+  BRANCH_WT=$(wt_for_branch "$HEAD_REF")
+  if [[ -z "$BRANCH_WT" ]]; then
+    echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
+    exit 1
+  fi
+  if ! git -C "$BRANCH_WT" ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
+    echo "ERROR: evidence report is not tracked on $HEAD_REF: $EVIDENCE_FILE" >&2
+    exit 1
+  fi
+  REVIEWED_SHA=$(git -C "$BRANCH_WT" rev-parse HEAD^1)
+  uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+else
+  echo "review evidence not required for issue #${LINKED_ISSUE:-unknown}"
 fi
-if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
-  echo "ERROR: evidence report path must be repository-relative without '..'." >&2
-  exit 1
-fi
-BRANCH_WT=$(wt_for_branch "$HEAD_REF")
-if [[ -z "$BRANCH_WT" ]]; then
-  echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
-  exit 1
-fi
-if ! git -C "$BRANCH_WT" ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
-  echo "ERROR: evidence report is not tracked on $HEAD_REF: $EVIDENCE_FILE" >&2
-  exit 1
-fi
-REVIEWED_SHA=$(git -C "$BRANCH_WT" rev-parse HEAD^1)
-uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
 
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "[dry-run] gh pr merge $PR --auto --squash"
