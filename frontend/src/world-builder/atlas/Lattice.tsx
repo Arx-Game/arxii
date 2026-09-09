@@ -38,6 +38,16 @@
  * Every other drop (same-kind, or onto open ground) is a position-only
  * dispatch (`edit_area`/`staff_place_room`), swapping the two tiles' cells
  * when the drop lands on an occupied one.
+ *
+ * The grid is looked at like a map (2026-09-09, the reviewer building Arx): the
+ * canvas sits in a fixed viewport and carries a `LatticeView` (zoom and pan,
+ * remembered per area). The wheel zooms around the cursor; pressing on ground
+ * and moving pans (a plain click still plans a square); pressing on a tile and
+ * moving is still the drag-to-swap above, because the tile's own pointer
+ * handler claims the press before the viewport sees it. − / + / fit sit in the
+ * tools row. Zoomed out past `ZOOM_LABELS_HIDE_BELOW` the tiles drop their kind
+ * label. Growth with ⊕ is unchanged; the viewport moves independently of the
+ * bounds, so a big grid is never a wide page.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -55,9 +65,14 @@ import {
   computeFloorRail,
   directionBetween,
   FANCIFUL_EXIT_NAME,
+  fitView,
   growBounds,
   growFloor,
   parseCellKey,
+  readLatticeView,
+  writeLatticeView,
+  ZOOM_LABELS_HIDE_BELOW,
+  zoomAround,
   planCell,
   readGrownFloors,
   readLatticeSketch,
@@ -66,6 +81,7 @@ import {
   writeLatticeSketch,
   type CellKey,
   type LatticeSketch,
+  type LatticeView,
 } from './latticeState';
 
 export interface LatticeTile {
@@ -107,6 +123,8 @@ export interface LatticeProps {
 }
 
 const DRAG_THRESHOLD_PX = 5;
+/** Wheel delta to zoom factor: one notch (~100px) is about a 14% step. */
+const WHEEL_ZOOM_RATE = 0.0015;
 
 function findAdjacent(tiles: LatticeTile[], x: number, y: number): LatticeTile | null {
   for (const dir of CARDINALS) {
@@ -237,6 +255,86 @@ export function Lattice({
     setSketch(readLatticeSketch(accountId, mode, nodeId, sketchFloor));
   }, [accountId, mode, nodeId, sketchFloor]);
 
+  // ---- the map view: zoom + pan, remembered per area ----
+  const [view, setView] = useState<LatticeView>(() => readLatticeView(accountId, nodeId));
+  useEffect(() => {
+    setView(readLatticeView(accountId, nodeId));
+  }, [accountId, nodeId]);
+  useEffect(() => {
+    writeLatticeView(accountId, nodeId, view);
+  }, [accountId, nodeId, view]);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // The wheel zooms around the cursor. React registers `onWheel` passively, so
+  // the listener that must `preventDefault` (or the page scrolls too) is native.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_RATE);
+      setView((prev) =>
+        zoomAround(prev, factor, event.clientX - rect.left, event.clientY - rect.top)
+      );
+    };
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const zoomBy = (factor: number) => {
+    const viewport = viewportRef.current;
+    const cx = viewport ? viewport.clientWidth / 2 : 0;
+    const cy = viewport ? viewport.clientHeight / 2 : 0;
+    setView((prev) => zoomAround(prev, factor, cx, cy));
+  };
+
+  const fitToGrid = () => {
+    const viewport = viewportRef.current;
+    const canvas = canvasRef.current;
+    if (!viewport || !canvas) return;
+    setView(
+      fitView(canvas.offsetWidth, canvas.offsetHeight, viewport.clientWidth, viewport.clientHeight)
+    );
+  };
+
+  // Pressing on ground and moving pans; a tile's own pointer handler claims a
+  // press first (drag-to-swap), so this only ever sees ground and gaps. A pan
+  // suppresses the click the ground cell would otherwise get on release.
+  const suppressGroundClickRef = useRef(false);
+  const [panning, setPanning] = useState(false);
+  const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('[data-testid^="lattice-tile-"]')) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origin = view;
+    let moved = false;
+    const onMove = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      moved = true;
+      setPanning(true);
+      setView({ zoom: origin.zoom, panX: origin.panX + dx, panY: origin.panY + dy });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setPanning(false);
+      if (moved) suppressGroundClickRef.current = true;
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  const groundClickSuppressed = () => {
+    if (!suppressGroundClickRef.current) return false;
+    suppressGroundClickRef.current = false;
+    return true;
+  };
+  const labelsHidden = view.zoom < ZOOM_LABELS_HIDE_BELOW;
+
   const updateSketch = (updater: (prev: LatticeSketch) => LatticeSketch) => {
     setSketch((prev) => {
       const next = updater(prev);
@@ -343,6 +441,7 @@ export function Lattice({
     childAreaLevel > maxBuildLevel;
 
   const handleCellLeftClick = (key: CellKey, state: 'planned' | 'void' | 'empty') => {
+    if (groundClickSuppressed()) return;
     if (pruning) {
       updateSketch((prev) => carveCell(prev, key));
       return;
@@ -621,89 +720,107 @@ export function Lattice({
         >
           ⊕
         </Button>
-        <Plate className="flex-1 overflow-x-auto rounded-none p-0.5">
+        <Plate className="flex-1 rounded-none p-0.5">
           <div
-            className="grid gap-0.5"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(7rem, 1fr))` }}
-            data-testid="lattice-grid"
+            ref={viewportRef}
+            className={cn(
+              'relative h-[70vh] min-h-96 touch-none select-none overflow-hidden',
+              panning ? 'cursor-grabbing' : 'cursor-grab'
+            )}
+            onPointerDown={handleViewportPointerDown}
+            data-testid="lattice-viewport"
+            data-zoom={view.zoom.toFixed(2)}
           >
-            {gridCells.map(({ x, y }) => {
-              const key = cellKey(x, y);
-              const tile = tileAt.get(key);
-              if (tile) {
+            <div
+              ref={canvasRef}
+              className="grid w-max gap-0.5"
+              style={{
+                gridTemplateColumns: `repeat(${cols}, 7rem)`,
+                transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`,
+                transformOrigin: '0 0',
+              }}
+              data-testid="lattice-grid"
+            >
+              {gridCells.map(({ x, y }) => {
+                const key = cellKey(x, y);
+                const tile = tileAt.get(key);
+                if (tile) {
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      data-cell-key={key}
+                      data-testid={`lattice-tile-${tile.id}`}
+                      data-highlighted={highlightTileId === tile.id ? 'true' : undefined}
+                      className={cn(
+                        'flex min-h-24 flex-col rounded-none border bg-card px-2 py-1.5 text-left',
+                        tile.unpublished && 'border-dashed',
+                        draggingId === tile.id && 'opacity-60',
+                        dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary',
+                        highlightTileId === tile.id && 'animate-pulse ring-2 ring-primary'
+                      )}
+                      onPointerDown={(event) => handlePointerDown(tile, event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                      onClick={() => handleTileClick(tile)}
+                    >
+                      <span
+                        className={cn(
+                          'theme-heading text-sm [font-variant:small-caps]',
+                          tile.unpublished && 'text-muted-foreground'
+                        )}
+                      >
+                        {tile.name}
+                        {connectSrc?.id === tile.id && ' ⟛'}
+                      </span>
+                      {!labelsHidden && (
+                        <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted-foreground">
+                          {tile.kindLabel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                const state = cellState(key, sketch);
                 return (
                   <button
                     key={key}
                     type="button"
                     data-cell-key={key}
-                    data-testid={`lattice-tile-${tile.id}`}
-                    data-highlighted={highlightTileId === tile.id ? 'true' : undefined}
+                    data-testid={`lattice-cell-${x}-${y}`}
+                    data-cell-state={state}
+                    aria-label={squareHint(state)}
                     className={cn(
-                      'flex min-h-24 flex-col rounded-none border bg-card px-2 py-1.5 text-left',
-                      tile.unpublished && 'border-dashed',
-                      draggingId === tile.id && 'opacity-60',
-                      dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary',
-                      highlightTileId === tile.id && 'animate-pulse ring-2 ring-primary'
+                      'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
+                      state === 'empty' && 'border-dotted text-muted-foreground',
+                      state === 'planned' && 'border-dashed border-primary text-muted-foreground',
+                      state === 'void' && 'border-transparent opacity-35'
                     )}
-                    onPointerDown={(event) => handlePointerDown(tile, event)}
-                    onContextMenu={(event) => event.preventDefault()}
-                    onClick={() => handleTileClick(tile)}
+                    onClick={() => handleCellLeftClick(key, state)}
+                    onContextMenu={(event) => handleCellRightClick(event, key)}
                   >
-                    <span
-                      className={cn(
-                        'theme-heading text-sm [font-variant:small-caps]',
-                        tile.unpublished && 'text-muted-foreground'
-                      )}
-                    >
-                      {tile.name}
-                      {connectSrc?.id === tile.id && ' ⟛'}
-                    </span>
-                    <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted-foreground">
-                      {tile.kindLabel}
-                    </span>
+                    {state === 'planned' && (
+                      <>
+                        <span className="italic">planned</span>
+                        <button
+                          type="button"
+                          aria-label="unplan this square"
+                          title="remove from the plan"
+                          className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            updateSketch((prev) => unplanCell(prev, key));
+                          }}
+                          data-testid={`lattice-unplan-${x}-${y}`}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    )}
+                    {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
                   </button>
                 );
-              }
-              const state = cellState(key, sketch);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  data-cell-key={key}
-                  data-testid={`lattice-cell-${x}-${y}`}
-                  data-cell-state={state}
-                  aria-label={squareHint(state)}
-                  className={cn(
-                    'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
-                    state === 'empty' && 'border-dotted text-muted-foreground',
-                    state === 'planned' && 'border-dashed border-primary text-muted-foreground',
-                    state === 'void' && 'border-transparent opacity-35'
-                  )}
-                  onClick={() => handleCellLeftClick(key, state)}
-                  onContextMenu={(event) => handleCellRightClick(event, key)}
-                >
-                  {state === 'planned' && (
-                    <>
-                      <span className="italic">planned</span>
-                      <button
-                        type="button"
-                        aria-label="unplan this square"
-                        title="remove from the plan"
-                        className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          updateSketch((prev) => unplanCell(prev, key));
-                        }}
-                        data-testid={`lattice-unplan-${x}-${y}`}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
-                  {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
-                </button>
-              );
-            })}
+              })}
+            </div>
           </div>
         </Plate>
         <Button
@@ -751,6 +868,40 @@ export function Lattice({
         >
           ✂ prune
         </Button>
+        <span className="ml-auto inline-flex items-center gap-1" data-testid="lattice-zoom">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="zoom out"
+            onClick={() => zoomBy(1 / 1.25)}
+            data-testid="lattice-zoom-out"
+          >
+            −
+          </Button>
+          <span className="w-10 text-center font-body text-xs tabular-nums text-muted-foreground">
+            {Math.round(view.zoom * 100)}%
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="zoom in"
+            onClick={() => zoomBy(1.25)}
+            data-testid="lattice-zoom-in"
+          >
+            +
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={fitToGrid}
+            data-testid="lattice-zoom-fit"
+          >
+            fit
+          </Button>
+        </span>
         {mode === 'rooms' && (
           <span
             className="font-body text-xs italic text-muted-foreground"
@@ -761,8 +912,8 @@ export function Lattice({
         )}
       </div>
       <p className="mt-1 font-body text-xs italic text-muted-foreground">
-        ❧ rough positions, not measurements — drag to arrange, click empty ground to plan,
-        right-click to carve.
+        ❧ rough positions, not measurements — drag a room to arrange, drag the ground to pan, wheel
+        to zoom, click empty ground to plan, right-click to carve.
       </p>
 
       <AddDialog

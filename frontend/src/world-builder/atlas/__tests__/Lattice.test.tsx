@@ -596,3 +596,77 @@ describe('Lattice — search-hit highlight (#3477 Task 6)', () => {
     expect(screen.getByTestId('lattice-tile-1')).not.toHaveAttribute('data-highlighted');
   });
 });
+
+describe('Lattice — the map view (zoom and pan)', () => {
+  function transformOf() {
+    return (screen.getByTestId('lattice-grid') as HTMLElement).style.transform;
+  }
+
+  it('starts at 100% with the canvas unmoved', () => {
+    renderLattice({ tiles: [makeTile({ id: 1 })] });
+    expect(screen.getByTestId('lattice-viewport')).toHaveAttribute('data-zoom', '1.00');
+    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+  });
+
+  it('the wheel zooms out and in around the cursor, within the clamp', () => {
+    renderLattice({ tiles: [makeTile({ id: 1 })] });
+    const viewport = screen.getByTestId('lattice-viewport');
+    fireEvent.wheel(viewport, { deltaY: 500, clientX: 0, clientY: 0 });
+    const zoomedOut = Number(viewport.getAttribute('data-zoom'));
+    expect(zoomedOut).toBeLessThan(1);
+    fireEvent.wheel(viewport, { deltaY: -500, clientX: 0, clientY: 0 });
+    expect(Number(viewport.getAttribute('data-zoom'))).toBeGreaterThan(zoomedOut);
+    for (let i = 0; i < 40; i += 1) fireEvent.wheel(viewport, { deltaY: 1000 });
+    expect(viewport.getAttribute('data-zoom')).toBe('0.25');
+  });
+
+  it('− and + step the zoom and zoomed out the tiles drop their kind label', async () => {
+    renderLattice({ tiles: [makeTile({ id: 1, kindLabel: 'chamber' })] });
+    expect(screen.getByText('chamber')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    expect(Number(screen.getByTestId('lattice-viewport').getAttribute('data-zoom'))).toBeLessThan(
+      0.6
+    );
+    expect(screen.queryByText('chamber')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lattice-zoom-in'));
+    expect(
+      Number(screen.getByTestId('lattice-viewport').getAttribute('data-zoom'))
+    ).toBeGreaterThan(0.6);
+    expect(screen.getByText('chamber')).toBeInTheDocument();
+  });
+
+  it('dragging the ground pans the canvas and does not plan the square it started on', async () => {
+    renderLattice({ tiles: [] });
+    const ground = screen.getByTestId('lattice-cell-1-0');
+    fireEvent.pointerDown(ground, { clientX: 10, clientY: 10, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 25 });
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 25 });
+    fireEvent.click(ground);
+    expect(transformOf()).toBe('translate(30px, 15px) scale(1)');
+    expect(ground).toHaveAttribute('data-cell-state', 'empty');
+    // the suppression is one-shot: the next plain click plans as usual
+    await userEvent.click(ground);
+    expect(ground).toHaveAttribute('data-cell-state', 'planned');
+  });
+
+  it('pressing on a tile is still a tile drag, never a pan', async () => {
+    const { runAction } = renderLattice({ tiles: [makeTile({ id: 1 })] });
+    await drag(screen.getByTestId('lattice-tile-1'), screen.getByTestId('lattice-cell-1-0'));
+    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+    expect(runAction).toHaveBeenCalledWith(
+      'staff_place_room',
+      expect.objectContaining({ room_id: 1, grid_x: 1, grid_y: 0 })
+    );
+  });
+
+  it('remembers the view per area', () => {
+    const first = renderLattice({ nodeId: 42, tiles: [] });
+    fireEvent.wheel(screen.getByTestId('lattice-viewport'), { deltaY: 500 });
+    const zoom = screen.getByTestId('lattice-viewport').getAttribute('data-zoom');
+    first.unmount();
+    renderLattice({ nodeId: 42, tiles: [] });
+    expect(screen.getByTestId('lattice-viewport')).toHaveAttribute('data-zoom', zoom);
+  });
+});
