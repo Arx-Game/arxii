@@ -26,6 +26,8 @@ interface RichTextInputProps {
   /** Defaults true for legacy command surfaces; narrative composer opts into Cmd/Ctrl+Enter. */
   submitOnEnter?: boolean;
   disabled?: boolean;
+  /** Block delivery while allowing the player to keep writing. */
+  submitDisabled?: boolean;
 }
 
 // M10: Multi-word names (e.g. "Crucible Mundi") can't be typed manually
@@ -96,6 +98,7 @@ export function RichTextInput({
   autocompleteItems,
   submitOnEnter = true,
   disabled = false,
+  submitDisabled = false,
 }: RichTextInputProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [autocompleteState, setAutocompleteState] = React.useState<AutocompleteState | null>(null);
@@ -254,13 +257,21 @@ export function RichTextInput({
         (submitOnEnter ? !e.shiftKey : e.ctrlKey || e.metaKey)
       ) {
         e.preventDefault();
-        onSubmit();
+        if (!disabled && !submitDisabled) onSubmit();
         return;
       }
 
       onKeyDown?.(e);
     },
-    [handleAutocompleteKey, handleFormattingKey, onSubmit, onKeyDown, submitOnEnter]
+    [
+      handleAutocompleteKey,
+      handleFormattingKey,
+      onSubmit,
+      onKeyDown,
+      submitOnEnter,
+      disabled,
+      submitDisabled,
+    ]
   );
 
   const handleChange = React.useCallback(
@@ -350,7 +361,7 @@ export function RichTextInput({
           className="ml-auto rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           onClick={onSubmit}
           aria-label="Send"
-          disabled={disabled}
+          disabled={disabled || submitDisabled}
         >
           Send
         </button>

@@ -29,7 +29,6 @@ from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
-from web.webclient.message_types import WebsocketMessageType
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
     "This account refuses telnet sign-in while two-factor authentication is on. "
@@ -422,7 +421,7 @@ class Account(DefaultAccount):
             "character_name": character.key if character else None,
         }
         for sess in self.sessions.all():
-            sess.msg(type=WebsocketMessageType.PUPPET_CHANGED.value, args=[payload])
+            sess.msg(puppet_changed=((), payload))
 
     def puppet_object(self, session, obj):
         """Puppet a character on a session, then broadcast puppet_changed.

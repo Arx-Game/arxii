@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 interface EvenniaMessageProps {
   content: string;
   className?: string;
+  presentation?: 'terminal' | 'prose';
 }
 
 // Evennia color class mappings to Tailwind classes
@@ -26,7 +27,11 @@ const colorMap: Record<string, string> = {
   'color-015': 'text-white', // White
 };
 
-export function EvenniaMessage({ content, className = '' }: EvenniaMessageProps) {
+export function EvenniaMessage({
+  content,
+  className = '',
+  presentation = 'terminal',
+}: EvenniaMessageProps) {
   const processedContent = useMemo(() => {
     // Convert Evennia color classes to Tailwind classes
     let processed = content;
@@ -49,7 +54,7 @@ export function EvenniaMessage({ content, className = '' }: EvenniaMessageProps)
 
   return (
     <div
-      className={`whitespace-pre-wrap font-mono text-sm ${className}`}
+      className={`whitespace-pre-wrap ${presentation === 'terminal' ? 'font-mono text-sm' : 'font-[inherit] text-[length:inherit] leading-[1.55]'} ${className}`}
       dangerouslySetInnerHTML={{ __html: processedContent }}
     />
   );

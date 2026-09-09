@@ -255,7 +255,9 @@ export function GameWindow({
           className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
           role="status"
         >
-          Entering the world… waiting for a confirmed location.
+          {session.isConnected
+            ? 'Entering the world… waiting for a confirmed location. You can write while you wait.'
+            : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
         </div>
       )}
       {sessionNames.length >= 2 && (
@@ -366,7 +368,7 @@ export function GameWindow({
           onCancelReply={onCancelReply}
           submitOnEnter={false}
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
-          ready={Boolean(session.room)}
+          ready={session.isConnected && Boolean(session.room)}
         />
       )}
     </div>

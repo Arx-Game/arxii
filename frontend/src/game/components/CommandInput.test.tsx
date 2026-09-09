@@ -125,6 +125,25 @@ describe('CommandInput', () => {
     queryClient.clear();
   });
 
+  it('keeps drafts editable while entry is unconfirmed and blocks button and keyboard sends', () => {
+    const { rerender } = render(
+      <CommandInput character="Alice" ready={false} submitOnEnter={false} />
+    );
+    const textarea = screen.getByRole('textbox');
+    expect(textarea).toBeEnabled();
+    fireEvent.change(textarea, { target: { value: 'A draft while entering.' } });
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    fireEvent.keyDown(textarea, { key: 'Enter', ctrlKey: true });
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).not.toHaveBeenCalled();
+    expect(textarea).toHaveValue('A draft while entering.');
+
+    rerender(<CommandInput character="Alice" ready submitOnEnter={false} />);
+    expect(textarea).toHaveValue('A draft while entering.');
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'A draft while entering.');
+  });
   it('renders ghost text with mode label when composerMode is provided', () => {
     const mode: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
     render(<CommandInput character="Alice" composerMode={mode} />);
