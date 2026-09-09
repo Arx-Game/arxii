@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { GameMessage } from '@/hooks/types';
+import { EvenniaMessage } from './EvenniaMessage';
 
 interface SystemLaneProps {
   messages: Array<GameMessage & { id: string }>;
@@ -54,7 +55,7 @@ export function SystemLane({ messages }: SystemLaneProps) {
               <span className="shrink-0 text-muted-foreground/70">
                 {new Date(message.timestamp).toLocaleTimeString()}
               </span>
-              <p className="whitespace-pre-wrap">{message.content}</p>
+              <EvenniaMessage content={message.content} />
             </div>
           ))}
         </div>
