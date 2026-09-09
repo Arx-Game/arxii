@@ -11,24 +11,23 @@
  * drag-to-swap with a 5px threshold, ⊕ edge growth, and (rooms mode) the
  * floors rail + ⟛ connect tool.
  *
- * Two backend gaps neither `create_area` nor `staff_dig_room` closes force a
- * two-step "realize, then resolve" flow instead of one dispatch:
+ * Realizing chains on the ids the actions return (2026-09-09): `create_area`
+ * takes `grid_x`/`grid_y` and answers with `data.area_id`, `staff_dig_room`
+ * with `data.room_id`, so `runAction` is awaited and the follow-ups
+ * (`staff_link_rooms` for a room's entrance/exit; for an area with an
+ * entrance, the dig of its first room and then the link) go out at once.
+ * A `runAction` that returns nothing (the story palette's, or a test's
+ * `vi.fn()`) falls back to the older "realize, then resolve" path for room
+ * links: the plotted cell goes into `pendingLinks` and an effect watching the
+ * `tiles` prop links the room once the area-manager refetch surfaces it. A
+ * dig that never lands leaves its entry stranded for the session — harmless,
+ * since nothing new is likely to land on that exact cell by coincidence.
  *
- * - `create_area` has no `grid_x`/`grid_y` kwargs at all (only `edit_area`
- *   does) — matches `CreateAreaDialog`'s existing precedent of leaving a
- *   freshly created area unplaced until an `edit_area`/arrange follow-up.
- * - Neither action's `ActionResult` returns the new row's id, so this can't
- *   just dispatch a follow-up immediately — it has to wait for the id to
- *   show up. Once dispatched, the plotted cell's name goes into
- *   `pendingPlacements`/`pendingLinks`; an effect watching the `tiles` prop
- *   resolves each entry the moment the area-manager refetch (already wired
- *   by `useWorldBuilderAction`'s cache invalidation) surfaces the new row,
- *   then dispatches `edit_area` (position) or `staff_link_rooms`
- *   (entrance/exit, via `AddDialog`'s payload) and clears the entry. A dig
- *   that never lands (a refused dispatch) leaves its entry stranded for the
- *   session — harmless, since nothing new is likely to land on that exact
- *   cell/name by coincidence, but worth knowing if this needs hardening
- *   later.
+ * Above BUILDING a map holds child areas *and* this area's own rooms (the
+ * city center is an open-air room of its neighborhood; buildings stand
+ * beside it), so areas mode's `AddDialog` offers every level that fits under
+ * this one plus "a room here", and a building planned beside a room can be
+ * given its door in the same stroke.
  *
  * Drag-to-swap gives `staff_move_room` (typed since #2449, never dispatched)
  * its first real caller: dropping a ROOM tile onto an AREA tile — reachable
@@ -56,6 +55,7 @@ import { Plate } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
+import type { DispatchResult } from '@/map-canvas/dispatch';
 import { AREA_LEVELS } from '../types';
 import { AddDialog, type AddDialogConnection, type AddDialogRealizePayload } from './AddDialog';
 import {
@@ -100,6 +100,16 @@ export interface LatticeTile {
   level?: number;
 }
 
+/**
+ * Keyed generically so this also satisfies the story palette's own action-key
+ * union. A caller that returns the dispatch result lets realize chain on the
+ * new row's id; one that returns nothing gets the refetch-driven fallback.
+ */
+export type LatticeRunAction = (
+  key: string,
+  kwargs: Record<string, unknown>
+) => void | Promise<DispatchResult | undefined>;
+
 export interface LatticeProps {
   mode: 'areas' | 'rooms';
   nodeId: number;
@@ -107,8 +117,7 @@ export interface LatticeProps {
   onOpen: (tile: LatticeTile) => void;
   /** Fires once a realize dispatch has gone out — a convenience signal, not tied to success/failure. */
   onRealize?: () => void;
-  /** Keyed generically so this also satisfies the story palette's own action-key union. */
-  runAction: (key: string, kwargs: Record<string, unknown>) => void;
+  runAction: LatticeRunAction;
   /** Areas mode only — the level new child areas realize at (`create_area`'s `level`). */
   childAreaLevel?: number;
   /** The caller's grant ceiling (#3534) — null/undefined = unlimited (staff).
@@ -172,10 +181,16 @@ interface PendingLink {
  * so the entrance and exit names land on opposite sides of a single exit rather
  * than producing two links between the same two rooms.
  */
+/** The numeric id an action put under `data[key]`, or null when the dispatch answered with nothing. */
+function returnedId(result: DispatchResult | undefined | void, key: string): number | null {
+  const value = result?.data?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
 function linkPendingRoom(
   newRoomId: number,
   pending: PendingLink,
-  runAction: (key: string, params: Record<string, unknown>) => void
+  runAction: LatticeRunAction
 ): void {
   const { entrance, exit } = pending;
   if (entrance && exit && entrance.roomId === exit.roomId) {
@@ -444,6 +459,19 @@ export function Lattice({
     maxBuildLevel != null &&
     childAreaLevel != null &&
     childAreaLevel > maxBuildLevel;
+  // Every level a planned square may become here: the next one down first,
+  // then anything lower (a city can hold a neighborhood with no ward between).
+  // `overCeiling` above already withholds planning when the next level is past
+  // the caller's grant, and every lower level sits under it too.
+  const areaLevelOptions = useMemo(
+    () =>
+      mode === 'areas' && childAreaLevel != null
+        ? AREA_LEVELS.filter((choice) => choice.value <= childAreaLevel).sort(
+            (a, b) => b.value - a.value
+          )
+        : [],
+    [mode, childAreaLevel]
+  );
 
   const handleCellLeftClick = (key: CellKey, state: 'planned' | 'void' | 'empty') => {
     if (groundClickSuppressed()) return;
@@ -485,7 +513,12 @@ export function Lattice({
   const [addCell, setAddCell] = useState<{ x: number; y: number } | null>(null);
   const defaultNeighbor = useMemo(() => {
     if (!addCell) return null;
-    const neighbor = findAdjacent(placedTiles, addCell.x, addCell.y);
+    // Only a room can be an entrance; an adjacent area tile is not a neighbor.
+    const neighbor = findAdjacent(
+      placedTiles.filter((t) => t.kind === 'room'),
+      addCell.x,
+      addCell.y
+    );
     if (!neighbor) return null;
     const toNeighbor = directionBetween(
       { gridX: addCell.x, gridY: addCell.y } as LatticeTile,
@@ -495,10 +528,9 @@ export function Lattice({
     return { roomId: neighbor.id, intoName: toNeighbor.opposite, outName: toNeighbor.name };
   }, [addCell, placedTiles]);
 
-  // Cells awaiting an id that only the next `tiles` refetch will reveal —
-  // see the module doc's "realize, then resolve" note.
+  // Room links awaiting an id the dispatch didn't return — the fallback path,
+  // see the module doc.
   const pendingLinksRef = useRef<Map<string, PendingLink>>(new Map());
-  const pendingAreaPlacementsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
     for (const [key, pending] of pendingLinksRef.current) {
@@ -513,52 +545,91 @@ export function Lattice({
       linkPendingRoom(newRoom.id, pending, runAction);
       pendingLinksRef.current.delete(key);
     }
-    for (const [name, pending] of pendingAreaPlacementsRef.current) {
-      const newArea = tiles.find((t) => t.kind === 'area' && t.name === name && t.gridX == null);
-      if (!newArea) continue;
-      runAction('edit_area', { area_id: newArea.id, grid_x: pending.x, grid_y: pending.y });
-      pendingAreaPlacementsRef.current.delete(name);
-    }
   }, [tiles, runAction]);
+
+  /** Create the area on this square; with an entrance, dig its first room and link it. */
+  const realizeArea = async (
+    payload: Extract<AddDialogRealizePayload, { kind: 'area' }>,
+    x: number,
+    y: number
+  ) => {
+    const created = await runAction('create_area', {
+      name: payload.name,
+      slug: slugify(payload.name),
+      level: payload.level ?? childAreaLevel,
+      parent_id: nodeId,
+      grid_x: x,
+      grid_y: y,
+    });
+    const areaId = returnedId(created, 'area_id');
+    if (!payload.entrance || areaId == null) return;
+    const dug = await runAction('staff_dig_room', {
+      area_id: areaId,
+      name: payload.entrance.firstRoomName,
+      floor: 0,
+      grid_x: 0,
+      grid_y: 0,
+    });
+    const roomId = returnedId(dug, 'room_id');
+    if (roomId == null) return;
+    await runAction('staff_link_rooms', {
+      room_a_id: payload.entrance.roomId,
+      room_b_id: roomId,
+      name_ab: payload.entrance.exitName,
+      name_ba: payload.entrance.exitBack,
+    });
+  };
+
+  /** Dig (or place) the room on this square; link it now if the dig said which room it made. */
+  const realizeRoom = async (
+    payload: Extract<AddDialogRealizePayload, { kind: 'room' }>,
+    x: number,
+    y: number
+  ) => {
+    // A room dug straight onto an area's map (areas mode) sits on its ground floor.
+    const roomFloor = mode === 'rooms' ? floor : 0;
+    const links: PendingLink = {
+      x,
+      y,
+      floor: roomFloor,
+      entrance: payload.entrance,
+      exit: payload.exit,
+    };
+    if (payload.matchedRoomId != null) {
+      await runAction('staff_place_room', {
+        room_id: payload.matchedRoomId,
+        grid_x: x,
+        grid_y: y,
+        floor: roomFloor,
+      });
+      if (payload.entrance || payload.exit)
+        linkPendingRoom(payload.matchedRoomId, links, runAction);
+      return;
+    }
+    const dug = await runAction('staff_dig_room', {
+      area_id: nodeId,
+      name: payload.name,
+      floor: roomFloor,
+      grid_x: x,
+      grid_y: y,
+    });
+    if (!payload.entrance && !payload.exit) return;
+    const roomId = returnedId(dug, 'room_id');
+    if (roomId != null) {
+      linkPendingRoom(roomId, links, runAction);
+    } else {
+      pendingLinksRef.current.set(pendingLinkKey(x, y, roomFloor), links);
+    }
+  };
 
   const handleConfirmRealize = (payload: AddDialogRealizePayload) => {
     if (!addCell) return;
     const { x, y } = addCell;
     onRealize?.();
     if (payload.kind === 'area') {
-      runAction('create_area', {
-        name: payload.name,
-        slug: slugify(payload.name),
-        level: childAreaLevel,
-        parent_id: nodeId,
-      });
-      pendingAreaPlacementsRef.current.set(payload.name, { x, y });
+      void realizeArea(payload, x, y);
     } else if (payload.kind === 'room') {
-      if (payload.matchedRoomId != null) {
-        runAction('staff_place_room', {
-          room_id: payload.matchedRoomId,
-          grid_x: x,
-          grid_y: y,
-          floor,
-        });
-      } else {
-        runAction('staff_dig_room', {
-          area_id: nodeId,
-          name: payload.name,
-          floor,
-          grid_x: x,
-          grid_y: y,
-        });
-      }
-      if (payload.entrance || payload.exit) {
-        pendingLinksRef.current.set(pendingLinkKey(x, y, floor), {
-          x,
-          y,
-          floor,
-          entrance: payload.entrance,
-          exit: payload.exit,
-        });
-      }
+      void realizeRoom(payload, x, y);
     }
     updateSketch((prev) => unplanCell(prev, cellKey(x, y)));
     setAddCell(null);
@@ -925,9 +996,10 @@ export function Lattice({
           className="mt-1 font-body text-xs italic text-muted-foreground"
           data-testid="lattice-ladder-hint"
         >
-          a planned square here becomes a {childLevelLabel.toLowerCase()}; open one to plot what it
-          holds (ward, then neighborhood, then building), and a building&apos;s map is its rooms.
-          Rooms can also sit right here; drop one on an area&apos;s tile to move it inside.
+          a planned square here becomes a {childLevelLabel.toLowerCase()}, a lower level, or a room
+          right here (a street or square sits beside the buildings that open off it); open an area
+          to plot what it holds, and a building&apos;s map is its rooms. Drop a room on an
+          area&apos;s tile to move it inside.
         </p>
       )}
 
@@ -941,6 +1013,7 @@ export function Lattice({
         roomOptions={roomOptions}
         unplacedOptions={unplacedOptions}
         childLevelLabel={childLevelLabel}
+        areaLevelOptions={areaLevelOptions}
         defaultNeighbor={defaultNeighbor}
       />
     </div>

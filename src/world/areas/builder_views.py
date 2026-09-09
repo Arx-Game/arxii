@@ -377,7 +377,16 @@ def _area_breadcrumb(area: Area | None) -> list[dict]:
     chain: list[dict] = []
     node = area
     while node is not None:
-        chain.append({"id": node.pk, "name": node.name, "level_display": node.get_level_display()})
+        chain.append(
+            {
+                "id": node.pk,
+                "name": node.name,
+                "level": node.level,
+                "level_display": node.get_level_display(),
+                "grid_x": node.grid_x,
+                "grid_y": node.grid_y,
+            }
+        )
         node = node.parent
     chain.reverse()
     return chain

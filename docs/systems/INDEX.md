@@ -1117,8 +1117,10 @@ buildings up to entire planes. A `Room` is not its own `Area` level — it hangs
   `world.buildings.room_services` (#670), so the owner-facing Room Builder and the
   staff canvas share one substrate instead of two drifting copies. Forty-three
   REGISTRY actions (`src/actions/definitions/world_builder.py`,
-  `category="world_builder"`, `target_type=SELF`) — `create_area`/`edit_area`/
-  `staff_dig_room`/`staff_edit_room`/
+  `category="world_builder"`, `target_type=SELF`) — `create_area` (takes
+  parent-local `grid_x`/`grid_y`; answers with `data.area_id`)/`edit_area`/
+  `staff_dig_room` (answers with `data.room_id`, so the Atlas chains a link or a
+  first-room dig without waiting for a refetch)/`staff_edit_room`/
   `staff_link_rooms`/`staff_unlink_rooms`/`staff_rename_exit`/`staff_place_room`/
   `staff_publish_room`/`staff_remove_room`/`staff_remove_area`/`staff_move_room`/
   `promote_room`/`promote_area` + the six #2451 discovery/portal verbs + the #3269

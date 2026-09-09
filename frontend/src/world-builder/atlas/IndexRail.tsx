@@ -204,6 +204,7 @@ function TreeNode({ area, depth, current, onSelect }: TreeNodeProps) {
               data-testid="index-empty-node"
             >
               nothing here yet: plan a square on {area.name}&apos;s map to add a {childLevelLabel}
+              {isLeaf ? '' : ' or a room'}
             </p>
           )}
           {childAreas.map((child) => (

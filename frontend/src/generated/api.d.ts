@@ -46935,7 +46935,10 @@ export interface components {
     WorldBuilderBreadcrumb: {
       id: number;
       name: string;
+      level: number;
       level_display: string;
+      grid_x: number | null;
+      grid_y: number | null;
     };
     /** @description Panel pick-lists (#3269; condition-editor refs #3534). */
     WorldBuilderCatalogs: {

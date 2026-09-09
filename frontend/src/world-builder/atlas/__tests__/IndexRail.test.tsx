@@ -112,7 +112,16 @@ function makeManager(
       starting_areas: [],
       beginnings: [],
     },
-    breadcrumb: [{ id: area.id, name: area.name, level_display: area.level_display }],
+    breadcrumb: [
+      {
+        id: area.id,
+        name: area.name,
+        level: area.level,
+        level_display: area.level_display,
+        grid_x: area.grid_x,
+        grid_y: area.grid_y,
+      },
+    ],
     rooms,
     resonances: [],
     exits: [],
@@ -222,7 +231,7 @@ describe('IndexRail', () => {
 
     await userEvent.click(screen.getByTestId('index-expand-3'));
     expect(await screen.findByTestId('index-empty-node')).toHaveTextContent(
-      "nothing here yet: plan a square on Eastern Ward's map to add a neighborhood"
+      "nothing here yet: plan a square on Eastern Ward's map to add a neighborhood or a room"
     );
   });
 

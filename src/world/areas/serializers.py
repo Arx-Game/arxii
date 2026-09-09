@@ -309,7 +309,14 @@ class WorldBuilderBreadcrumbSerializer(serializers.Serializer):
 
     id = serializers.IntegerField()
     name = serializers.CharField()
+    # The numeric AreaLevel travels with its label so the Atlas crumb can offer
+    # "insert a level between these two" only where a level actually fits, and
+    # the parent-local grid position so the inserted level can take this node's
+    # place on its parent's map.
+    level = serializers.IntegerField()
     level_display = serializers.CharField()
+    grid_x = serializers.IntegerField(allow_null=True)
+    grid_y = serializers.IntegerField(allow_null=True)
 
 
 class WorldBuilderRoomDescVariantSerializer(serializers.Serializer):
