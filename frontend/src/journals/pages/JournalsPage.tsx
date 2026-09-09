@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
-import { VoteButton } from '@/components/VoteButton';
+import { NominateButton } from '@/components/NominateButton';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import type {
   JournalEntrySummary,
@@ -259,15 +259,15 @@ function EntryRow({
   onToggle: () => void;
   showResponseForm: boolean;
 }) {
-  // Own-entry gate for VoteButton (#3302), mirroring PoseUnit's isSelfPose
-  // guard: VoteButton has no self-guard of its own (the backend rejects
-  // self-votes; this is UX only), so the row computes whether `entry.author`
-  // (a CharacterSheet id) is one of the viewer's own characters and decides
-  // whether to mount. Also requires `is_public`, since only public entries
-  // carry a vote target server-side.
+  // Own-entry gate for NominateButton (#3302, nominations since #3738), mirroring
+  // PoseUnit's isSelfPose guard: the button has no self-guard of its own (the
+  // backend refuses your own characters; this is UX only), so the row computes
+  // whether `entry.author` (a CharacterSheet id) is one of the viewer's own
+  // characters and decides whether to mount. Also requires `is_public`, since
+  // only a public entry can be nominated server-side.
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
-  const canVote = entry.is_public && !isOwnEntry;
+  const canNominate = entry.is_public && !isOwnEntry;
 
   return (
     <Card>
@@ -303,7 +303,13 @@ function EntryRow({
             </div>
           </CardHeader>
         </button>
-        {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
+        {canNominate ? (
+          <NominateButton
+            targetType="journal"
+            targetId={entry.id}
+            nomineeName={entry.author_name}
+          />
+        ) : null}
       </div>
       {expanded ? (
         <CardContent className="p-4 pt-0">

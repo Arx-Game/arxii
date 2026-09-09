@@ -63,8 +63,8 @@ PLANNED-UNBUILT tier here. Where a planned system *does* already have an issue/m
   disguise as form overlays (see the perception-taxonomy entry above). What remains is the scene-level
   shared-altered-reality mode (the deferred `SceneRound` perception-split — see that entry; no issue
   filed yet, no live consumer). Dreams also have **zero web surface** — **#3003**.
-- **Community pose-of-the-scene voting / award** — `partial`: `WeeklyVote`/`VoteButton` are built but
-  unwired (#2161).
+- ✅ **Community pose-of-the-scene award** — DONE (#3738): best in scene is one of the four weekly
+  nomination settlement paths; nominations replaced the `WeeklyVote` budget.
 - ✅ **New-player onboarding tutorial** — DONE (#1035; T1–T7 mission chain + e2e journey). Still
   `intent`: **friend list / "looking for RP" finder**; rich-text composer / conversation threading.
 - **Automatic scene / story-beat development awards** — granting development points from

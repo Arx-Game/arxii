@@ -27,7 +27,7 @@ The central time engine that drives the living world. An anchor-based game clock
 - **AP regen:** `apply_daily_regen()`, `apply_weekly_regen()` batch jobs wired to scheduler.
 - **Journal weekly reset:** `WeeklyJournalXP` uses `game_week` FK. `needs_reset()` / `reset_week()` compare FKs. Batch sweep resets all non-current-week trackers.
 - **Relationship weekly reset:** `CharacterRelationship` uses `game_week` FK for `developments_this_week` / `changes_this_week` counters.
-- **Vote processing:** `WeeklyVoteBudget`, `WeeklyVote` use `game_week` FK. Processed during weekly rollover.
+- **Nomination settlement (#3738):** `Nomination` uses a `game_week` FK. The week that just ended is settled during the weekly rollover (`weekly_nomination_processing_task`).
 - **Skill development:** `WeeklySkillUsage` uses `game_week` FK. Check-based DP accumulation + weekly rust processing.
 - **Random scenes:** `RandomSceneTarget` uses `game_week` FK. Generated during weekly rollover.
 - **Form expiration:** `TemporaryFormChange` with `expires_at` for real-time duration. `GAME_TIME` duration type placeholder exists.

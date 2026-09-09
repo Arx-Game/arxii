@@ -1,17 +1,16 @@
 /**
- * Targeted test: VoteButton visibility gating on journal entry rows (#3302).
+ * Targeted test: NominateButton visibility gating on journal entry rows (#3302,
+ * nominations since #3738).
  *
- * Mirrors `scenes/components/__tests__/PoseUnit.voteButton.test.tsx`, using the same
- * gating shape (VoteButton has no self-guard of its own; the backend rejects
- * self-votes, so this gate is UX only), applied to `JournalsPage`'s public
- * feed rows instead of poses. `entry.author` is a CharacterSheet id, so the
- * gate compares it against the viewer's roster `character_id`s (all owned
- * characters, matching the account-level self-vote check in
- * `services/voting.py`'s `get_author_account_for_target`) rather than the
- * persona-id comparison PoseUnit uses.
+ * Mirrors `scenes/components/__tests__/PoseUnit.nominateButton.test.tsx`, using the
+ * same gating shape (the button has no self-guard of its own; the backend refuses
+ * your own characters, so this gate is UX only), applied to `JournalsPage`'s public
+ * feed rows instead of poses. `entry.author` is a CharacterSheet id, so the gate
+ * compares it against the viewer's roster `character_id`s (all owned characters,
+ * matching the account-level self check in `services/nominations.py`) rather than
+ * the persona-id comparison PoseUnit uses.
  *
- * Scope: gating only. VoteButton's own budget-disabled behavior is its own
- * concern and isn't retested here.
+ * Scope: gating only.
  */
 
 import { render, screen, within } from '@testing-library/react';
@@ -41,16 +40,13 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
-// Vote hooks, mocked so VoteButton renders without hitting the network.
-const mockCastVote = vi.fn();
-const mockRemoveVote = vi.fn();
-vi.mock('@/progression/voteQueries', () => ({
-  useMyVotesQuery: vi.fn(() => ({ data: [] })),
-  useVoteBudgetQuery: vi.fn(() => ({
-    data: { base_votes: 5, scene_bonus_votes: 0, votes_spent: 0, votes_remaining: 5 },
-  })),
-  useCastVoteMutation: vi.fn(() => ({ mutate: mockCastVote, isPending: false })),
-  useRemoveVoteMutation: vi.fn(() => ({ mutate: mockRemoveVote, isPending: false })),
+// Nomination hooks, mocked so NominateButton renders without hitting the network.
+const mockNominate = vi.fn();
+const mockWithdraw = vi.fn();
+vi.mock('@/progression/nominationQueries', () => ({
+  useMyNominationsQuery: vi.fn(() => ({ data: [] })),
+  useNominateMutation: vi.fn(() => ({ mutate: mockNominate, isPending: false })),
+  useWithdrawNominationMutation: vi.fn(() => ({ mutate: mockWithdraw, isPending: false })),
 }));
 
 const mockUseJournalEntries = vi.fn();
@@ -104,7 +100,7 @@ function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-describe('JournalsPage - VoteButton gating (#3302)', () => {
+describe('JournalsPage - NominateButton gating (#3302, #3738)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUseMyJournalEntries.mockReturnValue({ data: emptyPage(), isLoading: false });
@@ -113,7 +109,7 @@ describe('JournalsPage - VoteButton gating (#3302)', () => {
     mockUseCreateJournalEntry.mockReturnValue({ mutate: vi.fn(), isPending: false });
   });
 
-  it("renders VoteButton on another character's public entry", () => {
+  it("renders NominateButton on another character's public entry", () => {
     // author 99 is not the viewer (roster character_id 42).
     const entry = makeEntry({ id: 1, author: 99, is_public: true });
     mockUseJournalEntries.mockReturnValue({ data: makePage([entry]), isLoading: false });
@@ -125,10 +121,10 @@ describe('JournalsPage - VoteButton gating (#3302)', () => {
     );
 
     const section = screen.getByTestId('public-journals-section');
-    expect(within(section).getByTitle(/vote/i)).toBeInTheDocument();
+    expect(within(section).getByTitle(/nominate someone else/i)).toBeInTheDocument();
   });
 
-  it("hides VoteButton on the viewer's own public entry", () => {
+  it("hides NominateButton on the viewer's own public entry", () => {
     // author 42 matches the mocked viewer's roster character_id.
     const entry = makeEntry({ id: 2, author: 42, is_public: true });
     mockUseJournalEntries.mockReturnValue({ data: makePage([entry]), isLoading: false });
@@ -140,10 +136,10 @@ describe('JournalsPage - VoteButton gating (#3302)', () => {
     );
 
     const section = screen.getByTestId('public-journals-section');
-    expect(within(section).queryByTitle(/vote/i)).toBeNull();
+    expect(within(section).queryByTitle(/nominate/i)).toBeNull();
   });
 
-  it('hides VoteButton on entries in the "My Journal" section (always own)', () => {
+  it('hides NominateButton on entries in the "My Journal" section (always own)', () => {
     const entry = makeEntry({ id: 3, author: 42, is_public: true });
     mockUseMyJournalEntries.mockReturnValue({ data: makePage([entry]), isLoading: false });
     mockUseJournalEntries.mockReturnValue({ data: emptyPage(), isLoading: false });
@@ -155,6 +151,6 @@ describe('JournalsPage - VoteButton gating (#3302)', () => {
     );
 
     const section = screen.getByTestId('my-journal-section');
-    expect(within(section).queryByTitle(/vote/i)).toBeNull();
+    expect(within(section).queryByTitle(/nominate/i)).toBeNull();
   });
 });

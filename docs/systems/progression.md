@@ -14,8 +14,9 @@ from world.progression.types import (
     UnlockType,          # LEVEL, SKILL_RATING, STAT_RATING, ABILITY, OTHER
     DevelopmentSource,   # SCENE, TRAINING, PRACTICE, TEACHING, QUEST, EXPLORATION, CRAFTING, COMBAT, SOCIAL, OTHER
     ProgressionReason,   # XP_PURCHASE, CG_CONVERSION, SCENE_AWARD, GM_AWARD, SYSTEM_AWARD, REFUND,
-                         # CORRECTION, KUDOS_CLAIM, FIRST_IMPRESSION, VOTE_REWARD, MEMORABLE_POSE,
-                         # RANDOM_SCENE, GM_STORY_REWARD (#2123 — GM Story Reward, see gm-system.md), OTHER
+                         # CORRECTION, KUDOS_CLAIM, FIRST_IMPRESSION, NOMINATION, MOST_NOMINATED_PROSE,
+                         # BEST_IN_SCENE, MOST_NOMINATED_JOURNAL (#3738), RANDOM_SCENE,
+                         # GM_STORY_REWARD (#2123 — GM Story Reward, see gm-system.md), OTHER
 )
 
 # Typed data structures
@@ -40,6 +41,7 @@ from world.progression.types import (
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
+| `Nomination` | One piece of this week's prose a player cited when nominating its writer for good RP (#3738); one account nominating one character in one week is one nomination however many rows | `nominator` (AccountDB), `game_week`, `nominee` (CharacterSheet), `target_type` (`NominationTargetType`: interaction, journal), `target_id`, `processed`, `created_at` |
 | `CharacterXP` | Per-character XP balance, partitioned by transferability | `character`, `total_earned`, `total_spent`, `transferable` |
 | `CharacterXPTransaction` | Audit trail for character-level XP changes | `character`, `amount`, `reason` (ProgressionReason), `description`, `transferable`, `transaction_date` |
 
@@ -148,6 +150,46 @@ All carry a `user_message` attribute for safe API responses (no `str(exc)` in vi
 ---
 
 ## Key Methods
+
+### Nominations (#3738)
+
+Nominations replaced the budgeted weekly vote. A nomination is an OOC act by the
+**account** ("I am voting this person for good RP because of this"), hung off a pose
+or a public journal entry from the current game week that the nominator could see
+(`Interaction.objects.visible_to`); the nominee is the **character** whose prose it
+was. One account nominating one character in one week is one nomination however many
+pieces it cites. No budget. **Invisible**: no toast, no count, no names; the nominee
+learns only the settled XP.
+
+```python
+from world.progression.services.nominations import (
+    nominate, withdraw_nomination, nominations_by_account, has_nominated,
+)
+nominate(account, NominationTargetType.INTERACTION, interaction.pk)   # ProgressionError on
+# your own characters (any alt), an unplayed character, last week's prose, an invisible piece,
+# or a piece you already cited
+```
+
+Settlement (`services.nomination_processing.process_weekly_nominations`, run by the weekly
+rollover) pays four paths on one stepped curve, `stepped_xp(count, first_xp)`, whose tiers
+are the reviewer's exact floors to 133 (`NOMINATION_TIER_FLOORS`: 1 | 2-3 | 4-6 | 7-10 | 11-16
+| 17-25 | 26-38 | 39-58 | 59-88 | 89-133) and then widen by half:
+
+| Path | Counts | Pays |
+|---|---|---|
+| Nominations in general | distinct people who nominated the character on anything | curve from 3 (`NOMINATION_FIRST_XP`) |
+| Most nominated prose | the character's own most-cited piece (one instance per week) | flat 1 |
+| Best in scene | scenes in which their pose was the most nominated (ties count for all) | curve from 1 |
+| Most nominated journal | the one journal entry game-wide with most nominators (ties pay all) | flat 1 |
+
+Worked examples (ruled 2026-09-09): one scene, one friend nominates you, 3 + 1 + 1 = 5;
+twenty scenes, a hundred people, your pose best in every scene, 12 + 1 + 6 = 19.
+
+API: `POST /api/progression/nominations/` (`target_type`, `target_id`), `DELETE
+/api/progression/nominations/<id>/`, `GET /api/progression/nominations/` (your own list only).
+Frontend: `NominateButton` beside the reaction row on each `PoseUnit` and on public journal
+rows; `NominationsPanel` on `/xp-kudos`. The scene highlight reel ranks on all-time
+nominations but its payload carries only `reaction_count`. See ADR-0286.
 
 ### ExperiencePointsData / CharacterXP
 
@@ -361,8 +403,8 @@ result = award_kudos(
 )
 # Returns AwardResult(points_data, transaction)
 #
-# Post-commit side effect (#2161): every award — regardless of caller (vote
-# settlement, GM award, writeup kudos, social-engagement roll, …) — schedules
+# Post-commit side effect (#2161): every award — regardless of caller (GM award,
+# writeup kudos, social-engagement roll, …) — schedules
 # `notify_kudos_received(account, amount=..., source_category=..., description=...)`
 # via `transaction.on_commit`, pushing a `kudos_received` WS frame to the recipient's
 # connected sessions so the toast surfaces in real time. `KudosTransactionSerializer`
@@ -633,8 +675,8 @@ on the same `action.run()` seam:
 | Action key | Class | Wraps |
 |---|---|---|
 | `claim_kudos` | `ClaimKudosAction` | `claim_kudos_for_xp` |
-| `cast_vote` | `CastVoteAction` | `services.voting.cast_vote` |
-| `remove_vote` | `RemoveVoteAction` | `services.voting.remove_vote` |
+| `nominate` | `NominateAction` | `services.nominations.nominate` (#3738) |
+| `withdraw_nomination` | `WithdrawNominationAction` | `services.nominations.withdraw_nomination` (#3738) |
 | `claim_random_scene` | `ClaimRandomSceneAction` | `services.random_scene.claim_random_scene` |
 | `reroll_random_scene` | `RerollRandomSceneAction` | `services.random_scene.reroll_random_scene_target` |
 | `set_path_intent` | `SetPathIntentAction` | `services.path_intent.set_path_intent` |
@@ -704,16 +746,17 @@ kudos claim <category_id> <n> — claim <n> kudos via category for XP
 Dispatches `ClaimKudosAction` (`registry_key="claim_kudos"`); mirrors the web
 `ClaimKudosView`.
 
-### `vote` — Cast weekly votes on other players' content (#1348)
+### `nominate` — Nominate another player's character for good RP (#1348, #3738)
 
 ```
-vote                               — list current votes and remaining budget
-vote <interaction|participation|journal> <id>   — cast a vote
-vote remove <interaction|participation|journal> <id>   — remove a vote
+nominate                          — list your nominations this week (they cannot see these)
+nominate <pose|journal> <id>      — nominate the writer of that piece
+nominate remove <pose|journal> <id> — take a nomination back
 ```
 
-Dispatches `CastVoteAction` / `RemoveVoteAction` (`registry_key="cast_vote"` /
-`"remove_vote"`); mirrors the web `VoteViewSet`.
+Dispatches `NominateAction` / `WithdrawNominationAction` (`registry_key="nominate"` /
+`"withdraw_nomination"`); mirrors the web `NominationViewSet`. Replaced the `vote`
+command and its budget in #3738.
 
 ### `randomscene` / `rscene` — Weekly random-scene bounties (#1348)
 
@@ -766,7 +809,8 @@ Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
 - **Mechanics**: Development rate modifiers from distinctions (e.g., Spoiled reduces physical skill development by 20%) are applied via `get_modifier_total(sheet, modifier_target)` with string-based ModifierTarget lookup (pending target FK).
 - **Traits**: `DevelopmentPoints.award_points()` auto-applies to `CharacterTraitValue`.
 - **Classes**: `ClassLevelUnlock`, `ClassXPCost`, and requirements reference `CharacterClass` and class levels.
-- **Scenes**: Scene completion (`on_scene_finished`) grants vote-budget bonuses. It does
+- **Scenes**: Scene completion (`on_scene_finished`) settles reaction windows (the vote-budget
+  bonus went with votes in #3738). It does
   not award development points — development comes from resolved checks (hooked at the
   `perform_check` chokepoint, #3039 — see "Check-based accrual" above) and GM fiat
   (`GMAwardAction`). Awarding development from scene participation itself (independent

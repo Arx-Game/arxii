@@ -7,16 +7,15 @@ first reaction (``lazy_open``), so no per-pose rows exist until someone
 actually reacts. One reaction per player per pose is enforced by the
 window primitive's uniqueness.
 
-Pose-voting deliberately did NOT become a kind: that capability is its own
-axis, ``WeeklyVote`` (``cast_vote`` → progression views → the frontend
-``VoteButton``/``VotesPanel``), with weekly XP settlement. #2161 landed the
-frontend mounting end-to-end — ``VoteButton`` on each ``PoseUnit`` and
-``VotesPanel`` on ``/xp-kudos`` — and re-ranked the scene highlight reel on
-all-time vote counts. A voting kind would still be a parallel implementation
-of an already-wired axis. The emoji ``InteractionReaction`` layer likewise
-stays, per the ruling on #911 — Discord-style OOC reactions beside the
-mechanical kudos chip. See ADR-0115 for the three-axes ruling (votes vs.
-kudos vs. reactions) that keeps all three separate by design.
+Nominating deliberately did NOT become a kind: that capability is its own
+axis, ``Nomination`` (``nominate`` → progression views → the frontend
+``NominateButton``/``NominationsPanel``), with weekly XP settlement (#3738,
+which replaced the budgeted ``WeeklyVote`` of #2161). A nomination is
+invisible to its nominee, which a reaction window (public by design) could
+not be. The emoji ``InteractionReaction`` layer likewise stays, per the
+ruling on #911 — Discord-style OOC reactions beside the mechanical kudos
+chip. See ADR-0115 (amended by ADR-0286) for the three-axes ruling
+(nominations vs. kudos vs. reactions) that keeps all three separate.
 
 Registered from ``world.progression.apps.ready()`` so scenes never imports
 progression.

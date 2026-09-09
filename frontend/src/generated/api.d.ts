@@ -17719,6 +17719,50 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/progression/nominations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Nominations for good RP (#3738): the nominator's own side only.
+     *
+     *     POST /nominations/ — nominate the writer of a pose or journal entry
+     *     DELETE /nominations/<id>/ — withdraw this week's citation
+     *     GET /nominations/ — the requesting account's own nominations this week
+     *
+     *     There is deliberately no read of nominations received, no count and no
+     *     budget: a nominee learns only the settled XP at week's end.
+     */
+    get: operations['progression_nominations_list'];
+    put?: never;
+    /** @description Nominate the writer of a piece of this week's prose. */
+    post: operations['progression_nominations_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/progression/nominations/{id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    /** @description Withdraw one of the requesting account's own nominations. */
+    delete: operations['progression_nominations_destroy'];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/progression/path-intent/': {
     parameters: {
       query?: never;
@@ -17863,65 +17907,6 @@ export interface paths {
     put?: never;
     /** @description Purchase an unlock by dispatching PurchaseUnlockAction. */
     post: operations['progression_unlocks_purchase_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/progression/votes/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for casting, removing, and listing weekly votes.
-     *
-     *     POST /votes/ — Cast a vote
-     *     DELETE /votes/<id>/ — Unvote
-     *     GET /votes/ — List current week's votes for the requesting user
-     *     GET /votes/budget/ — Return current vote budget
-     */
-    get: operations['progression_votes_list'];
-    put?: never;
-    /** @description Cast a vote on a piece of content. */
-    post: operations['progression_votes_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/progression/votes/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    post?: never;
-    /** @description Remove (unvote) an existing vote by ID. */
-    delete: operations['progression_votes_destroy'];
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/progression/votes/budget/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return the current vote budget for the requesting user. */
-    get: operations['progression_votes_budget_retrieve'];
-    put?: never;
-    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -19725,14 +19710,16 @@ export interface paths {
      *
      *     Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
      *     zero reactions, because storyteller curation has primacy. When the scene has no
-     *     tags, this falls back to the single most-voted (reactions tie-break) pose. The
-     *     index is the remaining poses with at least one vote or reaction, ranked by
-     *     all-time vote count first, reaction count as tie-break, and recency last —
-     *     capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
-     *     can never surface a pose the viewer cannot already see — not even as a sealed
-     *     slot. The payload carries interaction ids plus vote/reaction counts (the featured
-     *     card stays otherwise sealed); the frontend reveals a pose by fetching it through
-     *     the existing interaction-detail endpoint, which re-checks visibility.
+     *     tags, this falls back to the single most-nominated (reactions tie-break) pose.
+     *     The index is the remaining poses with at least one nomination or reaction,
+     *     ranked by all-time nomination count first, reaction count as tie-break, and
+     *     recency last — capped at 10. Every pose is drawn through
+     *     ``Interaction.visible_to`` so the reel can never surface a pose the viewer
+     *     cannot already see — not even as a sealed slot. The payload carries interaction
+     *     ids plus the reaction count only (#3738: nominations rank but are never shown;
+     *     the featured card stays otherwise sealed); the frontend reveals a pose by
+     *     fetching it through the existing interaction-detail endpoint, which re-checks
+     *     visibility.
      */
     get: operations['scenes_highlight_reel_retrieve'];
     put?: never;
@@ -31117,7 +31104,6 @@ export interface components {
     HighlightReelEntry: {
       interaction_id: number;
       rank: number;
-      vote_count: number;
       reaction_count: number;
     };
     /**
@@ -31126,12 +31112,12 @@ export interface components {
      *     The collapsed featured card is *fully sealed* — it shows no pose content, type, or
      *     participants until the viewer expands it, at which point the frontend fetches the
      *     pose through the existing interaction-detail endpoint (which re-checks visibility).
-     *     Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
-     *     (#2161) are exposed so the frontend can badge the sealed card.
+     *     Sending pose content here would defeat the seal, but ``reaction_count`` (#2161)
+     *     is exposed so the frontend can badge the sealed card. Nominations (#3738) rank
+     *     the reel but are never counted out loud: a nomination is invisible.
      */
     HighlightReelFeatured: {
       interaction_id: number;
-      vote_count: number;
       reaction_count: number;
     };
     /** @description A required catalog choice on a template, with its active options (#2079). */
@@ -34173,6 +34159,52 @@ export interface components {
      * @enum {string}
      */
     NewLevelEnum: 'starting' | 'junior' | 'gm' | 'experienced' | 'senior';
+    /**
+     * @description One of the requesting account's own nominations this week.
+     *
+     *     The only read anyone gets of a nomination: the nominator's own list, so
+     *     they know whom they have already nominated. A nominee never sees a row.
+     */
+    Nomination: {
+      readonly id: number;
+      /**
+       * @description What the nominator read: a pose (interaction) or a journal entry.
+       *
+       *     * `interaction` - Interaction
+       *     * `journal` - Journal Entry
+       */
+      target_type: components['schemas']['NominationTargetTypeEnum'];
+      /** @description PK of the cited piece (not a FK: the interaction table is partitioned). */
+      target_id: number;
+      readonly nominee_name: string;
+      /** @description A short label for the cited piece. */
+      readonly target_name: string;
+      /** Format: date-time */
+      readonly created_at: string;
+    };
+    /**
+     * @description One of the requesting account's own nominations this week.
+     *
+     *     The only read anyone gets of a nomination: the nominator's own list, so
+     *     they know whom they have already nominated. A nominee never sees a row.
+     */
+    NominationRequest: {
+      /**
+       * @description What the nominator read: a pose (interaction) or a journal entry.
+       *
+       *     * `interaction` - Interaction
+       *     * `journal` - Journal Entry
+       */
+      target_type: components['schemas']['NominationTargetTypeEnum'];
+      /** @description PK of the cited piece (not a FK: the interaction table is partitioned). */
+      target_id: number;
+    };
+    /**
+     * @description * `interaction` - Interaction
+     *     * `journal` - Journal Entry
+     * @enum {string}
+     */
+    NominationTargetTypeEnum: 'interaction' | 'journal';
     /**
      * @description * `personal` - Personal
      *     * `room` - Room
@@ -46888,30 +46920,6 @@ export interface components {
      * @enum {string}
      */
     VoyageStatusEnum: 'DRAFT' | 'IN_TRANSIT' | 'ARRIVED' | 'ABANDONED';
-    /** @description Read serializer for WeeklyVote instances. */
-    WeeklyVote: {
-      readonly id: number;
-      target_type: components['schemas']['WeeklyVoteTargetTypeEnum'];
-      /** @description PK of the voted-on object (not a FK -- no cascades) */
-      target_id: number;
-      /** @description Resolve a human-readable name for the vote target. */
-      readonly target_name: string;
-      /** Format: date-time */
-      readonly created_at: string;
-    };
-    /** @description Read serializer for WeeklyVote instances. */
-    WeeklyVoteRequest: {
-      target_type: components['schemas']['WeeklyVoteTargetTypeEnum'];
-      /** @description PK of the voted-on object (not a FK -- no cascades) */
-      target_id: number;
-    };
-    /**
-     * @description * `interaction` - Interaction
-     *     * `scene_participation` - Scene Participation
-     *     * `journal` - Journal Entry
-     * @enum {string}
-     */
-    WeeklyVoteTargetTypeEnum: 'interaction' | 'scene_participation' | 'journal';
     Will: {
       readonly id: number;
       /** @description The character this sheet belongs to */
@@ -71746,6 +71754,68 @@ export interface operations {
       };
     };
   };
+  progression_nominations_list: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Nomination'][];
+        };
+      };
+    };
+  };
+  progression_nominations_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['NominationRequest'];
+      };
+    };
+    responses: {
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['Nomination'];
+        };
+      };
+    };
+  };
+  progression_nominations_destroy: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   progression_path_intent_retrieve: {
     parameters: {
       query?: never;
@@ -71967,87 +72037,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['PurchaseUnlockResponse'];
-        };
-      };
-    };
-  };
-  progression_votes_list: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WeeklyVote'][];
-        };
-      };
-    };
-  };
-  progression_votes_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['WeeklyVoteRequest'];
-      };
-    };
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WeeklyVote'];
-        };
-      };
-    };
-  };
-  progression_votes_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        id: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  progression_votes_budget_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['WeeklyVote'];
         };
       };
     };

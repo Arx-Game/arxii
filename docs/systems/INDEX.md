@@ -2077,20 +2077,27 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   match telnet's `ritual join` — see `docs/systems/progression.md`). Closed the "every SPEND
   path was telnet-only" gap; `RandomScenePanel` (earn-path, previously built-but-orphaned) now
   mounts on `XpKudosPage` instead.
+- **Nominations (#3738, ADR-0286):** `Nomination` (`models/nominations.py`) replaced `WeeklyVote`/`WeeklyVoteBudget`:
+  an OOC act by the account off a pose or public journal from the current week the nominator could
+  see; one per account per nominee per week however many pieces cited; no budget; invisible to the
+  nominee. `services/nominations.py` (`nominate`, `withdraw_nomination`, `nominations_by_account`,
+  `has_nominated`), `services/nomination_processing.py` (`stepped_xp`, `process_weekly_nominations`,
+  `weekly_nomination_processing_task` on the weekly rollover: four paths, one stepped curve),
+  `NominationViewSet` at `/api/progression/nominations/`. Frontend `NominateButton` + `NominationsPanel`.
 - **Actions:**
   - `PurchaseUnlockAction` (`registry_key="purchase_unlock"`) — shared unlock purchase path for web and telnet
   - `ClaimKudosAction` (`registry_key="claim_kudos"`) — kudos→XP conversion; shared by web and telnet (#1348)
-  - `CastVoteAction` / `RemoveVoteAction` (`"cast_vote"` / `"remove_vote"`) — weekly vote budget management (#1348)
+  - `NominateAction` / `WithdrawNominationAction` (`"nominate"` / `"withdraw_nomination"`) — nominating a character for good RP off a pose or journal (#1348 seam, #3738 replaced the vote budget)
   - `ClaimRandomSceneAction` / `RerollRandomSceneAction` (`"claim_random_scene"` / `"reroll_random_scene"`) — weekly random-scene bounty claims/rerolls (#1348)
   - `SetPathIntentAction` / `ClearPathIntentAction` (`"set_path_intent"` / `"clear_path_intent"`) — declare/clear preferred next path for Audere Majora (#1348)
 - **New service module (#1348):** `world.progression.services.path_intent` — `set_path_intent(sheet, path)` / `clear_path_intent(sheet)`; single seam for `PathIntentViewSet` + `CmdPathIntent`
 - **Telnet Commands:** `progression unlocks`, `progression unlock class=<id>`, `progression unlock thread=<id> level=<n>` (in `commands/progression.py`);
-  `kudos`, `vote`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348);
+  `kudos`, `nominate`, `randomscene` (alias `rscene`), `pathintent` (in `commands/progression_rewards.py`, #1348, #3738);
   `durance [status|intent|convene]` (in `commands/durance.py`, #1700)
 - **`award_kudos` real-time push + privacy guard (#2161):** every `award_kudos` call
   schedules `notify_kudos_received` via `transaction.on_commit`, pushing a `kudos_received`
   WS frame (amount/source_category/description) to the recipient's connected sessions —
-  central to the service, not per-caller, so vote settlement, GM awards, writeup kudos, and
+  central to the service, not per-caller, so GM awards, writeup kudos, and
   the social-engagement roll below all get the toast for free. `KudosTransactionSerializer`
   no longer exposes `awarded_by`/`awarded_by_name` to the recipient (ADR-0033 structural
   guard — the awarder's identity never leaks to the person they kudos'd).
@@ -3282,10 +3289,10 @@ action consent flow, and a three-mode non-combat round framework.
     and `SceneViewSet.highlight_reel`.
   - **Do not inline this logic.** `SceneViewSet`, `ReadOnlyOrSceneParticipant`, the combat
     encounter read gate, and the interaction/reel read gates all consume these forms.
-- **Highlight reel (#1241; re-ranked #2161):** `GET /api/scenes/{id}/highlight-reel/` — a
-  fully-sealed featured moment + ranked index, carrying `vote_count`/`reaction_count` per pose.
-  Ranked by all-time `WeeklyVote` count first (survives weekly settlement, unlike the weekly
-  `Interaction.vote_count` counter), `InteractionReaction` count as tie-break, recency last;
+- **Highlight reel (#1241; re-ranked #2161; nominations #3738):** `GET /api/scenes/{id}/highlight-reel/` — a
+  fully-sealed featured moment + ranked index, carrying `reaction_count` per pose only.
+  Ranked by all-time `Nomination` count first (survives weekly settlement; never counted out
+  loud, a nomination is invisible), `InteractionReaction` count as tie-break, recency last;
   GM-tagged poses headline. Filtered through `Interaction.objects.visible_to`. Frontend:
   `HighlightReel` (`frontend/src/scenes/components/`) — direct-mounted (no extra Accordion
   wrapper, it's already self-collapsing) in the `/game` right sidebar's Room tab via

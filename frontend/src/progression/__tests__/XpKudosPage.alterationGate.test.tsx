@@ -47,7 +47,7 @@ vi.mock('../queries', () => ({
 // GoalsPanel (#3045, mounted on this page via RandomScenePanel's sibling row) resolves
 // the active character through this hook — `throwOnError: true` on the real hook means
 // an unmocked network call here would crash the render tree, not just degrade gracefully
-// like RandomScenePanel/VotesPanel's own unmocked queries do.
+// like RandomScenePanel/NominationsPanel's own unmocked queries do.
 vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: vi.fn(() => ({ data: [] })),
 }));

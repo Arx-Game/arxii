@@ -26,3 +26,7 @@ real-time push; `VoteButton`/`VotesPanel` weren't mounted), not consolidation of
 three into fewer mechanisms.
 
 > Status: accepted · Source: #2161, Tehom's ruling on 2026-07-10
+>
+> Amended by ADR-0286 (#3738, 2026-09-09): the popularity axis is no longer `WeeklyVote`
+> with a weekly budget but an invisible, unbudgeted `Nomination` by the account; the
+> three-axes split itself stands.

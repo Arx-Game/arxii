@@ -51,14 +51,14 @@ IC writing by players — journals, praises, retorts, and weekly XP awards. Jour
   write-then-filter, since a rejection here can't leak); a mute persists the response normally
   but excludes it from the entry AUTHOR's own read (`JournalEntryViewSet.retrieve`) — any other
   viewer is unaffected.
-- **Weekly-vote UI on public journal entries (#3302)** — `VoteButton` (`targetType="journal"`)
-  is mounted on `JournalsPage`'s public feed rows and the in-scene `JournalTab`, gated by
-  `is_public` and hidden when `entry.author` (a CharacterSheet id) is one of the viewer's own
-  roster characters (the backend already refuses self-votes, via
-  `services/voting.py::get_author_account_for_target`, so this is a UX-only guard). Shares the
-  same weekly budget as pose/action votes and shows up in `VotesPanel`'s history via the
-  existing `journal` target-type label; no backend change was needed, since the JOURNAL vote
-  target was already fully wired.
+- **Nominate UI on public journal entries (#3302; nominations since #3738)** — `NominateButton`
+  (`targetType="journal"`) is mounted on `JournalsPage`'s public feed rows and the in-scene
+  `JournalTab`, gated by `is_public` and hidden when `entry.author` (a CharacterSheet id) is one
+  of the viewer's own roster characters (the backend refuses your own characters through any
+  alt, `services/nominations.py`, so this is a UX-only guard). A journal nomination is the same
+  one-per-person-per-week nomination as a pose (one pool), shows in `NominationsPanel` under the
+  `journal` label, can be the writer's most nominated prose, and the game's single most
+  nominated journal each week pays its writer 1 XP (ties pay all).
 
 - **Posthumous afterlife (#3287, ADR-0229)** — private entries no longer die with their
   author. `CharacterSheet.posthumous_journal_disposition` (REVEAL default / SEAL) plus a

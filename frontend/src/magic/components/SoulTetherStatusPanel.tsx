@@ -18,7 +18,7 @@
  * displaying the bonded character's sheet ID prefixed with "#". This avoids
  * needing a separate character-sheet lookup hook.
  *
- * Pattern: modeled after VotesPanel (header card + item rows).
+ * Pattern: modeled after NominationsPanel (header card + item rows).
  */
 
 import { Link2 } from 'lucide-react';

@@ -1,14 +1,13 @@
 /**
- * Targeted test: VoteButton visibility gating in PoseUnit (#2161).
+ * Targeted test: NominateButton visibility gating in PoseUnit (#2161, #3738).
  *
- * PoseUnit mounts VoteButton beside ReactionsFooter (both the POSE and
+ * PoseUnit mounts NominateButton beside ReactionsFooter (both the POSE and
  * standalone-ACTION branches), but only when the pose does not belong to the
- * viewer — VoteButton itself carries no self-guard (the backend rejects
- * self-votes; this gate is UX only), so PoseUnit computes the same
+ * viewer — the button itself carries no self-guard (the backend refuses your
+ * own characters; this gate is UX only), so PoseUnit computes the same
  * viewer-persona signal EndorsementControl uses and decides whether to mount.
  *
- * Scope: gating only. VoteButton's own budget-disabled behavior is its own
- * concern and isn't retested here.
+ * Scope: gating only. The button's own toggle behavior has its own test.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -24,12 +23,12 @@ vi.mock('@/combat/queries', () => ({
   combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
 }));
 
-// Stub PoseUnitDetailPanel — irrelevant to VoteButton gating.
+// Stub PoseUnitDetailPanel — irrelevant to NominateButton gating.
 vi.mock('../PoseUnitDetailPanel', () => ({
   PoseUnitDetailPanel: () => <div data-testid="pose-unit-detail-panel" />,
 }));
 
-// Stub EndorsementControl — irrelevant to VoteButton gating; covered by its own tests.
+// Stub EndorsementControl — irrelevant to NominateButton gating; covered by its own tests.
 vi.mock('../EndorsementControl', () => ({
   EndorsementControl: () => null,
 }));
@@ -67,16 +66,13 @@ vi.mock('@/store/hooks', () => ({
   ),
 }));
 
-// Vote hooks — mocked so VoteButton renders without hitting the network.
-const mockCastVote = vi.fn();
-const mockRemoveVote = vi.fn();
-vi.mock('@/progression/voteQueries', () => ({
-  useMyVotesQuery: vi.fn(() => ({ data: [] })),
-  useVoteBudgetQuery: vi.fn(() => ({
-    data: { base_votes: 5, scene_bonus_votes: 0, votes_spent: 0, votes_remaining: 5 },
-  })),
-  useCastVoteMutation: vi.fn(() => ({ mutate: mockCastVote, isPending: false })),
-  useRemoveVoteMutation: vi.fn(() => ({ mutate: mockRemoveVote, isPending: false })),
+// Nomination hooks — mocked so NominateButton renders without hitting the network.
+const mockNominate = vi.fn();
+const mockWithdraw = vi.fn();
+vi.mock('@/progression/nominationQueries', () => ({
+  useMyNominationsQuery: vi.fn(() => ({ data: [] })),
+  useNominateMutation: vi.fn(() => ({ mutate: mockNominate, isPending: false })),
+  useWithdrawNominationMutation: vi.fn(() => ({ mutate: mockWithdraw, isPending: false })),
 }));
 
 import { PoseUnit } from '../PoseUnit';
@@ -113,12 +109,12 @@ function Wrapper({ children }: { children: ReactNode }) {
   return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
 }
 
-describe('PoseUnit — VoteButton gating (#2161)', () => {
+describe('PoseUnit — NominateButton gating (#2161, #3738)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders VoteButton on another persona's pose in a scene", () => {
+  it("renders NominateButton on another persona's pose in a scene", () => {
     // Alice (id 10) is not the viewer (primary_persona_id 7).
     const interaction = makeInteraction({ mode: 'pose', persona: { id: 10, name: 'Alice' } });
     render(
@@ -126,10 +122,10 @@ describe('PoseUnit — VoteButton gating (#2161)', () => {
         <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
-    expect(screen.getByTitle(/vote/i)).toBeInTheDocument();
+    expect(screen.getByTitle(/nominate alice/i)).toBeInTheDocument();
   });
 
-  it("hides VoteButton on the viewer's own pose", () => {
+  it("hides NominateButton on the viewer's own pose", () => {
     // persona.id === 7 matches the mocked viewer's primary_persona_id.
     const interaction = makeInteraction({
       mode: 'pose',
@@ -140,10 +136,10 @@ describe('PoseUnit — VoteButton gating (#2161)', () => {
         <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
-    expect(screen.queryByTitle(/vote/i)).toBeNull();
+    expect(screen.queryByTitle(/nominate/i)).toBeNull();
   });
 
-  it("renders VoteButton on another persona's standalone ACTION in a scene", () => {
+  it("renders NominateButton on another persona's standalone ACTION in a scene", () => {
     const interaction = makeInteraction({
       mode: 'action',
       persona: { id: 10, name: 'Alice' },
@@ -154,10 +150,10 @@ describe('PoseUnit — VoteButton gating (#2161)', () => {
         <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
-    expect(screen.getByTitle(/vote/i)).toBeInTheDocument();
+    expect(screen.getByTitle(/nominate alice/i)).toBeInTheDocument();
   });
 
-  it("hides VoteButton on the viewer's own standalone ACTION", () => {
+  it("hides NominateButton on the viewer's own standalone ACTION", () => {
     const interaction = makeInteraction({
       mode: 'action',
       persona: { id: 7, name: 'ViewerChar' },
@@ -168,6 +164,6 @@ describe('PoseUnit — VoteButton gating (#2161)', () => {
         <PoseUnit interaction={interaction} sceneId="1" />
       </Wrapper>
     );
-    expect(screen.queryByTitle(/vote/i)).toBeNull();
+    expect(screen.queryByTitle(/nominate/i)).toBeNull();
   });
 });
