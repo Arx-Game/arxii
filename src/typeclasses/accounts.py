@@ -485,13 +485,28 @@ class Account(DefaultAccount):
         # PlayerData will be created automatically via the property
 
     def at_post_login(self, session=None):
-        """Called after successful login."""
-        super().at_post_login(session)
+        """Called after successful login.
 
-        # Store webclient authentication info for autologin
-        if session and hasattr(session, "at_login"):
-            session.uid = self.id  # Set the uid manually
-            session.at_login()  # Then call standard at_login
+        Deliberately does NOT touch the webclient's autologin state. It used to
+        (``session.uid = self.id; session.at_login()``), which raised TypeError on
+        every single login and took the rest of this method down with it: no cmdset
+        payload, no character list (the 2026-09-09 Sentry quota incident; digest #3736).
+
+        The call was aimed at the *Portal*-side ``SecureWebSocketClient.at_login()``
+        (``server/portal/secure_websocket.py``), which takes no arguments and stores
+        the autologin uid + nonce in the Django session. But ``at_post_login`` runs on
+        the **Server**, where ``session`` is an Evennia ``ServerSession`` whose
+        signature is ``at_login(self, account)``. The ``hasattr(session, "at_login")``
+        guard could never catch that: both sides define the name, with different
+        arities. Two processes, one attribute name.
+
+        Nothing needs to replace it. ``sessionhandler.login()`` already sends the
+        ``SLOGIN`` AMP op *before* calling this hook, and the Portal's
+        ``server_logged_in()`` answers it with ``load_sync_data(data)`` (carrying the
+        uid) followed by the real, Portal-side ``session.at_login()``. Autologin was
+        always Evennia's job; this block was a duplicate that only ever raised.
+        """
+        super().at_post_login(session)
 
         payload = serialize_cmdset(self)
         for sess in self.sessions.all():
