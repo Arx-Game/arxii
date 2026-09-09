@@ -20,7 +20,7 @@ import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
-import { VoteButton } from '@/components/VoteButton';
+import { NominateButton } from '@/components/NominateButton';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
 import { ReactionStrip } from './ReactionStrip';
@@ -259,8 +259,9 @@ export function PoseUnit({
 
   // Resolve the viewer's active persona to detect self-pose — mirrors
   // EndorsementControl's self-endorsement guard (same signal, same source).
-  // VoteButton has no self-guard of its own (the backend rejects self-votes;
-  // this gate is UX only), so PoseUnit computes it and decides whether to mount.
+  // NominateButton has no self-guard of its own (the backend refuses your own
+  // characters; this gate is UX only), so PoseUnit computes it and decides
+  // whether to mount (#3738).
   const activeCharacterName = useAppSelector((state) => state.game.active);
   const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
   const viewerPersonaId = useMemo(
@@ -268,7 +269,7 @@ export function PoseUnit({
     [myRosterEntries, activeCharacterName]
   );
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
-  const canVote = Boolean(sceneId) && !isSelfPose;
+  const canNominate = Boolean(sceneId) && !isSelfPose;
 
   // -------------------------------------------------------------------------
   // State 3: standalone ACTION (not linked to any pose)
@@ -317,8 +318,12 @@ export function PoseUnit({
         {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
         <div className="flex items-center gap-1">
           {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
-          {!readOnly && canVote && (
-            <VoteButton targetType="interaction" targetId={interaction.id} />
+          {!readOnly && canNominate && (
+            <NominateButton
+              targetType="interaction"
+              targetId={interaction.id}
+              nomineeName={interaction.persona.name}
+            />
           )}
         </div>
         {/* Standalone ACTION rows are authored content (claimed resonances) and
@@ -456,7 +461,13 @@ export function PoseUnit({
 
       <div className="flex items-center gap-1">
         {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
-        {!readOnly && canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+        {!readOnly && canNominate && (
+          <NominateButton
+            targetType="interaction"
+            targetId={interaction.id}
+            nomineeName={interaction.persona.name}
+          />
+        )}
       </div>
       {!readOnly && <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />}
       {interaction.pose_kind === 'entry' && !readOnly && (

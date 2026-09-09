@@ -28814,6 +28814,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/DuranceStatus'
           description: ''
+  /api/progression/nominations/:
+    get:
+      operationId: progression_nominations_list
+      description: |-
+        Nominations for good RP (#3738): the nominator's own side only.
+
+        POST /nominations/ — nominate the writer of a pose or journal entry
+        DELETE /nominations/<id>/ — withdraw this week's citation
+        GET /nominations/ — the requesting account's own nominations this week
+
+        There is deliberately no read of nominations received, no count and no
+        budget: a nominee learns only the settled XP at week's end.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Nomination'
+          description: ''
+    post:
+      operationId: progression_nominations_create
+      description: Nominate the writer of a piece of this week's prose.
+      tags:
+      - progression
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NominationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nomination'
+          description: ''
+  /api/progression/nominations/{id}/:
+    delete:
+      operationId: progression_nominations_destroy
+      description: Withdraw one of the requesting account's own nominations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/progression/path-intent/:
     get:
       operationId: progression_path_intent_retrieve
@@ -29009,81 +29071,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PurchaseUnlockResponse'
-          description: ''
-  /api/progression/votes/:
-    get:
-      operationId: progression_votes_list
-      description: |-
-        ViewSet for casting, removing, and listing weekly votes.
-
-        POST /votes/ — Cast a vote
-        DELETE /votes/<id>/ — Unvote
-        GET /votes/ — List current week's votes for the requesting user
-        GET /votes/budget/ — Return current vote budget
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WeeklyVote'
-          description: ''
-    post:
-      operationId: progression_votes_create
-      description: Cast a vote on a piece of content.
-      tags:
-      - progression
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WeeklyVoteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WeeklyVote'
-          description: ''
-  /api/progression/votes/{id}/:
-    delete:
-      operationId: progression_votes_destroy
-      description: Remove (unvote) an existing vote by ID.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/progression/votes/budget/:
-    get:
-      operationId: progression_votes_budget_retrieve
-      description: Return the current vote budget for the requesting user.
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WeeklyVote'
           description: ''
   /api/protected-subjects/:
     get:
@@ -31958,14 +31945,16 @@ paths:
 
         Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
         zero reactions, because storyteller curation has primacy. When the scene has no
-        tags, this falls back to the single most-voted (reactions tie-break) pose. The
-        index is the remaining poses with at least one vote or reaction, ranked by
-        all-time vote count first, reaction count as tie-break, and recency last —
-        capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
-        can never surface a pose the viewer cannot already see — not even as a sealed
-        slot. The payload carries interaction ids plus vote/reaction counts (the featured
-        card stays otherwise sealed); the frontend reveals a pose by fetching it through
-        the existing interaction-detail endpoint, which re-checks visibility.
+        tags, this falls back to the single most-nominated (reactions tie-break) pose.
+        The index is the remaining poses with at least one nomination or reaction,
+        ranked by all-time nomination count first, reaction count as tie-break, and
+        recency last — capped at 10. Every pose is drawn through
+        ``Interaction.visible_to`` so the reel can never surface a pose the viewer
+        cannot already see — not even as a sealed slot. The payload carries interaction
+        ids plus the reaction count only (#3738: nominations rank but are never shown;
+        the featured card stays otherwise sealed); the frontend reveals a pose by
+        fetching it through the existing interaction-detail endpoint, which re-checks
+        visibility.
       parameters:
       - in: path
         name: id
@@ -54133,15 +54122,12 @@ components:
           type: integer
         rank:
           type: integer
-        vote_count:
-          type: integer
         reaction_count:
           type: integer
       required:
       - interaction_id
       - rank
       - reaction_count
-      - vote_count
     HighlightReelFeatured:
       type: object
       description: |-
@@ -54150,19 +54136,17 @@ components:
         The collapsed featured card is *fully sealed* — it shows no pose content, type, or
         participants until the viewer expands it, at which point the frontend fetches the
         pose through the existing interaction-detail endpoint (which re-checks visibility).
-        Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
-        (#2161) are exposed so the frontend can badge the sealed card.
+        Sending pose content here would defeat the seal, but ``reaction_count`` (#2161)
+        is exposed so the frontend can badge the sealed card. Nominations (#3738) rank
+        the reel but are never counted out loud: a nomination is invisible.
       properties:
         interaction_id:
-          type: integer
-        vote_count:
           type: integer
         reaction_count:
           type: integer
       required:
       - interaction_id
       - reaction_count
-      - vote_count
     HouseAspectDefinition:
       type: object
       description: A required catalog choice on a template, with its active options
@@ -60081,6 +60065,82 @@ components:
         * `gm` - GM
         * `experienced` - Experienced GM
         * `senior` - Senior GM
+    Nomination:
+      type: object
+      description: |-
+        One of the requesting account's own nominations this week.
+
+        The only read anyone gets of a nomination: the nominator's own list, so
+        they know whom they have already nominated. A nominee never sees a row.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/NominationTargetTypeEnum'
+          description: |-
+            What the nominator read: a pose (interaction) or a journal entry.
+
+            * `interaction` - Interaction
+            * `journal` - Journal Entry
+        target_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'PK of the cited piece (not a FK: the interaction table is
+            partitioned).'
+        nominee_name:
+          type: string
+          readOnly: true
+        target_name:
+          type: string
+          description: A short label for the cited piece.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - nominee_name
+      - target_id
+      - target_name
+      - target_type
+    NominationRequest:
+      type: object
+      description: |-
+        One of the requesting account's own nominations this week.
+
+        The only read anyone gets of a nomination: the nominator's own list, so
+        they know whom they have already nominated. A nominee never sees a row.
+      properties:
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/NominationTargetTypeEnum'
+          description: |-
+            What the nominator read: a pose (interaction) or a journal entry.
+
+            * `interaction` - Interaction
+            * `journal` - Journal Entry
+        target_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'PK of the cited piece (not a FK: the interaction table is
+            partitioned).'
+      required:
+      - target_id
+      - target_type
+    NominationTargetTypeEnum:
+      enum:
+      - interaction
+      - journal
+      type: string
+      description: |-
+        * `interaction` - Interaction
+        * `journal` - Journal Entry
     NotificationLevelEnum:
       enum:
       - personal
@@ -83683,58 +83743,6 @@ components:
         * `IN_TRANSIT` - In Transit
         * `ARRIVED` - Arrived
         * `ABANDONED` - Abandoned
-    WeeklyVote:
-      type: object
-      description: Read serializer for WeeklyVote instances.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        target_type:
-          $ref: '#/components/schemas/WeeklyVoteTargetTypeEnum'
-        target_id:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: PK of the voted-on object (not a FK -- no cascades)
-        target_name:
-          type: string
-          description: Resolve a human-readable name for the vote target.
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - id
-      - target_id
-      - target_name
-      - target_type
-    WeeklyVoteRequest:
-      type: object
-      description: Read serializer for WeeklyVote instances.
-      properties:
-        target_type:
-          $ref: '#/components/schemas/WeeklyVoteTargetTypeEnum'
-        target_id:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: PK of the voted-on object (not a FK -- no cascades)
-      required:
-      - target_id
-      - target_type
-    WeeklyVoteTargetTypeEnum:
-      enum:
-      - interaction
-      - scene_participation
-      - journal
-      type: string
-      description: |-
-        * `interaction` - Interaction
-        * `scene_participation` - Scene Participation
-        * `journal` - Journal Entry
     Will:
       type: object
       properties:

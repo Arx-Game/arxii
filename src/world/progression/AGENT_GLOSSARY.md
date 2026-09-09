@@ -1,9 +1,10 @@
 # Progression glossary
 
 > Durance, XP, and Development Points are cross-cutting terms — see the root `AGENT_GLOSSARY_MAP.md`.
-> Kudos, Weekly Vote, Vote Budget, and Memorable Pose are defined below — they're the
-> applause-economy axes native to this app (see ADR-0115 for how they relate to
-> `InteractionReaction`, the sibling axis defined in `scenes/AGENT_GLOSSARY.md`).
+> Kudos, Nomination, and the four settlement paths are defined below — they're the
+> applause-economy axes native to this app (see ADR-0115, amended by ADR-0286, for how
+> they relate to `InteractionReaction`, the sibling axis defined in
+> `scenes/AGENT_GLOSSARY.md`).
 
 **Unlock**:
 An authored advancement target a character can spend XP to acquire — e.g. `ClassLevelUnlock` (a class level) or `TraitRatingUnlock` (a major trait threshold) — whose availability is governed by Requirements.
@@ -28,39 +29,45 @@ _Avoid_: path receipt, path choice (it is an aspiration, not a committed record)
 **Kudos**:
 An unlimited, GM- or player-awarded "good sport" currency (`award_kudos`,
 `KudosTransaction`) recognizing graciousness — someone was a good sport, wrote a
-great post, played fair through a loss. Distinct from `WeeklyVote` (a scarce,
-budgeted popularity signal) and `InteractionReaction` (cosmetic/relationship
+great post, played fair through a loss. Distinct from `Nomination` (the invisible
+popularity signal, #3738) and `InteractionReaction` (cosmetic/relationship
 expression) — see ADR-0115 for why all three stay separate axes. Every award pushes
 a real-time `kudos_received` WS toast to the recipient (`notify_kudos_received`,
 #2161); the awarder's identity is never exposed to the recipient
 (`KudosTransactionSerializer` drops `awarded_by`, ADR-0033).
-_Avoid_: applause, upvote, like (reserve those for `WeeklyVote`/`InteractionReaction`).
+_Avoid_: applause, upvote, like (reserve those for `Nomination`/`InteractionReaction`).
 
-**Weekly Vote**:
-A single cast of a player's weekly `WeeklyVote` on a piece of content (a pose,
-scene participation, or journal entry) — the popularity axis of applause. Toggleable
-(cast/uncast) until the weekly cron processes it; settles into `MEMORABLE_POSE` XP
-for top-ranked poses and ranks the scene highlight reel by all-time vote count
-(#2161, `SceneViewSet.highlight_reel`). Frontend surface: `VoteButton` on each
-`PoseUnit` and the `/xp-kudos` `VotesPanel`.
-_Avoid_: kudos, like, favorite (favoriting is the private, non-social
-`InteractionFavorite` bookmark, unrelated to this axis).
+**Nomination** (#3738):
+A player's OOC "I am voting this person for good RP because of this": a `Nomination` row
+by the **account** (alts and personas collapse to one) naming the **character** whose
+prose it was, hung off a pose or a public journal entry from the current `GameWeek` that
+the nominator could see. One account nominating one character in one week is one
+nomination however many pieces it cites; the extra rows only cite more prose. No budget;
+the scarcity is what you could see this week. **Invisible**: no toast, no count, no
+names; the nominee learns only the settled XP. Replaced `WeeklyVote` + `WeeklyVoteBudget`
+(the Arx I shape: a capped weekly budget rewarding scene volume). Frontend: `NominateButton`
+beside the reaction row on each `PoseUnit` and on public journal rows; `NominationsPanel`
+(your own list) on `/xp-kudos`.
+_Avoid_: vote, upvote, like, kudos, favorite (favoriting is the private `InteractionFavorite`
+bookmark, unrelated to this axis).
 
-**Vote Budget**:
-`WeeklyVoteBudget` — how many `WeeklyVote`s an account can cast in a given
-`GameWeek`: 7 base votes plus 1 bonus per scene attended that week
-(`scene_bonus_votes`), minus `votes_spent`. Resets every game week; not a
-carry-forward currency.
-_Avoid_: vote balance, vote allowance.
+**Stepped curve** (#3738):
+`stepped_xp(count, first_xp)`: the reviewer's tier floors to 133 (1 | 2-3 | 4-6 | 7-10 |
+11-16 | 17-25 | 26-38 | 39-58 | 59-88 | 89-133), then each tier widens by half; one XP per
+tier from `first_xp`. The curve is the only cap.
+_Avoid_: diminishing-returns formula, vote XP cap.
 
-**Memorable Pose**:
-The weekly settlement outcome for the top-3 vote-ranked poses (via
-`process_memorable_poses`): 1st/2nd/3rd place authors receive `MEMORABLE_POSE_XP`
-([3, 2, 1]) XP, capped per-account by `VOTE_XP_CAP`. This is where a `WeeklyVote`'s
-popularity signal cashes out into XP — kudos and reactions have their own,
-independent settlement/effects.
-_Avoid_: top pose, featured pose (that's the highlight reel's *featured* slot,
-which can headline a GM-tagged pose with zero votes — a different selection rule).
+**Nominations in general / Most nominated prose / Best in scene / Most nominated journal**
+(#3738): the four settlement paths `process_weekly_nominations` pays on the weekly
+rollover. In general: distinct people who nominated the character, curve from 3
+(`NOMINATION_FIRST_XP`). Most nominated prose: the character's own most-cited piece, one
+instance per week, flat 1. Best in scene: scenes in which their pose was the most
+nominated (ties count for every tied writer), curve from 1. Most nominated journal: the
+one journal entry game-wide with the most nominators, flat 1, ties pay all. The reviewer's
+examples: one scene, one friend = 5; twenty scenes, a hundred people, best in all = 19.
+_Avoid_: Memorable Pose, memorable poses top three (the 3/2/1 placings went with votes),
+top pose, featured pose (that's the highlight reel's *featured* slot, which can headline a
+GM-tagged pose with zero nominations — a different selection rule).
 
 **trainer-of-record**:
 The `CharacterSheet` stored on a `DuranceTrainingSite` as the room's designated officiant.

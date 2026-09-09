@@ -1584,6 +1584,7 @@
   - character_xp_transactions <- progression.CharacterXPTransaction
   - kudos_transactions <- progression.KudosTransaction
   - maturation_spends <- progression.MaturationSpend
+  - nominations_received <- progression.Nomination
   - path_intent <- progression.PathIntent
   - path_history <- progression.CharacterPathHistory
   - xptransaction_set <- progression.XPTransaction
@@ -3772,7 +3773,7 @@
 - `invite_organization(event: world.events.models.Event, organization: world.societies.models.Organization, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite an organization to an event.`
 - `invite_persona(event: world.events.models.Event, target_persona: world.scenes.models.Persona, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite a persona to an event.`
 - `invite_society(event: world.events.models.Event, society: world.societies.models.Society, *, invited_by: world.scenes.models.Persona | None = None) -> world.events.models.EventInvitation - Invite a society to an event.`
-- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Grant scene completion rewards and settle reaction windows.`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Settle a finished scene's reaction windows.`
 - `respond_to_invitation(invitation: world.events.models.EventInvitation, persona: world.scenes.models.Persona, *, response: str) -> world.events.models.EventInvitation - Record an invitee's RSVP (ACCEPTED / DECLINED) on a PERSONA invitation.`
 - `schedule_event(event: world.events.models.Event) -> world.events.models.Event - Transition an event from DRAFT to SCHEDULED.`
 - `set_room_description_overlay(event: world.events.models.Event, overlay_text: str) -> world.events.models.EventModification - Set or update the room description overlay for an event.`
@@ -3995,11 +3996,10 @@
 **Pointed to by:**
   - standing_declarations <- societies.StandingDeclaration
   - social_engagement_trackers <- progression.WeeklySocialEngagement
+  - nominations <- progression.Nomination
   - random_scene_targets <- progression.RandomSceneTarget
   - development_transactions <- progression.DevelopmentTransaction
   - skill_usages <- progression.WeeklySkillUsage
-  - vote_budgets <- progression.WeeklyVoteBudget
-  - votes <- progression.WeeklyVote
   - technique_progress_weekly <- magic.TechniqueProgressWeekly
   - purse_drain_weeks <- currency.PurseDrainWeek
   - gm_reward_trackers <- gm.GMWeeklyRewardTracker
@@ -7350,6 +7350,12 @@
 **Pointed to by:**
   - class_levels <- progression.MultiClassLevel
 
+### Nomination
+**Foreign Keys:**
+  - nominator -> evennia.AccountDB [FK]
+  - game_week -> game_clock.GameWeek [FK]
+  - nominee -> character_sheets.CharacterSheet [FK]
+
 ### PathIntent
 **Foreign Keys:**
   - character_sheet -> character_sheets.CharacterSheet [OneToOne]
@@ -7414,17 +7420,6 @@
 **Pointed to by:**
   - initiators <- progression.WeeklyEngagementInitiator
 
-### WeeklyVote
-**Foreign Keys:**
-  - voter -> evennia.AccountDB [FK]
-  - game_week -> game_clock.GameWeek [FK]
-  - author_account -> evennia.AccountDB [FK]
-
-### WeeklyVoteBudget
-**Foreign Keys:**
-  - account -> evennia.AccountDB [FK]
-  - game_week -> game_clock.GameWeek [FK]
-
 ### XPCostChart
 **Pointed to by:**
   - cost_entries <- progression.XPCostEntry
@@ -7449,20 +7444,17 @@
 - `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
 - `calculate_check_dev_points(effort_level: 'str', path_level: 'int') -> 'int' - Calculate dp earned from a single check.`
 - `calculate_level_up_requirements(character: 'ObjectDB', character_class: 'CharacterClass', target_level: 'int') -> 'LevelUpRequirements | dict[str, str]' - Calculate what's required to level up a character in a specific class.`
-- `cast_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int, author_account: evennia.accounts.models.AccountDB) -> world.progression.models.voting.WeeklyVote - Cast a vote on a piece of content.`
 - `check_requirements_for_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock') -> 'tuple[bool, list[str]]' - Check if a character meets all requirements for an unlock.`
 - `claim_kudos(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str) -> world.progression.types.ClaimResult - Claim kudos from an account for conversion to rewards.`
 - `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '') -> world.progression.types.KudosXPResult - Claim kudos and convert the reward to account-level XP.`
 - `get_available_unlocks_for_character(character: 'ObjectDB') -> 'AvailableUnlocks' - Get all unlocks that a character could potentially purchase.`
 - `get_development_suggestions_for_character(character: 'ObjectDB') -> 'dict[str, list[str]]' - Get development suggestions for a character based on their current traits.`
-- `get_or_create_vote_budget(account: evennia.accounts.models.AccountDB, game_week: world.game_clock.models.GameWeek | None = None) -> world.progression.models.voting.WeeklyVoteBudget - Return the vote budget for the current week, creating with defaults if needed.`
 - `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' - Get or create XP tracker for an account.`
-- `get_vote_state(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> bool - Return whether the voter has an unprocessed vote for this target this week.`
-- `get_votes_by_voter(voter_account: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet - Return all unprocessed votes for the current week.`
-- `increment_scene_bonus(account: evennia.accounts.models.AccountDB) -> None - Add 1 to scene_bonus_votes for the current week's budget (capped at 7).`
-- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Grant scene completion rewards and settle reaction windows.`
-- `remove_vote(voter_account: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None - Remove an unprocessed vote for the current week.`
+- `nominate(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> world.progression.models.nominations.Nomination - Nominate the writer of a piece of this week's prose for good RP.`
+- `nominations_by_account(nominator: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet - This week's citations by ``nominator``: the one list a nominator may see.`
+- `on_scene_finished(scene: world.scenes.models.Scene) -> None - Settle a finished scene's reaction windows.`
 - `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' - Spend XP to unlock something for a character.`
+- `withdraw_nomination(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None - Take back this week's citation of a piece, while the week is still open.`
 
 
 ## world.projects
