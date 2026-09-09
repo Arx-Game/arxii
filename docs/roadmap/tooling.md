@@ -18,8 +18,13 @@ a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), a map v
 (2026-09-09, the reviewer building Arx: the wheel zooms around the cursor between 25%
 and 150%, dragging the ground pans, − / + / fit in the tools row, zoom and pan
 remembered per area, kind labels hidden zoomed out; pressing a tile is still the swap
-drag), and WIP dimming
-from `published_at`. Cross-world search lands on the hit's parent grid with
+drag), the ladder made legible (2026-09-09, the reviewer expanded Arx in the rail
+and saw nothing: areas mode's `AddDialog` is titled by the level a square becomes,
+"New ward" / "Ward name"; a hint under the lattice names that level and the
+city › ward › neighborhood › building › rooms ladder; the rail reads the manager
+for every expanded node so a city's own squares list beside its wards, and an
+expanded node with nothing under it says which level to plot on its map), and WIP
+dimming from `published_at`. Cross-world search lands on the hit's parent grid with
 the room highlighted. **Room Document** (`RoomDocument`): full-width drafted
 name/prose (`useDraft`, per-room localStorage), Save/Publish/delete savebar
 ("Next unpublished" trance loop included), seasonal/day-night `VariantsPanel`

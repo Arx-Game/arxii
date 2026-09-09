@@ -56,6 +56,7 @@ import { Plate } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
+import { AREA_LEVELS } from '../types';
 import { AddDialog, type AddDialogConnection, type AddDialogRealizePayload } from './AddDialog';
 import {
   boundsContaining,
@@ -434,6 +435,10 @@ export function Lattice({
   // #3534 — a granted GM whose ceiling sits below this altitude's child level
   // gets no planning affordance here at all (spec §3: "add-buttons past your
   // ceiling absent"); the warrant check refuses server-side regardless.
+  const childLevelLabel =
+    mode === 'areas' && childAreaLevel != null
+      ? AREA_LEVELS.find((choice) => choice.value === childAreaLevel)?.label
+      : undefined;
   const overCeiling =
     mode === 'areas' &&
     maxBuildLevel != null &&
@@ -915,6 +920,16 @@ export function Lattice({
         ❧ rough positions, not measurements — drag a room to arrange, drag the ground to pan, wheel
         to zoom, click empty ground to plan, right-click to carve.
       </p>
+      {childLevelLabel && (
+        <p
+          className="mt-1 font-body text-xs italic text-muted-foreground"
+          data-testid="lattice-ladder-hint"
+        >
+          a planned square here becomes a {childLevelLabel.toLowerCase()}; open one to plot what it
+          holds (ward, then neighborhood, then building), and a building&apos;s map is its rooms.
+          Rooms can also sit right here; drop one on an area&apos;s tile to move it inside.
+        </p>
+      )}
 
       <AddDialog
         mode={mode}
@@ -925,6 +940,7 @@ export function Lattice({
         onConfirm={handleConfirmRealize}
         roomOptions={roomOptions}
         unplacedOptions={unplacedOptions}
+        childLevelLabel={childLevelLabel}
         defaultNeighbor={defaultNeighbor}
       />
     </div>

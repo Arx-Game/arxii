@@ -234,6 +234,18 @@ describe('Lattice — plot-then-realize', () => {
     });
   });
 
+  it('areas mode carries the ladder hint naming the level a square becomes', () => {
+    renderLattice({ mode: 'areas', tiles: [], childAreaLevel: 30 });
+    expect(screen.getByTestId('lattice-ladder-hint')).toHaveTextContent(
+      'a planned square here becomes a ward'
+    );
+  });
+
+  it('rooms mode carries no ladder hint', () => {
+    renderLattice({ mode: 'rooms', tiles: [] });
+    expect(screen.queryByTestId('lattice-ladder-hint')).not.toBeInTheDocument();
+  });
+
   it('areas mode hides the connection rows in Add', async () => {
     renderLattice({ mode: 'areas', tiles: [] });
     await userEvent.click(screen.getByTestId('lattice-cell-0-0'));

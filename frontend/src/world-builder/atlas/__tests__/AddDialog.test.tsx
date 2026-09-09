@@ -48,6 +48,13 @@ const ROOM_OPTIONS = [
 ];
 
 describe('AddDialog — areas mode', () => {
+  it('names the level a planned square becomes when the parent hands one down', () => {
+    renderDialog({ mode: 'areas', childLevelLabel: 'Ward' });
+
+    expect(screen.getByRole('heading', { name: 'New ward' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Ward name')).toBeInTheDocument();
+  });
+
   it('hides the connection rows entirely and confirms {kind: "area"}', async () => {
     const { onConfirm } = renderDialog({ mode: 'areas' });
 

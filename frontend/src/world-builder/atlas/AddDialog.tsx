@@ -120,6 +120,8 @@ export interface AddDialogProps {
   onConfirm: (payload: AddDialogRealizePayload) => void;
   /** Rooms mode: pick targets for the connection rows. Exit mode: the dig/link match pool. */
   roomOptions?: AddDialogRoomOption[];
+  /** Areas mode: the label of the level a plotted square becomes ("Ward"), so the dialog says which it is. */
+  childLevelLabel?: string;
   /** Rooms mode: this area's rooms with no grid position yet — a name match places one instead of digging. */
   unplacedOptions?: AddDialogRoomOption[];
   /** Rooms mode only — the plotted cell's one adjacent realized room, if any. */
@@ -163,6 +165,7 @@ export function AddDialog({
   onConfirm,
   roomOptions = [],
   unplacedOptions = [],
+  childLevelLabel,
   defaultNeighbor = null,
   onDestinationInput,
 }: AddDialogProps) {
@@ -260,7 +263,14 @@ export function AddDialog({
     onOpenChange(false);
   };
 
-  const copy = MODE_COPY[mode];
+  const copy =
+    mode === 'areas' && childLevelLabel
+      ? {
+          title: `New ${childLevelLabel.toLowerCase()}`,
+          nameLabel: `${childLevelLabel} name`,
+          placeholder: MODE_COPY.areas.placeholder,
+        }
+      : MODE_COPY[mode];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
