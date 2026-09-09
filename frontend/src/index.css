@@ -60,6 +60,12 @@
 
   /* ===== Realm Themes ===== */
 
+  /* Each realm has a light block keyed on [data-realm] and a dark block keyed on the
+     same element carrying .dark (the <html> case). The dark block also matches a
+     [data-realm] wrapper NESTED under .dark, so a card or row that carries its own
+     realm palette (the Realms hub, the landing page's realm rows) goes dark with the
+     page instead of staying on the light palette (#3725 follow-up). */
+
   /* Default warm theme (pre-selection, fallback) */
   [data-realm='default'] {
     --background: 35 40% 97%;
@@ -82,7 +88,8 @@
     --input: 35 15% 86%;
     --ring: 38 45% 40%;
   }
-  [data-realm='default'].dark {
+  [data-realm='default'].dark,
+  .dark [data-realm='default'] {
     --background: 30 15% 8%;
     --foreground: 35 25% 90%;
     --card: 30 12% 11%;
@@ -126,7 +133,8 @@
     --input: 40 16% 80%;
     --ring: 43 40% 38%;
   }
-  [data-realm='arx'].dark {
+  [data-realm='arx'].dark,
+  .dark [data-realm='arx'] {
     --background: 220 15% 8%;
     --foreground: 40 20% 82%;
     --card: 220 12% 11%;
@@ -170,7 +178,8 @@
     --input: 215 12% 78%;
     --ring: 215 30% 28%;
   }
-  [data-realm='umbros'].dark {
+  [data-realm='umbros'].dark,
+  .dark [data-realm='umbros'] {
     --background: 220 18% 5%;
     --foreground: 215 14% 78%;
     --card: 220 15% 8%;
@@ -214,7 +223,8 @@
     --input: 42 25% 80%;
     --ring: 42 70% 42%;
   }
-  [data-realm='luxen'].dark {
+  [data-realm='luxen'].dark,
+  .dark [data-realm='luxen'] {
     --background: 225 28% 8%;
     --foreground: 42 35% 88%;
     --card: 225 25% 11%;
@@ -258,7 +268,8 @@
     --input: 15 16% 78%;
     --ring: 18 80% 42%;
   }
-  [data-realm='inferna'].dark {
+  [data-realm='inferna'].dark,
+  .dark [data-realm='inferna'] {
     --background: 12 24% 6%;
     --foreground: 18 30% 85%;
     --card: 12 22% 9%;
@@ -302,7 +313,8 @@
     --input: 350 10% 78%;
     --ring: 350 50% 30%;
   }
-  [data-realm='ariwn'].dark {
+  [data-realm='ariwn'].dark,
+  .dark [data-realm='ariwn'] {
     --background: 350 18% 5%;
     --foreground: 35 18% 80%;
     --card: 350 15% 8%;
@@ -346,7 +358,8 @@
     --input: 205 16% 80%;
     --ring: 205 48% 36%;
   }
-  [data-realm='aythirmok'].dark {
+  [data-realm='aythirmok'].dark,
+  .dark [data-realm='aythirmok'] {
     --background: 210 22% 6%;
     --foreground: 205 22% 85%;
     --card: 210 20% 9%;

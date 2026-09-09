@@ -200,10 +200,6 @@ export function RealmPage() {
             )}
           </span>
           <span className="realm-note">
-            <b>Skip the testament.</b> <a href="#houses">Houses and organizations</a> ·{' '}
-            <a href="#names">Names spoken here</a> · <a href="#characters">Characters</a>
-          </span>
-          <span className="realm-note">
             <Link to="/realms">All realms</Link>
           </span>
         </aside>
