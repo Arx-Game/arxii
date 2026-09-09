@@ -16,6 +16,13 @@
  * itself, since the new room's id doesn't exist until the dig lands; the
  * caller resolves the link once the tile appears (see `Lattice.tsx`).
  *
+ * Rooms mode has the same implicit fork for a room that already exists in this
+ * area but sits nowhere on the grid (dug from an exit, or seeded): typing its
+ * name exactly (case-insensitively, against `unplacedOptions`) means "place that
+ * room on this square" — the caller dispatches `staff_place_room`; any other
+ * name digs a new room. Before this the only way onto the grid was a fresh dig,
+ * so an unplaced room could never be placed from the Atlas at all.
+ *
  * Exit mode (#3477 Task 6, `RoomDocument`'s "⊕ dig or link an exit…") is the
  * prototype's implicit dig/link fork: one "Leads to" field, no mode toggle to
  * pre-answer it. Typing a name that exactly matches one of `roomOptions`
@@ -64,6 +71,8 @@ export type AddDialogRealizePayload =
   | {
       kind: 'room';
       name: string;
+      /** Set when `name` exactly (case-insensitively) matched an `unplacedOptions` entry: place it, don't dig. */
+      matchedRoomId: number | null;
       entrance: AddDialogConnection | null;
       exit: AddDialogConnection | null;
     }
@@ -111,6 +120,8 @@ export interface AddDialogProps {
   onConfirm: (payload: AddDialogRealizePayload) => void;
   /** Rooms mode: pick targets for the connection rows. Exit mode: the dig/link match pool. */
   roomOptions?: AddDialogRoomOption[];
+  /** Rooms mode: this area's rooms with no grid position yet — a name match places one instead of digging. */
+  unplacedOptions?: AddDialogRoomOption[];
   /** Rooms mode only — the plotted cell's one adjacent realized room, if any. */
   defaultNeighbor?: AddDialogNeighbor | null;
   /** Exit mode only — fires as "Leads to" changes, so the caller can live-search room names. */
@@ -124,8 +135,13 @@ function exitNote(trimmedDestination: string, matched: AddDialogRoomOption | nul
   return 'dug as a placeholder for the writing pass — you stay here';
 }
 
-/** Exit mode forks on whether the destination already exists; every other mode just adds. */
-function submitLabel(mode: AddDialogProps['mode'], matched: AddDialogRoomOption | null): string {
+/** Exit mode forks on whether the destination already exists; rooms mode on an unplaced match; areas just add. */
+function submitLabel(
+  mode: AddDialogProps['mode'],
+  matched: AddDialogRoomOption | null,
+  matchedUnplaced: AddDialogRoomOption | null = null
+): string {
+  if (mode === 'rooms') return matchedUnplaced ? 'Place' : 'Add';
   if (mode !== 'exit') return 'Add';
   return matched ? 'Link it' : 'Dig it';
 }
@@ -146,6 +162,7 @@ export function AddDialog({
   onOpenChange,
   onConfirm,
   roomOptions = [],
+  unplacedOptions = [],
   defaultNeighbor = null,
   onDestinationInput,
 }: AddDialogProps) {
@@ -196,6 +213,21 @@ export function AddDialog({
           .slice(0, 4)
       : [];
 
+  // Rooms mode's fork — a name that exactly matches an unplaced room of this
+  // area means "place that room here," anything else means "dig a new one."
+  const matchedUnplaced =
+    mode === 'rooms'
+      ? (unplacedOptions.find(
+          (option) => option.name.toLowerCase() === trimmedDestination.toLowerCase()
+        ) ?? null)
+      : null;
+  const unplacedSuggestions =
+    mode === 'rooms' && trimmedDestination !== ''
+      ? unplacedOptions
+          .filter((option) => option.name.toLowerCase().includes(trimmedDestination.toLowerCase()))
+          .slice(0, 4)
+      : [];
+
   const submit = () => {
     const trimmedName = name.trim();
     if (mode === 'areas') {
@@ -220,6 +252,7 @@ export function AddDialog({
       onConfirm({
         kind: 'room',
         name: trimmedName,
+        matchedRoomId: matchedUnplaced?.id ?? null,
         entrance: entranceConnection,
         exit: exitConnection,
       });
@@ -297,8 +330,33 @@ export function AddDialog({
             </>
           )}
 
+          {mode === 'rooms' && unplacedSuggestions.length > 0 && (
+            <div className="grid gap-1" data-testid="add-dialog-place-suggestions">
+              {unplacedSuggestions.map((option) => (
+                <button
+                  key={option.id}
+                  type="button"
+                  className="text-left text-sm text-muted-foreground hover:text-primary"
+                  onClick={() => setName(option.name)}
+                  data-testid="add-dialog-place-suggestion"
+                >
+                  ⌖ place {option.name} here
+                </button>
+              ))}
+            </div>
+          )}
+
           {mode === 'rooms' && (
             <>
+              {matchedUnplaced && (
+                <p
+                  className="font-body text-xs italic text-muted-foreground"
+                  data-testid="add-dialog-place-note"
+                >
+                  {matchedUnplaced.name} already exists here without a place on the grid; Add puts
+                  it on this square instead of digging another
+                </p>
+              )}
               <ConnectionRow
                 label="Entrance from"
                 testId="entrance"
@@ -330,7 +388,7 @@ export function AddDialog({
             Cancel
           </Button>
           <Button onClick={submit} disabled={!canSubmit} data-testid="add-dialog-submit">
-            {submitLabel(mode, matched)}
+            {submitLabel(mode, matched, matchedUnplaced)}
           </Button>
         </DialogFooter>
       </DialogContent>

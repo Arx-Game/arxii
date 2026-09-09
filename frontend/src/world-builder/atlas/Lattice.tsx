@@ -275,6 +275,15 @@ export function Lattice({
         .map((t) => ({ id: t.id, name: t.name })),
     [tiles]
   );
+  // Rooms with no grid position (dug from an exit, or seeded): naming one on a
+  // planned square places it there instead of digging a duplicate.
+  const unplacedOptions = useMemo(
+    () =>
+      tiles
+        .filter((t) => t.kind === 'room' && (t.gridX == null || t.gridY == null))
+        .map((t) => ({ id: t.id, name: t.name })),
+    [tiles]
+  );
 
   // ---- tools: prune and connect are mutually exclusive; connect is rooms-only ----
   const [pruning, setPruning] = useState(false);
@@ -421,13 +430,22 @@ export function Lattice({
       });
       pendingAreaPlacementsRef.current.set(payload.name, { x, y });
     } else if (payload.kind === 'room') {
-      runAction('staff_dig_room', {
-        area_id: nodeId,
-        name: payload.name,
-        floor,
-        grid_x: x,
-        grid_y: y,
-      });
+      if (payload.matchedRoomId != null) {
+        runAction('staff_place_room', {
+          room_id: payload.matchedRoomId,
+          grid_x: x,
+          grid_y: y,
+          floor,
+        });
+      } else {
+        runAction('staff_dig_room', {
+          area_id: nodeId,
+          name: payload.name,
+          floor,
+          grid_x: x,
+          grid_y: y,
+        });
+      }
       if (payload.entrance || payload.exit) {
         pendingLinksRef.current.set(pendingLinkKey(x, y, floor), {
           x,
@@ -755,6 +773,7 @@ export function Lattice({
         }}
         onConfirm={handleConfirmRealize}
         roomOptions={roomOptions}
+        unplacedOptions={unplacedOptions}
         defaultNeighbor={defaultNeighbor}
       />
     </div>

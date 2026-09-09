@@ -79,6 +79,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: { roomId: 5, exitName: 'east' },
       exit: { roomId: 5, exitName: 'west' },
     });
@@ -96,6 +97,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: null,
       exit: { roomId: 5, exitName: 'west' },
     });
@@ -114,6 +116,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Attic',
+      matchedRoomId: null,
       entrance: null,
       exit: null,
     });
@@ -153,6 +156,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: { roomId: 5, exitName: 'east' },
       exit: { roomId: 6, exitName: 'west' },
     });

@@ -11,7 +11,10 @@ is the routed page). **Atlas** (navigation): warrant-scoped index rail with
 pins/recents (`IndexRail`, `useAtlasState`), folio ancestry crumb, `AreaPage`
 ledger rows + the `Lattice` — one snapped grid at every altitude with
 plot-then-realize planning squares, right-click carving/voids, edge growth,
-drag-to-swap arranging (`staff_move_room`'s first dispatch), and WIP dimming
+drag-to-swap arranging (`staff_move_room`'s first dispatch), placing an unplaced
+room by naming it on a planned square (rooms mode's `AddDialog` matches the
+area's rooms with no grid position and dispatches `staff_place_room` instead of
+a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), and WIP dimming
 from `published_at`. Cross-world search lands on the hit's parent grid with
 the room highlighted. **Room Document** (`RoomDocument`): full-width drafted
 name/prose (`useDraft`, per-room localStorage), Save/Publish/delete savebar
