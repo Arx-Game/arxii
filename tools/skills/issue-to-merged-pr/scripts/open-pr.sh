@@ -4,12 +4,16 @@
 # Pushes the branch (--force-with-lease if it was rebased) and opens a PR
 # whose body is composed from templates/pr-body.md with substitutions:
 #   {{issue_number}}, {{summary}}, {{followup_list}},
-#   {{ran_or_skipped}}, {{sync_summary}}
+#   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
+#
+# Required env vars:
+#   PR_EVIDENCE_FILE - tracked review report, validated against HEAD
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
 #   PR_RAN_OR_SKIPPED - replaces {{ran_or_skipped}} (default: "ran")
-#   PR_SYNC_SUMMARY   - replaces {{sync_summary}}   (default: "(no rebase performed)")
+#   PR_SYNC_SUMMARY   - replaces {{sync_summary}} (default: "(no rebase performed)")
+#   PR_CLOSE_ISSUE    - use Closes instead of Refs only with explicit completion (default: 0)
 #   PR_TITLE          - PR title (default: derived from issue title)
 #
 # Emits the new PR number on stdout.
@@ -49,6 +53,25 @@ TEMPLATE="$SCRIPT_DIR/../templates/pr-body.md"
 SUMMARY="${PR_SUMMARY:-(no summary provided)}"
 RAN_OR_SKIPPED="${PR_RAN_OR_SKIPPED:-ran}"
 SYNC_SUMMARY="${PR_SYNC_SUMMARY:-(no rebase performed)}"
+EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
+if [[ -z "$EVIDENCE_FILE" ]]; then
+  echo "ERROR: PR_EVIDENCE_FILE is required; provide a committed review report." >&2
+  exit 1
+fi
+if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
+  echo "ERROR: PR_EVIDENCE_FILE must be a repository-relative path without '..'." >&2
+  exit 1
+fi
+if ! git ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
+  echo "ERROR: PR_EVIDENCE_FILE must name a tracked file: $EVIDENCE_FILE" >&2
+  exit 1
+fi
+REVIEWED_SHA=$(git rev-parse HEAD^1)
+uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+LINK_VERB="Refs"
+if [[ "${PR_CLOSE_ISSUE:-0}" == "1" ]]; then
+  LINK_VERB="Closes"
+fi
 
 # Build the follow-up list (markdown bullets) or "(none)".
 if [[ ${#FOLLOWUPS[@]} -eq 0 ]]; then
@@ -72,6 +95,8 @@ BODY=${BODY//\{\{summary\}\}/$SUMMARY}
 BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
 BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
+BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_FILE}
+BODY=${BODY//\{\{link_verb\}\}/$LINK_VERB}
 
 # Derive a PR title if not explicitly given.
 if [[ -z "${PR_TITLE:-}" ]]; then

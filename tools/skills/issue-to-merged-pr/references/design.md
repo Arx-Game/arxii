@@ -134,7 +134,7 @@ the state-mutating ones.
 `templates/pr-body.md`:
 
 ```markdown
-Closes #{{issue_number}}
+{{link_verb}} #{{issue_number}}
 
 ## Summary
 
@@ -144,13 +144,25 @@ Closes #{{issue_number}}
 
 {{followup_list}}
 
+## Review evidence
+
+- Report: `{{evidence_file}}`
+- The report is validated against the exact reviewed code revision before this PR is opened.
+- A PASS requires every mandatory criterion to have concrete evidence and no unresolved findings.
+- A scoped or partial change uses `Refs` and links the remaining work; it does not claim umbrella completion.
+
 ## Notes
 
-- Brainstorm/plan: {{ran_or_skipped}}{{spec_link}}
+- Spec: reviewed & approved on #{{issue_number}} (in the issue body)
+- Brainstorm/plan: {{ran_or_skipped}}
 - Sync-with-main: {{sync_summary}}
 
 <!-- last-addressed-comment: 0 -->
 ```
+
+`open-pr.sh` requires `PR_EVIDENCE_FILE` to name this tracked report and validates
+the reviewed code revision (the evidence commit parent). `PR_CLOSE_ISSUE=1` is required to use `Closes`; the default is
+`Refs`, which prevents scoped repair PRs from silently closing an umbrella issue.
 
 The trailing HTML comment is the marker `read-pr-comments.sh` reads. After the agent addresses comments and pushes, it updates the marker inline using `gh pr edit <pr> --body "<new-body-with-marker-bumped>"` (read the current body, replace the marker line, write it back — no dedicated script for this). Initial value `0` means "no comments addressed yet" — all comments are unread on first read.
 

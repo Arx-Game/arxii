@@ -24,9 +24,11 @@ redone (#3659). The artifact-driven arcs (#3305, #3540, #3477) did not have that
 problem.
 
 **REQUIRED SUB-SKILLS:** `verify-against-code` (the last screen is the rows
-finalize writes),
-`artifact-design` and `artifact-capabilities` (before writing the page),
-`deslop` for any copy that could read as lore.
+finalize writes), `artifact-design` and `artifact-capabilities` (before writing
+the page), and `deslop` for any copy that could read as lore. These are external
+harness/plugin skills, not tracked repository skills. If a required skill or its
+artifact capability is unavailable, stop with a BLOCKED review result; do not
+substitute a source-only review or claim the demo gate ran.
 
 ## The demo page is
 

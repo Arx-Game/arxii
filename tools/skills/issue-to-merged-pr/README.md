@@ -13,9 +13,11 @@ same workflow inside the devcontainer.
    to skip (chore, docs, dep-bump, typo fixes).
 3. **Implementation** — works through the plan.
 4. **Sync with main** — rebases, surfaces cross-issue overlap.
-5. **Push & PR** — opens the PR with a templated body and links to
-   follow-up issues filed during implementation.
-6. **CI watch** — polls per a smart cadence (~25 min cap).
+5. **Push & PR** — validates a committed review-evidence report against the
+   exact HEAD, then opens a templated PR with durable evidence and links to
+   follow-up issues filed during implementation. Partial work uses `Refs`.
+6. **CI watch** — polls per a smart cadence (~25 min cap), with the evidence
+   report revalidated before merge-queue enqueue.
 7. **CI fix** — reads failure logs, fixes, pushes; bails after 3 same-check
    failures or 5 total pushes.
 8. **PR-comment phase** — on re-invocation, reads unread comments via a
