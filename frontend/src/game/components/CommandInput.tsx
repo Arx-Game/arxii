@@ -17,6 +17,7 @@ import {
 import type { TargetCandidate } from '@/scenes/components/TargetPicker';
 import { useAppSelector } from '@/store/hooks';
 import type { MyRosterEntry } from '@/roster/types';
+import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
 import { submitPose, fetchScene, sceneKeys } from '@/scenes/queries';
@@ -50,6 +51,7 @@ const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
 // #2993 — the language selector only makes sense for speech modes (comprehension
 // gating applies to say/whisper/mutter; pose/emit/tt carry no in-fiction language).
 const SPEECH_COMPOSER_MODES = new Set(['say', 'whisper', 'mutter']);
+const MAX_POSE_LENGTH = 10_000;
 
 /**
  * Builds the full command string for a trimmed input given the active composer
@@ -106,6 +108,13 @@ interface CommandInputProps {
    * behind having more than one character) once the caller supplies it.
    */
   speakingAs?: { name: string; thumbnailUrl: string | null };
+  /** Narrative play uses Cmd/Ctrl+Enter; legacy command drawers may retain Enter. */
+  submitOnEnter?: boolean;
+  /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
+  draftScope?: string;
+  replyTarget?: Interaction | null;
+  onCancelReply?: () => void;
+  ready?: boolean;
 }
 
 export function CommandInput({
@@ -125,10 +134,65 @@ export function CommandInput({
   onPoseSubmitted,
   isAtPlace,
   speakingAs,
+  submitOnEnter = true,
+  draftScope,
+  replyTarget,
+  onCancelReply,
+  ready = true,
 }: CommandInputProps) {
-  const [command, setCommand] = useState('');
+  const draftStorageKey = draftScope ? `arx:play-draft:v1:${draftScope}` : null;
+  const [command, setCommand] = useState(() => {
+    if (!draftStorageKey) return '';
+    try {
+      return sessionStorage.getItem(draftStorageKey) ?? '';
+    } catch {
+      return '';
+    }
+  });
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
+  const previousDraftKey = useRef(draftStorageKey);
+  const skipPersistOnce = useRef(false);
+  const suppressDraftFlush = useRef(false);
+  useEffect(() => {
+    if (previousDraftKey.current === draftStorageKey) return;
+    previousDraftKey.current = draftStorageKey;
+    skipPersistOnce.current = true;
+    try {
+      setCommand(draftStorageKey ? (sessionStorage.getItem(draftStorageKey) ?? '') : '');
+    } catch {
+      setCommand('');
+    }
+  }, [draftStorageKey]);
+  useEffect(() => {
+    if (skipPersistOnce.current) {
+      skipPersistOnce.current = false;
+      return;
+    }
+    if (!draftStorageKey) return;
+    const timer = window.setTimeout(() => {
+      try {
+        if (command) sessionStorage.setItem(draftStorageKey, command);
+        else sessionStorage.removeItem(draftStorageKey);
+      } catch {
+        /* Storage can be unavailable; the in-memory draft remains usable. */
+      }
+    }, 500);
+    return () => {
+      window.clearTimeout(timer);
+      // A reference view can temporarily unmount the composer. Flush the
+      // current draft so opening history immediately cannot lose text.
+      if (suppressDraftFlush.current) {
+        suppressDraftFlush.current = false;
+        return;
+      }
+      try {
+        if (draftStorageKey && command) sessionStorage.setItem(draftStorageKey, command);
+      } catch {
+        /* keep the in-memory draft when storage is unavailable */
+      }
+    };
+  }, [command, draftStorageKey]);
   // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
   const [isEntrance, setIsEntrance] = useState(false);
   // #3294 — pose as this bonded, present companion instead of yourself. Sticky
@@ -155,10 +219,24 @@ export function CommandInput({
     enabled: !!sceneId,
   });
 
+  const clearStoredDraft = useCallback(() => {
+    suppressDraftFlush.current = true;
+    if (!draftStorageKey) return;
+    try {
+      sessionStorage.removeItem(draftStorageKey);
+    } catch {
+      /* keep in memory */
+    }
+  }, [draftStorageKey]);
+
   const handleSubmit = useCallback(() => {
     if (submittingRef.current) return;
     const trimmed = command.trim();
     if (!trimmed) return;
+    if (command.length > MAX_POSE_LENGTH) {
+      toast.error(`Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`);
+      return;
+    }
 
     // I4: Whisper mode requires a target — don't send a malformed command
     if (composerMode?.command === 'whisper' && composerMode.targets.length === 0) {
@@ -178,6 +256,7 @@ export function CommandInput({
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
           setCommand('');
+          clearStoredDraft();
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
@@ -232,6 +311,7 @@ export function CommandInput({
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
           setCommand('');
+          clearStoredDraft();
           setIsEntrance(false);
           // #2183 — an entrance technique was attached: dispatch it now that
           // the entry pose exists, so EntranceAction can anchor to it. Plain
@@ -268,6 +348,7 @@ export function CommandInput({
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
     setCommand('');
+    clearStoredDraft();
     // I3: Clear synchronously — React batches the state updates above,
     // so this runs on the same tick and prevents double-submission.
     submittingRef.current = false;
@@ -286,6 +367,7 @@ export function CommandInput({
     onPoseSubmitted,
     isEntrance,
     entranceTechnique,
+    clearStoredDraft,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -380,12 +462,28 @@ export function CommandInput({
 
   return (
     <div className="shrink-0 border-t">
+      {replyTarget && (
+        <div
+          className="flex items-center gap-2 bg-accent/40 px-3 py-1.5 text-xs"
+          data-testid="reply-context"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            Replying to <strong>{replyTarget.persona.name}</strong>:{' '}
+            {replyTarget.content.slice(0, 140)}
+          </span>
+          <button type="button" className="min-h-8 underline" onClick={onCancelReply}>
+            Cancel reply
+          </button>
+        </div>
+      )}
       <RichTextInput
         value={command}
         onChange={handleChange}
         onSubmit={handleSubmit}
         onKeyDown={handleKeyDown}
-        rows={2}
+        rows={5}
+        submitOnEnter={submitOnEnter}
+        disabled={!ready}
         leftSlot={
           <div className="flex items-center gap-1">
             {speakingAs && (
@@ -451,6 +549,14 @@ export function CommandInput({
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />
+      {(command.length > MAX_POSE_LENGTH - 500 || command.length > MAX_POSE_LENGTH) && (
+        <p
+          className={`px-3 py-1 text-xs ${command.length > MAX_POSE_LENGTH ? 'text-destructive' : 'text-muted-foreground'}`}
+          role={command.length > MAX_POSE_LENGTH ? 'alert' : undefined}
+        >
+          {command.length.toLocaleString()} / {MAX_POSE_LENGTH.toLocaleString()} characters
+        </p>
+      )}
     </div>
   );
 }

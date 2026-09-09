@@ -1,10 +1,10 @@
 import re as _re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from world.scenes.constants import InteractionMode, PoseKind
+from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.models import (
     Interaction,
@@ -28,6 +28,10 @@ _DANGEROUS_LINK_RE = _re.compile(
     r"\[[^\]]*\]\((?!https?://)",
     _re.IGNORECASE,
 )
+
+
+TEMPORARY_AVAILABILITY = "temporary"
+RETAINED_AVAILABILITY = "retained"
 
 
 class InlineActionInteractionSerializer(serializers.ModelSerializer):
@@ -114,11 +118,23 @@ class InteractionListSerializer(serializers.ModelSerializer):
     language_id = serializers.IntegerField(read_only=True, allow_null=True)
     language_name = serializers.SerializerMethodField()
     attributed_companion = serializers.SerializerMethodField()
+    # Additive narrative-play contract fields. Legacy rows deliberately expose
+    # no inferred parent; play readers treat each one as its own root.
+    thread_id = serializers.SerializerMethodField()
+    reply_to = serializers.SerializerMethodField()
+    conversation = serializers.SerializerMethodField()
+    availability = serializers.SerializerMethodField()
+    is_unread = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
         fields = [
             "id",
+            "thread_id",
+            "reply_to",
+            "conversation",
+            "availability",
+            "is_unread",
             "persona",
             "scene",
             "place",
@@ -147,6 +163,43 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "entry_endorsers",
             "entry_endorsed_by_me",
         ]
+
+    def get_thread_id(self, obj: Interaction) -> str | None:
+        """Return only explicit topology; legacy rows remain standalone roots."""
+        try:
+            value = obj.thread_id
+        except AttributeError:
+            return None
+        return None if value is None else str(value)
+
+    def get_reply_to(self, obj: Interaction) -> dict[str, Any] | None:
+        """Do not infer a parent from neighboring interactions."""
+        try:
+            parent = obj.reply_to
+        except AttributeError:
+            return None
+        if parent is None:
+            return None
+        return {"id": str(parent.id), "timestamp": parent.timestamp.isoformat()}
+
+    def get_conversation(self, obj: Interaction) -> dict[str, str]:
+        """Expose a non-authorizing context identity for reader grouping."""
+        if obj.scene_id is not None:
+            return {"kind": "room", "key": f"scene:{obj.scene_id}"}
+        return {"kind": "room", "key": "room"}
+
+    def get_availability(self, obj: Interaction) -> str:
+        """Classify temporary scene rows without changing retention behavior."""
+        try:
+            if obj.scene is not None and obj.scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+                return TEMPORARY_AVAILABILITY
+        except AttributeError:
+            pass
+        return RETAINED_AVAILABILITY
+
+    def get_is_unread(self, _obj: Interaction) -> bool:
+        """Read state is private to the play reader and defaults to unread false."""
+        return False
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
         # Per-viewer name resolution (#1109): own faces and named-public faces render real;

@@ -1,11 +1,11 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
-import { ChatWindow } from './ChatWindow';
+import { NarrativeMessageReader } from './NarrativeMessageReader';
+import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 import { ConversationTabStrip, type ConversationTabStripProps } from './ConversationTabStrip';
 import { SystemLane } from './SystemLane';
-import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -50,7 +50,7 @@ export interface GameWindowSceneFeed {
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
-  /** When present, the center column renders the structured scene feed instead of ChatWindow. */
+  /** When present, the center column renders the threaded scene reader. */
   sceneFeed?: GameWindowSceneFeed;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
@@ -75,6 +75,12 @@ interface GameWindowProps {
   pendingActionIds?: number[];
   detachedActionIds?: number[];
   onPoseSubmitted?: () => void;
+  /** Explicit parent pose selected by the reader. */
+  onReply?: (interaction: Interaction) => void;
+  replyTarget?: Interaction | null;
+  onCancelReply?: () => void;
+  /** Stable account scope for per-tab drafts. */
+  draftScopePrefix?: string;
   /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
   isAtPlace?: boolean;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
@@ -89,6 +95,11 @@ interface GameWindowProps {
   conversationTabs?: ConversationTabStripProps;
   /** "Speaking as" identity chip (#2166 Decision 3) — threaded straight to `CommandInput`. */
   speakingAs?: { name: string; thumbnailUrl: string | null };
+  /** Read-only historical reference shown in the same reader. */
+  reference?: { kind: string; key: string; title: string } | null;
+  onReturnToLive?: () => void;
+  referenceUnavailable?: boolean;
+  referenceLoading?: boolean;
 }
 
 export function GameWindow({
@@ -109,6 +120,10 @@ export function GameWindow({
   pendingActionIds,
   detachedActionIds,
   onPoseSubmitted,
+  onReply,
+  replyTarget,
+  onCancelReply,
+  draftScopePrefix,
   isAtPlace,
   placeBar,
   tavernGameWidget,
@@ -116,6 +131,10 @@ export function GameWindow({
   pendingAttachments,
   conversationTabs,
   speakingAs,
+  reference,
+  onReturnToLive,
+  referenceUnavailable,
+  referenceLoading = false,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -187,13 +206,19 @@ export function GameWindow({
   const session = active ? sessions[active] : undefined;
   if (!active || !session) {
     return (
-      <div className="flex flex-1 items-center justify-center p-4">
-        <p className="text-sm text-muted-foreground">Select a character to begin.</p>
+      <div className="flex flex-1 items-center justify-center p-6">
+        <div className="max-w-md rounded-lg border border-dashed p-8 text-center">
+          <h1 className="font-serif text-2xl">Enter the world</h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Choose a character above to begin. Your surroundings and story will appear here.
+          </p>
+        </div>
       </div>
     );
   }
 
   const sessionNames = Object.keys(sessions);
+  const awaitingRoom = !session.room && !sceneFeed;
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
     // #3412 — persist the selection server-side ALONGSIDE the existing
@@ -210,6 +235,29 @@ export function GameWindow({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      {reference && (
+        <div
+          className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm"
+          role="status"
+        >
+          <span>Reading history · {reference.title}</span>
+          <button
+            type="button"
+            className="rounded border px-3 py-1 text-xs font-medium"
+            onClick={onReturnToLive}
+          >
+            Return to live
+          </button>
+        </div>
+      )}
+      {awaitingRoom && (
+        <div
+          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          Entering the world… waiting for a confirmed location.
+        </div>
+      )}
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
@@ -239,50 +287,88 @@ export function GameWindow({
       {sceneFeed ? (
         <>
           <div
-            className="min-h-0 flex-1 overflow-y-auto"
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
             ref={feedScrollRef}
             onScroll={handleFeedScroll}
           >
-            <SceneMessages
-              sceneId={sceneFeed.sceneId}
-              filteredInteractions={sceneFeed.interactions}
-              onAvatarClick={onAvatarClick}
-              onAddTarget={onAddTarget}
-              onAttachAction={onAttachAction}
-            />
-            {sceneFeed.hasNextPage && (
-              <button onClick={() => sceneFeed.fetchNextPage()} className="mt-4 px-4">
-                Load More
-              </button>
+            {referenceLoading && reference && (
+              <div
+                className="mx-auto my-8 max-w-md p-6 text-center text-muted-foreground"
+                role="status"
+              >
+                Loading history…
+              </div>
+            )}
+            {!referenceLoading && referenceUnavailable && reference && (
+              <div
+                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
+                role="alert"
+              >
+                <h2 className="font-serif text-xl">This pose is no longer available</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  The requested history cannot be shown with your current access.
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded border px-3 py-2 text-sm"
+                  onClick={onReturnToLive}
+                >
+                  Return to live
+                </button>
+              </div>
+            )}
+            {!referenceLoading && !referenceUnavailable && (
+              <ThreadedNarrativeReader
+                sceneId={sceneFeed.sceneId}
+                interactions={sceneFeed.interactions}
+                hasNextPage={sceneFeed.hasNextPage}
+                fetchNextPage={sceneFeed.fetchNextPage}
+                onAvatarClick={onAvatarClick}
+                onAddTarget={onAddTarget}
+                onAttachAction={onAttachAction}
+                onReply={onReply}
+                readOnly={Boolean(reference)}
+              />
             )}
           </div>
-          <SystemLane messages={session.messages} />
+          {!reference && <SystemLane messages={session.messages} />}
         </>
       ) : (
-        <ChatWindow messages={session.messages} />
+        <NarrativeMessageReader messages={session.messages} />
       )}
       {placeBar}
       {tavernGameWidget}
       {speakerQueueBar}
       {pendingAttachments}
-      <CommandInput
-        character={active}
-        sceneId={sceneFeed?.sceneId}
-        personaId={personaId}
-        composerMode={composerMode}
-        onModeChange={onModeChange}
-        targetToAppend={targetToAppend}
-        onTargetConsumed={onTargetConsumed}
-        actionAttachment={actionAttachment}
-        onActionAttach={onActionAttach}
-        onActionDetach={onActionDetach}
-        onSubmitAction={onSubmitAction}
-        pendingActionIds={pendingActionIds}
-        detachedActionIds={detachedActionIds}
-        onPoseSubmitted={onPoseSubmitted}
-        isAtPlace={isAtPlace}
-        speakingAs={speakingAs}
-      />
+      {reference ? (
+        <div className="shrink-0 border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+          Draft preserved for your live conversation
+        </div>
+      ) : (
+        <CommandInput
+          character={active}
+          sceneId={sceneFeed?.sceneId}
+          personaId={personaId}
+          composerMode={composerMode}
+          onModeChange={onModeChange}
+          targetToAppend={targetToAppend}
+          onTargetConsumed={onTargetConsumed}
+          actionAttachment={actionAttachment}
+          onActionAttach={onActionAttach}
+          onActionDetach={onActionDetach}
+          onSubmitAction={onSubmitAction}
+          pendingActionIds={pendingActionIds}
+          detachedActionIds={detachedActionIds}
+          onPoseSubmitted={onPoseSubmitted}
+          isAtPlace={isAtPlace}
+          speakingAs={speakingAs}
+          replyTarget={replyTarget}
+          onCancelReply={onCancelReply}
+          submitOnEnter={false}
+          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
+          ready={Boolean(session.room)}
+        />
+      )}
     </div>
   );
 }

@@ -16960,6 +16960,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/play/context/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET a small authorized context window around a retained pose. */
+    get: operations['play_context_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/play/conversations/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET authorized conversation summaries for the play navigator. */
+    get: operations['play_conversations_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/play/poses/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET authorized poses using the existing enriched interaction DTO. */
+    get: operations['play_poses_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/play/search/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Search only viewer-rendered, authorized interaction text. */
+    get: operations['play_search_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/player-submissions/bug-reports/': {
     parameters: {
       query?: never;
@@ -31353,6 +31421,20 @@ export interface components {
     };
     InteractionDetail: {
       readonly id: number;
+      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      readonly thread_id: string | null;
+      /** @description Do not infer a parent from neighboring interactions. */
+      readonly reply_to: {
+        [key: string]: unknown;
+      } | null;
+      /** @description Expose a non-authorizing context identity for reader grouping. */
+      readonly conversation: {
+        [key: string]: string;
+      };
+      /** @description Classify temporary scene rows without changing retention behavior. */
+      readonly availability: string;
+      /** @description Read state is private to the play reader and defaults to unread false. */
+      readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {
         id: number;
@@ -31537,6 +31619,20 @@ export interface components {
     };
     InteractionList: {
       readonly id: number;
+      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      readonly thread_id: string | null;
+      /** @description Do not infer a parent from neighboring interactions. */
+      readonly reply_to: {
+        [key: string]: unknown;
+      } | null;
+      /** @description Expose a non-authorizing context identity for reader grouping. */
+      readonly conversation: {
+        [key: string]: string;
+      };
+      /** @description Classify temporary scene rows without changing retention behavior. */
+      readonly availability: string;
+      /** @description Read state is private to the play reader and defaults to unread false. */
+      readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {
         id: number;
@@ -70469,6 +70565,78 @@ export interface operations {
         content: {
           'application/json': components['schemas']['Place'];
         };
+      };
+    };
+  };
+  play_context_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  play_conversations_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  play_poses_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  play_search_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
     };
   };

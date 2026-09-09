@@ -23,6 +23,9 @@ interface RichTextInputProps {
   rightSlot?: React.ReactNode;
   ghostText?: string;
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
+  /** Defaults true for legacy command surfaces; narrative composer opts into Cmd/Ctrl+Enter. */
+  submitOnEnter?: boolean;
+  disabled?: boolean;
 }
 
 // M10: Multi-word names (e.g. "Crucible Mundi") can't be typed manually
@@ -91,6 +94,8 @@ export function RichTextInput({
   rightSlot,
   ghostText,
   autocompleteItems,
+  submitOnEnter = true,
+  disabled = false,
 }: RichTextInputProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [autocompleteState, setAutocompleteState] = React.useState<AutocompleteState | null>(null);
@@ -241,8 +246,13 @@ export function RichTextInput({
       if (handleAutocompleteKey(e)) return;
       if (handleFormattingKey(e)) return;
 
-      // Enter to submit, Shift+Enter for newline
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Narrative writing keeps Enter for paragraphs. Legacy command surfaces
+      // retain Enter-to-send unless the caller opts into the safer shortcut.
+      if (
+        e.key === 'Enter' &&
+        !e.nativeEvent.isComposing &&
+        (submitOnEnter ? !e.shiftKey : e.ctrlKey || e.metaKey)
+      ) {
         e.preventDefault();
         onSubmit();
         return;
@@ -250,7 +260,7 @@ export function RichTextInput({
 
       onKeyDown?.(e);
     },
-    [handleAutocompleteKey, handleFormattingKey, onSubmit, onKeyDown]
+    [handleAutocompleteKey, handleFormattingKey, onSubmit, onKeyDown, submitOnEnter]
   );
 
   const handleChange = React.useCallback(
@@ -335,6 +345,15 @@ export function RichTextInput({
         <div className="mx-1 h-4 w-px bg-border" />
         <ColorPicker onSelectColor={handleColorSelect} />
         {rightSlot}
+        <button
+          type="button"
+          className="ml-auto rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          onClick={onSubmit}
+          aria-label="Send"
+          disabled={disabled}
+        >
+          Send
+        </button>
       </div>
 
       {/* Textarea with ghost text and autocomplete */}
@@ -351,6 +370,7 @@ export function RichTextInput({
           onKeyDown={handleKeyDown}
           rows={rows}
           spellCheck={true}
+          disabled={disabled}
           className="relative w-full resize-none bg-transparent px-3 py-2 text-base focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
         />
         {autocompleteItems && (
