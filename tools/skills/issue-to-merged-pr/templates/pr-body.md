@@ -8,6 +8,8 @@
 
 {{followup_list}}
 
+<!-- review-evidence-required -->
+
 ## Review evidence
 
 - Report: `{{evidence_file}}`

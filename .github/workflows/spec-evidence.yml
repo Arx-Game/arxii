@@ -28,6 +28,11 @@ jobs:
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               event = json.load(stream)
           body = event["pull_request"].get("body") or ""
+          # Ordinary PRs do not need spec/demo evidence. The issue-to-merged-pr
+          # template opts in explicitly, so only that flow is hard-gated.
+          if "<!-- review-evidence-required -->" not in body:
+              print("review evidence not required for this PR")
+              raise SystemExit(0)
           with open("/tmp/pr-body.md", "w", encoding="utf-8") as stream:
               stream.write(body)
           match = re.search(r"^- Report: `([^`]+)`$", body, re.MULTILINE)

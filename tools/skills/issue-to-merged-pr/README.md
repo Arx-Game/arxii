@@ -87,3 +87,6 @@ cross-issue overlap detection, token scopes, distribution model.
 Edit files in this directory. In the devcontainer, the symlink picks up
 changes instantly — no copy step. On bare-metal, repeat the symlink (or
 re-copy on Windows).
+
+
+Ordinary PRs are not required to carry a review report. The `spec-evidence` GitHub Action skips them unless the PR body contains the generated `<!-- review-evidence-required -->` marker; evidence-required PRs fail when the report is missing or stale.

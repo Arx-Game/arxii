@@ -276,7 +276,7 @@ are clean — it is not a separate phase requiring a fresh user request or
 re-invocation.** The only human-only gate before implementation is
 `spec:approved` (Phase 2); PR-opening, CI-watch, and CI-fix are one
 continuous run from there. A second, mechanical pre-PR gate is mandatory:
-`open-pr.sh` validates a committed review evidence report against the reviewed code revision (the parent of the evidence commit) before
+`open-pr.sh` marks evidence-required PRs and validates a committed review evidence report against the reviewed code revision (the parent of the evidence commit) before
 it pushes or opens anything. Do not write a stopping instruction like "stop
 before opening a PR" into a dispatch to a sub-skill unless the user explicitly
 asked for that checkpoint.
