@@ -147,7 +147,16 @@ function makeDetail(room: WorldBuilderRoom): WorldBuilderRoomDetail {
       starting_areas: [],
       beginnings: [],
     },
-    breadcrumb: [{ id: 5, name: 'The Grand Foyer Building', level_display: 'Building' }],
+    breadcrumb: [
+      {
+        id: 5,
+        name: 'The Grand Foyer Building',
+        level: 10,
+        level_display: 'Building',
+        grid_x: null,
+        grid_y: null,
+      },
+    ],
     exits: [],
     comfort: { level: 0, points: 0, amenity: 0, axes: [] },
     ambient_lines: [],

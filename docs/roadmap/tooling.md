@@ -14,8 +14,27 @@ plot-then-realize planning squares, right-click carving/voids, edge growth,
 drag-to-swap arranging (`staff_move_room`'s first dispatch), placing an unplaced
 room by naming it on a planned square (rooms mode's `AddDialog` matches the
 area's rooms with no grid position and dispatches `staff_place_room` instead of
-a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), and WIP dimming
-from `published_at`. Cross-world search lands on the hit's parent grid with
+a dig; 2026-09-09, the Wanderer's Rest could not be placed before this), a map view
+(2026-09-09, the reviewer building Arx: the wheel zooms around the cursor between 25%
+and 150%, dragging the ground pans, − / + / fit in the tools row, zoom and pan
+remembered per area, kind labels hidden zoomed out; pressing a tile is still the swap
+drag), the ladder made legible (2026-09-09, the reviewer expanded Arx in the rail
+and saw nothing: areas mode's `AddDialog` is titled by the level a square becomes,
+"New ward" / "Ward name"; a hint under the lattice names that level and the
+city › ward › neighborhood › building › rooms ladder; the rail reads the manager
+for every expanded node so a city's own squares list beside its wards, and an
+expanded node with nothing under it says which level to plot on its map), the ladder
+grown from either end (2026-09-09, the reviewer plotting Arx: "the city center isn't
+inside a building, it just goes neighborhood › room, and room › buildings": areas
+mode's `AddDialog` asks what a square is, an area at the next level down or any
+lower one, or a room right here, and a building planned beside a room is given its
+door in the same stroke, the dig of its first room and the link chained on the ids
+`create_area` and `staff_dig_room` now return; the folio crumb carries a ⊕ between
+two entries a level fits between, and `InsertLevelDialog` creates it at the lower
+entry's spot on the upper's map and moves the lower inside, `staff_move_room` +
+`staff_place_room` for a room, `edit_area` for an area, so "Arx City › The City
+Center" becomes "Arx City › Central Ward › Central Neighborhood › The City Center"
+from the room's own page), and WIP dimming from `published_at`. Cross-world search lands on the hit's parent grid with
 the room highlighted. **Room Document** (`RoomDocument`): full-width drafted
 name/prose (`useDraft`, per-room localStorage), Save/Publish/delete savebar
 ("Next unpublished" trance loop included), seasonal/day-night `VariantsPanel`

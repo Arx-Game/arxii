@@ -328,6 +328,15 @@ def _apply_area_plain_fields(area: Any, kwargs: dict[str, Any]) -> str | None:
             options = ", ".join(PermitEligibility.values)
             return f"No '{value}' permit eligibility. Options: {options}."
         area.permit_eligibility = value
+    return _apply_area_grid(area, kwargs)
+
+
+def _apply_area_grid(area: Any, kwargs: dict[str, Any]) -> str | None:
+    """Apply parent-local ``grid_x``/``grid_y`` kwargs to ``area``, pre-save.
+
+    Absent keys leave the coordinate untouched; an explicit ``None`` unplaces
+    it. Shared by ``create_area`` and ``edit_area``.
+    """
     for coord in ("grid_x", "grid_y"):
         if coord not in kwargs:
             continue
@@ -567,7 +576,11 @@ class _WorldBuilderAction(Action):
 class CreateAreaAction(_WorldBuilderAction):
     """Create a new AUTHORED area.
 
-    Kwargs: ``name``, ``slug``, ``level`` (int), optional ``parent_id``.
+    Kwargs: ``name``, ``slug``, ``level`` (int), optional ``parent_id`` and
+    ``grid_x``/``grid_y`` (parent-local placement, so a square planned on the
+    parent's map lands where it was planned instead of unplaced). The result's
+    ``data`` carries ``area_id`` so a caller can chain a follow-up (move a room
+    inside, dig its first room) without waiting for a refetch to reveal the id.
     """
 
     key: str = "create_area"
@@ -606,11 +619,18 @@ class CreateAreaAction(_WorldBuilderAction):
             parent=parent,
             origin=GridOrigin.AUTHORED,
         )
+        grid_error = _apply_area_grid(area, kwargs)
+        if grid_error is not None:
+            return ActionResult(success=False, message=grid_error)
         try:
             area.save()
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))
-        return ActionResult(success=True, message=f"{area.name} created (area #{area.pk}).")
+        return ActionResult(
+            success=True,
+            message=f"{area.name} created (area #{area.pk}).",
+            data={"area_id": area.pk},
+        )
 
 
 @dataclass
@@ -764,6 +784,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
         return ActionResult(
             success=True,
             message=f"{profile.objectdb.db_key} dug (#{profile.pk}).{link_note}{unplaced_note}",
+            data={"room_id": profile.pk},
         )
 
 

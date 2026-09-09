@@ -111,6 +111,35 @@ class CreateAreaActionTests(TestCase):
         assert area.name == "Golden Ward"
         assert area.origin == GridOrigin.AUTHORED
 
+    def test_create_area_places_on_the_parent_grid_and_returns_its_id(self) -> None:
+        """A square planned on the parent's map lands where it was planned, and the
+        result carries the new id so a caller can chain a move or a dig onto it."""
+        from actions.definitions.world_builder import CreateAreaAction
+
+        city = AreaFactory(name="Arx", level=AreaLevel.CITY, origin=GridOrigin.AUTHORED, slug="arx")
+        result = CreateAreaAction().run(
+            self.staff,
+            name="Central Ward",
+            slug="central-ward",
+            level=int(AreaLevel.WARD),
+            parent_id=city.pk,
+            grid_x=2,
+            grid_y=3,
+        )
+        assert result.success, result.message
+        area = Area.objects.get(slug="central-ward")
+        assert result.data == {"area_id": area.pk}
+        assert (area.parent_id, area.grid_x, area.grid_y) == (city.pk, 2, 3)
+
+    def test_create_area_refuses_a_non_numeric_grid(self) -> None:
+        from actions.definitions.world_builder import CreateAreaAction
+
+        result = CreateAreaAction().run(
+            self.staff, name="Bad Grid", slug="bad-grid", level=int(AreaLevel.WARD), grid_x="x"
+        )
+        assert not result.success
+        assert not Area.objects.filter(slug="bad-grid").exists()
+
     def test_non_staff_rejected(self) -> None:
         from actions.definitions.world_builder import CreateAreaAction
 
@@ -259,6 +288,8 @@ class StaffDigRoomActionTests(TestCase):
         profile = RoomProfile.objects.get(fixture_key="arx-city/golden-hart-taproom")
         assert profile.origin == GridOrigin.AUTHORED
         assert profile.area_id == self.authored_area.pk
+        # The new id travels in ``data`` so a caller can link or place it at once.
+        assert result.data == {"room_id": profile.pk}
 
     def test_non_staff_rejected(self) -> None:
         from actions.definitions.world_builder import StaffDigRoomAction

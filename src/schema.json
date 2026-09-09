@@ -84063,10 +84063,21 @@ components:
           type: integer
         name:
           type: string
+        level:
+          type: integer
         level_display:
           type: string
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
       required:
+      - grid_x
+      - grid_y
       - id
+      - level
       - level_display
       - name
     WorldBuilderCatalogs:

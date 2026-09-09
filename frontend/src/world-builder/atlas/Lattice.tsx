@@ -11,24 +11,23 @@
  * drag-to-swap with a 5px threshold, ⊕ edge growth, and (rooms mode) the
  * floors rail + ⟛ connect tool.
  *
- * Two backend gaps neither `create_area` nor `staff_dig_room` closes force a
- * two-step "realize, then resolve" flow instead of one dispatch:
+ * Realizing chains on the ids the actions return (2026-09-09): `create_area`
+ * takes `grid_x`/`grid_y` and answers with `data.area_id`, `staff_dig_room`
+ * with `data.room_id`, so `runAction` is awaited and the follow-ups
+ * (`staff_link_rooms` for a room's entrance/exit; for an area with an
+ * entrance, the dig of its first room and then the link) go out at once.
+ * A `runAction` that returns nothing (the story palette's, or a test's
+ * `vi.fn()`) falls back to the older "realize, then resolve" path for room
+ * links: the plotted cell goes into `pendingLinks` and an effect watching the
+ * `tiles` prop links the room once the area-manager refetch surfaces it. A
+ * dig that never lands leaves its entry stranded for the session — harmless,
+ * since nothing new is likely to land on that exact cell by coincidence.
  *
- * - `create_area` has no `grid_x`/`grid_y` kwargs at all (only `edit_area`
- *   does) — matches `CreateAreaDialog`'s existing precedent of leaving a
- *   freshly created area unplaced until an `edit_area`/arrange follow-up.
- * - Neither action's `ActionResult` returns the new row's id, so this can't
- *   just dispatch a follow-up immediately — it has to wait for the id to
- *   show up. Once dispatched, the plotted cell's name goes into
- *   `pendingPlacements`/`pendingLinks`; an effect watching the `tiles` prop
- *   resolves each entry the moment the area-manager refetch (already wired
- *   by `useWorldBuilderAction`'s cache invalidation) surfaces the new row,
- *   then dispatches `edit_area` (position) or `staff_link_rooms`
- *   (entrance/exit, via `AddDialog`'s payload) and clears the entry. A dig
- *   that never lands (a refused dispatch) leaves its entry stranded for the
- *   session — harmless, since nothing new is likely to land on that exact
- *   cell/name by coincidence, but worth knowing if this needs hardening
- *   later.
+ * Above BUILDING a map holds child areas *and* this area's own rooms (the
+ * city center is an open-air room of its neighborhood; buildings stand
+ * beside it), so areas mode's `AddDialog` offers every level that fits under
+ * this one plus "a room here", and a building planned beside a room can be
+ * given its door in the same stroke.
  *
  * Drag-to-swap gives `staff_move_room` (typed since #2449, never dispatched)
  * its first real caller: dropping a ROOM tile onto an AREA tile — reachable
@@ -38,6 +37,16 @@
  * Every other drop (same-kind, or onto open ground) is a position-only
  * dispatch (`edit_area`/`staff_place_room`), swapping the two tiles' cells
  * when the drop lands on an occupied one.
+ *
+ * The grid is looked at like a map (2026-09-09, the reviewer building Arx): the
+ * canvas sits in a fixed viewport and carries a `LatticeView` (zoom and pan,
+ * remembered per area). The wheel zooms around the cursor; pressing on ground
+ * and moving pans (a plain click still plans a square); pressing on a tile and
+ * moving is still the drag-to-swap above, because the tile's own pointer
+ * handler claims the press before the viewport sees it. − / + / fit sit in the
+ * tools row. Zoomed out past `ZOOM_LABELS_HIDE_BELOW` the tiles drop their kind
+ * label. Growth with ⊕ is unchanged; the viewport moves independently of the
+ * bounds, so a big grid is never a wide page.
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -46,6 +55,8 @@ import { Plate } from '@/components/folio';
 import { cn } from '@/lib/utils';
 import { useAccount } from '@/store/hooks';
 
+import type { DispatchResult } from '@/map-canvas/dispatch';
+import { AREA_LEVELS } from '../types';
 import { AddDialog, type AddDialogConnection, type AddDialogRealizePayload } from './AddDialog';
 import {
   boundsContaining,
@@ -55,9 +66,14 @@ import {
   computeFloorRail,
   directionBetween,
   FANCIFUL_EXIT_NAME,
+  fitView,
   growBounds,
   growFloor,
   parseCellKey,
+  readLatticeView,
+  writeLatticeView,
+  ZOOM_LABELS_HIDE_BELOW,
+  zoomAround,
   planCell,
   readGrownFloors,
   readLatticeSketch,
@@ -66,6 +82,7 @@ import {
   writeLatticeSketch,
   type CellKey,
   type LatticeSketch,
+  type LatticeView,
 } from './latticeState';
 
 export interface LatticeTile {
@@ -83,6 +100,16 @@ export interface LatticeTile {
   level?: number;
 }
 
+/**
+ * Keyed generically so this also satisfies the story palette's own action-key
+ * union. A caller that returns the dispatch result lets realize chain on the
+ * new row's id; one that returns nothing gets the refetch-driven fallback.
+ */
+export type LatticeRunAction = (
+  key: string,
+  kwargs: Record<string, unknown>
+) => void | Promise<DispatchResult | undefined>;
+
 export interface LatticeProps {
   mode: 'areas' | 'rooms';
   nodeId: number;
@@ -90,8 +117,7 @@ export interface LatticeProps {
   onOpen: (tile: LatticeTile) => void;
   /** Fires once a realize dispatch has gone out — a convenience signal, not tied to success/failure. */
   onRealize?: () => void;
-  /** Keyed generically so this also satisfies the story palette's own action-key union. */
-  runAction: (key: string, kwargs: Record<string, unknown>) => void;
+  runAction: LatticeRunAction;
   /** Areas mode only — the level new child areas realize at (`create_area`'s `level`). */
   childAreaLevel?: number;
   /** The caller's grant ceiling (#3534) — null/undefined = unlimited (staff).
@@ -107,6 +133,8 @@ export interface LatticeProps {
 }
 
 const DRAG_THRESHOLD_PX = 5;
+/** Wheel delta to zoom factor: one notch (~100px) is about a 14% step. */
+const WHEEL_ZOOM_RATE = 0.0015;
 
 function findAdjacent(tiles: LatticeTile[], x: number, y: number): LatticeTile | null {
   for (const dir of CARDINALS) {
@@ -153,10 +181,16 @@ interface PendingLink {
  * so the entrance and exit names land on opposite sides of a single exit rather
  * than producing two links between the same two rooms.
  */
+/** The numeric id an action put under `data[key]`, or null when the dispatch answered with nothing. */
+function returnedId(result: DispatchResult | undefined | void, key: string): number | null {
+  const value = result?.data?.[key];
+  return typeof value === 'number' ? value : null;
+}
+
 function linkPendingRoom(
   newRoomId: number,
   pending: PendingLink,
-  runAction: (key: string, params: Record<string, unknown>) => void
+  runAction: LatticeRunAction
 ): void {
   const { entrance, exit } = pending;
   if (entrance && exit && entrance.roomId === exit.roomId) {
@@ -236,6 +270,86 @@ export function Lattice({
   useEffect(() => {
     setSketch(readLatticeSketch(accountId, mode, nodeId, sketchFloor));
   }, [accountId, mode, nodeId, sketchFloor]);
+
+  // ---- the map view: zoom + pan, remembered per area ----
+  const [view, setView] = useState<LatticeView>(() => readLatticeView(accountId, nodeId));
+  useEffect(() => {
+    setView(readLatticeView(accountId, nodeId));
+  }, [accountId, nodeId]);
+  useEffect(() => {
+    writeLatticeView(accountId, nodeId, view);
+  }, [accountId, nodeId, view]);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
+
+  // The wheel zooms around the cursor. React registers `onWheel` passively, so
+  // the listener that must `preventDefault` (or the page scrolls too) is native.
+  useEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return undefined;
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const rect = viewport.getBoundingClientRect();
+      const factor = Math.exp(-event.deltaY * WHEEL_ZOOM_RATE);
+      setView((prev) =>
+        zoomAround(prev, factor, event.clientX - rect.left, event.clientY - rect.top)
+      );
+    };
+    viewport.addEventListener('wheel', onWheel, { passive: false });
+    return () => viewport.removeEventListener('wheel', onWheel);
+  }, []);
+
+  const zoomBy = (factor: number) => {
+    const viewport = viewportRef.current;
+    const cx = viewport ? viewport.clientWidth / 2 : 0;
+    const cy = viewport ? viewport.clientHeight / 2 : 0;
+    setView((prev) => zoomAround(prev, factor, cx, cy));
+  };
+
+  const fitToGrid = () => {
+    const viewport = viewportRef.current;
+    const canvas = canvasRef.current;
+    if (!viewport || !canvas) return;
+    setView(
+      fitView(canvas.offsetWidth, canvas.offsetHeight, viewport.clientWidth, viewport.clientHeight)
+    );
+  };
+
+  // Pressing on ground and moving pans; a tile's own pointer handler claims a
+  // press first (drag-to-swap), so this only ever sees ground and gaps. A pan
+  // suppresses the click the ground cell would otherwise get on release.
+  const suppressGroundClickRef = useRef(false);
+  const [panning, setPanning] = useState(false);
+  const handleViewportPointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement).closest('[data-testid^="lattice-tile-"]')) return;
+    const startX = event.clientX;
+    const startY = event.clientY;
+    const origin = view;
+    let moved = false;
+    const onMove = (moveEvent: PointerEvent) => {
+      const dx = moveEvent.clientX - startX;
+      const dy = moveEvent.clientY - startY;
+      if (!moved && Math.hypot(dx, dy) < DRAG_THRESHOLD_PX) return;
+      moved = true;
+      setPanning(true);
+      setView({ zoom: origin.zoom, panX: origin.panX + dx, panY: origin.panY + dy });
+    };
+    const onUp = () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      setPanning(false);
+      if (moved) suppressGroundClickRef.current = true;
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+  };
+  const groundClickSuppressed = () => {
+    if (!suppressGroundClickRef.current) return false;
+    suppressGroundClickRef.current = false;
+    return true;
+  };
+  const labelsHidden = view.zoom < ZOOM_LABELS_HIDE_BELOW;
 
   const updateSketch = (updater: (prev: LatticeSketch) => LatticeSketch) => {
     setSketch((prev) => {
@@ -336,13 +450,31 @@ export function Lattice({
   // #3534 — a granted GM whose ceiling sits below this altitude's child level
   // gets no planning affordance here at all (spec §3: "add-buttons past your
   // ceiling absent"); the warrant check refuses server-side regardless.
+  const childLevelLabel =
+    mode === 'areas' && childAreaLevel != null
+      ? AREA_LEVELS.find((choice) => choice.value === childAreaLevel)?.label
+      : undefined;
   const overCeiling =
     mode === 'areas' &&
     maxBuildLevel != null &&
     childAreaLevel != null &&
     childAreaLevel > maxBuildLevel;
+  // Every level a planned square may become here: the next one down first,
+  // then anything lower (a city can hold a neighborhood with no ward between).
+  // `overCeiling` above already withholds planning when the next level is past
+  // the caller's grant, and every lower level sits under it too.
+  const areaLevelOptions = useMemo(
+    () =>
+      mode === 'areas' && childAreaLevel != null
+        ? AREA_LEVELS.filter((choice) => choice.value <= childAreaLevel).sort(
+            (a, b) => b.value - a.value
+          )
+        : [],
+    [mode, childAreaLevel]
+  );
 
   const handleCellLeftClick = (key: CellKey, state: 'planned' | 'void' | 'empty') => {
+    if (groundClickSuppressed()) return;
     if (pruning) {
       updateSketch((prev) => carveCell(prev, key));
       return;
@@ -381,7 +513,12 @@ export function Lattice({
   const [addCell, setAddCell] = useState<{ x: number; y: number } | null>(null);
   const defaultNeighbor = useMemo(() => {
     if (!addCell) return null;
-    const neighbor = findAdjacent(placedTiles, addCell.x, addCell.y);
+    // Only a room can be an entrance; an adjacent area tile is not a neighbor.
+    const neighbor = findAdjacent(
+      placedTiles.filter((t) => t.kind === 'room'),
+      addCell.x,
+      addCell.y
+    );
     if (!neighbor) return null;
     const toNeighbor = directionBetween(
       { gridX: addCell.x, gridY: addCell.y } as LatticeTile,
@@ -391,10 +528,9 @@ export function Lattice({
     return { roomId: neighbor.id, intoName: toNeighbor.opposite, outName: toNeighbor.name };
   }, [addCell, placedTiles]);
 
-  // Cells awaiting an id that only the next `tiles` refetch will reveal —
-  // see the module doc's "realize, then resolve" note.
+  // Room links awaiting an id the dispatch didn't return — the fallback path,
+  // see the module doc.
   const pendingLinksRef = useRef<Map<string, PendingLink>>(new Map());
-  const pendingAreaPlacementsRef = useRef<Map<string, { x: number; y: number }>>(new Map());
 
   useEffect(() => {
     for (const [key, pending] of pendingLinksRef.current) {
@@ -409,52 +545,91 @@ export function Lattice({
       linkPendingRoom(newRoom.id, pending, runAction);
       pendingLinksRef.current.delete(key);
     }
-    for (const [name, pending] of pendingAreaPlacementsRef.current) {
-      const newArea = tiles.find((t) => t.kind === 'area' && t.name === name && t.gridX == null);
-      if (!newArea) continue;
-      runAction('edit_area', { area_id: newArea.id, grid_x: pending.x, grid_y: pending.y });
-      pendingAreaPlacementsRef.current.delete(name);
-    }
   }, [tiles, runAction]);
+
+  /** Create the area on this square; with an entrance, dig its first room and link it. */
+  const realizeArea = async (
+    payload: Extract<AddDialogRealizePayload, { kind: 'area' }>,
+    x: number,
+    y: number
+  ) => {
+    const created = await runAction('create_area', {
+      name: payload.name,
+      slug: slugify(payload.name),
+      level: payload.level ?? childAreaLevel,
+      parent_id: nodeId,
+      grid_x: x,
+      grid_y: y,
+    });
+    const areaId = returnedId(created, 'area_id');
+    if (!payload.entrance || areaId == null) return;
+    const dug = await runAction('staff_dig_room', {
+      area_id: areaId,
+      name: payload.entrance.firstRoomName,
+      floor: 0,
+      grid_x: 0,
+      grid_y: 0,
+    });
+    const roomId = returnedId(dug, 'room_id');
+    if (roomId == null) return;
+    await runAction('staff_link_rooms', {
+      room_a_id: payload.entrance.roomId,
+      room_b_id: roomId,
+      name_ab: payload.entrance.exitName,
+      name_ba: payload.entrance.exitBack,
+    });
+  };
+
+  /** Dig (or place) the room on this square; link it now if the dig said which room it made. */
+  const realizeRoom = async (
+    payload: Extract<AddDialogRealizePayload, { kind: 'room' }>,
+    x: number,
+    y: number
+  ) => {
+    // A room dug straight onto an area's map (areas mode) sits on its ground floor.
+    const roomFloor = mode === 'rooms' ? floor : 0;
+    const links: PendingLink = {
+      x,
+      y,
+      floor: roomFloor,
+      entrance: payload.entrance,
+      exit: payload.exit,
+    };
+    if (payload.matchedRoomId != null) {
+      await runAction('staff_place_room', {
+        room_id: payload.matchedRoomId,
+        grid_x: x,
+        grid_y: y,
+        floor: roomFloor,
+      });
+      if (payload.entrance || payload.exit)
+        linkPendingRoom(payload.matchedRoomId, links, runAction);
+      return;
+    }
+    const dug = await runAction('staff_dig_room', {
+      area_id: nodeId,
+      name: payload.name,
+      floor: roomFloor,
+      grid_x: x,
+      grid_y: y,
+    });
+    if (!payload.entrance && !payload.exit) return;
+    const roomId = returnedId(dug, 'room_id');
+    if (roomId != null) {
+      linkPendingRoom(roomId, links, runAction);
+    } else {
+      pendingLinksRef.current.set(pendingLinkKey(x, y, roomFloor), links);
+    }
+  };
 
   const handleConfirmRealize = (payload: AddDialogRealizePayload) => {
     if (!addCell) return;
     const { x, y } = addCell;
     onRealize?.();
     if (payload.kind === 'area') {
-      runAction('create_area', {
-        name: payload.name,
-        slug: slugify(payload.name),
-        level: childAreaLevel,
-        parent_id: nodeId,
-      });
-      pendingAreaPlacementsRef.current.set(payload.name, { x, y });
+      void realizeArea(payload, x, y);
     } else if (payload.kind === 'room') {
-      if (payload.matchedRoomId != null) {
-        runAction('staff_place_room', {
-          room_id: payload.matchedRoomId,
-          grid_x: x,
-          grid_y: y,
-          floor,
-        });
-      } else {
-        runAction('staff_dig_room', {
-          area_id: nodeId,
-          name: payload.name,
-          floor,
-          grid_x: x,
-          grid_y: y,
-        });
-      }
-      if (payload.entrance || payload.exit) {
-        pendingLinksRef.current.set(pendingLinkKey(x, y, floor), {
-          x,
-          y,
-          floor,
-          entrance: payload.entrance,
-          exit: payload.exit,
-        });
-      }
+      void realizeRoom(payload, x, y);
     }
     updateSketch((prev) => unplanCell(prev, cellKey(x, y)));
     setAddCell(null);
@@ -621,89 +796,107 @@ export function Lattice({
         >
           ⊕
         </Button>
-        <Plate className="flex-1 overflow-x-auto rounded-none p-0.5">
+        <Plate className="flex-1 rounded-none p-0.5">
           <div
-            className="grid gap-0.5"
-            style={{ gridTemplateColumns: `repeat(${cols}, minmax(7rem, 1fr))` }}
-            data-testid="lattice-grid"
+            ref={viewportRef}
+            className={cn(
+              'relative h-[70vh] min-h-96 touch-none select-none overflow-hidden',
+              panning ? 'cursor-grabbing' : 'cursor-grab'
+            )}
+            onPointerDown={handleViewportPointerDown}
+            data-testid="lattice-viewport"
+            data-zoom={view.zoom.toFixed(2)}
           >
-            {gridCells.map(({ x, y }) => {
-              const key = cellKey(x, y);
-              const tile = tileAt.get(key);
-              if (tile) {
+            <div
+              ref={canvasRef}
+              className="grid w-max gap-0.5"
+              style={{
+                gridTemplateColumns: `repeat(${cols}, 7rem)`,
+                transform: `translate(${view.panX}px, ${view.panY}px) scale(${view.zoom})`,
+                transformOrigin: '0 0',
+              }}
+              data-testid="lattice-grid"
+            >
+              {gridCells.map(({ x, y }) => {
+                const key = cellKey(x, y);
+                const tile = tileAt.get(key);
+                if (tile) {
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      data-cell-key={key}
+                      data-testid={`lattice-tile-${tile.id}`}
+                      data-highlighted={highlightTileId === tile.id ? 'true' : undefined}
+                      className={cn(
+                        'flex min-h-24 flex-col rounded-none border bg-card px-2 py-1.5 text-left',
+                        tile.unpublished && 'border-dashed',
+                        draggingId === tile.id && 'opacity-60',
+                        dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary',
+                        highlightTileId === tile.id && 'animate-pulse ring-2 ring-primary'
+                      )}
+                      onPointerDown={(event) => handlePointerDown(tile, event)}
+                      onContextMenu={(event) => event.preventDefault()}
+                      onClick={() => handleTileClick(tile)}
+                    >
+                      <span
+                        className={cn(
+                          'theme-heading text-sm [font-variant:small-caps]',
+                          tile.unpublished && 'text-muted-foreground'
+                        )}
+                      >
+                        {tile.name}
+                        {connectSrc?.id === tile.id && ' ⟛'}
+                      </span>
+                      {!labelsHidden && (
+                        <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted-foreground">
+                          {tile.kindLabel}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                const state = cellState(key, sketch);
                 return (
                   <button
                     key={key}
                     type="button"
                     data-cell-key={key}
-                    data-testid={`lattice-tile-${tile.id}`}
-                    data-highlighted={highlightTileId === tile.id ? 'true' : undefined}
+                    data-testid={`lattice-cell-${x}-${y}`}
+                    data-cell-state={state}
+                    aria-label={squareHint(state)}
                     className={cn(
-                      'flex min-h-24 flex-col rounded-none border bg-card px-2 py-1.5 text-left',
-                      tile.unpublished && 'border-dashed',
-                      draggingId === tile.id && 'opacity-60',
-                      dragOverKey === key && draggingId !== tile.id && 'ring-2 ring-primary',
-                      highlightTileId === tile.id && 'animate-pulse ring-2 ring-primary'
+                      'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
+                      state === 'empty' && 'border-dotted text-muted-foreground',
+                      state === 'planned' && 'border-dashed border-primary text-muted-foreground',
+                      state === 'void' && 'border-transparent opacity-35'
                     )}
-                    onPointerDown={(event) => handlePointerDown(tile, event)}
-                    onContextMenu={(event) => event.preventDefault()}
-                    onClick={() => handleTileClick(tile)}
+                    onClick={() => handleCellLeftClick(key, state)}
+                    onContextMenu={(event) => handleCellRightClick(event, key)}
                   >
-                    <span
-                      className={cn(
-                        'theme-heading text-sm [font-variant:small-caps]',
-                        tile.unpublished && 'text-muted-foreground'
-                      )}
-                    >
-                      {tile.name}
-                      {connectSrc?.id === tile.id && ' ⟛'}
-                    </span>
-                    <span className="mt-1 text-[0.6rem] uppercase tracking-wide text-muted-foreground">
-                      {tile.kindLabel}
-                    </span>
+                    {state === 'planned' && (
+                      <>
+                        <span className="italic">planned</span>
+                        <button
+                          type="button"
+                          aria-label="unplan this square"
+                          title="remove from the plan"
+                          className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            updateSketch((prev) => unplanCell(prev, key));
+                          }}
+                          data-testid={`lattice-unplan-${x}-${y}`}
+                        >
+                          ✕
+                        </button>
+                      </>
+                    )}
+                    {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
                   </button>
                 );
-              }
-              const state = cellState(key, sketch);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  data-cell-key={key}
-                  data-testid={`lattice-cell-${x}-${y}`}
-                  data-cell-state={state}
-                  aria-label={squareHint(state)}
-                  className={cn(
-                    'relative flex min-h-24 flex-col justify-center rounded-none border px-2 py-1.5 text-left text-xs',
-                    state === 'empty' && 'border-dotted text-muted-foreground',
-                    state === 'planned' && 'border-dashed border-primary text-muted-foreground',
-                    state === 'void' && 'border-transparent opacity-35'
-                  )}
-                  onClick={() => handleCellLeftClick(key, state)}
-                  onContextMenu={(event) => handleCellRightClick(event, key)}
-                >
-                  {state === 'planned' && (
-                    <>
-                      <span className="italic">planned</span>
-                      <button
-                        type="button"
-                        aria-label="unplan this square"
-                        title="remove from the plan"
-                        className="absolute right-1 top-1 text-muted-foreground hover:text-primary"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          updateSketch((prev) => unplanCell(prev, key));
-                        }}
-                        data-testid={`lattice-unplan-${x}-${y}`}
-                      >
-                        ✕
-                      </button>
-                    </>
-                  )}
-                  {state === 'empty' && !overCeiling && <span aria-hidden>⊕</span>}
-                </button>
-              );
-            })}
+              })}
+            </div>
           </div>
         </Plate>
         <Button
@@ -751,6 +944,40 @@ export function Lattice({
         >
           ✂ prune
         </Button>
+        <span className="ml-auto inline-flex items-center gap-1" data-testid="lattice-zoom">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="zoom out"
+            onClick={() => zoomBy(1 / 1.25)}
+            data-testid="lattice-zoom-out"
+          >
+            −
+          </Button>
+          <span className="w-10 text-center font-body text-xs tabular-nums text-muted-foreground">
+            {Math.round(view.zoom * 100)}%
+          </span>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            aria-label="zoom in"
+            onClick={() => zoomBy(1.25)}
+            data-testid="lattice-zoom-in"
+          >
+            +
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={fitToGrid}
+            data-testid="lattice-zoom-fit"
+          >
+            fit
+          </Button>
+        </span>
         {mode === 'rooms' && (
           <span
             className="font-body text-xs italic text-muted-foreground"
@@ -761,9 +988,20 @@ export function Lattice({
         )}
       </div>
       <p className="mt-1 font-body text-xs italic text-muted-foreground">
-        ❧ rough positions, not measurements — drag to arrange, click empty ground to plan,
-        right-click to carve.
+        ❧ rough positions, not measurements — drag a room to arrange, drag the ground to pan, wheel
+        to zoom, click empty ground to plan, right-click to carve.
       </p>
+      {childLevelLabel && (
+        <p
+          className="mt-1 font-body text-xs italic text-muted-foreground"
+          data-testid="lattice-ladder-hint"
+        >
+          a planned square here becomes a {childLevelLabel.toLowerCase()}, a lower level, or a room
+          right here (a street or square sits beside the buildings that open off it); open an area
+          to plot what it holds, and a building&apos;s map is its rooms. Drop a room on an
+          area&apos;s tile to move it inside.
+        </p>
+      )}
 
       <AddDialog
         mode={mode}
@@ -774,6 +1012,8 @@ export function Lattice({
         onConfirm={handleConfirmRealize}
         roomOptions={roomOptions}
         unplacedOptions={unplacedOptions}
+        childLevelLabel={childLevelLabel}
+        areaLevelOptions={areaLevelOptions}
         defaultNeighbor={defaultNeighbor}
       />
     </div>

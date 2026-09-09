@@ -204,6 +204,24 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         self.assertEqual(private_row["occupant_count"], 1)
         self.assertEqual(public_row["occupant_count"], 0)
 
+    def test_breadcrumb_carries_the_numeric_level_beside_its_label(self) -> None:
+        """The Atlas crumb offers "insert a level between" only where one fits,
+        which needs the number, not just the display word."""
+        response = self._get(self._url(), self.staff_account)
+        self.assertEqual(
+            response.data["breadcrumb"],
+            [
+                {
+                    "id": self.area.pk,
+                    "name": "Golden Ward",
+                    "level": int(AreaLevel.WARD),
+                    "level_display": "Ward",
+                    "grid_x": None,
+                    "grid_y": None,
+                }
+            ],
+        )
+
     def test_cross_area_exit_has_to_area_id(self) -> None:
         response = self._get(self._url(), self.staff_account)
         exits_by_id = {row["id"]: row for row in response.data["exits"]}

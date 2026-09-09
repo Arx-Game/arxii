@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
@@ -231,7 +231,151 @@ describe('Lattice — plot-then-realize', () => {
       slug: 'the-grand-foyer',
       level: 10,
       parent_id: 7,
+      grid_x: 0,
+      grid_y: 0,
     });
+  });
+
+  it('areas mode offers the lower levels too, and dispatches the one picked', async () => {
+    const { runAction } = renderLattice({
+      mode: 'areas',
+      nodeId: 7,
+      tiles: [],
+      childAreaLevel: 30,
+    });
+    await userEvent.click(screen.getByTestId('lattice-cell-0-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-0-0'));
+    const becomes = within(screen.getByTestId('add-dialog-becomes-row')).getByRole(
+      'combobox'
+    ) as HTMLSelectElement;
+    expect(Array.from(becomes.options).map((option) => option.value)).toEqual([
+      '',
+      '30',
+      '20',
+      '10',
+      'room',
+    ]);
+    await userEvent.selectOptions(becomes, '20');
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Central Neighborhood');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(runAction).toHaveBeenCalledWith(
+      'create_area',
+      expect.objectContaining({ name: 'Central Neighborhood', level: 20, parent_id: 7 })
+    );
+  });
+
+  it('areas mode digs a room right here on the ground floor when the square is a room', async () => {
+    const { runAction } = renderLattice({
+      mode: 'areas',
+      nodeId: 7,
+      tiles: [],
+      childAreaLevel: 10,
+    });
+    await userEvent.click(screen.getByTestId('lattice-cell-1-1'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-1'));
+    await userEvent.selectOptions(
+      within(screen.getByTestId('add-dialog-becomes-row')).getByRole('combobox'),
+      'room'
+    );
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The City Center');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(runAction).toHaveBeenCalledWith('staff_dig_room', {
+      area_id: 7,
+      name: 'The City Center',
+      floor: 0,
+      grid_x: 1,
+      grid_y: 1,
+    });
+    expect(runAction).not.toHaveBeenCalledWith('create_area', expect.anything());
+  });
+
+  it('a building planned beside a room gets its door: create, dig the first room, link', async () => {
+    const square = makeTile({ id: 5, name: 'The City Center', gridX: 0, gridY: 0 });
+    const runAction = vi.fn(async (key: string) => {
+      if (key === 'create_area') return { success: true, message: '', data: { area_id: 77 } };
+      if (key === 'staff_dig_room') return { success: true, message: '', data: { room_id: 88 } };
+      return { success: true, message: '' };
+    });
+    renderLattice({
+      mode: 'areas',
+      nodeId: 7,
+      tiles: [square],
+      childAreaLevel: 10,
+      runAction,
+    });
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Sleepers Chambers');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    await waitFor(() => expect(runAction).toHaveBeenCalledTimes(3));
+    expect(runAction.mock.calls).toEqual([
+      [
+        'create_area',
+        {
+          name: 'Sleepers Chambers',
+          slug: 'sleepers-chambers',
+          level: 10,
+          parent_id: 7,
+          grid_x: 1,
+          grid_y: 0,
+        },
+      ],
+      ['staff_dig_room', { area_id: 77, name: 'Entry', floor: 0, grid_x: 0, grid_y: 0 }],
+      [
+        'staff_link_rooms',
+        { room_a_id: 5, room_b_id: 88, name_ab: 'Sleepers Chambers', name_ba: 'out' },
+      ],
+    ]);
+  });
+
+  it('a refused create stops the chain: no dig, no link', async () => {
+    const square = makeTile({ id: 5, name: 'The City Center', gridX: 0, gridY: 0 });
+    const runAction = vi.fn(async () => ({ success: false, message: 'refused' }));
+    renderLattice({ mode: 'areas', nodeId: 7, tiles: [square], childAreaLevel: 10, runAction });
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Sleepers Chambers');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    await waitFor(() => expect(runAction).toHaveBeenCalledTimes(1));
+    expect(runAction).not.toHaveBeenCalledWith('staff_dig_room', expect.anything());
+  });
+
+  it('rooms mode links a dug room at once when the dig answers with its id', async () => {
+    const neighbor = makeTile({ id: 5, name: 'The Gallery Stair', gridX: 0, gridY: 0 });
+    const runAction = vi.fn(async (key: string) => {
+      if (key === 'staff_dig_room') return { success: true, message: '', data: { room_id: 99 } };
+      return { success: true, message: '' };
+    });
+    renderLattice({ mode: 'rooms', tiles: [neighbor], runAction });
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.click(screen.getByTestId('lattice-cell-1-0'));
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The Wine Cellar');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    await waitFor(() =>
+      expect(runAction).toHaveBeenCalledWith('staff_link_rooms', {
+        room_a_id: 99,
+        room_b_id: 5,
+        name_ab: 'west',
+        name_ba: 'east',
+      })
+    );
+  });
+
+  it('areas mode carries the ladder hint naming the level a square becomes', () => {
+    renderLattice({ mode: 'areas', tiles: [], childAreaLevel: 30 });
+    expect(screen.getByTestId('lattice-ladder-hint')).toHaveTextContent(
+      'a planned square here becomes a ward'
+    );
+  });
+
+  it('rooms mode carries no ladder hint', () => {
+    renderLattice({ mode: 'rooms', tiles: [] });
+    expect(screen.queryByTestId('lattice-ladder-hint')).not.toBeInTheDocument();
   });
 
   it('areas mode hides the connection rows in Add', async () => {
@@ -302,33 +446,6 @@ describe('Lattice — plot-then-realize', () => {
       name_ab: 'west',
       name_ba: 'east',
     });
-  });
-
-  it('areas mode resolves a pending create_area placement once the unplaced area appears', () => {
-    const { runAction, rerenderWith } = renderLattice({
-      mode: 'areas',
-      nodeId: 7,
-      tiles: [],
-      childAreaLevel: 10,
-    });
-
-    fireEvent.click(screen.getByTestId('lattice-cell-2-1'));
-    fireEvent.click(screen.getByTestId('lattice-cell-2-1'));
-    fireEvent.change(screen.getByTestId('add-dialog-name'), { target: { value: 'New Ward' } });
-    fireEvent.click(screen.getByTestId('add-dialog-submit'));
-
-    expect(runAction).not.toHaveBeenCalledWith('edit_area', expect.anything());
-
-    const unplacedArea = makeTile({
-      id: 55,
-      kind: 'area',
-      name: 'New Ward',
-      gridX: null,
-      gridY: null,
-    });
-    rerenderWith({ tiles: [unplacedArea] });
-
-    expect(runAction).toHaveBeenCalledWith('edit_area', { area_id: 55, grid_x: 2, grid_y: 1 });
   });
 });
 
@@ -594,5 +711,79 @@ describe('Lattice — search-hit highlight (#3477 Task 6)', () => {
     renderLattice({ tiles, highlightTileId: null });
 
     expect(screen.getByTestId('lattice-tile-1')).not.toHaveAttribute('data-highlighted');
+  });
+});
+
+describe('Lattice — the map view (zoom and pan)', () => {
+  function transformOf() {
+    return (screen.getByTestId('lattice-grid') as HTMLElement).style.transform;
+  }
+
+  it('starts at 100% with the canvas unmoved', () => {
+    renderLattice({ tiles: [makeTile({ id: 1 })] });
+    expect(screen.getByTestId('lattice-viewport')).toHaveAttribute('data-zoom', '1.00');
+    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+  });
+
+  it('the wheel zooms out and in around the cursor, within the clamp', () => {
+    renderLattice({ tiles: [makeTile({ id: 1 })] });
+    const viewport = screen.getByTestId('lattice-viewport');
+    fireEvent.wheel(viewport, { deltaY: 500, clientX: 0, clientY: 0 });
+    const zoomedOut = Number(viewport.getAttribute('data-zoom'));
+    expect(zoomedOut).toBeLessThan(1);
+    fireEvent.wheel(viewport, { deltaY: -500, clientX: 0, clientY: 0 });
+    expect(Number(viewport.getAttribute('data-zoom'))).toBeGreaterThan(zoomedOut);
+    for (let i = 0; i < 40; i += 1) fireEvent.wheel(viewport, { deltaY: 1000 });
+    expect(viewport.getAttribute('data-zoom')).toBe('0.25');
+  });
+
+  it('− and + step the zoom and zoomed out the tiles drop their kind label', async () => {
+    renderLattice({ tiles: [makeTile({ id: 1, kindLabel: 'chamber' })] });
+    expect(screen.getByText('chamber')).toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    await userEvent.click(screen.getByTestId('lattice-zoom-out'));
+    expect(Number(screen.getByTestId('lattice-viewport').getAttribute('data-zoom'))).toBeLessThan(
+      0.6
+    );
+    expect(screen.queryByText('chamber')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByTestId('lattice-zoom-in'));
+    expect(
+      Number(screen.getByTestId('lattice-viewport').getAttribute('data-zoom'))
+    ).toBeGreaterThan(0.6);
+    expect(screen.getByText('chamber')).toBeInTheDocument();
+  });
+
+  it('dragging the ground pans the canvas and does not plan the square it started on', async () => {
+    renderLattice({ tiles: [] });
+    const ground = screen.getByTestId('lattice-cell-1-0');
+    fireEvent.pointerDown(ground, { clientX: 10, clientY: 10, button: 0 });
+    fireEvent.pointerMove(window, { clientX: 40, clientY: 25 });
+    fireEvent.pointerUp(window, { clientX: 40, clientY: 25 });
+    fireEvent.click(ground);
+    expect(transformOf()).toBe('translate(30px, 15px) scale(1)');
+    expect(ground).toHaveAttribute('data-cell-state', 'empty');
+    // the suppression is one-shot: the next plain click plans as usual
+    await userEvent.click(ground);
+    expect(ground).toHaveAttribute('data-cell-state', 'planned');
+  });
+
+  it('pressing on a tile is still a tile drag, never a pan', async () => {
+    const { runAction } = renderLattice({ tiles: [makeTile({ id: 1 })] });
+    await drag(screen.getByTestId('lattice-tile-1'), screen.getByTestId('lattice-cell-1-0'));
+    expect(transformOf()).toBe('translate(0px, 0px) scale(1)');
+    expect(runAction).toHaveBeenCalledWith(
+      'staff_place_room',
+      expect.objectContaining({ room_id: 1, grid_x: 1, grid_y: 0 })
+    );
+  });
+
+  it('remembers the view per area', () => {
+    const first = renderLattice({ nodeId: 42, tiles: [] });
+    fireEvent.wheel(screen.getByTestId('lattice-viewport'), { deltaY: 500 });
+    const zoom = screen.getByTestId('lattice-viewport').getAttribute('data-zoom');
+    first.unmount();
+    renderLattice({ nodeId: 42, tiles: [] });
+    expect(screen.getByTestId('lattice-viewport')).toHaveAttribute('data-zoom', zoom);
   });
 });

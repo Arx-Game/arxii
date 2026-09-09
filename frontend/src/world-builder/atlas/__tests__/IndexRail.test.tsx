@@ -112,7 +112,16 @@ function makeManager(
       starting_areas: [],
       beginnings: [],
     },
-    breadcrumb: [{ id: area.id, name: area.name, level_display: area.level_display }],
+    breadcrumb: [
+      {
+        id: area.id,
+        name: area.name,
+        level: area.level,
+        level_display: area.level_display,
+        grid_x: area.grid_x,
+        grid_y: area.grid_y,
+      },
+    ],
     rooms,
     resonances: [],
     exits: [],
@@ -133,11 +142,20 @@ const publishedRoom = makeRoom({
   area_id: 2,
   published_at: '2026-01-01T00:00:00Z',
 });
+// A square that sits directly on the ward, beside its building (rooms live at any level).
+const wardSquare = makeRoom({
+  id: 202,
+  name: 'Sentry Post',
+  area_id: 1,
+  published_at: null,
+});
+// A ward with neither buildings nor squares: the rail says what to plot on it.
+const emptyWard = makeArea({ id: 3, name: 'Eastern Ward', level: 30, children_count: 0 });
 
 function mockQueries() {
   vi.mocked(useWorldBuilderAreasQuery).mockImplementation((params = {}, enabled) => {
     if (params.hasParent === false) {
-      return { data: { results: [ward], count: 1 }, isLoading: false } as never;
+      return { data: { results: [ward, emptyWard], count: 2 }, isLoading: false } as never;
     }
     if (params.parent === 1 && enabled !== false) {
       return { data: { results: [foyer], count: 1 }, isLoading: false } as never;
@@ -152,7 +170,10 @@ function mockQueries() {
       } as never;
     }
     if (areaId === 1) {
-      return { data: makeManager(ward, [unpublishedRoom]), isLoading: false } as never;
+      return { data: makeManager(ward, [wardSquare]), isLoading: false } as never;
+    }
+    if (areaId === 3) {
+      return { data: makeManager(emptyWard, []), isLoading: false } as never;
     }
     return { data: undefined, isLoading: false } as never;
   });
@@ -173,6 +194,11 @@ describe('IndexRail', () => {
 
     await userEvent.click(screen.getByTestId('index-expand-1'));
     expect(await screen.findByText('The Grand Foyer')).toBeInTheDocument();
+    // The ward's own square is listed beside its building, not only under buildings.
+    expect(
+      screen.getByText('Sentry Post').closest('[data-testid="index-room-node"]')
+    ).not.toBeNull();
+    expect(screen.queryByTestId('index-empty-node')).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByTestId('index-expand-2'));
     const galleryStair = await screen.findByText('Gallery Stair');
@@ -196,8 +222,17 @@ describe('IndexRail', () => {
     const onSelect = vi.fn();
     renderWithProviders(<IndexRail current={null} onSelect={onSelect} pinned={[]} recents={[]} />);
 
-    await userEvent.click(screen.getByTestId('index-area-node'));
+    await userEvent.click(screen.getAllByTestId('index-area-node')[0]);
     expect(onSelect).toHaveBeenCalledWith({ kind: 'area', id: 1 }, 'Central Ward');
+  });
+
+  it('an expanded node with no areas and no rooms says what to plot on its map', async () => {
+    renderWithProviders(<IndexRail current={null} onSelect={vi.fn()} pinned={[]} recents={[]} />);
+
+    await userEvent.click(screen.getByTestId('index-expand-3'));
+    expect(await screen.findByTestId('index-empty-node')).toHaveTextContent(
+      "nothing here yet: plan a square on Eastern Ward's map to add a neighborhood or a room"
+    );
   });
 
   it("jumps to a room from the current area's unpublished list", async () => {
@@ -208,7 +243,7 @@ describe('IndexRail', () => {
 
     expect(screen.getByTestId('index-unpublished')).toHaveTextContent('Unpublished rooms — 1');
     await userEvent.click(screen.getByTestId('index-unpublished-room'));
-    expect(onSelect).toHaveBeenCalledWith({ kind: 'roomdoc', id: 200 }, 'Gallery Stair');
+    expect(onSelect).toHaveBeenCalledWith({ kind: 'roomdoc', id: 202 }, 'Sentry Post');
   });
 
   it('renders Pinned and Recent sections, with empty-state copy when there is nothing yet', () => {
