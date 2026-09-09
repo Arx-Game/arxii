@@ -223,6 +223,9 @@ export interface InteractionWsPayload {
   place_name: string | null;
   receiver_persona_ids: number[];
   target_persona_ids: number[];
+  /** Explicit narrative topology when supplied by the play protocol. */
+  thread_id?: string | null;
+  reply_to?: { id: string; timestamp: string } | null;
   /** Cosmetic companion pose attribution (#3294); null/absent for a normal pose. */
   attributed_companion_id?: number | null;
   attributed_companion_name?: string | null;

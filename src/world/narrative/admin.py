@@ -81,10 +81,12 @@ class AmbientEmoteConditionInline(admin.TabularInline):
 class AmbientEmoteLineAdmin(admin.ModelAdmin):
     """#2471 v2 — authored room/area-entry reactions (plain atmosphere + conditional)."""
 
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
+
     list_display = ("__str__", "weight", "fire_chance", "cooldown_minutes", "is_active")
     list_filter = ("parent_type", "is_active")
     search_fields = ("bystander_body", "arriver_body")
-    raw_id_fields = ("area", "room_profile")
+    raw_id_fields = ["area"]
     inlines = [AmbientEmoteConditionInline]
 
 
@@ -92,7 +94,9 @@ class AmbientEmoteLineAdmin(admin.ModelAdmin):
 class AmbientEmitAdmin(admin.ModelAdmin):
     """#2988 linger lines / risk telegraphs — admin parity for the #3269 builder verbs."""
 
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
+
     list_display = ("key", "gate_stat_key", "gate_min", "gate_max", "weight", "written_by")
     list_filter = ("gate_stat_key",)
     search_fields = ("key", "text")
-    raw_id_fields = ("area", "room_profile", "written_by", "reviewed_by")
+    raw_id_fields = ["area", "written_by", "reviewed_by"]

@@ -254,7 +254,7 @@ class InteractionViewSet(
         # (#1241) shares the exact same gate — no parallel privacy implementation.
         user = self.request.user
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
-        since = self.request.query_params.get("since")  # noqa: USE_FILTERSET
+        since = self.request.query_params.get("since") or self.request.query_params.get("from")  # noqa: USE_FILTERSET
         qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
         # #1278 — hide personas the viewer can't see (Block, enforced, staff bypass).
         # Muted personas (#2087) are NOT excluded here — their interactions stay in the

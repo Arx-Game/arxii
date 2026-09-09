@@ -55,6 +55,10 @@ export interface ThreadingState {
 }
 
 export function getThreadKey(interaction: Interaction): string {
+  // New play payloads carry explicit topology. Legacy rows continue through
+  // the audience-based fallback below; proximity and names are never used to
+  // infer a reply relationship.
+  if (interaction.thread_id) return interaction.thread_id;
   if (interaction.mode === 'whisper' && interaction.receiver_persona_ids.length > 0) {
     const ids = [interaction.persona.id, ...interaction.receiver_persona_ids].sort((a, b) => a - b);
     return `whisper:${ids.join(',')}`;

@@ -179,7 +179,7 @@ export function FocusPanel({
           </Button>
         </div>
       )}
-      <div className="flex-1 overflow-y-auto">{body}</div>
+      <div className="flex-1">{body}</div>
     </div>
   );
 }

@@ -57,7 +57,7 @@ export function Layout({ children }: LayoutProps) {
       <a href="#main-content" className="sr-only focus:not-sr-only">
         Skip to content
       </a>
-      <Header />
+      {!isFullViewport && <Header />}
       <DowntimeBanner />
       <PendingAlterationBanner />
       <SeanceOfferBanner />

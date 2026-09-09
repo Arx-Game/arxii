@@ -588,4 +588,15 @@ Two committed files are generated from the DRF backend by `just gen-api-types`: 
 
 **A `TYPE_CHECKING`-only annotation on a `SerializerMethodField` getter breaks schema generation, not tests.** drf-spectacular calls `get_type_hints()` on getter methods, which evaluates annotations at runtime even under `from __future__ import annotations`. If the annotation references a name imported only under `if TYPE_CHECKING:`, schema generation raises `NameError`. Symptom: `just gen-api-types` / `arx manage spectacular` exits 1, but unit tests + `ty` + `pnpm typecheck` all pass (none of them run spectacular) — this only surfaces via CI's `api-types-drift`. Fix: import the type at runtime instead (safe as long as the imported module's own imports are `TYPE_CHECKING`-guarded, avoiding a circular import). When adding a new `SerializerMethodField`, run `just gen-api-types` as part of its verification, not just app tests.
 
+## Admin Widgets for Large Tables
+
+A `ForeignKey` to `RoomProfile` on any first-party `ModelAdmin` (or inline) goes in
+`autocomplete_fields`, never a plain select and not `raw_id_fields`: rooms are searched
+as you type, never scrolled (reviewer, 2026-09-09; tens of thousands of rooms are
+coming). `RoomProfileAdmin.search_fields` backs the widget, so Django's admin check
+(E039/E040) passes. Apply the same to any relation whose table will grow past a few
+hundred rows (`RoomProfile`, `CharacterSheet`, `Persona`, `ItemInstance`); a small
+vocabulary table (a `TextChoices` stand-in, a catalog of dozens) may keep the select.
+Evennia's own admins are never edited (see CLAUDE.md, "Never edit dependency code").
+
 These guidelines ensure consistent, secure, and maintainable Django applications within the Arx II codebase.

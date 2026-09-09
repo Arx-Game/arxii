@@ -224,6 +224,8 @@ export interface PoseUnitProps {
    * PersonaContextMenu remains the action surface either way.
    */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+  /** Historical readers must not mount mutation controls. */
+  readOnly?: boolean;
 }
 
 /** Why a reaction chip nudges your regard, shown on hover. */
@@ -240,6 +242,7 @@ export function PoseUnit({
   onAttachAction,
   canGm = false,
   onAvatarClick,
+  readOnly = false,
 }: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
@@ -313,16 +316,22 @@ export function PoseUnit({
         </button>
         {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
         <div className="flex items-center gap-1">
-          <ReactionsFooter interaction={interaction} sceneId={sceneId} />
-          {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+          {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
+          {!readOnly && canVote && (
+            <VoteButton targetType="interaction" targetId={interaction.id} />
+          )}
         </div>
         {/* Standalone ACTION rows are authored content (claimed resonances) and
             are endorsable per spec — this is intentional, not a slip. */}
-        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
-        {interaction.pose_kind === 'entry' && (
+        {!readOnly && (
+          <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
+        )}
+        {interaction.pose_kind === 'entry' && !readOnly && (
           <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
         )}
-        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+        {!readOnly && (
+          <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+        )}
       </div>
     );
   }
@@ -350,14 +359,18 @@ export function PoseUnit({
       {/* Header: avatar + name + timestamp */}
       <div className="flex items-center gap-2">
         <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
-        <PersonaContextMenu
-          personaId={interaction.persona.id}
-          personaName={interaction.persona.name}
-          sceneId={sceneId}
-          onAttachAction={onAttachAction}
-        >
-          <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
-        </PersonaContextMenu>
+        {readOnly ? (
+          <PoseUnitActorLabel interaction={interaction} />
+        ) : (
+          <PersonaContextMenu
+            personaId={interaction.persona.id}
+            personaName={interaction.persona.name}
+            sceneId={sceneId}
+            onAttachAction={onAttachAction}
+          >
+            <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
+          </PersonaContextMenu>
+        )}
         <span className="text-xs text-muted-foreground">
           {new Date(interaction.timestamp).toLocaleString()}
         </span>
@@ -369,6 +382,15 @@ export function PoseUnit({
           {actionLinks.map((link) => (
             <ActionChip key={link.id} link={link} onExpandRequest={() => setExpanded((v) => !v)} />
           ))}
+        </div>
+      )}
+
+      {interaction.reply_to && (
+        <div
+          className="mt-1 rounded border-l-2 border-primary/40 px-2 text-xs text-muted-foreground"
+          data-testid="parent-reference"
+        >
+          Replying to pose {interaction.reply_to.id}
         </div>
       )}
 
@@ -384,11 +406,13 @@ export function PoseUnit({
         <PoseUnitDetailPanel actionInteractionIds={actionInteractionIds} />
       )}
 
-      <ReactionStrip
-        windows={interaction.reaction_windows ?? []}
-        sceneId={sceneId}
-        interactionId={interaction.id}
-      />
+      {!readOnly && (
+        <ReactionStrip
+          windows={interaction.reaction_windows ?? []}
+          sceneId={sceneId}
+          interactionId={interaction.id}
+        />
+      )}
 
       {/* Dramatic-moment tag badges (#1139) */}
       {dramaticTags.length > 0 && (
@@ -406,7 +430,7 @@ export function PoseUnit({
       )}
 
       {/* GM control: tag a dramatic moment (#1139) */}
-      {canGm && (
+      {canGm && !readOnly && (
         <div className="mt-1">
           <button
             type="button"
@@ -426,19 +450,19 @@ export function PoseUnit({
       )}
 
       {/* GM confirm/dismiss inbox: technique-driven dramatic-moment suggestions (#2183) */}
-      {canGm && (
+      {canGm && !readOnly && (
         <DramaticMomentSuggestionChip suggestions={dramaticSuggestions} sceneId={sceneId} />
       )}
 
       <div className="flex items-center gap-1">
-        <ReactionsFooter interaction={interaction} sceneId={sceneId} />
-        {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+        {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
+        {!readOnly && canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
       </div>
-      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
-      {interaction.pose_kind === 'entry' && (
+      {!readOnly && <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />}
+      {interaction.pose_kind === 'entry' && !readOnly && (
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
       )}
-      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+      {!readOnly && <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />}
     </div>
   );
 }
