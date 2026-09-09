@@ -1,33 +1,29 @@
-# Initial narrative play designs
+# Narrative play design and implementation specification
 
-This snapshot preserves the first interactive concepts for replacing Arx II's browser terminal. These are design references, not an implementation or a settled visual specification. No production application code is changed by this snapshot.
+Tracking issue: [Arx-Game/arxii #3731](https://github.com/Arx-Game/arxii/issues/3731).
 
-## Decisions after the initial review
+Start with **[arx-play-specification.md](arx-play-specification.md)**. It is the authoritative design handoff and supersedes the preliminary layout guidance in the original brief. It specifies one sidebar, long-form typography, independently scrolling history/context, explicit collapsible reply threads, historical reference, scoped drafts, lifecycle states, data contracts, privacy/retention boundaries, existing-code reuse and 22 acceptance journeys.
 
-- **Firm:** remove the terminal from every player-facing web-play state. Entry, exploration, quiet rooms, active scenes, combat, and failures all need intentional interfaces. A reskinned or collapsed terminal does not meet the requirement.
-- **Tentatively preferred:** the narrative workspace direction: meaningful surroundings, readable roleplay, visible audience and authorship, a persistent composer, and contextual character/object/action/encounter tools.
-- **Provisional:** the original three-column arrangement, exact panel contents, typography, spacing, navigation and visual treatment. The screenshots are a starting point, not a pixel-perfect implementation contract.
-- **New review requirement — long-form RP:** people regularly write several paragraphs per pose. The initial font is probably too large. Choose a smaller readable default, with adjustable font size, line height and message density. Test multiple consecutive long poses and long drafts, not only short chat samples. Do not silently truncate contributions; any collapse/expand behavior is an explicit reader preference.
-- **New review requirement — writing width:** a central feed/composer between permanent left and right sidebars may be too narrow. Compare a wide narrative and writing column plus one scrollable sidebar containing the contextual sections. Collapsible/dockable sections and a reading mode are candidates. Preserve comfortable reading line length at very wide screens; do not simply stretch prose without bounds. The one-sided layout is a candidate for the default, not yet a final ruling.
-- **OOC channels are expected:** decide where persistent public/org OOC channels live and how players control their visibility. Keep persistent channels distinct from scene-local OOC, room roleplay, private whispers and IC correspondence. Coordinate with [#3299](https://github.com/Arx-Game/arxii/issues/3299), which already calls for filtering, muting, ordering and notification controls so channels never crowd IC. Its proposed right-hand Channels tab is subject to the broader layout review, not a requirement to preserve two permanent sidebars.
-- **Allow future customization:** separate panel content and data subscriptions from where panels are placed. Use stable panel identifiers and a layout-preference boundary with defaults and a reset path. Candidate settings include pane visibility/order/width, docking, font size, density and channel notifications. Exact controls and persistence scope can be iterated later; a full drag-and-drop dashboard editor is not a prerequisite for removing the terminal. Customization never changes audience or authorization and must not make urgent actionable prompts unreachable.
-- **Priority:** remove the terminal and establish a coherent narrative experience first. Iterate on the precise look and organization. Typed character-entry acknowledgements and robust reconnect handling are important secondary work, not the focus of this design issue.
+The user confirmed that references open in the same wide reader, preserving the live draft with a clear return to live. Right placement, 14px desktop prose and explicit reply semantics are concrete design defaults; presentation can be refined without dropping the mandatory capabilities.
 
-## Files
+## Revised reader study
 
-- [Initial narrative scene](arx-scene-desktop.png)
-- [Exploring a location](arx-exploration-desktop.png)
-- [Combat within the scene](arx-combat-desktop.png)
-- [Phone presentation](arx-scene-mobile.png)
-- [Conversation lounge alternative](arx-conversation-desktop.png)
-- [Reading room alternative](arx-reading-desktop.png)
-- [Standalone interactive preview](arx-play-preview.html): download and open locally. World/Scene navigation, conversations, inspection and writing operate only on example data. GitHub displays the source; it does not run the preview. The optional Codex design-control panel is not available in this standalone export; the alternative presentations and combat state are preserved in screenshots and the original source.
-- [Original interactive fragment](arx-narrative-play.html): preserves the optional Codex controls for layout, moment and prose size.
-- [Initial design brief](arx-play-design.md): code findings, proposed experiences, implementation sequence and acceptance criteria from before the follow-up review. **The review decisions above take precedence wherever the initial brief assumes a three-column default or larger prose.**
+- [Interactive source](arx-wide-reader.html) for the Codex conversation.
+- [Standalone preview](arx-wide-reader-preview.html): download and open locally; GitHub displays source rather than executing it.
+- [Desktop reader](arx-wide-reader-desktop.png), [historical whisper reference](arx-wide-reader-reference.png), [phone reader](arx-wide-reader-mobile.png).
+- [Local validation results](wide-reader-validation.json).
 
-The illustrations use invented names, locations, prose, stats and encounter choices. They do not define gameplay rules or imply that unavailable data exists. Backend-authorized, data-driven actions remain authoritative. The source is a presentation study, not production code to transplant.
+The reader study demonstrates smaller prose, a single sidebar, collapsible exchanges, sample history lookup and preserved live writing. The fixture has 500 poses across 20 threads, with a 250-pose thread. Five poses are displayed per sample page so the presentation can be explored without mounting the full fixture. Production page sizes and windowing requirements are in the spec.
 
-## Validation and limits
+Try collapsing an exchange, expanding it, loading earlier replies, selecting History and searching for `Aldren`, then returning to the live draft. Optional Codex design controls change sidebar placement, prose size and spacing. All interactions remain local; sample identities/prose/actions are fictional.
 
-The original prototype was checked across 72 presentation/state/width/theme combinations, with additional checks for scoped drafts, local posts, private-thread separation in the fixture, inspection, travel, encounter declarations and phone pane access. These are prototype checks, not proof of live server privacy, reconnect correctness or production integration. Long-form typography and a one-sided sidebar remain design iterations requested by the reviewer; the original screenshots deliberately retain the initial design for comparison.
+This is a focused design study, not the implementation or proof of production performance. It does not implement backend authorization, production pagination/windowing, exact unread tracking, full conversation datasets, persistence, rich-text editing, reliable delivery, character entry or combat. Conversation selections illustrate scoped drafts; the same fixture remains visible and does not constitute a private-feed implementation. The written specification takes precedence wherever the prototype simplifies behavior.
+
+Validation: 20 combinations of light/dark theme, left/right sidebar and 320/360/736/1024/1440px widths; no horizontal page overflow or runtime errors. Local checks exercised independent scrolling, collapsed arrivals, history search, read-only reference, draft restoration, reply/send and the exported preview's form handler. Production acceptance tests remain work for implementation.
+
+## Initial designs preserved
+
+The original [brief](arx-play-design.md), [interactive study](arx-narrative-play.html), [standalone preview](arx-play-preview.html), and `arx-scene-*`, `arx-exploration-*`, `arx-combat-*`, `arx-conversation-*`, `arx-reading-*` screenshots remain as visual references. Their three-column layout is superseded by the specification. Encounter and exploration content still inform the final experience.
+
+This branch contains documentation/design artifacts only. No production implementation, merge or deployment is included. When implementation begins, create a repository worktree and follow AGENTS.md; do not transplant the prototype DOM code into React.
 

@@ -1,0 +1,16 @@
+{
+  "layouts": 20,
+  "fixturePoses": 500,
+  "checks": [
+    "independent scrolling",
+    "collapsed thread stays collapsed on arrival",
+    "historical search",
+    "read-only reference",
+    "preserved live draft",
+    "explicit reply and local send",
+    "responsive sidebar",
+    "no horizontal overflow",
+    "no runtime errors"
+  ],
+  "limitations": "Local design fixture only. No server, privacy, durable history, virtualizer or delivery integration validated."
+}
