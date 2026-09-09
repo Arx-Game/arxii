@@ -112,7 +112,10 @@ def _validate_fields(fields: dict[str, str], expected_revision: str | None) -> l
     if not _SHA.fullmatch(revision):
         errors.append("Reviewed revision must be a 40-character commit SHA")
     if expected_revision and revision != expected_revision:
-        errors.append(f"report revision {revision!r} does not match HEAD {expected_revision}")
+        errors.append(
+            "report revision "
+            f"{revision!r} does not match the reviewed code revision {expected_revision}"
+        )
     if fields["Overall outcome"].strip(" `").upper() != "PASS":
         errors.append("overall outcome must be PASS before opening a PR")
     return errors

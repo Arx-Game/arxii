@@ -7,7 +7,7 @@
 #   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
 #
 # Required env vars:
-#   PR_EVIDENCE_FILE - tracked review report, validated against HEAD
+#   PR_EVIDENCE_FILE - tracked review report, validated against the reviewed code revision
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")

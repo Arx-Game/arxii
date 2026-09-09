@@ -87,7 +87,7 @@ class ReviewEvidenceTests(unittest.TestCase):
                 check=False,
             )
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("does not match HEAD", result.stderr)
+        self.assertIn("does not match the reviewed code revision", result.stderr)
 
 
 if __name__ == "__main__":
