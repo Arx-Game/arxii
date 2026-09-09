@@ -814,8 +814,8 @@ export function GamePage() {
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}
               onReturnToLive={returnToLive}
-              referenceUnavailable={referenceUnavailable}
-              referenceLoading={referenceLoading}
+              referenceUnavailable={Boolean(reference && referenceUnavailable)}
+              referenceLoading={Boolean(reference && referenceLoading)}
               {...placeWidgets(placesRoomId)}
               pendingAttachments={
                 sceneId ? (
