@@ -59,6 +59,8 @@ const mockStartingArea: StartingArea = {
   crest_image: null,
   is_accessible: true,
   realm_theme: 'default',
+  realm_slug: 'arx',
+  realm_name: 'Arx',
 };
 
 const mockBeginnings: Beginnings = {

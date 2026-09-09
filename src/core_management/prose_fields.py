@@ -97,6 +97,7 @@ NON_PROSE_TEXT_FIELDS = frozenset(
         "color_hex",
         "crest_asset",
         "display_name",
+        "formal_name",  # a realm's long name (#3725): a title, not prose
         "draft_validator_path",
         "fatigue_category",
         "gm_notes",

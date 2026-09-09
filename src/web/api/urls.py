@@ -91,6 +91,8 @@ urlpatterns = [
     # Checks API
     path("checks/", include("world.checks.urls", namespace="checks")),
     path("societies/", include("world.societies.urls", namespace="societies")),
+    # Realm pages (#3725): the hub, a realm by slug, its organizations and boards
+    path("realms/", include("world.realms.urls", namespace="realms")),
     # Building-manager API (#670)
     path("buildings/", include("world.buildings.urls", namespace="buildings")),
     # Worship + ceremonies (#2355/#2289)

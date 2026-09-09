@@ -78,8 +78,10 @@ export function GatefoldPage() {
   return (
     <div className="gatefold">
       <Cover />
-      <RealmsChapter />
+      {/* Chapter order (#3723): what kind of game this is comes first, since this page
+          shows only to visitors who are not logged in; then who you may wake as. */}
       <CodexChapter />
+      <RealmsChapter />
       <ScenesChapter />
       <Door />
     </div>

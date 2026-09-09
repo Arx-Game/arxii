@@ -23,6 +23,9 @@ export interface StartingArea {
   crest_image: string | null;
   is_accessible: boolean;
   realm_theme: string;
+  /** The realm page's route key and name (#3725); null when the area has no realm. */
+  realm_slug: string | null;
+  realm_name: string | null;
 }
 
 /** The world fact behind a heritage's CG age ceiling (#3663). */

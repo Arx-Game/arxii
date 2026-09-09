@@ -74,6 +74,8 @@ export const mockStartingArea: StartingArea = {
   crest_image: '/images/arx-crest.png',
   is_accessible: true,
   realm_theme: 'arx',
+  realm_slug: 'arx',
+  realm_name: 'Arx',
 };
 
 export const mockStartingAreaNoHeritages: StartingArea = {
@@ -83,6 +85,8 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   crest_image: null,
   is_accessible: true,
   realm_theme: 'default',
+  realm_slug: 'default',
+  realm_name: 'Default',
 };
 
 export const mockStartingAreaInaccessible: StartingArea = {
@@ -92,6 +96,8 @@ export const mockStartingAreaInaccessible: StartingArea = {
   crest_image: null,
   is_accessible: false,
   realm_theme: 'default',
+  realm_slug: 'default',
+  realm_name: 'Default',
 };
 
 export const mockStartingAreas: StartingArea[] = [

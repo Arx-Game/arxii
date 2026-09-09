@@ -1371,10 +1371,13 @@ Temporary instanced rooms spawned on demand for missions, GM events, and tutoria
 - **Source:** `src/world/instances/`
 - **Details:** [instances.md](instances.md)
 ### Realms
-Game world realms (Arx, Luxan, etc.) for geographical/political organization.
+Game world realms (Arx, Luxen, etc.) for geographical/political organization, and the
+public realm pages (#3725): the Realms hub and each realm's page (testament, societies,
+houses and organizations, the two boards, the roster).
 
-- **Models:** `Realm`
-- **Integrates with:** societies (Society.realm FK), character_creation (StartingArea)
+- **Models:** `Realm`, `RealmTestamentSection`
+- **API:** `/api/realms/` (hub), `/api/realms/<slug>/` (+ `organizations/`, `notables/`); `realm_by_slug`
+- **Integrates with:** societies (Society.realm FK; shop-window and realm boards), character_creation (StartingArea; `realm_slug`), roster (`?realm=` filter), character_sheets (Profile.origin_realm)
 - **Source:** `src/world/realms/`
 - **Details:** [realms.md](realms.md)
 ### Weather (Climate baseline + transient weather — #1522)
