@@ -244,3 +244,92 @@ export function growFloor(floors: number[], edge: 'up' | 'down'): number {
   if (floors.length === 0) return edge === 'up' ? 1 : -1;
   return edge === 'up' ? Math.max(...floors) + 1 : Math.min(...floors) - 1;
 }
+
+// ---- the map view: zoom and pan (2026-09-09, the reviewer building Arx) ----
+
+/** How the grid is looked at: a scale and a translation of the canvas inside the viewport, in CSS px. */
+export interface LatticeView {
+  zoom: number;
+  panX: number;
+  panY: number;
+}
+
+export const ZOOM_MIN = 0.25;
+export const ZOOM_MAX = 1.5;
+export const DEFAULT_VIEW: LatticeView = { zoom: 1, panX: 0, panY: 0 };
+/** Below this the tiles drop their kind label so a whole district reads as a shape. */
+export const ZOOM_LABELS_HIDE_BELOW = 0.6;
+
+export function clampZoom(zoom: number): number {
+  return Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom));
+}
+
+/**
+ * Scale the view by `factor` so the canvas point under the cursor stays under the
+ * cursor (`cursorX`/`cursorY` are viewport-local). The map convention: the wheel
+ * zooms where you point, not around the corner.
+ */
+export function zoomAround(
+  view: LatticeView,
+  factor: number,
+  cursorX: number,
+  cursorY: number
+): LatticeView {
+  const zoom = clampZoom(view.zoom * factor);
+  const ratio = zoom / view.zoom;
+  return {
+    zoom,
+    panX: cursorX - (cursorX - view.panX) * ratio,
+    panY: cursorY - (cursorY - view.panY) * ratio,
+  };
+}
+
+/** The view that frames a canvas of `canvasW`×`canvasH` px inside a `viewW`×`viewH` viewport, centered. */
+export function fitView(
+  canvasW: number,
+  canvasH: number,
+  viewW: number,
+  viewH: number
+): LatticeView {
+  if (canvasW <= 0 || canvasH <= 0 || viewW <= 0 || viewH <= 0) return DEFAULT_VIEW;
+  const zoom = clampZoom(Math.min(viewW / canvasW, viewH / canvasH, 1));
+  return {
+    zoom,
+    panX: (viewW - canvasW * zoom) / 2,
+    panY: (viewH - canvasH * zoom) / 2,
+  };
+}
+
+function viewStorageKey(accountId: number | string, nodeId: number): string {
+  return `world-builder-lattice:${accountId}:${nodeId}:view`;
+}
+
+export function readLatticeView(accountId: number | string, nodeId: number): LatticeView {
+  try {
+    const raw = window.localStorage.getItem(viewStorageKey(accountId, nodeId));
+    if (!raw) return DEFAULT_VIEW;
+    const parsed = JSON.parse(raw) as Partial<LatticeView>;
+    if (
+      typeof parsed.zoom !== 'number' ||
+      typeof parsed.panX !== 'number' ||
+      typeof parsed.panY !== 'number'
+    ) {
+      return DEFAULT_VIEW;
+    }
+    return { zoom: clampZoom(parsed.zoom), panX: parsed.panX, panY: parsed.panY };
+  } catch {
+    return DEFAULT_VIEW;
+  }
+}
+
+export function writeLatticeView(
+  accountId: number | string,
+  nodeId: number,
+  view: LatticeView
+): void {
+  try {
+    window.localStorage.setItem(viewStorageKey(accountId, nodeId), JSON.stringify(view));
+  } catch {
+    // Storage unavailable — where you left the map is a convenience, not a requirement.
+  }
+}

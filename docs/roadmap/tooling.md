@@ -11,7 +11,10 @@ is the routed page). **Atlas** (navigation): warrant-scoped index rail with
 pins/recents (`IndexRail`, `useAtlasState`), folio ancestry crumb, `AreaPage`
 ledger rows + the `Lattice` — one snapped grid at every altitude with
 plot-then-realize planning squares, right-click carving/voids, edge growth,
-drag-to-swap arranging (`staff_move_room`'s first dispatch), and WIP dimming
+drag-to-swap arranging (`staff_move_room`'s first dispatch), a map view (2026-09-09,
+the reviewer building Arx: the wheel zooms around the cursor between 25% and 150%,
+dragging the ground pans, − / + / fit in the tools row, zoom and pan remembered per
+area, kind labels hidden zoomed out; pressing a tile is still the swap drag), and WIP dimming
 from `published_at`. Cross-world search lands on the hit's parent grid with
 the room highlighted. **Room Document** (`RoomDocument`): full-width drafted
 name/prose (`useDraft`, per-room localStorage), Save/Publish/delete savebar
