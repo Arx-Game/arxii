@@ -72,74 +72,71 @@ class ClaimKudosAction(Action):
 
 
 @dataclass
-class CastVoteAction(Action):
-    """Cast a weekly vote on another player's content. Wraps ``cast_vote``."""
+class NominateAction(Action):
+    """Nominate the writer of a pose or journal entry for good RP (#3738).
 
-    key: str = "cast_vote"
-    name: str = "Cast Vote"
-    icon: str = "thumbs-up"
+    An OOC act by the account: one nomination per nominee per week however
+    many pieces are cited. Wraps ``nominate``.
+    """
+
+    key: str = "nominate"
+    name: str = "Nominate"
+    icon: str = "award"
     category: str = "progression"
     target_type: TargetType = TargetType.SELF
 
     def execute(
         self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
     ) -> ActionResult:
-        from world.progression.services.voting import (  # noqa: PLC0415
-            cast_vote,
-            get_author_account_for_target,
-        )
-        from world.progression.types import ProgressionError  # noqa: PLC0415
-
-        account = _resolve_account(actor)
-        if account is None:
-            return ActionResult(success=False, message=_NO_ACCOUNT)
-        target_type = kwargs["target_type"]
-        target_id = int(kwargs["target_id"])
-        author = get_author_account_for_target(target_type, target_id)
-        if author is None:
-            return ActionResult(
-                success=False, message="Could not determine author for the specified target."
-            )
-        try:
-            cast_vote(
-                voter_account=account,
-                target_type=target_type,
-                target_id=target_id,
-                author_account=author,
-            )
-        except ProgressionError as exc:
-            return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="Vote cast.")
-
-
-@dataclass
-class RemoveVoteAction(Action):
-    """Remove an unprocessed weekly vote. Wraps ``remove_vote``."""
-
-    key: str = "remove_vote"
-    name: str = "Remove Vote"
-    icon: str = "thumbs-down"
-    category: str = "progression"
-    target_type: TargetType = TargetType.SELF
-
-    def execute(
-        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
-    ) -> ActionResult:
-        from world.progression.services.voting import remove_vote  # noqa: PLC0415
+        from world.progression.services.nominations import nominate  # noqa: PLC0415
         from world.progression.types import ProgressionError  # noqa: PLC0415
 
         account = _resolve_account(actor)
         if account is None:
             return ActionResult(success=False, message=_NO_ACCOUNT)
         try:
-            remove_vote(
-                voter_account=account,
+            row = nominate(
+                nominator=account,
                 target_type=kwargs["target_type"],
                 target_id=int(kwargs["target_id"]),
             )
         except ProgressionError as exc:
             return ActionResult(success=False, message=exc.user_message)
-        return ActionResult(success=True, message="Vote removed.")
+        return ActionResult(
+            success=True,
+            message="Nominated. They will not know who; it settles at week's end.",
+            data={"nomination_id": row.pk},
+        )
+
+
+@dataclass
+class WithdrawNominationAction(Action):
+    """Take back this week's citation of a piece. Wraps ``withdraw_nomination``."""
+
+    key: str = "withdraw_nomination"
+    name: str = "Withdraw Nomination"
+    icon: str = "award"
+    category: str = "progression"
+    target_type: TargetType = TargetType.SELF
+
+    def execute(
+        self, actor: ObjectDB, context: ActionContext | None = None, **kwargs: Any
+    ) -> ActionResult:
+        from world.progression.services.nominations import withdraw_nomination  # noqa: PLC0415
+        from world.progression.types import ProgressionError  # noqa: PLC0415
+
+        account = _resolve_account(actor)
+        if account is None:
+            return ActionResult(success=False, message=_NO_ACCOUNT)
+        try:
+            withdraw_nomination(
+                nominator=account,
+                target_type=kwargs["target_type"],
+                target_id=int(kwargs["target_id"]),
+            )
+        except ProgressionError as exc:
+            return ActionResult(success=False, message=exc.user_message)
+        return ActionResult(success=True, message="Nomination withdrawn.")
 
 
 @dataclass

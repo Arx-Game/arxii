@@ -577,12 +577,12 @@ class HighlightReelFeaturedSerializer(serializers.Serializer):
     The collapsed featured card is *fully sealed* — it shows no pose content, type, or
     participants until the viewer expands it, at which point the frontend fetches the
     pose through the existing interaction-detail endpoint (which re-checks visibility).
-    Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
-    (#2161) are exposed so the frontend can badge the sealed card.
+    Sending pose content here would defeat the seal, but ``reaction_count`` (#2161)
+    is exposed so the frontend can badge the sealed card. Nominations (#3738) rank
+    the reel but are never counted out loud: a nomination is invisible.
     """
 
     interaction_id = serializers.IntegerField()
-    vote_count = serializers.IntegerField()
     reaction_count = serializers.IntegerField()
 
 
@@ -591,7 +591,6 @@ class HighlightReelEntrySerializer(serializers.Serializer):
 
     interaction_id = serializers.IntegerField()
     rank = serializers.IntegerField()
-    vote_count = serializers.IntegerField()
     reaction_count = serializers.IntegerField()
 
 

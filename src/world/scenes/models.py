@@ -1025,7 +1025,12 @@ class Interaction(SharedMemoryModel):
     )
     vote_count = models.PositiveIntegerField(
         default=0,
-        help_text="Number of weekly votes (nominations for Memorable Poses)",
+        help_text=(
+            "Retired weekly vote counter. #3738 replaced votes with nominations, which "
+            "are invisible and counted from their own rows; nothing writes this any "
+            "more. The column stays because the interaction partition DDL "
+            "(scenes/sql/partition_interaction_*.sql) pins it."
+        ),
     )
     strain_committed = models.PositiveIntegerField(
         default=0,
@@ -1209,8 +1214,8 @@ class InteractionReaction(SharedMemoryModel):
     kudos/voting?" question raised in this docstring's earlier revisions:
     reactions stay their own axis (see ADR-0115) — expression + an ambient
     relationship bump (``ReactionEmoji.valence``) — distinct from kudos
-    (graciousness, ``award_kudos``) and votes (popularity/ranking,
-    ``WeeklyVote``). No migration is planned; this model is the permanent
+    (graciousness, ``award_kudos``) and nominations (popularity/ranking,
+    ``Nomination``, #3738). No migration is planned; this model is the permanent
     home for emoji reactions, not a bridge.
     """
 

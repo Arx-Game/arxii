@@ -9,21 +9,35 @@ from django.db import models
 from world.fatigue.constants import EffortLevel
 
 
-class VoteTargetType(models.TextChoices):
-    """Types of content that can receive weekly votes."""
+class NominationTargetType(models.TextChoices):
+    """The prose a nomination hangs off (#3738): a pose or a journal entry.
+
+    A nomination is "I am voting this person for good RP because of this" — the
+    piece only says where you read them; the nominee is the character who wrote it.
+    """
 
     INTERACTION = "interaction", "Interaction"
-    SCENE_PARTICIPATION = "scene_participation", "Scene Participation"
     JOURNAL = "journal", "Journal Entry"
 
 
-# Vote budget
-DEFAULT_BASE_VOTES = 7
-MAX_SCENE_BONUS_VOTES = 7
-
-# XP award amounts
-MEMORABLE_POSE_XP = [3, 2, 1]  # 1st, 2nd, 3rd place
-VOTE_XP_CAP = 50
+# Nomination settlement (#3738, the reviewer's curve, ruled 2026-09-09).
+#
+# Every settlement path counts something for the week and pays on one stepped
+# curve: the count's tier is one XP step. The tier floors to 133 are the
+# reviewer's exact numbers ("1 | 2 to 3 | 4 to 6 | 7 to 10 | 11 to 16 | 17 to 25
+# | 26 to 38 | 39 to 58 | 59 to 88 | 89 to 133"); past the table each tier widens
+# by half again (``stepped_xp`` in ``services.nomination_processing``). There is
+# no other cap: the curve is the cap.
+NOMINATION_TIER_FLOORS: tuple[int, ...] = (1, 2, 4, 7, 11, 17, 26, 39, 59, 89, 134)
+# "Nominations in general" is front-loaded so one good scene with one close
+# friend is not left in the dust: the first nominator is worth 3, each tier +1.
+NOMINATION_FIRST_XP = 3
+# "Best per scene" counts scene wins on the same curve from 1.
+BEST_IN_SCENE_FIRST_XP = 1
+# "Most nominated prose" is one instance per nominee per week by definition, so
+# a flat 1; "most nominated journal" is one writer (or a tie) game-wide.
+MOST_NOMINATED_PROSE_XP = 1
+MOST_NOMINATED_JOURNAL_XP = 1
 
 # Random scene XP
 RS_BASE_XP = 5

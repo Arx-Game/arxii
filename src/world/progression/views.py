@@ -25,14 +25,14 @@ from rest_framework.views import APIView
 
 from actions.constants import ActionBackend
 from actions.definitions.progression_rewards import (
-    CastVoteAction,
     ClaimKudosAction,
     ClaimRandomSceneAction,
     ClearPathIntentAction,
-    RemoveVoteAction,
+    NominateAction,
     RerollRandomSceneAction,
     SelectPathAction,
     SetPathIntentAction,
+    WithdrawNominationAction,
 )
 from actions.player_interface import dispatch_player_action
 from actions.types import ActionRef
@@ -46,25 +46,22 @@ from world.progression.models import (
     KudosClaimCategory,
     KudosPointsData,
     KudosTransaction,
+    Nomination,
     PathIntent,
     RandomSceneTarget,
-    WeeklyVote,
-    WeeklyVoteBudget,
     XPTransaction,
 )
 from world.progression.selectors import current_path_for_character, next_path_options
 from world.progression.serializers import (
     AccountProgressionSerializer,
-    CastVoteResponseSerializer,
-    CastVoteSerializer,
     InitialPathOptionsSerializer,
+    NominateSerializer,
+    NominationSerializer,
     PathIntentDeclareSerializer,
     PathIntentSerializer,
     PathOptionsSerializer,
     RandomSceneTargetSerializer,
     SelectPathSerializer,
-    VoteBudgetSerializer,
-    WeeklyVoteSerializer,
 )
 from world.progression.serializers.durance import (
     DuranceConveneResponseSerializer,
@@ -75,11 +72,8 @@ from world.progression.serializers.unlocks import (
     PurchaseUnlockResponseSerializer,
     PurchaseUnlockSerializer,
 )
+from world.progression.services.nominations import nominations_by_account
 from world.progression.services.spends import get_available_unlocks_for_character
-from world.progression.services.voting import (
-    get_or_create_vote_budget,
-    get_votes_by_voter,
-)
 from world.roster.models import RosterEntry
 from world.roster.selectors import puppeted_sheet_for
 from world.skills.services import skills_at_boundary
@@ -229,73 +223,66 @@ class ClaimKudosView(APIView):
 # --- Voting views ---
 
 
-class VoteViewSet(
+class NominationViewSet(
     mixins.ListModelMixin,
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """ViewSet for casting, removing, and listing weekly votes.
+    """Nominations for good RP (#3738): the nominator's own side only.
 
-    POST /votes/ — Cast a vote
-    DELETE /votes/<id>/ — Unvote
-    GET /votes/ — List current week's votes for the requesting user
-    GET /votes/budget/ — Return current vote budget
+    POST /nominations/ — nominate the writer of a pose or journal entry
+    DELETE /nominations/<id>/ — withdraw this week's citation
+    GET /nominations/ — the requesting account's own nominations this week
+
+    There is deliberately no read of nominations received, no count and no
+    budget: a nominee learns only the settled XP at week's end.
     """
 
-    pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
+    pagination_class = None  # a week's own nominations: a short list (ADR-0138)
 
-    serializer_class = WeeklyVoteSerializer
+    serializer_class = NominationSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self) -> Any:
-        """Return current week's unprocessed votes for the requesting user."""
-        return get_votes_by_voter(cast(AccountDB, self.request.user))
+        """The requesting account's unprocessed nominations this week."""
+        return nominations_by_account(cast(AccountDB, self.request.user))
 
     def create(self, request: Request) -> Response:
-        """Cast a vote on a piece of content."""
-        serializer = CastVoteSerializer(data=request.data)
+        """Nominate the writer of a piece of this week's prose."""
+        serializer = NominateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         target_type = serializer.validated_data["target_type"]
         target_id = serializer.validated_data["target_id"]
-        voter = cast(AccountDB, request.user)
+        nominator = cast(AccountDB, request.user)
 
-        actor = _actor_for_account(voter)
+        actor = _actor_for_account(nominator)
         if actor is None:
             return Response(
                 {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        result = CastVoteAction().run(actor=actor, target_type=target_type, target_id=target_id)
+        result = NominateAction().run(actor=actor, target_type=target_type, target_id=target_id)
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
 
-        WeeklyVote.flush_instance_cache()
-        vote = WeeklyVote.objects.get(
-            voter=voter,
-            game_week=get_current_game_week(),
-            target_type=target_type,
-            target_id=target_id,
+        Nomination.flush_instance_cache()
+        row = Nomination.objects.select_related("nominee__character").get(
+            pk=result.data["nomination_id"]
         )
-        WeeklyVoteBudget.flush_instance_cache()
-        budget = get_or_create_vote_budget(voter)
-        response_serializer = CastVoteResponseSerializer(
-            {"vote": vote, "budget": budget},
-        )
-        return Response(response_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(NominationSerializer(row).data, status=status.HTTP_201_CREATED)
 
     def destroy(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Remove (unvote) an existing vote by ID."""
+        """Withdraw one of the requesting account's own nominations."""
         instance = self.get_object()
-        voter = cast(AccountDB, request.user)
-        actor = _actor_for_account(voter)
+        nominator = cast(AccountDB, request.user)
+        actor = _actor_for_account(nominator)
         if actor is None:
             return Response(
                 {"detail": NO_ACTIVE_CHARACTER_MESSAGE},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        result = RemoveVoteAction().run(
+        result = WithdrawNominationAction().run(
             actor=actor,
             target_type=instance.target_type,
             target_id=instance.target_id,
@@ -303,18 +290,6 @@ class VoteViewSet(
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)
         return Response(status=status.HTTP_204_NO_CONTENT)
-
-    @action(detail=False, methods=[HTTPMethod.GET])
-    def budget(self, request: Request) -> Response:
-        """Return the current vote budget for the requesting user."""
-        account = cast(AccountDB, request.user)
-        WeeklyVoteBudget.flush_instance_cache()
-        budget = get_or_create_vote_budget(account)
-        serializer = VoteBudgetSerializer(budget)
-        return Response(serializer.data)
-
-
-# --- Random Scene views ---
 
 
 class RandomSceneViewSet(mixins.ListModelMixin, viewsets.GenericViewSet):

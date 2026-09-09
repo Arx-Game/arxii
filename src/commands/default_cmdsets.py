@@ -132,7 +132,7 @@ from commands.portals import CmdPortalAnchor  # #2222
 from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
-from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
@@ -485,7 +485,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdAppeal,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
             CmdKudos,
-            CmdVote,
+            CmdNominate,
             CmdRandomScene,
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.

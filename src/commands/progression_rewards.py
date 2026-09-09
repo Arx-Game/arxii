@@ -10,27 +10,27 @@ from __future__ import annotations
 from typing import ClassVar
 
 from actions.definitions.progression_rewards import (
-    CastVoteAction,
     ClaimKudosAction,
     ClaimRandomSceneAction,
     ClearPathIntentAction,
-    RemoveVoteAction,
+    NominateAction,
     RerollRandomSceneAction,
     SetPathIntentAction,
+    WithdrawNominationAction,
 )
 from commands.command import ArxCommand
 from commands.exceptions import CommandError
-from world.progression.constants import VoteTargetType
+from world.progression.constants import NominationTargetType
 
-_VOTE_TYPES = {
-    "interaction": VoteTargetType.INTERACTION,
-    "participation": VoteTargetType.SCENE_PARTICIPATION,
-    "journal": VoteTargetType.JOURNAL,
+_NOMINATION_TYPES = {
+    "interaction": NominationTargetType.INTERACTION,
+    "pose": NominationTargetType.INTERACTION,
+    "journal": NominationTargetType.JOURNAL,
 }
 
 # Argument-count constants (avoids PLR2004 magic-value comparisons).
 _KUDOS_CLAIM_ARGC = 3
-_VOTE_TARGET_ARGC = 2
+_NOMINATION_TARGET_ARGC = 2
 _RANDOMSCENE_ARGC = 2
 
 # Shared command lock + error wording (kept single-sourced for consistency).
@@ -104,16 +104,19 @@ class CmdKudos(ArxCommand):
         self.msg("\n".join(lines))
 
 
-class CmdVote(ArxCommand):
-    """Cast or remove weekly votes on other players' content.
+class CmdNominate(ArxCommand):
+    """Nominate another player's character for good RP (#3738).
 
     Usage:
-      vote                            - list your current votes and budget
-      vote <type> <id>                - cast a vote (type: interaction|participation|journal)
-      vote remove <type> <id>         - remove a vote
+      nominate                          - list your nominations this week
+      nominate <pose|journal> <id>      - nominate the writer of that piece
+      nominate remove <pose|journal> <id> - take a nomination back
+
+    One nomination per character per week however many pieces you cite; only
+    this week's prose that you could see. The nominee never learns who.
     """
 
-    key = "vote"
+    key = "nominate"
     aliases: ClassVar[list[str]] = []
     locks = _LOCK_ALL
     help_category = "Progression"
@@ -128,27 +131,27 @@ class CmdVote(ArxCommand):
     def _dispatch(self) -> None:
         parts: list[str] = list((self.args or "").strip().split())
         if not parts or parts[0].lower() == "list":  # noqa: STRING_LITERAL
-            self._show_votes()
+            self._show_nominations()
             return
         if parts[0].lower() == "remove":  # noqa: STRING_LITERAL
             target_type, target_id = self._parse_target(parts[1:])
-            result = RemoveVoteAction().run(
+            result = WithdrawNominationAction().run(
                 actor=self.caller, target_type=target_type, target_id=target_id
             )
         else:
             target_type, target_id = self._parse_target(parts)
-            result = CastVoteAction().run(
+            result = NominateAction().run(
                 actor=self.caller, target_type=target_type, target_id=target_id
             )
         self.msg(result.message)
 
     def _parse_target(self, parts: list[str]) -> tuple[str, int]:
-        if len(parts) != _VOTE_TARGET_ARGC:
-            msg = "Usage: vote [remove] <interaction|participation|journal> <id>"
+        if len(parts) != _NOMINATION_TARGET_ARGC:
+            msg = "Usage: nominate [remove] <pose|journal> <id>"
             raise CommandError(msg)
-        target_type = _VOTE_TYPES.get(parts[0].lower())
+        target_type = _NOMINATION_TYPES.get(parts[0].lower())
         if target_type is None:
-            msg = "Target type must be one of: interaction, participation, journal."
+            msg = "Target type must be one of: pose, journal."
             raise CommandError(msg)
         try:
             return target_type, int(parts[1])
@@ -156,22 +159,21 @@ class CmdVote(ArxCommand):
             msg = "Target id must be a number."
             raise CommandError(msg) from exc
 
-    def _show_votes(self) -> None:
-        from world.progression.services.voting import (  # noqa: PLC0415
-            get_or_create_vote_budget,
-            get_votes_by_voter,
-        )
+    def _show_nominations(self) -> None:
+        from world.progression.services.nominations import nominations_by_account  # noqa: PLC0415
         from world.roster.selectors import get_account_for_character  # noqa: PLC0415
 
         account = get_account_for_character(self.caller)
         if account is None:
             msg = _NO_ACTIVE_CHARACTER_MSG
             raise CommandError(msg)
-        budget = get_or_create_vote_budget(account)
-        votes = get_votes_by_voter(account)
-        lines = [f"Votes remaining: {budget.votes_remaining}", "Your votes this week:"]
-        vote_lines = [f"  {v.target_type} #{v.target_id}" for v in votes]
-        lines.extend(vote_lines or ["  (none)"])
+        rows = nominations_by_account(account)
+        lines = ["Your nominations this week (they cannot see these):"]
+        lines.extend(
+            f"  {row.nominee.character.db_key}: {row.target_type} #{row.target_id}" for row in rows
+        )
+        if len(lines) == 1:
+            lines.append("  (none)")
         self.msg("\n".join(lines))
 
 
