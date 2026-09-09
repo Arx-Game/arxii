@@ -11,15 +11,12 @@ class Migration(migrations.Migration):
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 
+    # Hand-edited after generation: the autodetector emitted two RemoveField steps on
+    # weeklyvotebudget ahead of its DeleteModel, and that shape does not reverse (the
+    # migration-replay test rewinds the whole graph and hit KeyError 'account' adding the
+    # field back onto a model recreated without it). A bare DeleteModel is the standard,
+    # reversible shape: its reversal recreates the model with every field and constraint.
     operations = [
-        migrations.RemoveField(
-            model_name="weeklyvotebudget",
-            name="account",
-        ),
-        migrations.RemoveField(
-            model_name="weeklyvotebudget",
-            name="game_week",
-        ),
         migrations.AlterField(
             model_name="characterxptransaction",
             name="reason",
