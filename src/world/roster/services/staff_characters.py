@@ -67,6 +67,7 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
     from world.character_sheets.services import create_character_with_sheet  # noqa: PLC0415
     from world.roster.models import Roster, RosterEntry, RosterTenure  # noqa: PLC0415
     from world.roster.models.choices import RosterType  # noqa: PLC0415
+    from world.seeds.character_creation import ensure_canonical_fallback_room  # noqa: PLC0415
 
     name = (name or "").strip()
     if not name:
@@ -76,9 +77,15 @@ def _mint_character_working_set(account: AccountDB, name: str, typeclass: str) -
         msg = "A character by that name already exists."
         raise StaffMintError(msg)
 
+    starting_room = ensure_canonical_fallback_room()
     character, sheet, _persona = create_character_with_sheet(
-        character_key=name, primary_persona_name=name, typeclass=typeclass
+        character_key=name,
+        primary_persona_name=name,
+        typeclass=typeclass,
+        home=starting_room,
     )
+    character.location = starting_room
+    character.save(update_fields=["db_location"])
     # Keyed on roster_type (unique), not name (#3426 in-scope bugfix): the seeded
     # shelf is named "NPCs" (world/roster/seeds.py), so a name="NPC" lookup never
     # matches it on a seeded DB and the fallback create collides on the unique

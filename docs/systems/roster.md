@@ -23,6 +23,18 @@ from world.roster.models import (
 
 ---
 
+## Staff and GM character minting (#3741)
+
+`world.roster.services.staff_characters.mint_gm_character` and
+`mint_story_npc` create their characters through the shared
+`_mint_character_working_set` helper. The helper resolves the canonical fallback
+room with `world.seeds.character_creation.ensure_canonical_fallback_room` and
+assigns it as both the character's `home` and `location`. This keeps a newly
+minted GM or staff presence playable immediately, even when no character
+creation draft supplied a starting room.
+
+---
+
 ## Applying these migrations
 
 `Roster.roster_type` (#2728) is `null=False` with no default — migration 0011
