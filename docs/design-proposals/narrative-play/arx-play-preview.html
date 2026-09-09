@@ -1,0 +1,1471 @@
+<!doctype html>
+<html lang="en" data-visualize-standalone>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src 'unsafe-inline' blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Arx Narrative Play</title>
+<style>:root{color-scheme:light dark;background:light-dark(rgb(255 255 255), rgb(24 24 24))}html,body{margin:0}body{box-sizing:border-box;padding:1rem;background:inherit}iframe{display:block;width:100%;height:calc(100vh - 2rem);margin:0 auto;border:0}</style>
+</head>
+<body>
+<iframe sandbox="allow-scripts" referrerpolicy="no-referrer" title="Arx Narrative Play" srcdoc="&lt;!doctype html&gt;
+&lt;html lang=&quot;en&quot; data-visualize-standalone&gt;
+&lt;head&gt;
+&lt;meta charset=&quot;utf-8&quot;&gt;
+&lt;meta name=&quot;viewport&quot; content=&quot;width=device-width, initial-scale=1&quot;&gt;
+&lt;meta name=&quot;referrer&quot; content=&quot;no-referrer&quot;&gt;
+&lt;meta http-equiv=&quot;Content-Security-Policy&quot; content=&quot;default-src &#x27;none&#x27;; script-src &#x27;unsafe-inline&#x27; &#x27;unsafe-eval&#x27; &#x27;wasm-unsafe-eval&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; style-src &#x27;unsafe-inline&#x27; blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; img-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; font-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; media-src blob: data: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://esm.sh https://fonts.bunny.net https://fonts.googleapis.com https://fonts.gstatic.com https://unpkg.com; worker-src blob:; connect-src blob: data:; frame-src &#x27;none&#x27;; object-src &#x27;none&#x27;; base-uri &#x27;none&#x27;; form-action &#x27;none&#x27;&quot;&gt;
+&lt;title&gt;Arx Narrative Play&lt;/title&gt;
+&lt;style&gt;:root {
+  color-scheme: light dark;
+  background-color: var(
+    --background,
+    var(--color-background-primary, light-dark(rgb(255 255 255), rgb(24 24 24)))
+  ) !important;
+
+  /* Agent-facing contract; keep in sync with SKILL.md. */
+  --background: var(
+    --color-background-primary,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --card: color-mix(in oklab, var(--foreground) 5%, var(--background));
+  --card-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --popover: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255), rgb(45 45 45))
+  );
+  --popover-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --primary: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --primary-foreground: var(
+    --color-text-inverse,
+    light-dark(rgb(255 255 255), rgb(13 13 13))
+  );
+  --secondary: var(
+    --color-background-secondary,
+    light-dark(rgb(255 255 255 / 96%), rgb(54 54 54 / 96%))
+  );
+  --secondary-foreground: var(
+    --color-text-primary,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --muted: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --muted-foreground: var(
+    --color-text-secondary,
+    light-dark(rgb(26 28 31 / 49.4%), rgb(255 255 255 / 49.8%))
+  );
+  --accent: var(
+    --color-background-info,
+    light-dark(rgb(229 242 255), rgb(13 39 63))
+  );
+  --accent-foreground: var(
+    --color-text-info,
+    light-dark(rgb(51 156 255), rgb(131 195 255))
+  );
+  --destructive: var(
+    --color-text-warning,
+    light-dark(rgb(226 85 7), rgb(255 133 73))
+  );
+  --border: var(
+    --color-border-secondary,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+  --input: var(
+    --color-border-primary,
+    light-dark(
+      rgb(26 28 31 / 11.8%),
+      color-mix(in oklab, rgb(0 0 0) 10%, transparent)
+    )
+  );
+  --ring: var(
+    --color-ring-primary,
+    light-dark(rgb(51 156 255), rgb(131 195 255 / 76%))
+  );
+  --font-size-base: var(--font-text-md-size, 14px);
+  --blue: light-dark(rgb(51 156 255), rgb(51 156 255));
+  --orange: light-dark(rgb(226 85 7), rgb(251 106 34));
+  --green: light-dark(rgb(0 162 64), rgb(64 201 119));
+  --red: light-dark(rgb(224 46 42), rgb(255 103 100));
+  --purple: light-dark(rgb(146 79 247), rgb(173 123 249));
+  --yellow: light-dark(rgb(255 195 0), rgb(255 210 64));
+  --viz-series-1: var(--primary);
+  --viz-series-2: light-dark(rgb(243 136 59), rgb(245 154 86));
+  --viz-series-3: light-dark(rgb(93 201 119), rgb(116 213 139));
+  --viz-series-4: light-dark(rgb(235 119 177), rgb(240 143 192));
+  --viz-series-5: light-dark(rgb(155 121 236), rgb(170 145 239));
+  --viz-series-6: light-dark(rgb(58 185 177), rgb(90 203 194));
+
+  /* Internal implementation variables; not part of the agent contract. */
+  --font-sans: -apple-system, system-ui, &quot;Segoe UI&quot;, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, &quot;SF Mono&quot;, Menlo, Consolas, &quot;Liberation Mono&quot;,
+    monospace;
+  --font-size-normal: max(11px, var(--font-size-base));
+  --font-size-tooltip: calc(var(--font-size-base) - 1px);
+  --font-size-small: max(11px, calc(var(--font-size-base) - 2px));
+  --font-size-h1: calc(var(--font-size-normal) * 1.7142857143);
+  --font-size-h2: calc(var(--font-size-normal) * 1.4285714286);
+  --font-size-h3: calc(var(--font-size-normal) * 1.2857142857);
+  --font-weight-normal: 430;
+  --font-weight-medium: 500;
+  --icon-size: 16px;
+  --line-height-normal: calc(var(--font-size-normal) * 1.5);
+  --line-height-tooltip: calc(var(--font-size-tooltip) * 1.4285714286);
+  --line-height-small: calc(var(--font-size-small) + 4px);
+  --corner-shape: round;
+  --radius: var(--border-radius-lg, 10px);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-2xl: calc(var(--radius) * 1.6);
+  --radius-full: 9999px;
+  --shadow-sm: 0 1px 2px -1px rgb(0 0 0 / 8%);
+  --checkmark-image: url(&quot;data:image/svg+xml,%3Csvg xmlns=&#x27;http://www.w3.org/2000/svg&#x27; viewBox=&#x27;0 0 17 17&#x27;%3E%3Cpath d=&#x27;M12.8961 3.64101C13.1297 3.41418 13.4984 3.37523 13.7779 3.56581C14.0571 3.75635 14.1554 4.11331 14.0299 4.41347L13.9615 4.53847L7.71151 13.7045C7.59411 13.8767 7.4063 13.9877 7.19881 14.0072C6.99136 14.0267 6.78564 13.9533 6.63826 13.806L2.88826 10.056L2.79842 9.9457C2.6192 9.67407 2.64927 9.30496 2.88826 9.06581C3.12738 8.82669 3.49647 8.79676 3.76815 8.97597L3.8785 9.06581L7.03084 12.2182L12.8053 3.74941L12.8961 3.64101Z&#x27;/%3E%3C/svg%3E&quot;);
+
+  /* Legacy aliases; not part of the current agent contract. */
+  --viz-bg: transparent;
+  --viz-panel: var(--card);
+  --viz-border: var(--border);
+  --viz-text: var(--foreground);
+  --viz-muted: var(--muted-foreground);
+  --viz-accent: var(--primary);
+  --viz-accent-text: var(--primary-foreground);
+  --viz-accent-bg: var(--accent);
+  --viz-font-size: var(--font-size-base);
+  --viz-warning: var(--destructive);
+}
+
+:root[data-theme=&quot;light&quot;] {
+  color-scheme: light;
+}
+
+:root[data-theme=&quot;dark&quot;] {
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html &gt; body {
+  /* Preserve MCP aliases for older inline renderers without creating :root cycles. */
+  --color-background-primary: var(
+    --background,
+    light-dark(rgb(255 255 255), rgb(24 24 24))
+  );
+  --color-text-primary: var(
+    --foreground,
+    light-dark(rgb(26 28 31), rgb(255 255 255))
+  );
+  --color-border-secondary: var(
+    --border,
+    light-dark(rgb(26 28 31 / 8%), rgb(255 255 255 / 8.2%))
+  );
+
+  margin: 0;
+  padding: var(--visualize-paint-gutter, 0px);
+  color: var(--foreground);
+  background: transparent !important;
+  font-family: var(--font-sans) !important;
+  font-size: var(--font-size-normal);
+  font-weight: var(--font-weight-normal);
+  line-height: var(--line-height-normal);
+}
+
+a {
+  color: color-mix(in srgb, var(--viz-accent) 80%, var(--viz-text) 20%);
+  cursor: pointer;
+  font-weight: var(--font-weight-medium, 500);
+  text-decoration: none;
+  text-underline-offset: 2px;
+}
+
+a:is(:hover, :focus-visible) {
+  text-decoration-line: underline;
+  text-decoration-style: dashed;
+  text-decoration-thickness: 0.5px;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p {
+  margin-block: 0;
+}
+
+h1 {
+  font-size: var(--font-size-h1);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h2 {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+h3,
+h4,
+h5,
+h6 {
+  font-size: var(--font-size-h3);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.3;
+}
+
+b,
+strong,
+th {
+  font-weight: var(--font-weight-medium);
+}
+
+code:not(pre code) {
+  display: inline;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  word-break: break-word;
+}
+
+.table-responsive {
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  font: inherit;
+  text-align: start;
+}
+
+.table :is(th, td) {
+  padding-block: 10px;
+  padding-inline: 0 24px;
+  overflow-wrap: anywhere;
+  border-bottom: 1px solid var(--border);
+  text-align: start;
+  vertical-align: top;
+}
+
+.table-responsive &gt; .table :is(th, td) {
+  overflow-wrap: break-word;
+}
+
+.table :is(th, td):last-child {
+  padding-inline-end: 0;
+}
+
+.table :is(caption, thead th) {
+  font-weight: 600;
+}
+
+.table thead th {
+  padding-block: 8px;
+  border-bottom-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+}
+
+.table tbody tr:last-child :is(th, td) {
+  border-bottom: 0;
+}
+
+.table.table-sm :is(th, td) {
+  padding-block: 6px;
+}
+
+.table.table-sm :is(th, td):not(:last-child) {
+  padding-inline-end: 16px;
+}
+
+.table :is(.text-end, [align=&quot;right&quot;]) {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+
+.table :is(.text-center, [align=&quot;center&quot;]) {
+  text-align: center;
+}
+
+.table .text-nowrap {
+  white-space: nowrap;
+}
+
+#widget {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 0;
+  background: transparent !important;
+}
+
+.card {
+  min-width: 0;
+  padding: 12px;
+  overflow: hidden;
+  overflow-wrap: break-word;
+  border-radius: var(--radius-2xl);
+  corner-shape: var(--corner-shape);
+  color: var(--card-foreground);
+  background: var(--card);
+}
+
+#widget &gt; :not(.card, .progress) {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.tooltip {
+  position: fixed;
+  z-index: 50;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: min(
+    20rem,
+    var(--tooltip-available-width, calc(100vw - 10px)),
+    calc(100vw - 10px)
+  );
+  max-height: min(
+    var(--tooltip-available-height, calc(100vh - 10px)),
+    calc(100vh - 10px)
+  );
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--popover-foreground);
+  background: var(--popover);
+  box-shadow: none;
+  font-size: var(--font-size-tooltip);
+  line-height: var(--line-height-tooltip);
+  overflow-wrap: break-word;
+  white-space: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+.viz-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(max(180px, 24%), 1fr));
+  gap: 10px;
+}
+
+.viz-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.viz-stat-value {
+  font-size: var(--font-size-h2);
+  font-weight: var(--font-weight-medium);
+  line-height: 1.25;
+}
+
+.viz-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+hr {
+  width: 100%;
+  height: 1px;
+  margin-block: 6px;
+  border: 0;
+  background: var(--border);
+}
+
+.nav {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.progress {
+  display: flex;
+  height: 8px;
+  margin-block: calc((var(--line-height-normal, 1.5em) - 8px) / 2);
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+}
+
+.progress-bar:only-child {
+  border-radius: var(--radius-full);
+}
+
+.progress-bar {
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: var(--viz-series-1);
+}
+
+.viz-badge {
+  padding: 3px 8px;
+  border-radius: var(--radius-full);
+  color: var(--accent-foreground);
+  background: var(--accent);
+  font-weight: var(--font-weight-medium);
+}
+
+small,
+.text-small,
+.viz-badge {
+  font-size: var(--font-size-small);
+  line-height: var(--line-height-small);
+}
+
+.text-muted {
+  color: var(--muted-foreground);
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.viz-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.viz-controls &gt; .form-label {
+  display: grid;
+  min-width: min(100%, 260px);
+  flex: 1 1 280px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 2px 12px;
+  margin-bottom: 0;
+}
+
+.viz-controls &gt; .form-label &gt; :is(.form-control, .form-range, .form-select) {
+  grid-column: 1 / -1;
+}
+
+.btn,
+.nav-link,
+.form-check-input,
+.form-control,
+.form-range,
+.form-select {
+  font: inherit;
+}
+
+.btn,
+.nav-link {
+  appearance: button;
+  display: inline-flex;
+  inline-size: fit-content;
+  max-inline-size: 100%;
+  min-height: 28px;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0 8px;
+  -webkit-app-region: no-drag;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: var(--cursor-interaction, pointer);
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+.btn:is(.btn-block, .viz-tile) {
+  inline-size: 100%;
+}
+
+.btn.viz-tile {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.btn {
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.btn:not(:disabled):hover,
+.nav-link:not(:disabled):not([aria-disabled=&quot;true&quot;]):hover {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.btn-primary {
+  border-color: transparent;
+  color: var(--primary-foreground);
+  background: var(--foreground);
+  background-clip: padding-box;
+}
+
+.btn-primary .text-muted {
+  color: color-mix(in srgb, var(--primary-foreground) 50%, transparent);
+}
+
+.btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--foreground) 80%, transparent);
+  background-clip: padding-box;
+}
+
+.btn-ghost {
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.btn-ghost:not(:disabled):hover {
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.nav-pills .nav-link {
+  min-width: 0;
+  border-color: transparent;
+  color: var(--muted-foreground);
+  background: transparent;
+}
+
+.nav-justified .nav-link {
+  flex: 1 1 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.nav-pills .nav-link.active {
+  color: var(--foreground);
+  background: var(--muted);
+}
+
+.btn:disabled,
+.nav-link:disabled,
+.nav-link[aria-disabled=&quot;true&quot;] {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+[data-lucide] {
+  stroke-width: 1.6;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--foreground);
+}
+
+.form-control {
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  padding: 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background: var(--secondary);
+}
+
+.form-control::placeholder {
+  color: var(--muted-foreground);
+}
+
+.form-control[type=&quot;file&quot;] {
+  padding: 0;
+  overflow: hidden;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control[type=&quot;file&quot;]::file-selector-button {
+  min-height: 26px;
+  margin-right: 8px;
+  padding: 0 8px;
+  border: 0;
+  border-right: 1px solid var(--input);
+  color: var(--secondary-foreground);
+  background: var(--secondary);
+  cursor: inherit;
+  font: inherit;
+}
+
+.form-control[type=&quot;file&quot;]:not(:disabled):hover::file-selector-button {
+  background: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-control-color[type=&quot;color&quot;] {
+  width: 40px;
+  height: 28px;
+  padding: 3px;
+  cursor: var(--cursor-interaction, pointer);
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.form-control-color[type=&quot;color&quot;]::-webkit-color-swatch {
+  border: 0;
+  border-radius: calc(var(--radius-lg) - 4px);
+  corner-shape: var(--corner-shape);
+}
+
+textarea.form-control {
+  height: auto;
+  min-height: 72px;
+  padding: 8px 10px;
+  resize: vertical;
+}
+
+.form-control:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-control:disabled,
+.form-select:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.form-select {
+  appearance: none;
+  display: block;
+  width: 100%;
+  min-height: 28px;
+  margin: 0;
+  padding: 0 32px 0 8px;
+  outline: none;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-lg);
+  corner-shape: var(--corner-shape);
+  color: var(--foreground);
+  background-color: var(--secondary);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--muted-foreground) 50%),
+    linear-gradient(135deg, var(--muted-foreground) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 10px) 50%;
+  background-repeat: no-repeat;
+  background-size: 4px 4px;
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-select:not(:disabled):hover {
+  background-color: color-mix(in srgb, var(--foreground) 6%, var(--secondary));
+}
+
+.form-select:focus-visible {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-check {
+  display: flex;
+  min-height: 20px;
+  align-items: center;
+  gap: 6px;
+}
+
+.form-check-input {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  margin: 0;
+  border: 1px solid var(--input);
+  color: var(--primary-foreground);
+  background-color: transparent;
+  cursor: var(--cursor-interaction, default);
+  transition:
+    background-color 150ms,
+    border-color 150ms,
+    box-shadow 150ms;
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;] {
+  border-color: var(--input);
+  border-radius: var(--radius-sm);
+  corner-shape: var(--corner-shape);
+  background-color: var(--secondary);
+  box-shadow: var(--shadow-sm);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input:not(:disabled):not(:checked):hover {
+  background-color: var(--card);
+}
+
+.form-check:not(.form-switch) .form-check-input[type=&quot;checkbox&quot;]:checked {
+  border-color: var(--primary);
+  background-color: var(--primary);
+}
+
+.form-check:not(.form-switch)
+  .form-check-input[type=&quot;checkbox&quot;]:checked::before {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background: var(--primary-foreground);
+  content: &quot;&quot;;
+  mask: var(--checkmark-image) center / 12px 12px no-repeat;
+}
+
+.form-check-input[type=&quot;radio&quot;] {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--radius-full);
+}
+
+.form-check-input[type=&quot;radio&quot;]:checked {
+  border: 2px solid var(--primary);
+  background:
+    radial-gradient(circle, var(--primary-foreground) 0 2.5px, transparent 3px),
+    var(--primary);
+}
+
+.form-check:not(.form-switch) .form-check-input:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled {
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.form-check:not(.form-switch) .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+}
+
+.form-switch .form-check-input:disabled,
+.form-switch .form-check-input:disabled + .form-check-label {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.form-check-label {
+  color: var(--foreground);
+  cursor: var(--cursor-interaction, default);
+}
+
+.form-switch .form-check-input {
+  position: relative;
+  width: 32px;
+  height: 20px;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--muted);
+  box-shadow: none;
+  transition: background-color 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input::before {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border: 1px solid light-dark(var(--primary-foreground), var(--foreground));
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+  box-shadow: var(--shadow-sm);
+  content: &quot;&quot;;
+  transform: translate(2px, -50%);
+  transition: transform 200ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.form-switch .form-check-input:checked {
+  background: var(--primary);
+}
+
+.form-switch .form-check-input:checked::before {
+  transform: translate(14px, -50%);
+}
+
+.form-switch .form-check-input:focus-visible {
+  box-shadow: 0 0 0 2px var(--ring);
+}
+
+.form-range {
+  appearance: none;
+  display: block;
+  width: 100%;
+  height: 28px;
+  flex: 1;
+  margin: 0;
+  padding: 0;
+  outline: none;
+  border: 0;
+  accent-color: var(--primary);
+  background: linear-gradient(
+      color-mix(in srgb, var(--foreground) 7%, transparent),
+      color-mix(in srgb, var(--foreground) 7%, transparent)
+    )
+    center / 100% 2px no-repeat;
+}
+
+.form-range::-webkit-slider-runnable-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-webkit-slider-thumb {
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-webkit-slider-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range::-moz-range-track {
+  height: 28px;
+  background: transparent;
+}
+
+.form-range::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  background: light-dark(var(--primary-foreground), var(--foreground));
+}
+
+.form-range:focus-visible::-moz-range-thumb {
+  border-color: var(--ring);
+  box-shadow: inset 0 0 0 1px var(--ring);
+}
+
+.form-range:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.btn:not(.btn-primary, .viz-tile):is(
+  [aria-pressed=&quot;true&quot;],
+  [aria-selected=&quot;true&quot;],
+  .is-selected
+) {
+  border-color: var(--primary);
+  color: var(--primary-foreground);
+  background: var(--primary);
+}
+
+.btn.viz-tile:is([aria-pressed=&quot;true&quot;], [aria-selected=&quot;true&quot;], .is-selected) {
+  border-color: var(--primary);
+  box-shadow: inset 0 0 0 1px var(--primary);
+}
+
+.btn:focus-visible,
+.nav-link:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+@media (pointer: coarse) {
+  .btn,
+  .nav-link,
+  .form-control,
+  .form-select {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  /* Keep small-screen WebKit from zooming when a text field receives focus. */
+  .form-control,
+  .form-select {
+    font-size: max(16px, var(--font-size-normal));
+  }
+
+  .form-control[type=&quot;file&quot;]::file-selector-button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .form-control-color[type=&quot;color&quot;] {
+    width: 44px;
+    height: 44px;
+  }
+
+  .form-control:is(
+    [type=&quot;date&quot;],
+    [type=&quot;datetime-local&quot;],
+    [type=&quot;month&quot;],
+    [type=&quot;time&quot;],
+    [type=&quot;week&quot;]
+  ) {
+    min-width: 0;
+    max-width: 100%;
+    padding-block: 8px;
+  }
+
+  .form-check {
+    min-height: 44px;
+    padding-inline: 15px;
+  }
+
+  .form-check-input {
+    position: relative;
+  }
+
+  .form-check-input::after {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 44px;
+    height: 44px;
+    content: &quot;&quot;;
+    transform: translate(-50%, -50%);
+  }
+
+  .form-check-label {
+    display: inline-flex;
+    min-width: 44px;
+    min-height: 44px;
+    align-items: center;
+  }
+
+  .form-range {
+    height: 44px;
+    touch-action: pan-y;
+  }
+
+  .form-range::-webkit-slider-runnable-track {
+    height: 44px;
+  }
+
+  .form-range::-moz-range-track {
+    height: 44px;
+  }
+
+  .form-range::-webkit-slider-thumb {
+    margin-top: 12px;
+  }
+}
+
+svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+
+#widget &gt; svg {
+  width: 100%;
+}
+
+/* Model-authored chart rules can otherwise stretch icons after these styles load. */
+svg.lucide {
+  display: block;
+  width: var(--icon-size) !important;
+  height: var(--icon-size) !important;
+  flex: none;
+  margin: 0 !important;
+  stroke-width: 1.6;
+}
+
+.text-warning,
+.text-destructive {
+  color: var(--destructive);
+}
+
+html&gt;body{padding:0}&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+&lt;style&gt;
+#arx-play { --arx-bg:light-dark(#f4f1e9,#171c1d); --arx-panel:light-dark(#eae6dc,#1e2425); --arx-page:light-dark(#fcfaf5,#222a2b); --arx-ink:light-dark(#292f2d,#e7e6dc); --arx-muted:light-dark(#60665e,#abb7ad); --arx-line:light-dark(#d5d3c8,#394443); --arx-gold:light-dark(#776023,#d9bd7a); --arx-wash:light-dark(#e6dfc9,#373a2d); --arx-action:light-dark(#344f48,#c0d2bd); --arx-on-action:light-dark(#fffdf6,#1a2a23); --arx-alert:light-dark(#8b422b,#efb195); color:var(--arx-ink); background:var(--arx-bg); font:14px/1.5 &#x27;Segoe UI&#x27;,sans-serif; border:1px solid var(--arx-line); border-radius:12px; overflow:hidden; position:relative; text-align:left; }
+#arx-play * {box-sizing:border-box} #arx-play [hidden]{display:none!important} #arx-play .arx-focus-return{white-space:nowrap}
+#arx-play h1,#arx-play h2,#arx-play h3,#arx-play p{margin:0} #arx-play h1,#arx-play h2,#arx-play h3{font-family:Georgia,serif;font-weight:400;line-height:1.2} #arx-play h1{font-size:32px} #arx-play h2{font-size:24px} #arx-play h3{font-size:19px}
+#arx-play button,#arx-play textarea,#arx-play select{font:inherit;color:inherit} #arx-play button{cursor:pointer;border:1px solid transparent;background:transparent;border-radius:6px;padding:8px 10px;text-align:left;line-height:1.35} #arx-play button:hover{background:var(--arx-wash)} #arx-play button:focus-visible,#arx-play textarea:focus-visible,#arx-play select:focus-visible{outline:2px solid var(--arx-gold);outline-offset:3px} #arx-play button:disabled{cursor:default;opacity:.6}
+#arx-play .arx-primary{background:var(--arx-action);color:var(--arx-on-action);text-align:center;font-weight:600} #arx-play .arx-primary:hover{filter:brightness(.92);background:var(--arx-action)} #arx-play .arx-outline{border-color:var(--arx-line)} #arx-play .arx-small{font-size:12px;color:var(--arx-muted)} #arx-play .arx-eyebrow{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--arx-muted);font-weight:600} #arx-play .arx-row{display:flex;gap:9px;align-items:center} #arx-play .arx-between{justify-content:space-between} #arx-play .arx-stack{display:grid;gap:12px} #arx-play .arx-gold{color:var(--arx-gold)}
+#arx-play .arx-header{min-height:64px;padding:12px 20px;display:flex;align-items:center;gap:22px;border-bottom:1px solid var(--arx-line);background:var(--arx-panel)} #arx-play .arx-brand{font-family:Georgia,serif;font-size:27px;letter-spacing:4px;color:var(--arx-gold)} #arx-play .arx-mainnav{display:flex;gap:4px;flex:1} #arx-play .arx-mainnav button[aria-pressed=true]{background:var(--arx-wash);color:var(--arx-gold)} #arx-play .arx-id{border-left:1px solid var(--arx-line);padding-left:16px} #arx-play .arx-avatar{display:inline-grid;place-items:center;flex-shrink:0;width:34px;height:34px;border:1px solid var(--arx-line);background:var(--arx-wash);border-radius:50%;font-family:Georgia,serif;color:var(--arx-gold)}
+#arx-play .arx-layout{display:grid;grid-template-columns:200px minmax(0,1fr) 242px;height:748px} #arx-play .arx-world{padding:22px 16px;border-right:1px solid var(--arx-line);overflow-y:auto;background:var(--arx-panel)} #arx-play .arx-side-section{margin-top:23px} #arx-play .arx-side-section&gt;.arx-eyebrow{margin-bottom:9px} #arx-play .arx-world h3{margin:7px 0 8px} #arx-play .arx-navitem{width:100%;display:flex;gap:9px;align-items:center;margin:3px 0} #arx-play .arx-navitem small{display:block;color:var(--arx-muted);font-size:11px;margin-top:2px} #arx-play .arx-navitem[aria-pressed=true]{background:var(--arx-wash);border-left:2px solid var(--arx-gold)} #arx-play .arx-count{margin-left:auto;font-size:11px;background:var(--arx-action);color:var(--arx-on-action);border-radius:50%;min-width:19px;line-height:19px;text-align:center} #arx-play .arx-person{width:100%;display:flex;align-items:center;gap:9px;padding:7px 4px} #arx-play .arx-person .arx-avatar{width:28px;height:28px;font-size:12px}
+#arx-play .arx-center{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--arx-page)} #arx-play .arx-scene-heading{padding:24px 26px 17px;border-bottom:1px solid var(--arx-line)} #arx-play .arx-scene-heading h1{margin:8px 0 11px} #arx-play .arx-scene-heading .arx-small{line-height:1.6} #arx-play .arx-tag{display:inline-block;padding:3px 7px;background:var(--arx-wash);font-size:11px;border-radius:4px;color:var(--arx-gold)} #arx-play .arx-viewbar{padding:10px 24px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--arx-line);font-size:12px} #arx-play .arx-viewbar button{padding:5px 7px} #arx-play .arx-feed{overflow-y:auto;flex:1;min-height:0;padding:21px 27px;scroll-behavior:auto} #arx-play .arx-feed .arx-divider{display:flex;align-items:center;gap:10px;color:var(--arx-muted);font-size:11px;margin:0 0 22px} #arx-play .arx-divider:before,#arx-play .arx-divider:after{content:&#x27;&#x27;;height:1px;flex:1;background:var(--arx-line)}
+#arx-play .arx-pose{margin-bottom:26px} #arx-play .arx-author{display:flex;gap:9px;align-items:center;margin-bottom:10px;font-size:12px} #arx-play .arx-author button{padding:0;font-weight:600} #arx-play .arx-author time{font-size:11px;color:var(--arx-muted);margin-left:auto} #arx-play .arx-prose{font:var(--arx-prose-size,16px)/1.75 Georgia,serif;overflow-wrap:anywhere} #arx-play .arx-prose p+p{margin-top:9px} #arx-play .arx-pose-actions{display:flex;gap:4px;margin-top:7px} #arx-play .arx-pose-actions button{color:var(--arx-muted);font-size:11px;padding:4px 7px} #arx-play .arx-narration{padding:14px 17px;border-left:2px solid var(--arx-gold);background:var(--arx-wash);margin:0 0 24px} #arx-play .arx-narration p{font:italic 16px/1.65 Georgia,serif;margin-top:7px}
+#arx-play .arx-composer{border-top:1px solid var(--arx-line);padding:13px 20px;background:var(--arx-page)} #arx-play .arx-composer-label{display:flex;align-items:center;justify-content:space-between;gap:7px;font-size:12px;margin-bottom:9px;flex-wrap:wrap} #arx-play .arx-composer textarea{display:block;width:100%;height:78px;resize:vertical;min-height:65px;max-height:150px;border:1px solid var(--arx-line);border-radius:6px;background:var(--arx-bg);padding:12px;line-height:1.5} #arx-play textarea::placeholder{color:var(--arx-muted)} #arx-play .arx-compose-bottom{display:flex;align-items:center;gap:6px;justify-content:space-between;margin-top:10px} #arx-play .arx-compose-bottom select{background:var(--arx-bg);border:1px solid var(--arx-line);border-radius:4px;padding:6px;font-size:12px;max-width:110px} #arx-play .arx-compose-bottom button{font-size:12px}
+#arx-play .arx-inspector{padding:22px 18px;background:var(--arx-panel);border-left:1px solid var(--arx-line);overflow-y:auto} #arx-play .arx-inspector h2{margin:9px 0 11px} #arx-play .arx-inspector p{font-size:13px;line-height:1.65} #arx-play .arx-detail-block{padding:18px 0;border-bottom:1px solid var(--arx-line)} #arx-play .arx-detail-block h3{font-size:17px;margin:0 0 9px} #arx-play .arx-detail-block .arx-eyebrow{margin-bottom:8px} #arx-play .arx-choice{width:100%;border:1px solid var(--arx-line);margin-top:8px;padding:12px} #arx-play .arx-choice[aria-pressed=true]{border-color:var(--arx-gold);background:var(--arx-wash)} #arx-play .arx-choice small{display:block;font-size:12px;color:var(--arx-muted);margin-top:5px} #arx-play .arx-inspector .arx-primary{width:100%;margin-top:12px}
+#arx-play .arx-explore{padding:34px 30px;overflow-y:auto;flex:1} #arx-play .arx-explore h1{font-size:39px;line-height:1.15;margin:12px 0 22px} #arx-play .arx-explore .arx-prose{font-size:18px;line-height:1.8} #arx-play .arx-explore .arx-eyebrow{margin-bottom:9px} #arx-play .arx-location-rule{height:4px;width:48px;background:var(--arx-gold);margin:25px 0} #arx-play .arx-entry-card{border:1px solid var(--arx-line);border-radius:8px;padding:19px;margin-top:24px;background:var(--arx-bg)} #arx-play .arx-entry-card h3{font-size:23px;margin:6px 0 9px} #arx-play .arx-entry-card p{font-size:13px;color:var(--arx-muted);margin-bottom:16px} #arx-play .arx-place-list{display:grid;gap:4px;margin-top:12px} #arx-play .arx-place-list button{border-bottom:1px solid var(--arx-line);border-radius:0;display:flex;justify-content:space-between;padding:12px 0}
+#arx-play .arx-map{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0} #arx-play .arx-map&gt;div{padding:12px 7px;border:1px solid var(--arx-line);border-radius:5px;font-size:12px;text-align:center} #arx-play .arx-map small{display:block;color:var(--arx-muted);font-size:11px;margin-top:5px} #arx-play .arx-map .arx-here{border-color:var(--arx-gold);background:var(--arx-wash)} #arx-play .arx-alert{color:var(--arx-alert)} #arx-play .arx-stat{display:flex;justify-content:space-between;padding:8px 0;font-size:13px;border-bottom:1px solid var(--arx-line)} #arx-play .arx-note{border-top:1px solid var(--arx-line);padding:7px 16px;font-size:11px;display:flex;gap:10px;align-items:center;justify-content:space-between;background:var(--arx-panel);color:var(--arx-muted)} #arx-play .arx-note button{font-size:11px;padding:3px 6px} #arx-play .arx-mobile-nav{display:none} #arx-play .arx-focus-return{display:none}
+#arx-play[data-direction=social] .arx-prose{font-family:&#x27;Segoe UI&#x27;,sans-serif;font-size:14px;line-height:1.7} #arx-play[data-direction=social] .arx-pose{border:1px solid var(--arx-line);border-radius:10px;background:var(--arx-bg);padding:13px;margin-bottom:13px} #arx-play[data-direction=social] .arx-layout{grid-template-columns:185px minmax(0,1fr) 242px} #arx-play[data-direction=reading] .arx-layout{grid-template-columns:176px minmax(0,1fr)} #arx-play[data-direction=reading] .arx-inspector{display:none} #arx-play[data-direction=reading] .arx-prose{max-width:64ch;font-size:18px} #arx-play[data-direction=reading] .arx-feed{padding:28px 40px} #arx-play[data-direction=reading][data-detail-open=true] .arx-inspector{display:block;position:absolute;right:0;top:64px;bottom:32px;width:min(320px,100%);z-index:4;box-shadow:-15px 0 30px #0002} #arx-play[data-direction=reading] .arx-focus-return{display:inline-block}
+@media(max-width:850px){#arx-play .arx-layout,#arx-play[data-direction=social] .arx-layout{grid-template-columns:173px minmax(0,1fr)} #arx-play .arx-inspector{display:none} #arx-play[data-detail-open=true] .arx-inspector{display:block;position:absolute;right:0;top:64px;bottom:33px;width:285px;z-index:4;box-shadow:-15px 0 30px #0002} #arx-play .arx-focus-return{display:inline-block} #arx-play .arx-header{gap:12px;padding:12px} #arx-play .arx-id .arx-small{display:none} #arx-play .arx-scene-heading{padding:20px} #arx-play .arx-feed{padding:20px} }
+@media(max-width:560px){#arx-play{border-radius:8px} #arx-play .arx-header{min-height:59px;gap:8px;flex-wrap:wrap} #arx-play .arx-brand{font-size:22px} #arx-play .arx-mainnav{gap:0} #arx-play .arx-mainnav button{font-size:12px;padding:7px} #arx-play .arx-id{padding-left:6px;border:0} #arx-play .arx-id .arx-identity-text{display:none} #arx-play .arx-layout,#arx-play[data-direction=social] .arx-layout,#arx-play[data-direction=reading] .arx-layout{display:block;height:750px} #arx-play .arx-center{height:100%} #arx-play .arx-world,#arx-play .arx-inspector{display:none} #arx-play[data-mobile=world] .arx-world{display:block;height:100%;border:0} #arx-play[data-mobile=world] .arx-center,#arx-play[data-mobile=details] .arx-center{display:none} #arx-play[data-mobile=details] .arx-inspector,#arx-play[data-direction=reading][data-mobile=details] .arx-inspector{display:block;position:static;width:100%;height:100%;box-shadow:none;border:0} #arx-play .arx-mobile-nav{display:flex;justify-content:space-around;border-top:1px solid var(--arx-line);padding:7px;background:var(--arx-panel)} #arx-play .arx-mobile-nav button{font-size:12px;padding:8px 14px} #arx-play .arx-mobile-nav button[aria-pressed=true]{background:var(--arx-wash);color:var(--arx-gold)} #arx-play .arx-scene-heading{padding:18px} #arx-play .arx-scene-heading h1{font-size:27px} #arx-play .arx-feed,#arx-play[data-direction=reading] .arx-feed{padding:18px} #arx-play .arx-composer{padding:12px} #arx-play .arx-explore{padding:25px 21px} #arx-play .arx-explore h1{font-size:34px} #arx-play .arx-viewbar{padding:9px 14px} #arx-play .arx-note{font-size:10px;align-items:flex-start} #arx-play .arx-note span:first-child{max-width:230px} #arx-play .arx-compose-bottom{flex-wrap:wrap} }
+&lt;/style&gt;
+&lt;div id=&quot;arx-play&quot; data-direction=&quot;editorial&quot; data-mobile=&quot;story&quot; data-detail-open=&quot;false&quot; aria-label=&quot;Arx narrative play design&quot;&gt;
+  &lt;header class=&quot;arx-header&quot;&gt;
+    &lt;span class=&quot;arx-brand&quot;&gt;ARX &lt;span style=&quot;font-size:13px;letter-spacing:0&quot;&gt;II&lt;/span&gt;&lt;/span&gt;
+    &lt;nav class=&quot;arx-mainnav&quot; aria-label=&quot;Play navigation&quot;&gt;&lt;button data-go=&quot;explore&quot;&gt;World&lt;/button&gt;&lt;button data-go=&quot;scene&quot;&gt;Scene&lt;/button&gt;&lt;button data-focus=&quot;journal&quot;&gt;Journal&lt;/button&gt;&lt;/nav&gt;
+    &lt;button class=&quot;arx-row arx-id&quot; data-focus=&quot;self&quot; aria-label=&quot;Open your character&quot;&gt;&lt;span class=&quot;arx-avatar&quot;&gt;A&lt;/span&gt;&lt;span class=&quot;arx-identity-text&quot;&gt;&lt;strong&gt;Apostate&lt;/strong&gt;&lt;span class=&quot;arx-small&quot; style=&quot;display:block&quot;&gt;Playing as yourself&lt;/span&gt;&lt;/span&gt;&lt;/button&gt;
+  &lt;/header&gt;
+  &lt;div class=&quot;arx-layout&quot;&gt;
+    &lt;aside class=&quot;arx-world&quot; aria-label=&quot;Surroundings and conversations&quot;&gt;&lt;/aside&gt;
+    &lt;main class=&quot;arx-center&quot; aria-label=&quot;Narrative and writing&quot;&gt;&lt;/main&gt;
+    &lt;aside class=&quot;arx-inspector&quot; aria-label=&quot;Context and character details&quot;&gt;&lt;/aside&gt;
+  &lt;/div&gt;
+  &lt;nav class=&quot;arx-mobile-nav&quot; aria-label=&quot;Workspace panes&quot;&gt;&lt;button data-mobile=&quot;world&quot;&gt;Surroundings&lt;/button&gt;&lt;button data-mobile=&quot;story&quot; aria-pressed=&quot;true&quot;&gt;Story&lt;/button&gt;&lt;button data-mobile=&quot;details&quot;&gt;Details&lt;/button&gt;&lt;/nav&gt;
+  &lt;footer class=&quot;arx-note&quot;&gt;&lt;span&gt;Interactive concept · illustrative characters, places &amp;amp; rules&lt;/span&gt;&lt;span id=&quot;arx-feedback&quot; role=&quot;status&quot; aria-live=&quot;polite&quot;&gt;Preview only · nothing is sent to Arx&lt;/span&gt;&lt;/footer&gt;
+&lt;/div&gt;
+&lt;script&gt;
+(() =&gt; {
+const root=document.getElementById(&#x27;arx-play&#x27;);
+const opts={direction:&#x27;editorial&#x27;,moment:&#x27;scene&#x27;,proseSize:16};
+const state={moment:&#x27;scene&#x27;,thread:&#x27;room&#x27;,focus:&#x27;moment&#x27;,location:&#x27;inn&#x27;,mobile:&#x27;story&#x27;,detailOpen:false,choice:&#x27;guard&#x27;,declared:false,mode:&#x27;pose&#x27;,drafts:{},posts:{},applause:new Set(),ooc:false};
+const rooms={inn:{name:&#x27;The Gilded Lantern&#x27;,area:&#x27;The Lower Boroughs&#x27;,ambience:&#x27;Lamplight · rain at the windows&#x27;,description:&#x27;Rain follows you through the door, giving way to cedar smoke and the low murmur of conversation. Along the far wall, a hearth throws amber light over a gathering of mismatched chairs.&#x27;,detail:&#x27;A woman in a travel-worn coat turns a sealed letter between her fingers. By the window, two guests have drawn their chairs close together.&#x27;},court:{name:&#x27;Lantern Court&#x27;,area:&#x27;The Lower Boroughs&#x27;,ambience:&#x27;Dusk · a sheltered courtyard&#x27;,description:&#x27;Water pools between the cobblestones. A row of lanterns traces a path from the inn to the covered arcade; above it, the city rises in layers of slate and pale stone.&#x27;,detail:&#x27;The inn door is open behind you. For a moment, the courtyard belongs to the rain.&#x27;}};
+const threadNames={room:&#x27;The whole room&#x27;,table:&#x27;By the hearth&#x27;,whisper:&#x27;A private word&#x27;,ooc:&#x27;Out of character&#x27;};
+const audience={room:&#x27;Visible to the room&#x27;,table:&#x27;Visible to people at the hearth&#x27;,whisper:&#x27;Only you and Mira&#x27;,ooc:&#x27;OOC · visible to the room&#x27;};
+const esc=s=&gt;String(s).replace(/[&amp;&lt;&gt;&quot;&#x27;]/g,c=&gt;({&#x27;&amp;&#x27;:&#x27;&amp;amp;&#x27;,&#x27;&lt;&#x27;:&#x27;&amp;lt;&#x27;,&#x27;&gt;&#x27;:&#x27;&amp;gt;&#x27;,&#x27;&quot;&#x27;:&#x27;&amp;quot;&#x27;,&quot;&#x27;&quot;:&#x27;&amp;#39;&#x27;}[c]));
+const $=s=&gt;root.querySelector(s);
+const feedback=s=&gt;{$(&#x27;#arx-feedback&#x27;).textContent=s;};
+function saveDraft(){const box=$(&#x27;textarea&#x27;);if(box)state.drafts[state.thread]=box.value;}
+function setMoment(value){saveDraft();state.moment=value;opts.moment=value;state.thread=&#x27;room&#x27;;state.focus=value===&#x27;combat&#x27;?&#x27;combat&#x27;:&#x27;moment&#x27;;state.mobile=&#x27;story&#x27;;state.detailOpen=false;render();}
+function focus(value){saveDraft();state.focus=value;state.detailOpen=true;if(root.clientWidth&lt;=560)state.mobile=&#x27;details&#x27;;render();}
+function world(){const room=rooms[state.location];return `&lt;div class=&quot;arx-eyebrow&quot;&gt;Your surroundings&lt;/div&gt;&lt;h3&gt;${room.name}&lt;/h3&gt;&lt;p class=&quot;arx-small&quot;&gt;${room.area}&lt;/p&gt;&lt;button class=&quot;arx-navitem&quot; data-focus=&quot;room&quot;&gt;Read the room &lt;span style=&quot;margin-left:auto&quot;&gt;↗&lt;/span&gt;&lt;/button&gt;&lt;div class=&quot;arx-side-section&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Conversations&lt;/div&gt;${state.moment===&#x27;lobby&#x27;?&#x27;&lt;p class=&quot;arx-small&quot;&gt;Enter the world to find your surroundings.&lt;/p&gt;&#x27;:state.location===&#x27;court&#x27;?&#x27;&lt;p class=&quot;arx-small&quot;&gt;A quiet moment. No one else is here.&lt;/p&gt;&#x27;:[[&#x27;room&#x27;,&#x27;The whole room&#x27;,&#x27;Shared conversation&#x27;],[&#x27;table&#x27;,&#x27;By the hearth&#x27;,&#x27;A small gathering&#x27;],[&#x27;whisper&#x27;,&#x27;A private word&#x27;,&#x27;You and Mira&#x27;]].map(([key,label,sub])=&gt;`&lt;button class=&quot;arx-navitem&quot; data-thread=&quot;${key}&quot; aria-pressed=&quot;${state.thread===key&amp;&amp;[&#x27;scene&#x27;,&#x27;combat&#x27;].includes(state.moment)}&quot;&gt;&lt;span&gt;${label}&lt;small&gt;${sub}&lt;/small&gt;&lt;/span&gt;${key===&#x27;whisper&#x27;&amp;&amp;state.thread!==&#x27;whisper&#x27;?&#x27;&lt;span class=&quot;arx-count&quot;&gt;1&lt;/span&gt;&#x27;:&#x27;&#x27;}&lt;/button&gt;`).join(&#x27;&#x27;)}&lt;/div&gt;&lt;div class=&quot;arx-side-section&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;${state.location===&#x27;inn&#x27;?&#x27;Here with you&#x27;:&#x27;Nearby&#x27;}&lt;/div&gt;${state.location===&#x27;inn&#x27;?[&#x27;Mira&#x27;,&#x27;Cassian&#x27;,&#x27;Elian&#x27;].map((name,i)=&gt;`&lt;button class=&quot;arx-person&quot; data-focus=&quot;${name}&quot;&gt;&lt;span class=&quot;arx-avatar&quot;&gt;${name[0]}&lt;/span&gt;&lt;span&gt;${name}&lt;span class=&quot;arx-small&quot; style=&quot;display:block&quot;&gt;${[&#x27;At the hearth&#x27;,&#x27;By the window&#x27;,&#x27;At the bar&#x27;][i]}&lt;/span&gt;&lt;/span&gt;&lt;/button&gt;`).join(&#x27;&#x27;):&#x27;&lt;p class=&quot;arx-small&quot;&gt;Light spills from the inn.&lt;/p&gt;&#x27;}&lt;/div&gt;&lt;div class=&quot;arx-side-section&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Ways onward&lt;/div&gt;&lt;button class=&quot;arx-navitem&quot; data-travel=&quot;${state.location===&#x27;inn&#x27;?&#x27;court&#x27;:&#x27;inn&#x27;}&quot;&gt;${state.location===&#x27;inn&#x27;?&#x27;Lantern Court&#x27;:&#x27;The Gilded Lantern&#x27;} &lt;span style=&quot;margin-left:auto&quot;&gt;→&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;arx-side-section&quot;&gt;&lt;button class=&quot;arx-navitem&quot; data-thread=&quot;ooc&quot;&gt;Out of character&lt;/button&gt;&lt;button class=&quot;arx-navitem&quot; data-focus=&quot;boundaries&quot;&gt;Scene boundaries&lt;/button&gt;&lt;/div&gt;`;}
+function pose(name,time,body,id,sub=&#x27;To the room&#x27;){return `&lt;article class=&quot;arx-pose&quot;&gt;&lt;div class=&quot;arx-author&quot;&gt;&lt;span class=&quot;arx-avatar&quot;&gt;${name[0]}&lt;/span&gt;&lt;span&gt;&lt;button data-focus=&quot;${name===&#x27;Apostate&#x27;?&#x27;self&#x27;:name}&quot;&gt;${name}&lt;/button&gt;&lt;span class=&quot;arx-small&quot; style=&quot;display:block&quot;&gt;${sub}&lt;/span&gt;&lt;/span&gt;&lt;time&gt;${time}&lt;/time&gt;&lt;/div&gt;&lt;div class=&quot;arx-prose&quot;&gt;${body}&lt;/div&gt;&lt;div class=&quot;arx-pose-actions&quot;&gt;&lt;button data-reply=&quot;${name}&quot;&gt;Respond&lt;/button&gt;&lt;button data-applaud=&quot;${id}&quot; aria-pressed=&quot;${state.applause.has(id)}&quot;&gt;${state.applause.has(id)?&#x27;Applauded&#x27;:&#x27;Applaud&#x27;}&lt;/button&gt;&lt;/div&gt;&lt;/article&gt;`;}
+function feed(){let content=&#x27;&#x27;;if(state.thread===&#x27;whisper&#x27;)content=`&lt;div class=&quot;arx-divider&quot;&gt;Private · you and Mira&lt;/div&gt;${pose(&#x27;Mira&#x27;,&#x27;8:34&#x27;,&#x27;&lt;p&gt;“There is something I could not say in front of the others. Did anyone follow you here?”&lt;/p&gt;&#x27;,&#x27;w1&#x27;,&#x27;Whisper to Apostate&#x27;)}`;else if(state.thread===&#x27;table&#x27;)content=`&lt;div class=&quot;arx-divider&quot;&gt;At the hearth&lt;/div&gt;${pose(&#x27;Mira&#x27;,&#x27;8:32&#x27;,&#x27;&lt;p&gt;Mira shifts her chair to make room. “Come closer. You look half-frozen.”&lt;/p&gt;&#x27;,&#x27;t1&#x27;,&#x27;To the hearth&#x27;)}${pose(&#x27;Elian&#x27;,&#x27;8:33&#x27;,&#x27;&lt;p&gt;Elian nudges an untouched cup across the table. “You arrived before the story. That is what matters.”&lt;/p&gt;&#x27;,&#x27;t2&#x27;,&#x27;To the hearth&#x27;)}`;else if(state.thread===&#x27;ooc&#x27;)content=`&lt;div class=&quot;arx-divider&quot;&gt;Out of character · room participants&lt;/div&gt;${pose(&#x27;Cassian&#x27;,&#x27;8:30&#x27;,&#x27;&lt;p&gt;I have about an hour tonight. Happy to follow wherever this goes!&lt;/p&gt;&#x27;,&#x27;o1&#x27;,&#x27;OOC&#x27;)}`;else content=`&lt;div class=&quot;arx-divider&quot;&gt;${state.moment===&#x27;combat&#x27;?&#x27;The scene continues&#x27;:&#x27;You arrived at the Lantern&#x27;}&lt;/div&gt;${pose(&#x27;Mira&#x27;,&#x27;8:32&#x27;,&#x27;&lt;p&gt;Mira turns at the sound of the door. For a moment, the letter rests forgotten in her hand.&lt;/p&gt;&lt;p&gt;“You came.” There is relief in her voice, though she tries to hide it. “I was beginning to think the rain had won.”&lt;/p&gt;&#x27;,&#x27;r1&#x27;)}${pose(&#x27;Cassian&#x27;,&#x27;8:33&#x27;,&#x27;&lt;p&gt;From his seat by the window, Cassian raises his glass in silent greeting. His attention returns to the street a little too quickly.&lt;/p&gt;&#x27;,&#x27;r2&#x27;)}${state.moment===&#x27;combat&#x27;?&#x27;&lt;div class=&quot;arx-narration&quot;&gt;&lt;span class=&quot;arx-eyebrow&quot;&gt;The scene changes&lt;/span&gt;&lt;p&gt;The door strikes the wall. A cloaked figure steps inside, blade drawn. Mira backs toward the hearth.&lt;/p&gt;&lt;/div&gt;&#x27;:&#x27;&lt;div class=&quot;arx-narration&quot;&gt;&lt;span class=&quot;arx-eyebrow&quot;&gt;The scene around you&lt;/span&gt;&lt;p&gt;A gust worries the shutters. Conversation softens, then returns beneath the sound of the rain.&lt;/p&gt;&lt;/div&gt;&#x27;}`;
+if(state.declared&amp;&amp;state.moment===&#x27;combat&#x27;&amp;&amp;state.thread===&#x27;room&#x27;)content+=&#x27;&lt;div class=&quot;arx-narration&quot;&gt;&lt;span class=&quot;arx-eyebrow&quot;&gt;Your declaration&lt;/span&gt;&lt;p&gt;&#x27;+({guard:&#x27;You intend to protect Mira.&#x27;,retreat:&#x27;You intend to withdraw to the doorway.&#x27;,strike:&#x27;You intend to confront the intruder.&#x27;}[state.choice])+&#x27; Waiting for the round to resolve.&lt;/p&gt;&lt;/div&gt;&#x27;;
+return content+(state.posts[state.thread]||[]).map((post,i)=&gt;pose(&#x27;Apostate&#x27;,&#x27;Now&#x27;,`&lt;p&gt;${esc(post.text)}&lt;/p&gt;`,&#x27;mine&#x27;+state.thread+i,post.mode===&#x27;ooc&#x27;?&#x27;OOC&#x27;:audience[state.thread])).join(&#x27;&#x27;);}
+function center(){const room=rooms[state.location];if(state.moment===&#x27;lobby&#x27;)return `&lt;div class=&quot;arx-explore&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Your next chapter&lt;/div&gt;&lt;h1&gt;Step back&lt;br&gt;into the world.&lt;/h1&gt;&lt;p class=&quot;arx-prose&quot;&gt;The city carries on in your absence.&lt;br&gt;Tonight, a door is still open.&lt;/p&gt;&lt;div class=&quot;arx-entry-card&quot;&gt;&lt;div class=&quot;arx-row&quot;&gt;&lt;span class=&quot;arx-avatar&quot;&gt;A&lt;/span&gt;&lt;h3&gt;Apostate&lt;/h3&gt;&lt;/div&gt;&lt;p&gt;Last location · ${room.name}&lt;/p&gt;&lt;button class=&quot;arx-primary&quot; data-go=&quot;explore&quot;&gt;Enter as Apostate →&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;arx-location-rule&quot;&gt;&lt;/div&gt;&lt;p class=&quot;arx-small&quot;&gt;You decide where to go and whom to approach.&lt;/p&gt;&lt;/div&gt;`;
+if(state.moment===&#x27;explore&#x27;)return `&lt;div class=&quot;arx-explore&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;${room.area} / You are here&lt;/div&gt;&lt;h1&gt;${room.name}&lt;/h1&gt;&lt;p class=&quot;arx-small&quot;&gt;${room.ambience}&lt;/p&gt;&lt;div class=&quot;arx-location-rule&quot;&gt;&lt;/div&gt;&lt;div class=&quot;arx-prose&quot;&gt;&lt;p&gt;${room.description}&lt;/p&gt;&lt;p&gt;${room.detail}&lt;/p&gt;&lt;/div&gt;${state.location===&#x27;inn&#x27;?&#x27;&lt;div class=&quot;arx-entry-card&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;A gathering · open to join&lt;/div&gt;&lt;h3&gt;A letter in the rain&lt;/h3&gt;&lt;p&gt;Mira, Cassian and Elian are here. There is room for another voice.&lt;/p&gt;&lt;button class=&quot;arx-primary&quot; data-go=&quot;scene&quot;&gt;Approach the gathering →&lt;/button&gt;&lt;/div&gt;&#x27;:&#x27;&lt;div class=&quot;arx-entry-card&quot;&gt;&lt;h3&gt;A moment to yourself&lt;/h3&gt;&lt;p&gt;No active scene here. Explore your surroundings or return to the gathering.&lt;/p&gt;&lt;button class=&quot;arx-primary&quot; data-travel=&quot;inn&quot;&gt;Return to the Lantern →&lt;/button&gt;&lt;/div&gt;&#x27;}&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Within reach&lt;/div&gt;&lt;div class=&quot;arx-place-list&quot;&gt;&lt;button data-focus=&quot;${state.location===&#x27;inn&#x27;?&#x27;letter&#x27;:&#x27;lanterns&#x27;}&quot;&gt;${state.location===&#x27;inn&#x27;?&#x27;A sealed letter&#x27;:&#x27;The lanterns&#x27;} &lt;span&gt;Examine ↗&lt;/span&gt;&lt;/button&gt;&lt;button data-travel=&quot;${state.location===&#x27;inn&#x27;?&#x27;court&#x27;:&#x27;inn&#x27;}&quot;&gt;${state.location===&#x27;inn&#x27;?&#x27;The open doorway&#x27;:&#x27;The inn doorway&#x27;} &lt;span&gt;Go through →&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;`;
+return `&lt;div class=&quot;arx-scene-heading&quot;&gt;&lt;div class=&quot;arx-row arx-between&quot;&gt;&lt;span class=&quot;arx-eyebrow&quot;&gt;${room.name}&lt;/span&gt;&lt;span class=&quot;arx-tag&quot;&gt;${state.moment===&#x27;combat&#x27;?&#x27;Encounter · round 2&#x27;:&#x27;Live scene&#x27;}&lt;/span&gt;&lt;/div&gt;&lt;h1&gt;A letter in the rain&lt;/h1&gt;&lt;div class=&quot;arx-row arx-between&quot;&gt;&lt;span class=&quot;arx-small&quot;&gt;Four voices · ${state.moment===&#x27;combat&#x27;?&#x27;The stakes have changed&#x27;:&#x27;A chance meeting on a rainy evening&#x27;}&lt;/span&gt;&lt;button class=&quot;arx-focus-return arx-small&quot; data-focus=&quot;${state.moment===&#x27;combat&#x27;?&#x27;combat&#x27;:&#x27;moment&#x27;}&quot;&gt;Details ↗&lt;/button&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;arx-viewbar&quot;&gt;&lt;strong&gt;${threadNames[state.thread]}&lt;/strong&gt;&lt;span style=&quot;flex:1&quot;&gt;&lt;/span&gt;&lt;button data-focus=&quot;audience&quot;&gt;${state.thread===&#x27;whisper&#x27;?&#x27;Private&#x27;:&#x27;Audience&#x27;} ↗&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;arx-feed&quot; tabindex=&quot;0&quot; aria-label=&quot;${threadNames[state.thread]} narrative&quot;&gt;${feed()}&lt;/div&gt;&lt;form class=&quot;arx-composer&quot;&gt;&lt;div class=&quot;arx-composer-label&quot;&gt;&lt;strong&gt;Writing as Apostate&lt;/strong&gt;&lt;span class=&quot;arx-gold&quot;&gt;${audience[state.thread]}&lt;/span&gt;&lt;/div&gt;&lt;label for=&quot;arx-draft&quot; class=&quot;arx-small&quot;&gt;${state.thread===&#x27;whisper&#x27;?&#x27;Your private reply&#x27;:&#x27;Your next contribution&#x27;}&lt;/label&gt;&lt;textarea id=&quot;arx-draft&quot; placeholder=&quot;${state.thread===&#x27;whisper&#x27;?&#x27;Write a private reply to Mira…&#x27;:&#x27;What does Apostate say or do?&#x27;}&quot;&gt;${esc(state.drafts[state.thread]||&#x27;&#x27;)}&lt;/textarea&gt;&lt;div class=&quot;arx-compose-bottom&quot;&gt;&lt;div class=&quot;arx-row&quot;&gt;&lt;select aria-label=&quot;Writing mode&quot;&gt;&lt;option value=&quot;pose&quot;&gt;Roleplay&lt;/option&gt;&lt;option value=&quot;ooc&quot; ${state.mode===&#x27;ooc&#x27;?&#x27;selected&#x27;:&#x27;&#x27;}&gt;OOC&lt;/option&gt;&lt;/select&gt;&lt;button type=&quot;button&quot; data-focus=&quot;actions&quot;&gt;+ Action&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;arx-primary&quot; type=&quot;submit&quot;&gt;${state.thread===&#x27;whisper&#x27;?&#x27;Send to Mira&#x27;:&#x27;Share with &#x27;+(state.thread===&#x27;table&#x27;?&#x27;the hearth&#x27;:&#x27;the room&#x27;)}&lt;/button&gt;&lt;/div&gt;&lt;/form&gt;`;}
+function inspector(){const back=&#x27;&lt;button class=&quot;arx-small&quot; data-close&gt;← Back to the scene&lt;/button&gt;&#x27;;const f=state.focus;
+if(f===&#x27;self&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Your character&lt;/div&gt;&lt;h2&gt;Apostate&lt;/h2&gt;&lt;p class=&quot;arx-small&quot;&gt;You are at ${rooms[state.location].name}.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;At a glance&lt;/h3&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Condition&lt;/span&gt;&lt;strong&gt;Uninjured&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Stamina&lt;/span&gt;&lt;strong&gt;Ready&lt;/strong&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Active effects&lt;/span&gt;&lt;strong&gt;None&lt;/strong&gt;&lt;/div&gt;&lt;/div&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Your strengths&lt;/h3&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Composure&lt;/span&gt;&lt;span&gt;4&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Insight&lt;/span&gt;&lt;span&gt;3&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Presence&lt;/span&gt;&lt;span&gt;3&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;arx-small&quot; style=&quot;margin-top:10px&quot;&gt;Illustrative values for this design.&lt;/p&gt;&lt;/div&gt;&lt;button class=&quot;arx-choice&quot; data-focus=&quot;inventory&quot;&gt;Carried &amp;amp; worn &lt;small&gt;Travel cloak, signet, folded letter&lt;/small&gt;&lt;/button&gt;`;
+if([&#x27;Mira&#x27;,&#x27;Cassian&#x27;,&#x27;Elian&#x27;].includes(f))return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;In focus · a person&lt;/div&gt;&lt;h2&gt;${f}&lt;/h2&gt;&lt;p&gt;${{Mira:&#x27;A travel-worn coat, ink on her fingers, and the air of someone waiting for an answer.&#x27;,Cassian:&#x27;A watchful guest in a dark waistcoat. Rain beads on the hat beside his glass.&#x27;,Elian:&#x27;Sleeves rolled to the elbow, a warm cup balanced between both hands.&#x27;}[f]}&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;What you can see&lt;/h3&gt;&lt;p class=&quot;arx-small&quot;&gt;${f===&#x27;Mira&#x27;?&#x27;A letter sealed in dark green wax.&#x27;:f===&#x27;Cassian&#x27;?&#x27;A signet ring and an untouched glass.&#x27;:&#x27;A plain silver band and a well-mended coat.&#x27;}&lt;/p&gt;&lt;/div&gt;&lt;button class=&quot;arx-primary&quot; data-converse=&quot;${f}&quot;&gt;${f===&#x27;Mira&#x27;?&#x27;Whisper to Mira&#x27;:&#x27;Address &#x27;+f}&lt;/button&gt;&lt;button class=&quot;arx-choice&quot; data-thread=&quot;table&quot;&gt;Join the hearth conversation&lt;/button&gt;`;
+if(f===&#x27;room&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;In focus · a place&lt;/div&gt;&lt;h2&gt;${rooms[state.location].name}&lt;/h2&gt;&lt;p&gt;${rooms[state.location].description}&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Within reach&lt;/h3&gt;&lt;button class=&quot;arx-choice&quot; data-focus=&quot;letter&quot;&gt;The sealed letter &lt;small&gt;Held by Mira&lt;/small&gt;&lt;/button&gt;&lt;/div&gt;&lt;button class=&quot;arx-primary&quot; data-go=&quot;explore&quot;&gt;Explore this location&lt;/button&gt;`;
+if(f===&#x27;letter&#x27;||f===&#x27;lanterns&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;In focus · an object&lt;/div&gt;&lt;h2&gt;${f===&#x27;letter&#x27;?&#x27;A sealed letter&#x27;:&#x27;The lanterns&#x27;}&lt;/h2&gt;&lt;p&gt;${f===&#x27;letter&#x27;?&#x27;Heavy cream paper. Dark green wax. The seal bears an unfamiliar branching mark. Mira still holds it; its contents are hidden.&#x27;:&#x27;Small glass lanterns hang beneath the eaves, sheltered from the rain. Warm light catches in the uneven panes.&#x27;}&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Available interactions&lt;/h3&gt;&lt;button class=&quot;arx-choice&quot; data-converse=&quot;Mira&quot;&gt;${f===&#x27;letter&#x27;?&#x27;Ask Mira about the seal&#x27;:&#x27;Ask Mira about the courtyard&#x27;}&lt;/button&gt;&lt;/div&gt;`;
+if(f===&#x27;audience&#x27;||f===&#x27;boundaries&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Scene agreements&lt;/div&gt;&lt;h2&gt;${f===&#x27;audience&#x27;?&#x27;Who can see this?&#x27;:&#x27;Play comfortably&#x27;}&lt;/h2&gt;&lt;p&gt;&lt;strong&gt;${audience[state.thread]}.&lt;/strong&gt; Public targeting does not make a message private.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Recording&lt;/h3&gt;&lt;p&gt;This scene is provisional. Keeping a record is a separate, explicit decision.&lt;/p&gt;&lt;/div&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Boundaries&lt;/h3&gt;&lt;p&gt;Respect each participant’s lines and veils. Requests needing your answer appear beside your writing.&lt;/p&gt;&lt;/div&gt;&lt;button class=&quot;arx-choice&quot; data-pause&gt;Request an OOC pause&lt;/button&gt;`;
+if(f===&#x27;journal&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Your journal&lt;/div&gt;&lt;h2&gt;What you carry forward&lt;/h2&gt;&lt;p&gt;Kept scenes and your own notes belong here.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;A letter in the rain&lt;/h3&gt;&lt;p class=&quot;arx-small&quot;&gt;In progress · provisional&lt;br&gt;No permanent record has been kept.&lt;/p&gt;&lt;/div&gt;&lt;button class=&quot;arx-primary&quot; data-go=&quot;scene&quot;&gt;Return to the live scene&lt;/button&gt;`;
+if(f===&#x27;inventory&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Your belongings&lt;/div&gt;&lt;h2&gt;Carried &amp;amp; worn&lt;/h2&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Travel cloak&lt;/span&gt;&lt;span&gt;Worn&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Signet&lt;/span&gt;&lt;span&gt;Worn&lt;/span&gt;&lt;/div&gt;&lt;div class=&quot;arx-stat&quot;&gt;&lt;span&gt;Folded letter&lt;/span&gt;&lt;span&gt;Carried&lt;/span&gt;&lt;/div&gt;&lt;p class=&quot;arx-small&quot; style=&quot;margin-top:16px&quot;&gt;Select an object in the world to inspect it without leaving your writing.&lt;/p&gt;`;
+if(f===&#x27;actions&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;What do you attempt?&lt;/div&gt;&lt;h2&gt;Act in the scene&lt;/h2&gt;&lt;p&gt;Choose an available action, then describe your intent.&lt;/p&gt;&lt;button class=&quot;arx-choice&quot; data-attach=&quot;Read the situation&quot;&gt;Read the situation&lt;small&gt;Look for meaning in what you can observe.&lt;/small&gt;&lt;/button&gt;&lt;button class=&quot;arx-choice&quot; data-attach=&quot;Examine the seal&quot;&gt;Examine the seal&lt;small&gt;Inspect the letter’s visible markings.&lt;/small&gt;&lt;/button&gt;&lt;p class=&quot;arx-small&quot; style=&quot;margin-top:16px&quot;&gt;Example actions; the game supplies the available choices and rules.&lt;/p&gt;`;
+if(state.moment===&#x27;combat&#x27;||f===&#x27;combat&#x27;)return `${back}&lt;div class=&quot;arx-eyebrow&quot; style=&quot;margin-top:16px&quot;&gt;Encounter · round 2&lt;/div&gt;&lt;h2&gt;${state.declared?&#x27;Intent declared&#x27;:&#x27;What do you do?&#x27;}&lt;/h2&gt;&lt;p class=&quot;arx-alert&quot;&gt;An intruder threatens the gathering.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Positions&lt;/h3&gt;&lt;div class=&quot;arx-map&quot; aria-label=&quot;Schematic room positions&quot;&gt;&lt;div class=&quot;arx-here&quot;&gt;Hearth&lt;small&gt;You · Mira&lt;/small&gt;&lt;/div&gt;&lt;div&gt;Window&lt;small&gt;Cassian&lt;/small&gt;&lt;/div&gt;&lt;div&gt;Doorway&lt;small&gt;Intruder&lt;/small&gt;&lt;/div&gt;&lt;div&gt;Bar&lt;small&gt;Elian&lt;/small&gt;&lt;/div&gt;&lt;/div&gt;&lt;/div&gt;${state.declared?&#x27;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Waiting for resolution&lt;/h3&gt;&lt;p&gt;Your intent is recorded for this round. Continue writing while the other participants decide.&lt;/p&gt;&lt;/div&gt;&#x27;:`&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Your available actions&lt;/div&gt;${[[&#x27;guard&#x27;,&#x27;Protect Mira&#x27;,&#x27;Remain by the hearth.&#x27;],[&#x27;retreat&#x27;,&#x27;Withdraw&#x27;,&#x27;Move toward the doorway.&#x27;],[&#x27;strike&#x27;,&#x27;Confront the intruder&#x27;,&#x27;Engage the immediate threat.&#x27;]].map(([key,label,detail])=&gt;`&lt;button class=&quot;arx-choice&quot; data-choice=&quot;${key}&quot; aria-pressed=&quot;${state.choice===key}&quot;&gt;${label}&lt;small&gt;${detail}&lt;/small&gt;&lt;/button&gt;`).join(&#x27;&#x27;)}&lt;button class=&quot;arx-primary&quot; data-declare&gt;Declare intent&lt;/button&gt;&lt;/div&gt;`}&lt;p class=&quot;arx-small&quot; style=&quot;margin-top:12px&quot;&gt;Illustrative choices and positions. Resolution belongs to the game.&lt;/p&gt;`;
+if(state.moment===&#x27;lobby&#x27;)return &#x27;&lt;div class=&quot;arx-eyebrow&quot;&gt;Welcome back&lt;/div&gt;&lt;h2&gt;A world of other people.&lt;/h2&gt;&lt;p&gt;Enter as your character, find a place, and choose a conversation.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;At your pace&lt;/h3&gt;&lt;p class=&quot;arx-small&quot;&gt;You can explore before joining a scene.&lt;/p&gt;&lt;/div&gt;&#x27;;
+if(state.moment===&#x27;explore&#x27;)return `&lt;div class=&quot;arx-eyebrow&quot;&gt;An invitation, not an obligation&lt;/div&gt;&lt;h2&gt;${state.location===&#x27;inn&#x27;?&#x27;Follow your curiosity.&#x27;:&#x27;Take your time.&#x27;}&lt;/h2&gt;&lt;p&gt;${state.location===&#x27;inn&#x27;?&#x27;Mira seems preoccupied with the letter. The hearth has an empty chair. The city waits outside.&#x27;:&#x27;There is no scene to join here. The room still has a description, objects, and ways onward.&#x27;}&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Your next move&lt;/h3&gt;&lt;button class=&quot;arx-choice&quot; data-focus=&quot;${state.location===&#x27;inn&#x27;?&#x27;Mira&#x27;:&#x27;lanterns&#x27;}&quot;&gt;${state.location===&#x27;inn&#x27;?&#x27;Look at Mira&#x27;:&#x27;Look at the lanterns&#x27;}&lt;/button&gt;&lt;button class=&quot;arx-choice&quot; data-focus=&quot;self&quot;&gt;Check your character&lt;/button&gt;&lt;/div&gt;`;
+return `&lt;div class=&quot;arx-eyebrow&quot;&gt;This moment&lt;/div&gt;&lt;h2&gt;A letter.&lt;br&gt;A late arrival.&lt;/h2&gt;&lt;p&gt;Mira has been waiting for you. Cassian is watching the street.&lt;/p&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;h3&gt;Ways into the scene&lt;/h3&gt;&lt;button class=&quot;arx-choice&quot; data-thread=&quot;table&quot;&gt;Take a seat by the hearth &lt;small&gt;Join a smaller conversation.&lt;/small&gt;&lt;/button&gt;&lt;button class=&quot;arx-choice&quot; data-focus=&quot;letter&quot;&gt;Look at the letter &lt;small&gt;Inspect what is visible.&lt;/small&gt;&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Your character&lt;/div&gt;&lt;button class=&quot;arx-navitem&quot; data-focus=&quot;self&quot;&gt;&lt;span&gt;Uninjured · ready&lt;small&gt;Open character details ↗&lt;/small&gt;&lt;/span&gt;&lt;/button&gt;&lt;/div&gt;&lt;div class=&quot;arx-detail-block&quot;&gt;&lt;div class=&quot;arx-eyebrow&quot;&gt;Scene agreements&lt;/div&gt;&lt;p class=&quot;arx-small&quot;&gt;Open gathering · provisional record&lt;/p&gt;&lt;button class=&quot;arx-small&quot; data-focus=&quot;boundaries&quot;&gt;Audience &amp;amp; boundaries ↗&lt;/button&gt;&lt;/div&gt;`;
+}
+function render(){opts.moment=state.moment;root.dataset.direction=opts.direction;root.dataset.mobile=state.mobile;root.dataset.detailOpen=String(state.detailOpen);root.style.setProperty(&#x27;--arx-prose-size&#x27;,opts.proseSize+&#x27;px&#x27;);$(&#x27;.arx-world&#x27;).innerHTML=world();$(&#x27;.arx-center&#x27;).innerHTML=center();$(&#x27;.arx-inspector&#x27;).innerHTML=inspector();root.querySelectorAll(&#x27;.arx-mainnav [data-go]&#x27;).forEach(b=&gt;b.setAttribute(&#x27;aria-pressed&#x27;,b.dataset.go===state.moment||(b.dataset.go===&#x27;scene&#x27;&amp;&amp;state.moment===&#x27;combat&#x27;)));root.querySelectorAll(&#x27;.arx-mobile-nav button&#x27;).forEach(b=&gt;b.setAttribute(&#x27;aria-pressed&#x27;,b.dataset.mobile===state.mobile));}
+root.addEventListener(&#x27;input&#x27;,e=&gt;{if(e.target.matches(&#x27;textarea&#x27;))state.drafts[state.thread]=e.target.value;});
+root.addEventListener(&#x27;change&#x27;,e=&gt;{if(e.target.matches(&#x27;select&#x27;))state.mode=e.target.value;});
+root.addEventListener(&#x27;submit&#x27;,e=&gt;{e.preventDefault();const field=$(&#x27;textarea&#x27;);const text=field.value.trim();if(!text){field.focus();feedback(&#x27;Write something before sharing.&#x27;);return;}state.posts[state.thread]??=[];state.posts[state.thread].push({text,mode:state.mode});state.drafts[state.thread]=&#x27;&#x27;;render();$(&#x27;.arx-feed&#x27;).scrollTop=$(&#x27;.arx-feed&#x27;).scrollHeight;feedback(&#x27;Added to this preview only.&#x27;);});
+root.addEventListener(&#x27;click&#x27;,e=&gt;{const b=e.target.closest(&#x27;button&#x27;);if(!b)return;const d=b.dataset;if(d.go){if(d.go===&#x27;scene&#x27;)state.location=&#x27;inn&#x27;;setMoment(d.go);}else if(d.focus)focus(d.focus);else if(d.thread){saveDraft();if(![&#x27;scene&#x27;,&#x27;combat&#x27;].includes(state.moment))state.moment=&#x27;scene&#x27;;state.location=&#x27;inn&#x27;;state.thread=d.thread;state.mobile=&#x27;story&#x27;;state.detailOpen=false;state.mode=d.thread===&#x27;ooc&#x27;?&#x27;ooc&#x27;:&#x27;pose&#x27;;render();}else if(d.travel){saveDraft();state.location=d.travel;setMoment(&#x27;explore&#x27;);feedback(&#x27;Location changed in the preview. Your writing draft is kept.&#x27;);}else if(d.mobile){saveDraft();state.mobile=d.mobile;state.detailOpen=d.mobile===&#x27;details&#x27;;render();}else if(&#x27;close&#x27;in d){state.focus=state.moment===&#x27;combat&#x27;?&#x27;combat&#x27;:&#x27;moment&#x27;;state.mobile=&#x27;story&#x27;;state.detailOpen=false;saveDraft();render();}else if(d.converse){saveDraft();state.location=&#x27;inn&#x27;;state.moment=&#x27;scene&#x27;;state.thread=d.converse===&#x27;Mira&#x27;?&#x27;whisper&#x27;:&#x27;room&#x27;;state.mobile=&#x27;story&#x27;;state.detailOpen=false;if(d.converse!==&#x27;Mira&#x27;)state.drafts.room=`To ${d.converse}: `;render();$(&#x27;textarea&#x27;).focus();}else if(d.reply){const field=$(&#x27;textarea&#x27;);field.value+=(field.value?&#x27;\n&#x27;:&#x27;&#x27;)+`To ${d.reply}: `;state.drafts[state.thread]=field.value;field.focus();feedback(&#x27;Recipient added. &#x27;+audience[state.thread]+&#x27;.&#x27;);}else if(d.applaud){const active=!state.applause.has(d.applaud);if(active)state.applause.add(d.applaud);else state.applause.delete(d.applaud);b.textContent=active?&#x27;Applauded&#x27;:&#x27;Applaud&#x27;;b.setAttribute(&#x27;aria-pressed&#x27;,active);}else if(d.choice){saveDraft();state.choice=d.choice;render();}else if(&#x27;declare&#x27;in d){saveDraft();state.declared=true;render();feedback(&#x27;Intent declared in the preview; awaiting resolution.&#x27;);}else if(d.attach){saveDraft();state.drafts[state.thread]=(state.drafts[state.thread]||&#x27;&#x27;)+`[Intent: ${d.attach}] `;state.mobile=&#x27;story&#x27;;state.detailOpen=false;state.focus=&#x27;moment&#x27;;render();feedback(&#x27;Illustrative action intent added to your draft.&#x27;);$(&#x27;textarea&#x27;)?.focus();}else if(&#x27;pause&#x27;in d){feedback(&#x27;Preview: an OOC pause request would be shown to scene participants.&#x27;);}});
+render();
+if(globalThis.Tweak){const tweak=new Tweak({container:root,onChange:()=&gt;{saveDraft();if(opts.moment!==state.moment){state.moment=opts.moment;state.focus=opts.moment===&#x27;combat&#x27;?&#x27;combat&#x27;:&#x27;moment&#x27;;state.thread=&#x27;room&#x27;;state.location=&#x27;inn&#x27;;state.declared=false;state.mobile=&#x27;story&#x27;;state.detailOpen=false;}render();}});tweak.addSelect(opts,&#x27;direction&#x27;,{label:&#x27;Design direction&#x27;,options:[{label:&#x27;Narrative desk · recommended&#x27;,value:&#x27;editorial&#x27;},{label:&#x27;Conversation lounge&#x27;,value:&#x27;social&#x27;},{label:&#x27;Reading room&#x27;,value:&#x27;reading&#x27;}]});tweak.addSelect(opts,&#x27;moment&#x27;,{label:&#x27;Moment in play&#x27;,options:[{label:&#x27;Entering the world&#x27;,value:&#x27;lobby&#x27;},{label:&#x27;Exploring a room&#x27;,value:&#x27;explore&#x27;},{label:&#x27;Roleplaying a scene&#x27;,value:&#x27;scene&#x27;},{label:&#x27;An encounter begins&#x27;,value:&#x27;combat&#x27;}]});tweak.addSlider(opts,&#x27;proseSize&#x27;,{label:&#x27;Prose size&#x27;,min:14,max:20,step:1,unit:&#x27;px&#x27;});}
+})();
+&lt;/script&gt;
+
+&lt;script src=&quot;https://unpkg.com/@floating-ui/core@1.7.3/dist/floating-ui.core.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script src=&quot;https://unpkg.com/@floating-ui/dom@1.7.4/dist/floating-ui.dom.umd.min.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  if (window.FloatingUIDOM == null) {
+    return;
+  }
+  const { autoUpdate, computePosition, flip, offset, shift, size } =
+    window.FloatingUIDOM;
+  const tooltipPlacements = new Set([&quot;top&quot;, &quot;right&quot;, &quot;bottom&quot;, &quot;left&quot;]);
+  const tooltipId = `codex-visualization-tooltip-${
+    window.crypto?.randomUUID?.() ?? Date.now().toString(36)
+  }`;
+  const tooltipGap = 5;
+  const hoverDelay = 700;
+  const skipDelay = 300;
+  let activeTrigger = null;
+  let pendingTrigger = null;
+  let tooltip = null;
+  let openTimeout = null;
+  let autoUpdateCleanup = null;
+  let positionRequest = 0;
+  let skipDelayUntil = 0;
+  let lastPointerWasTouch = false;
+  let pinnedByTouch = false;
+
+  const getTrigger = (target) =&gt;
+    target?.nodeType === Node.ELEMENT_NODE
+      ? target.closest(&quot;[data-tooltip]&quot;)
+      : null;
+  const containsTarget = (trigger, target) =&gt;
+    target?.nodeType != null &amp;&amp; trigger.contains(target);
+  const getContent = (trigger) =&gt;
+    trigger.getAttribute(&quot;data-tooltip&quot;)?.trim() ?? &quot;&quot;;
+  const getPlacement = (trigger) =&gt; {
+    const placement = trigger.getAttribute(&quot;data-tooltip-placement&quot;);
+    return tooltipPlacements.has(placement) ? placement : &quot;top&quot;;
+  };
+  const getTooltip = () =&gt; {
+    if (tooltip == null) {
+      tooltip = document.createElement(&quot;div&quot;);
+      tooltip.id = tooltipId;
+      tooltip.className = &quot;tooltip&quot;;
+      tooltip.setAttribute(&quot;role&quot;, &quot;tooltip&quot;);
+    }
+    return tooltip;
+  };
+  const setDescribedBy = (trigger, described) =&gt; {
+    const ids = new Set(
+      (trigger.getAttribute(&quot;aria-describedby&quot;) ?? &quot;&quot;)
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+    if (described) {
+      ids.add(tooltipId);
+    } else {
+      ids.delete(tooltipId);
+    }
+    if (ids.size === 0) {
+      trigger.removeAttribute(&quot;aria-describedby&quot;);
+    } else {
+      trigger.setAttribute(&quot;aria-describedby&quot;, [...ids].join(&quot; &quot;));
+    }
+  };
+  const clearOpenTimeout = () =&gt; {
+    if (openTimeout != null) {
+      window.clearTimeout(openTimeout);
+      openTimeout = null;
+    }
+    pendingTrigger = null;
+  };
+  const closeTooltip = (activateSkipDelay = true) =&gt; {
+    clearOpenTimeout();
+    pinnedByTouch = false;
+    positionRequest += 1;
+    autoUpdateCleanup?.();
+    autoUpdateCleanup = null;
+    if (activeTrigger == null) {
+      return;
+    }
+    setDescribedBy(activeTrigger, false);
+    activeTrigger = null;
+    tooltip?.remove();
+    if (activateSkipDelay) {
+      skipDelayUntil = Date.now() + skipDelay;
+    }
+  };
+  const updatePosition = (trigger, floating) =&gt; {
+    const request = ++positionRequest;
+    void computePosition(trigger, floating, {
+      middleware: [
+        offset(tooltipGap),
+        flip({ padding: tooltipGap }),
+        shift({ padding: tooltipGap }),
+        size({
+          padding: tooltipGap,
+          apply({ availableHeight, availableWidth, elements }) {
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-width&quot;,
+              `${Math.max(0, availableWidth)}px`,
+            );
+            elements.floating.style.setProperty(
+              &quot;--tooltip-available-height&quot;,
+              `${Math.max(0, availableHeight)}px`,
+            );
+          },
+        }),
+      ],
+      placement: getPlacement(trigger),
+      strategy: &quot;fixed&quot;,
+    })
+      .then(({ x, y }) =&gt; {
+        if (activeTrigger !== trigger || request !== positionRequest) {
+          return;
+        }
+        const scale = window.devicePixelRatio || 1;
+        floating.style.transform = `translate(${Math.round(x * scale) / scale}px, ${Math.round(y * scale) / scale}px)`;
+        floating.style.visibility = &quot;visible&quot;;
+      })
+      .catch(() =&gt; {
+        if (activeTrigger === trigger &amp;&amp; request === positionRequest) {
+          closeTooltip(false);
+        }
+      });
+  };
+  const openTooltip = (trigger) =&gt; {
+    const content = getContent(trigger);
+    if (!trigger.isConnected || content.length === 0) {
+      return;
+    }
+    clearOpenTimeout();
+    if (activeTrigger === trigger) {
+      return;
+    }
+    closeTooltip();
+    const floating = getTooltip();
+    floating.textContent = content;
+    floating.style.visibility = &quot;hidden&quot;;
+    floating.style.transform = &quot;translate(0, 0)&quot;;
+    document.body.appendChild(floating);
+    activeTrigger = trigger;
+    setDescribedBy(trigger, true);
+    autoUpdateCleanup = autoUpdate(trigger, floating, () =&gt; {
+      updatePosition(trigger, floating);
+    });
+  };
+  const requestOpen = (trigger, immediate = false) =&gt; {
+    if (
+      getContent(trigger).length === 0 ||
+      activeTrigger === trigger ||
+      pendingTrigger === trigger
+    ) {
+      return;
+    }
+    clearOpenTimeout();
+    pendingTrigger = trigger;
+    const delay =
+      immediate || activeTrigger != null || Date.now() &lt; skipDelayUntil
+        ? 0
+        : hoverDelay;
+    if (delay === 0) {
+      openTooltip(trigger);
+      return;
+    }
+    openTimeout = window.setTimeout(() =&gt; {
+      openTimeout = null;
+      pendingTrigger = null;
+      openTooltip(trigger);
+    }, delay);
+  };
+  const handlePointerOpen = (event) =&gt; {
+    if (event.pointerType === &quot;touch&quot;) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    requestOpen(trigger);
+  };
+  const handlePointer = (event) =&gt; {
+    lastPointerWasTouch =
+      event.type === &quot;pointerdown&quot; &amp;&amp; event.pointerType === &quot;touch&quot;;
+  };
+  const handleTouchClick = (event) =&gt; {
+    const isTouch = event.pointerType === &quot;touch&quot; || lastPointerWasTouch;
+    lastPointerWasTouch = false;
+    if (!isTouch || event.detail === 0) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (
+      trigger == null ||
+      !trigger.isConnected ||
+      getContent(trigger).length === 0 ||
+      (pinnedByTouch &amp;&amp; activeTrigger === trigger)
+    ) {
+      if (pinnedByTouch) {
+        closeTooltip();
+      }
+      return;
+    }
+    openTooltip(trigger);
+    pinnedByTouch = activeTrigger === trigger;
+    window.setTimeout(() =&gt; {
+      if (activeTrigger === trigger &amp;&amp; !trigger.isConnected) {
+        closeTooltip(false);
+      }
+    }, 0);
+  };
+  const handleLeave = (event) =&gt; {
+    if (pinnedByTouch) {
+      return;
+    }
+    const trigger = getTrigger(event.target);
+    if (trigger == null || containsTarget(trigger, event.relatedTarget)) {
+      return;
+    }
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const handleFocusIn = (event) =&gt; {
+    const trigger = getTrigger(event.target);
+    if (trigger?.matches(&quot;:focus-visible&quot;)) {
+      requestOpen(trigger, true);
+    }
+  };
+  const handleKeyDown = (event) =&gt; {
+    if (event.key === &quot;Escape&quot;) {
+      closeTooltip();
+    }
+  };
+  const handleContextMenu = (event) =&gt; {
+    lastPointerWasTouch = false;
+    const trigger = getTrigger(event.target);
+    if (activeTrigger === trigger || pendingTrigger === trigger) {
+      closeTooltip();
+    }
+  };
+  const destroy = () =&gt; {
+    closeTooltip(false);
+    lastPointerWasTouch = false;
+    document.removeEventListener(&quot;pointerover&quot;, handlePointerOpen);
+    document.removeEventListener(&quot;pointerdown&quot;, handlePointer);
+    document.removeEventListener(&quot;pointercancel&quot;, handlePointer);
+    document.removeEventListener(&quot;click&quot;, handleTouchClick);
+    document.removeEventListener(&quot;pointerout&quot;, handleLeave);
+    document.removeEventListener(&quot;focusin&quot;, handleFocusIn);
+    document.removeEventListener(&quot;focusout&quot;, handleLeave);
+    document.removeEventListener(&quot;keydown&quot;, handleKeyDown);
+    document.removeEventListener(&quot;contextmenu&quot;, handleContextMenu);
+    tooltip = null;
+  };
+
+  document.addEventListener(&quot;pointerover&quot;, handlePointerOpen);
+  document.addEventListener(&quot;pointerdown&quot;, handlePointer);
+  document.addEventListener(&quot;pointercancel&quot;, handlePointer);
+  document.addEventListener(&quot;click&quot;, handleTouchClick);
+  document.addEventListener(&quot;pointerout&quot;, handleLeave);
+  document.addEventListener(&quot;focusin&quot;, handleFocusIn);
+  document.addEventListener(&quot;focusout&quot;, handleLeave);
+  document.addEventListener(&quot;keydown&quot;, handleKeyDown);
+  document.addEventListener(&quot;contextmenu&quot;, handleContextMenu);
+  window.addEventListener(&quot;pagehide&quot;, destroy, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-tabs&quot;&gt;
+(() =&gt; {
+  const selector = &#x27;.nav[role=&quot;tablist&quot;] [role=&quot;tab&quot;]&#x27;;
+  const disabled = &#x27;:disabled,[aria-disabled=&quot;true&quot;]&#x27;;
+  const selectTab = (selected) =&gt; {
+    const panelId = selected.getAttribute(&quot;aria-controls&quot;);
+    for (const tab of selected.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;)) {
+      const active = tab === selected;
+      tab.classList.toggle(&quot;active&quot;, active);
+      tab.setAttribute(&quot;aria-selected&quot;, String(active));
+      const id = tab.getAttribute(&quot;aria-controls&quot;);
+      const panel = id &amp;&amp; document.getElementById(id);
+      if (panel != null) {
+        panel.hidden = id !== panelId;
+        if (!panel.hidden &amp;&amp; selected.id) {
+          panel.setAttribute(&quot;aria-labelledby&quot;, selected.id);
+        }
+      }
+    }
+  };
+  const interact = (event) =&gt; {
+    const tab = event.target?.closest?.(selector);
+    if (event.defaultPrevented || tab == null || tab.matches(disabled)) {
+      return;
+    }
+    if (event.type === &quot;click&quot;) {
+      selectTab(tab);
+      return;
+    }
+    const tabs = Array.from(
+      tab.closest(&#x27;[role=&quot;tablist&quot;]&#x27;).querySelectorAll(&#x27;[role=&quot;tab&quot;]&#x27;),
+    ).filter((candidate) =&gt; !candidate.matches(disabled));
+    const current = tabs.indexOf(tab);
+    let next;
+    if (event.key === &quot;ArrowRight&quot; || event.key === &quot;ArrowDown&quot;) {
+      next = (current + 1) % tabs.length;
+    } else if (event.key === &quot;ArrowLeft&quot; || event.key === &quot;ArrowUp&quot;) {
+      next = (current + tabs.length - 1) % tabs.length;
+    } else if (event.key === &quot;Home&quot;) {
+      next = 0;
+    } else if (event.key === &quot;End&quot;) {
+      next = tabs.length - 1;
+    } else {
+      return;
+    }
+    event.preventDefault();
+    tabs[next].focus();
+    selectTab(tabs[next]);
+  };
+
+  for (const list of document.querySelectorAll(&#x27;.nav[role=&quot;tablist&quot;]&#x27;)) {
+    const selected =
+      list.querySelector(&#x27;[role=&quot;tab&quot;][aria-selected=&quot;true&quot;]&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;].active&#x27;) ??
+      list.querySelector(&#x27;[role=&quot;tab&quot;]&#x27;);
+    if (selected != null) {
+      selectTab(selected);
+    }
+  }
+  document.addEventListener(&quot;click&quot;, interact);
+  document.addEventListener(&quot;keydown&quot;, interact);
+  window.addEventListener(&quot;pagehide&quot;, () =&gt; {
+    document.removeEventListener(&quot;click&quot;, interact);
+    document.removeEventListener(&quot;keydown&quot;, interact);
+  }, { once: true });
+})();
+&lt;/script&gt;
+&lt;script id=&quot;codex-visualization-lucide&quot; async src=&quot;https://unpkg.com/lucide@1.17.0/dist/umd/lucide.js&quot;&gt;&lt;/script&gt;
+&lt;script&gt;
+(() =&gt; {
+  const initialize = () =&gt; {
+    globalThis.lucide?.createIcons({ attrs: { width: 16, height: 16 } });
+  };
+  if (globalThis.lucide != null) {
+    initialize();
+    return;
+  }
+  document
+    .getElementById(&quot;codex-visualization-lucide&quot;)
+    ?.addEventListener(&quot;load&quot;, initialize, { once: true });
+})();
+&lt;/script&gt;
+
+&lt;/body&gt;
+&lt;/html&gt;
+"></iframe>
+</body>
+</html>
+
