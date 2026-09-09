@@ -14,10 +14,10 @@ from world.travel.models import (
 
 @admin.register(TravelHub)
 class TravelHubAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
     list_display = ("name", "is_transit_stop", "is_active")
     list_filter = ("is_transit_stop", "is_active")
     search_fields = ("name",)
-    raw_id_fields = ("room_profile",)
 
 
 @admin.register(TravelRoute)

@@ -39,7 +39,6 @@ class StartingAreaAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "access_level"]
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
-    raw_id_fields = ["default_starting_room"]
     fieldsets = [
         (None, {"fields": ["realm", "name", "description", "crest_art"]}),
         (

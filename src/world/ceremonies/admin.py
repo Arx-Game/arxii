@@ -35,17 +35,10 @@ class CeremonyTypeAdmin(admin.ModelAdmin):
 
 @admin.register(Ceremony)
 class CeremonyAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["location"]  # rooms are searched, never scrolled
     list_display = ("ceremony_type", "officiant", "location", "status", "opened_at")
     list_filter = ("ceremony_type", "status")
-    raw_id_fields = (
-        "officiant",
-        "being",
-        "presented_being",
-        "location",
-        "scene",
-        "event",
-        "title",
-    )
+    raw_id_fields = ["officiant", "being", "presented_being", "scene", "event", "title"]
     inlines = [CeremonyHonoreeInline, CeremonyOfferingInline, CeremonySpeechInline]
 
 

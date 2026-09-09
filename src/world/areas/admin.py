@@ -8,4 +8,4 @@ class AreaAdmin(admin.ModelAdmin):
     list_display = ["name", "level", "parent", "realm", "grid_x", "grid_y"]
     list_filter = ["level", "realm"]
     search_fields = ["name"]
-    autocomplete_fields = ["parent", "realm"]
+    autocomplete_fields = ["parent", "realm", "exile_destination"]

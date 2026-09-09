@@ -24,6 +24,7 @@ class RoomFeatureKindAdmin(admin.ModelAdmin):
 
 @admin.register(RoomFeatureInstance)
 class RoomFeatureInstanceAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["room_profile"]  # rooms are searched, never scrolled
     list_display = ("room_profile", "feature_kind", "level", "dissolved_at")
     list_filter = ("feature_kind",)
     readonly_fields = ("installed_at",)
@@ -47,7 +48,7 @@ class RoomFeatureProgressionDetailsAdmin(admin.ModelAdmin):
 
 @admin.register(Trap)
 class TrapAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["created_by_sheet", "detected_by"]
+    autocomplete_fields = ["created_by_sheet", "detected_by", "room_profile"]
     list_display = ("name", "room_profile", "is_armed", "is_hidden")
     list_filter = ("is_armed", "is_hidden")
 

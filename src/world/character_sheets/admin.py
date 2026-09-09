@@ -108,7 +108,7 @@ class MoodOptionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterSheet)
 class CharacterSheetAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["active_persona", "character", "created_by"]
+    autocomplete_fields = ["active_persona", "character", "created_by", "current_residence"]
     # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
     large_table_widget_exempt = ["roster_entry"]
     list_display = [
@@ -130,7 +130,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     ]
     search_fields = ["character__db_key", "true_profile__concept", "true_profile__family__name"]
     readonly_fields = ["created_date", "updated_date", "decay_tier_display"]
-    raw_id_fields = ["true_profile", "current_residence"]
+    raw_id_fields = ["true_profile"]
 
     @admin.display(description="Decay tier (computed)")
     def decay_tier_display(self, obj: CharacterSheet) -> str:
