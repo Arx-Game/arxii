@@ -74,6 +74,22 @@ class ReviewEvidenceTests(unittest.TestCase):
             )
         self.assertEqual(result.returncode, 0, result.stderr)
 
+    def test_unresolved_finding_is_rejected(self) -> None:
+        revision = "d" * 40
+        report = (ROOT / "tools/tests/fixtures/stale-review-evidence.md").read_text()
+        report = report.replace("REVISION", revision).replace("- None", "- A01 remains unresolved")
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.md"
+            path.write_text(report, encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(path), "--revision", revision],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("unresolved findings", result.stderr)
+
     def test_stale_revision_is_rejected(self) -> None:
         revision = "b" * 40
         report = (ROOT / "tools/tests/fixtures/stale-review-evidence.md").read_text()
