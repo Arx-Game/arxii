@@ -408,6 +408,12 @@ export interface DramaticMomentSuggestionSummary {
 
 export interface Interaction {
   id: number;
+  /** Stable server-assigned thread identity; absent on legacy rows. */
+  thread_id?: string | null;
+  /** Explicit parent reference; never inferred from ordering or names. */
+  reply_to?: { id: string; timestamp: string } | null;
+  /** Reader-local state, supplied by the play contract when available. */
+  is_unread?: boolean;
   persona: InteractionPersona;
   content: string;
   mode: string;

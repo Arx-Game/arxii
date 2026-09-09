@@ -27424,6 +27424,50 @@ paths:
               schema:
                 $ref: '#/components/schemas/Place'
           description: ''
+  /api/play/context/:
+    get:
+      operationId: play_context_retrieve
+      description: GET a small authorized context window around a retained pose.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/conversations/:
+    get:
+      operationId: play_conversations_retrieve
+      description: GET authorized conversation summaries for the play navigator.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/poses/:
+    get:
+      operationId: play_poses_retrieve
+      description: GET authorized poses using the existing enriched interaction DTO.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/search/:
+    get:
+      operationId: play_search_retrieve
+      description: Search only viewer-rendered, authorized interaction text.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/player-submissions/bug-reports/:
     get:
       operationId: player_submissions_bug_reports_list
@@ -54653,6 +54697,33 @@ components:
         id:
           type: integer
           readOnly: true
+        thread_id:
+          type: string
+          nullable: true
+          description: Return only explicit topology; legacy rows remain standalone
+            roots.
+          readOnly: true
+        reply_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Do not infer a parent from neighboring interactions.
+          readOnly: true
+        conversation:
+          type: object
+          additionalProperties:
+            type: string
+          description: Expose a non-authorizing context identity for reader grouping.
+          readOnly: true
+        availability:
+          type: string
+          description: Classify temporary scene rows without changing retention behavior.
+          readOnly: true
+        is_unread:
+          type: boolean
+          description: Read state is private to the play reader and defaults to unread
+            false.
+          readOnly: true
         persona:
           type: object
           description: Persona data embedded in interaction payloads.
@@ -54904,7 +54975,9 @@ components:
       required:
       - action_links
       - attributed_companion
+      - availability
       - content
+      - conversation
       - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
@@ -54914,6 +54987,7 @@ components:
       - id
       - is_favorited
       - is_muted
+      - is_unread
       - language_id
       - language_name
       - my_pose_endorsement
@@ -54924,7 +54998,9 @@ components:
       - reactions
       - receiver_persona_ids
       - receivers
+      - reply_to
       - target_persona_ids
+      - thread_id
       - timestamp
     InteractionFavorite:
       type: object
@@ -54956,6 +55032,33 @@ components:
       properties:
         id:
           type: integer
+          readOnly: true
+        thread_id:
+          type: string
+          nullable: true
+          description: Return only explicit topology; legacy rows remain standalone
+            roots.
+          readOnly: true
+        reply_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: Do not infer a parent from neighboring interactions.
+          readOnly: true
+        conversation:
+          type: object
+          additionalProperties:
+            type: string
+          description: Expose a non-authorizing context identity for reader grouping.
+          readOnly: true
+        availability:
+          type: string
+          description: Classify temporary scene rows without changing retention behavior.
+          readOnly: true
+        is_unread:
+          type: boolean
+          description: Read state is private to the play reader and defaults to unread
+            false.
           readOnly: true
         persona:
           type: object
@@ -55202,7 +55305,9 @@ components:
       required:
       - action_links
       - attributed_companion
+      - availability
       - content
+      - conversation
       - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
@@ -55212,6 +55317,7 @@ components:
       - id
       - is_favorited
       - is_muted
+      - is_unread
       - language_id
       - language_name
       - my_pose_endorsement
@@ -55221,7 +55327,9 @@ components:
       - reaction_windows
       - reactions
       - receiver_persona_ids
+      - reply_to
       - target_persona_ids
+      - thread_id
       - timestamp
     InteractionListRequest:
       type: object

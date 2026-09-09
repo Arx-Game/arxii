@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ScrollText } from 'lucide-react';
+import { Menu, ScrollText } from 'lucide-react';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
@@ -135,7 +135,15 @@ export function GameTopBar({ characters }: GameTopBarProps) {
   const unplayedCharacters = characters.filter((c) => c.name !== active && !sessions[c.name]);
 
   return (
-    <div className="flex items-center gap-4 border-b bg-card px-4 py-2">
+    <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:gap-4 sm:px-4">
+      <Link
+        to="/"
+        aria-label="Open world menu"
+        title="World menu"
+        className="rounded p-2 hover:bg-accent"
+      >
+        <Menu className="h-5 w-5" />
+      </Link>
       <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
 
       <div className="mx-2 h-6 w-px bg-border" />
@@ -241,13 +249,13 @@ export function GameTopBar({ characters }: GameTopBarProps) {
           </button>
         ))}
 
-      <div className="ml-auto flex items-center gap-3">
+      <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
         <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
         <ClockReadout />
         <WeatherWidget />
         <div className="flex items-center gap-2">
           <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className="text-xs text-muted-foreground">
+          <span className="hidden text-xs text-muted-foreground sm:inline">
             {isConnected ? 'Connected' : 'Disconnected'}
           </span>
         </div>

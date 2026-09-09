@@ -13,6 +13,7 @@ interface Props {
   canGm?: boolean;
   /** Avatar identity-click affordance passthrough to PoseUnit (#2156). */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+  readOnly?: boolean;
 }
 
 /**
@@ -75,6 +76,7 @@ export function SceneMessages({
   onAttachAction,
   canGm,
   onAvatarClick,
+  readOnly = false,
 }: Props) {
   // Collect the set of ACTION interaction IDs that are already embedded inside
   // a POSE via action_links. These are rendered inside their parent PoseUnit
@@ -141,6 +143,7 @@ export function SceneMessages({
             onAttachAction={onAttachAction}
             canGm={canGm}
             onAvatarClick={onAvatarClick}
+            readOnly={readOnly}
           />
         );
       })}

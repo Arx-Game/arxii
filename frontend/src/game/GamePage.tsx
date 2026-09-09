@@ -5,7 +5,9 @@ import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
-import { ConversationSidebar } from './components/ConversationSidebar';
+import { PlaySidebar } from './components/PlaySidebar';
+import { fetchPlayContext, fetchPlayPoses } from './playQueries';
+import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
 import { DreamspacePanel } from '@/dreams/components/DreamspacePanel';
@@ -25,7 +27,7 @@ import { VoyagePanel } from '@/travel/components/VoyagePanel';
 import { actingPersonaId } from '@/roster/persona';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -52,6 +54,7 @@ import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
+import type { Interaction } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
 import type { ConversationTabStripProps } from './components/ConversationTabStrip';
@@ -248,6 +251,7 @@ function GameRightSidebar({
 
 export function GamePage() {
   const account = useAccount();
+  const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { data: characters = [] } = useMyRosterEntriesQuery();
@@ -426,11 +430,113 @@ export function GamePage() {
   // SceneDetailPage) since the drawer opens "in place" over whichever surface
   // the avatar was clicked on, not as a route navigation.
   const [cardPersona, setCardPersona] = useState<PoseUnitAvatarClickPersona | null>(null);
+  const [replyTarget, setReplyTarget] = useState<Interaction | null>(null);
+  const [reference, setReference] = useState<{
+    kind: string;
+    key: string;
+    title: string;
+    poseId?: string;
+    timestamp?: string;
+  } | null>(() => {
+    const kind = searchParams.get('referenceKind');
+    const key = searchParams.get('referenceKey');
+    return kind && key
+      ? {
+          kind,
+          key,
+          title: searchParams.get('referenceTitle') ?? key,
+          poseId: searchParams.get('referencePose') ?? undefined,
+          timestamp: searchParams.get('referenceTimestamp') ?? undefined,
+        }
+      : null;
+  });
+  // React Router updates searchParams on browser back/forward. Keep the
+  // historical reader synchronized with that URL rather than only its opener.
+  useEffect(() => {
+    const kind = searchParams.get('referenceKind');
+    const key = searchParams.get('referenceKey');
+    setReference(
+      kind && key
+        ? {
+            kind,
+            key,
+            title: searchParams.get('referenceTitle') ?? key,
+            poseId: searchParams.get('referencePose') ?? undefined,
+            timestamp: searchParams.get('referenceTimestamp') ?? undefined,
+          }
+        : null
+    );
+  }, [searchParams]);
+
+  const openReference = useCallback(
+    (next: { kind: string; key: string; title: string; poseId?: string; timestamp?: string }) => {
+      setReference(next);
+      setSearchParams((current) => {
+        const params = new URLSearchParams(current);
+        params.set('referenceKind', next.kind);
+        params.set('referenceKey', next.key);
+        if (next.poseId) params.set('referencePose', next.poseId);
+        else params.delete('referencePose');
+        if (next.timestamp) params.set('referenceTimestamp', next.timestamp);
+        else params.delete('referenceTimestamp');
+        params.delete('referenceTitle');
+        return params;
+      });
+    },
+    [setSearchParams]
+  );
+  const returnToLive = useCallback(() => {
+    setReference(null);
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      params.delete('referenceKind');
+      params.delete('referenceKey');
+      params.delete('referencePose');
+      params.delete('referenceTimestamp');
+      params.delete('referenceTitle');
+      return params;
+    });
+  }, [setSearchParams]);
+  const referenceSceneId = reference?.key.startsWith('scene:') ? reference.key.slice(6) : undefined;
+  const {
+    data: referencePage,
+    isError: referenceUnavailable,
+    isPending: referenceLoading,
+  } = useQuery<PlayPage<Interaction>>({
+    queryKey: ['play-reference', reference?.kind, reference?.key, reference?.poseId],
+    queryFn: () =>
+      reference?.poseId
+        ? fetchPlayContext({
+            id: reference.poseId,
+            scene: referenceSceneId,
+            timestamp: reference.timestamp,
+            conversation: reference.key,
+          }).then((context) => ({
+            results: context.results,
+            before: null,
+            after: null,
+            snapshot: new Date().toISOString(),
+          }))
+        : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key }),
+    enabled: Boolean(reference),
+  });
+
   const handleWhisper = useCallback(
     (name: string) => {
       if (active) dispatch(setActiveThreadTab({ character: active, threadKey: null }));
       setComposerMode({ command: 'whisper', targets: [name], label: `Whisper → ${name}` });
       setCardPersona(null);
+    },
+    [active, dispatch]
+  );
+
+  const handleReply = useCallback(
+    (interaction: Interaction) => {
+      setReplyTarget(interaction);
+      if (active) {
+        const key = interaction.thread_id ?? getThreadKey(interaction);
+        if (key !== 'room') dispatch(openThreadTab({ character: active, threadKey: key }));
+      }
     },
     [active, dispatch]
   );
@@ -499,6 +605,7 @@ export function GamePage() {
   // it on the same [active, sceneId] pair every other context reset uses.
   useEffect(() => {
     setComposerMode(undefined);
+    setReplyTarget(null);
   }, [active, sceneId]);
 
   // Continuously mark the ACTIVE TAB's thread seen as its interactions grow —
@@ -509,15 +616,21 @@ export function GamePage() {
   useEffect(() => {
     if (!sceneId || !active) return;
     const seenKey = activeThreadTab ?? 'room';
+    if (document.visibilityState === 'hidden') return;
     let maxId: number | undefined;
     for (const interaction of allInteractions) {
       if (getThreadKey(interaction) !== seenKey) continue;
       const id = Number(interaction.id);
+      // Ephemeral/socket-only negative ids are never persisted as a read cursor.
+      if (!Number.isFinite(id) || id <= 0) continue;
       if (maxId === undefined || id > maxId) maxId = id;
     }
-    if (maxId !== undefined) {
-      dispatch(markThreadSeen({ character: active, threadKey: seenKey, interactionId: maxId }));
-    }
+    const timer = window.setTimeout(() => {
+      if (maxId !== undefined && document.visibilityState !== 'hidden') {
+        dispatch(markThreadSeen({ character: active, threadKey: seenKey, interactionId: maxId }));
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
   }, [sceneId, active, allInteractions, activeThreadTab, dispatch]);
 
   // #2165: the sidebar is the open-a-tab surface. A conversation row opens or
@@ -650,19 +763,14 @@ export function GamePage() {
   // on the room, fall back to the room name; defaults to "Room" when
   // there's no active session yet.
   const roomTabLabel = deriveRoomTabLabel(focus.current, roomData?.name);
+  const displaySceneFeed = reference
+    ? sceneFeedProps(referenceSceneId ?? 'history', referencePage?.results ?? [], false, () => {})
+    : sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage);
 
   return (
     <>
       <GameLayout
         topBar={<GameTopBar characters={characters} />}
-        leftSidebar={
-          <ConversationSidebar
-            threading={sceneId ? threading : undefined}
-            onThreadClick={handleThreadClick}
-            onShowAll={handleShowAll}
-            selectedThreadKey={activeThreadTab ?? 'room'}
-          />
-        }
         center={
           <>
             {/* Scene toolset (#2156 Task 6) — mirrors SceneDetailPage.tsx:120-178's
@@ -674,25 +782,33 @@ export function GamePage() {
             {sceneId && <ConsentPrompt sceneId={sceneId} />}
             <GameWindow
               characters={characters}
-              sceneFeed={sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage)}
+              sceneFeed={displaySceneFeed}
               composerMode={effectiveComposerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
-              onAvatarClick={setCardPersona}
-              onAddTarget={setPendingTarget}
-              onAttachAction={handleActionAttach}
+              onAvatarClick={reference ? undefined : setCardPersona}
+              onAddTarget={reference ? undefined : setPendingTarget}
+              onAttachAction={reference ? undefined : handleActionAttach}
               targetToAppend={targetToAppend}
               onTargetConsumed={handleTargetConsumed}
               actionAttachment={actionAttachment}
-              onActionAttach={handleActionAttach}
-              onActionDetach={handleActionDetach}
-              onSubmitAction={handleSubmitAction}
+              onActionAttach={reference ? undefined : handleActionAttach}
+              onActionDetach={reference ? undefined : handleActionDetach}
+              onSubmitAction={reference ? undefined : handleSubmitAction}
               pendingActionIds={pendingActionIds}
               detachedActionIds={detachedActionIds}
               onPoseSubmitted={handlePoseSubmitted}
+              onReply={reference ? undefined : handleReply}
+              replyTarget={reference ? null : replyTarget}
+              onCancelReply={() => setReplyTarget(null)}
+              draftScopePrefix={`account:${account.id}`}
               isAtPlace={isAtPlace}
-              conversationTabs={conversationTabs}
+              conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
+              reference={reference}
+              onReturnToLive={returnToLive}
+              referenceUnavailable={referenceUnavailable}
+              referenceLoading={referenceLoading}
               {...placeWidgets(placesRoomId)}
               pendingAttachments={
                 sceneId ? (
@@ -709,17 +825,26 @@ export function GamePage() {
             {sceneId && <ActionPanel sceneId={sceneId} />}
           </>
         }
-        rightSidebar={
-          <GameRightSidebar
-            roomTabLabel={roomTabLabel}
-            isDreaming={isDreaming}
-            activeCharacterId={activeCharacterId}
-            active={active}
-            focus={focus}
-            roomData={roomData}
-            sceneData={sceneData}
-            hasActiveEncounter={hasActiveEncounter}
-            hasActiveBattle={hasActiveBattle}
+        sidebar={
+          <PlaySidebar
+            here={
+              <GameRightSidebar
+                roomTabLabel={roomTabLabel}
+                isDreaming={isDreaming}
+                activeCharacterId={activeCharacterId}
+                active={active}
+                focus={focus}
+                roomData={roomData}
+                sceneData={sceneData}
+                hasActiveEncounter={hasActiveEncounter}
+                hasActiveBattle={hasActiveBattle}
+              />
+            }
+            threading={sceneId ? threading : undefined}
+            onThreadClick={handleThreadClick}
+            onShowAll={handleShowAll}
+            selectedThreadKey={activeThreadTab ?? 'room'}
+            onOpenReference={openReference}
           />
         }
       />

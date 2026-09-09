@@ -22,7 +22,7 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured chat-bubble feed
-  (`SceneMessages` + `SystemLane`) instead of the legacy `ChatWindow`. Renders
+  (`ThreadedNarrativeReader` + `SystemLane`) instead of a terminal transcript. Renders
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
@@ -92,7 +92,7 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ### Communication (`components/`)
 
-- **`ChatWindow.tsx`**: Legacy raw message log (monospace, black background) —
+- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `NarrativeMessageReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error

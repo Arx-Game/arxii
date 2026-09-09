@@ -23,6 +23,8 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     place_name: payload.place_name,
     receiver_persona_ids: payload.receiver_persona_ids ?? [],
     target_persona_ids: payload.target_persona_ids ?? [],
+    thread_id: payload.thread_id ?? null,
+    reply_to: payload.reply_to ?? null,
     attributed_companion:
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }

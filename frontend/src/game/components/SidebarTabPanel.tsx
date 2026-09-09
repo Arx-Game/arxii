@@ -112,49 +112,49 @@ export function SidebarTabPanel({
           Travel
         </TabsTrigger>
       </TabsList>
-      <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
+      <TabsContent value="room" className="mt-0 flex-1">
         {roomPanel}
       </TabsContent>
-      <TabsContent value="who" className="mt-0 flex-1 overflow-y-auto">
+      <TabsContent value="who" className="mt-0 flex-1">
         {activatedTabs.has('who')
           ? (presencePanel ?? (
               <p className="p-3 text-sm text-muted-foreground">No presence to show.</p>
             ))
           : null}
       </TabsContent>
-      <TabsContent value="stories" className="mt-0 flex-1 overflow-y-auto">
+      <TabsContent value="stories" className="mt-0 flex-1">
         {activatedTabs.has('stories')
           ? (storiesPanel ?? (
               <p className="p-3 text-sm text-muted-foreground">No stories to show.</p>
             ))
           : null}
       </TabsContent>
-      <TabsContent value="events" className="mt-0 flex-1 overflow-hidden">
+      <TabsContent value="events" className="mt-0 flex-1">
         {activatedTabs.has('events') ? eventsPanel : null}
       </TabsContent>
-      <TabsContent value="codex" className="mt-0 flex-1 overflow-y-auto p-3">
+      <TabsContent value="codex" className="mt-0 flex-1 p-3">
         {activatedTabs.has('codex')
           ? (codexPanel ?? <p className="text-sm text-muted-foreground">Codex coming soon.</p>)
           : null}
       </TabsContent>
-      <TabsContent value="status" className="mt-0 flex-1 overflow-y-auto p-3">
+      <TabsContent value="status" className="mt-0 flex-1 p-3">
         {activatedTabs.has('status')
           ? (statusPanel ?? <p className="text-sm text-muted-foreground">No status to show.</p>)
           : null}
       </TabsContent>
-      <TabsContent value="inventory" className="mt-0 flex-1 overflow-y-auto p-3">
+      <TabsContent value="inventory" className="mt-0 flex-1 p-3">
         {activatedTabs.has('inventory')
           ? (inventoryPanel ?? <p className="text-sm text-muted-foreground">Nothing carried.</p>)
           : null}
       </TabsContent>
-      <TabsContent value="journal" className="mt-0 flex-1 overflow-y-auto">
+      <TabsContent value="journal" className="mt-0 flex-1">
         {activatedTabs.has('journal')
           ? (journalPanel ?? (
               <p className="p-3 text-sm text-muted-foreground">No journal to show.</p>
             ))
           : null}
       </TabsContent>
-      <TabsContent value="travel" className="mt-0 flex-1 overflow-y-auto">
+      <TabsContent value="travel" className="mt-0 flex-1">
         {activatedTabs.has('travel')
           ? (travelPanel ?? <p className="p-3 text-sm text-muted-foreground">No travel to show.</p>)
           : null}
