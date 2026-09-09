@@ -1,4 +1,6 @@
 import { useMemo, useState } from 'react';
+
+const INITIAL_PAGE_SIZE = 20;
 import { ChevronDown, ChevronRight, MessageCircle, Reply } from 'lucide-react';
 import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { Interaction } from '@/scenes/types';
@@ -34,9 +36,12 @@ export function ThreadedNarrativeReader({
   onReply,
   readOnly = false,
 }: ThreadedNarrativeReaderProps) {
+  const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
+  const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
+  const visibleInteractions = interactions.slice(historyStart);
   const groups = useMemo(() => {
     const grouped = new Map<string, Interaction[]>();
-    for (const interaction of interactions) {
+    for (const interaction of visibleInteractions) {
       // Legacy interactions have no reply topology and therefore each remain
       // an independent root. Only explicit server thread ids group replies.
       const key = interaction.thread_id || `legacy:${interaction.id}`;
@@ -58,7 +63,7 @@ export function ThreadedNarrativeReader({
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||
           a.interactions[0].id - b.interactions[0].id
       );
-  }, [interactions]);
+  }, [visibleInteractions]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
 
@@ -212,10 +217,40 @@ export function ThreadedNarrativeReader({
             );
           })
         )}
-        {hasNextPage && (
-          <button onClick={fetchNextPage} className="w-full rounded border px-3 py-2 text-sm">
-            Load earlier history
-          </button>
+        {(historyStart > 0 || hasNextPage) && (
+          <div className="flex gap-2">
+            {historyStart > 0 && (
+              <button
+                type="button"
+                onClick={() =>
+                  setHistoryStartOverride(Math.max(0, historyStart - INITIAL_PAGE_SIZE))
+                }
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load earlier history
+              </button>
+            )}
+            {historyStart < Math.max(0, interactions.length - INITIAL_PAGE_SIZE) && (
+              <button
+                type="button"
+                onClick={() =>
+                  setHistoryStartOverride(Math.max(0, interactions.length - INITIAL_PAGE_SIZE))
+                }
+                className="rounded border px-3 py-2 text-sm"
+              >
+                Jump to latest
+              </button>
+            )}
+            {historyStart === 0 && hasNextPage && (
+              <button
+                type="button"
+                onClick={fetchNextPage}
+                className="flex-1 rounded border px-3 py-2 text-sm"
+              >
+                Load earlier history
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>
