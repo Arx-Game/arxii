@@ -28,13 +28,13 @@ export function GameLayout({
   const contextualSidebar = sidebar ?? rightSidebar ?? leftSidebar;
   return (
     <div
-      className="flex min-h-0 flex-1 flex-col"
+      className="flex min-h-0 min-w-0 flex-1 flex-col"
       style={pageBackgroundStyle(backgrounds, 'game_client', 'Game Client')}
     >
       {topBar}
       <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_clamp(240px,280px,360px)]">
         <div
-          className={`min-h-0 flex-1 flex-col overflow-hidden lg:flex ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
+          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background lg:flex ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
         >
           {center}
         </div>

@@ -457,7 +457,9 @@ class Character(ObjectParent, DefaultCharacter):
 
         notify_friends_of_status(self, online=True)
 
-        # Execute look command to send room state to frontend via flow system
+        # Look now returns prose only. Confirm structured presence independently
+        # so web entry does not depend on moving rooms or having an active scene.
+        self.send_room_state()
         self.execute_cmd("look")
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):

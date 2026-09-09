@@ -109,6 +109,17 @@ export function GameTopBar({ characters }: GameTopBarProps) {
 
   const activeSession = active ? sessions[active] : null;
   const isConnected = activeSession?.isConnected ?? false;
+  const isReady = isConnected && Boolean(activeSession?.room);
+  let connectionLabel = 'Disconnected';
+  let connectionColor = 'bg-red-500';
+  if (isConnected) {
+    connectionLabel = 'Entering world';
+    connectionColor = 'bg-amber-500';
+  }
+  if (isReady) {
+    connectionLabel = 'In world';
+    connectionColor = 'bg-green-500';
+  }
 
   const handleSelectCharacter = (name: MyRosterEntry['name']) => {
     // #3412 — persist the selection server-side ALONGSIDE the existing
@@ -254,10 +265,8 @@ export function GameTopBar({ characters }: GameTopBarProps) {
         <ClockReadout />
         <WeatherWidget />
         <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${isConnected ? 'bg-green-500' : 'bg-red-500'}`} />
-          <span className="hidden text-xs text-muted-foreground sm:inline">
-            {isConnected ? 'Connected' : 'Disconnected'}
-          </span>
+          <div className={`h-2 w-2 rounded-full ${connectionColor}`} />
+          <span className="hidden text-xs text-muted-foreground sm:inline">{connectionLabel}</span>
         </div>
       </div>
     </div>

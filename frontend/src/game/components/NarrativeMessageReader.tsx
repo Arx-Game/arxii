@@ -66,7 +66,7 @@ export function NarrativeMessageReader({ messages }: NarrativeMessageReaderProps
                   })}
                 </time>
               </header>
-              <EvenniaMessage content={message.content} className="text-sm leading-relaxed" />
+              <EvenniaMessage content={message.content} presentation="prose" />
             </article>
           ))
         )}

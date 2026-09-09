@@ -91,11 +91,13 @@ class CommandUpdateTests(TestCase):
         session2 = MagicMock()
         char = ObjectDBFactory(db_typeclass_path="typeclasses.characters.Character")
         char.sessions.all = MagicMock(return_value=[session1, session2])
+        char.send_room_state = MagicMock()
         with patch("typeclasses.characters.serialize_cmdset", return_value=["cmd"]):
             with patch("typeclasses.characters.DefaultCharacter.at_post_puppet"):
                 char.at_post_puppet()
         session1.msg.assert_called_with(commands=(["cmd"], {}))
         session2.msg.assert_called_with(commands=(["cmd"], {}))
+        char.send_room_state.assert_called_once_with()
 
     def test_at_post_unpuppet_clears_commands(self):
         session = MagicMock()

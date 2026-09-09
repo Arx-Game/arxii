@@ -230,7 +230,7 @@ export function CommandInput({
   }, [draftStorageKey]);
 
   const handleSubmit = useCallback(() => {
-    if (submittingRef.current) return;
+    if (!ready || submittingRef.current) return;
     const trimmed = command.trim();
     if (!trimmed) return;
     if (command.length > MAX_POSE_LENGTH) {
@@ -368,6 +368,7 @@ export function CommandInput({
     isEntrance,
     entranceTechnique,
     clearStoredDraft,
+    ready,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -483,7 +484,7 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={5}
         submitOnEnter={submitOnEnter}
-        disabled={!ready}
+        submitDisabled={!ready}
         leftSlot={
           <div className="flex items-center gap-1">
             {speakingAs && (
