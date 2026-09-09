@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `a1210f2216dd34434c73780503d3514e85c676c1`
+- Reviewed revision: `20dadbe4d15e942a6a5e5cd8fee2e2eee1785fde`
 - Application/build identity: repository workflow scripts and GitHub Actions configuration at the reviewed revision
 - Environment: Ubuntu devcontainer, Python 3.13, uv-managed project environment, Bash, ShellCheck
 - Viewports/themes: Not applicable (process-only change; no player-facing surface)
