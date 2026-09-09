@@ -49,6 +49,20 @@ describe('SystemLane', () => {
     expect(screen.getByTestId('system-lane-count')).toHaveTextContent('1');
   });
 
+  it('renders Evennia color spans and line breaks in expanded messages', () => {
+    render(
+      <SystemLane
+        messages={[makeMessage('1', '<span class="color-002">tehom connected</span><br>Welcome')]}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /system/i }));
+
+    const message = screen.getByText('tehom connected');
+    expect(message).toHaveClass('text-green-700');
+    expect(message.parentElement).toHaveTextContent(/tehom connected\s+Welcome/);
+  });
+
   it('never applies terminal styling (no bg-black / font-mono) on the lane container', () => {
     const { container } = render(
       <SystemLane messages={[makeMessage('1', 'Server restarting soon.')]} />
