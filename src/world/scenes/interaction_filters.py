@@ -1,8 +1,13 @@
-from django.db.models import Q, QuerySet
+from django.db.models import Exists, OuterRef, Q, QuerySet
 import django_filters
 
 from world.scenes.constants import InteractionMode
-from world.scenes.models import Interaction, InteractionFavorite, InteractionReaction
+from world.scenes.models import (
+    Interaction,
+    InteractionFavorite,
+    InteractionReaction,
+    InteractionReceiver,
+)
 
 WHISPER_MODE = InteractionMode.WHISPER
 OOC_MODES = ("ooc", "system")
@@ -41,10 +46,17 @@ class InteractionFilter(django_filters.FilterSet):
         """Mirror `play_views._conversation()`'s kind derivation as a queryset filter.
 
         Kept in lockstep with that function deliberately -- `kind` is not a
-        stored column (#3759 ledger).
+        stored column (#3759 ledger). `_conversation()` only classifies a row as
+        "whisper" when `mode == WHISPER_MODE` AND it has receivers (line 131 of
+        `play_views.py`); a whisper-mode row with no `InteractionReceiver` rows
+        falls through to "room" instead. The `has_receivers` annotation keeps
+        that precedence exact rather than checking mode alone.
         """
+        annotated = queryset.annotate(
+            has_receivers=Exists(InteractionReceiver.objects.filter(interaction=OuterRef("pk")))
+        )
         if value == KIND_WHISPER:
-            return queryset.filter(mode=WHISPER_MODE)
+            return annotated.filter(mode=WHISPER_MODE, has_receivers=True)
         if value == KIND_PLACE:
             return queryset.filter(place__isnull=False)
         if value == KIND_SCENE_OOC:
@@ -52,10 +64,11 @@ class InteractionFilter(django_filters.FilterSet):
         if value == KIND_CHANNEL:
             return queryset.filter(mode=TABLETALK_MODE)
         if value == KIND_ROOM:
-            excluded_modes = {WHISPER_MODE, TABLETALK_MODE} | set(OOC_MODES)
-            return queryset.filter(
-                place__isnull=True,
-                mode__in=[m for m in InteractionMode.values if m not in excluded_modes],
+            excluded_modes = {TABLETALK_MODE} | set(OOC_MODES)
+            return (
+                annotated.filter(place__isnull=True)
+                .exclude(mode__in=excluded_modes)
+                .exclude(mode=WHISPER_MODE, has_receivers=True)
             )
         return queryset
 

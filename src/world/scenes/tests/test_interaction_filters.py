@@ -1,7 +1,13 @@
 from django.test import TestCase
 
 from world.scenes.constants import InteractionMode
-from world.scenes.factories import InteractionFactory, PersonaFactory, PlaceFactory, SceneFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    InteractionReceiverFactory,
+    PersonaFactory,
+    PlaceFactory,
+    SceneFactory,
+)
 from world.scenes.interaction_filters import InteractionFilter
 from world.scenes.models import Interaction
 
@@ -23,12 +29,21 @@ class InteractionFilterKindTests(TestCase):
         self.assertTrue(all(row.place_id == place.pk for row in qs))
         self.assertTrue(qs.exists())
 
-    def test_kind_whisper_matches_whisper_mode(self) -> None:
-        InteractionFactory(mode=InteractionMode.WHISPER, place=None, scene=None)
+    def test_kind_whisper_matches_whisper_mode_with_receivers(self) -> None:
+        whisper = InteractionFactory(mode=InteractionMode.WHISPER, place=None, scene=None)
+        InteractionReceiverFactory(interaction=whisper)
         InteractionFactory(mode=InteractionMode.POSE, place=None, scene=SceneFactory())
         qs = InteractionFilter({"kind": "whisper"}, queryset=Interaction.objects.all()).qs
-        self.assertTrue(all(row.mode == InteractionMode.WHISPER for row in qs))
-        self.assertTrue(qs.exists())
+        self.assertEqual(set(qs.values_list("pk", flat=True)), {whisper.pk})
+
+    def test_kind_whisper_mode_with_no_receivers_falls_through_to_room(self) -> None:
+        """Mirrors `_conversation()`'s precedence: whisper only classifies with receivers."""
+        whisper = InteractionFactory(mode=InteractionMode.WHISPER, place=None, scene=None)
+        all_interactions = Interaction.objects.all()
+        whisper_result = InteractionFilter({"kind": "whisper"}, queryset=all_interactions).qs
+        self.assertNotIn(whisper.pk, whisper_result.values_list("pk", flat=True))
+        room_result = InteractionFilter({"kind": "room"}, queryset=all_interactions).qs
+        self.assertIn(whisper.pk, room_result.values_list("pk", flat=True))
 
     def test_kind_unrecognized_value_returns_unfiltered_queryset(self) -> None:
         InteractionFactory(mode=InteractionMode.POSE, place=None, scene=SceneFactory())
@@ -46,15 +61,9 @@ class InteractionFilterParticipantTests(TestCase):
         self.assertEqual(set(qs.values_list("pk", flat=True)), {interaction.pk})
 
     def test_participant_matches_receiver(self) -> None:
-        from world.scenes.place_models import InteractionReceiver
-
         receiver_persona = PersonaFactory()
         interaction = InteractionFactory()
-        InteractionReceiver.objects.create(
-            interaction=interaction,
-            timestamp=interaction.timestamp,
-            persona=receiver_persona,
-        )
+        InteractionReceiverFactory(interaction=interaction, persona=receiver_persona)
         InteractionFactory()
         filter_data = {"participant": receiver_persona.pk}
         qs = InteractionFilter(filter_data, queryset=Interaction.objects.all()).qs
