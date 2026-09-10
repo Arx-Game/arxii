@@ -134,10 +134,15 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        // Passed out of timestamp order (3, 1, 2) so a component that merely
+        // rendered visibleInteractions in prop/array order — never sorting by
+        // (timestamp, id) at all — would fail this assertion. interaction(id, ...)
+        // derives its timestamp from `id`, so timestamp order here is 1 < 2 < 3
+        // (first < second < third) regardless of array position.
         interactions={[
+          interaction(3, 'third', 'thread-a'),
           interaction(1, 'first', 'thread-a'),
           interaction(2, 'second', 'thread-b'),
-          interaction(3, 'third', 'thread-a'),
         ]}
         fetchNextPage={vi.fn()}
       />
