@@ -8,7 +8,9 @@ export function handleRoomStatePayload(
   payload: RoomStatePayload,
   dispatch: AppDispatch
 ) {
-  const roomId = parseInt(payload.room.dbref.replace('#', ''), 10);
+  const roomRef = typeof payload.room?.dbref === 'string' ? payload.room.dbref : '';
+  const roomId = Number.parseInt(roomRef.replace(/^#/, ''), 10);
+  if (!Number.isFinite(roomId)) return;
   dispatch(
     setSessionRoom({
       character,

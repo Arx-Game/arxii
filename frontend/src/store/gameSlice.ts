@@ -10,6 +10,16 @@ import type {
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
+export type GameLifecycleState =
+  | 'entry-idle'
+  | 'entering'
+  | 'entry-error'
+  | 'ready-no-scene'
+  | 'ready-scene'
+  | 'reconnecting'
+  | 'encounter'
+  | 'aftermath';
+
 interface RoomData {
   id: number;
   name: string;
@@ -34,12 +44,16 @@ interface RoomData {
  */
 export interface Session {
   isConnected: boolean;
+  /** Presentation state for entry/reconnect/exploration; server remains authoritative. */
+  lifecycleState?: GameLifecycleState;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Structured scene-less interactions for the current room, kept in memory only. */
+  ambientInteractions?: InteractionWsPayload[];
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
   /**
@@ -121,6 +135,16 @@ export const gameSlice = createSlice({
         session.isConnected = status;
       }
     },
+    setSessionLifecycle: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        lifecycleState: GameLifecycleState;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) session.lifecycleState = action.payload.lifecycleState;
+    },
     addSessionMessage: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; message: GameMessage }>
@@ -161,8 +185,30 @@ export const gameSlice = createSlice({
       const { character, room } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        const previousRoomId = session.room?.id ?? null;
+        const nextRoomId = room?.id ?? null;
+        if (previousRoomId !== nextRoomId && session.ambientInteractions)
+          session.ambientInteractions = [];
         session.room = room;
       }
+    },
+    addAmbientInteraction: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        interaction: InteractionWsPayload;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
+      if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
+      ambient.push(action.payload.interaction);
+      if (ambient.length > 100) session.ambientInteractions = ambient.slice(-100);
+    },
+    clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.ambientInteractions = [];
     },
     setSessionScene: (
       state,
@@ -204,6 +250,7 @@ export const gameSlice = createSlice({
       const session = state.sessions[character];
       if (session) {
         const MAX_WS_INTERACTIONS = 200;
+        if (session.sceneInteractions.some((item) => item.id === interaction.id)) return;
         session.sceneInteractions.push(interaction);
         if (session.sceneInteractions.length > MAX_WS_INTERACTIONS) {
           session.sceneInteractions = session.sceneInteractions.slice(-MAX_WS_INTERACTIONS);
@@ -350,10 +397,13 @@ export const {
   startSession,
   setActiveSession,
   setSessionConnectionStatus,
+  setSessionLifecycle,
   addSessionMessage,
   clearSessionMessages,
   setSessionCommands,
   setSessionRoom,
+  addAmbientInteraction,
+  clearAmbientInteractions,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,

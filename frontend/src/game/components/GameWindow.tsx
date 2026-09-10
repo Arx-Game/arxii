@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
-import { NarrativeMessageReader } from './NarrativeMessageReader';
+import { ExplorationReader } from './ExplorationReader';
+import type { GameLifecycleState } from '@/store/gameSlice';
+import type { InteractionWsPayload } from '@/hooks/types';
+import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
@@ -52,6 +55,11 @@ interface GameWindowProps {
   characters: MyRosterEntry[];
   /** When present, the center column renders the threaded scene reader. */
   sceneFeed?: GameWindowSceneFeed;
+  /** Structured quiet-room data; absent only while entry is pending. */
+  room?: RoomData | null;
+  /** Scene-less interaction frames for the exploration reader. */
+  ambientInteractions?: InteractionWsPayload[];
+  lifecycleState?: GameLifecycleState;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
   /** The active character's persona id — lifted to GamePage to dedupe the roster query (#2156). */
@@ -105,6 +113,9 @@ interface GameWindowProps {
 export function GameWindow({
   characters,
   sceneFeed,
+  room,
+  ambientInteractions,
+  lifecycleState,
   composerMode,
   onModeChange,
   personaId,
@@ -260,6 +271,14 @@ export function GameWindow({
             : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
         </div>
       )}
+      {!awaitingRoom && lifecycleState === 'reconnecting' && (
+        <div
+          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          Connection lost. Your confirmed story remains available while we reconnect.
+        </div>
+      )}
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
@@ -336,7 +355,14 @@ export function GameWindow({
           {!reference && <SystemLane messages={session.messages} />}
         </>
       ) : (
-        <NarrativeMessageReader messages={session.messages} />
+        <ExplorationReader
+          room={room ?? session.room}
+          ambientInteractions={ambientInteractions ?? session.ambientInteractions}
+          lifecycleState={lifecycleState ?? session.lifecycleState}
+          onRetry={() => {
+            if (active) void connect(active);
+          }}
+        />
       )}
       {placeBar}
       {tavernGameWidget}

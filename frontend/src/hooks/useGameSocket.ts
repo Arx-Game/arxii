@@ -1,5 +1,10 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/store/gameSlice';
+import {
+  addSessionMessage,
+  resetGame,
+  setSessionConnectionStatus,
+  setSessionLifecycle,
+} from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
@@ -66,9 +71,11 @@ function clearReconnect(character: string) {
   }
 }
 
-/** A plain system message shown when a frame is malformed or unrecognized. */
-function buildSystemFallbackMessage(content: string): GameMessage {
-  return { content, timestamp: Date.now(), type: GAME_MESSAGE_TYPE.SYSTEM };
+/** A concise notice shown when a frame cannot be safely classified for play. */
+function buildSystemFallbackMessage(
+  content = 'A connection message could not be displayed.'
+): GameMessage {
+  return { content, timestamp: Date.now(), type: GAME_MESSAGE_TYPE.ERROR };
 }
 
 /** Narrows a parsed frame to the `[type, args, kwargs?]` wire shape. */
@@ -173,12 +180,46 @@ function dispatchIncomingMessage(
   const handler = handlerFor(msgType);
   if (handler) {
     handler({ character, args, kwargs, dispatch, navigate });
+    // Lifecycle is socket-owned so protocol handlers remain small and usable
+    // in isolation. A room_state frame is the only readiness confirmation.
+    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
+      const roomPayload = kwargs as { scene?: unknown } | undefined;
+      dispatch(
+        setSessionLifecycle({
+          character,
+          lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
+        })
+      );
+    } else if (msgType === WS_MESSAGE_TYPE.SCENE) {
+      const scenePayload = kwargs as { action?: unknown } | undefined;
+      dispatch(
+        setSessionLifecycle({
+          character,
+          lifecycleState: scenePayload?.action === 'end' ? 'aftermath' : 'ready-scene',
+        })
+      );
+    }
     return;
   }
 
-  // Regular game message
-  const message = parseGameMessage(parsed);
-  dispatch(addSessionMessage({ character, message }));
+  // Only legacy text-like frames may enter the compact notice lane. Control
+  // frames must never fall through as JSON or appear as authored prose.
+  if (
+    msgType === WS_MESSAGE_TYPE.TEXT ||
+    msgType === WS_MESSAGE_TYPE.LOGGED_IN ||
+    msgType === WS_MESSAGE_TYPE.VN_MESSAGE ||
+    msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION
+  ) {
+    const message = parseGameMessage(parsed);
+    dispatch(addSessionMessage({ character, message }));
+    return;
+  }
+  dispatch(
+    addSessionMessage({
+      character,
+      message: buildSystemFallbackMessage('A connection message was not recognized. Try again.'),
+    })
+  );
 }
 
 export function useGameSocket() {
@@ -197,6 +238,7 @@ export function useGameSocket() {
     async (character: MyRosterEntry['name']) => {
       if (sockets[character] || connecting.has(character)) return;
       connecting.add(character);
+      dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
 
       let currentAccount = account;
       if (!currentAccount) {
@@ -206,11 +248,13 @@ export function useGameSocket() {
             dispatch(setAccount(currentAccount));
           } else {
             connecting.delete(character);
+            dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
             navigate('/login');
             return;
           }
         } catch {
           connecting.delete(character);
+          dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
           navigate('/login');
           return;
         }
@@ -225,6 +269,7 @@ export function useGameSocket() {
       socket.addEventListener('open', () => {
         clearReconnect(character);
         dispatch(setSessionConnectionStatus({ character, status: true }));
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
         socket.send(JSON.stringify(puppet));
         // Backfill anything that arrived while no socket was listening: the
@@ -234,6 +279,9 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('close', (event) => {
+        // A reconnect can replace this socket before its close event arrives.
+        // Never let stale frames or stale closes mutate the current session.
+        if (sockets[character] !== socket) return;
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
         if (event.code === 1000) {
@@ -248,6 +296,12 @@ export function useGameSocket() {
         // Abnormal close: reconnect with capped exponential backoff
         // (1s, 2s, 4s, ... 30s). The open handler re-puppets and backfills.
         const attempt = (reconnectAttempts[character] ?? 0) + 1;
+        dispatch(
+          setSessionLifecycle({
+            character,
+            lifecycleState: attempt > MAX_RECONNECT_ATTEMPTS ? 'entry-error' : 'reconnecting',
+          })
+        );
         if (attempt > MAX_RECONNECT_ATTEMPTS) return;
         reconnectAttempts[character] = attempt;
         const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
@@ -258,27 +312,28 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
+        if (sockets[character] !== socket) return;
         let parsed: unknown;
 
         try {
           parsed = JSON.parse(event.data);
         } catch {
-          // Bad JSON frame: surface as a system message and bail.
+          // Bad JSON is a diagnostic, not story content.
           dispatch(
             addSessionMessage({
               character,
-              message: buildSystemFallbackMessage(String(event.data)),
+              message: buildSystemFallbackMessage('A connection message was invalid. Try again.'),
             })
           );
           return;
         }
 
         if (!isIncomingMessage(parsed)) {
-          // Unexpected structure: stringify and show
+          // Unexpected structure is a diagnostic, not story content.
           dispatch(
             addSessionMessage({
               character,
-              message: buildSystemFallbackMessage(JSON.stringify(parsed)),
+              message: buildSystemFallbackMessage('A connection message had an unexpected format.'),
             })
           );
           return;

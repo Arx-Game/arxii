@@ -1,5 +1,17 @@
-import { useState, type ReactNode } from 'react';
+import {
+  useEffect,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
+import {
+  DEFAULT_PLAY_PREFERENCES,
+  loadPlayPreferences,
+  savePlayPreferences,
+  type SidebarSide,
+} from '../playPreferences';
 
 interface GameLayoutProps {
   topBar: ReactNode;
@@ -10,6 +22,7 @@ interface GameLayoutProps {
   leftSidebar?: ReactNode;
   /** Deprecated compatibility input; it is never rendered as a second column. */
   rightSidebar?: ReactNode;
+  accountId?: number | null;
 }
 
 /**
@@ -22,29 +35,101 @@ export function GameLayout({
   sidebar,
   leftSidebar,
   rightSidebar,
+  accountId,
 }: GameLayoutProps) {
   const { data: backgrounds } = usePageBackgrounds();
   const [mobilePane, setMobilePane] = useState<'story' | 'sidebar'>('story');
+  const [sidebarWidth, setSidebarWidth] = useState(DEFAULT_PLAY_PREFERENCES.sidebarWidth);
+  const [sidebarSide, setSidebarSide] = useState<SidebarSide>(DEFAULT_PLAY_PREFERENCES.sidebarSide);
   const contextualSidebar = sidebar ?? rightSidebar ?? leftSidebar;
+
+  useEffect(() => {
+    const preferences = loadPlayPreferences(accountId);
+    setSidebarWidth(preferences.sidebarWidth);
+    setSidebarSide(preferences.sidebarSide);
+    const sync = (event: Event) => {
+      const detail = (event as CustomEvent<typeof preferences>).detail;
+      if (!detail) return;
+      setSidebarWidth(detail.sidebarWidth);
+      setSidebarSide(detail.sidebarSide);
+    };
+    window.addEventListener('arx-play-preferences', sync);
+    return () => window.removeEventListener('arx-play-preferences', sync);
+  }, [accountId]);
+
+  const resizeSidebar = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const origin = event.clientX;
+    const initial = sidebarWidth;
+    let latestWidth = initial;
+    const onMove = (move: globalThis.PointerEvent) => {
+      const delta = sidebarSide === 'right' ? origin - move.clientX : move.clientX - origin;
+      latestWidth = Math.min(360, Math.max(240, initial + delta));
+      setSidebarWidth(latestWidth);
+    };
+    const onUp = () => {
+      const width = latestWidth;
+      try {
+        const stored = loadPlayPreferences(accountId);
+        savePlayPreferences({ ...stored, sidebarWidth: width }, accountId);
+      } catch {
+        // Layout remains usable when storage is unavailable.
+      }
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp, { once: true });
+  };
+
+  const style = {
+    '--play-sidebar-width': `${sidebarWidth}px`,
+  } as CSSProperties;
   return (
     <div
       className="flex min-h-0 min-w-0 flex-1 flex-col"
       style={pageBackgroundStyle(backgrounds, 'game_client', 'Game Client')}
+      data-sidebar-side={sidebarSide}
+      data-sidebar-width={sidebarWidth}
     >
       {topBar}
-      <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_clamp(240px,280px,360px)]">
+      <div
+        className="flex min-h-0 flex-1 flex-col min-[960px]:grid min-[960px]:grid-cols-[minmax(0,1fr)_var(--play-sidebar-width)]"
+        style={style}
+      >
         <div
-          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background lg:flex ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
+          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background min-[960px]:flex ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
+          style={{ order: sidebarSide === 'left' ? 1 : 0 }}
         >
           {center}
         </div>
         <div
-          className={`min-h-0 overflow-hidden border-l bg-card lg:flex lg:flex-col ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
+          className={`relative min-h-0 overflow-hidden bg-card min-[960px]:flex min-[960px]:flex-col ${sidebarSide === 'left' ? 'border-r' : 'border-l'} ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
+          style={{ order: sidebarSide === 'left' ? 0 : 1 }}
         >
+          <button
+            type="button"
+            aria-label="Resize sidebar"
+            aria-valuemin={240}
+            aria-valuemax={360}
+            aria-valuenow={sidebarWidth}
+            role="separator"
+            className={`absolute top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none min-[960px]:block ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+            onPointerDown={resizeSidebar}
+            onKeyDown={(event) => {
+              if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+              event.preventDefault();
+              const delta = event.key === 'ArrowLeft' ? -8 : 8;
+              setSidebarWidth((current) => Math.min(360, Math.max(240, current + delta)));
+            }}
+          />
           {contextualSidebar}
         </div>
       </div>
-      <nav className="flex shrink-0 border-t bg-card p-1 lg:hidden" aria-label="Play panes">
+      <nav
+        className="flex shrink-0 border-t bg-card p-1 min-[960px]:hidden"
+        aria-label="Play panes"
+      >
         <button
           type="button"
           aria-pressed={mobilePane === 'story'}

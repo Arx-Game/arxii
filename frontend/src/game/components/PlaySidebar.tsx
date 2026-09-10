@@ -7,6 +7,7 @@ import type { ThreadingState } from '@/scenes/hooks/useThreading';
 
 interface PlaySidebarProps {
   here: ReactNode;
+  accountId?: number | null;
   threading?: ThreadingState;
   onThreadClick: (key: string) => void;
   onShowAll?: () => void;
@@ -23,6 +24,7 @@ interface PlaySidebarProps {
 /** The one contextual sidebar for the narrative play workspace. */
 export function PlaySidebar({
   here,
+  accountId,
   threading,
   onThreadClick,
   onShowAll,
@@ -64,7 +66,7 @@ export function PlaySidebar({
         </button>
       </nav>
       <div className="shrink-0 px-2 pb-1">
-        <DisplaySettings />
+        <DisplaySettings accountId={accountId} />
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
