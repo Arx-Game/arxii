@@ -1,5 +1,7 @@
 """Tests for the additive narrative play reader contracts."""
 
+import base64
+import json
 from unittest.mock import patch
 
 from rest_framework import status
@@ -148,3 +150,65 @@ class PlayThreadsViewTests(APITestCase):
         # and the last-20 window would be a completely different, out-of-order set.
         self.assertEqual(latest_ids, list(range(93, 113)))
         self.assertEqual(earlier_ids, list(range(90, 110)))
+
+    def test_multi_pose_thread_cursor_matches_its_sort_key(self) -> None:
+        """Regression test (task-4 re-review): the cursor-boundary key must be
+        computed from the SAME field the view sorts and pages by.
+
+        `PlayThreadsView` sorts groups by `firstVisible` (root creation time,
+        per spec: "Roots are ordered by creation time, oldest to newest"). A
+        genuine multi-pose `InteractionThread` can have a `latestVisible`
+        (newest reply) far removed from its `firstVisible` (root) -- an old
+        thread with a very recent reply. If `_row_key`'s fallback resolved to
+        `latestVisible` instead of `firstVisible`, the cursor-boundary key for
+        that thread would disagree with its actual sort position, and
+        `_page()`'s linear `key > boundary` / `key >= boundary` search --
+        which assumes `results` is monotonic in the SAME field it searches --
+        would misplace the boundary, re-including rows a caller already saw.
+
+        Layout (26 groups, page size 20): 6 single-pose "legacy" groups at
+        minutes 01-06, then thread "A" whose root lands at minute 07 (so it
+        sorts 7th) but whose reply lands 9 days later, then 19 more legacy
+        groups at minutes 08-26. Requesting everything strictly `after`
+        legacy pose 9 (minute 09, sort position 9th) must return legacy 10
+        onward only -- never "A", legacy 8, or legacy 9 again, which is
+        exactly what leaks back in if the cursor key uses the reply's
+        timestamp instead of the root's.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+
+        def _row(pose_id: int, timestamp: str, thread_id: str | None) -> dict:
+            return {
+                "id": pose_id,
+                "timestamp": timestamp,
+                "thread_id": thread_id,
+                "content": f"pose {pose_id}",
+                "mode": "pose",
+                "place": None,
+                "scene": None,
+                "receiver_persona_ids": [],
+                "persona": {"id": 1, "name": "Tester"},
+            }
+
+        rows = [_row(i, f"2026-01-01T00:{i:02d}:00Z", None) for i in range(1, 7)]
+        rows.append(_row(1000, "2026-01-01T00:07:00Z", "A"))  # thread A's root
+        rows.append(_row(2000, "2026-01-10T00:00:00Z", "A"))  # thread A's reply, 9 days later
+        rows.extend(_row(i, f"2026-01-01T00:{i:02d}:00Z", None) for i in range(8, 27))
+
+        # Build the "after" cursor for legacy pose 9 the same way `_cursor()` does,
+        # without importing that private helper: base64(json([timestamp, id])).
+        after_value = json.dumps(["2026-01-01T00:09:00Z", 9], separators=(",", ":"))
+        after_token = base64.urlsafe_b64encode(after_value.encode()).decode().rstrip("=")
+
+        with patch("world.scenes.play_views._rows", return_value=(rows, None)):
+            response = self.client.get(f"/api/play/threads/?after={after_token}")
+
+        self.assertEqual(response.status_code, 200)
+        result_ids = [row["id"] for row in response.json()["results"]]
+        # Thread "A" (root at minute 07) and legacy 8/9 all sort BEFORE the
+        # minute-09 boundary and must never reappear once we've paged past it.
+        self.assertNotIn("A", result_ids)
+        self.assertNotIn("legacy:8", result_ids)
+        self.assertNotIn("legacy:9", result_ids)
+        self.assertEqual(result_ids[0], "legacy:10")

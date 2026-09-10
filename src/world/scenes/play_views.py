@@ -295,9 +295,13 @@ class PlayThreadsView(APIView):
                 }
             )
             # `_page()`'s `_row_key()` fallback (`latestVisiblePose` or `pose` or the row
-            # itself) needs one of those keys to resolve a boundary; alias it onto the
-            # ref this view already computes so cursoring past 20 threads doesn't KeyError.
-            results[-1]["latestVisiblePose"] = results[-1]["latestVisible"]
+            # itself) needs one of those keys to resolve a boundary. Alias it to
+            # `firstVisible`, NOT `latestVisible`: roots are sorted (and paged) by
+            # creation time (see the sort below), and for a genuine multi-pose thread
+            # `latestVisible` (the newest reply) can diverge sharply from that sort key,
+            # desynchronizing `_page()`'s cursor-boundary search from the actual order.
+            # (`_row_key`'s fallback chain only checks the key name, not its semantics.)
+            results[-1]["latestVisiblePose"] = results[-1]["firstVisible"]
         results.sort(
             key=lambda item: (
                 item["firstVisible"]["timestamp"],
