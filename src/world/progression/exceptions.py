@@ -159,3 +159,39 @@ class StatPointNotAStatError(StatPointError):
     """Level stat points buy primary stats only."""
 
     user_message = "Stat points can only be spent on stats."
+
+
+class XPSpendError(Exception):
+    """Base for XP-debit failures raised by ``spend_xp_for_character`` (#3748).
+
+    Carries ``user_message`` per the project's no-``str(exc)``-in-API rule. Callers
+    that already pre-check (magic's gift/thread unlocks, the distinctions sheet
+    request) keep their own domain-specific message and never see these; callers
+    that don't translate them into their own return contract.
+    """
+
+    user_message = "This purchase could not be completed."
+
+
+class InsufficientXPError(XPSpendError):
+    """The account's XP pool cannot cover the debit.
+
+    ``required``/``available`` are exposed so a caller can format its own
+    long-standing message rather than adopting this one.
+    """
+
+    def __init__(self, *, required: int, available: int) -> None:
+        self.required = required
+        self.available = available
+        self.user_message = f"Need {required} XP, have {available}."
+        super().__init__(self.user_message)
+
+
+class NoAccountForCharacterError(XPSpendError):
+    """The spending character has no linked account, so there is no pool to debit.
+
+    XP is account-scoped (ADR-0053); an unplayed sheet (a roster character nobody
+    holds, an NPC asset) has no balance to spend from.
+    """
+
+    user_message = "This character has no linked account; XP cannot be spent."

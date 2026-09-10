@@ -3776,6 +3776,28 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/character-sheets/{id}/xp-ledger/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description What the owner has earned on, and invested in, this character (#3748).
+     *
+     *     Owner-only: XP is the player's business, not something other players read
+     *     off a public sheet.
+     */
+    get: operations['character_sheets_xp_ledger_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/characters/online/': {
     parameters: {
       query?: never;
@@ -26759,6 +26781,17 @@ export interface components {
      * @enum {string}
      */
     CharacterVitalsStatusEnum: 'alive' | 'dying' | 'incapacitated' | 'dead';
+    /**
+     * @description Response for CharacterSheetViewSet.xp-ledger (#3748): what this character cost.
+     *
+     *     XP is spent by the account, so these are attribution totals, not a balance —
+     *     ``spent`` can exceed ``earned`` when a player invests XP earned elsewhere.
+     */
+    CharacterXPLedger: {
+      earned: number;
+      spent: number;
+      locked: number;
+    };
     /**
      * @description Read-only payload for one of the requesting player's pending check calls (#3295).
      *
@@ -52059,6 +52092,27 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['StatPointState'];
+        };
+      };
+    };
+  };
+  character_sheets_xp_ledger_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['CharacterXPLedger'];
         };
       };
     };

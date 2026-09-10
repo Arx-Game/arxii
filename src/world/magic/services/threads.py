@@ -917,34 +917,24 @@ def accept_thread_weaving_unlock(
     enforce_advancement_gate(learner)
 
     from world.action_points.models import ActionPointPool  # noqa: PLC0415
-    from world.progression.models import XPTransaction  # noqa: PLC0415
-    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
-    from world.progression.types import ProgressionReason  # noqa: PLC0415
+    from world.progression.exceptions import (  # noqa: PLC0415
+        InsufficientXPError,
+        NoAccountForCharacterError,
+    )
+    from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
     unlock = offer.unlock
     xp_cost = compute_thread_weaving_xp_cost(unlock, learner)
 
-    account = learner.character.account
-    if account is None:
+    # Debits the account pool and credits the learner's lifetime spend (#3748).
+    try:
+        spend_xp_for_character(learner, xp_cost, f"ThreadWeaving unlock: {unlock}")
+    except NoAccountForCharacterError as exc:
         msg = "Learner character has no linked account; cannot spend XP."
-        raise XPInsufficient(msg)
-
-    xp_tracker = get_or_create_xp_tracker(account)
-    if not xp_tracker.can_spend(xp_cost):
-        msg = f"Need {xp_cost} XP to learn {unlock}, have {xp_tracker.current_available}."
-        raise XPInsufficient(msg)
-
-    # Spend the XP (updates total_spent; save is called inside spend_xp).
-    xp_tracker.spend_xp(xp_cost)
-
-    XPTransaction.objects.create(
-        account=account,
-        amount=-xp_cost,
-        reason=ProgressionReason.XP_PURCHASE,
-        description=f"ThreadWeaving unlock: {unlock}",
-        character=learner,
-        gm=None,
-    )
+        raise XPInsufficient(msg) from exc
+    except InsufficientXPError as exc:
+        msg = f"Need {xp_cost} XP to learn {unlock}, have {exc.available}."
+        raise XPInsufficient(msg) from exc
 
     # Consume teacher's banked AP commitment.
     teacher_pool = ActionPointPool.get_or_create_for_character(offer.teacher.character)

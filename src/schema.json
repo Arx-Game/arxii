@@ -5572,6 +5572,31 @@ paths:
               schema:
                 $ref: '#/components/schemas/StatPointState'
           description: ''
+  /api/character-sheets/{id}/xp-ledger/:
+    get:
+      operationId: character_sheets_xp_ledger_retrieve
+      description: |-
+        What the owner has earned on, and invested in, this character (#3748).
+
+        Owner-only: XP is the player's business, not something other players read
+        off a public sheet.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterXPLedger'
+          description: ''
   /api/characters/online/:
     get:
       operationId: characters_online_retrieve
@@ -44871,6 +44896,24 @@ components:
         * `dying` - dying
         * `incapacitated` - incapacitated
         * `dead` - dead
+    CharacterXPLedger:
+      type: object
+      description: |-
+        Response for CharacterSheetViewSet.xp-ledger (#3748): what this character cost.
+
+        XP is spent by the account, so these are attribution totals, not a balance —
+        ``spent`` can exceed ``earned`` when a player invests XP earned elsewhere.
+      properties:
+        earned:
+          type: integer
+        spent:
+          type: integer
+        locked:
+          type: integer
+      required:
+      - earned
+      - locked
+      - spent
     CheckCallTarget:
       type: object
       description: |-

@@ -1,19 +1,24 @@
-"""Read selectors for character path progression (#954).
+"""Read selectors for character progression (#954, #3748).
 
 `current_path_for_character` previously lived in `world.magic.audere_majora`,
 but it queries the progression model `CharacterPathHistory`; it belongs here.
 Magic imports it back for `eligible_paths_for_threshold`.
+
+`character_xp_ledger` answers "what has a player earned on, and invested in, this
+character" for the sheet, the admin and the death-kudos cap.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from django.db.models import Q, Sum
 from evennia.objects.models import ObjectDB
 
 from world.classes.models import Path
 from world.classes.services import stage_for_level
-from world.progression.models import CharacterPathHistory
+from world.progression.models import CharacterPathHistory, CharacterXP
 
 if TYPE_CHECKING:
     from world.character_sheets.models import CharacterSheet
@@ -74,3 +79,38 @@ def resolve_advanced_path_by_name(sheet: CharacterSheet, name: str) -> Path | No
         if path.name.casefold() == needle:
             return path
     return None
+
+
+@dataclass(frozen=True)
+class CharacterXPLedger:
+    """What a player has earned on, and invested in, one character (#3748).
+
+    The reviewer's two questions, side by side. ``spent`` is the number the
+    death-kudos cap is sized on (ADR-0131) and that character-loss
+    reimbursement will read; it can exceed ``earned``, because XP earned on one
+    character is routinely spent on another. ``locked`` is the separate CG
+    conversion pool, reported apart so it is never mistaken for play earnings.
+    """
+
+    earned: int
+    spent: int
+    locked: int
+
+
+def character_xp_ledger(sheet: CharacterSheet) -> CharacterXPLedger:
+    """Lifetime XP earned on and spent on ``sheet``.
+
+    One aggregate over the character's ``CharacterXP`` rows. Rows exist only
+    once something has moved, so a character nobody has awarded or spent on
+    reports zeroes rather than raising.
+    """
+    rows = CharacterXP.objects.filter(character_id=sheet.pk).aggregate(
+        earned=Sum("total_earned", filter=Q(transferable=True)),
+        spent=Sum("total_spent"),
+        locked=Sum("total_earned", filter=Q(transferable=False)),
+    )
+    return CharacterXPLedger(
+        earned=rows["earned"] or 0,
+        spent=rows["spent"] or 0,
+        locked=rows["locked"] or 0,
+    )

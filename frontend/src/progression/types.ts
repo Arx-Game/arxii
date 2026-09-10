@@ -73,3 +73,16 @@ export interface AccountProgressionData {
   kudos_transactions: KudosTransaction[];
   claim_categories: KudosClaimCategory[];
 }
+
+/**
+ * What a player has earned on, and invested in, one character (#3748).
+ *
+ * Attribution totals, not a balance — the pool is the account's, so `spent` can
+ * exceed `earned` when XP earned on one character is spent on another. `locked`
+ * is the separate character-creation conversion pool.
+ */
+export interface CharacterXpLedger {
+  earned: number;
+  spent: number;
+  locked: number;
+}
