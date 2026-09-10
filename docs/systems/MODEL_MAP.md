@@ -8178,6 +8178,7 @@
   - relationship_bumps <- relationships.RelationshipBump
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
+  - read_receipts <- scenes.InteractionReadReceipt
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
@@ -8202,6 +8203,11 @@
   - interaction -> scenes.Interaction [FK]
 
 ### InteractionReaction
+**Foreign Keys:**
+  - interaction -> scenes.Interaction [FK]
+  - account -> evennia.AccountDB [FK]
+
+### InteractionReadReceipt
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - account -> evennia.AccountDB [FK]
