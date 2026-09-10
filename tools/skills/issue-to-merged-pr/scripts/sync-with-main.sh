@@ -47,6 +47,11 @@ source "$SCRIPT_DIR/_wt-helpers.sh"
 # then run there via g(), so the caller's cwd never matters.
 if [[ -n "$EXPLICIT_WT" ]]; then
   WT="$EXPLICIT_WT"
+  if [[ "$WT" != /* ]]; then
+    COMMON_DIR=$(git rev-parse --git-common-dir)
+    COMMON_ROOT=$(cd "$(dirname "$COMMON_DIR")" && pwd -P)
+    WT="$COMMON_ROOT/$WT"
+  fi
   [[ -d "$WT" ]] || { echo "ERROR: worktree path does not exist: $WT" >&2; exit 1; }
 else
   WT=$(wt_for_branch "$BRANCH")

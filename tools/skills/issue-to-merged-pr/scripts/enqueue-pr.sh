@@ -25,6 +25,63 @@ usage() { echo "Usage: $0 [--dry-run] <pr-number>" >&2; exit 1; }
 PR="$1"
 [[ "$PR" =~ ^[0-9]+$ ]] || usage
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/_wt-helpers.sh"
+HEAD_REF=$(gh pr view "$PR" --json headRefName --jq .headRefName)
+PR_BODY=$(gh pr view "$PR" --json body --jq .body)
+LINKED_ISSUE=$(grep -oE '^(Refs|Closes) #[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | head -1 || true)
+ISSUE_LABELS=""
+if [[ -n "$LINKED_ISSUE" ]]; then
+  ISSUE_LABELS=$(gh issue view "$LINKED_ISSUE" --json labels --jq '.labels[].name')
+fi
+if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
+  EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
+  EVIDENCE_URL="${PR_EVIDENCE_URL:-}"
+  if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then
+    EVIDENCE_LINE=$(grep -E '^- Report: ' <<<"$PR_BODY" | head -1 || true)
+    EVIDENCE_REFERENCE="${EVIDENCE_LINE#- Report: }"
+    EVIDENCE_REFERENCE="${EVIDENCE_REFERENCE#\`}"
+    EVIDENCE_REFERENCE="${EVIDENCE_REFERENCE%\`}"
+    if [[ "$EVIDENCE_REFERENCE" == https://* ]]; then
+      EVIDENCE_URL="$EVIDENCE_REFERENCE"
+    else
+      EVIDENCE_FILE="$EVIDENCE_REFERENCE"
+    fi
+  fi
+  if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then
+    echo "ERROR: labeled issue #$LINKED_ISSUE requires a review evidence report." >&2
+    exit 1
+  fi
+  BRANCH_WT=$(wt_for_branch "$HEAD_REF")
+  if [[ -z "$BRANCH_WT" ]]; then
+    echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
+    exit 1
+  fi
+  REVIEWED_SHA=$(git -C "$BRANCH_WT" rev-parse HEAD^1)
+  if [[ -n "$EVIDENCE_URL" ]]; then
+    if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
+      echo "ERROR: evidence URL must be a GitHub issue or PR comment URL." >&2
+      exit 1
+    fi
+    COMMENT_ID="${EVIDENCE_URL##*#issuecomment-}"
+    EVIDENCE_TMP=$(mktemp)
+    REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+    gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body > "$EVIDENCE_TMP"
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$EVIDENCE_TMP" --revision "$REVIEWED_SHA"
+    rm -f "$EVIDENCE_TMP"
+  else
+    if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
+      echo "ERROR: evidence report path must be repository-relative without '..'." >&2
+      exit 1
+    fi
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+  fi
+
+else
+  echo "review evidence not required for issue #${LINKED_ISSUE:-unknown}"
+fi
+
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "[dry-run] gh pr merge $PR --auto --squash"
   exit 0

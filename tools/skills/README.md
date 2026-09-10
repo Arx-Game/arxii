@@ -86,10 +86,12 @@ behavior.)
 ### issue-to-merged-pr
 
 Carries a GitHub issue through to a merged PR with minimal human gating:
-brainstorm/spec/plan, implementation, PR, CI watch and fix loop,
-post-merge cleanup. Multi-invocation, GitHub-as-truth. See
-[issue-to-merged-pr/README.md](issue-to-merged-pr/README.md) and the
-[design doc](issue-to-merged-pr/references/design.md).
+brainstorm/spec/plan, implementation, exact-HEAD review evidence, PR, CI watch
+and fix loop, and post-merge cleanup. Multi-invocation, GitHub-as-truth. A PR
+must name a tracked evidence report; partial work uses `Refs` rather than
+silently closing its umbrella issue. See [issue-to-merged-pr/README.md](issue-to-merged-pr/README.md),
+[the design doc](issue-to-merged-pr/references/design.md), and
+[the evidence template](../../tools/skills/issue-to-merged-pr/templates/review-evidence.md).
 
 ### codebase-indexing
 

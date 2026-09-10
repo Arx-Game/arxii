@@ -273,15 +273,24 @@ On conflict (exit 4):
 
 **This step runs automatically once implementation + task/whole-branch review
 are clean — it is not a separate phase requiring a fresh user request or
-re-invocation.** The only human-only gate anywhere in this skill is
+re-invocation.** The only human-only gate before implementation is
 `spec:approved` (Phase 2); PR-opening, CI-watch, and CI-fix are one
-continuous run from there. Do not write a stopping instruction like "stop
-before opening a PR" into a dispatch to a sub-skill (e.g.
-`subagent-driven-development`) unless the user explicitly asked for that
-checkpoint — that manufactures a gate the skill doesn't have.
+continuous run from there. A second, mechanical pre-PR gate is mandatory:
+`open-pr.sh` marks evidence-required PRs and validates a committed review evidence report against the reviewed code revision (the parent of the evidence commit) before
+it pushes or opens anything. Do not write a stopping instruction like "stop
+before opening a PR" into a dispatch to a sub-skill unless the user explicitly
+asked for that checkpoint.
+
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. It must record the exact revision,
+build/environment, ordinary user interactions, fixture/live boundaries, visual
+screenshots when a design/demo exists, one verdict per mandatory criterion, and
+an empty unresolved-findings section. A green build or component-presence test
+is not acceptance evidence. Scoped or partial work defaults to `Refs #N`; set
+`PR_CLOSE_ISSUE=1` only after a final completeness review confirms every
+mandatory criterion is passed.
 
 Compose the PR body's substitution values (summary, follow-ups, sync
-summary).
+summary, evidence file).
 
 **Trivial findings never get filed — fix now or drop, no exceptions**
 (CLAUDE.md "Fold In, Don't File"). This applies to task-review and
@@ -313,12 +322,14 @@ unverified from a spec's deferred list and later closed as should-not-do; the
 genuine question became #1363.) Then:
 
 ```bash
+PR_EVIDENCE_FILE="a scratch review report" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body references the approved spec via `Closes #<issue>` — the spec lives
-in the issue body, so there is no spec-file link to pass.
+The PR body links the committed report and uses `Refs #<issue>` by default.
+Only an explicitly complete report may opt into `PR_CLOSE_ISSUE=1`; a partial
+repair must not auto-close its umbrella specification.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the
@@ -350,8 +361,9 @@ commits (so hooks never ran), scope the catch-up to just the branch's diff —
 > ad-hoc poll you author.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh
-  <pr-N>` (arms squash auto-merge), post a brief status comment, exit the
+- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the
+  committed report against the reviewed code revision before arming squash auto-merge.
+  Then post a brief status comment and exit the
   session. **Do NOT re-sync with main or merge by hand.** The merge queue
   re-tests the PR on top of the latest main and merges it in order once a human
   approves — that human approval is the only remaining gate. If main moves while
