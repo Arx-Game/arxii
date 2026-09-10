@@ -4,6 +4,8 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.scenes.factories import InteractionFactory
+from world.scenes.models import InteractionReadReceipt
 
 
 class PlayReaderContractTests(APITestCase):
@@ -28,3 +30,31 @@ class PlayReaderContractTests(APITestCase):
         response = self.client.get("/api/play/context/?id=999999")
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.json()["detail"], "This pose is no longer available.")
+
+
+class PlayReadViewTests(APITestCase):
+    def test_marks_poses_read(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        interaction = InteractionFactory()
+        response = self.client.post(
+            "/api/play/read/",
+            {"poses": [{"id": interaction.pk, "timestamp": interaction.timestamp.isoformat()}]},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marked"], 1)
+        self.assertTrue(
+            InteractionReadReceipt.objects.filter(account=account, interaction=interaction).exists()
+        )
+
+    def test_rejects_more_than_100_poses(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        poses = [{"id": i, "timestamp": "2026-01-01T00:00:00Z"} for i in range(101)]
+        response = self.client.post("/api/play/read/", {"poses": poses}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_authentication(self) -> None:
+        response = self.client.post("/api/play/read/", {"poses": []}, format="json")
+        self.assertEqual(response.status_code, 403)

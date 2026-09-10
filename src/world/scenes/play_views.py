@@ -253,3 +253,33 @@ class PlaySearchView(APIView):
                 }
             )
         return _page(results, 30, request)
+
+
+class PlayReadView(APIView):
+    """POST authorized pose references to mark them read for this account."""
+
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request: Request) -> Response:
+        from world.scenes.read_state_services import (  # noqa: PLC0415
+            MAX_POSES_PER_BATCH,
+            mark_poses_read,
+        )
+
+        poses = request.data.get("poses", [])
+        if not isinstance(poses, list) or len(poses) > MAX_POSES_PER_BATCH:
+            return Response(
+                {"detail": f"poses must be a list of at most {MAX_POSES_PER_BATCH} entries."},
+                status=400,
+            )
+        pairs: list[tuple[int, str]] = []
+        for entry in poses:
+            try:
+                pairs.append((int(entry["id"]), str(entry["timestamp"])))
+            except (KeyError, TypeError, ValueError):
+                return Response({"detail": "Each pose needs an id and a timestamp."}, status=400)
+        marked = mark_poses_read(
+            account=request.user,  # type: ignore[invalid-argument-type]
+            poses=pairs,
+        )
+        return Response({"marked": marked})
