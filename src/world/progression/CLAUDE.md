@@ -192,8 +192,8 @@ character.
   decides; `None` only for an award no character earned (a GM story reward).
 - **`spend_xp_for_character(sheet, amount, description, *, reason, gm)`**
   (`services/xp_ledger.py`) — **never debit `ExperiencePointsData` by hand.** Five
-  sites used to, and three of them never stamped the character, which is how the cap
-  came to read a ledger nobody was feeding. Raises `InsufficientXPError`
+  sites used to, and not one of them touched `CharacterXP`, which is how the cap came
+  to read a ledger nobody was feeding. Raises `InsufficientXPError`
   (carries `required`/`available`) / `NoAccountForCharacterError`.
 - **`CharacterXP` means two things, keyed on `transferable`.** `True` is the
   attribution ledger: not a pool, nothing is drawn from it, and `total_spent` may

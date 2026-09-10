@@ -127,8 +127,9 @@ def spend_xp_for_character(
 
     The single seam every XP purchase goes through — class-level unlocks, skill
     breakthroughs, gift unlocks, thread-weaving unlocks, distinction sheet changes.
-    Before #3748 each of those repeated the same four steps and only three of them
-    stamped the character, so the death-kudos cap read a number nobody maintained.
+    Before #3748 each of those repeated the same four steps by hand, and while all five
+    stamped ``XPTransaction.character``, not one of them touched ``CharacterXP`` — so the
+    death-kudos cap, which reads that ledger, read a number nobody maintained.
 
     Returns ``None`` for a free purchase (``amount <= 0``) so callers can keep
     authoring zero-cost unlocks without a phantom transaction.

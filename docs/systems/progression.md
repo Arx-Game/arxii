@@ -378,9 +378,9 @@ result = get_available_unlocks_for_character(character)
 ### The XP debit seam (`services.xp_ledger`, #3748)
 
 **Every XP purchase in the game debits through `spend_xp_for_character`.** Five sites
-used to repeat the same four steps by hand and three of them never stamped the
-character, so the death-kudos cap read a ledger nobody was feeding. Do not write a
-sixth by hand.
+used to repeat the same four steps by hand, and while all five stamped
+`XPTransaction.character`, not one touched `CharacterXP` — so the death-kudos cap, which
+reads that ledger, read a number nobody was feeding. Do not write a sixth by hand.
 
 ```python
 from world.progression.services import spend_xp_for_character

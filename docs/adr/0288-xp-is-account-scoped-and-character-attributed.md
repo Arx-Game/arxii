@@ -22,9 +22,11 @@ behind them was honoured no better than one who had never spent a point.
 
 Five separate call sites debited the pool by hand — class-level unlocks, skill
 breakthroughs, gift unlocks, thread-weaving unlocks and distinction sheet changes — each
-repeating fetch-tracker, check, spend, write-receipt, and three of them not stamping the
-character even on `XPTransaction`. The issue's own verified ledger named one of the five.
-That is why the gap was invisible: nobody could see all five at once.
+repeating fetch-tracker, check, spend, write-receipt. All five stamped
+`XPTransaction.character`, so the audit trail looked healthy; not one of them touched
+`CharacterXP`, which is the ledger the cap actually reads. The issue's own verified ledger
+named one of the five. That is why the gap was invisible: nobody could see all five at
+once, and the surface that looked right was not the surface being read.
 
 **Decision.** The balance stays the account's; **attribution is added beside it, not
 under it.**
