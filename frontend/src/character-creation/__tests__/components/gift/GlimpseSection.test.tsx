@@ -138,6 +138,10 @@ function visibleOffer(tag: GlimpseTagOption, overrides: Partial<VisibleOffer> = 
     first_look: false,
     held: false,
     effect_line: '',
+    taken_per_feature: false,
+    opens_feature: false,
+    requires_feature_opened: false,
+    cg_max_rank: 0,
     ...overrides,
   };
 }

@@ -972,6 +972,14 @@ class VisibleOfferSerializer(serializers.Serializer):
     first_look = serializers.BooleanField()
     held = serializers.BooleanField()
     effect_line = serializers.CharField()
+    #: The per-feature shape (#3739): whether this line is offered on every feature
+    #: rather than once, whether taking it is what makes a feature distinctive,
+    #: whether it may only sit on an already-distinctive feature, and the rank
+    #: ceiling character creation applies (0 = ``max_rank``).
+    taken_per_feature = serializers.BooleanField()
+    opens_feature = serializers.BooleanField()
+    requires_feature_opened = serializers.BooleanField()
+    cg_max_rank = serializers.IntegerField()
 
 
 class ClosedDistinctionSerializer(serializers.Serializer):

@@ -69,6 +69,7 @@ from world.scenes.reaction_toggle_services import (
     toggle_interaction_reaction,
 )
 from world.scenes.services import active_persona_for_sheet
+from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -405,16 +406,36 @@ class InteractionViewSet(
         caller_state = sdm.initialize_state_for_object(character)
         message_location(caller_state, content)
 
-        with transaction.atomic():
-            interaction = record_interaction(
-                character=character,
-                content=content,
-                mode=InteractionMode.POSE,
-                scene=scene,
-                persona=persona,
-                pose_kind=pose_kind,
-                target_personas=target_personas,
-                on_created=_on_created,
+        reply_data = data.get("reply_to")
+        reply_target = (
+            ReplyTarget(
+                interaction_id=reply_data["id"],
+                timestamp=reply_data["timestamp"],
+            )
+            if reply_data is not None
+            else None
+        )
+        try:
+            with transaction.atomic():
+                interaction = record_interaction(
+                    character=character,
+                    content=content,
+                    mode=InteractionMode.POSE,
+                    scene=scene,
+                    persona=persona,
+                    pose_kind=pose_kind,
+                    target_personas=target_personas,
+                    reply_to=reply_target,
+                    on_created=_on_created,
+                )
+        except InteractionThreadError:
+            return Response(
+                {
+                    "code": "reply_target_unavailable",
+                    "field": "reply_to",
+                    "detail": "Cannot reply to that interaction.",
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         if interaction is None:

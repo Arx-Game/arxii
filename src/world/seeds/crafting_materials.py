@@ -92,12 +92,15 @@ def seed_crafting_materials() -> None:
 # The ratified accent vocabulary (#2886, Apostate 2026-08-02): seven axes.
 # (name, adjective, check_type_name or None). Unwired axes stay authored-but-
 # dormant — flagged skill-list holes (crowd-blending, courtly command), never
-# force-fit. Regal spans a check family; the check-scoped seam is 1:1, so it
-# stays dormant until the courtly CheckTypes land (design note on #2886).
+# force-fit. Regal stayed dormant until a courtly CheckType existed; #3739 seeded
+# one (Command: presence + Leadership) and bound the axis to it.
 _ACCENT_AXES = (
     ("allure", "alluring", None),  # attraction reads wire via npc_services, not a CheckType
     ("menace", "menacing", "Intimidation"),
-    ("regal", "regal", None),
+    # #3739 — bound now that a Command CheckType exists (presence + Leadership,
+    # ``world.seeds.governance_checks``); the fill-if-found wiring below attaches it
+    # to a target seeded before the check did.
+    ("regal", "regal", "Command"),
     ("dramatic", "dramatic", "Performance"),
     ("stealthy", "stealthy", "Stealth"),
     ("unassuming", "unassuming", None),

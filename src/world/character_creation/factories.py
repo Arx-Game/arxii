@@ -252,8 +252,16 @@ class DistinctionOfferFactory(factory_django.DjangoModelFactory):
     distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
     chapter = OfferChapter.APPEARANCE
     arrives_as = OfferArrival.CHOICE
+    #: Declared so ``appearance_section``'s Maybe can read it (#3739); a test that
+    #: wants the feature-rows opener passes ``feature_rows=True``.
+    feature_rows = False
     appearance_section = factory.Maybe(
-        factory.LazyAttribute(lambda o: o.chapter == OfferChapter.APPEARANCE),
+        # An Appearance line is opened by exactly one thing (#3739): a section, or
+        # the feature rows. A test that asks for ``feature_rows=True`` gets no
+        # section, so the model's own at-most-one-opener rule still holds.
+        factory.LazyAttribute(
+            lambda o: o.chapter == OfferChapter.APPEARANCE and not o.feature_rows
+        ),
         yes_declaration=factory.SubFactory(AppearanceSectionFactory),
         no_declaration=None,
     )

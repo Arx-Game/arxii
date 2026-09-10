@@ -49,6 +49,10 @@ const silverTongue: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 const magicalScar: VisibleOffer = {
@@ -67,6 +71,10 @@ const magicalScar: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 const highborn: VisibleOffer = {
@@ -85,6 +93,10 @@ const highborn: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 /** A CHOICE entry from a different chapter's offer, to prove a toggle never drops it. */
@@ -170,8 +182,8 @@ describe('ChapterOffers', () => {
     );
     await user.click(screen.getByRole('button', { name: /Silver Tongue/ }));
     expect(mutate).toHaveBeenCalledWith([
-      { id: 50, rank: 2, offer_id: 999 },
-      { id: 1, rank: 1, offer_id: 101 },
+      { id: 50, rank: 2, offer_id: 999, feature_trait: '', feature_marking: 0 },
+      { id: 1, rank: 1, offer_id: 101, feature_trait: '', feature_marking: 0 },
     ]);
   });
 
@@ -195,8 +207,8 @@ describe('ChapterOffers', () => {
     );
     await user.click(screen.getByRole('button', { name: /Silver Tongue/ }));
     expect(mutate).toHaveBeenCalledWith([
-      { id: 50, rank: 2, offer_id: 999 },
-      { id: 1, rank: 1, offer_id: 101 },
+      { id: 50, rank: 2, offer_id: 999, feature_trait: '', feature_marking: 0 },
+      { id: 1, rank: 1, offer_id: 101, feature_trait: '', feature_marking: 0 },
     ]);
     const [syncBody] = mutate.mock.calls[0];
     expect(syncBody.some((row: { id: number }) => row.id === 60)).toBe(false);
@@ -262,8 +274,8 @@ describe('ChapterOffers', () => {
     );
     await user.click(screen.getByRole('button', { name: 'Raise Magical Scar' }));
     expect(mutate).toHaveBeenCalledWith([
-      { id: 50, rank: 2, offer_id: 999 },
-      { id: 2, rank: 1, offer_id: 102 },
+      { id: 50, rank: 2, offer_id: 999, feature_trait: '', feature_marking: 0 },
+      { id: 2, rank: 1, offer_id: 102, feature_trait: '', feature_marking: 0 },
     ]);
   });
 
@@ -377,6 +389,10 @@ describe('ChapterOffers', () => {
       first_look: false,
       held: false,
       effect_line: '',
+      taken_per_feature: false,
+      opens_feature: false,
+      requires_feature_opened: false,
+      cg_max_rank: 0,
     };
     offersResponse = { ...offersResponse, offers: [...offersResponse.offers, refundRanked] };
     draftDistinctions = [

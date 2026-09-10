@@ -31,6 +31,7 @@ import type {
   TechniqueStyle,
   Tradition,
   Vacancy,
+  VisibleOffer,
 } from '../types';
 
 // =============================================================================
@@ -1270,3 +1271,34 @@ export const mockCGExplanations: Record<string, string> = {
   arrival_door: 'Begin',
   arrival_quiet: 'Return to the Hall',
 };
+
+/**
+ * A `VisibleOffer` with every required field filled, overridable per test
+ * (#3739). The type is generated from the server's own serializer, so it grows
+ * whenever an offer does; a builder keeps that growth from touching every test
+ * that only cares about a name and a price.
+ */
+export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): VisibleOffer {
+  return {
+    offer_id: 1,
+    distinction_id: 1,
+    name: 'An Offer',
+    player_line: '',
+    chapter: 'appearance',
+    arrives_as: 'choice',
+    opener_label: '',
+    cost_per_rank: 1,
+    max_rank: 1,
+    is_locked: false,
+    lock_reason: '',
+    opener_key: '',
+    first_look: false,
+    held: false,
+    effect_line: '',
+    taken_per_feature: false,
+    opens_feature: false,
+    requires_feature_opened: false,
+    cg_max_rank: 0,
+    ...overrides,
+  };
+}

@@ -33,6 +33,7 @@ class InteractionPayload(TypedDict):
     content: str
     mode: str
     timestamp: str
+    thread_id: str | None
     scene_id: int | None
     place_id: int | None
     place_name: str | None

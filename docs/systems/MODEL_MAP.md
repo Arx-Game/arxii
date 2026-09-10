@@ -1503,6 +1503,7 @@
 - `finalize_magic_data(draft: 'CharacterDraft', sheet: 'CharacterSheet') -> 'None' - Create magic models from the CG-chosen catalog Gift/Techniques during finalization.`
 - `first_journal_offered(draft: 'CharacterDraft') -> 'bool' - The First Journal is offered to an Arx start; anyone else writes one in play.`
 - `get_accessible_starting_areas(account: 'AbstractBaseUser | AnonymousUser') -> 'QuerySet' - Get all starting areas accessible to an account.`
+- `opened_feature_traits(draft_data: 'dict') -> 'set[str]' - The names of the trait rows this draft has made distinctive (#3739).`
 - `reconcile_offer_picks(draft: 'CharacterDraft') -> 'list[str]' - Apply carried and bundled offers, drop picks whose offer has gone, reprice.`
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
@@ -3535,6 +3536,8 @@
   - distinction -> distinctions.Distinction [FK]
   - secret -> secrets.Secret [OneToOne] (nullable)
   - from_glimpse -> magic.CharacterAura [FK] (nullable)
+  - feature_trait -> forms.FormTrait [FK] (nullable)
+  - feature_marking -> forms.FormMarking [FK] (nullable)
 **Pointed to by:**
   - modifier_sources <- mechanics.ModifierSource
   - resonance_grants <- magic.ResonanceGrant
@@ -3896,12 +3899,16 @@
 ### FormMarking
 **Foreign Keys:**
   - form -> forms.CharacterForm [FK]
+**Pointed to by:**
+  - feature_distinctions <- distinctions.CharacterDistinction
 
 ### FormTrait
 **Foreign Keys:**
   - composite_option -> forms.FormTraitOption [FK] (nullable)
+  - unnatural_option -> forms.FormTraitOption [FK] (nullable)
 **Pointed to by:**
   - kinsperson_values <- roster.KinspersonTraitValue
+  - feature_distinctions <- distinctions.CharacterDistinction
   - options <- forms.FormTraitOption
   - species_links <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
@@ -3917,6 +3924,7 @@
 **Pointed to by:**
   - kinsperson_values <- roster.KinspersonTraitValue
   - composite_for_traits <- forms.FormTrait
+  - unnatural_for_traits <- forms.FormTrait
   - species_restrictions <- forms.SpeciesFormTrait
   - character_values <- forms.CharacterFormValue
   - natural_for_values <- forms.CharacterFormValue
@@ -8149,6 +8157,7 @@
 
 ### Interaction
 **Foreign Keys:**
+  - thread -> scenes.InteractionThread [FK] (nullable)
   - persona -> scenes.Persona [FK]
   - writer_account -> evennia.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
@@ -8207,6 +8216,13 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
+
+### InteractionThread
+**Foreign Keys:**
+  - parent -> scenes.InteractionThread [FK] (nullable)
+**Pointed to by:**
+  - child_threads <- scenes.InteractionThread
+  - interactions <- scenes.Interaction
 
 ### Mute
 **Foreign Keys:**

@@ -2,6 +2,7 @@ import re as _re
 from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
 from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
@@ -32,6 +33,9 @@ _DANGEROUS_LINK_RE = _re.compile(
 
 TEMPORARY_AVAILABILITY = "temporary"
 RETAINED_AVAILABILITY = "retained"
+_UNKNOWN_REPLY_TARGET_FIELDS = "Unknown reply target fields."
+_REPLY_TARGET_TIMEZONE_ERROR = "Reply target timestamp must include a timezone."
+_RFC3339_OFFSET_RE = _re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$")
 
 
 class InlineActionInteractionSerializer(serializers.ModelSerializer):
@@ -118,8 +122,8 @@ class InteractionListSerializer(serializers.ModelSerializer):
     language_id = serializers.IntegerField(read_only=True, allow_null=True)
     language_name = serializers.SerializerMethodField()
     attributed_companion = serializers.SerializerMethodField()
-    # Additive narrative-play contract fields. Legacy rows deliberately expose
-    # no inferred parent; play readers treat each one as its own root.
+    # Additive narrative-play contract fields. Unthreaded rows deliberately expose
+    # no inferred parent; play readers keep their existing holder fallback.
     thread_id = serializers.SerializerMethodField()
     reply_to = serializers.SerializerMethodField()
     conversation = serializers.SerializerMethodField()
@@ -165,7 +169,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         ]
 
     def get_thread_id(self, obj: Interaction) -> str | None:
-        """Return only explicit topology; legacy rows remain standalone roots."""
+        """Return only explicit topology; unthreaded rows remain standalone."""
         try:
             value = obj.thread_id
         except AttributeError:
@@ -857,12 +861,39 @@ class ReactionEmojiSerializer(serializers.ModelSerializer):
         fields = ["emoji", "valence", "sort_order"]
 
 
+class ReplyTargetSerializer(serializers.Serializer):
+    """Write-only interaction reference used to select a flat thread."""
+
+    id = serializers.IntegerField(min_value=1)
+    timestamp = serializers.DateTimeField()
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        """Reject unknown members and naive timestamps before DRF normalizes them."""
+        if not isinstance(data, dict):
+            raise serializers.ValidationError(_UNKNOWN_REPLY_TARGET_FIELDS)
+        unknown = set(data) - {"id", "timestamp"}
+        if unknown:
+            raise serializers.ValidationError(_UNKNOWN_REPLY_TARGET_FIELDS)
+        raw_timestamp = data.get("timestamp")
+        if not isinstance(raw_timestamp, str) or not _RFC3339_OFFSET_RE.search(raw_timestamp):
+            raise serializers.ValidationError(_REPLY_TARGET_TIMEZONE_ERROR)
+        return super().to_internal_value(data)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Require the normalized timestamp to remain timezone-aware."""
+        if not timezone.is_aware(attrs["timestamp"]):
+            raise serializers.ValidationError(_REPLY_TARGET_TIMEZONE_ERROR)
+        return attrs
+
+
 class PoseSubmitSerializer(serializers.Serializer):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view
     creates the Interaction and wires the auto-link service.
     """
+
+    reply_to = ReplyTargetSerializer(required=False, allow_null=True, write_only=True)
 
     persona_id = serializers.IntegerField(
         help_text="PK of the Persona the requesting user is posing as.",

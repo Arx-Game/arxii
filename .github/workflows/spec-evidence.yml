@@ -25,29 +25,28 @@ jobs:
           readarray -t values < <(python3 - <<'PY'
           import json
           import os
-          import re
+
+          from tools.validate_review_evidence import linked_issue_number
 
           with open(os.environ["EVENT_PATH"], encoding="utf-8") as stream:
               event = json.load(stream)
           body = event["pull_request"].get("body") or ""
           with open("/tmp/pr-body.md", "w", encoding="utf-8") as stream:
               stream.write(body)
-          if "<!-- review-evidence-required -->" not in body:
-              print("SKIP")
-              raise SystemExit(0)
-          match = re.search(r"^(?:Refs|Closes) #([0-9]+)$", body, re.MULTILINE)
-          if not match:
-              raise SystemExit("PR body must link an issue with Refs or Closes")
-          print(match.group(1))
+          # Review evidence is opt-in through a label on the linked issue.
+          # PRs without an issue link cannot be opted in, so leave them alone
+          # (this includes Dependabot update PRs). GitHub accepts terminal
+          # punctuation after a closing reference, such as "Closes #123.".
+          print(linked_issue_number(body) or "")
           print(event["pull_request"]["head"]["sha"])
           PY
           )
-          if [[ "${values[0]}" == "SKIP" ]]; then
-              echo "review evidence not required for this PR"
-              exit 0
-          fi
           issue_number="${values[0]}"
           head_sha="${values[1]}"
+          if [[ -z "$issue_number" ]]; then
+              echo "review evidence not required: PR does not link an issue"
+              exit 0
+          fi
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${issue_number}/labels" --paginate --jq '.[].name')"
           if ! grep -qx "review:evidence-required" <<<"$labels"; then
               echo "review evidence not required for issue #${issue_number}"

@@ -220,6 +220,41 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=True,
         help_text="Whether this distinction is available for selection.",
     )
+    # A distinctive physical feature (#3739). ``taken_per_feature`` rows are held once
+    # per feature (a trait row or a marking) rather than once per character; the
+    # ``opens_feature`` row is the one-point "Make it distinctive" pick that opens a
+    # feature's description, every option of its trait and the axis rows; a
+    # ``requires_feature_opened`` row (Alluring, Menacing, Regal) may be held on a
+    # feature only where an ``opens_feature`` row is held. ``cg_max_rank`` caps the
+    # rank character creation allows below ``max_rank`` (3 in CG, higher in play).
+    taken_per_feature = models.BooleanField(
+        default=False,
+        help_text=(
+            "Held once per feature (a trait row or a marking), not once per character; "
+            "offered on every feature row of the Appearance chapter (#3739)."
+        ),
+    )
+    opens_feature = models.BooleanField(
+        default=False,
+        help_text=(
+            "The one-point 'Make it distinctive' pick: holding it on a feature opens the "
+            "feature's description, every option of its trait, and the axis rows (#3739)."
+        ),
+    )
+    requires_feature_opened = models.BooleanField(
+        default=False,
+        help_text=(
+            "May be held on a feature only where the opens_feature row is held on the "
+            "same feature (the Alluring / Menacing / Regal axes, #3739)."
+        ),
+    )
+    cg_max_rank = models.PositiveIntegerField(
+        default=0,
+        help_text=(
+            "The highest rank character creation allows, when lower than max_rank; "
+            "0 means max_rank applies in CG too (#3739: axes stop at 3 in CG)."
+        ),
+    )
     is_teachable = models.BooleanField(
         default=False,
         help_text="If True, a PC who holds this distinction can teach it to others "
@@ -307,6 +342,19 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         Authored content: negligible staleness on the identity-mapped row.
         """
         return list(self.codex_grants.all())
+
+    @property
+    def cg_ceiling(self) -> int:
+        """The highest rank a draft may buy (#3739).
+
+        ``cg_max_rank`` when it is set and lower than ``max_rank``, else
+        ``max_rank``. The axes reach 5 in play and stop at 3 in CG, so the sync
+        view and the Appearance leaf both read this rather than ``max_rank``;
+        every distinction that never set ``cg_max_rank`` is unaffected.
+        """
+        if self.cg_max_rank and self.cg_max_rank < self.max_rank:
+            return self.cg_max_rank
+        return self.max_rank
 
     def calculate_total_cost(self, rank: int) -> int:
         """
@@ -482,10 +530,63 @@ class CharacterDistinction(SharedMemoryModel):
         help_text="When this distinction was last modified.",
     )
 
+    # The feature a per-feature distinction is aimed at (#3739): exactly one of these
+    # when ``distinction.taken_per_feature``, neither otherwise. A trait row aims at
+    # the FormTrait (the character's true form carries the value); a marking aims at
+    # the FormMarking itself. FK direction per ADR-0010: this row is the specific side.
+    feature_trait = models.ForeignKey(
+        "arxii.FormTrait",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="feature_distinctions",
+        help_text="The trait row this per-feature distinction is aimed at (#3739).",
+    )
+    feature_marking = models.ForeignKey(
+        "arxii.FormMarking",
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        related_name="feature_distinctions",
+        help_text="The marking this per-feature distinction is aimed at (#3739).",
+    )
+
     class Meta:
-        unique_together = ["character", "distinction"]
+        constraints = [
+            # A plain distinction is still held once per character; a per-feature one
+            # once per feature (#3739). NULLs compare distinct in a unique constraint,
+            # so each shape carries its own conditional constraint.
+            models.UniqueConstraint(
+                fields=["character", "distinction"],
+                condition=models.Q(feature_trait__isnull=True, feature_marking__isnull=True),
+                name="characterdistinction_unique_plain",
+            ),
+            models.UniqueConstraint(
+                fields=["character", "distinction", "feature_trait"],
+                condition=models.Q(feature_trait__isnull=False),
+                name="characterdistinction_unique_per_trait",
+            ),
+            models.UniqueConstraint(
+                fields=["character", "distinction", "feature_marking"],
+                condition=models.Q(feature_marking__isnull=False),
+                name="characterdistinction_unique_per_marking",
+            ),
+            models.CheckConstraint(
+                check=~models.Q(feature_trait__isnull=False, feature_marking__isnull=False),
+                name="characterdistinction_one_feature_at_most",
+            ),
+        ]
         verbose_name = "Character Distinction"
         verbose_name_plural = "Character Distinctions"
+
+    @property
+    def feature_label(self) -> str:
+        """The feature this row is aimed at, for the sheet: a trait's name, a marking's, or ''."""
+        if self.feature_trait_id is not None:
+            return self.feature_trait.display_name
+        if self.feature_marking_id is not None:
+            return self.feature_marking.name
+        return ""
 
     def __str__(self) -> str:
         rank_str = f" (Rank {self.rank})" if self.distinction.max_rank > 1 else ""

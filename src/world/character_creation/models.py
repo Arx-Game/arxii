@@ -1679,21 +1679,27 @@ class CharacterDraft(SharedMemoryModel):
         if not distinctions_data:
             return 0
 
-        entries = {
-            d["distinction_id"]: d.get("rank", 1)
-            for d in distinctions_data
-            if d.get("distinction_id")
-        }
-        if not entries:
+        # A per-feature distinction (#3739) is held once per feature, so ranks are
+        # collected as a list per distinction and every one of them pays: "Alluring 2"
+        # on your hair and "Alluring 3" on a scar are two purchases, not one.
+        ranks: dict[int, list[int]] = defaultdict(list)
+        for d in distinctions_data:
+            if d.get("distinction_id"):
+                ranks[d["distinction_id"]].append(d.get("rank", 1))
+        if not ranks:
             return 0
 
         effects = DistinctionEffect.objects.filter(
-            distinction_id__in=entries.keys(),
+            distinction_id__in=ranks.keys(),
             target__name=modifier_target_name,
             target__category__name=category_name,
         ).select_related("target")
 
-        return sum(effect.get_value_at_rank(entries[effect.distinction_id]) for effect in effects)
+        return sum(
+            effect.get_value_at_rank(rank)
+            for effect in effects
+            for rank in ranks[effect.distinction_id]
+        )
 
     @property
     def starting_technique_picks(self) -> int:
@@ -1879,7 +1885,11 @@ class CharacterDraft(SharedMemoryModel):
             return {}
 
         distinction_ids = [d["distinction_id"] for d in distinctions_data]
-        ranks_by_id = {d["distinction_id"]: d.get("rank", 1) for d in distinctions_data}
+        # One list of ranks per distinction (#3739): a per-feature distinction is held
+        # once per feature and each holding contributes its own effect value.
+        ranks_by_id: dict[int, list[int]] = defaultdict(list)
+        for d in distinctions_data:
+            ranks_by_id[d["distinction_id"]].append(d.get("rank", 1))
 
         effects = (
             DistinctionEffect.objects.filter(
@@ -1893,10 +1903,10 @@ class CharacterDraft(SharedMemoryModel):
         bonuses: dict[str, int] = {}
         for effect in effects:
             stat_name = effect.target.name
-            rank = ranks_by_id.get(effect.distinction_id, 1)
-            value = effect.get_value_at_rank(rank)
-            display_value = value // STAT_DISPLAY_DIVISOR
-            bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
+            for rank in ranks_by_id.get(effect.distinction_id, [1]):
+                value = effect.get_value_at_rank(rank)
+                display_value = value // STAT_DISPLAY_DIVISOR
+                bonuses[stat_name] = bonuses.get(stat_name, 0) + display_value
 
         return bonuses
 
@@ -2393,6 +2403,13 @@ class DistinctionOffer(
     )
     #: The Beginnings that pin this line into the few shown at rest (#3709); every
     #: other line in the block folds under "See N more". Read by ``offers.offers_for``.
+    feature_rows = models.BooleanField(
+        default=False,
+        help_text=(
+            "Appearance only: offered on every trait row and marking rather than under a "
+            "section, for the per-feature distinctions (#3739)."
+        ),
+    )
     first_look = models.ManyToManyField(
         Beginnings,
         through="OfferFirstLook",
@@ -2401,6 +2418,11 @@ class DistinctionOffer(
     )
 
     objects = NaturalKeyManager()
+
+    #: The ``opener_key`` a feature-rows line reports (#3739). Unlike every other
+    #: opener there is no row to name, because the line is offered on every feature
+    #: the character has; the leaf keys its per-feature mounts off this one word.
+    FEATURE_OPENER_KEY: ClassVar[str] = "feature"
 
     #: Every opener field, and the chapter each belongs to. An FK opener is set when
     #: its id is; a choice opener when its value is non-blank.
@@ -2412,6 +2434,7 @@ class DistinctionOffer(
         "enemy_reason",
         "enemy_degree",
         "appearance_section",
+        "feature_rows",
     )
 
     class Meta:
@@ -2430,6 +2453,9 @@ class DistinctionOffer(
                         "appearance_section": None,
                         "prompt": "",
                         "enemy_degree": "",
+                        # A boolean opener is unset when False (#3739): a feature-rows
+                        # line is offered on every feature, so it can carry no section.
+                        "feature_rows": False,
                     }
                 ),
                 name="distinctionoffer_at_most_one_opener",
@@ -2454,7 +2480,7 @@ class DistinctionOffer(
         OfferChapter.TRADITION_STEP: ("schooling_line",),
         OfferChapter.GLIMPSE: ("glimpse_tag",),
         OfferChapter.LINEAGE: ("origin_choice",),
-        OfferChapter.APPEARANCE: ("appearance_section",),
+        OfferChapter.APPEARANCE: ("appearance_section", "feature_rows"),
         OfferChapter.ACTORS_SHEET: ("prompt",),
         OfferChapter.ENEMY: ("enemy_reason", "enemy_degree"),
     }
@@ -2473,7 +2499,7 @@ class DistinctionOffer(
         return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
 
     def _opener_is_set(self, field: str) -> bool:
-        if field in ("prompt", "enemy_degree"):
+        if field in ("prompt", "enemy_degree", "feature_rows"):
             return bool(getattr(self, field))
         return getattr(self, f"{field}_id") is not None
 
@@ -2497,6 +2523,8 @@ class DistinctionOffer(
             return f"degree:{self.enemy_degree}"
         if self.appearance_section_id is not None:
             return f"section:{self.appearance_section_id}"
+        if self.feature_rows:
+            return self.FEATURE_OPENER_KEY
         if self.glimpse_tag_id is not None:
             return f"tag:{self.glimpse_tag_id}"
         if self.origin_choice_id is not None:

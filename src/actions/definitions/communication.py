@@ -20,6 +20,23 @@ from flows.service_functions.communication import message_location, send_message
 from world.gm.constants import GMLevel
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import record_interaction, record_whisper_interaction
+from world.scenes.thread_services import (
+    InteractionThreadError,
+    ReplyTarget,
+    coerce_reply_target,
+)
+
+
+def _parse_reply_target(kwargs: dict[str, Any]) -> tuple[ReplyTarget | None, ActionResult | None]:
+    """Parse the optional serializer-shaped target used by communication actions."""
+    try:
+        return coerce_reply_target(kwargs.get("reply_to")), None
+    except InteractionThreadError:
+        return None, ActionResult(
+            success=False,
+            message="Cannot reply to that interaction.",
+        )
+
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -252,6 +269,9 @@ class SayAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
         if not text:
             return ActionResult(success=False, message="Say what?")
@@ -283,6 +303,7 @@ class SayAction(Action):
             mode=InteractionMode.SAY,
             target_personas=target_personas,
             language=language,
+            reply_to=reply_to,
         )
 
         # #1278/#2088 — flag circumvention: a blocked player directing a say at the
@@ -316,6 +337,9 @@ class PoseAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
         place = kwargs.get("place")
         if not text:
@@ -338,6 +362,7 @@ class PoseAction(Action):
             mode=InteractionMode.POSE,
             target_personas=target_personas,
             place=place,
+            reply_to=reply_to,
         )
 
         # #1278/#2088 — flag circumvention: a blocked player directing a pose at the
@@ -377,6 +402,9 @@ class EmitAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
         place = kwargs.get("place")
         if not text:
@@ -395,6 +423,7 @@ class EmitAction(Action):
             mode=InteractionMode.EMIT,
             target_personas=target_personas,
             place=place,
+            reply_to=reply_to,
         )
 
         return ActionResult(success=True)
@@ -429,6 +458,9 @@ class MutterAction(Action):
         )
 
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
             return ActionResult(success=False, message="Mutter what?")
@@ -458,7 +490,11 @@ class MutterAction(Action):
                 send_message(bystander_state, f'{actor.key} mutters, "{fragment}"')
 
         record_mutter_interaction(
-            character=actor, receivers=receivers, content=text, language=language
+            character=actor,
+            receivers=receivers,
+            content=text,
+            language=language,
+            reply_to=reply_to,
         )
 
         return ActionResult(success=True)
@@ -497,6 +533,9 @@ class PemitAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
             return ActionResult(success=False, message="Pemit what?")
@@ -519,6 +558,7 @@ class PemitAction(Action):
             content=text,
             mode=InteractionMode.EMIT,
             receivers=receiver_personas,
+            reply_to=reply_to,
         )
 
         return ActionResult(success=True)
@@ -547,6 +587,9 @@ class WhisperAction(Action):
     ) -> ActionResult:
         target = kwargs.get("target")
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         if target is None or not text:
             return ActionResult(success=False, message="Whisper what to whom?")
 
@@ -568,7 +611,13 @@ class WhisperAction(Action):
         )
         # Record + push: creates DB record and sends structured WebSocket payload.
         # Web clients use this for the scene feed display.
-        record_whisper_interaction(character=actor, target=target, content=text, language=language)
+        record_whisper_interaction(
+            character=actor,
+            target=target,
+            content=text,
+            language=language,
+            reply_to=reply_to,
+        )
 
         # #1278/#2088 — flag circumvention attempts: a blocked player whispering the
         # blocker via another identity. No-op when no active block exists.

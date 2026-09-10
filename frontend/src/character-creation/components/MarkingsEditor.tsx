@@ -7,6 +7,11 @@
  * character's true form at finalization. Optional — no stage validation
  * reads these. Self-contained CRUD (react-query) rather than riding the
  * draft PATCH, since rows are structured records, not draft_data blobs.
+ *
+ * A marking is a feature (#3739), so each entry carries `FeatureDistinctions`:
+ * its name and description stay free, and the point buys only the three
+ * presence axes. That is the one difference from a trait row, where the same
+ * point also opens the palette and the description.
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -18,6 +23,8 @@ import {
   type DraftMarkingCreate,
 } from '../api';
 import { ChoiceRow, Entry, EntryList, Field } from '../folio';
+import { FeatureDistinctions } from './offers/FeatureDistinctions';
+import type { CharacterDraft } from '../types';
 
 const MARKING_KINDS = [
   { value: 'tattoo', label: 'Tattoo' },
@@ -53,7 +60,23 @@ const EMPTY_FORM: DraftMarkingCreate = {
 
 const MARKINGS_QUERY_KEY = ['draft-markings'] as const;
 
-export function MarkingsEditor() {
+interface MarkingsEditorProps {
+  /**
+   * The draft, when the caller has it (#3739): each marking then offers the
+   * per-feature rows. Omitted by any caller that only needs the CRUD list.
+   */
+  draft?: CharacterDraft;
+  markingUnlockLabel?: string;
+  markingUnlockWhy?: string;
+  perTierWord?: string;
+}
+
+export function MarkingsEditor({
+  draft,
+  markingUnlockLabel,
+  markingUnlockWhy,
+  perTierWord,
+}: MarkingsEditorProps = {}) {
   const queryClient = useQueryClient();
   const { data: markings = [] } = useQuery({
     queryKey: MARKINGS_QUERY_KEY,
@@ -101,6 +124,16 @@ export function MarkingsEditor() {
               open
             >
               <p>{marking.description}</p>
+              {draft && (
+                <FeatureDistinctions
+                  draft={draft}
+                  feature={{ feature_marking: marking.id }}
+                  featureLabel={marking.name}
+                  unlockLabel={markingUnlockLabel}
+                  unlockWhy={markingUnlockWhy}
+                  perTierWord={perTierWord}
+                />
+              )}
               <div className="entry-act">
                 <button
                   type="button"

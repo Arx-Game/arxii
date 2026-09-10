@@ -42,7 +42,7 @@ from world.character_creation.models import (
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
 )
-from world.character_creation.offers import reconcile_offer_picks
+from world.character_creation.offers import opened_feature_traits, reconcile_offer_picks
 from world.character_sheets.services import create_character_with_sheet
 from world.forms.services import calculate_weight
 from world.roster.constants import ParentageKind
@@ -246,11 +246,13 @@ def finalize_character(
     # Create true form from appearance form traits
     _create_true_form(character, draft.draft_data)
 
-    # Materialize CG-authored body markings onto the true form (#2985).
-    _materialize_draft_markings(sheet, draft)
+    # Materialize CG-authored body markings onto the true form (#2985). The returned
+    # map binds each draft marking to the row it became, which is what a per-feature
+    # distinction bought on a marking resolves against below (#3739).
+    markings = _materialize_draft_markings(sheet, draft)
 
     # Create stat trait values, skills, goals, distinctions, path history, post-CG bonuses
-    _apply_character_mechanics(character, draft)
+    _apply_character_mechanics(character, draft, markings=markings)
 
     _initialize_full_vitals(sheet)
 
@@ -1247,19 +1249,29 @@ def _apply_sheet_demographics(sheet: CharacterSheet, draft: CharacterDraft) -> N
     sheet.save()
 
 
-def _apply_character_mechanics(character: ObjectDB, draft: CharacterDraft) -> None:
+def _apply_character_mechanics(
+    character: ObjectDB,
+    draft: CharacterDraft,
+    *,
+    markings: dict[int, Any] | None = None,
+) -> None:
     """
     Create stat trait values, skills, goals, distinctions, path history, and post-CG
     bonuses for the character from draft data.
 
     Centralized so both player and GM finalize flows share the same mechanics setup.
+
+    ``markings`` is ``{DraftMarking pk: FormMarking}`` from
+    ``_materialize_draft_markings`` (#3739). The GM finalize path creates neither a
+    true form nor markings, so it passes none and any per-feature pick bought on a
+    marking is skipped there — the row it would point at does not exist.
     """
     from world.traits.models import CharacterTraitValue, Trait, TraitType  # noqa: PLC0415
 
     _create_stat_values(character, draft, Trait, TraitType, CharacterTraitValue)
     _create_skill_values(character, draft)
     _build_and_create_goals(character, draft)
-    _create_distinctions(character, draft)
+    _create_distinctions(character, draft, markings=markings or {})
     _create_worship_declaration(character, draft)
     _create_path_history(character, draft)
     _stamp_default_class_level(character)
@@ -1605,7 +1617,9 @@ def _connection_asset_names(
     return asset_names
 
 
-def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
+def _create_distinctions(
+    character: ObjectDB, draft: CharacterDraft, *, markings: dict[int, Any] | None = None
+) -> None:
     """
     Create CharacterDistinction records and their modifiers from draft data.
 
@@ -1623,32 +1637,49 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     both a player's paid pick and a bundled/carried offer. ``asset_names`` (#3675)
     resolves the connection-asset naming for any bundled offer whose group question has
     a PERSON question anchored to it.
+
+    A per-feature distinction (#3739) is held once per feature, so the entry list is
+    keyed by ``feature_key`` rather than by distinction id, and each row carries the
+    ``FormTrait`` or ``FormMarking`` it names. ``markings`` maps the draft's marking
+    ids to the rows ``_materialize_draft_markings`` just created; without it (the GM
+    finalize path, which makes no markings) a marking-bound pick is skipped.
     """
     from world.distinctions.models import CharacterDistinction, Distinction  # noqa: PLC0415
-    from world.distinctions.types import DistinctionOrigin  # noqa: PLC0415
+    from world.distinctions.types import DistinctionOrigin, feature_key  # noqa: PLC0415
 
     distinctions_data = draft.draft_data.get("distinctions", [])
     if not distinctions_data:
         return
 
-    # Dict keyed by distinction_id deduplicates entries (CharacterDistinction
-    # has unique_together on character+distinction, so duplicates would fail)
-    entries_by_id = {d["distinction_id"]: d for d in distinctions_data if d.get("distinction_id")}
+    # Keyed by (distinction, feature) so a per-feature pick survives once per feature
+    # while a plain pick still deduplicates: the row's unique constraints have that
+    # same shape (one plain row per distinction, one row per distinction per feature).
+    entries_by_key = {feature_key(d): d for d in distinctions_data if d.get("distinction_id")}
 
     # Fetch all distinctions with effects prefetched in one query
     distinctions = _distinctions_with_effects(
-        Distinction.objects.filter(id__in=entries_by_id.keys())
+        Distinction.objects.filter(id__in={k[0] for k in entries_by_key})
     )
     distinctions_by_id = {d.id: d for d in distinctions}
+    traits_by_name = _feature_traits_by_name(entries_by_key)
 
     # Build CharacterDistinction instances
     char_distinctions = []
-    for distinction_id, entry in entries_by_id.items():
+    for (distinction_id, trait_name, marking_id), entry in entries_by_key.items():
         distinction = distinctions_by_id.get(distinction_id)
         if not distinction:
             logger.warning(
                 "Invalid distinction ID %s in draft for character %s",
                 distinction_id,
+                character.key,
+            )
+            continue
+        trait = traits_by_name.get(trait_name) if trait_name else None
+        marking = (markings or {}).get(marking_id) if marking_id else None
+        if (trait_name and trait is None) or (marking_id and marking is None):
+            logger.warning(
+                "Distinction %s names a feature that did not survive finalize for %s",
+                distinction.name,
                 character.key,
             )
             continue
@@ -1660,13 +1691,15 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
                 notes=entry.get("notes", ""),
                 origin=DistinctionOrigin.CHARACTER_CREATION,
                 source_description="; ".join(entry.get("sources", [])),
+                feature_trait=trait,
+                feature_marking=marking,
             )
         )
 
     if not char_distinctions:
         return
 
-    asset_names = _connection_asset_names(draft, entries_by_id.values())
+    asset_names = _connection_asset_names(draft, entries_by_key.values())
     created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
     _create_distinction_modifiers_bulk(
         character.sheet_data, created_distinctions, asset_names=asset_names
@@ -1680,6 +1713,21 @@ def _create_distinctions(character: ObjectDB, draft: CharacterDraft) -> None:
     for cd in created_distinctions:
         if cd.distinction.secret_by_default:
             mint_distinction_secret(cd)
+
+
+def _feature_traits_by_name(entries_by_key: dict) -> dict[str, Any]:
+    """The ``FormTrait`` rows the draft's per-feature picks name, by name (#3739).
+
+    Called by ``_create_distinctions``; one query, empty dict when no pick names a
+    trait. Draft entries store the trait's ``name`` rather than its pk because that
+    is what ``draft_data["form_traits"]`` is keyed by everywhere else in CG.
+    """
+    names = {k[1] for k in entries_by_key if k[1]}
+    if not names:
+        return {}
+    from world.forms.models import FormTrait  # noqa: PLC0415
+
+    return {t.name: t for t in FormTrait.objects.filter(name__in=names)}
 
 
 def _distinctions_with_effects(distinctions: QuerySet) -> QuerySet:
@@ -1777,17 +1825,22 @@ def _create_distinction_modifiers_bulk(
         reconcile_distinction_regard_seeds(char_dist)
 
 
-def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> None:
+def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> dict[int, Any]:
     """Copy CG-authored ``DraftMarking`` rows onto the character's TRUE form (#2985).
 
     Goes through ``grant_marking``, which get-or-creates the TRUE form — a
     species with no required form traits legally reaches here with none.
+
+    Returns ``{DraftMarking pk: FormMarking}`` so ``_create_distinctions`` can
+    bind a per-feature distinction bought on a marking (#3739) to the real row
+    this call just created; a draft marking id means nothing after finalize.
     """
     from world.forms.constants import MarkingSource  # noqa: PLC0415
     from world.forms.services.markings import grant_marking  # noqa: PLC0415
 
+    created: dict[int, Any] = {}
     for draft_marking in draft.markings.all():
-        grant_marking(
+        created[draft_marking.pk] = grant_marking(
             sheet,
             body_region=draft_marking.body_region,
             kind=draft_marking.kind,
@@ -1795,6 +1848,7 @@ def _materialize_draft_markings(sheet: Any, draft: CharacterDraft) -> None:
             description=draft_marking.description,
             source=MarkingSource.CHARGEN,
         )
+    return created
 
 
 def _create_true_form(character: ObjectDB, draft_data: dict) -> None:
@@ -1863,6 +1917,12 @@ def _apply_form_trait_descriptors(
     player-authored here, so the descriptor-never-auto-attach privacy invariant
     (#1109) is untouched — nothing is copied, the player typed it for this face.
 
+    Since #3739 a descriptor is also **bought**: the field opens only on a trait
+    the draft made distinctive (an ``opens_feature`` pick naming that trait), so
+    a descriptor left in ``draft_data`` for a trait whose unlock was refunded is
+    dropped here rather than written. This is the finalize-side half of the same
+    gate the Appearance leaf and ``validators._get_form_trait_errors`` apply.
+
     Args:
         character: The newly created Character object.
         draft_data: The draft's JSON data blob.
@@ -1877,7 +1937,10 @@ def _apply_form_trait_descriptors(
     persona = sheet.primary_persona if sheet else None
     if persona is None:
         return
+    opened = opened_feature_traits(draft_data)
     for trait in selections:
+        if trait.name not in opened:
+            continue
         text = descriptors.get(trait.name)
         if isinstance(text, str) and text.strip():
             PersonaTraitDescriptor.objects.update_or_create(
