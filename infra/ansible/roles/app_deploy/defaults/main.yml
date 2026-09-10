@@ -58,9 +58,10 @@ app_release_gamedir: "{{ app_releases_dir }}/{{ app_ref }}/src"
 app_secret_settings_src: /etc/arxii/secret_settings.py
 
 # Frontend build (Task D). The box has no Node preinstalled — installed here
-# via the NodeSource apt repo, pinned to the Node 20.x line to match CI
-# (.github/workflows/ci.yml `node-version: 20`).
-app_frontend_node_major: "20"
+# via the NodeSource apt repo, pinned to the Node 22.x line to match CI
+# (.github/workflows/ci.yml `node-version: 22.12`). Vitest 5 requires Node
+# 22.12 or newer.
+app_frontend_node_major: "22"
 # frontend/package.json has NO "packageManager" field to read a pnpm-version
 # contract from (checked). CI instead pins the pnpm MAJOR via
 # `pnpm/action-setup { version: 9 }` in .github/workflows/ci.yml — mirror
