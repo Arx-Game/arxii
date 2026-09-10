@@ -8157,6 +8157,7 @@
 
 ### Interaction
 **Foreign Keys:**
+  - thread -> scenes.InteractionThread [FK] (nullable)
   - persona -> scenes.Persona [FK]
   - writer_account -> evennia.AccountDB [FK] (nullable)
   - scene -> scenes.Scene [FK] (nullable)
@@ -8215,6 +8216,13 @@
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
+
+### InteractionThread
+**Foreign Keys:**
+  - parent -> scenes.InteractionThread [FK] (nullable)
+**Pointed to by:**
+  - child_threads <- scenes.InteractionThread
+  - interactions <- scenes.Interaction
 
 ### Mute
 **Foreign Keys:**

@@ -651,6 +651,7 @@ class TestPushInteraction(TestCase):
             "content": "strides in.",
             "mode": InteractionMode.POSE,
             "timestamp": interaction.timestamp.isoformat(),
+            "thread_id": None,
             "scene_id": interaction.scene_id,
             "place_id": None,
             "place_name": None,

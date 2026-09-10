@@ -862,6 +862,34 @@ class PoseSubmitViewTests(APITestCase):
         assert response.status_code == status.HTTP_201_CREATED
         assert response.data["target_persona_ids"] == []
 
+    def test_submit_pose_reply_creates_and_returns_thread(self) -> None:
+        scene = SceneFactory(participants=[self.account])
+        target = InteractionFactory(
+            persona=self.persona,
+            writer_account=self.account,
+            scene=scene,
+            content="A root pose.",
+        )
+
+        response = self.client.post(
+            self.url,
+            {
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A reply pose.",
+                "reply_to": {
+                    "id": target.pk,
+                    "timestamp": target.timestamp.isoformat(),
+                },
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_201_CREATED, response.data
+        target.refresh_from_db()
+        assert target.thread_id is not None
+        assert response.data["thread_id"] == str(target.thread_id)
+
 
 class ActionLinksSerializerTests(APITestCase):
     """action_links field is populated by the list endpoint for POSE interactions."""

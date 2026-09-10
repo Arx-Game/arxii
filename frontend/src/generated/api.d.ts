@@ -31421,7 +31421,7 @@ export interface components {
     };
     InteractionDetail: {
       readonly id: number;
-      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
       /** @description Do not infer a parent from neighboring interactions. */
       readonly reply_to: {
@@ -31619,7 +31619,7 @@ export interface components {
     };
     InteractionList: {
       readonly id: number;
-      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
       /** @description Do not infer a parent from neighboring interactions. */
       readonly reply_to: {

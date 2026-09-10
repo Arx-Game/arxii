@@ -6,6 +6,7 @@ import itertools
 from typing import TYPE_CHECKING, cast
 
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.utils import timezone
 
 from world.scenes.constants import (
@@ -21,6 +22,12 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver, Place
+from world.scenes.thread_services import (
+    InteractionThreadError,
+    ReplyTarget,
+    assign_interaction_thread,
+    pending_thread_update,
+)
 from world.scenes.types import InteractionPayload, PersonaPayload
 
 if TYPE_CHECKING:
@@ -162,98 +169,102 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     visibility: str = InteractionVisibility.DEFAULT,
     language: Language | None = None,
     attributed_companion: Companion | None = None,
+    reply_to: ReplyTarget | None = None,
 ) -> Interaction:
-    """Create an atomic RP interaction with optional receiver records.
+    """Create an atomic RP interaction with optional receiver and thread records.
 
     Receiver logic:
     - If receivers are explicitly provided, create InteractionReceiver rows.
     - If place is provided without receivers, auto-populate from PlacePresence.
     - If neither place nor receivers, the interaction is public (no receiver rows).
 
-    Callers must handle ephemeral scenes before calling this function --
-    ephemeral interactions should never be persisted.
+    Callers must handle ephemeral scenes before calling this function -- ephemeral
+    interactions should never be persisted.
 
     Args:
         persona: The writer's identity (non-nullable).
         content: The actual written text.
-        mode: InteractionMode value (pose, emit, say, etc.).
+        mode: InteractionMode value (pose, emit, say, whisper, etc.).
         scene: Scene container if one was active.
         place: Sub-location where this interaction occurred.
         receivers: Explicit list of personas who should receive this.
-        target_personas: Explicit IC targets for thread derivation.
-        strain_committed: Strain the initiator actually committed for this
-            action. Persisted onto the resulting Interaction for audit.
-        fury_committed: Realized FuryTier post-resolution (null = no fury). Audit field.
-        pose_kind: PoseKind classification (Spec C); ENTRY poses open a
-            Make-an-Entrance reaction window (#904) at the call site.
-        visibility: InteractionVisibility tier. DEFAULT is room-heard; PERCEIVED_ONLY
-            (#2710) restricts the interaction to its explicit ``receivers`` plus staff
-            and the scene GM. Escalate only — never pass a weaker tier than the scene
-            or mode already implies.
-        language: Spoken language (#2993); null = universal/untagged (poses, emits,
-            pre-#2993 rows). Drives per-recipient comprehension rendering at push time.
-        attributed_companion: Cosmetic pose attribution (#3294) — a bonded companion the
-            room sees as the actor. Authorship stays on ``persona`` (always the companion's
-            owner); this never substitutes for it in block/mute/consent/visibility.
+        target_personas: Explicit IC targets for the interaction.
+        strain_committed: Strain the initiator actually committed for this action.
+        fury_committed: Realized FuryTier post-resolution (null = no fury).
+        pose_kind: PoseKind classification for POSE interactions.
+        visibility: InteractionVisibility tier.
+        language: Spoken language, or null for universal/untagged content.
+        attributed_companion: Cosmetic pose attribution.
+        reply_to: Optional serializer-level target used to select a thread.
 
     Returns:
         The created Interaction.
     """
-    # Pin the writer's account at creation (#1219) — party identity for private-content
-    # log visibility, stable across later persona hand-offs.
-    interaction = Interaction.objects.create(
-        persona=persona,
-        writer_account_id=_get_account_for_persona(persona),
-        content=content,
-        mode=mode,
-        scene=scene,
-        place=place,
-        strain_committed=strain_committed,
-        fury_committed=fury_committed,
-        pose_kind=pose_kind,
-        visibility=visibility,
-        language=language,
-        attributed_companion=attributed_companion,
-    )
-    # #1826 — posing in a scene is IC action in its area: lie-low breaks.
-    _break_lie_low_for_interaction(persona, scene)
-
-    # Determine receiver list
-    effective_receivers = receivers
-    if effective_receivers is None and place is not None:
-        # Auto-populate from PlacePresence, excluding the writer
-        effective_receivers = list(
-            Persona.objects.filter(
-                place_presences__place=place,
-            ).exclude(pk=persona.pk)
+    writer_account_id = _get_account_for_persona(persona)
+    with transaction.atomic():
+        # Pin the writer's account at creation (#1219) — party identity for
+        # private-content log visibility, stable across persona hand-offs.
+        interaction = Interaction.objects.create(
+            persona=persona,
+            writer_account_id=writer_account_id,
+            content=content,
+            mode=mode,
+            scene=scene,
+            place=place,
+            strain_committed=strain_committed,
+            fury_committed=fury_committed,
+            pose_kind=pose_kind,
+            visibility=visibility,
+            language=language,
+            attributed_companion=attributed_companion,
         )
+        # #1826 — posing in a scene is IC action in its area: lie-low breaks.
+        _break_lie_low_for_interaction(persona, scene)
 
-    if effective_receivers:
-        # Pin each receiver's account too (#1219), batched to one query for the whole room.
-        receiver_accounts = accounts_for_personas(effective_receivers)
-        InteractionReceiver.objects.bulk_create(
-            [
-                InteractionReceiver(
-                    interaction=interaction,
-                    timestamp=interaction.timestamp,
-                    persona=recv_persona,
-                    account_id=receiver_accounts.get(recv_persona.pk),
-                )
-                for recv_persona in effective_receivers
-            ]
-        )
+        # Determine receiver list.
+        effective_receivers = receivers
+        if effective_receivers is None and place is not None:
+            # Auto-populate from PlacePresence, excluding the writer.
+            effective_receivers = list(
+                Persona.objects.filter(
+                    place_presences__place=place,
+                ).exclude(pk=persona.pk)
+            )
 
-    if target_personas:
-        InteractionTargetPersona.objects.bulk_create(
-            [
-                InteractionTargetPersona(
-                    interaction=interaction,
-                    timestamp=interaction.timestamp,
-                    persona=p,
-                )
-                for p in target_personas
-            ]
-        )
+        if effective_receivers:
+            # Pin each receiver's account too (#1219), batched to one query.
+            receiver_accounts = accounts_for_personas(effective_receivers)
+            InteractionReceiver.objects.bulk_create(
+                [
+                    InteractionReceiver(
+                        interaction=interaction,
+                        timestamp=interaction.timestamp,
+                        persona=recv_persona,
+                        account_id=receiver_accounts.get(recv_persona.pk),
+                    )
+                    for recv_persona in effective_receivers
+                ]
+            )
+
+        if target_personas:
+            InteractionTargetPersona.objects.bulk_create(
+                [
+                    InteractionTargetPersona(
+                        interaction=interaction,
+                        timestamp=interaction.timestamp,
+                        persona=p,
+                    )
+                    for p in target_personas
+                ]
+            )
+
+        if reply_to is not None:
+            assignment = assign_interaction_thread(
+                interaction=interaction,
+                reply_target=reply_to,
+                account_id=writer_account_id,
+            )
+            interaction.thread_assignment = assignment
 
     return interaction
 
@@ -322,6 +333,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     mode: str,
     timestamp: str,
     scene_id: int | None,
+    thread_id: str | None = None,
     place_id: int | None = None,
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
@@ -342,6 +354,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         content=content,
         mode=mode,
         timestamp=timestamp,
+        thread_id=thread_id,
         scene_id=scene_id,
         place_id=place_id,
         place_name=place_name,
@@ -459,6 +472,7 @@ def push_interaction(
         content=interaction.content,
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
+        thread_id=str(interaction.thread_id) if interaction.thread_id else None,
         scene_id=interaction.scene_id,
         place_id=interaction.place_id,
         place_name=interaction.place.name if interaction.place_id else None,
@@ -851,7 +865,7 @@ def personas_for_characters(characters: Iterable[ObjectDB]) -> list[Persona] | N
     return personas or None
 
 
-def record_interaction(  # noqa: PLR0913 - all fields needed for interaction creation
+def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interaction creation
     *,
     character: ObjectDB,
     content: str,
@@ -864,6 +878,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     pose_kind: str = PoseKind.STANDARD,
     language: Language | None = None,
     attributed_companion: Companion | None = None,
+    reply_to: ReplyTarget | None = None,
     on_created: Callable[[Interaction], None] | None = None,
 ) -> Interaction | None:
     """Record an IC interaction to the database.
@@ -907,8 +922,10 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     if scene is None:
         scene = get_active_scene(character.location)
 
-    # Ephemeral scenes: push in real-time but never persist
+    # Ephemeral scenes cannot persist or join threads.
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        if reply_to is not None:
+            raise InteractionThreadError
         push_ephemeral_interaction(
             persona=persona,
             content=content,
@@ -929,10 +946,15 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         pose_kind=pose_kind,
         language=language,
         attributed_companion=attributed_companion,
+        reply_to=reply_to,
     )
 
     if scene is not None:
         _ensure_scene_participation(scene, character)
+
+    thread_update = pending_thread_update(interaction)
+    if thread_update is not None:
+        push_interaction(thread_update)
 
     if on_created is not None:
         on_created(interaction)
@@ -968,6 +990,7 @@ def record_whisper_interaction(
     target: ObjectDB,
     content: str,
     language: Language | None = None,
+    reply_to: ReplyTarget | None = None,
 ) -> Interaction | None:
     """Record a whisper interaction with only the target as receiver.
 
@@ -983,8 +1006,10 @@ def record_whisper_interaction(
 
     scene = get_active_scene(character.location)
 
-    # Ephemeral scenes: push in real-time but never persist
+    # Ephemeral scenes cannot persist or join threads.
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+        if reply_to is not None:
+            raise InteractionThreadError
         push_ephemeral_interaction(
             persona=persona,
             content=content,
@@ -1002,6 +1027,7 @@ def record_whisper_interaction(
         scene=scene,
         target_personas=[target_persona],
         language=language,
+        reply_to=reply_to,
     )
     push_interaction(
         interaction,
@@ -1084,6 +1110,7 @@ def record_mutter_interaction(
     receivers: list[ObjectDB],
     content: str,
     language: Language | None = None,
+    reply_to: ReplyTarget | None = None,
 ) -> tuple[Interaction | None, Interaction | None]:
     """Record a mutter as TWO interactions (#905): full + fragment.
 
@@ -1113,6 +1140,7 @@ def record_mutter_interaction(
         receivers=receiver_personas,
         target_personas=receiver_personas or None,
         language=language,
+        reply_to=reply_to,
     )
     fragment = record_interaction(
         character=character,
