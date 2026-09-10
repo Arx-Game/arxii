@@ -127,4 +127,23 @@ describe('ThreadedNarrativeReader', () => {
     expect(screen.getByText('scene2 newer')).toBeInTheDocument();
     expect(screen.queryByText('scene2 older')).not.toBeInTheDocument();
   });
+
+  it('chronological mode shows all poses as a flat, time-ordered list', async () => {
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'first', 'thread-a'),
+          interaction(2, 'second', 'thread-b'),
+          interaction(3, 'third', 'thread-a'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+    const texts = screen.getAllByText(/first|second|third/).map((el) => el.textContent);
+    expect(texts).toEqual(['first', 'second', 'third']);
+  });
 });
