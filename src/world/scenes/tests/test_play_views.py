@@ -4,7 +4,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
-from world.scenes.factories import InteractionFactory
+from world.scenes.factories import InteractionFactory, SceneFactory
 from world.scenes.models import InteractionReadReceipt
 
 
@@ -58,3 +58,36 @@ class PlayReadViewTests(APITestCase):
     def test_requires_authentication(self) -> None:
         response = self.client.post("/api/play/read/", {"poses": []}, format="json")
         self.assertEqual(response.status_code, 403)
+
+
+class PlayThreadsViewTests(APITestCase):
+    def test_groups_by_thread_and_paginates(self) -> None:
+        from world.scenes.models import InteractionThread
+
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        thread = InteractionThread.objects.create(
+            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
+        )
+        InteractionFactory(scene=scene, thread=thread, content="root pose")
+        InteractionFactory(scene=scene, thread=thread, content="a reply")
+        InteractionFactory(scene=scene, content="unthreaded standalone")
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        thread_ids = {row["id"] for row in data["results"]}
+        self.assertIn(str(thread.pk), thread_ids)
+        threaded_row = next(r for r in data["results"] if r["id"] == str(thread.pk))
+        self.assertEqual(threaded_row["visiblePoseCount"], 2)
+
+    def test_threads_respect_visibility(self) -> None:
+        from world.scenes.constants import InteractionVisibility
+
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        InteractionFactory(scene=scene, visibility=InteractionVisibility.VERY_PRIVATE)
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+        self.assertEqual(response.json()["results"], [])

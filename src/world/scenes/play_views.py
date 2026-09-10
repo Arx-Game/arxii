@@ -255,6 +255,51 @@ class PlaySearchView(APIView):
         return _page(results, 30, request)
 
 
+class PlayThreadsView(APIView):
+    """GET server-grouped, paginated thread summaries for one conversation."""
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request) -> Response:
+        conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
+        rows, _ = _rows(request)
+        if conversation:
+            rows = [row for row in rows if _conversation(row)["key"] == conversation]
+        read_ids: set[int] = set()
+        if request.user.is_authenticated and rows:
+            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+
+            read_ids = has_read(
+                account=request.user,  # type: ignore[invalid-argument-type]
+                interaction_ids=[row["id"] for row in rows],
+            )
+        grouped: dict[str, list[dict[str, Any]]] = {}
+        for row in rows:
+            key = row.get("thread_id") or f"legacy:{row['id']}"
+            grouped.setdefault(key, []).append(row)
+        results = []
+        for key, members in grouped.items():
+            root, latest = members[0], members[-1]
+            unread = sum(1 for m in members if int(m["id"]) not in read_ids)
+            results.append(
+                {
+                    "id": key,
+                    "conversation": _conversation(root),
+                    "root": _ref(root) if not key.startswith("legacy:") else None,
+                    "firstVisible": _ref(root),
+                    "latestVisible": _ref(latest),
+                    "opening": root.get("content") or "",
+                    "visiblePoseCount": len(members),
+                    "unread": unread,
+                    "directUnread": 0,
+                }
+            )
+        results.sort(
+            key=lambda item: (item["firstVisible"]["timestamp"], item["firstVisible"]["id"])
+        )
+        return _page(results, 20, request)
+
+
 class PlayReadView(APIView):
     """POST authorized pose references to mark them read for this account."""
 
