@@ -54828,8 +54828,7 @@ components:
         thread_id:
           type: string
           nullable: true
-          description: Return only explicit topology; legacy rows remain standalone
-            roots.
+          description: Return only explicit topology; unthreaded rows remain standalone.
           readOnly: true
         reply_to:
           type: object
@@ -55164,8 +55163,7 @@ components:
         thread_id:
           type: string
           nullable: true
-          description: Return only explicit topology; legacy rows remain standalone
-            roots.
+          description: Return only explicit topology; unthreaded rows remain standalone.
           readOnly: true
         reply_to:
           type: object
