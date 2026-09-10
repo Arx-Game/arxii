@@ -684,6 +684,14 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   [technique-use-pipeline.md](../architecture/technique-use-pipeline.md) · power ledger +
   penetration contest: [power-derivation.md](../architecture/power-derivation.md)
 
+### Scene Interaction Threads
+Explicit flat thread membership for scene, place, and fixed-party whisper interactions.
+
+- **Models:** `scenes.InteractionThread`; nullable `scenes.Interaction.thread`.
+- **Write target:** serializer-only `reply_to` (`id` + RFC3339 `timestamp`).
+- **Read payload:** `thread_id`; existing visibility and delivery rules remain canonical.
+- **Source:** [`scene-interaction-threads.md`](scene-interaction-threads.md).
+
 ### Traits
 Character statistics and dice rolling mechanics.
 
