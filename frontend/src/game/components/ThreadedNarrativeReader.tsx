@@ -6,9 +6,11 @@ import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+import { loadConversationAnchor, saveConversationAnchor } from '../playPreferences';
 
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
+  conversationKey: string;
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
@@ -27,6 +29,7 @@ interface Group {
 /** A wide, accessible reader for long-form scene poses. */
 export function ThreadedNarrativeReader({
   sceneId,
+  conversationKey,
   interactions,
   hasNextPage,
   fetchNextPage,
@@ -64,7 +67,20 @@ export function ThreadedNarrativeReader({
           a.interactions[0].id - b.interactions[0].id
       );
   }, [visibleInteractions]);
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const storedAnchorState = useMemo(
+    () => loadConversationAnchor(conversationKey),
+    [conversationKey]
+  );
+  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
+    if (storedAnchorState) return new Set(storedAnchorState.collapsed);
+    if (groups.length <= 1) return new Set();
+    const mostRecentKey = [...groups].sort((a, b) =>
+      b.interactions[b.interactions.length - 1].timestamp.localeCompare(
+        a.interactions[a.interactions.length - 1].timestamp
+      )
+    )[0].key;
+    return new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key));
+  });
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
 
   const toggleThread = (key: string) =>
@@ -72,6 +88,10 @@ export function ThreadedNarrativeReader({
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
+      saveConversationAnchor(conversationKey, {
+        anchor: storedAnchorState?.anchor ?? null,
+        collapsed: [...next],
+      });
       return next;
     });
   const togglePose = (id: number) =>

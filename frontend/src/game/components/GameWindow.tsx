@@ -322,6 +322,7 @@ export function GameWindow({
             {!referenceLoading && !referenceUnavailable && (
               <ThreadedNarrativeReader
                 sceneId={sceneFeed.sceneId}
+                conversationKey={sceneFeed.sceneId}
                 interactions={sceneFeed.interactions}
                 hasNextPage={sceneFeed.hasNextPage}
                 fetchNextPage={sceneFeed.fetchNextPage}
