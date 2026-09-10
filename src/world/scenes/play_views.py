@@ -224,7 +224,10 @@ class PlayContextView(APIView):
 
 
 class PlaySearchView(APIView):
-    """Search only viewer-rendered, authorized interaction text."""
+    """Search only viewer-rendered, authorized interaction text, bounded by
+    conversation/kind/date so the comprehension-aware match never scans
+    unbounded history (#3759).
+    """
 
     permission_classes = [IsAuthenticated]
 
@@ -234,7 +237,19 @@ class PlaySearchView(APIView):
             return Response(
                 {"detail": "Search text must be between 2 and 200 characters."}, status=400
             )
+        has_bound = any(
+            request.query_params.get(key)  # noqa: USE_FILTERSET
+            for key in ("conversation", "kind", "from", "to", "participant")
+        )
+        if not has_bound:
+            return Response(
+                {"detail": "Search requires a conversation, kind, participant, or date bound."},
+                status=400,
+            )
         rows, _ = _rows(request)
+        conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
+        if conversation:
+            rows = [row for row in rows if _conversation(row)["key"] == conversation]
         folded = query.casefold()
         results = []
         for row in rows:

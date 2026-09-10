@@ -212,3 +212,85 @@ class PlayThreadsViewTests(APITestCase):
         self.assertNotIn("legacy:8", result_ids)
         self.assertNotIn("legacy:9", result_ids)
         self.assertEqual(result_ids[0], "legacy:10")
+
+
+class PlaySearchMaskingTests(APITestCase):
+    """Proves search matches rendered (comprehension-masked) text, never raw content."""
+
+    def test_zero_fluency_viewer_gets_no_hit_on_garbled_term(self) -> None:
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import (
+            PlayerDataFactory,
+            RosterEntryFactory,
+            RosterTenureFactory,
+        )
+        from world.scenes.constants import InteractionMode
+        from world.scenes.factories import SceneFactory
+        from world.species.factories import LanguageFactory
+        from world.traits.factories import CharacterTraitValueFactory
+        from world.traits.models import Trait, TraitCategory, TraitType
+
+        trait = Trait.objects.create(
+            name="TestSearchKhatic", trait_type=TraitType.LANGUAGE, category=TraitCategory.GENERAL
+        )
+        language = LanguageFactory(name="TestSearchKhatic", trait=trait)
+        scene = SceneFactory()
+
+        writer_account = AccountFactory()
+        writer_sheet = CharacterSheetFactory(character=CharacterFactory())
+        RosterTenureFactory(
+            player_data=PlayerDataFactory(account=writer_account),
+            roster_entry=RosterEntryFactory(character_sheet=writer_sheet),
+        )
+        CharacterTraitValueFactory(character=writer_sheet, trait=trait, value=100)
+        content = "the caravan leaves at dawn through the salt gate"
+        interaction = InteractionFactory(
+            persona=writer_sheet.primary_persona,
+            scene=scene,
+            mode=InteractionMode.SAY,
+            language=language,
+            content=content,
+        )
+
+        zero_account = AccountFactory()
+        zero_sheet = CharacterSheetFactory(character=CharacterFactory())
+        RosterTenureFactory(
+            player_data=PlayerDataFactory(account=zero_account),
+            roster_entry=RosterEntryFactory(character_sheet=zero_sheet),
+        )
+        # C1: the zero-fluency viewer needs a pose IN this scene to count as a
+        # participant at all (test_language_interactions.py's own pattern) —
+        # without one they always garble regardless of fluency, which still
+        # proves the point but let's be precise and give them scene presence.
+        InteractionFactory(
+            persona=zero_sheet.primary_persona, scene=scene, mode=InteractionMode.POSE
+        )
+
+        self.client.force_authenticate(user=zero_account)
+        # This task (Task 5) requires every search request to carry a bound;
+        # bound by this scene's conversation, which does not narrow the
+        # candidate set below the writer's interaction (it stays IN scope) —
+        # so the masking proof below is unaffected by the bound requirement.
+        response = self.client.get(f"/api/play/search/?q=caravan&conversation=scene:{scene.pk}")
+        self.assertEqual(response.status_code, 200)
+        hit_ids = {r["pose"]["id"] for r in response.json()["results"]}
+        self.assertNotIn(str(interaction.pk), hit_ids)
+
+        # Sanity: the SAME query against the raw DB column would have matched —
+        # proves this is a real masking test, not a query the raw column
+        # wouldn't have hit anyway.
+        self.assertIn("caravan", content)
+
+    def test_search_requires_a_bound(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/play/search/?q=pose")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("bound", response.json()["detail"])
+
+    def test_search_with_a_date_bound_succeeds(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/play/search/?q=pose&from=2020-01-01")
+        self.assertEqual(response.status_code, 200)
