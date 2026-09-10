@@ -297,6 +297,12 @@ def _seed_governance() -> None:
     seed_governance_check_content()
 
 
+def _seed_distinctive_features() -> None:
+    from world.seeds.distinctive_features import seed_distinctive_features  # noqa: PLC0415
+
+    seed_distinctive_features()
+
+
 def _seed_scandal_archetypes() -> None:
     from world.seeds.scandal_archetypes import seed_scandal_archetypes  # noqa: PLC0415
 
@@ -630,6 +636,12 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # Governance: Scholarship/Economics + Organization/Stewardship skills and the
     # Tax Collection / Domain Investment checks (#930). After "checks" for the spine.
     "governance": _seed_governance,
+    # Distinctive physical features (#3739): "Make It Distinctive" plus the three
+    # presence axes, each offered on every trait row and marking of the Appearance
+    # chapter. After "social_relationships" (allure), "crafting_materials"
+    # (menace/regal) and "governance" (the Command check regal binds to), so every
+    # effect finds its ModifierTarget on the first pass.
+    "distinctive_features": _seed_distinctive_features,
     # Dev domain slice: PLACEHOLDER house/streams/steward offers/scandal archetypes
     # so the books + scandal loops are walkable on a dev DB (#930/#1464). After
     # governance (its CheckTypes) and character_creation (the Arx realm).
@@ -1000,6 +1012,9 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Governance seeds skills/specs + CheckTypes (shared spine rows counted under
         # "checks"); appears as a seeded cluster with no standalone content model (#930).
         "governance": [],
+        # Distinctive features seeds Distinction + DistinctionOffer rows (#3739),
+        # counted under the distinction catalogue rather than a model of its own.
+        "distinctive_features": [],
         # Dev domain slice: PLACEHOLDER house + steward offers (#930/#1464).
         # Scandal vocabulary: the authored archetype categories (#1464/#1806).
         "scandal": [],

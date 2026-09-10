@@ -60,9 +60,9 @@ expands seed data in this public repo (TehomCD ruling, 2026-07-17).
 | `BeginningTradition` | Maps traditions to beginnings, with which slate line each reads (#3675); `CreditedContent` because `own_wording` is player-facing prose | `beginning`, `tradition`, `state`, `own_wording`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `TraditionStateLine` | The standard line for one `TraditionState` and the drawback it carries (#3675) | `state`, `entry_line`, `carries` |
 | `SchoolingLine` | One stance under a LIVING_MASTERS tradition and what it grants (#3675) | `rank`, `name`, `player_line`, `grants` |
-| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`; `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `opener_fields`, `set_openers` |
+| `DistinctionOffer` | Where a distinction is shown in CG, what opens it there, how it arrives, and which Beginnings pin it into the first look (#3675, #3709) | `distinction`, `chapter` (`OfferChapter`, now with `enemy`), `arrives_as`, exactly one opener of the chapter's kind: `glimpse_tag`/`origin_choice`/`schooling_line`/`prompt` (`ActorSheetPrompt`)/`enemy_reason`/`enemy_degree` (ruined or destroy)/`appearance_section`/`feature_rows` (#3739 — Appearance's second opener: offered on every trait row and marking rather than under a section); `first_look` (M2M `Beginnings` through `OfferFirstLook`); `opener_key`, `opener_fields`, `set_openers` |
 | `EnemyReason` | Why an enemy wants the character to fail, as staff wrote it once for every enemy (#3709); the enemy chapter's opener | `name`, `player_line`, `fits` (`EnemyReasonFits`: person/group/either), `sort_order`, `is_active`, credit |
-| `AppearanceSection` | A heading Appearance groups its offers under (#3709); the Appearance chapter's opener | `name`, `player_line`, `sort_order`, credit |
+| `AppearanceSection` | A heading Appearance groups its offers under (#3709); one of the Appearance chapter's two openers | `name`, `player_line`, `sort_order`, credit |
 | `OfferFirstLook` | One Beginning pinning one offer line into the few shown at rest (#3709) | `offer`, `beginning` (unique together) |
 
 ### Draft State (models.Model - per-player)
@@ -226,8 +226,25 @@ from world.character_creation.offers import (
                                #   TraditionStateLine carries, if any
     entry_price,                # (entry, distinction) -> int: 0 if any source arrived
                                #   bundled/carried, else distinction.calculate_total_cost
+    opened_features,           # (draft_data) -> set[(trait name, marking id)]: the
+                               #   features the draft paid to make distinctive (#3739)
+    opened_feature_traits,     # (draft_data) -> set[str]: the same, narrowed to trait
+                               #   rows -- the one reader of "is this feature unlocked?"
+                               #   for the palette check, the descriptor write and the
+                               #   form-options view
 )
 ```
+
+**Per-feature picks (#3739).** A `Distinction.taken_per_feature` row is offered on
+every trait row and marking of the Appearance chapter (its offer's opener is
+`feature_rows`, not a section) and can be held once per feature. Draft entries are
+therefore keyed by `world.distinctions.types.feature_key` --
+`(distinction_id, trait name, draft marking id)` -- everywhere they used to be keyed
+by distinction id, and the sync payload carries `feature_trait` / `feature_marking`
+on each row. `reconcile_offer_picks` drops a per-feature pick whose feature is gone
+(a deleted marking) or whose unlock is gone (the axes bought under it), refunding
+both. Anything that is not per-feature keys as `(id, "", 0)` and is unaffected. See
+[distinctions.md](distinctions.md) "Distinctive features".
 
 **Reconcile-on-patch:** `CharacterDraftViewSet.perform_update` calls
 `reconcile_offer_picks(draft)` after every draft save, and `select-tradition` calls it

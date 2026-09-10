@@ -213,8 +213,12 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
         CharacterModifier.objects.filter(
             character=character,
             target=modifier_target,
-        ).select_related("source__distinction_effect__distinction")
+        ).select_related(
+            "source__distinction_effect__distinction",
+            "source__character_distinction__feature_marking",
+        )
     )
+    modifiers = _visible_feature_modifiers(character, modifiers)
 
     # Distinction-sourced rows carry the amplify/immunity semantics (they dereference
     # ``distinction_effect``); *recognized* non-distinction sources — residence comfort,
@@ -255,6 +259,47 @@ def get_modifier_breakdown(character, modifier_target: ModifierTarget) -> Modifi
         has_immunity=has_immunity,
         negatives_blocked=negatives_blocked,
     )
+
+
+def _visible_feature_modifiers(character, modifiers: list) -> list:
+    """Drop the rows a covered feature grants (#3739): a hidden feature gives no bonus.
+
+    Called by ``get_modifier_breakdown`` on every read. A presence axis bought on a
+    physical feature is paid for by that feature being *seen* — the scar that makes
+    you menacing does nothing under a sleeve — so a modifier whose distinction names
+    a ``FormMarking`` drops out while the worn layers cover that marking's region.
+    ``covered_regions`` reads the cached equipment handler and runs no query, and the
+    whole check is skipped unless some row actually names a marking, so the ordinary
+    modifier read is unchanged.
+
+    Trait features (hair, eyes, horns) have no covering rule today: nothing in the
+    form layer conceals a trait row the way clothing conceals a region, and the
+    descriptor-concealment path (``get_presented_appearance``) hides the player's
+    *words* about a trait, never the trait. When a covering rule for those lands,
+    this is the seam it extends.
+    """
+    marking_rows = [m for m in modifiers if m.source.character_distinction_id]
+    marking_rows = [m for m in marking_rows if m.source.character_distinction.feature_marking_id]
+    if not marking_rows:
+        return modifiers
+
+    from world.items.services.appearance import covered_regions  # noqa: PLC0415
+
+    try:
+        char = character.character
+        covered = covered_regions(char) if char is not None else set()
+    except AttributeError:
+        # A raw ObjectDB fixture carries no equipment handler; nothing is worn, so
+        # nothing is covered (same fallback as ``_crafted_modifier_total``).
+        return modifiers
+    if not covered:
+        return modifiers
+    hidden = {
+        m.pk
+        for m in marking_rows
+        if m.source.character_distinction.feature_marking.body_region in covered
+    }
+    return [m for m in modifiers if m.pk not in hidden]
 
 
 def _crafted_modifier_total(character: object, modifier_target: ModifierTarget) -> int:

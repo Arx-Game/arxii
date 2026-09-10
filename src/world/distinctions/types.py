@@ -45,15 +45,53 @@ class DraftDistinctionEntry(TypedDict):
     offer_ids: list[int | str]
     sources: list[str]
     arrivals: list[str]
+    # The feature this entry is aimed at (#3739), for a ``taken_per_feature``
+    # distinction only: ``feature_trait`` is a ``FormTrait.name`` and
+    # ``feature_marking`` a ``DraftMarking`` pk, and at most one is ever set.
+    # A distinction held per feature appears once per feature, so the entry list
+    # is keyed by ``feature_key`` rather than by ``distinction_id`` alone.
+    feature_trait: str
+    feature_marking: int
 
 
-def build_distinction_entry(
+#: The key that identifies one draft entry. Everything that used to key the
+#: entry list by ``distinction_id`` keys it by this instead (#3739): "Alluring"
+#: on a scar and "Alluring" on your eyes are two entries of one distinction,
+#: and both are paid for.
+type FeatureKey = tuple[int, str, int]
+
+
+def feature_key(entry: DraftDistinctionEntry) -> FeatureKey:
+    """The identity of one draft entry: its distinction plus the feature it names.
+
+    Called anywhere the entry list is indexed (``offers.offers_for``,
+    ``reconcile_offer_picks``, the sync view's merge, ``_create_distinctions``).
+    A distinction that is not ``taken_per_feature`` carries no feature, so its
+    key degenerates to ``(distinction_id, "", 0)`` and behaves exactly as the
+    pre-#3739 ``distinction_id`` key did.
+    """
+    trait, marking = feature_of(entry)
+    return (entry["distinction_id"], trait, marking)
+
+
+def feature_of(entry: DraftDistinctionEntry) -> tuple[str, int]:
+    """Just the feature half of ``feature_key``: ``("", 0)`` when there is none.
+
+    Kept separate because most callers compare features, not whole keys: "is this
+    entry on the feature I am rendering", "which features has the draft opened".
+    """
+    return (entry.get("feature_trait") or "", entry.get("feature_marking") or 0)
+
+
+def build_distinction_entry(  # noqa: PLR0913 - one builder for every draft entry shape
     distinction: Distinction,
     rank: int = 1,
     notes: str = "",
     *,
     offer: DistinctionOffer | None = None,
     source: str = "",
+    feature_trait: str = "",
+    feature_marking: int = 0,
 ) -> DraftDistinctionEntry:
     """Build the dictionary entry for a distinction on a draft.
 
@@ -61,6 +99,10 @@ def build_distinction_entry(
     and by ``world.character_creation.offers`` when a ``DistinctionOffer`` is
     the source (#3675): the cost is ``0`` when the offer arrives ``bundled`` or
     ``carried``, since that pick isn't paid for out of CG points.
+
+    ``feature_trait``/``feature_marking`` (#3739) name the one feature a
+    ``taken_per_feature`` distinction is aimed at; the sync view resolves them
+    and passes at most one. Everything else leaves both at their empty defaults.
 
     ``offer_ids``/``sources``/``arrivals`` are kept in lockstep by ``offer``
     alone (never by whether ``source`` happens to be a non-empty string): an
@@ -82,6 +124,8 @@ def build_distinction_entry(
         offer_ids=[offer.id] if has_offer else [],
         sources=[source] if has_offer else [],
         arrivals=[arrival] if has_offer else [],
+        feature_trait=feature_trait,
+        feature_marking=feature_marking,
     )
 
 
