@@ -21,14 +21,21 @@ export function ExplorationReader({
   lifecycleState,
   onRetry,
 }: ExplorationReaderProps) {
-  const isStale = lifecycleState === 'reconnecting' || lifecycleState === 'entry-error';
+  const awaitingSnapshot = lifecycleState === 'entering' && Boolean(room);
+  const isStale =
+    lifecycleState === 'reconnecting' || lifecycleState === 'entry-error' || awaitingSnapshot;
+  const isAftermath = lifecycleState === 'aftermath';
   return (
     <section
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+      style={{
+        fontFamily: 'var(--play-prose-family, ui-sans-serif)',
+        fontSize: 'var(--play-prose-size, 14px)',
+      }}
       aria-label="Exploration"
       data-testid="exploration-reader"
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-5 px-4 py-6 sm:px-6">
+      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,1.25rem)] px-4 py-6 sm:px-6">
         <header className="border-b pb-4">
           <p className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
             {isStale ? 'Last confirmed location' : 'You are here'}
@@ -36,10 +43,40 @@ export function ExplorationReader({
           <h1 className="mt-1 font-serif text-2xl">{room?.name ?? 'The world'}</h1>
           {isStale && (
             <p className="mt-2 text-sm text-muted-foreground" role="status">
-              This view may be out of date while the connection recovers.
+              {awaitingSnapshot
+                ? 'Refreshing your confirmed surroundings…'
+                : 'This view may be out of date while the connection recovers.'}
             </p>
           )}
         </header>
+        {isAftermath && (
+          <div className="rounded-lg border bg-muted/30 p-4" role="status">
+            <p className="font-medium">The scene has ended.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              You are back in exploration. The Here panel remains available for your next choice.
+            </p>
+          </div>
+        )}
+        {room && lifecycleState === 'entry-error' && (
+          <div
+            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4"
+            role="alert"
+          >
+            <p className="font-medium">The connection needs attention.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              This is the last confirmed location. Try again to refresh your surroundings.
+            </p>
+            {onRetry && (
+              <button
+                type="button"
+                onClick={onRetry}
+                className="mt-3 min-h-11 rounded border px-4 text-sm font-medium hover:bg-accent"
+              >
+                Try again
+              </button>
+            )}
+          </div>
+        )}
 
         {!room ? (
           <div
@@ -61,7 +98,7 @@ export function ExplorationReader({
               <button
                 type="button"
                 onClick={onRetry}
-                className="mt-4 min-h-10 rounded border px-4 text-sm font-medium hover:bg-accent"
+                className="mt-4 min-h-11 rounded border px-4 text-sm font-medium hover:bg-accent"
               >
                 Try again
               </button>

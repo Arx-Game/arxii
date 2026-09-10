@@ -87,24 +87,21 @@ export function GameLayout({
   } as CSSProperties;
   return (
     <div
-      className="flex min-h-0 min-w-0 flex-1 flex-col"
+      className="flex min-h-0 min-h-[100dvh] min-w-0 flex-1 flex-col"
       style={pageBackgroundStyle(backgrounds, 'game_client', 'Game Client')}
       data-sidebar-side={sidebarSide}
       data-sidebar-width={sidebarWidth}
     >
       {topBar}
-      <div
-        className="flex min-h-0 flex-1 flex-col min-[960px]:grid min-[960px]:grid-cols-[minmax(0,1fr)_var(--play-sidebar-width)]"
-        style={style}
-      >
+      <div className="play-workspace flex min-h-0 flex-1 flex-col" style={style}>
         <div
-          className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background min-[960px]:flex ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
+          className={`play-story-pane min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-background ${mobilePane !== 'story' ? 'hidden' : 'flex'}`}
           style={{ order: sidebarSide === 'left' ? 1 : 0 }}
         >
           {center}
         </div>
         <div
-          className={`relative min-h-0 overflow-hidden bg-card min-[960px]:flex min-[960px]:flex-col ${sidebarSide === 'left' ? 'border-r' : 'border-l'} ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
+          className={`play-sidebar-pane relative min-h-0 overflow-hidden bg-card ${sidebarSide === 'left' ? 'border-r' : 'border-l'} ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
           style={{ order: sidebarSide === 'left' ? 0 : 1 }}
         >
           <button
@@ -113,23 +110,26 @@ export function GameLayout({
             aria-valuemin={240}
             aria-valuemax={360}
             aria-valuenow={sidebarWidth}
+            aria-orientation="vertical"
             role="separator"
-            className={`absolute top-0 z-10 hidden h-full w-2 cursor-col-resize touch-none min-[960px]:block ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
+            className={`absolute top-0 z-10 hidden h-full w-11 cursor-col-resize touch-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${sidebarSide === 'left' ? 'right-0' : 'left-0'}`}
             onPointerDown={resizeSidebar}
             onKeyDown={(event) => {
               if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
               event.preventDefault();
               const delta = event.key === 'ArrowLeft' ? -8 : 8;
-              setSidebarWidth((current) => Math.min(360, Math.max(240, current + delta)));
+              const nextWidth = Math.min(360, Math.max(240, sidebarWidth + delta));
+              setSidebarWidth(nextWidth);
+              savePlayPreferences(
+                { ...loadPlayPreferences(accountId), sidebarWidth: nextWidth },
+                accountId
+              );
             }}
           />
           {contextualSidebar}
         </div>
       </div>
-      <nav
-        className="flex shrink-0 border-t bg-card p-1 min-[960px]:hidden"
-        aria-label="Play panes"
-      >
+      <nav className="play-mobile-nav flex shrink-0 border-t bg-card p-1" aria-label="Play panes">
         <button
           type="button"
           aria-pressed={mobilePane === 'story'}

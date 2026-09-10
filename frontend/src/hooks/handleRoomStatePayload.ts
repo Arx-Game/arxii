@@ -7,10 +7,10 @@ export function handleRoomStatePayload(
   character: MyRosterEntry['name'],
   payload: RoomStatePayload,
   dispatch: AppDispatch
-) {
-  const roomRef = typeof payload.room?.dbref === 'string' ? payload.room.dbref : '';
+): boolean {
+  const roomRef = typeof payload?.room?.dbref === 'string' ? payload.room.dbref : '';
   const roomId = Number.parseInt(roomRef.replace(/^#/, ''), 10);
-  if (!Number.isFinite(roomId)) return;
+  if (!Number.isFinite(roomId)) return false;
   dispatch(
     setSessionRoom({
       character,
@@ -34,4 +34,5 @@ export function handleRoomStatePayload(
   // WS interaction buffer) — guarded on an actual scene-id change, so the
   // room_state broadcast fired by every arrival no longer wipes the live feed.
   dispatch(setSessionScene({ character, scene: payload.scene ?? null }));
+  return true;
 }

@@ -6,6 +6,7 @@ import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+import type { ReaderMode } from '../playPreferences';
 
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
@@ -17,6 +18,7 @@ interface ThreadedNarrativeReaderProps {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   onReply?: (interaction: Interaction) => void;
   readOnly?: boolean;
+  readerMode?: ReaderMode;
 }
 
 interface Group {
@@ -35,6 +37,7 @@ export function ThreadedNarrativeReader({
   onAttachAction,
   onReply,
   readOnly = false,
+  readerMode = 'threads',
 }: ThreadedNarrativeReaderProps) {
   const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
   const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
@@ -42,9 +45,12 @@ export function ThreadedNarrativeReader({
   const groups = useMemo(() => {
     const grouped = new Map<string, Interaction[]>();
     for (const interaction of visibleInteractions) {
-      // Legacy interactions have no reply topology and therefore each remain
-      // an independent root. Only explicit server thread ids group replies.
-      const key = interaction.thread_id || `legacy:${interaction.id}`;
+      // Chronological mode deliberately flattens topology: every pose keeps
+      // its own timestamp position instead of collapsing replies into a card.
+      const key =
+        readerMode === 'chronological'
+          ? `chronological:${interaction.id}`
+          : interaction.thread_id || `legacy:${interaction.id}`;
       const rows = grouped.get(key) ?? [];
       rows.push(interaction);
       grouped.set(key, rows);
@@ -63,7 +69,7 @@ export function ThreadedNarrativeReader({
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||
           a.interactions[0].id - b.interactions[0].id
       );
-  }, [visibleInteractions]);
+  }, [readerMode, visibleInteractions]);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
 
@@ -91,7 +97,7 @@ export function ThreadedNarrativeReader({
         fontFamily: 'var(--play-prose-family, ui-sans-serif)',
       }}
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-3 px-4 py-4">
+      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,0.75rem)] px-4 py-4">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
             {groups.length

@@ -91,7 +91,7 @@ interface IncomingMessageContext {
   navigate: NavigateFunction;
 }
 
-type IncomingMessageHandler = (ctx: IncomingMessageContext) => void;
+type IncomingMessageHandler = (ctx: IncomingMessageContext) => boolean | void;
 
 // One case per control message type the server can push; anything not matched
 // here falls through to parseGameMessage as a regular game message. A switch on
@@ -179,23 +179,15 @@ function dispatchIncomingMessage(
   const [msgType, args, kwargs] = parsed;
   const handler = handlerFor(msgType);
   if (handler) {
-    handler({ character, args, kwargs, dispatch, navigate });
+    const accepted = handler({ character, args, kwargs, dispatch, navigate });
     // Lifecycle is socket-owned so protocol handlers remain small and usable
     // in isolation. A room_state frame is the only readiness confirmation.
-    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE) {
+    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
       const roomPayload = kwargs as { scene?: unknown } | undefined;
       dispatch(
         setSessionLifecycle({
           character,
           lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
-        })
-      );
-    } else if (msgType === WS_MESSAGE_TYPE.SCENE) {
-      const scenePayload = kwargs as { action?: unknown } | undefined;
-      dispatch(
-        setSessionLifecycle({
-          character,
-          lifecycleState: scenePayload?.action === 'end' ? 'aftermath' : 'ready-scene',
         })
       );
     }

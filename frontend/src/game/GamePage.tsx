@@ -18,6 +18,7 @@ import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene } from '@/combat/queries';
+import { usePlayPreferences } from './playPreferences';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
@@ -259,6 +260,7 @@ function GameRightSidebar({
 
 export function GamePage() {
   const account = useAccount();
+  const { preferences: playPreferences } = usePlayPreferences(account?.id);
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -785,7 +787,7 @@ export function GamePage() {
   return (
     <>
       <GameLayout
-        accountId={account.id}
+        accountId={account?.id}
         topBar={<GameTopBar characters={characters} />}
         center={
           <>
@@ -802,6 +804,7 @@ export function GamePage() {
               room={roomData}
               ambientInteractions={activeSession?.ambientInteractions}
               lifecycleState={activeEncounter ? 'encounter' : activeSession?.lifecycleState}
+              readerMode={playPreferences.readerMode}
               composerMode={effectiveComposerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
@@ -846,7 +849,7 @@ export function GamePage() {
         }
         sidebar={
           <PlaySidebar
-            accountId={account.id}
+            accountId={account?.id}
             here={
               <GameRightSidebar
                 roomTabLabel={roomTabLabel}

@@ -22,16 +22,21 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
         : 'ui-sans-serif, system-ui, sans-serif'
     );
     document.documentElement.dataset.playDensity = preferences.density;
+    document.documentElement.style.setProperty(
+      '--play-density-gap',
+      preferences.density === 'comfortable' ? '1.25rem' : '0.75rem'
+    );
     window.dispatchEvent(new CustomEvent('arx-play-preferences', { detail: preferences }));
   }, [preferences]);
   return (
     <details className="rounded border px-2 py-1 text-xs">
       <summary className="cursor-pointer font-medium">Display settings</summary>
       <div className="mt-2 space-y-2 pb-1">
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Text size{' '}
           <input
             aria-label="Prose text size"
+            className="h-11"
             type="range"
             min="12"
             max="20"
@@ -39,10 +44,11 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             onChange={(event) => update({ proseSize: Number(event.target.value) })}
           />
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Measure{' '}
           <input
             aria-label="Reading measure"
+            className="h-11"
             type="range"
             min="72"
             max="110"
@@ -50,7 +56,7 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             onChange={(event) => update({ measure: Number(event.target.value) })}
           />
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Font{' '}
           <select
             aria-label="Prose font"
@@ -61,10 +67,11 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             <option value="serif">Serif</option>
           </select>
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Sidebar width{' '}
           <input
             aria-label="Sidebar width"
+            className="h-11"
             type="range"
             min="240"
             max="360"
@@ -72,7 +79,7 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             onChange={(event) => update({ sidebarWidth: Number(event.target.value) })}
           />
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Sidebar side{' '}
           <select
             aria-label="Sidebar side"
@@ -85,7 +92,7 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             <option value="left">Left</option>
           </select>
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Density{' '}
           <select
             aria-label="Reading density"
@@ -98,7 +105,7 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
             <option value="comfortable">Comfortable</option>
           </select>
         </label>
-        <label className="flex items-center justify-between gap-2">
+        <label className="flex min-h-11 items-center justify-between gap-2">
           Reader{' '}
           <select
             aria-label="Reader order"

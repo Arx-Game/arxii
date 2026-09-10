@@ -40,10 +40,10 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
   try {
     const stored =
       window.localStorage.getItem(playPreferencesKey(accountId)) ??
-      (accountId == null ? window.localStorage.getItem(LEGACY_STORAGE_KEY) : null);
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
     const value = stored ? (JSON.parse(stored) as Partial<PlayPreferences>) : null;
     if (!value) return DEFAULT_PLAY_PREFERENCES;
-    return {
+    const normalized: PlayPreferences = {
       proseSize: clamp(value.proseSize, 12, 20, DEFAULT_PLAY_PREFERENCES.proseSize),
       proseFamily: value.proseFamily === 'serif' ? 'serif' : 'sans',
       measure: clamp(value.measure, 72, 110, DEFAULT_PLAY_PREFERENCES.measure),
@@ -52,6 +52,10 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
       density: value.density === 'comfortable' ? 'comfortable' : 'compact',
       readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
     };
+    if (accountId != null && !window.localStorage.getItem(playPreferencesKey(accountId))) {
+      window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(normalized));
+    }
+    return normalized;
   } catch {
     return DEFAULT_PLAY_PREFERENCES;
   }
@@ -81,6 +85,12 @@ export function usePlayPreferences(accountId?: number | null) {
   // Account changes should never display the previous account's layout.
   useEffect(() => {
     setPreferences(loadPlayPreferences(accountId));
+    const sync = (event: Event) => {
+      const detail = (event as CustomEvent<PlayPreferences>).detail;
+      if (detail) setPreferences(detail);
+    };
+    window.addEventListener('arx-play-preferences', sync);
+    return () => window.removeEventListener('arx-play-preferences', sync);
   }, [key, accountId]);
   return { preferences, update };
 }

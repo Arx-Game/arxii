@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import { ExplorationReader } from './ExplorationReader';
 import type { GameLifecycleState } from '@/store/gameSlice';
+import type { ReaderMode } from '../playPreferences';
 import type { InteractionWsPayload } from '@/hooks/types';
 import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
@@ -60,6 +61,7 @@ interface GameWindowProps {
   /** Scene-less interaction frames for the exploration reader. */
   ambientInteractions?: InteractionWsPayload[];
   lifecycleState?: GameLifecycleState;
+  readerMode?: ReaderMode;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
   /** The active character's persona id — lifted to GamePage to dedupe the roster query (#2156). */
@@ -116,6 +118,7 @@ export function GameWindow({
   room,
   ambientInteractions,
   lifecycleState,
+  readerMode = 'threads',
   composerMode,
   onModeChange,
   personaId,
@@ -230,6 +233,15 @@ export function GameWindow({
 
   const sessionNames = Object.keys(sessions);
   const awaitingRoom = !session.room && !sceneFeed;
+  const effectiveLifecycle =
+    lifecycleState ??
+    session.lifecycleState ??
+    (!session.isConnected && session.room ? 'reconnecting' : undefined);
+  const playReady =
+    session.isConnected &&
+    Boolean(session.room) &&
+    (!effectiveLifecycle ||
+      ['ready-no-scene', 'ready-scene', 'encounter', 'aftermath'].includes(effectiveLifecycle));
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
     // #3412 — persist the selection server-side ALONGSIDE the existing
@@ -349,6 +361,7 @@ export function GameWindow({
                 onAttachAction={onAttachAction}
                 onReply={onReply}
                 readOnly={Boolean(reference)}
+                readerMode={readerMode}
               />
             )}
           </div>
@@ -358,7 +371,7 @@ export function GameWindow({
         <ExplorationReader
           room={room ?? session.room}
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
-          lifecycleState={lifecycleState ?? session.lifecycleState}
+          lifecycleState={effectiveLifecycle}
           onRetry={() => {
             if (active) void connect(active);
           }}
@@ -394,7 +407,7 @@ export function GameWindow({
           onCancelReply={onCancelReply}
           submitOnEnter={false}
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
-          ready={session.isConnected && Boolean(session.room)}
+          ready={playReady}
         />
       )}
     </div>
