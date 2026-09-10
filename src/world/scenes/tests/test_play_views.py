@@ -87,6 +87,41 @@ class PlayReaderContractTests(APITestCase):
         )
 
 
+class PlayPosesPaginationTests(APITestCase):
+    def test_before_cursor_near_start_excludes_boundary_and_later_rows(self) -> None:
+        """`_page()`'s ``before`` branch must stop at the boundary, not overshoot it.
+
+        With 60 total rows and a `before` cursor targeting row index 5 (so only
+        5 rows exist strictly before the boundary, far fewer than the view's
+        page limit of 100), the old slice `results[start_index:start_index+limit]`
+        computed `start_index = max(0, end_index-limit) = max(0, 5-100) = 0` and
+        then sliced `[0:100]`, returning all 60 rows -- including the boundary
+        row itself and everything after it, which a "before" request must never
+        include. The fixed slice must return exactly rows 0-4.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interactions = [InteractionFactory(scene=scene) for _ in range(60)]
+        boundary = interactions[5]
+
+        poses_by_id = {
+            row["id"]: row["timestamp"]
+            for row in self.client.get("/api/play/poses/").json()["results"]
+        }
+        before_value = json.dumps([poses_by_id[boundary.pk], boundary.pk], separators=(",", ":"))
+        before_token = base64.urlsafe_b64encode(before_value.encode()).decode().rstrip("=")
+
+        response = self.client.get(f"/api/play/poses/?before={before_token}")
+        self.assertEqual(response.status_code, 200)
+        result_ids = [row["id"] for row in response.json()["results"]]
+
+        expected_ids = [interactions[i].pk for i in range(5)]
+        self.assertEqual(result_ids, expected_ids)
+        boundary_and_later_ids = {interactions[i].pk for i in range(5, 60)}
+        self.assertFalse(boundary_and_later_ids & set(result_ids))
+
+
 class PlayReadViewTests(APITestCase):
     def test_marks_poses_read(self) -> None:
         account = AccountFactory()
@@ -200,7 +235,14 @@ class PlayThreadsViewTests(APITestCase):
         # order would instead be [100, 101, ..., 112, 90, 91, ..., 99] (lexical),
         # and the last-20 window would be a completely different, out-of-order set.
         self.assertEqual(latest_ids, list(range(93, 113)))
-        self.assertEqual(earlier_ids, list(range(90, 110)))
+        # Only 3 groups (90, 91, 92) sort strictly before the boundary (id 93);
+        # `_page()`'s `before` branch must stop there rather than padding the page
+        # out to `limit` by overshooting past the boundary. This assertion used to
+        # read `list(range(90, 110))` (20 rows, including the boundary row 93 and
+        # everything up to 109) -- that was the pre-existing `_page()` overshoot
+        # bug found incidentally during #3759, not intended pagination behavior;
+        # corrected alongside the `_page()` fix (see `PlayPosesPaginationTests`).
+        self.assertEqual(earlier_ids, [90, 91, 92])
 
     def test_multi_pose_thread_cursor_matches_its_sort_key(self) -> None:
         """Regression test (task-4 re-review): the cursor-boundary key must be

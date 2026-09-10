@@ -85,7 +85,7 @@ def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Respon
                 (index for index, key in enumerate(keys) if key >= boundary), len(results)
             )
             start_index = max(0, end_index - limit)
-    page = results[start_index : start_index + limit]
+    page = results[start_index : min(start_index + limit, end_index)]
     return Response(
         {
             "results": page,
