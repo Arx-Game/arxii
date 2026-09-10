@@ -15,8 +15,11 @@ _REQUIRED_FIELDS = (
     "Application/build identity",
     "Environment",
     "Viewports/themes",
+    "Approved design",
     "Visual review",
+    "Visual verdict",
     "Screenshots",
+    "Comparison notes",
     "Tested interactions",
     "Fixture/live boundary",
     "Overall outcome",
@@ -120,16 +123,40 @@ def _validate_fields(fields: dict[str, str], expected_revision: str | None) -> l
     return errors
 
 
+def _validate_screenshot_refs(screenshots: str) -> list[str]:
+    errors: list[str] = []
+    image_refs = re.findall(r"!\[[^]]*\]\(([^)]+)\)", screenshots)
+    if not image_refs:
+        return ["screenshots must include at least one Markdown image"]
+    for reference in image_refs:
+        if reference.startswith(("http://", "https://")):
+            continue
+        image_path = Path(reference)
+        if image_path.is_absolute() or ".." in image_path.parts:
+            errors.append(f"screenshot path must be repository-relative: {reference}")
+        elif not (Path.cwd() / image_path).is_file():
+            errors.append(f"screenshot file does not exist: {reference}")
+        elif image_path.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
+            errors.append(f"screenshot is not an image file: {reference}")
+    return errors
+
+
 def _validate_visual_fields(fields: dict[str, str]) -> list[str]:
     visual = fields["Visual review"].lower()
+    verdict = fields["Visual verdict"].strip(" `").upper()
     screenshots = fields["Screenshots"]
     if "not applicable" in visual:
+        if verdict != "NOT_APPLICABLE":
+            return ["non-visual review must use Visual verdict: NOT_APPLICABLE"]
         return []
-    errors: list[str] = []
+    errors = []
+    if verdict != "PASS":
+        errors.append("completed visual review must have Visual verdict: PASS")
     if not _usable(screenshots) or "not applicable" in screenshots.lower():
         errors.append("completed visual review requires actual screenshot paths or URLs")
     if _PLACEHOLDER.search(screenshots):
         errors.append("screenshot field contains a placeholder")
+    errors.extend(_validate_screenshot_refs(screenshots))
     return errors
 
 

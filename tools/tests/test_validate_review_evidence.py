@@ -46,8 +46,11 @@ class ReviewEvidenceTests(unittest.TestCase):
 - Application/build identity: local production build
 - Environment: Ubuntu, Chromium, fixture backend
 - Viewports/themes: desktop 1440px, dark theme
+- Approved design: Not applicable (process-only change)
 - Visual review: Not applicable (process-only change)
+- Visual verdict: NOT_APPLICABLE
 - Screenshots: Not applicable (process-only change)
+- Comparison notes: Not applicable (process-only change)
 - Tested interactions: validator rejection and acceptance paths
 - Fixture/live boundary: validator-only; no live player data
 - Overall outcome: PASS
@@ -89,6 +92,48 @@ class ReviewEvidenceTests(unittest.TestCase):
             )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("unresolved findings", result.stderr)
+
+    def test_visual_review_requires_a_real_image(self) -> None:
+        revision = "e" * 40
+        report = (ROOT / "tools/tests/fixtures/stale-review-evidence.md").read_text()
+        report = report.replace("REVISION", revision).replace(
+            "Not applicable (process-only fixture)", "design URL"
+        )
+        report = report.replace(
+            "- Visual review: Not applicable (process-only change)",
+            "- Visual review: Completed",
+        )
+        report = report.replace("- Visual verdict: NOT_APPLICABLE", "- Visual verdict: PASS")
+        report = report.replace(
+            "- Screenshots: Not applicable (process-only change)",
+            "- Screenshots: ![ready](shot.png)",
+        )
+        report = report.replace(
+            "- Comparison notes: Not applicable (process-only fixture)",
+            "- Comparison notes: Compared ready state with approved design",
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "evidence.md"
+            path.write_text(report, encoding="utf-8")
+            (Path(directory) / "shot.png").write_bytes(b"PNG fixture")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(path), "--revision", revision],
+                capture_output=True,
+                text=True,
+                cwd=directory,
+                check=False,
+            )
+            self.assertEqual(result.returncode, 0, result.stderr)
+            (Path(directory) / "shot.png").unlink()
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(path), "--revision", revision],
+                capture_output=True,
+                text=True,
+                cwd=directory,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("screenshot file does not exist", result.stderr)
 
     def test_stale_revision_is_rejected(self) -> None:
         revision = "b" * 40
