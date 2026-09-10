@@ -2419,6 +2419,11 @@ class DistinctionOffer(
 
     objects = NaturalKeyManager()
 
+    #: The ``opener_key`` a feature-rows line reports (#3739). Unlike every other
+    #: opener there is no row to name, because the line is offered on every feature
+    #: the character has; the leaf keys its per-feature mounts off this one word.
+    FEATURE_OPENER_KEY: ClassVar[str] = "feature"
+
     #: Every opener field, and the chapter each belongs to. An FK opener is set when
     #: its id is; a choice opener when its value is non-blank.
     OPENER_FIELDS: ClassVar[tuple[str, ...]] = (
@@ -2519,7 +2524,7 @@ class DistinctionOffer(
         if self.appearance_section_id is not None:
             return f"section:{self.appearance_section_id}"
         if self.feature_rows:
-            return "feature"
+            return self.FEATURE_OPENER_KEY
         if self.glimpse_tag_id is not None:
             return f"tag:{self.glimpse_tag_id}"
         if self.origin_choice_id is not None:

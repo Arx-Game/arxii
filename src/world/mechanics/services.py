@@ -285,8 +285,8 @@ def _visible_feature_modifiers(character, modifiers: list) -> list:
 
     from world.items.services.appearance import covered_regions  # noqa: PLC0415
 
-    char = getattr(character, "character", None)
     try:
+        char = character.character
         covered = covered_regions(char) if char is not None else set()
     except AttributeError:
         # A raw ObjectDB fixture carries no equipment handler; nothing is worn, so
