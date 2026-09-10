@@ -1,5 +1,7 @@
 """Tests for the additive narrative play reader contracts."""
 
+from unittest.mock import patch
+
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -91,3 +93,58 @@ class PlayThreadsViewTests(APITestCase):
         InteractionFactory(scene=scene, visibility=InteractionVisibility.VERY_PRIVATE)
         response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
         self.assertEqual(response.json()["results"], [])
+
+    def test_paginates_beyond_one_page_with_stable_numeric_ordering(self) -> None:
+        """Regression test (task-4 review): a conversation with more than 20
+        distinct thread groups must not 500 (`_row_key`'s fallback needs a
+        `latestVisiblePose` key, which `ThreadSummary` rows previously lacked),
+        and equal-timestamp ties must order by `int(id)`, not `str(id)` (the
+        pre-sort's tie-break previously compared the stringified id).
+
+        Uses a mocked `_rows()` so the id values are exact and deterministic —
+        real `Interaction` autoincrement ids depend on prior test execution
+        order and cannot be relied on to straddle a digit-length boundary.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        shared_timestamp = "2026-01-01T00:00:00Z"
+        # 90..112 straddles the 99 -> 100 digit-length boundary, where a STRING
+        # sort ("100" < "99") disagrees with an INT sort.
+        synthetic_ids = list(range(90, 113))
+        rows = [
+            {
+                "id": pose_id,
+                "timestamp": shared_timestamp,
+                "thread_id": None,
+                "content": f"pose {pose_id}",
+                "mode": "pose",
+                "place": None,
+                "scene": None,
+                "receiver_persona_ids": [],
+                "persona": {"id": 1, "name": "Tester"},
+            }
+            for pose_id in synthetic_ids
+        ]
+
+        with patch("world.scenes.play_views._rows", return_value=(rows, None)):
+            # The default (no-cursor) request is exactly the path that 500'd before
+            # the fix: `start_index = len(results) - limit = 3 > 0`, so `_page()`
+            # unconditionally calls `_cursor(page[0])`, which needs `_row_key`'s
+            # fallback to resolve -- the missing `latestVisiblePose` key crashed here.
+            latest_response = self.client.get("/api/play/threads/")
+            self.assertEqual(latest_response.status_code, 200)
+            latest_page = latest_response.json()
+            self.assertIsNotNone(latest_page["before"])
+
+            earlier_response = self.client.get(f"/api/play/threads/?before={latest_page['before']}")
+            self.assertEqual(earlier_response.status_code, 200)
+            earlier_page = earlier_response.json()
+
+        latest_ids = [int(row["firstVisible"]["id"]) for row in latest_page["results"]]
+        earlier_ids = [int(row["firstVisible"]["id"]) for row in earlier_page["results"]]
+
+        # If the tie-break compared `str(id)` instead of `int(id)`, this sorted
+        # order would instead be [100, 101, ..., 112, 90, 91, ..., 99] (lexical),
+        # and the last-20 window would be a completely different, out-of-order set.
+        self.assertEqual(latest_ids, list(range(93, 113)))
+        self.assertEqual(earlier_ids, list(range(90, 110)))

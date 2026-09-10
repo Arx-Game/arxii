@@ -294,8 +294,15 @@ class PlayThreadsView(APIView):
                     "directUnread": 0,
                 }
             )
+            # `_page()`'s `_row_key()` fallback (`latestVisiblePose` or `pose` or the row
+            # itself) needs one of those keys to resolve a boundary; alias it onto the
+            # ref this view already computes so cursoring past 20 threads doesn't KeyError.
+            results[-1]["latestVisiblePose"] = results[-1]["latestVisible"]
         results.sort(
-            key=lambda item: (item["firstVisible"]["timestamp"], item["firstVisible"]["id"])
+            key=lambda item: (
+                item["firstVisible"]["timestamp"],
+                int(item["firstVisible"]["id"]),
+            )
         )
         return _page(results, 20, request)
 
