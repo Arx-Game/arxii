@@ -132,6 +132,18 @@ class FormTrait(NaturalKeyMixin, SharedMemoryModel):
             "concealment without the distinctive prose."
         ),
     )
+    unnatural_option = models.ForeignKey(
+        "arxii.FormTraitOption",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="unnatural_for_traits",
+        help_text=(
+            "The umbrella value for a colour no list carries (#3739, 'Unnatural'): never in "
+            "a species palette, reachable only on a feature made distinctive, so the "
+            "normalized layer stays honest under concealment the way Multihued does."
+        ),
+    )
 
     objects = NaturalKeyManager()
 

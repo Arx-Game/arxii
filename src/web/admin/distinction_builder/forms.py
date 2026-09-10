@@ -40,6 +40,13 @@ class DistinctionForm(forms.ModelForm):
             "trust_category",
             "is_automatic",
             "requires_slot_filled",
+            # Distinctive physical features (#3739). Authored here because the
+            # per-feature shape is a property of the distinction, not of any one
+            # offer: the same row is offered on every feature there is.
+            "taken_per_feature",
+            "opens_feature",
+            "requires_feature_opened",
+            "cg_max_rank",
         ]
         labels = {"max_rank": "Ranks", "mutually_exclusive_with": "Distinctions"}
         help_texts = {
@@ -85,6 +92,12 @@ DISTINCTION_MORE_FIELDS = (
     "trust_category",
     "is_automatic",
     "requires_slot_filled",
+    # Distinctive physical features (#3739): rarely touched, since only the four
+    # Appearance rows set them, but authorable here rather than in the raw admin.
+    "taken_per_feature",
+    "opens_feature",
+    "requires_feature_opened",
+    "cg_max_rank",
 )
 
 
@@ -133,6 +146,9 @@ class OfferForm(forms.ModelForm):
             "enemy_reason",
             "enemy_degree",
             "appearance_section",
+            # The Appearance chapter's other opener (#3739): a line offered on every
+            # trait row and marking rather than under a section.
+            "feature_rows",
             "sort_order",
         ]
         widgets = {

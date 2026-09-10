@@ -31,12 +31,22 @@ from world.character_creation.questionnaire import DraftAnswers, anchor_for, vis
 from world.character_creation.types import ClosedDistinction, VisibleOffer
 from world.character_sheets.types import EnemyDegree
 from world.distinctions.models import Distinction, DistinctionEffect
-from world.distinctions.types import DraftDistinctionEntry, build_distinction_entry
+from world.distinctions.types import (
+    DraftDistinctionEntry,
+    build_distinction_entry,
+    feature_key,
+)
 
 if TYPE_CHECKING:
     from world.character_creation.models import Beginnings
     from world.magic.models import Tradition
     from world.societies.models import Organization
+
+
+#: Where the Appearance chapter's feature-rows lines (#3739) sort relative to its
+#: sections. Sections carry ``AppearanceSection.sort_order``; a feature-rows line
+#: belongs to no section, so it sorts after every one of them.
+_FEATURE_ROWS_GROUP_ORDER = 1_000_000
 
 
 def tradition_is_self_taught(tradition: Tradition) -> bool:
@@ -114,7 +124,9 @@ def _opener_satisfied(offer: DistinctionOffer, ctx: dict) -> bool:
         # The question is always on the leaf; the prompt only says which block (#3709).
         return bool(offer.prompt)
     if chapter == OfferChapter.APPEARANCE:
-        return offer.appearance_section_id is not None
+        # A feature-rows line (#3739) is opened by the chapter itself: it is offered
+        # on every trait row and every marking, so there is no section to satisfy.
+        return offer.appearance_section_id is not None or offer.feature_rows
     if chapter == OfferChapter.ENEMY:
         if offer.enemy_reason_id is not None:
             return offer.enemy_reason_id == ctx["enemy_reason_id"]
@@ -216,6 +228,13 @@ def opener_label(offer: DistinctionOffer, *, draft: CharacterDraft | None = None
         return EnemyDegree(offer.enemy_degree).label
     if offer.appearance_section_id:
         return offer.appearance_section.name
+    if offer.feature_rows:
+        # #3739: which feature is not knowable from the offer -- the same line is
+        # offered on every one. The sync view overwrites this with the feature's own
+        # name once it has resolved it, so ``source_description`` reads "Hair Color"
+        # rather than the generic word; this is the fallback for a caller that has
+        # no feature in hand (the picker, a closed-distinction hint).
+        return "a feature"
     if offer.glimpse_tag_id:
         return offer.glimpse_tag.name
     if offer.origin_choice_id:
@@ -300,8 +319,13 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
     Called by each chapter's view/serializer to render its offer list. Pinned
     (first look) offers sort first, then ``sort_order``, then id (#3709).
     """
-    entries = {d["distinction_id"]: d for d in draft.draft_data.get("distinctions", [])}
-    held = set(entries)
+    # A per-feature distinction (#3739) can be held several times over, so an entry
+    # list is grouped by distinction rather than keyed by it. "Held" for the
+    # exclusion checks below still means "the draft has this distinction at all".
+    entries_by_dist: dict[int, list[DraftDistinctionEntry]] = defaultdict(list)
+    for entry in draft.draft_data.get("distinctions", []):
+        entries_by_dist[entry["distinction_id"]].append(entry)
+    held = set(entries_by_dist)
     chapter_offers = [
         offer
         for offer in visible_offers(draft).values()
@@ -318,10 +342,14 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
         dist = offer.distinction
         conflict_id = next((x for x in exclusions.get(dist.id, ()) if x in held), None)
         conflict_name = conflict_names.get(conflict_id) if conflict_id is not None else None
-        entry = entries.get(dist.id)
+        dist_entries = entries_by_dist.get(dist.id, [])
         # Held elsewhere: the draft has it, and not from this line (a legacy entry with
-        # no offer_ids key counts as elsewhere too).
-        held_elsewhere = entry is not None and offer.id not in entry.get("offer_ids", [])
+        # no offer_ids key counts as elsewhere too). A per-feature line is never held
+        # elsewhere -- it is offered on every feature and the leaf reads its own
+        # per-feature state off the draft entries, which carry the feature.
+        held_elsewhere = not dist.taken_per_feature and any(
+            offer.id not in e.get("offer_ids", []) for e in dist_entries
+        )
         out.append(
             VisibleOffer(
                 offer_id=offer.id,
@@ -339,6 +367,10 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
                 first_look=offer.id in pinned,
                 held=held_elsewhere,
                 effect_line=effect_line(effects.get(dist.id, [])),
+                taken_per_feature=dist.taken_per_feature,
+                opens_feature=dist.opens_feature,
+                requires_feature_opened=dist.requires_feature_opened,
+                cg_max_rank=dist.cg_max_rank,
             )
         )
     # Appearance groups by section, in the sections' own order; within a group the
@@ -347,6 +379,12 @@ def offers_for(draft: CharacterDraft, chapter: OfferChapter) -> list[VisibleOffe
         offer.id: (offer.appearance_section.sort_order if offer.appearance_section_id else 0)
         for offer in chapter_offers
     }
+    # #3739: a feature-rows line belongs to no section, and the leaf mounts it on the
+    # feature rows themselves. Sorting it after every section keeps a section's own
+    # block contiguous for the mounts that group by ``opener_key``.
+    for offer in chapter_offers:
+        if offer.feature_rows:
+            group_orders[offer.id] = _FEATURE_ROWS_GROUP_ORDER
     sort_orders = {offer.id: offer.sort_order for offer in chapter_offers}
     out.sort(
         key=lambda o: (
@@ -622,6 +660,89 @@ def _apply_bundled(
     return changed
 
 
+def opened_features(draft_data: dict) -> set[tuple[str, int]]:
+    """The features this draft has made distinctive, as ``(trait name, marking id)``.
+
+    One query. The single reader of "is this feature unlocked?" for everything
+    downstream of the draft (#3739): the Appearance validator's palette check,
+    ``services._apply_form_trait_descriptors`` at finalize, and the form-options
+    view's widened palette. A feature is unlocked exactly while an ``opens_feature``
+    entry naming it sits in ``draft_data["distinctions"]`` — refund the pick and the
+    widened palette, the description and the axes all close again together.
+    """
+    entries = draft_data.get("distinctions") or []
+    if not entries:
+        return set()
+    opens = set(
+        Distinction.objects.filter(
+            id__in={e["distinction_id"] for e in entries if e.get("distinction_id")},
+            opens_feature=True,
+        ).values_list("id", flat=True)
+    )
+    if not opens:
+        return set()
+    return {feature_key(e)[1:] for e in entries if e.get("distinction_id") in opens}
+
+
+def opened_feature_traits(draft_data: dict) -> set[str]:
+    """The names of the trait rows this draft has made distinctive (#3739).
+
+    ``opened_features`` narrowed to trait features; markings are unlocked the same
+    way but are addressed by id, and their description is free either way.
+    """
+    return {trait for trait, _ in opened_features(draft_data) if trait}
+
+
+def _drop_vanished_features(
+    entries: list[DraftDistinctionEntry],
+    draft: CharacterDraft,
+) -> tuple[list[DraftDistinctionEntry], list[str]]:
+    """Drop per-feature picks whose feature or whose unlock has gone (#3739).
+
+    Called by ``reconcile_offer_picks`` after the carried/bundled passes. Two
+    things can strand a per-feature entry between syncs:
+
+    * the **feature** itself is gone -- the player deleted the ``DraftMarking``
+      the pick names. (A trait row cannot vanish: every trait the species offers
+      is always on the page, whether or not an option is chosen for it.)
+    * the **unlock** is gone -- the axis lines (``requires_feature_opened``) may
+      only be held where "Make it distinctive" (``opens_feature``) is held on the
+      same feature, so dropping the unlock drops the axes bought under it.
+
+    Both are refunded by dropping the entry, which ``_drop_empty_and_reprice``
+    then leaves alone; the returned names go into the caller's changed list so
+    the player is told what the change cost them.
+    """
+    feature_entries = [e for e in entries if feature_key(e)[1:] != ("", 0)]
+    if not feature_entries:
+        return entries, []
+
+    live_marking_ids = set(draft.markings.values_list("id", flat=True))
+    flags = Distinction.objects.filter(
+        id__in={e["distinction_id"] for e in feature_entries}
+    ).values_list("id", "opens_feature", "requires_feature_opened")
+    opens = {did for did, o, _ in flags if o}
+    needs_open = {did for did, _, r in flags if r}
+
+    opened_features = {
+        feature_key(e)[1:] for e in feature_entries if e["distinction_id"] in opens
+    }
+
+    kept: list[DraftDistinctionEntry] = []
+    changed: list[str] = []
+    for entry in entries:
+        feature = feature_key(entry)[1:]
+        marking_id = feature[1]
+        if marking_id and marking_id not in live_marking_ids:
+            changed.append(entry["distinction_name"])
+            continue
+        if entry["distinction_id"] in needs_open and feature not in opened_features:
+            changed.append(entry["distinction_name"])
+            continue
+        kept.append(entry)
+    return kept, changed
+
+
 def _drop_empty_and_reprice(
     entries: list[DraftDistinctionEntry],
 ) -> tuple[list[DraftDistinctionEntry], list[str]]:
@@ -666,7 +787,10 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     original = draft.draft_data.get("distinctions", [])
     entries: list[DraftDistinctionEntry] = list(original)
     visible = visible_offers(draft)
-    by_dist = {e["distinction_id"]: e for e in entries}
+    # Carried and bundled offers are never per-feature (#3739), so they index by
+    # distinction alone -- and must never match a per-feature entry, which would let
+    # a bundled grant reprice "Alluring on your scar" to the bundle's free price.
+    by_dist = {e["distinction_id"]: e for e in entries if feature_key(e)[1:] == ("", 0)}
     carried = _carried_offer(draft)
     carried_key = f"state:{carried[0].state}" if carried else None
 
@@ -674,6 +798,8 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     changed += _drop_vanished_sources(entries, visible, carried_key)
     changed += _apply_carried(entries, by_dist, carried)
     changed += _apply_bundled(entries, by_dist, visible, draft)
+    entries, dropped_features = _drop_vanished_features(entries, draft)
+    changed += dropped_features
     kept, repriced = _drop_empty_and_reprice(entries)
     changed += repriced
 

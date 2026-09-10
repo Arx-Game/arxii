@@ -1945,6 +1945,12 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             # under descriptor concealment a viewer still sees the true,
             # memorable fact ("multihued") without the detail.
             ("multihued", "Multihued"),
+            # #3739 umbrella value: a colour no species carries, taken only on a
+            # feature the player paid to make distinctive. Kept out of every CG
+            # palette by ``forms.services.get_cg_form_options`` and reached through
+            # the widened list instead, so the normalized layer stays honest under
+            # concealment the way Multihued does.
+            ("unnatural", "Unnatural"),
             # #2632 — magical shimmer, distinct from mundane multihued combos;
             # set by Prism's Dye ("blended with magical light").
             ("prismatic", "Prismatic"),
@@ -1981,6 +1987,8 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             # #2632 umbrella value: heterochromia — the descriptor names the
             # pair ("one blue, one amber"); the one-word form stays honest.
             ("mismatched", "Mismatched"),
+            # #3739 — see hair_color's note: off-species colour, bought per feature.
+            ("unnatural", "Unnatural"),
         ),
     ),
     (
@@ -1994,6 +2002,8 @@ _APPEARANCE_TRAITS: tuple[tuple[str, str, str, bool, tuple[tuple[str, str], ...]
             ("medium", "Medium"),
             ("tan", "Tan"),
             ("dark", "Dark"),
+            # #3739 — see hair_color's note: off-species colour, bought per feature.
+            ("unnatural", "Unnatural"),
         ),
     ),
 )
@@ -2183,6 +2193,7 @@ def _seed_form_traits(species: Species | None) -> None:
                 trait=trait,
             )
     _wire_composite_options()
+    _wire_unnatural_options()
 
 
 #: Trait → the umbrella option blends resolve to (#2632). Wired after options
@@ -2190,6 +2201,17 @@ def _seed_form_traits(species: Species | None) -> None:
 _COMPOSITE_OPTIONS: tuple[tuple[str, str], ...] = (
     ("hair_color", "multihued"),
     ("eye_color", "mismatched"),
+)
+
+#: Trait → its off-species umbrella option (#3739). Same shape as
+#: ``_COMPOSITE_OPTIONS`` and wired the same way, but the two mean different
+#: things: a composite option is a legal species value that names a blend, while
+#: the unnatural option is outside every palette and reachable only on a feature
+#: the draft paid to make distinctive.
+_UNNATURAL_OPTIONS: tuple[tuple[str, str], ...] = (
+    ("hair_color", "unnatural"),
+    ("eye_color", "unnatural"),
+    ("skin_tone", "unnatural"),
 )
 
 
@@ -2203,6 +2225,22 @@ def _wire_composite_options() -> None:
         if option is not None:
             trait.composite_option = option
             trait.save(update_fields=["composite_option"])
+
+
+def _wire_unnatural_options() -> None:
+    """Point each colour trait at its off-species umbrella option (idempotent, #3739).
+
+    Fill-if-empty, like ``_wire_composite_options``: a content repo that authored a
+    different umbrella row keeps it, and a re-seed never overwrites the pointer.
+    """
+    for trait_name, option_name in _UNNATURAL_OPTIONS:
+        trait = FormTrait.objects.filter(name=trait_name).first()
+        if trait is None or trait.unnatural_option_id is not None:
+            continue
+        option = FormTraitOption.objects.filter(trait=trait, name=option_name).first()
+        if option is not None:
+            trait.unnatural_option = option
+            trait.save(update_fields=["unnatural_option"])
 
 
 # ---------------------------------------------------------------------------

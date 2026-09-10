@@ -196,9 +196,18 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             msg = "Distinction not found or inactive."
             raise NotFound(msg) from None
 
+        # Per-feature picks come only through ``sync`` (#3739), which is the one path
+        # that carries the feature. Adding one here would store an entry with no
+        # feature at all, which no later reader could place on a trait or a marking.
+        if distinction.taken_per_feature:
+            raise ValidationError(
+                {"detail": f"{distinction.name} is taken on a feature, in the Appearance stage."}
+            )
+
         # Validate rank
-        if not isinstance(rank, int) or rank < 1 or rank > distinction.max_rank:
-            raise ValidationError({"detail": f"Rank must be between 1 and {distinction.max_rank}."})
+        ceiling = distinction.cg_ceiling
+        if not isinstance(rank, int) or rank < 1 or rank > ceiling:
+            raise ValidationError({"detail": f"Rank must be between 1 and {ceiling}."})
 
         # Check if already on draft
         if distinction_id in existing_ids:
@@ -544,6 +553,11 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                     "id": entry["id"],
                     "rank": entry.get("rank", 1),
                     "offer_id": entry.get("offer_id"),
+                    # #3739: which feature this pick is aimed at, for the per-feature
+                    # distinctions. A trait row is named by ``FormTrait.name`` and a
+                    # marking by its ``DraftMarking`` pk; at most one is ever sent.
+                    "feature_trait": entry.get("feature_trait") or "",
+                    "feature_marking": entry.get("feature_marking") or 0,
                 }
             )
         return entries
@@ -581,18 +595,19 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
     def _validate_sync_ranks(
         self, distinction_entries: list[dict], by_id: dict[int, Distinction]
     ) -> None:
-        """Raise if any entry's rank is out of bounds for its distinction. Called by ``sync``."""
+        """Raise if any entry's rank is out of bounds for its distinction.
+
+        Called by ``sync``. The ceiling is ``Distinction.cg_ceiling`` (#3739), which
+        is ``max_rank`` for everything that has not set a lower character-creation
+        cap; the presence axes reach 5 in play and stop at 3 here.
+        """
         for entry in distinction_entries:
             distinction = by_id[entry["id"]]
             rank = entry["rank"]
-            if not isinstance(rank, int) or rank < 1 or rank > distinction.max_rank:
+            ceiling = distinction.cg_ceiling
+            if not isinstance(rank, int) or rank < 1 or rank > ceiling:
                 raise ValidationError(
-                    {
-                        "detail": (
-                            f"Rank for {distinction.name} must be between 1 and"
-                            f" {distinction.max_rank}."
-                        )
-                    }
+                    {"detail": f"Rank for {distinction.name} must be between 1 and {ceiling}."}
                 )
 
     def _build_sync_entries(
@@ -607,24 +622,144 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         another offer in this same payload merges into it (offer_ids/sources/
         arrivals appended, rank raised to the max requested).
         """
-        new_by_id: dict[int, dict] = {}
+        labels = self._resolve_sync_features(distinction_entries, by_id, draft)
+        new_by_key: dict[tuple[int, str, int], dict] = {}
         for entry in distinction_entries:
             distinction = by_id[entry["id"]]
             rank = entry["rank"]
             offer = self._resolve_offer(entry["offer_id"], distinction, draft)
-            existing = new_by_id.get(distinction.id)
+            trait_name, marking_id = self._entry_feature(entry, distinction)
+            key = (distinction.id, trait_name, marking_id)
+            # A per-feature line names the same offer on every feature, so its source
+            # is the feature's own display name (#3739) -- "Hair Color", "a burn scar"
+            # -- which is what ``CharacterDistinction.source_description`` should read.
+            source = labels.get(key[1:]) or opener_label(offer, draft=draft)
+            existing = new_by_key.get(key)
             if existing is None:
-                new_by_id[distinction.id] = self._build_distinction_entry(
-                    distinction, rank, "", offer, draft
+                new_by_key[key] = build_distinction_entry(
+                    distinction,
+                    rank,
+                    "",
+                    offer=offer,
+                    source=source,
+                    feature_trait=trait_name,
+                    feature_marking=marking_id,
                 )
                 continue
             existing["rank"] = max(existing["rank"], rank)
             existing["cost"] = distinction.calculate_total_cost(existing["rank"])
             if offer.id not in existing["offer_ids"]:
                 existing["offer_ids"].append(offer.id)
-                existing["sources"].append(opener_label(offer, draft=draft))
+                existing["sources"].append(source)
                 existing["arrivals"].append(offer.arrives_as)
-        return list(new_by_id.values())
+        return list(new_by_key.values())
+
+    @staticmethod
+    def _entry_feature(entry: dict, distinction: Distinction) -> tuple[str, int]:
+        """The feature one sync entry names, as ``(trait name, draft marking id)``.
+
+        Called by ``_build_sync_entries``. A distinction that is not
+        ``taken_per_feature`` never carries a feature, so anything the client sent
+        on it is dropped rather than stored -- ``_resolve_sync_features`` has
+        already rejected the payload if it named one.
+        """
+        if not distinction.taken_per_feature:
+            return "", 0
+        return entry["feature_trait"], entry["feature_marking"]
+
+    def _resolve_sync_features(
+        self,
+        distinction_entries: list[dict],
+        by_id: dict[int, Distinction],
+        draft: CharacterDraft,
+    ) -> dict[tuple[str, int], str]:
+        """Validate every entry's feature and return each one's display label (#3739).
+
+        Called by ``_build_sync_entries``. Four things are checked, because a
+        per-feature pick is priced per feature and the feature is the only thing
+        that keeps two picks of one distinction apart:
+
+        * a ``taken_per_feature`` distinction names exactly one feature;
+        * anything else names none;
+        * a named trait is a real ``FormTrait`` and a named marking is one of *this*
+          draft's own ``DraftMarking`` rows (never another player's);
+        * a ``requires_feature_opened`` axis is bought on a feature this same payload
+          also unlocks -- the sync is the whole truth about the draft's CHOICE picks,
+          so the unlock has to be in it.
+
+        The returned mapping is keyed by ``(trait name, draft marking id)`` and holds
+        the feature's own display name, which becomes the entry's source.
+        """
+        from world.forms.models import FormTrait  # noqa: PLC0415
+
+        named: set[tuple[str, int]] = set()
+        for entry in distinction_entries:
+            distinction = by_id[entry["id"]]
+            trait_name, marking_id = entry["feature_trait"], entry["feature_marking"]
+            if not distinction.taken_per_feature:
+                if trait_name or marking_id:
+                    raise ValidationError(
+                        {"detail": f"{distinction.name} is not taken on a single feature."}
+                    )
+                continue
+            if bool(trait_name) == bool(marking_id):
+                raise ValidationError(
+                    {"detail": f"{distinction.name} must name exactly one feature."}
+                )
+            named.add((trait_name, marking_id))
+
+        if not named:
+            return {}
+
+        traits = {
+            t.name: t.display_name
+            for t in FormTrait.objects.filter(name__in={n for n, _ in named if n})
+        }
+        markings = {
+            m.pk: (m.name or m.get_kind_display())
+            for m in draft.markings.filter(pk__in={m for _, m in named if m})
+        }
+        labels: dict[tuple[str, int], str] = {}
+        for trait_name, marking_id in named:
+            if trait_name and trait_name not in traits:
+                raise ValidationError({"detail": f"No such feature: {trait_name}."})
+            if marking_id and marking_id not in markings:
+                raise ValidationError({"detail": "That marking is not on this draft."})
+            labels[(trait_name, marking_id)] = (
+                traits[trait_name] if trait_name else markings[marking_id]
+            )
+
+        self._check_feature_unlocks(distinction_entries, by_id)
+        return labels
+
+    @staticmethod
+    def _check_feature_unlocks(
+        distinction_entries: list[dict], by_id: dict[int, Distinction]
+    ) -> None:
+        """Raise unless every axis pick sits on a feature the payload also unlocks.
+
+        Called by ``_resolve_sync_features``. ``sync`` replaces the draft's whole
+        CHOICE list, so "already unlocked" can only mean "unlocked in this payload";
+        a client that drops the unlock and keeps the axes is asking for an axis on a
+        feature that is no longer distinctive.
+        """
+        opened = {
+            (e["feature_trait"], e["feature_marking"])
+            for e in distinction_entries
+            if by_id[e["id"]].opens_feature
+        }
+        for entry in distinction_entries:
+            distinction = by_id[entry["id"]]
+            if not distinction.requires_feature_opened:
+                continue
+            if (entry["feature_trait"], entry["feature_marking"]) not in opened:
+                raise ValidationError(
+                    {
+                        "detail": (
+                            f"{distinction.name} needs that feature made distinctive first."
+                        )
+                    }
+                )
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:
         """

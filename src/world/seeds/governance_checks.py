@@ -54,6 +54,12 @@ _GOVERNANCE_CHECK_COMPOSITION: dict[str, tuple[str, str, str]] = {
     # direction bonus atop dispatched functionary agents (#672 seam).
     "Household Command": ("presence", "Leadership", "Stewardship"),
     "Domain Investment": ("intellect", "Scholarship", "Economics"),
+    # #3739 — the check a regal bearing plays into: rallying troops to make a stand,
+    # appealing to the people on your right to rule. Presence + Leadership with no
+    # specialization, because the ask is command itself rather than any one office;
+    # this is also the target the ``regal`` accent axis binds to, for items and for
+    # the Regal distinctive feature alike (``world.seeds.crafting_materials``).
+    "Command": ("presence", "Leadership", ""),
 }
 
 
@@ -209,9 +215,36 @@ def ensure_governance_check_compositions(
     return check_types
 
 
+def _bind_regal_accent_to_command() -> None:
+    """Point the ``regal`` accent axis at the Command CheckType (#3739).
+
+    The ``crafting_materials`` cluster seeds the accent ``ModifierTarget`` rows and
+    runs *before* this one, so when it asks for "Command" the check does not exist
+    yet and the target is left unbound. This is the other half of that fill-if-found
+    seam, so a single seed pass ends with the axis bound rather than needing a
+    second. Fill-if-empty: a target a content repo already pointed somewhere keeps
+    its binding.
+
+    The axis is read by item accents (#2886) and by the Regal distinctive feature
+    (#3739) alike — both are "how commanding you read", and both land on one check.
+    """
+    from world.checks.models import CheckType  # noqa: PLC0415
+    from world.mechanics.models import ModifierTarget  # noqa: PLC0415
+
+    target = ModifierTarget.objects.filter(name="regal", target_check_type__isnull=True).first()
+    if target is None:
+        return
+    command = CheckType.objects.filter(name="Command").first()
+    if command is None:
+        return
+    target.target_check_type = command
+    target.save(update_fields=["target_check_type"])
+
+
 def seed_governance_check_content() -> None:
     """Cluster entry — seed the governance skills, specializations, and checks (#930)."""
     _rename_legacy_organization()
     skills = ensure_governance_skills()
     specs = ensure_governance_specializations(skills)
     ensure_governance_check_compositions(skills, specs)
+    _bind_regal_accent_to_command()
