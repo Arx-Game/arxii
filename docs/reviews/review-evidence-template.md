@@ -13,6 +13,17 @@
 - Fixture/live boundary: `<what used fixtures and what reached a live backend>`
 - Overall outcome: `<PASS only when every mandatory criterion passes>`
 
+## Visual checklist
+
+For visual work, enumerate every visible element from the approved design/demo. Use
+one row per element and mark `MATCH` only after comparing the rendered application
+screenshot with the approved reference. Link the screenshot or PR/issue attachment
+in Evidence. Omit this section only when Visual review is Not applicable.
+
+| Element | Expected | Result | Evidence |
+|---|---|---|---|
+| `<header, rail, control, or state>` | `<approved design description>` | MATCH | `<screenshot link>` |
+
 ## Requirement ledger
 
 | ID | Status | Evidence | Authorized decision |

@@ -112,6 +112,14 @@ class ReviewEvidenceTests(unittest.TestCase):
             "- Comparison notes: Not applicable (process-only fixture)",
             "- Comparison notes: Compared ready state with approved design",
         )
+        report = report.replace(
+            "## Requirement ledger",
+            "## Visual checklist\n\n"
+            "| Element | Expected | Result | Evidence |\n"
+            "|---|---|---|---|\n"
+            "| Ready state | reader and composer visible | MATCH | ![ready](shot.png) |\n\n"
+            "## Requirement ledger",
+        )
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "evidence.md"
             path.write_text(report, encoding="utf-8")
@@ -124,6 +132,17 @@ class ReviewEvidenceTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
+            mismatch_path = Path(directory) / "mismatch.md"
+            mismatch_path.write_text(report.replace("| MATCH |", "| MISMATCH |"), encoding="utf-8")
+            result = subprocess.run(
+                [sys.executable, str(SCRIPT), str(mismatch_path), "--revision", revision],
+                capture_output=True,
+                text=True,
+                cwd=directory,
+                check=False,
+            )
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("not marked MATCH", result.stderr)
             (Path(directory) / "shot.png").unlink()
             result = subprocess.run(
                 [sys.executable, str(SCRIPT), str(path), "--revision", revision],

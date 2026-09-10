@@ -9,10 +9,13 @@ model: sonnet
 implementer before the PR opens. The report must identify the exact reviewed
 commit, application/build URL or identity, environment, viewport and theme,
 actual application screenshot paths or durable URLs (prefer committed image
-files linked with Markdown), tested user interactions, fixture-versus-live
-boundaries, an approved-design reference, concrete comparison notes, a
-PASS/FAIL/BLOCKED verdict for every mandatory criterion, and all unresolved
-findings. A source-only review, a test name, or a
+files or GitHub PR/issue attachments linked with Markdown), tested user
+interactions, fixture-versus-live boundaries, an approved-design reference, and
+concrete comparison notes. Enumerate every visible element from each approved
+demo/spec image in a Visual checklist and mark each `MATCH` only after a
+vision-capable reviewer compares the rendered application and reference at the
+same viewport/theme. Include a PASS/FAIL/BLOCKED verdict for every mandatory
+criterion and all unresolved findings. A source-only review, a test name, or a
 screenshot of a mockup is not a visual review. If the approved design or original
 review record cannot be reached, report that as BLOCKED rather than inferring a
 pass.

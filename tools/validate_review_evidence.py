@@ -141,7 +141,59 @@ def _validate_screenshot_refs(screenshots: str) -> list[str]:
     return errors
 
 
-def _validate_visual_fields(fields: dict[str, str]) -> list[str]:
+def _validate_visual_checklist_row(cells: list[str]) -> list[str]:
+    if len(cells) != _LEDGER_COLUMNS:
+        return ["Visual checklist rows must have four columns"]
+    element, expected, result, evidence = cells
+    errors: list[str] = []
+    if not _usable(element) or not _usable(expected) or not _usable(evidence):
+        errors.append("Visual checklist rows need concrete element, expected, and evidence values")
+    if result.upper() != "MATCH":
+        errors.append(f"visual checklist item {element or '(empty)'} is not marked MATCH")
+    return errors
+
+
+def _validate_visual_checklist(lines: list[str]) -> list[str]:
+    start = next(
+        (
+            index
+            for index, line in enumerate(lines)
+            if line.strip().lower() == "## visual checklist"
+        ),
+        None,
+    )
+    if start is None:
+        return ["completed visual review requires a Visual checklist section"]
+    header = "|element|expected|result|evidence|"
+    header_index = next(
+        (
+            index
+            for index in range(start + 1, len(lines))
+            if lines[index].strip().lower().replace(" ", "") == header
+        ),
+        None,
+    )
+    if header_index is None:
+        return ["Visual checklist must have Element, Expected, Result, and Evidence columns"]
+    errors: list[str] = []
+    rows = 0
+    for line in lines[header_index + 1 :]:
+        stripped = line.strip()
+        if not stripped.startswith("|"):
+            if rows:
+                break
+            continue
+        if re.match(r"^\|\s*:?-+", stripped):
+            continue
+        cells = [cell.strip() for cell in stripped.strip("|").split("|")]
+        errors.extend(_validate_visual_checklist_row(cells))
+        rows += len(cells) == _LEDGER_COLUMNS
+    if not rows:
+        errors.append("Visual checklist has no rows")
+    return errors
+
+
+def _validate_visual_fields(fields: dict[str, str], lines: list[str]) -> list[str]:
     visual = fields["Visual review"].lower()
     verdict = fields["Visual verdict"].strip(" `").upper()
     screenshots = fields["Screenshots"]
@@ -157,6 +209,7 @@ def _validate_visual_fields(fields: dict[str, str]) -> list[str]:
     if _PLACEHOLDER.search(screenshots):
         errors.append("screenshot field contains a placeholder")
     errors.extend(_validate_screenshot_refs(screenshots))
+    errors.extend(_validate_visual_checklist(lines))
     return errors
 
 
@@ -187,7 +240,7 @@ def validate_report(path: Path, expected_revision: str | None = None) -> list[st
         errors.append("report must start with '# Review evidence'")
     fields = {label: _field(lines, label) for label in _REQUIRED_FIELDS}
     errors.extend(_validate_fields(fields, expected_revision))
-    errors.extend(_validate_visual_fields(fields))
+    errors.extend(_validate_visual_fields(fields, lines))
     errors.extend(_validate_unresolved(lines))
     ledger_errors, statuses = _ledger_rows(lines)
     errors.extend(ledger_errors)
