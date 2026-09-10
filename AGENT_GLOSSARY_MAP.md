@@ -466,6 +466,11 @@ _Avoid_: treaty, engagement, org report.
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.
+XP is earned, held and spent by the **account** (ADR-0053), and every movement of it also
+names the character it was earned on or spent on — the per-character **attribution ledger**
+(#3748, ADR-0288; see `progression/AGENT_GLOSSARY.md`), which is what character-loss
+reimbursement reads. Attribution is not ownership: there is one balance, and it is the
+account's.
 
 ## Achievements & discovery
 

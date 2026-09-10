@@ -181,6 +181,28 @@ Registered on the `advance_class_level_via_session` service path. Translates:
 - `parse_draft`: no-op (base `RitualDraftAdapter` behaviour — the officiant supplies
   nothing extra at draft time).
 
+## XP ledger — the one debit seam (#3748, ADR-0288)
+
+XP is the **account's** balance (ADR-0053). Every movement of it also names the
+character it was earned on or spent on, because the death-kudos cap (ADR-0131) and
+future character-loss reimbursement are sized on what a player poured into one
+character.
+
+- **`award_xp(..., *, character)`** — keyword-only, no default. Every call site
+  decides; `None` only for an award no character earned (a GM story reward).
+- **`spend_xp_for_character(sheet, amount, description, *, reason, gm)`**
+  (`services/xp_ledger.py`) — **never debit `ExperiencePointsData` by hand.** Five
+  sites used to, and three of them never stamped the character, which is how the cap
+  came to read a ledger nobody was feeding. Raises `InsufficientXPError`
+  (carries `required`/`available`) / `NoAccountForCharacterError`.
+- **`CharacterXP` means two things, keyed on `transferable`.** `True` is the
+  attribution ledger: not a pool, nothing is drawn from it, and `total_spent` may
+  exceed `total_earned`. `False` is the locked CG-conversion pool, the only row the
+  no-overdraft rule applies to.
+- **Read it through `selectors.character_xp_ledger`**, not a fresh aggregate — the
+  sheet panel, the admin and `vitals.death_kudos` all go through it so they cannot
+  disagree.
+
 ## Key rules
 
 - **Never hardcode advancement logic in commands.** All level-write logic lives in

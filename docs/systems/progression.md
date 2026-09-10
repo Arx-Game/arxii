@@ -35,14 +35,14 @@ from world.progression.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `ExperiencePointsData` | Account XP balance (one per account) | `account` (PK, OneToOne AccountDB), `total_earned`, `total_spent` |
-| `XPTransaction` | Audit trail for all account XP changes | `account`, `amount`, `reason` (ProgressionReason), `description`, `character`, `gm`, `transaction_date` |
+| `XPTransaction` | Audit trail for all account XP changes; `character` names who it was earned on or spent on (#3748) | `account`, `amount`, `reason` (ProgressionReason), `description`, `character`, `gm`, `transaction_date` |
 
 ### Character-Level XP
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Nomination` | One piece of this week's prose a player cited when nominating its writer for good RP (#3738); one account nominating one character in one week is one nomination however many rows | `nominator` (AccountDB), `game_week`, `nominee` (CharacterSheet), `target_type` (`NominationTargetType`: interaction, journal), `target_id`, `processed`, `created_at` |
-| `CharacterXP` | Per-character XP balance, partitioned by transferability | `character`, `total_earned`, `total_spent`, `transferable` |
+| `CharacterXP` | Per-character totals, partitioned by `transferable`: the attribution ledger (True) or the locked CG pool (False) — see below | `character`, `total_earned`, `total_spent`, `transferable` |
 | `CharacterXPTransaction` | Audit trail for character-level XP changes | `character`, `amount`, `reason` (ProgressionReason), `description`, `transferable`, `transaction_date` |
 
 ### Development Points (Auto-Applied Trait Growth)
@@ -210,6 +210,25 @@ char_xp.spend_xp(50)       # Returns bool
 char_xp.award_xp(25)       # Awards XP
 ```
 
+**`transferable` says which of two things a row is (#3748, ADR-0288).**
+
+- **`transferable=True` — the attribution ledger.** Maintained by
+  `services.xp_ledger` on every award and every purchase. It answers "what has this
+  player earned on, and invested in, this character", which is what the death-kudos
+  cap is sized on (ADR-0131) and what character-loss reimbursement will read. **It is
+  not a pool**: nothing is drawn from it, and `total_spent` may exceed `total_earned`,
+  because XP earned on one character is routinely spent on another. `current_available`
+  / `can_spend` / `spend_xp` are therefore meaningless on this row, and `clean()`'s
+  no-overdraft rule deliberately skips it.
+- **`transferable=False` — a real locked pool**, written once by
+  `award_cg_conversion_xp` for unspent CG points. This one is drawn from, so the
+  no-overdraft invariant applies to it.
+
+Read the ledger through `selectors.character_xp_ledger(sheet) -> CharacterXPLedger`
+(`earned` / `spent` / `locked`) rather than aggregating the rows again — that
+selector is what the sheet panel, the admin and `world.vitals.death_kudos` all use,
+so the cap and the panel cannot disagree.
+
 ### DevelopmentPoints
 
 ```python
@@ -308,8 +327,13 @@ xp_cost = unlock.get_xp_cost_for_character(character)
 from world.progression.services import award_xp, award_development_points, get_or_create_xp_tracker
 from world.progression.types import DevelopmentSource, ProgressionReason
 
-# Award account-level XP (atomic, creates transaction)
-transaction = award_xp(account, 50, reason=ProgressionReason.GM_AWARD, description="Quest reward", gm=gm_account)
+# Award account-level XP (atomic, creates transaction). `character` is keyword-only
+# with no default (#3748): every call site names the character whose play earned this,
+# or passes None for an award no character earned.
+transaction = award_xp(
+    account, 50, reason=ProgressionReason.GM_AWARD, description="Quest reward",
+    gm=gm_account, character=sheet,
+)
 
 # Award development points (auto-applies rate modifiers from distinctions)
 transaction = award_development_points(
@@ -329,7 +353,8 @@ xp_tracker = get_or_create_xp_tracker(account)
 
 **GM Story Reward (#2123):** the sole GM-side XP source in the game — `world.gm.services.award_gm_story_reward`
 calls this same `award_xp` with `reason=ProgressionReason.GM_STORY_REWARD` (`gm=None` — it is a
-system-issued award, not a manual GM correction). See [gm-system.md](../roadmap/gm-system.md) and
+system-issued award, not a manual GM correction; and `character=None`, because running the
+scene is the GM's own work, not a character's play — #3748). See [gm-system.md](../roadmap/gm-system.md) and
 the GM entry in `INDEX.md` for the full players-served formula, weekly cap, and the three
 convergence points (a GM-marked beat, a resolved episode, a completed story) plus the positive
 story-feedback path.
@@ -349,6 +374,29 @@ all_met, failed_messages = check_requirements_for_unlock(character, unlock_targe
 result = get_available_unlocks_for_character(character)
 # Returns: {"available": [...], "locked": [...], "already_unlocked": [...]}
 ```
+
+### The XP debit seam (`services.xp_ledger`, #3748)
+
+**Every XP purchase in the game debits through `spend_xp_for_character`.** Five sites
+used to repeat the same four steps by hand and three of them never stamped the
+character, so the death-kudos cap read a ledger nobody was feeding. Do not write a
+sixth by hand.
+
+```python
+from world.progression.services import spend_xp_for_character
+
+# Debits the account pool, stamps XPTransaction.character, and credits the
+# character's lifetime spend. Returns None for a free (amount <= 0) purchase.
+spend_xp_for_character(sheet, xp_cost, "Unlocked Duelist 4", gm=None)
+```
+
+Raises `InsufficientXPError` (carrying `required`/`available`, so a caller can phrase
+its own refusal) or `NoAccountForCharacterError` — both from
+`world.progression.exceptions`, both carrying `user_message`. Current callers:
+`spend_xp_on_unlock` (class levels), `world.skills.services.purchase_skill_breakthrough`,
+`world.magic.services.gift_acquisition.spend_xp_on_gift_unlock`,
+`world.magic.services.threads.accept_thread_weaving_unlock`, and
+`world.distinctions.services.approve_sheet_update_request`.
 
 ### Path Requirements (#2538)
 
@@ -549,6 +597,22 @@ paths = eligible_advanced_paths_for(sheet)  # -> list[Path]
 path = resolve_advanced_path_by_name(sheet, "Path of the Pale")  # -> Path | None
 ```
 
+### XP Ledger Selector (`selectors.py` — #3748)
+
+```python
+from world.progression.selectors import character_xp_ledger
+
+# One aggregate over the character's CharacterXP rows. Zeroes for a character
+# nothing has moved on yet — rows exist only once something has.
+ledger = character_xp_ledger(sheet)  # -> CharacterXPLedger(earned, spent, locked)
+```
+
+The single answer to "what has this player earned on, and invested in, this
+character". Read by `GET /api/character-sheets/{id}/xp-ledger/` (the sheet's
+Advancement tab card), the `CharacterXP` admin, and
+`world.vitals.death_kudos._lifetime_xp_spent` — so the death-kudos cap (ADR-0131)
+and the panel a player reads can never disagree.
+
 ---
 
 ## API Endpoints
@@ -648,6 +712,23 @@ materially different query from `eligible_advanced_paths_for` (see "Path Selecto
     "claim_categories": [...]
 }
 ```
+
+### Per-Character XP Ledger (#3748)
+- `GET /api/character-sheets/{id}/xp-ledger/` — what this character earned and what was
+  spent on them. **Owner-only** (`_check_ownership`): XP is the player's business, not
+  something a visitor reads off a public sheet. Lives on the sheet viewset, not
+  `/api/progression/`, because the question is per-character; the account dashboard above
+  stays the account-wide view.
+
+**Response shape:**
+```json
+{"earned": 1240, "spent": 900, "locked": 60}
+```
+
+Frontend: `XpLedgerCard` (`frontend/src/progression/components/advancement/`), mounted
+at the top of the sheet's Advancement tab. It sits outside that tab's
+`isActiveCharacter` gate — it reads by sheet id and writes nothing, so it does not care
+which character is currently puppeted.
 
 ### Path Intent (`services.path_intent` — #1348)
 
@@ -817,6 +898,10 @@ Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
   of any check resolved within it) is recorded as intent in
   `docs/roadmap/planned-systems.md`.
 - **Character Creation**: CG-to-XP conversion via `award_cg_conversion_xp()` creates locked (non-transferable) `CharacterXP`.
+- **Vitals — death kudos (#3748)**: `world.vitals.death_kudos` sizes the graceful-death
+  kudos cap (ADR-0131) on `character_xp_ledger(sheet).spent`. Every XP purchase feeds
+  that number through `spend_xp_for_character`; before #3748 only CG conversion did, so
+  the cap was the CG-locked amount rather than a lifetime spend.
 - **Magic — Ritual of the Durance (#1352):** `advance_class_level_via_session` is
   dispatched by `fire_session` for the "Ritual of the Durance" `Ritual` row (seeded via
   `RitualOfTheDuranceFactory`). The `ClassLevelAdvancement` receipt links back to the
@@ -835,6 +920,9 @@ Dispatches `SetPathIntentAction` / `ClearPathIntentAction`
 All models are registered with appropriate filters, search, and inline editing:
 
 - **Rewards**: `ExperiencePointsDataAdmin`, `XPTransactionAdmin`, `DevelopmentPointsAdmin`, `DevelopmentTransactionAdmin`
+- **Character XP ledger (#3748)**: `CharacterXPAdmin` (counters read-only — they are
+  maintained by `services.xp_ledger`, and hand-editing `total_spent` silently resizes the
+  death-kudos cap), `CharacterXPTransactionAdmin` (view-only receipts)
 - **Kudos**: `KudosSourceCategoryAdmin`, `KudosClaimCategoryAdmin`, `KudosPointsDataAdmin` (with transaction link), `KudosTransactionAdmin`
 - **Unlocks**: `XPCostChartAdmin` (with `XPCostEntryInline`), `ClassXPCostAdmin`, `TraitXPCostAdmin`, `ClassLevelUnlockAdmin`, `TraitRatingUnlockAdmin`, `CharacterUnlockAdmin`
 - **Requirements**: Individual admin classes for each requirement type, `MultiClassRequirementAdmin` (with `MultiClassLevelInline`)

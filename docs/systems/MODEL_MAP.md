@@ -4856,7 +4856,7 @@
   - game_week -> game_clock.GameWeek [FK] (nullable)
 
 ### Service Functions
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `base_entries_queryset() -> 'QuerySet[JournalEntry]' - The annotated/prefetched base queryset every list-style journal read builds on.`
 - `create_journal_entry(*, author: 'CharacterSheet', title: 'str', body: 'str', is_public: 'bool', tags: 'list[str] | None' = None, posthumous_override: 'str' = PosthumousOverride.INHERIT, award_weekly_xp: 'bool' = True, kind: 'str' = JournalKind.ENTRY) -> 'JournalEntry' - Create a journal entry, optionally awarding weekly XP.`
 - `create_journal_response(*, author: 'CharacterSheet', parent: 'JournalEntry', response_type: 'ResponseType', title: 'str', body: 'str') -> 'JournalEntry' - Create a praise or retort response to a journal entry.`
@@ -7441,18 +7441,19 @@
 - `award_check_development(character_sheet: 'CharacterSheet', check_type: 'CheckType', effort_level: 'str | None', path_level: 'int') -> 'list[tuple[str, int, int]]' - Award dp to traits used in a check.`
 - `award_development_points(character_sheet: 'CharacterSheet', trait: 'Trait', source: 'str', amount: 'int', scene: 'Scene | None' = None, reason: 'str' = ProgressionReason.SCENE_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'DevelopmentTransaction' - Award development points to a character and automatically apply them.`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult - Award kudos to an account with full audit trail.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `calculate_check_dev_points(effort_level: 'str', path_level: 'int') -> 'int' - Calculate dp earned from a single check.`
 - `calculate_level_up_requirements(character: 'ObjectDB', character_class: 'CharacterClass', target_level: 'int') -> 'LevelUpRequirements | dict[str, str]' - Calculate what's required to level up a character in a specific class.`
 - `check_requirements_for_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock') -> 'tuple[bool, list[str]]' - Check if a character meets all requirements for an unlock.`
 - `claim_kudos(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str) -> world.progression.types.ClaimResult - Claim kudos from an account for conversion to rewards.`
-- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '') -> world.progression.types.KudosXPResult - Claim kudos and convert the reward to account-level XP.`
+- `claim_kudos_for_xp(account: evennia.accounts.models.AccountDB, amount: int, claim_category: world.progression.models.kudos.KudosClaimCategory, description: str = '', *, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.KudosXPResult - Claim kudos and convert the reward to account-level XP.`
 - `get_available_unlocks_for_character(character: 'ObjectDB') -> 'AvailableUnlocks' - Get all unlocks that a character could potentially purchase.`
 - `get_development_suggestions_for_character(character: 'ObjectDB') -> 'dict[str, list[str]]' - Get development suggestions for a character based on their current traits.`
-- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' - Get or create XP tracker for an account.`
+- `get_or_create_xp_tracker(account: 'AccountDB') -> 'ExperiencePointsData' - Get or create the account's XP pool row.`
 - `nominate(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> world.progression.models.nominations.Nomination - Nominate the writer of a piece of this week's prose for good RP.`
 - `nominations_by_account(nominator: evennia.accounts.models.AccountDB) -> django.db.models.query.QuerySet - This week's citations by ``nominator``: the one list a nominator may see.`
 - `on_scene_finished(scene: world.scenes.models.Scene) -> None - Settle a finished scene's reaction windows.`
+- `spend_xp_for_character(sheet: 'CharacterSheet', amount: 'int', description: 'str', *, reason: 'str' = ProgressionReason.XP_PURCHASE, gm: 'AccountDB | None' = None) -> 'XPTransaction | None' - Debit the account's pool for something bought for ``sheet``, and attribute it.`
 - `spend_xp_on_unlock(character: 'ObjectDB', unlock_target: 'ClassLevelUnlock', gm: 'AccountDB | None' = None) -> 'tuple[bool, str, CharacterUnlock | None]' - Spend XP to unlock something for a character.`
 - `withdraw_nomination(nominator: evennia.accounts.models.AccountDB, target_type: str, target_id: int) -> None - Take back this week's citation of a piece, while the week is still open.`
 
@@ -7738,7 +7739,7 @@
 - `apply_affection_shift(*, source: 'CharacterSheet', target: 'CharacterSheet', scene: 'Scene', effect: 'ConsequenceEffect | None', amount: 'int', boon: 'Boon | None' = None) -> 'AffectionShift | None' - Apply a social action's automatic affection shift (#1697, boon mode #2540).`
 - `apply_relationship_bump(*, source: 'CharacterSheet', target: 'CharacterSheet', interaction: 'Interaction', valence: 'int', source_emoji: 'ReactionEmoji | None' = None) -> 'RelationshipBump' - Apply an ambient ±1 bump to source's regard toward target (#1699).`
 - `award_kudos(account: evennia.accounts.models.AccountDB, amount: int, source_category: world.progression.models.kudos.KudosSourceCategory, description: str, awarded_by: evennia.accounts.models.AccountDB | None = None, character: world.character_sheets.models.CharacterSheet | None = None) -> world.progression.types.AwardResult - Award kudos to an account with full audit trail.`
-- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None) -> 'XPTransaction' - Award XP to an account.`
+- `award_xp(account: 'AccountDB', amount: 'int', reason: 'str' = ProgressionReason.SYSTEM_AWARD, description: 'str' = '', gm: 'AccountDB | None' = None, *, character: 'CharacterSheet | None') -> 'XPTransaction' - Award XP to an account, attributed to the character that earned it (#3748).`
 - `bond_bonus(actor: 'ObjectDB', protected: 'ObjectDB') -> 'int' - Return the bond bonus for protection checks (INTERPOSE/SUCCOR).`
 - `bond_combat_bonus(sheet: 'CharacterSheet', encounter: 'CombatEncounter') -> 'list[ModifierContribution]' - Return ModifierContribution(RELATIONSHIP) entries for each bonded co-combatant.`
 - `clear_very_attracted(sheets) -> 'None' - Drop Very Attracted for the given characters — the scene-end early clear (#1697).`

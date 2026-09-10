@@ -335,4 +335,5 @@ treat those names as hints to confirm, not gospel.
 - [0284 - Every technique must have an activatable cast; capability grants are not passive techniques](0284-every-technique-must-have-an-activatable-cast.md) (#3713; related ADR-0248)
 - [0285 - Realm pages read a realm API because the realm now owns content; the realm boards are #676's per-realm addition, diegetic in shape](0285-realm-pages-read-a-realm-api-and-carry-public-realm-boards.md) (#3725; amends ADR-0227 and the #676 diegetic-discovery invariant; related ADR-0201, ADR-0238, ADR-0224)
 - [0286 - The popularity axis is an invisible nomination by the account, not a budgeted vote](0286-the-popularity-axis-is-an-invisible-nomination-by-account-not-a-budgeted-vote.md) (#3738; amends ADR-0115; related ADR-0033, ADR-0237)
+- [0288 - XP stays account-scoped, and every movement of it is attributed to a character](0288-xp-is-account-scoped-and-character-attributed.md) (#3748; extends ADR-0053, makes ADR-0131's cap real; related ADR-0010)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
