@@ -6,7 +6,12 @@ from unittest.mock import Mock, patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import InteractionMode
 from world.scenes.factories import (
@@ -16,11 +21,17 @@ from world.scenes.factories import (
     PersonaFactory,
     PlaceFactory,
     PlacePresenceFactory,
+    SceneFactory,
 )
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_services import push_interaction
 from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.thread_services import (
+    InteractionThreadError,
+    ReplyTarget,
+    assign_interaction_thread,
+)
 
 
 class TestSerializerNewFields(TestCase):
@@ -309,3 +320,47 @@ class TestInteractionThreadModel(TestCase):
 
         assert thread.parent_id is None
         assert thread.pk is not None
+
+
+class TestInteractionThreadAssignment(TestCase):
+    """Reply targets create and reuse flat threads without parent links."""
+
+    def test_scene_target_creates_and_reuses_thread(self) -> None:
+        account = AccountFactory()
+        scene = SceneFactory()
+        target = InteractionFactory(scene=scene, writer_account=account)
+        first_reply = InteractionFactory(scene=scene, writer_account=account)
+
+        thread = assign_interaction_thread(
+            interaction=first_reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        assert target.thread_id == thread.pk
+        assert first_reply.thread_id == thread.pk
+        assert thread.parent_id is None
+
+        second_reply = InteractionFactory(scene=scene, writer_account=account)
+        reused = assign_interaction_thread(
+            interaction=second_reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        assert reused.pk == thread.pk
+        assert second_reply.thread_id == thread.pk
+
+    def test_scene_less_target_is_unavailable(self) -> None:
+        account = AccountFactory()
+        target = InteractionFactory(writer_account=account)
+        reply = InteractionFactory(writer_account=account)
+
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        assert error.exception.code == "reply_target_unavailable"
