@@ -239,7 +239,7 @@ class PlaySearchView(APIView):
             )
         has_bound = any(
             request.query_params.get(key)  # noqa: USE_FILTERSET
-            for key in ("conversation", "kind", "from", "to", "participant")
+            for key in ("conversation", "kind", "from", "to", "until", "participant")
         )
         if not has_bound:
             return Response(

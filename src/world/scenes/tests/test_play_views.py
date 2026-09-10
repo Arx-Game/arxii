@@ -294,3 +294,13 @@ class PlaySearchMaskingTests(APITestCase):
         self.client.force_authenticate(user=account)
         response = self.client.get("/api/play/search/?q=pose&from=2020-01-01")
         self.assertEqual(response.status_code, 200)
+
+    def test_search_with_only_an_until_bound_succeeds(self) -> None:
+        """`_queryset()` accepts `until` as an alias for `to` (play_views.py:99);
+        the bound gate must recognize it too, or a caller bounding solely by
+        `until` gets spuriously 400'd even though `_queryset()` would have
+        honored it as a real bound (reviewer finding on b159b889b)."""
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/play/search/?q=pose&until=2030-01-01")
+        self.assertEqual(response.status_code, 200)
