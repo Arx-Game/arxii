@@ -13,7 +13,7 @@ from evennia_extensions.factories import (
     RoomProfileFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
@@ -368,6 +368,35 @@ class TestInteractionThreadAssignment(TestCase):
 
         assert reused.thread.pk == thread.pk
         assert second_reply.thread_id == thread.pk
+
+    def test_mismatched_scene_is_unavailable(self) -> None:
+        account = AccountFactory()
+        target = InteractionFactory(scene=SceneFactory(), writer_account=account)
+        reply = InteractionFactory(scene=SceneFactory(), writer_account=account)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+    def test_inaccessible_target_is_unavailable(self) -> None:
+        writer = AccountFactory()
+        viewer = AccountFactory()
+        private_scene = SceneFactory(
+            privacy_mode=ScenePrivacyMode.PRIVATE,
+            participants=[writer],
+        )
+        target = InteractionFactory(scene=private_scene, writer_account=writer)
+        reply = InteractionFactory(scene=private_scene, writer_account=viewer)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=viewer.pk,
+            )
 
     def test_scene_less_target_is_unavailable(self) -> None:
         account = AccountFactory()
