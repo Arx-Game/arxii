@@ -7,7 +7,8 @@
 #   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
 #
 # Required env vars:
-#   PR_EVIDENCE_FILE - tracked review report, validated against the reviewed code revision
+#   PR_EVIDENCE_FILE - local review report (repo or scratch path)
+#   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
@@ -59,33 +60,41 @@ if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
   EVIDENCE_REQUIRED=1
 fi
 EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
+EVIDENCE_URL="${PR_EVIDENCE_URL:-}"
 if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
-  if [[ -z "$EVIDENCE_FILE" ]]; then
-    echo "ERROR: issue #$ISSUE requires review evidence; set PR_EVIDENCE_FILE." >&2
-    exit 1
-  fi
-  if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
-    echo "ERROR: PR_EVIDENCE_FILE must be repository-relative without '..'." >&2
-    exit 1
-  fi
-  if ! git ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
-    echo "ERROR: PR_EVIDENCE_FILE must name a tracked file: $EVIDENCE_FILE" >&2
+  if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then
+    echo "ERROR: issue #$ISSUE requires review evidence; set PR_EVIDENCE_FILE or PR_EVIDENCE_URL." >&2
     exit 1
   fi
   REVIEWED_SHA=$(git rev-parse HEAD^1)
-  uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+  if [[ -n "$EVIDENCE_URL" ]]; then
+    if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
+      echo "ERROR: PR_EVIDENCE_URL must be a GitHub issue or PR comment URL." >&2
+      exit 1
+    fi
+    COMMENT_ID="${EVIDENCE_URL##*#issuecomment-}"
+    EVIDENCE_TMP=$(mktemp)
+    trap 'rm -f "$EVIDENCE_TMP"' EXIT
+    REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+    gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body > "$EVIDENCE_TMP"
+    uv run python tools/validate_review_evidence.py "$EVIDENCE_TMP" --revision "$REVIEWED_SHA"
+    EVIDENCE_REFERENCE="$EVIDENCE_URL"
+  else
+    uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+    EVIDENCE_REFERENCE="$EVIDENCE_FILE"
+  fi
 else
-  EVIDENCE_FILE="${EVIDENCE_FILE:-not required for this issue}"
+  EVIDENCE_REFERENCE="not required for this issue"
 fi
 EVIDENCE_MARKER=""
 EVIDENCE_STATUS="- Review evidence is not required; this issue is not labeled \`review:evidence-required\`."
 if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
   EVIDENCE_MARKER="<!-- review-evidence-required -->"
-  EVIDENCE_STATUS="- Report: \`$EVIDENCE_FILE\`
-- The report is validated against the exact reviewed code revision before this PR is opened.
-- A PASS requires every mandatory criterion to have concrete evidence and no unresolved findings.
-- A scoped or partial change uses \`Refs\` and links the remaining work; it does not claim umbrella completion."
+  EVIDENCE_STATUS="- Report: $EVIDENCE_REFERENCE
+- The local reviewer report is validated against the exact reviewed code revision before this PR is opened.
+- A PASS requires concrete evidence for every mandatory criterion, including a visual checklist where applicable, and no unresolved findings."
 fi
+
 LINK_VERB="Refs"
 if [[ "${PR_CLOSE_ISSUE:-0}" == "1" ]]; then
   LINK_VERB="Closes"
@@ -113,7 +122,7 @@ BODY=${BODY//\{\{summary\}\}/$SUMMARY}
 BODY=${BODY//\{\{followup_list\}\}/$FOLLOWUP_LIST}
 BODY=${BODY//\{\{ran_or_skipped\}\}/$RAN_OR_SKIPPED}
 BODY=${BODY//\{\{sync_summary\}\}/$SYNC_SUMMARY}
-BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_FILE}
+BODY=${BODY//\{\{evidence_file\}\}/$EVIDENCE_REFERENCE}
 BODY=${BODY//\{\{evidence_marker\}\}/$EVIDENCE_MARKER}
 BODY=${BODY//\{\{evidence_status\}\}/$EVIDENCE_STATUS}
 BODY=${BODY//\{\{link_verb\}\}/$LINK_VERB}

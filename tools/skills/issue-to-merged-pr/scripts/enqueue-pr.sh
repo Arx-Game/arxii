@@ -37,17 +37,20 @@ if [[ -n "$LINKED_ISSUE" ]]; then
 fi
 if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
   EVIDENCE_FILE="${PR_EVIDENCE_FILE:-}"
-  if [[ -z "$EVIDENCE_FILE" ]]; then
-    EVIDENCE_LINE=$(grep -F -- "- Report: \`" <<<"$PR_BODY" | head -1 || true)
-    EVIDENCE_FILE="${EVIDENCE_LINE#- Report: \`}"
-    EVIDENCE_FILE="${EVIDENCE_FILE%\`}"
+  EVIDENCE_URL="${PR_EVIDENCE_URL:-}"
+  if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then
+    EVIDENCE_LINE=$(grep -E '^- Report: ' <<<"$PR_BODY" | head -1 || true)
+    EVIDENCE_REFERENCE="${EVIDENCE_LINE#- Report: }"
+    EVIDENCE_REFERENCE="${EVIDENCE_REFERENCE#\`}"
+    EVIDENCE_REFERENCE="${EVIDENCE_REFERENCE%\`}"
+    if [[ "$EVIDENCE_REFERENCE" == https://* ]]; then
+      EVIDENCE_URL="$EVIDENCE_REFERENCE"
+    else
+      EVIDENCE_FILE="$EVIDENCE_REFERENCE"
+    fi
   fi
-  if [[ -z "$EVIDENCE_FILE" ]]; then
+  if [[ -z "$EVIDENCE_FILE" && -z "$EVIDENCE_URL" ]]; then
     echo "ERROR: labeled issue #$LINKED_ISSUE requires a review evidence report." >&2
-    exit 1
-  fi
-  if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
-    echo "ERROR: evidence report path must be repository-relative without '..'." >&2
     exit 1
   fi
   BRANCH_WT=$(wt_for_branch "$HEAD_REF")
@@ -55,12 +58,26 @@ if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
     echo "ERROR: branch $HEAD_REF is not checked out; cannot validate its evidence report." >&2
     exit 1
   fi
-  if ! git -C "$BRANCH_WT" ls-files --error-unmatch "$EVIDENCE_FILE" >/dev/null 2>&1; then
-    echo "ERROR: evidence report is not tracked on $HEAD_REF: $EVIDENCE_FILE" >&2
-    exit 1
-  fi
   REVIEWED_SHA=$(git -C "$BRANCH_WT" rev-parse HEAD^1)
-  uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+  if [[ -n "$EVIDENCE_URL" ]]; then
+    if [[ "$EVIDENCE_URL" != https://github.com/*/issues/*#issuecomment-* && "$EVIDENCE_URL" != https://github.com/*/pull/*#issuecomment-* ]]; then
+      echo "ERROR: evidence URL must be a GitHub issue or PR comment URL." >&2
+      exit 1
+    fi
+    COMMENT_ID="${EVIDENCE_URL##*#issuecomment-}"
+    EVIDENCE_TMP=$(mktemp)
+    REPO=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+    gh api "repos/$REPO/issues/comments/$COMMENT_ID" --jq .body > "$EVIDENCE_TMP"
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$EVIDENCE_TMP" --revision "$REVIEWED_SHA"
+    rm -f "$EVIDENCE_TMP"
+  else
+    if [[ "$EVIDENCE_FILE" = /* || "$EVIDENCE_FILE" == *..* ]]; then
+      echo "ERROR: evidence report path must be repository-relative without '..'." >&2
+      exit 1
+    fi
+    uv run python "$BRANCH_WT/tools/validate_review_evidence.py" "$BRANCH_WT/$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
+  fi
+
 else
   echo "review evidence not required for issue #${LINKED_ISSUE:-unknown}"
 fi

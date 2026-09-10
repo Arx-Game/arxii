@@ -281,7 +281,7 @@ it pushes or opens anything. Do not write a stopping instruction like "stop
 before opening a PR" into a dispatch to a sub-skill unless the user explicitly
 asked for that checkpoint.
 
-Set `PR_EVIDENCE_FILE` to the tracked report. It must record the exact revision,
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. It must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual
 screenshots when a design/demo exists, one verdict per mandatory criterion, and
 an empty unresolved-findings section. A green build or component-presence test

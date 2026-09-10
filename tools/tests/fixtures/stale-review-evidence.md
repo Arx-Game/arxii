@@ -1,6 +1,8 @@
 # Review evidence
 
 - Reviewed revision: `REVISION`
+- Reviewer: fixture reviewer
+- Reviewer verdict: PASS
 - Application/build identity: local production build
 - Environment: Ubuntu, Chromium, fixture backend
 - Viewports/themes: desktop 1440px, dark theme

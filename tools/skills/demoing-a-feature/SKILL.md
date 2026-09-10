@@ -98,13 +98,16 @@ recommendation first, and in the spec's Decisions section as pending.
    then fold the answers into the spec and wait for `spec:approved`.
 8. **Before opening the PR, check the built thing against the demo.** Dispatch
    the `demo-fidelity-reviewer` agent (`tools/agents/`) with the issue number; it
-   reads the demo, renders the built surface and reports screen by screen where
-   the two differ. This step is not optional and it is not satisfied by reading
-   your own templates: the demo is the approved design, and nothing else in the
-   pipeline ever compares it to the code. #3660 shipped the Upbringing Builder
-   with none of the demo's admin form rows, header chips, submit row or
-   right-hand rail, and none of its own class hooks defined; nineteen tests
-   passed and a human found it on production (#3667).
+   reads the approved reference, renders the built surface, and uses a
+   vision-capable model to compare matching screenshots screen by screen. It
+   enumerates every visible element in a checklist. A mismatch is a `FAIL` with
+   concrete discrepancies, not an optional note; the implementer fixes it and
+   reruns the reviewer before opening the PR. `open-pr.sh` blocks until the
+   committed report names this reviewer and has a `PASS` verdict. This step is
+   not satisfied by reading your own templates or relying on CI. #3660 shipped
+   the Upbringing Builder with none of the demo's admin form rows, header chips,
+   submit row or right-hand rail, and none of its own class hooks defined;
+   nineteen tests passed and a human found it on production (#3667).
 
    Where a finding is a class hook with no rule, fold in the mechanical guard as
    well as the fix - a test that collects every class the surface's templates

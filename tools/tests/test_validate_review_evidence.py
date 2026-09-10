@@ -43,6 +43,8 @@ class ReviewEvidenceTests(unittest.TestCase):
         report = f"""# Review evidence
 
 - Reviewed revision: `{revision}`
+- Reviewer: local reviewer agent
+- Reviewer verdict: PASS
 - Application/build identity: local production build
 - Environment: Ubuntu, Chromium, fixture backend
 - Viewports/themes: desktop 1440px, dark theme
@@ -97,8 +99,9 @@ class ReviewEvidenceTests(unittest.TestCase):
         revision = "e" * 40
         report = (ROOT / "tools/tests/fixtures/stale-review-evidence.md").read_text()
         report = report.replace("REVISION", revision).replace(
-            "Not applicable (process-only fixture)", "design URL"
+            "- Reviewer: fixture reviewer", "- Reviewer: local reviewer agent"
         )
+        report = report.replace("Not applicable (process-only fixture)", "design URL")
         report = report.replace(
             "- Visual review: Not applicable (process-only change)",
             "- Visual review: Completed",

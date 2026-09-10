@@ -12,6 +12,8 @@ _PLACEHOLDER = re.compile(r"(?:TBD|TODO|FILL[- ]?ME|<[^>]+>)", re.IGNORECASE)
 _STATUSES = {"PASS", "FAIL", "BLOCKED", "OUT_OF_SCOPE"}
 _REQUIRED_FIELDS = (
     "Reviewed revision",
+    "Reviewer",
+    "Reviewer verdict",
     "Application/build identity",
     "Environment",
     "Viewports/themes",
@@ -118,6 +120,8 @@ def _validate_fields(fields: dict[str, str], expected_revision: str | None) -> l
             "report revision "
             f"{revision!r} does not match the reviewed code revision {expected_revision}"
         )
+    if fields["Reviewer verdict"].strip(" `").upper() != "PASS":
+        errors.append("reviewer verdict must be PASS before opening a PR")
     if fields["Overall outcome"].strip(" `").upper() != "PASS":
         errors.append("overall outcome must be PASS before opening a PR")
     return errors

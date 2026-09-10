@@ -198,7 +198,7 @@ criterion, and no unresolved findings. A green build is not acceptance evidence.
 Scoped or partial work defaults to `Refs`; set `PR_CLOSE_ISSUE=1` only after a
 final completeness review confirms every mandatory criterion is passed.
 
-Set `PR_EVIDENCE_FILE` to the tracked report. Compose the PR body's substitution
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. Compose the PR body's substitution
 values. For each deferred follow-up, call
 `scripts/file-followup.sh <title> <body-path> <labels...>` NOW (before opening
 the PR) and collect the issue numbers. **Before filing each follow-up, run the
