@@ -1568,3 +1568,42 @@
 .interview .plate-night button:focus-visible {
   outline-color: rgb(var(--cg-night-glow));
 }
+
+/* Distinctive physical features (#3739). A feature block is a short list of
+   ordinary `.stance` rows: the one-point unlock, then the three presence axes
+   it opens. `.opened` indents the axes under the unlock that paid for them, so
+   the dependency reads at a glance; `.tiers` is the bought-tier gauge, drawn
+   the way a stat row's pips are. */
+.interview .feature-buy {
+  margin: 0.35rem 0 1.1rem;
+}
+.interview .feature-buy > li.opened {
+  margin-left: 1.6rem;
+  border-left: 1px solid var(--cg-hairline);
+  padding-left: 0.8rem;
+}
+.interview .stance.ax {
+  cursor: default;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+.interview .stance.ax b {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.interview .tiers {
+  display: inline-flex;
+  gap: 0.22rem;
+}
+.interview .tiers .tier {
+  width: 0.42rem;
+  height: 0.42rem;
+  border: 1px solid var(--cg-hairline-strong);
+  border-radius: 50%;
+  display: inline-block;
+}
+.interview .tiers .tier.on {
+  background: var(--cg-accent);
+  border-color: var(--cg-accent);
+}

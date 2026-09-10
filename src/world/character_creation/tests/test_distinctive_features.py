@@ -454,3 +454,42 @@ class FeaturePaletteTests(TestCase):
         """It is reached through the widened list, never offered as a species value."""
         palette = get_cg_form_options(self.species)
         assert [o.name for o in palette[self.trait]] == ["black"]
+
+
+class MarkingDeletionRefundTests(TestCase):
+    """Deleting a marking refunds what was bought on it (#3739)."""
+
+    @classmethod
+    def setUpTestData(cls):
+        User = get_user_model()
+        cls.user = User.objects.create_user(username="markingrefund", password="pw")
+        cls.draft = CharacterDraftFactory(account=cls.user)
+        cls.opener = DistinctionFactory(
+            name="Make It Distinctive",
+            cost_per_rank=1,
+            max_rank=1,
+            taken_per_feature=True,
+            opens_feature=True,
+        )
+        cls.opener_offer = DistinctionOfferFactory(
+            distinction=cls.opener, chapter=OfferChapter.APPEARANCE, feature_rows=True
+        )
+
+    def setUp(self):
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+
+    def test_removing_the_marking_drops_the_picks_that_named_it(self):
+        marking = self.draft.markings.create(body_region="face", kind="scar", name="Seam")
+        self.draft.draft_data["distinctions"] = [
+            build_distinction_entry(
+                self.opener, offer=self.opener_offer, feature_marking=marking.pk
+            )
+        ]
+        self.draft.save()
+
+        resp = self.client.delete(f"/api/character-creation/draft-markings/{marking.pk}/")
+        assert resp.status_code == status.HTTP_204_NO_CONTENT
+
+        self.draft.refresh_from_db()
+        assert self.draft.draft_data["distinctions"] == []

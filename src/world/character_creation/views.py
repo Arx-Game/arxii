@@ -820,6 +820,19 @@ class DraftMarkingViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "You have no character draft in progress."})
         serializer.save(draft=draft)
 
+    def perform_destroy(self, instance: DraftMarking) -> None:
+        """Delete the marking, then refund whatever was bought on it (#3739).
+
+        A marking is a feature, so a player can have made it distinctive and
+        bought presence axes on it. Removing the marking removes the thing those
+        picks name, and ``reconcile_offer_picks`` is what drops them and gives the
+        points back — without this the refund would wait for the player's next
+        distinction sync, and the CG budget would read wrong until then.
+        """
+        draft = instance.draft
+        super().perform_destroy(instance)
+        reconcile_offer_picks(draft)
+
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):
     """
