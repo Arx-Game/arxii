@@ -299,7 +299,11 @@ describe('AppearanceStage (folio)', () => {
     ];
     renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
     expect(screen.getByLabelText('Describe it')).toHaveAttribute('maxlength', '120');
-    expect(screen.getByRole('button', { name: 'Unnatural' })).toBeInTheDocument();
+    const unnatural = screen.getByRole('button', { name: 'Unnatural' });
+    expect(unnatural).toBeInTheDocument();
+    // Drawn apart from the species' own values, so the point that opened it shows.
+    expect(unnatural).toHaveClass('beyond');
+    expect(screen.getByRole('button', { name: 'Black' })).not.toHaveClass('beyond');
   });
 
   it('does not mount the per-feature line as a section of its own (#3739)', () => {

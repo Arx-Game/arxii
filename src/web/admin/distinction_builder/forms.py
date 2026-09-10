@@ -18,7 +18,25 @@ class DistinctionForm(forms.ModelForm):
     exposes today - this page fully replaces that admin for authoring
     (``mutually_exclusive_with`` is rendered separately, in its own "Cannot be
     held with" module, not through ``DISTINCTION_FIELDSETS`` below).
+
+    ``cg_max_rank`` (#3739) is declared here rather than left to the ModelForm
+    default because a ``PositiveIntegerField`` with a model default is still a
+    *required* form field, and this one is blank on all but four rows: an author
+    filling in a distinction should not have to type a 0 to mean "no separate
+    character-creation cap". Blank cleans to 0, which is what the model reads as
+    "``max_rank`` applies in CG too".
     """
+
+    cg_max_rank = forms.IntegerField(
+        required=False,
+        min_value=0,
+        label="CG rank cap",
+        help_text="Blank means Ranks applies in character creation too.",
+    )
+
+    def clean_cg_max_rank(self) -> int:
+        """Blank means 0 -- the model's own "no separate CG cap" value."""
+        return self.cleaned_data.get("cg_max_rank") or 0
 
     class Meta:
         model = Distinction

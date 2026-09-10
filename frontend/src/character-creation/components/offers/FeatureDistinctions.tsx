@@ -138,7 +138,11 @@ export function FeatureDistinctions({
           const max = axis.cg_max_rank || axis.max_rank;
           return (
             <li key={axis.offer_id} className="opened">
-              <div className="stance ax" role="group" aria-label={`${axis.name} on ${featureLabel}`}>
+              <div
+                className="stance ax"
+                role="group"
+                aria-label={`${axis.name} on ${featureLabel}`}
+              >
                 <span className="dot sq" />
                 <b>
                   {axis.name}
@@ -155,15 +159,21 @@ export function FeatureDistinctions({
                   />
                 </b>
                 <span className="price">
-                  <span className="cost">
-                    {axis.cost_per_rank} {perTierWord ?? 'per tier'}
-                  </span>
                   {rank > 0 && <span className="cost">{axis.cost_per_rank * rank} spent</span>}
                 </span>
               </div>
             </li>
           );
         })}
+      {unlockRank > 0 && axes.length > 0 && (
+        // The demo prints the axis price once under the three rows, not on each
+        // (they all cost the same); a bought row still shows what it spent.
+        <li className="opened">
+          <p className="per">
+            {axes[0].cost_per_rank} {perTierWord ?? 'per tier'}
+          </p>
+        </li>
+      )}
     </ul>
   );
 }

@@ -1607,3 +1607,16 @@
   background: var(--cg-accent);
   border-color: var(--cg-accent);
 }
+.interview .per {
+  margin: 0.2rem 0 0;
+  font-family: 'Cinzel', serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cg-muted);
+}
+/* An option the species does not list, reachable only because this feature was
+   made distinctive (#3739): drawn apart so the point that opened it is visible. */
+.interview .choice-row button.beyond {
+  border-style: dashed;
+}

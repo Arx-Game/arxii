@@ -549,6 +549,9 @@ export function AppearanceStage({
             const palette = opened
               ? (t.all_options ?? t.options)
               : [...t.options, ...inheritedOptionsFor(t.trait.id)];
+            // Which of those the species does not itself list: drawn apart, so the
+            // point the player spent is visible in the row it opened (#3739).
+            const ownIds = new Set(t.options.map((o) => o.id));
             return (
               <div key={t.trait.id}>
                 <h3 className="section-h" id={`trait-${t.trait.id}`}>
@@ -558,7 +561,11 @@ export function AppearanceStage({
                 <ChoiceRow
                   labelledBy={`trait-${t.trait.id}`}
                   label={t.trait.display_name}
-                  options={palette.map((o) => ({ value: o.id, label: o.display_name }))}
+                  options={palette.map((o) => ({
+                    value: o.id,
+                    label: o.display_name,
+                    beyond: opened && !ownIds.has(o.id),
+                  }))}
                   value={getSelectedOptionId(t.trait.name)}
                   onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
                   clearable={!t.is_required}
