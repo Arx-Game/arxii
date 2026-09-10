@@ -99,7 +99,8 @@ for spec in \
   "status:spec-draft|BFD4F2|Agent drafting the spec into the issue body" \
   "status:spec-review|FBCA04|Spec on the issue; awaiting org-member approval" \
   "status:implementing|1D76DB|Spec approved; implementation in progress" \
-  "spec:approved|0E8A16|Org member approved the spec — clear to implement (members only)"; do
+  "spec:approved|0E8A16|Org member approved the spec — clear to implement (members only)" \
+  "review:evidence-required|B60205|PR must ship a validated review-evidence report before it can open/enqueue"; do
   name="${spec%%|*}"; rest="${spec#*|}"; color="${rest%%|*}"; desc="${rest##*|}"
   gh label create "$name" --color "$color" --description "$desc" --force >/dev/null 2>&1 || true
 done
@@ -112,6 +113,17 @@ for stale in status:spec-review status:implementing status:in-progress; do
   gh issue edit "$ISSUE" --remove-label "$stale" >/dev/null 2>&1 || true
 done
 gh issue edit "$ISSUE" --add-label "status:spec-draft" >/dev/null
+# Frontend work is exactly the class of issue where a defect can pass every
+# static/unit check and still not resemble the approved design (#3735/#3750
+# incident): a subagent visual reviewer was assigned to that PR and the result
+# still diverged from the spec's screenshots. open-pr.sh/enqueue-pr.sh already
+# enforce a validated evidence report, but only when `review:evidence-required`
+# is present — and nothing applied it automatically, so it depended on an agent
+# remembering to self-add it. Close that gap mechanically: any issue picked up
+# with the `frontend` label gets it applied here, not left to agent discretion.
+if grep -qx "frontend" <<<"$LABELS"; then
+  gh issue edit "$ISSUE" --add-label "review:evidence-required" >/dev/null
+fi
 
 # 5. Build slug
 TITLE=$(jq -r '.title' <<<"$ISSUE_JSON")

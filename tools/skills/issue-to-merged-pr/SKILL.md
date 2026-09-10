@@ -121,6 +121,17 @@ Await-approval, and Implementation.
   `pickup-issue.sh` + separate worktree-creation sequence. Skipping it is the #1
   cause of duplicate work (two sessions on the same issue because neither
   assigned it).
+- **`pickup-issue.sh` also auto-applies `review:evidence-required` to any issue
+  carrying the `frontend` label.** This was previously a manual, agent-discretion
+  label — the #3735/#3750 incident shipped a UI that didn't resemble its approved
+  spec despite a subagent visual reviewer being assigned, and the mechanical
+  `open-pr.sh`/`enqueue-pr.sh` evidence gate (Step 5 below) only fires when this
+  label is present. Nothing applied it automatically, so it depended on an agent
+  remembering to self-add it to its own issue — the same "agent must remember"
+  shape CLAUDE.md's Reviewer Agents section flags as the problem, not the fix.
+  Fixed at pickup time instead of left as a self-compulsion. Backend-only issues
+  still get it only by deliberate choice; extend the label check if a similar
+  recurring gap shows up there.
 - After `start-work.sh` succeeds, `cd` into the emitted `worktree_path`. **Do NOT
   use `EnterWorktree` or create another worktree** — `start-work.sh` already ran
   `git worktree add`. Using a native worktree tool on top of it recreates the
