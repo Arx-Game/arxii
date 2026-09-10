@@ -322,7 +322,7 @@ unverified from a spec's deferred list and later closed as should-not-do; the
 genuine question became #1363.) Then:
 
 ```bash
-PR_EVIDENCE_FILE="docs/reviews/<issue>-<slug>.md" \
+PR_EVIDENCE_FILE="a scratch review report" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```

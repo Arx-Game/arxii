@@ -52,13 +52,23 @@ jobs:
           body = open("/tmp/pr-body.md", encoding="utf-8").read()
           if "<!-- review-evidence-required -->" not in body:
               raise SystemExit("labeled issue requires the review-evidence-required PR marker")
-          match = re.search(r"^- Report: `([^`]+)`$", body, re.MULTILINE)
+          match = re.search(
+              r"^- Report: (?:`([^`]+)`|(https://\S+))$", body, re.MULTILINE
+          )
           if not match:
-              raise SystemExit("labeled issue requires a committed review report link")
-          print(match.group(1))
+              raise SystemExit("labeled issue requires a review report link")
+          print(match.group(1) or match.group(2))
           PY
           )
-          report_path="${report_values[0]}"
+          report_reference="${report_values[0]}"
+          if [[ "$report_reference" == https://github.com/*#issuecomment-* ]]; then
+              comment_id="${report_reference##*#issuecomment-}"
+              gh api "repos/${GITHUB_REPOSITORY}/issues/comments/${comment_id}" \
+                  --jq .body > /tmp/review-evidence.md
+              report_path=/tmp/review-evidence.md
+          else
+              report_path="$report_reference"
+          fi
           reviewed_sha="$(git rev-parse "${head_sha}^1")"
           python3 tools/validate_review_evidence.py "$report_path" \
               --revision "$reviewed_sha" --pr-body /tmp/pr-body.md

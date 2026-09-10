@@ -91,7 +91,7 @@ and fix loop, and post-merge cleanup. Multi-invocation, GitHub-as-truth. A PR
 must name a tracked evidence report; partial work uses `Refs` rather than
 silently closing its umbrella issue. See [issue-to-merged-pr/README.md](issue-to-merged-pr/README.md),
 [the design doc](issue-to-merged-pr/references/design.md), and
-[the evidence template](../../docs/reviews/review-evidence-template.md).
+[the evidence template](../../tools/skills/issue-to-merged-pr/templates/review-evidence.md).
 
 ### codebase-indexing
 

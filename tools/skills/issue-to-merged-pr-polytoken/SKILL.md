@@ -206,7 +206,7 @@ the PR) and collect the issue numbers. **Before filing each follow-up, run the
 design-open items as `needs-design` questions, not asserted work.
 
 ```bash
-PR_EVIDENCE_FILE="docs/reviews/<issue>-<slug>.md" \
+PR_EVIDENCE_FILE="a scratch review report" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```

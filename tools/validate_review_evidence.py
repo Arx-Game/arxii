@@ -50,7 +50,7 @@ def validate_pr_body(body: str, expected_issue: str | None = None) -> list[str]:
         errors.append("PR body must begin with Refs or Closes followed by an issue number")
     elif expected_issue and link.group(2) != expected_issue:
         errors.append(f"PR body links issue #{link.group(2)}, expected #{expected_issue}")
-    report = re.search(r"^- Report: `([^`]+)`$", body, re.MULTILINE)
+    report = re.search(r"^- Report: (?:`([^`]+)`|(https://\S+))$", body, re.MULTILINE)
     if report is None:
         errors.append("PR body is missing the committed review report link")
     if "## Review evidence" not in body:

@@ -28,6 +28,11 @@ class ReviewEvidenceTests(unittest.TestCase):
         errors = validate_pr_body(body, expected_issue="3731")
         self.assertIn("missing the committed review report link", " ".join(errors))
 
+    def test_pr_body_accepts_issue_comment_report_url(self) -> None:
+        body = "Refs #3750\n\n## Review evidence\n\n"
+        body += "- Report: https://github.com/Arx-Game/arxii/issues/3750#issuecomment-1\n"
+        self.assertEqual(validate_pr_body(body, expected_issue="3750"), [])
+
     def test_archived_3735_shape_is_rejected(self) -> None:
         result = subprocess.run(
             [sys.executable, str(SCRIPT), str(ROOT / "tools/tests/fixtures/pr-3735-body.md")],
