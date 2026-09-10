@@ -57,6 +57,10 @@ const hedonistic: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 const voracious: VisibleOffer = {
@@ -75,6 +79,10 @@ const voracious: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 const rouault: EnemyOffer = {
@@ -233,6 +241,10 @@ describe("FinalTouchesStage (Actor's Sheet)", () => {
       opener_key: 'reason:1',
       cost_per_rank: -5,
       effect_line: '-Daily AP',
+      taken_per_feature: false,
+      opens_feature: false,
+      requires_feature_opened: false,
+      cg_max_rank: 0,
     };
     offersResponse = { offers: [hedonistic, voracious, lightSleeper], closed: [] };
     let leave: (() => Promise<boolean>) | null = null;

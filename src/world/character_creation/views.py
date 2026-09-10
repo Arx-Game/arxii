@@ -820,6 +820,19 @@ class DraftMarkingViewSet(viewsets.ModelViewSet):
             raise ValidationError({"detail": "You have no character draft in progress."})
         serializer.save(draft=draft)
 
+    def perform_destroy(self, instance: DraftMarking) -> None:
+        """Delete the marking, then refund whatever was bought on it (#3739).
+
+        A marking is a feature, so a player can have made it distinctive and
+        bought presence axes on it. Removing the marking removes the thing those
+        picks name, and ``reconcile_offer_picks`` is what drops them and gives the
+        points back — without this the refund would wait for the player's next
+        distinction sync, and the CG budget would read wrong until then.
+        """
+        draft = instance.draft
+        super().perform_destroy(instance)
+        reconcile_offer_picks(draft)
+
 
 class CharacterDraftViewSet(viewsets.ModelViewSet):
     """
@@ -1341,6 +1354,7 @@ class FormOptionsView(APIView):
             ).values_list("trait_id", flat=True)
         )
 
+        all_options = self._all_options_payload(form_options)
         result = []
         for trait, options in form_options.items():
             result.append(
@@ -1348,6 +1362,12 @@ class FormOptionsView(APIView):
                     "trait": self._trait_payload(trait),
                     "is_required": trait.id in required_trait_ids,
                     "options": [self._option_payload(opt) for opt in options],
+                    # Every option the trait carries, palette or not (#3739). The leaf
+                    # offers these in place of ``options`` on a feature the draft has
+                    # made distinctive; ``validators._get_form_trait_errors`` is the
+                    # gate that decides whether a pick from here is actually legal, so
+                    # sending the full list is never itself permission to use it.
+                    "all_options": all_options.get(trait.id, []),
                 }
             )
 
@@ -1355,6 +1375,23 @@ class FormOptionsView(APIView):
         if draft is not None:
             payload["inherited"] = self._inherited_payload(draft, species)
         return Response(payload)
+
+    def _all_options_payload(self, form_options: dict) -> dict[int, list[dict]]:
+        """Every option of every offered trait, in one query (#3739).
+
+        Called by ``get``. The species palette narrows what a trait normally offers;
+        a feature made distinctive reaches past it to anything the trait carries,
+        the Unnatural umbrella included, so the leaf needs both lists at once.
+        """
+        if not form_options:
+            return {}
+        rows = FormTraitOption.objects.filter(trait_id__in=[t.id for t in form_options]).order_by(
+            "sort_order", "display_name"
+        )
+        out: dict[int, list[dict]] = defaultdict(list)
+        for opt in rows:
+            out[opt.trait_id].append(self._option_payload(opt))
+        return out
 
 
 class IsStaffPermission(permissions.BasePermission):

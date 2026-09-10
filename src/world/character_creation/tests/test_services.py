@@ -391,6 +391,28 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         values = {v.trait.name: v.option.name for v in true_form.values.all()}
         assert values == {"hair_color": "black", "eye_color": "blue"}
 
+    @staticmethod
+    def _make_it_distinctive_entry(trait_name: str) -> dict:
+        """A draft entry buying "Make It Distinctive" on one trait row (#3739).
+
+        The descriptor field is bought, not free: finalize writes a descriptor only
+        for a trait the draft unlocked, so a test about descriptors has to buy one.
+        """
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.types import build_distinction_entry
+
+        distinction = DistinctionFactory(
+            name="Make It Distinctive", taken_per_feature=True, opens_feature=True
+        )
+        # The entry needs a live offer or ``reconcile_offer_picks`` drops it at
+        # finalize as a pick whose last source vanished (``_drop_empty_and_reprice``).
+        offer = DistinctionOfferFactory(
+            distinction=distinction, chapter=OfferChapter.APPEARANCE, feature_rows=True
+        )
+        return build_distinction_entry(distinction, offer=offer, feature_trait=trait_name)
+
     def test_finalize_writes_cg_trait_descriptors(self):
         """CG per-trait flavor text lands on the PRIMARY persona (#2632)."""
         from world.forms.models import PersonaTraitDescriptor
@@ -407,6 +429,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             "nonexistent_trait": "ignored",
             "eye_color": "   ",
         }
+        draft.draft_data["distinctions"] = [self._make_it_distinctive_entry("hair_color")]
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
@@ -415,6 +438,28 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         row = PersonaTraitDescriptor.objects.get(persona=persona, trait=hair_trait)
         assert row.text == "onyx shot through with silver streaks"
         assert PersonaTraitDescriptor.objects.filter(persona=persona).count() == 1
+
+    def test_finalize_drops_a_descriptor_for_a_feature_never_made_distinctive(self):
+        """A descriptor is bought with the one-point unlock, never free (#3739).
+
+        Text left in ``draft_data`` for a trait whose unlock was refunded (or that
+        never had one) is dropped at finalize, so the paid field and the written
+        words cannot come apart.
+        """
+        from world.forms.models import PersonaTraitDescriptor
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+        draft.draft_data["form_traits"] = {"hair_color": option.id}
+        draft.draft_data["form_trait_descriptors"] = {"hair_color": "unpaid words"}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        persona = character.character_sheet.primary_persona
+        assert not PersonaTraitDescriptor.objects.filter(persona=persona).exists()
 
     def test_finalize_skips_form_traits_when_empty(self):
         """No true form created when form_traits is empty or missing."""

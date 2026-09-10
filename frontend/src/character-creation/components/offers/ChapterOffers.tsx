@@ -28,7 +28,7 @@ import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { useDraftOffers } from '../../queries';
 import type { CharacterDraft, ClosedDistinction, OfferChapter, VisibleOffer } from '../../types';
 import { RankControl } from './RankControl';
-import { choiceEntries } from './syncHelpers';
+import { choiceEntries, sameFeature } from './syncHelpers';
 
 interface ChapterOffersProps {
   draft: CharacterDraft;
@@ -246,9 +246,27 @@ export function ChapterOffers({
 
   const applyRank = useCallback(
     (offer: VisibleOffer, rank: number) => {
-      const base = choiceEntries(draftDistinctions).filter((e) => e.id !== offer.distinction_id);
+      // Only the plain (featureless) row for this distinction is replaced (#3739):
+      // a per-feature holding of the same distinction is a different pick, and
+      // `FeatureDistinctions` owns it.
+      const base = choiceEntries(draftDistinctions).filter(
+        (e) => !(e.id === offer.distinction_id && sameFeature(e, {}))
+      );
       const next =
-        rank > 0 ? [...base, { id: offer.distinction_id, rank, offer_id: offer.offer_id }] : base;
+        rank > 0
+          ? [
+              ...base,
+              // Explicitly featureless (#3739): every row in the payload carries
+              // the same shape, so nothing here depends on a server-side default.
+              {
+                id: offer.distinction_id,
+                rank,
+                offer_id: offer.offer_id,
+                feature_trait: '',
+                feature_marking: 0,
+              },
+            ]
+          : base;
       syncDistinctions.mutate(next);
     },
     [draftDistinctions, syncDistinctions]

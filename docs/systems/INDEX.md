@@ -775,6 +775,14 @@ rows, read through `world.character_creation.offers` (`offers_for`/`closed_for`/
   potency, #1834; `DistinctionResonanceRankThreshold` — the reverse direction, #2037; both
   sidecar models live in `world.magic` per ADR-0010 — see below and
   [distinctions.md](distinctions.md) "Distinctions grant/shape Resonance")
+- **Per-feature distinctions (#3739):** `Distinction.taken_per_feature` /
+  `opens_feature` / `requires_feature_opened` / `cg_max_rank` (`cg_ceiling`) make a
+  distinction one a character holds **once per feature** (a `FormTrait` row or a
+  `FormMarking`) rather than once. `CharacterDistinction.feature_trait` /
+  `feature_marking` name it; `world.distinctions.types.feature_key` is the key every
+  draft-entry reader uses in place of the distinction id. See
+  [distinctions.md](distinctions.md) "Distinctive features" and
+  [forms.md](forms.md) "Distinctive features".
 - **Source:** `src/world/distinctions/`
 - **Glossary:** `src/world/distinctions/AGENT_GLOSSARY.md`
 - **Details:** [distinctions.md](distinctions.md)
@@ -1005,7 +1013,10 @@ shapeshift lifecycle.
   `knows_style(sheet, option)` / `learn_style(sheet, option)` (#2632),
   `trigger_transformation(sheet, alt, *, cause, instance_value=1.0)` (the seam both non-command cause-paths call; #1604),
   `identification_difficulty(viewer_sheet, target_character)` / `attempt_identification(viewer, target, guess_name=None)` (`world/forms/services/identification.py`, #1107 slice 5 — the PC-to-PC "who's really under this mask" check; second `PersonaDiscovery` producer, see [appearance_and_identity.md](appearance_and_identity.md) §"Identification loop (slice 5)"),
-  `grant_marking(sheet, ...)` / `visible_markings_for(character, observer)` (`world/forms/services/markings.py`, #2985 — the marking write seam + the observer-filtered read behind look's "Markings:" line and `GET /api/items/visible-markings/`)
+  `grant_marking(sheet, ...)` / `visible_markings_for(character, observer)` (`world/forms/services/markings.py`, #2985 — the marking write seam + the observer-filtered read behind look's "Markings:" line and `GET /api/items/visible-markings/`),
+  `get_cg_form_options(species)` (the CG palette: species `allowed_options`, minus each
+  trait's `unnatural_option` — the off-species umbrella a distinctive feature reaches
+  past it to, #3739; see forms.md "Distinctive features")
 - **Key Exceptions:** `RevertBlockedError`, `AlternateSelfActiveError`, `FormOwnershipError`,
   `TraitNotBlendableError`, `StyleNotKnownError` (#2632; items-side wrappers
   `BlendNotSupported` / `StyleNotKnown` / `StyleChoiceRequired` on `use_item`)

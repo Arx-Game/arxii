@@ -1,5 +1,27 @@
 # Character Creation & Identity
 
+## Built (2026-09-10, #3739: distinctive physical features)
+
+A feature is any trait row or any marking, species-required markers included.
+One CG point on "Make It Distinctive" opens that feature's description, widens
+its palette to every option the trait carries (including a new off-species
+"Unnatural" umbrella on hair, eyes and skin), and puts Alluring, Menacing and
+Regal up for sale on it at 2 a tier for +2 a tier, up to three tiers in
+character creation and five in play. A marking's name and description stay free,
+so the point buys only its axes. Mechanically a distinction can now be held once
+per feature (`taken_per_feature`), so `CharacterDistinction` names the feature and
+every draft-entry reader keys by `(distinction, feature)`. Regal is bound at last,
+to a newly seeded Command check (presence + Leadership), which also wakes the item
+accent that has been dormant since #2886. A bonus travels with visibility: a
+marking-bound modifier drops out while the worn layers cover its region. "In your
+own words" is gone. Migration 0117. See ADR-0287,
+[distinctions.md](../systems/distinctions.md)'s "Distinctive features" and
+[forms.md](../systems/forms.md)'s "Distinctive features".
+
+**Still open:** the axis magnitudes and the four rows' prose are PLACEHOLDER,
+authored over by the reviewer's own catalogue pass; and in-play enhancement above
+tier 3 has a ceiling (`max_rank` 5) but no purchase path yet.
+
 ## Built (2026-09-08, #3709: offers hang off the question and the reason)
 
 Every chapter's offer line now names what opens it, and the leaf groups by it:

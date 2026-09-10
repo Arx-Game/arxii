@@ -8,7 +8,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0116_nominations_replace_weekly_votes"),
+        ("arxii", "0117_distinctive_features"),
     ]
 
     operations = [

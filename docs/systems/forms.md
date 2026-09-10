@@ -31,7 +31,7 @@ from world.forms.models import (
 |-------|---------|------------|
 | `HeightBand` | Height ranges mapping to descriptive bands; `CreditedContent` because `cg_hint` is player-facing prose (#3675) | `name`, `display_name`, `min_inches`, `max_inches`, `weight_min`, `weight_max`, `is_cg_selectable`, `cg_hint` (staff copy shown on the CG option, e.g. what opens a band players cannot normally take), `hide_build`, `sort_order`, `written_by`, `written_on`, `reviewed_by`, `reviewed_on` |
 | `Build` | Body type with weight calculation factor | `name`, `display_name`, `weight_factor` (Decimal), `is_cg_selectable`, `sort_order` |
-| `FormTrait` | Physical characteristic type (e.g., hair_color) | `name`, `display_name`, `trait_type` (TraitType), `sort_order` |
+| `FormTrait` | Physical characteristic type (e.g., hair_color) | `name`, `display_name`, `trait_type` (TraitType), `sort_order`, `composite_option` (the blend umbrella, #2632), `unnatural_option` (the off-species umbrella, #3739 — never in a CG palette, see below) |
 | `FormTraitOption` | Valid value for a trait (e.g., "black" for hair_color) | `trait` (FK), `name`, `display_name`, `height_modifier_inches` (nullable), `sort_order` |
 | `SpeciesFormTrait` | Links species to available traits/options in CG | `species` (FK), `trait` (FK), `is_available_in_cg`, `is_required` (species identity marker, #2815), `allowed_options` (M2M, empty = all) |
 
@@ -121,7 +121,8 @@ switch_form(character, target_form)  # Raises FormOwnershipError if wrong charac
 # Revert to true form
 revert_to_true_form(character)
 
-# Get CG options for a species (respects SpeciesFormTrait restrictions)
+# Get CG options for a species (respects SpeciesFormTrait restrictions, and
+# always excludes the trait's `unnatural_option` — #3739)
 options = get_cg_form_options(species)
 # Returns: dict[FormTrait, list[FormTraitOption]]
 
@@ -335,3 +336,40 @@ All models registered with appropriate filters, search, and inline editing:
 - **`CharacterFormAdmin`** - Inline `CharacterFormValueInline` with autocomplete fields.
 - **`CharacterFormStateAdmin`** - Simple list of character-to-active-form mappings.
 - **`TemporaryFormChangeAdmin`** - Filtered by source type and duration type.
+
+---
+
+## Distinctive features (#3739)
+
+A **feature** is any trait row or any marking, species-required markers included.
+Spending one CG point on the `opens_feature` distinction ("Make It Distinctive")
+makes one feature distinctive, which does three things to that feature and no
+other:
+
+1. **Widens its palette.** `get_cg_form_options` narrows a trait to the species'
+   `allowed_options` and always drops the trait's `unnatural_option`; a
+   distinctive trait reaches past both, to every option the trait carries. The
+   gate is `character_creation.validators._get_form_trait_errors`, which skips
+   the palette-legality check for a trait named by an `opens_feature` entry in
+   the draft. The Appearance leaf reads the same widened list from the
+   form-options view's `all_options`, and draws the values the species does not
+   itself list apart from the ones it does.
+2. **Opens its description.** `PersonaTraitDescriptor` is written at finalize
+   only for a trait the draft made distinctive; a marking's own name and
+   description were always free and are unaffected.
+3. **Opens the presence axes.** Alluring, Menacing and Regal
+   (`requires_feature_opened`) may then be bought on that feature, in any
+   combination, at up to `cg_max_rank` tiers in character creation.
+
+`FormTrait.unnatural_option` is the umbrella value for a colour no species
+carries — the same honest-under-concealment shape as `composite_option`
+("multihued", "mismatched"): a viewer who cannot make out the detail still gets
+one true word. Seeded on hair colour, eye colour and skin tone.
+
+**A bonus travels with visibility.** `mechanics.services.get_modifier_breakdown`
+drops a modifier whose `CharacterDistinction` names a `FormMarking` while the
+worn layers cover that marking's region (`items.services.appearance.covered_regions`,
+zero queries). The scar that makes you menacing does nothing under a sleeve.
+Trait features have no covering rule today — nothing in the form layer conceals a
+trait row, and descriptor concealment hides the player's *words* about a trait,
+never the trait itself — so that is the seam a future covering rule extends.

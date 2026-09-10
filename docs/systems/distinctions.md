@@ -66,13 +66,51 @@ branches on `target.category.name`:
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
+| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`), `feature_trait` / `feature_marking` (the one feature a per-feature distinction names, #3739 — at most one is ever set) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character` (FK → `character_sheets.CharacterSheet`), `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
 
 Both `character` FKs point at **`CharacterSheet`**, not `ObjectDB` (#2608 — the first
 re-point in the ObjectDB FK audit). `CharacterSheet.pk ==
 ObjectDB.pk` (primary-key O2O), so the change was a pure `AlterField`. Read
 `character_distinction.character` and get the sheet directly — no `.sheet_data` hop.
+
+Since #3739 a distinction can be held **once per feature** rather than once per
+character (`Distinction.taken_per_feature`). The old
+`unique_together(character, distinction)` is therefore gone, replaced by three
+conditional unique constraints — one plain row per distinction when it names no
+feature, one row per distinction per trait, one per distinction per marking — plus
+a check constraint that a row never names both a trait and a marking. See
+"Distinctive features" below.
+
+---
+
+## Distinctive features — a distinction held per feature (#3739)
+
+Four flags on `Distinction` carry the shape:
+
+| Field | Meaning |
+|-------|---------|
+| `taken_per_feature` | Held once per feature (a trait row or a marking), not once per character. Offered on every feature row of the Appearance chapter, via a `DistinctionOffer` whose opener is `feature_rows` rather than a section. |
+| `opens_feature` | The one-point "Make It Distinctive" pick. Holding it on a feature opens that feature's description, every option of its trait, and the axis rows. |
+| `requires_feature_opened` | May be held on a feature only where an `opens_feature` row is held on the same feature: the Alluring / Menacing / Regal axes. |
+| `cg_max_rank` | The rank ceiling character creation applies when lower than `max_rank` (`Distinction.cg_ceiling`). The axes reach 5 in play and stop at 3 in CG. |
+
+Because a per-feature distinction is held several times over, the draft entry list
+is keyed by **`world.distinctions.types.feature_key`** — `(distinction_id, trait
+name, draft marking id)` — everywhere it used to be keyed by distinction id:
+`offers.offers_for`, `reconcile_offer_picks`, the sync endpoint's merge, the CG
+point preview, and `_create_distinctions` at finalize. A distinction that is not
+per-feature keys as `(id, "", 0)` and behaves exactly as it did before.
+
+Two refunds keep a pick from outliving what it names, both through
+`reconcile_offer_picks` (`offers._drop_vanished_features`): dropping the unlock
+drops the axes bought under it, and deleting a marking drops everything bought on
+it (the draft-marking viewset's `perform_destroy` reconciles, so the budget is
+right immediately rather than at the next sync).
+
+The three axes are the same `ModifierTarget` rows item accents use (#2886), so a
+feature and a garment push on one number. A feature is worth more on purpose: an
+accent rung is +1, a feature tier is +2.
 
 ---
 

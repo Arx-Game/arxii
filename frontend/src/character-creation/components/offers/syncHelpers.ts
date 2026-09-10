@@ -39,7 +39,33 @@ export function choiceEntries(
   for (const entry of entries ?? []) {
     const offerId = choiceOfferId(entry);
     if (offerId === undefined) continue;
-    result.push({ id: entry.distinction_id, rank: entry.rank, offer_id: offerId });
+    result.push({
+      id: entry.distinction_id,
+      rank: entry.rank,
+      offer_id: offerId,
+      // #3739: the feature travels with the row, so resending another block's
+      // picks never strips "Alluring on your scar" down to a plain "Alluring".
+      feature_trait: entry.feature_trait ?? '',
+      feature_marking: entry.feature_marking ?? 0,
+    });
   }
   return result;
+}
+
+/**
+ * The feature a row is aimed at, normalized (#3739): `['', 0]` for every
+ * distinction that is not taken per feature. Used to tell two rows of one
+ * distinction apart, in the same shape the server's `feature_key` uses.
+ */
+export type FeatureRef = { feature_trait?: string; feature_marking?: number };
+
+export function featureKey(ref: FeatureRef): [string, number] {
+  return [ref.feature_trait ?? '', ref.feature_marking ?? 0];
+}
+
+/** Whether two rows name the same feature. */
+export function sameFeature(a: FeatureRef, b: FeatureRef): boolean {
+  const [at, am] = featureKey(a);
+  const [bt, bm] = featureKey(b);
+  return at === bt && am === bm;
 }
