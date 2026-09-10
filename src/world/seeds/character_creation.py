@@ -375,9 +375,7 @@ CG_EXPLANATION_COPY: dict[str, str] = {
     # its description; a marking's name and description were always free), and the
     # axis price word. PLACEHOLDER prose, authored over by staff.
     "appearance_make_distinctive": "Make it distinctive",
-    "appearance_make_distinctive_why": (
-        "any colour, a description, and what people feel about it"
-    ),
+    "appearance_make_distinctive_why": ("any colour, a description, and what people feel about it"),
     "appearance_marking_distinctive_why": "what people feel about it",
     "appearance_per_tier": "per tier",
     "identity_name_heading": "Name",

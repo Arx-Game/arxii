@@ -754,11 +754,7 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                 continue
             if (entry["feature_trait"], entry["feature_marking"]) not in opened:
                 raise ValidationError(
-                    {
-                        "detail": (
-                            f"{distinction.name} needs that feature made distinctive first."
-                        )
-                    }
+                    {"detail": (f"{distinction.name} needs that feature made distinctive first.")}
                 )
 
     def _validate_bulk_exclusions(self, distinctions: list[Distinction]) -> None:

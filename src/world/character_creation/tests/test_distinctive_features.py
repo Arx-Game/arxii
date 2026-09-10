@@ -25,14 +25,14 @@ from world.character_creation.offers import (
     opened_feature_traits,
     reconcile_offer_picks,
 )
-from world.distinctions.factories import DistinctionFactory
-from world.distinctions.types import build_distinction_entry
 from world.character_creation.services import finalize_character
 from world.character_creation.tests.finalization_fixtures import (
     DEFAULT_STATS,
     FinalizationTestMixin,
 )
 from world.character_creation.validators import _get_form_trait_errors
+from world.distinctions.factories import DistinctionFactory
+from world.distinctions.types import build_distinction_entry
 from world.forms.factories import FormTraitFactory, FormTraitOptionFactory
 from world.forms.models import SpeciesFormTrait
 from world.forms.services import get_cg_form_options
@@ -130,9 +130,7 @@ class FeatureOfferTests(TestCase):
         """Refund the unlock and the axes bought under it go with it (#3739)."""
         draft = self._draft(
             distinctions=[
-                self._entry(
-                    self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer
-                )
+                self._entry(self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer)
             ]
         )
         changed = reconcile_offer_picks(draft)
@@ -144,9 +142,7 @@ class FeatureOfferTests(TestCase):
         draft = self._draft(
             distinctions=[
                 self._entry(self.opener, trait="hair_color"),
-                self._entry(
-                    self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer
-                ),
+                self._entry(self.alluring, trait="hair_color", rank=2, offer=self.alluring_offer),
             ]
         )
         reconcile_offer_picks(draft)
@@ -325,9 +321,7 @@ class FeatureFinalizeTests(FinalizationTestMixin, TestCase):
         self.account = AccountDB.objects.create(username="featurefinalize")
         self._setup_finalization_base(self, prefix="Feature Test", height_min=700, height_max=800)
         self.trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
-        self.option = FormTraitOptionFactory(
-            trait=self.trait, name="black", display_name="Black"
-        )
+        self.option = FormTraitOptionFactory(trait=self.trait, name="black", display_name="Black")
         self.opener = DistinctionFactory(
             name="Make It Distinctive",
             cost_per_rank=1,
@@ -410,9 +404,7 @@ class FeaturePaletteTests(TestCase):
         cls.account = AccountFactory()
         cls.species = Species.objects.create(name="Palette Test Species")
         cls.trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
-        cls.allowed = FormTraitOptionFactory(
-            trait=cls.trait, name="black", display_name="Black"
-        )
+        cls.allowed = FormTraitOptionFactory(trait=cls.trait, name="black", display_name="Black")
         cls.unnatural = FormTraitOptionFactory(
             trait=cls.trait, name="unnatural", display_name="Unnatural"
         )

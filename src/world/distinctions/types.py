@@ -70,11 +70,17 @@ def feature_key(entry: DraftDistinctionEntry) -> FeatureKey:
     key degenerates to ``(distinction_id, "", 0)`` and behaves exactly as the
     pre-#3739 ``distinction_id`` key did.
     """
-    return (
-        entry["distinction_id"],
-        entry.get("feature_trait") or "",
-        entry.get("feature_marking") or 0,
-    )
+    trait, marking = feature_of(entry)
+    return (entry["distinction_id"], trait, marking)
+
+
+def feature_of(entry: DraftDistinctionEntry) -> tuple[str, int]:
+    """Just the feature half of ``feature_key``: ``("", 0)`` when there is none.
+
+    Kept separate because most callers compare features, not whole keys: "is this
+    entry on the feature I am rendering", "which features has the draft opened".
+    """
+    return (entry.get("feature_trait") or "", entry.get("feature_marking") or 0)
 
 
 def build_distinction_entry(  # noqa: PLR0913 - one builder for every draft entry shape

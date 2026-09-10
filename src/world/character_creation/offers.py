@@ -34,7 +34,7 @@ from world.distinctions.models import Distinction, DistinctionEffect
 from world.distinctions.types import (
     DraftDistinctionEntry,
     build_distinction_entry,
-    feature_key,
+    feature_of,
 )
 
 if TYPE_CHECKING:
@@ -681,7 +681,7 @@ def opened_features(draft_data: dict) -> set[tuple[str, int]]:
     )
     if not opens:
         return set()
-    return {feature_key(e)[1:] for e in entries if e.get("distinction_id") in opens}
+    return {feature_of(e) for e in entries if e.get("distinction_id") in opens}
 
 
 def opened_feature_traits(draft_data: dict) -> set[str]:
@@ -713,7 +713,7 @@ def _drop_vanished_features(
     then leaves alone; the returned names go into the caller's changed list so
     the player is told what the change cost them.
     """
-    feature_entries = [e for e in entries if feature_key(e)[1:] != ("", 0)]
+    feature_entries = [e for e in entries if feature_of(e) != ("", 0)]
     if not feature_entries:
         return entries, []
 
@@ -724,14 +724,12 @@ def _drop_vanished_features(
     opens = {did for did, o, _ in flags if o}
     needs_open = {did for did, _, r in flags if r}
 
-    opened_features = {
-        feature_key(e)[1:] for e in feature_entries if e["distinction_id"] in opens
-    }
+    opened_features = {feature_of(e) for e in feature_entries if e["distinction_id"] in opens}
 
     kept: list[DraftDistinctionEntry] = []
     changed: list[str] = []
     for entry in entries:
-        feature = feature_key(entry)[1:]
+        feature = feature_of(entry)
         marking_id = feature[1]
         if marking_id and marking_id not in live_marking_ids:
             changed.append(entry["distinction_name"])
@@ -790,7 +788,7 @@ def reconcile_offer_picks(draft: CharacterDraft) -> list[str]:
     # Carried and bundled offers are never per-feature (#3739), so they index by
     # distinction alone -- and must never match a per-feature entry, which would let
     # a bundled grant reprice "Alluring on your scar" to the bundle's free price.
-    by_dist = {e["distinction_id"]: e for e in entries if feature_key(e)[1:] == ("", 0)}
+    by_dist = {e["distinction_id"]: e for e in entries if feature_of(e) == ("", 0)}
     carried = _carried_offer(draft)
     carried_key = f"state:{carried[0].state}" if carried else None
 

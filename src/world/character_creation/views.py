@@ -1385,9 +1385,9 @@ class FormOptionsView(APIView):
         """
         if not form_options:
             return {}
-        rows = FormTraitOption.objects.filter(
-            trait_id__in=[t.id for t in form_options]
-        ).order_by("sort_order", "display_name")
+        rows = FormTraitOption.objects.filter(trait_id__in=[t.id for t in form_options]).order_by(
+            "sort_order", "display_name"
+        )
         out: dict[int, list[dict]] = defaultdict(list)
         for opt in rows:
             out[opt.trait_id].append(self._option_payload(opt))

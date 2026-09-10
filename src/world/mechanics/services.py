@@ -279,9 +279,7 @@ def _visible_feature_modifiers(character, modifiers: list) -> list:
     this is the seam it extends.
     """
     marking_rows = [m for m in modifiers if m.source.character_distinction_id]
-    marking_rows = [
-        m for m in marking_rows if m.source.character_distinction.feature_marking_id
-    ]
+    marking_rows = [m for m in marking_rows if m.source.character_distinction.feature_marking_id]
     if not marking_rows:
         return modifiers
 
