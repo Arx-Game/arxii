@@ -321,6 +321,7 @@ export function GameWindow({
             )}
             {!referenceLoading && !referenceUnavailable && (
               <ThreadedNarrativeReader
+                key={sceneFeed.sceneId}
                 sceneId={sceneFeed.sceneId}
                 conversationKey={sceneFeed.sceneId}
                 interactions={sceneFeed.interactions}

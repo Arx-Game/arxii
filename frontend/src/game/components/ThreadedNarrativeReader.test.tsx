@@ -87,4 +87,44 @@ describe('ThreadedNarrativeReader', () => {
     expect(screen.getByText('newer root')).toBeInTheDocument();
     expect(screen.queryByText('older root')).not.toBeInTheDocument();
   });
+
+  it("re-derives the default collapse state on a scene change instead of carrying over the previous scene's stale collapsed set", () => {
+    // Mirrors GameWindow.tsx's actual mount: `key={sceneFeed.sceneId}` on the
+    // same element as `conversationKey={sceneFeed.sceneId}`, so switching
+    // scenes forces React to unmount/remount this component (fresh
+    // `collapsed`/`storedAnchorState` initializers) rather than reusing one
+    // instance across scenes. Without that `key`, the old scene's `collapsed`
+    // Set (full of the OLD scene's thread keys) would survive into the new
+    // scene, where none of those keys match the new scene's groups — so
+    // every thread in the new scene would silently render expanded.
+    const { rerender } = render(
+      <ThreadedNarrativeReader
+        key="scene:1"
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'scene1 older', 'thread-a'),
+          interaction(2, 'scene1 newer', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    expect(screen.getByText('scene1 newer')).toBeInTheDocument();
+    expect(screen.queryByText('scene1 older')).not.toBeInTheDocument();
+
+    rerender(
+      <ThreadedNarrativeReader
+        key="scene:2"
+        sceneId="2"
+        conversationKey="scene:2"
+        interactions={[
+          interaction(1, 'scene2 older', 'thread-x'),
+          interaction(2, 'scene2 newer', 'thread-y'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    expect(screen.getByText('scene2 newer')).toBeInTheDocument();
+    expect(screen.queryByText('scene2 older')).not.toBeInTheDocument();
+  });
 });
