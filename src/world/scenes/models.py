@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
+from uuid import uuid4
 
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
@@ -939,6 +940,57 @@ class BlockContactFlag(SharedMemoryModel):
         return f"contact-flag: {self.blocked_account_id} → {self.blocker_account_id}"
 
 
+class InteractionThread(SharedMemoryModel):
+    """A flat conversation membership container for narrative interactions."""
+
+    class HolderKind(models.TextChoices):
+        SCENE = "scene", "Scene"
+        PLACE = "place", "Place"
+        WHISPER = "whisper", "Whisper"
+
+    id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    parent = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="child_threads",
+    )
+    holder_kind = models.CharField(max_length=20, choices=HolderKind.choices)
+    holder_id = models.PositiveBigIntegerField(null=True, blank=True)
+    room_id = models.PositiveBigIntegerField(null=True, blank=True)
+    scene_id = models.PositiveBigIntegerField(null=True, blank=True)
+    party_key = models.TextField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(holder_kind="scene")
+                    & Q(holder_id__isnull=False)
+                    & Q(scene_id__isnull=False)
+                    & Q(room_id__isnull=True)
+                    & Q(party_key__isnull=True)
+                )
+                | (
+                    Q(holder_kind="place")
+                    & Q(holder_id__isnull=False)
+                    & Q(room_id__isnull=False)
+                    & Q(party_key__isnull=True)
+                )
+                | (
+                    Q(holder_kind="whisper")
+                    & Q(holder_id__isnull=True)
+                    & Q(room_id__isnull=True)
+                    & Q(scene_id__isnull=True)
+                    & Q(party_key__isnull=False)
+                ),
+                name="interaction_thread_holder_shape",
+            )
+        ]
+
+
 class Interaction(SharedMemoryModel):
     """An atomic IC interaction — one writer, one piece of content, one audience.
 
@@ -947,6 +999,13 @@ class Interaction(SharedMemoryModel):
     recording. Scenes are optional containers; interactions exist independently.
     """
 
+    thread = models.ForeignKey(
+        "arxii.InteractionThread",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="interactions",
+    )
     persona = models.ForeignKey(
         Persona,
         on_delete=models.PROTECT,

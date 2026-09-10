@@ -19,6 +19,7 @@ from world.scenes.factories import (
 )
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_services import push_interaction
+from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver
 
 
@@ -170,7 +171,6 @@ class TestPoseActionWithTargets(TestCase):
 
     def test_pose_with_place_creates_place_interaction(self) -> None:
         from actions.definitions.communication import PoseAction
-        from world.scenes.models import Interaction
 
         room = ObjectDBFactory(
             db_key="Hall",
@@ -277,3 +277,35 @@ class TestTabletalkCommand(TestCase):
         cmd.func()
 
         assert any("Tabletalk what?" in str(m) for m in messages)
+
+
+class TestInteractionThreadModel(TestCase):
+    """Interaction threads are nullable flat membership containers."""
+
+    def test_interaction_thread_membership_and_set_null(self) -> None:
+        interaction = InteractionFactory()
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=7,
+            scene_id=7,
+        )
+        interaction.thread = thread
+        interaction.save(update_fields=["thread"])
+
+        interaction.refresh_from_db()
+        assert interaction.thread_id == thread.pk
+
+        thread.delete()
+        thread_id = (
+            Interaction.objects.filter(pk=interaction.pk).values_list("thread_id", flat=True).get()
+        )
+        assert thread_id is None
+
+    def test_thread_parent_is_optional(self) -> None:
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.WHISPER,
+            party_key="3,7",
+        )
+
+        assert thread.parent_id is None
+        assert thread.pk is not None
