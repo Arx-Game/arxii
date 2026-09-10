@@ -567,13 +567,15 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 ### Play API (narrative reader) (#3759)
 
-Read-only reader contracts for the play-history workspace (`src/world/scenes/play_views.py`).
-All six endpoints require authentication (`IsAuthenticated`) and read from the same authorized
-`Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to` (via
-`InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and block/mute
-rules) — so this surface introduces no separate visibility rule. Cursor-paginated endpoints use
-an opaque base64 `(timestamp, id)` boundary token (`before`/`after`) rather than offset
-pagination.
+Reader contracts for the play-history workspace (`src/world/scenes/play_views.py`). All six
+endpoints require authentication (`IsAuthenticated`). Five of the six read from the same
+authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to`
+(via `InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and
+block/mute rules) — so this surface introduces no separate visibility rule for them.
+`POST /api/play/read/` is the exception: it doesn't gate reads at all — it privately records this
+account's own read state and is never serialized to any other viewer (see its entry below).
+Cursor-paginated endpoints use an opaque base64 `(timestamp, id)` boundary token (`before`/`after`)
+rather than offset pagination.
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.

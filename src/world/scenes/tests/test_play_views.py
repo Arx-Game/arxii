@@ -36,18 +36,55 @@ class PlayReaderContractTests(APITestCase):
         self.assertEqual(response.json()["detail"], "This pose is no longer available.")
 
     def test_context_includes_surrounding_cursors(self) -> None:
+        """The +-25 pose window must be genuinely bounded, not just present.
+
+        With only a handful of interactions, the whole set fits inside the
+        +-25 window and `before`/`after` are always `None` regardless of
+        whether the boundary math is right -- `assertIn` alone would pass
+        for a broken view that hardcodes `{"before": None, "after": None}`
+        (reviewer finding on 2028a0af7). Use enough rows that the target has
+        genuine earlier AND later poses beyond the window, then decode each
+        cursor the same way `_page()` does (base64 + json, see its own
+        boundary-parsing code) and assert it names the EXACT boundary row's
+        (timestamp, id) pair -- not merely a non-null string.
+        """
         account = AccountFactory()
         self.client.force_authenticate(user=account)
         scene = SceneFactory()
-        interactions = [InteractionFactory(scene=scene) for _ in range(5)]
-        target = interactions[2]
+        interactions = [InteractionFactory(scene=scene) for _ in range(60)]
+        target = interactions[30]
+
         response = self.client.get(
             "/api/play/context/",
             {"id": target.pk, "timestamp": target.timestamp.isoformat()},
         )
         data = response.json()
-        self.assertIn("before", data)
-        self.assertIn("after", data)
+        self.assertIsNotNone(data["before"])
+        self.assertIsNotNone(data["after"])
+
+        def _decode(token: str) -> list:
+            padded = token + "=" * (-len(token) % 4)
+            return json.loads(base64.urlsafe_b64decode(padded).decode())
+
+        # Window is rows[5:56] (start = max(0, 30-25) = 5, end = 30+26 = 56,
+        # of 60 rows): `before` must decode to row 5's boundary, `after` to
+        # row 55's. Fetch the served (DRF-rendered) timestamps from
+        # `/api/play/poses/` rather than reformatting `.isoformat()` by hand,
+        # since that rendering is exactly what `_cursor()` encodes.
+        poses_by_id = {
+            row["id"]: row["timestamp"]
+            for row in self.client.get("/api/play/poses/").json()["results"]
+        }
+        expected_before_row = interactions[5]
+        expected_after_row = interactions[55]
+        self.assertEqual(
+            _decode(data["before"]),
+            [poses_by_id[expected_before_row.pk], expected_before_row.pk],
+        )
+        self.assertEqual(
+            _decode(data["after"]),
+            [poses_by_id[expected_after_row.pk], expected_after_row.pk],
+        )
 
 
 class PlayReadViewTests(APITestCase):
