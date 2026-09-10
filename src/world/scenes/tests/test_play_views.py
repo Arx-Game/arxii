@@ -35,6 +35,20 @@ class PlayReaderContractTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(response.json()["detail"], "This pose is no longer available.")
 
+    def test_context_includes_surrounding_cursors(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interactions = [InteractionFactory(scene=scene) for _ in range(5)]
+        target = interactions[2]
+        response = self.client.get(
+            "/api/play/context/",
+            {"id": target.pk, "timestamp": target.timestamp.isoformat()},
+        )
+        data = response.json()
+        self.assertIn("before", data)
+        self.assertIn("after", data)
+
 
 class PlayReadViewTests(APITestCase):
     def test_marks_poses_read(self) -> None:

@@ -565,6 +565,39 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 `combat_risk_level` is computed from the row's own target persona — mirroring the primary-request field — so additional targets of a hostile AOE cast receive the same combat-risk warning in `ConsentPrompt` as the primary target does (#1259).
 
+### Play API (narrative reader) (#3759)
+
+Read-only reader contracts for the play-history workspace (`src/world/scenes/play_views.py`).
+All six endpoints require authentication (`IsAuthenticated`) and read from the same authorized
+`Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to` (via
+`InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and block/mute
+rules) — so this surface introduces no separate visibility rule. Cursor-paginated endpoints use
+an opaque base64 `(timestamp, id)` boundary token (`before`/`after`) rather than offset
+pagination.
+
+- `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
+  whisper/OOC-channel grouping), cursor-paginated 30/page.
+- `GET /api/play/threads/` (#3759) - Server-grouped, cursor-paginated (20/page) thread summaries
+  for one `conversation`, each carrying a per-account unread count via
+  `read_state_services.has_read`.
+- `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
+  (`InteractionListSerializer`), cursor-paginated 100/page.
+- `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose
+  reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
+  page further in either direction without re-deriving the boundary. A missing or unauthorized
+  reference returns an identical 404 (`"This pose is no longer available."`) — the two are never
+  distinguished.
+- `GET /api/play/search/` (#3759) - Case-insensitive substring search over authorized,
+  already-rendered content. Requires a 2-200 character query AND at least one of `conversation`/
+  `kind`/`from`/`to`/`until`/`participant` (an unbounded scan is rejected with 400); cursor-paginated
+  30/page.
+- `POST /api/play/read/` (#3759) - Marks up to `MAX_POSES_PER_BATCH` (100) `{id, timestamp}` pose
+  references read for the calling account (`read_state_services.mark_poses_read`), creating a
+  private `InteractionReadReceipt` per pose. Idempotent — already-read poses are silently skipped,
+  not errors. Not visibility-gated itself (a read receipt is a private per-account marker never
+  serialized to any other viewer); callers are expected to only mark poses they were actually
+  shown.
+
 ---
 
 ## Scene Administration (#1445)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import json
 from typing import Any
 
@@ -36,6 +36,21 @@ def _row_key(row: dict[str, Any]) -> tuple[str, int]:
     """Return the stable pose boundary for either a pose or summary row."""
     pose = row.get("latestVisiblePose") or row.get("pose") or row
     return str(pose["timestamp"]), int(pose["id"])
+
+
+def _same_instant(recorded: Any, requested: str) -> bool:
+    """Compare a served row timestamp against a client-supplied one by value.
+
+    The served value is DRF's ISO-8601 rendering (``Z`` suffix for UTC); a
+    caller round-tripping a Python ``datetime.isoformat()`` string instead
+    sends the ``+00:00`` spelling of the same instant. Raw string equality
+    spuriously rejects that match, so parse both sides before comparing.
+    Falls back to string equality for a value neither side can parse.
+    """
+    try:
+        return datetime.fromisoformat(str(recorded)) == datetime.fromisoformat(requested)
+    except ValueError:
+        return str(recorded) == requested
 
 
 def _cursor(row: dict[str, Any]) -> str:
@@ -214,10 +229,18 @@ class PlayContextView(APIView):
         for index, row in enumerate(rows):
             if str(row["id"]) != pose_id:
                 continue
-            if pose_timestamp and str(row["timestamp"]) != pose_timestamp:
+            if pose_timestamp and not _same_instant(row["timestamp"], pose_timestamp):
                 continue
+            start = max(0, index - 25)
+            end = index + 26
+            window = rows[start:end]
             return Response(
-                {"results": rows[max(0, index - 25) : index + 26], "threadId": row.get("thread_id")}
+                {
+                    "results": window,
+                    "threadId": row.get("thread_id"),
+                    "before": _cursor(window[0]) if start > 0 and window else None,
+                    "after": _cursor(window[-1]) if end < len(rows) and window else None,
+                }
             )
         # Do not distinguish an unauthorized reference from a missing one.
         return Response({"detail": "This pose is no longer available."}, status=404)
