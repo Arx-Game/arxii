@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Validate committed review evidence required before opening a pull request."""
 
 from __future__ import annotations
