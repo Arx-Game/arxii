@@ -32,6 +32,9 @@ jobs:
           body = event["pull_request"].get("body") or ""
           with open("/tmp/pr-body.md", "w", encoding="utf-8") as stream:
               stream.write(body)
+          if "<!-- review-evidence-required -->" not in body:
+              print("SKIP")
+              raise SystemExit(0)
           match = re.search(r"^(?:Refs|Closes) #([0-9]+)$", body, re.MULTILINE)
           if not match:
               raise SystemExit("PR body must link an issue with Refs or Closes")
@@ -39,6 +42,10 @@ jobs:
           print(event["pull_request"]["head"]["sha"])
           PY
           )
+          if [[ "${values[0]}" == "SKIP" ]]; then
+              echo "review evidence not required for this PR"
+              exit 0
+          fi
           issue_number="${values[0]}"
           head_sha="${values[1]}"
           labels="$(gh api "repos/${GITHUB_REPOSITORY}/issues/${issue_number}/labels" --paginate --jq '.[].name')"
