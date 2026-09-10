@@ -23,8 +23,11 @@ from world.scenes.factories import (
     PlacePresenceFactory,
     SceneFactory,
 )
-from world.scenes.interaction_serializers import InteractionListSerializer
-from world.scenes.interaction_services import push_interaction
+from world.scenes.interaction_serializers import (
+    InteractionListSerializer,
+    ReplyTargetSerializer,
+)
+from world.scenes.interaction_services import create_interaction, push_interaction
 from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import (
@@ -76,6 +79,20 @@ class TestSerializerNewFields(TestCase):
     def test_target_persona_ids(self) -> None:
         data = InteractionListSerializer(self.interaction).data
         assert self.target_persona.pk in data["target_persona_ids"]
+
+    def test_thread_id_is_serialized(self) -> None:
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=11,
+            scene_id=11,
+        )
+        self.interaction.thread = thread
+        self.interaction.save(update_fields=["thread"])
+
+        data = InteractionListSerializer(self.interaction).data
+
+        assert data["thread_id"] == str(thread.pk)
+        assert data["reply_to"] is None
 
     def test_no_place_returns_none(self) -> None:
         interaction = InteractionFactory(persona=self.writer_persona)
@@ -331,11 +348,12 @@ class TestInteractionThreadAssignment(TestCase):
         target = InteractionFactory(scene=scene, writer_account=account)
         first_reply = InteractionFactory(scene=scene, writer_account=account)
 
-        thread = assign_interaction_thread(
+        assignment = assign_interaction_thread(
             interaction=first_reply,
             reply_target=ReplyTarget(target.pk, target.timestamp),
             account_id=account.pk,
         )
+        thread = assignment.thread
 
         assert target.thread_id == thread.pk
         assert first_reply.thread_id == thread.pk
@@ -348,7 +366,7 @@ class TestInteractionThreadAssignment(TestCase):
             account_id=account.pk,
         )
 
-        assert reused.pk == thread.pk
+        assert reused.thread.pk == thread.pk
         assert second_reply.thread_id == thread.pk
 
     def test_scene_less_target_is_unavailable(self) -> None:
@@ -364,3 +382,54 @@ class TestInteractionThreadAssignment(TestCase):
             )
 
         assert error.exception.code == "reply_target_unavailable"
+
+    def test_create_interaction_assigns_thread_atomically(self) -> None:
+        account = AccountFactory()
+        scene = SceneFactory()
+        persona = PersonaFactory()
+
+        with patch(
+            "world.scenes.interaction_services._get_account_for_persona",
+            return_value=account.pk,
+        ):
+            target = create_interaction(
+                persona=persona,
+                content="root",
+                mode=InteractionMode.POSE,
+                scene=scene,
+            )
+            reply = create_interaction(
+                persona=persona,
+                content="reply",
+                mode=InteractionMode.POSE,
+                scene=scene,
+                reply_to=ReplyTarget(target.pk, target.timestamp),
+            )
+
+        assert reply.thread_id is not None
+        assert (
+            Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
+            == reply.thread_id
+        )
+
+
+class TestReplyTargetSerializer(TestCase):
+    """Reply targets are write-only serializer references."""
+
+    def test_accepts_timezone_aware_reference(self) -> None:
+        serializer = ReplyTargetSerializer(data={"id": 4, "timestamp": "2026-09-10T12:00:00Z"})
+
+        assert serializer.is_valid(), serializer.errors
+        assert serializer.validated_data["id"] == 4
+
+    def test_rejects_unknown_fields(self) -> None:
+        serializer = ReplyTargetSerializer(
+            data={"id": 4, "timestamp": "2026-09-10T12:00:00Z", "thread_id": "x"}
+        )
+
+        assert not serializer.is_valid()
+
+    def test_rejects_naive_timestamp(self) -> None:
+        serializer = ReplyTargetSerializer(data={"id": 4, "timestamp": "2026-09-10T12:00:00"})
+
+        assert not serializer.is_valid()

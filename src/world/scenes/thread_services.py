@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from evennia.accounts.models import AccountDB
 
 from world.scenes.constants import InteractionMode
@@ -18,6 +19,9 @@ class InteractionThreadError(ValueError):
 
     code = "reply_target_unavailable"
 
+    def __init__(self, message: str = "Cannot reply to that interaction.") -> None:
+        super().__init__(message)
+
 
 @dataclass(frozen=True)
 class ReplyTarget:
@@ -25,6 +29,41 @@ class ReplyTarget:
 
     interaction_id: int
     timestamp: datetime
+
+
+def coerce_reply_target(value: object) -> ReplyTarget | None:
+    """Normalize a REST or action-command reply target."""
+    if value is None:
+        return None
+    if isinstance(value, ReplyTarget):
+        return value
+    if not isinstance(value, dict) or set(value) != {"id", "timestamp"}:
+        raise _unavailable()
+    try:
+        interaction_id = int(value["id"])
+        timestamp_value = value["timestamp"]
+    except (TypeError, ValueError):
+        raise _unavailable() from None
+    if interaction_id < 1:
+        raise _unavailable()
+    if isinstance(timestamp_value, datetime):
+        timestamp = timestamp_value
+    elif isinstance(timestamp_value, str):
+        timestamp = parse_datetime(timestamp_value)
+    else:
+        timestamp = None
+    if timestamp is None or not timezone.is_aware(timestamp):
+        raise _unavailable()
+    return ReplyTarget(interaction_id=interaction_id, timestamp=timestamp)
+
+
+@dataclass(frozen=True)
+class ThreadAssignment:
+    """Result of assigning a new interaction to a target-selected thread."""
+
+    thread: InteractionThread
+    target: Interaction
+    created: bool
 
 
 @dataclass(frozen=True)
@@ -132,12 +171,21 @@ def _same_holder(thread: InteractionThread, signature: HolderSignature) -> bool:
     )
 
 
+def pending_thread_update(interaction: Interaction) -> Interaction | None:
+    """Return the first thread target that needs a websocket upsert, if any."""
+    try:
+        assignment = interaction.thread_assignment
+    except AttributeError:
+        return None
+    return assignment.target if assignment.created else None
+
+
 def assign_interaction_thread(
     *,
     interaction: Interaction,
     reply_target: ReplyTarget,
     account_id: int | None,
-) -> InteractionThread:
+) -> ThreadAssignment:
     """Assign an interaction to the target's existing or newly-created thread.
 
     The caller must invoke this while the interaction write is atomic. The target
@@ -179,6 +227,7 @@ def assign_interaction_thread(
         raise _unavailable()
 
     thread = target.thread
+    created = thread is None
     if thread is None:
         thread = InteractionThread.objects.create(**target_signature.as_thread_kwargs())
         target.thread = thread
@@ -188,4 +237,4 @@ def assign_interaction_thread(
 
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
-    return thread
+    return ThreadAssignment(thread=thread, target=target, created=created)
