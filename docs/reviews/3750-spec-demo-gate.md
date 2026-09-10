@@ -1,11 +1,14 @@
 # Review evidence
 
-- Reviewed revision: `2239f3f05a0acb11ef09b40dbf12ca5cb319c3a6`
+- Reviewed revision: `5c6f0700d7146a5393bca7dafb59e2e7d11562d6`
 - Application/build identity: repository workflow scripts and GitHub Actions configuration at the reviewed revision
 - Environment: Ubuntu devcontainer, Python 3.13, uv-managed project environment, Bash, ShellCheck
 - Viewports/themes: Not applicable (process-only change; no player-facing surface)
+- Approved design: Not applicable (process-only change; #3750 has no UI demo)
 - Visual review: Not applicable (process-only change; no approved UI demo in #3750)
+- Visual verdict: NOT_APPLICABLE
 - Screenshots: Not applicable (process-only change; no application surface was changed)
+- Comparison notes: Not applicable (process-only change; no application surface was changed)
 - Tested interactions: validate the archived #3735 evidence shape, validate a complete report, reject a stale revision, and reject PR opening without PR_EVIDENCE_FILE
 - Fixture/live boundary: validator tests and archived PR body are repository fixtures; no live player data or application backend was used
 - Overall outcome: PASS
