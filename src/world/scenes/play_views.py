@@ -1,4 +1,10 @@
-"""Authorized reader contracts for the narrative play workspace."""
+"""Authorized reader contracts for the narrative play workspace.
+
+Also hosts ``PoseSubmissionDetailView`` (#3760) -- a writer-only
+submission-status lookup by ``client_request_id``, the "did this land"
+check the composer's "Check status" affordance calls after a reconnect or a
+dropped connection leaves a send's outcome unknown.
+"""
 
 from __future__ import annotations
 
@@ -239,14 +245,15 @@ class PoseSubmissionDetailView(APIView):
 
     def get(self, request: Request, client_request_id: uuid.UUID) -> Response:
         persona_ids = get_account_personas(request)
-        submission = (
-            PoseSubmission.objects.filter(
-                persona_id__in=persona_ids,
-                client_request_id=client_request_id,
-            )
-            .select_related("interaction")
-            .first()
-        )
+        # Finding 6.1 (#3760 final review): only `interaction_id` (a plain FK
+        # column already on this row) is read below -- `.interaction` (the
+        # related object) is never touched, so the `select_related` inherited
+        # from an earlier ViewSet-shaped draft of this endpoint was a wasted
+        # join. Dropped.
+        submission = PoseSubmission.objects.filter(
+            persona_id__in=persona_ids,
+            client_request_id=client_request_id,
+        ).first()
         if submission is None:
             return Response({"detail": "Submission not found."}, status=404)
         return Response(
