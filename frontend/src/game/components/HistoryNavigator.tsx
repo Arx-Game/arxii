@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, History, CalendarDays } from 'lucide-react';
 import { fetchPlayConversations, fetchPlaySearch } from '../playQueries';
@@ -22,6 +22,21 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
   const [kind, setKind] = useState<'all' | 'room' | 'whisper'>('all');
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [conversationsCursor, setConversationsCursor] = useState<string | undefined>(undefined);
+  // #3759 review fix: `from`/`to` are the filters that actually scope the
+  // conversations query (see its `queryKey` below — `kind` only scopes
+  // `search`, not `conversations`). Without this, paging forward with
+  // "Load more" was a one-way trap: only the showAllHistory toggle reset the
+  // cursor, so changing a date filter mid-page silently kept requesting page
+  // N+1 of the OLD filter instead of returning to page 1 of the new one.
+  // Skip the very first render (mount) so this never fires on initial values.
+  const isFirstDateFilterRender = useRef(true);
+  useEffect(() => {
+    if (isFirstDateFilterRender.current) {
+      isFirstDateFilterRender.current = false;
+      return;
+    }
+    setConversationsCursor(undefined);
+  }, [from, to]);
   const ninetyDaysAgo = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 90);
