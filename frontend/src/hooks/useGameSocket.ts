@@ -209,7 +209,13 @@ function dispatchIncomingMessage(
       msgType === WS_MESSAGE_TYPE.TEXT &&
       (metadata?.type === 'narrative' || metadata?.type === 'gemit')
     ) {
-      dispatch(addAmbientNotice({ character, message: message.content }));
+      dispatch(
+        addAmbientNotice({
+          character,
+          message: message.content,
+          timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
+        })
+      );
     } else {
       dispatch(addSessionMessage({ character, message }));
     }

@@ -243,10 +243,21 @@ export const gameSlice = createSlice({
     },
     addAmbientNotice: (
       state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        message: string;
+        timestamp?: string;
+      }>
     ) => {
       const session = state.sessions[action.payload.character];
       if (!session) return;
+      const frameTime = action.payload.timestamp ? Date.parse(action.payload.timestamp) : NaN;
+      if (
+        session.ambientRoomEnteredAt &&
+        Number.isFinite(frameTime) &&
+        frameTime < session.ambientRoomEnteredAt
+      )
+        return;
       const notices = session.ambientNotices ?? (session.ambientNotices = []);
       notices.push(action.payload.message);
       if (notices.length > 50) session.ambientNotices = notices.slice(-50);

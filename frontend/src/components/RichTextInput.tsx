@@ -331,7 +331,7 @@ export function RichTextInput({
     <div className={cn('overflow-hidden rounded-md border border-input shadow-sm', className)}>
       {/* Toolbar */}
       <div
-        className="flex items-center gap-0.5 border-b border-input bg-muted/50 px-1.5 py-1"
+        className="flex flex-wrap items-center gap-0.5 border-b border-input bg-muted/50 px-1.5 py-1"
         role="toolbar"
         aria-label="Formatting toolbar"
       >
@@ -381,7 +381,7 @@ export function RichTextInput({
         {rightSlot}
         <button
           type="button"
-          className="ml-auto rounded bg-primary px-2 py-1 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          className="ml-auto min-h-11 min-w-11 shrink-0 rounded bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
           onClick={onSubmit}
           aria-label="Send"
           disabled={disabled || submitDisabled}

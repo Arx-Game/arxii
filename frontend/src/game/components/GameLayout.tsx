@@ -103,7 +103,7 @@ export function GameLayout({
           {center}
         </div>
         <div
-          className={`play-sidebar-pane relative min-h-0 overflow-hidden bg-card ${sidebarSide === 'left' ? 'border-r' : 'border-l'} ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
+          className={`play-sidebar-pane relative min-h-0 flex-1 overflow-hidden bg-card ${sidebarSide === 'left' ? 'border-r' : 'border-l'} ${mobilePane !== 'sidebar' ? 'hidden' : 'flex'}`}
           style={{ order: sidebarSide === 'left' ? 0 : 1 }}
         >
           <button

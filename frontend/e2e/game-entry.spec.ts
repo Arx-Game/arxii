@@ -85,10 +85,30 @@ test('a quiet-room entry preserves an editable draft until structured presence a
     ])
   );
   await expect(page.getByText('In world', { exact: true })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Quiet courtyard', exact: true })).toBeVisible();
+  await expect(
+    page
+      .getByTestId('exploration-reader')
+      .getByRole('heading', { name: 'Quiet courtyard', exact: true })
+  ).toBeVisible();
   await expect(editor).toHaveValue('A quiet beginning.\n\nThe draft stays here.');
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await expect(page.getByText(/puppet_changed/)).toHaveCount(0);
   expect(errors).toEqual([]);
-  await page.screenshot({ path: 'test-results/game-entry.png', fullPage: true });
+  await page.screenshot({ path: 'test-results/3758-desktop.png', fullPage: true });
+
+  // Required responsive/a11y review states: the same live app fixture at
+  // 320px, both pane choices, and 200% browser-style zoom. No demo assets are
+  // committed; these files are copied to the review report only when captured.
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect(page.getByRole('button', { name: 'Sidebar', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Sidebar', exact: true }).click();
+  await page.screenshot({ path: 'test-results/3758-mobile-sidebar.png', fullPage: true });
+  await page.getByRole('button', { name: 'Story', exact: true }).click();
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '2';
+  });
+  await page.screenshot({ path: 'test-results/3758-zoom-200.png', fullPage: true });
+  await page.evaluate(() => {
+    document.documentElement.style.zoom = '1';
+  });
 });
