@@ -357,8 +357,14 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
+      // Task 8's default-collapse starts the older room thread collapsed
+      // (the whisper thread is more recently active) — expand every loaded
+      // thread first so this test's actual concern (tab-driven feed
+      // narrowing) isn't entangled with per-thread collapse state.
+      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
+
       // Both interactions show before any thread is selected.
-      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
 
       const sidebar = screen.getByLabelText('Thread sidebar');
@@ -388,9 +394,12 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text inside a
+      // collapsed thread; wait on the sidebar itself (always rendered
+      // regardless of collapse state) rather than the pose content — this
+      // test's real assertions are the sidebar unread badges below, not
+      // center-feed content.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
 
       // Baseline: both threads existed at scene load, so neither shows unread yet.
       const roomButton = () =>
@@ -567,7 +576,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are about the tab
+      // filter resetting, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const sidebar = () => screen.getByLabelText('Thread sidebar');
       const whisperButton = () =>
@@ -646,7 +658,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the sidebar's
+      // own unread badges, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const sidebar = () => screen.getByLabelText('Thread sidebar');
       const roomButton = () =>
@@ -908,7 +923,10 @@ describe('GamePage', () => {
       store.dispatch(setActiveSession(ACTIVE_NAME));
 
       const { container } = renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the puppet tab
+      // bar badges, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const tabBar = container.querySelector('.mb-2.flex.gap-2.border-b') as HTMLElement;
       const ariaTab = within(tabBar).getByText(ACTIVE_NAME).closest('button') as HTMLElement;
@@ -1003,9 +1021,10 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are about tab
+      // narrowing, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
         .getByText(/whisper/i)
         .closest('button') as HTMLElement;
@@ -1055,7 +1074,14 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse starts the room thread collapsed (the
+      // whisper thread is more recently active). This test's own concern is
+      // whether switching tabs restores the full feed, so expand every
+      // loaded thread up front — the reader's `collapsed` state lives for
+      // the life of the mount (keyed on sceneId, not the active tab), so a
+      // per-thread collapse never resets just from narrowing/widening the
+      // tab-fed `interactions` prop.
+      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
@@ -1092,9 +1118,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the tab strip's
+      // own unread badges, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = () =>
         within(sidebar)
           .getByText(/whisper/i)
@@ -1152,7 +1179,13 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse starts the room thread collapsed (the
+      // whisper thread is more recently active). This test's own concern is
+      // whether closing the tab restores the full feed, so expand every
+      // loaded thread up front — the reader's `collapsed` state lives for
+      // the life of the mount, so it never resets just from narrowing/
+      // widening the tab-fed `interactions` prop.
+      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = () =>
@@ -1184,9 +1217,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertion is that the tab
+      // strip clears on scene change, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
         .getByText(/whisper/i)
         .closest('button') as HTMLElement;
@@ -1218,7 +1252,13 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse starts the room thread collapsed (the
+      // whisper thread is more recently active). This test's own concern is
+      // whether the "All" button restores the full feed, so expand every
+      // loaded thread up front — the reader's `collapsed` state lives for
+      // the life of the mount, so it never resets just from narrowing/
+      // widening the tab-fed `interactions` prop.
+      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
