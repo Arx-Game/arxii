@@ -391,6 +391,7 @@ describe('CommandInput', () => {
       persona_id: 42,
       scene_id: 1,
       content: 'lunges forward',
+      client_request_id: expect.any(String),
       action_link_ids: [10],
     });
   });
@@ -417,6 +418,7 @@ describe('CommandInput', () => {
       persona_id: 42,
       scene_id: 1,
       content: 'stands ready',
+      client_request_id: expect.any(String),
     });
   });
 
@@ -432,6 +434,7 @@ describe('CommandInput', () => {
       persona_id: 9,
       scene_id: 5,
       content: 'looks around',
+      client_request_id: expect.any(String),
     });
   });
 
@@ -480,6 +483,7 @@ describe('CommandInput', () => {
       persona_id: 9,
       scene_id: 5,
       content: 'confronts',
+      client_request_id: expect.any(String),
       target_names: ['Bob'],
     });
   });
@@ -501,6 +505,73 @@ describe('CommandInput', () => {
     // The draft survives the rejection — never silently eaten.
     expect(textarea.value).toBe('looks around');
     expect(onPoseSubmitted).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // #3760 Task 16 fix — the REST submit-pose path (the "canonical route for
+  // scene poses" per queries.ts) previously never sent `client_request_id`
+  // at all, so every ordinary in-scene pose 400'd against the backend's
+  // required field. These mirror the WS say/whisper/tt ack-gating tests
+  // above, adapted for the promise-based REST flow.
+  // ---------------------------------------------------------------------------
+
+  it('a REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)', () => {
+    sessionStorage.setItem('arx:play-draft:v1:pose-retry-scope', 'looks around');
+    seedDraft(
+      {
+        status: 'rejected',
+        rejectionReason: 'Not co-located.',
+        clientRequestId: 'req-pose-rejected',
+        content: 'looks around',
+      },
+      'pose-retry-scope',
+      9
+    );
+
+    render(
+      <CommandInput character="Alice" sceneId="5" personaId={9} draftScope="pose-retry-scope" />
+    );
+    // The textarea is enabled for a `rejected` draft — the ordinary Send
+    // button, not a Task-11-specific Retry affordance.
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'looks around',
+      client_request_id: 'req-pose-rejected',
+    });
+  });
+
+  it('does not clear a newer edit made after a REST pose request was sent but before the response arrives', async () => {
+    let resolveSubmit: (value: unknown) => void = () => {};
+    submitPoseMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSubmit = resolve;
+        })
+    );
+    const onPoseSubmitted = vi.fn();
+    render(
+      <CommandInput character="Alice" sceneId="5" personaId={9} onPoseSubmitted={onPoseSubmitted} />
+    );
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: 'looks around' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith(
+      expect.objectContaining({ content: 'looks around' })
+    );
+
+    // A newer, unsent edit happens while the original request is still in
+    // flight — it must survive the eventual ack for the OLDER content.
+    fireEvent.change(textarea, { target: { value: 'looks around, then frowns' } });
+
+    resolveSubmit({ id: 1 });
+    await waitFor(() => expect(onPoseSubmitted).toHaveBeenCalled());
+
+    expect(textarea.value).toBe('looks around, then frowns');
   });
 
   // ---------------------------------------------------------------------------
@@ -549,6 +620,7 @@ describe('CommandInput', () => {
       persona_id: 9,
       scene_id: 1,
       content: 'strides in dramatically',
+      client_request_id: expect.any(String),
       pose_kind: 'entry',
     });
 
@@ -577,6 +649,7 @@ describe('CommandInput', () => {
       persona_id: 9,
       scene_id: 1,
       content: 'simply walks in',
+      client_request_id: expect.any(String),
       pose_kind: 'entry',
     });
 
@@ -628,6 +701,7 @@ describe('CommandInput', () => {
       persona_id: 9,
       scene_id: 1,
       content: 'looks around calmly',
+      client_request_id: expect.any(String),
     });
 
     await waitFor(() => expect(submitPoseMock).toHaveBeenCalled());
@@ -748,10 +822,18 @@ describe('CommandInput', () => {
    * overridden) will hydrate from — the only way to reach the `unknown`
    * status and the stranded-draft-on-mount path from outside the component,
    * since nothing in this task wires a live trigger for either (Task 12's
-   * reconnect reconciliation owns that).
+   * reconnect reconciliation owns that). `personaId` defaults to 0 (matching
+   * every pre-#3760-Task-16 call site, none of which pass a `personaId` prop
+   * to `CommandInput`); the REST-pose tests (#3760 Task 16) pass the same
+   * `personaId` they render `CommandInput` with, since that value is part of
+   * the draft storage key.
    */
-  function seedDraft(overrides: Partial<Draft>, conversationKey = 'character:Alice') {
-    const key = draftStorageKey({ accountId: 0, personaId: 0, conversationKey });
+  function seedDraft(
+    overrides: Partial<Draft>,
+    conversationKey = 'character:Alice',
+    personaId = 0
+  ) {
+    const key = draftStorageKey({ accountId: 0, personaId, conversationKey });
     const draft: Draft = {
       content: 'leans against the doorframe',
       languageId: null,

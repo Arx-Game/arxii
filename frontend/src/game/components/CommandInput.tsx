@@ -636,16 +636,29 @@ export function CommandInput({
     if (usesRestSubmit) {
       // REST path: explicit action_link_ids override when the user has detached
       // one or more pending actions. WebSocket send() is intentionally skipped
-      // to avoid creating two POSE Interactions for the same pose. The draft
-      // is only cleared on success (#2156 review fix) — a rejected request
-      // (e.g. the co-location 400) must not silently eat the player's text;
-      // the composer keeps it and the server's error surfaces via toast so a
-      // retry doesn't mean retyping the whole pose.
+      // to avoid creating two POSE Interactions for the same pose.
+      //
+      // #3760 Task 16 fix — this is now ack-gated exactly like the say/
+      // whisper/tt `executeAction` branches above: `beginSend` mints/reuses a
+      // `client_request_id` (the backend's `PoseSubmitSerializer` field is
+      // REQUIRED; every REST pose submission 400'd without this) and
+      // `pendingSpeechRef` tracks it so `isStrandedDraft` (above) can tell a
+      // genuinely in-flight send from a reopened stranded one. The draft is
+      // only cleared on a matching `acknowledge()` (#2156 review fix's
+      // original intent, now enforced by the same id-matching guard Task 8
+      // built rather than an unconditional clear) — a rejected request (the
+      // co-location 400, or a 409 payload conflict on client_request_id
+      // reuse) must not silently eat the player's text; the composer keeps
+      // it and the server's error surfaces via toast so a retry doesn't mean
+      // retyping the whole pose.
       const composerTargets = composerMode?.targets ?? [];
+      const clientRequestId = draftStore.beginSend(liveSpeechMode);
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
         content: trimmed,
+        client_request_id: clientRequestId,
         pose_kind: isEntrance ? 'entry' : undefined,
         ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
         ...(hasDetachments
@@ -655,11 +668,18 @@ export function CommandInput({
           : {}),
       })
         .then((response) => {
+          draftStore.acknowledge(clientRequestId);
           onPoseSubmitted?.();
-          setHistory((prev) => [...prev, trimmed]);
-          setHistoryIndex(-1);
-          setCommand('');
-          clearStoredDraft();
+          // Only clear what's on screen if it still matches what was
+          // actually sent — a newer edit made after the request went out
+          // must survive this ack (mirrors `handleActionResult`'s WS-path
+          // guard above, the exact safety property Task 8 built).
+          if (commandRef.current === trimmed) {
+            setHistory((prev) => [...prev, trimmed]);
+            setHistoryIndex(-1);
+            setCommand('');
+            clearStoredDraft();
+          }
           setIsEntrance(false);
           // #2183 — an entrance technique was attached: dispatch it now that
           // the entry pose exists, so EntranceAction can anchor to it. Plain
@@ -681,9 +701,13 @@ export function CommandInput({
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to submit pose.';
+          draftStore.reject(clientRequestId, message);
           toast.error(message);
         })
         .finally(() => {
+          if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+            pendingSpeechRef.current = null;
+          }
           submittingRef.current = false;
         });
       return;

@@ -250,17 +250,29 @@ export interface SubmitPoseBody {
    * skipped, not an error).
    */
   target_names?: string[];
+  /**
+   * Client-minted idempotency id for this send attempt (#3760 Task 16 fix —
+   * `PoseSubmitSerializer.client_request_id` is a REQUIRED field server-side;
+   * omitting it makes every REST pose submission fail its 400 validation).
+   * Reused verbatim on an unmodified retry of the same content/context (see
+   * `useDraftStore.beginSend`); a content change mints a fresh one.
+   */
+  client_request_id: string;
 }
 
 /**
- * The submit-pose response body (`InteractionListSerializer` output), or
- * `{ ephemeral: true }` for ephemeral scenes that never persist an Interaction
- * row (#2156). `id` is what callers need to link a follow-up action request
- * (e.g. the technique-driven entrance's `entry_interaction_id`, #2183).
+ * The submit-pose response body (`InteractionListSerializer` output plus
+ * `replayed`), or `{ ephemeral: true, replayed }` for ephemeral scenes that
+ * never persist an Interaction row (#2156). `id` is what callers need to
+ * link a follow-up action request (e.g. the technique-driven entrance's
+ * `entry_interaction_id`, #2183). `replayed` (#3760 Task 4/16) is true when
+ * this response is the SAME accepted submission being re-served for a
+ * retried `client_request_id`, rather than a freshly created one.
  */
 export interface SubmitPoseResult {
   id?: number;
   ephemeral?: boolean;
+  replayed?: boolean;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
