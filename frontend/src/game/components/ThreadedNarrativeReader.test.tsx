@@ -3,7 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { loadConversationAnchor } from '../playPreferences';
+import { markConversationRead } from '../playQueries';
 import type { Interaction } from '@/scenes/types';
+
+vi.mock('../playQueries', () => ({
+  markConversationRead: vi.fn().mockResolvedValue({ marked: 0 }),
+}));
 
 vi.mock('@/scenes/components/SceneMessages', () => ({
   SceneMessages: ({ filteredInteractions }: { filteredInteractions: Interaction[] }) => (
@@ -43,6 +48,7 @@ describe('ThreadedNarrativeReader', () => {
   let offsetHeightSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(() => {
+    vi.mocked(markConversationRead).mockClear();
     // Each test uses conversationKey="scene:1" — clear so per-conversation
     // collapse state saved by one test never leaks into the next.
     window.localStorage.clear();
@@ -350,5 +356,27 @@ describe('ThreadedNarrativeReader', () => {
     expect(observedElements).toHaveLength(2);
 
     vi.unstubAllGlobals();
+  });
+
+  it('calls markConversationRead with the current conversation key and the latest visible pose timestamp', async () => {
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mark conversation read/i }));
+
+    expect(markConversationRead).toHaveBeenCalledTimes(1);
+    // interaction(id, ...) derives timestamp `2026-01-01T00:0{id}:00Z` from id,
+    // so the later pose (id 2) carries the latest timestamp of the two.
+    expect(markConversationRead).toHaveBeenCalledWith('scene:1', '2026-01-01T00:02:00Z');
   });
 });

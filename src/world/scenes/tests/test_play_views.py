@@ -1,15 +1,18 @@
 """Tests for the additive narrative play reader contracts."""
 
 import base64
+from datetime import timedelta
 import json
 from unittest.mock import patch
 
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
 from evennia_extensions.factories import AccountFactory
+from world.scenes.constants import InteractionVisibility
 from world.scenes.factories import InteractionFactory, SceneFactory
-from world.scenes.models import InteractionReadReceipt
+from world.scenes.models import Interaction, InteractionReadReceipt
 
 
 class PlayReaderContractTests(APITestCase):
@@ -147,6 +150,139 @@ class PlayReadViewTests(APITestCase):
 
     def test_requires_authentication(self) -> None:
         response = self.client.post("/api/play/read/", {"poses": []}, format="json")
+        self.assertEqual(response.status_code, 403)
+
+
+class PlayReadViewMarkConversationReadTests(APITestCase):
+    """The mark-all-before-snapshot bulk dismissal (#3759 spec section 7).
+
+    `{"conversation": ..., "before": ...}` marks every interaction the account
+    can see in that conversation, timestamp <= before, in one call -- the
+    bulk sibling of the explicit `{"poses": [...]}` per-pose path above.
+    """
+
+    def test_marks_authorized_conversation_history_read(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interactions = [InteractionFactory(scene=scene) for _ in range(5)]
+        before = max(i.timestamp for i in interactions).isoformat()
+
+        response = self.client.post(
+            "/api/play/read/",
+            {"conversation": f"scene:{scene.pk}", "before": before},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marked"], 5)
+        for interaction in interactions:
+            self.assertTrue(
+                InteractionReadReceipt.objects.filter(
+                    account=account, interaction=interaction
+                ).exists()
+            )
+
+    def test_never_marks_an_interaction_outside_visible_to(self) -> None:
+        """A row this account cannot see (per `visible_to`) must never get a receipt,
+
+        even though it lives in the SAME scene/conversation and is within the
+        `before` bound -- the bulk path must route through the authorized
+        `_rows()`/`_queryset()` queryset, never a raw `Interaction.objects.filter(...)`.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        visible = InteractionFactory(scene=scene)
+        hidden = InteractionFactory(scene=scene, visibility=InteractionVisibility.VERY_PRIVATE)
+        before = max(visible.timestamp, hidden.timestamp).isoformat()
+
+        response = self.client.post(
+            "/api/play/read/",
+            {"conversation": f"scene:{scene.pk}", "before": before},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marked"], 1)
+        self.assertTrue(
+            InteractionReadReceipt.objects.filter(account=account, interaction=visible).exists()
+        )
+        self.assertFalse(
+            InteractionReadReceipt.objects.filter(account=account, interaction=hidden).exists()
+        )
+
+    def test_timestamp_after_before_is_not_marked(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        earlier = InteractionFactory(scene=scene)
+        later = InteractionFactory(scene=scene)
+        # Force a deterministic ordering: `timestamp` is `auto_now_add`, so a
+        # plain create() can't back- or forward-date it -- `.update()` bypasses
+        # `save()`'s auto_now_add and the idmapper cache must be flushed after,
+        # mirroring `test_interaction_services.test_cannot_delete_after_window`.
+        earlier_ts = timezone.now() - timedelta(hours=2)
+        later_ts = timezone.now() - timedelta(hours=1)
+        Interaction.objects.filter(pk=earlier.pk).update(timestamp=earlier_ts)
+        Interaction.objects.filter(pk=later.pk).update(timestamp=later_ts)
+        Interaction.flush_cached_instance(earlier, force=True)
+        Interaction.flush_cached_instance(later, force=True)
+
+        response = self.client.post(
+            "/api/play/read/",
+            {"conversation": f"scene:{scene.pk}", "before": earlier_ts.isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["marked"], 1)
+        self.assertTrue(
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id=earlier.pk
+            ).exists()
+        )
+        self.assertFalse(
+            InteractionReadReceipt.objects.filter(account=account, interaction_id=later.pk).exists()
+        )
+
+    def test_repeat_call_is_idempotent(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interactions = [InteractionFactory(scene=scene) for _ in range(3)]
+        before = max(i.timestamp for i in interactions).isoformat()
+        body = {"conversation": f"scene:{scene.pk}", "before": before}
+
+        first = self.client.post("/api/play/read/", body, format="json")
+        second = self.client.post("/api/play/read/", body, format="json")
+
+        self.assertEqual(first.status_code, 200)
+        self.assertEqual(second.status_code, 200)
+        self.assertEqual(first.json()["marked"], 3)
+        self.assertEqual(second.json()["marked"], 0)
+        self.assertEqual(
+            InteractionReadReceipt.objects.filter(
+                account=account, interaction_id__in=[i.pk for i in interactions]
+            ).count(),
+            3,
+        )
+
+    def test_requires_a_before_timestamp(self) -> None:
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        response = self.client.post(
+            "/api/play/read/", {"conversation": f"scene:{scene.pk}"}, format="json"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_authentication(self) -> None:
+        response = self.client.post(
+            "/api/play/read/",
+            {"conversation": "scene:1", "before": "2026-01-01T00:00:00Z"},
+            format="json",
+        )
         self.assertEqual(response.status_code, 403)
 
 

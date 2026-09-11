@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import base64
+from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 import json
 from typing import Any
 
 from django.db.models import QuerySet
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.request import Request
 from rest_framework.response import Response
@@ -100,12 +102,21 @@ def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Respon
     )
 
 
-def _queryset(request: Request) -> tuple[QuerySet[Interaction], dict[str, Any]]:
+def _queryset(
+    request: Request, params: Mapping[str, str] | None = None
+) -> tuple[QuerySet[Interaction], dict[str, Any]]:
     """Build the canonical visible interaction queryset and serializer context.
 
     The play endpoints intentionally reuse ``InteractionViewSet``. This keeps
     masking, language comprehension, block/mute rules, and private-party
     visibility identical to the existing scene feed.
+
+    `params` overrides `request.query_params` as the source of `from`/`to`/
+    `until`/`conversation` filter values — used by `PlayReadView`'s bulk
+    mark-conversation-read path (#3759), whose `conversation`/`before` are
+    POST body fields rather than query-string params, so it can still push
+    its `timestamp <= before` bound into the SAME authorized DB query every
+    GET-based play view uses, instead of filtering in Python after the fact.
     """
     view = InteractionViewSet()
     view.request = request
@@ -113,9 +124,10 @@ def _queryset(request: Request) -> tuple[QuerySet[Interaction], dict[str, Any]]:
     view.kwargs = {}
     view.format_kwarg = None
     queryset = view.get_queryset()
+    query_params = request.query_params if params is None else params
     # ``from`` is the UI spelling for an explicit older-history lower bound.
-    since = request.query_params.get("from")
-    until = request.query_params.get("to") or request.query_params.get("until")
+    since = query_params.get("from")
+    until = query_params.get("to") or query_params.get("until")
     if since:
         queryset = queryset.filter(timestamp__gte=since)
     if until:
@@ -130,8 +142,8 @@ def _queryset(request: Request) -> tuple[QuerySet[Interaction], dict[str, Any]]:
                 queryset = queryset.filter(timestamp__lt=exclusive_until)
         else:
             queryset = queryset.filter(timestamp__lte=until)
-    queryset = InteractionFilter(request.query_params, queryset=queryset).qs
-    conversation = request.query_params.get("conversation")
+    queryset = InteractionFilter(query_params, queryset=queryset).qs
+    conversation = query_params.get("conversation")
     if conversation and conversation.startswith("scene:"):
         queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
     elif conversation == KIND_ROOM:
@@ -167,8 +179,10 @@ def _conversation(row: dict[str, Any]) -> dict[str, str]:
     return {"kind": KIND_ROOM, "key": KIND_ROOM}
 
 
-def _rows(request: Request) -> tuple[list[dict[str, Any]], QuerySet[Interaction]]:
-    queryset, context = _queryset(request)
+def _rows(
+    request: Request, params: Mapping[str, str] | None = None
+) -> tuple[list[dict[str, Any]], QuerySet[Interaction]]:
+    queryset, context = _queryset(request, params)
     serialized = InteractionListSerializer(queryset, many=True, context=context).data
     return list(serialized), queryset
 
@@ -355,11 +369,28 @@ class PlayThreadsView(APIView):
 
 
 class PlayReadView(APIView):
-    """POST authorized pose references to mark them read for this account."""
+    """POST authorized pose references to mark them read for this account.
+
+    Two request-body shapes:
+
+    - ``{"poses": [{"id": ..., "timestamp": ...}, ...]}`` — the original
+      explicit-list path, capped at ``MAX_POSES_PER_BATCH``.
+    - ``{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}`` — the
+      mark-all-before-snapshot bulk dismissal (#3759 spec section 7: "Separate
+      explicit mark-all-before-snapshot operation for deliberate dismissal.").
+      Marks every interaction this account can see in that conversation with
+      ``timestamp <= before`` as read, without the client enumerating poses.
+    """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
+        conversation = request.data.get("conversation")
+        if conversation:
+            return self._mark_conversation_read(request, conversation)
+        return self._mark_poses_read(request)
+
+    def _mark_poses_read(self, request: Request) -> Response:
         from world.scenes.read_state_services import (  # noqa: PLC0415
             MAX_POSES_PER_BATCH,
             mark_poses_read,
@@ -378,6 +409,33 @@ class PlayReadView(APIView):
             except (KeyError, TypeError, ValueError):
                 return Response({"detail": "Each pose needs an id and a timestamp."}, status=400)
         marked = mark_poses_read(
+            account=request.user,  # type: ignore[invalid-argument-type]
+            poses=pairs,
+        )
+        return Response({"marked": marked})
+
+    def _mark_conversation_read(self, request: Request, conversation: Any) -> Response:
+        from world.scenes.read_state_services import mark_conversation_read  # noqa: PLC0415
+
+        if not isinstance(conversation, str):
+            return Response({"detail": "conversation must be a string reference."}, status=400)
+        before = request.data.get("before")
+        if not isinstance(before, str) or parse_datetime(before) is None:
+            return Response(
+                {"detail": "before must be an ISO-8601 timestamp."},
+                status=400,
+            )
+        # Push the `timestamp <= before` bound into the SAME authorized DB
+        # query every GET-based play view builds (`_queryset`'s `to` alias),
+        # rather than fetching this account's entire visible history and
+        # filtering in Python — see `_queryset`'s `params` docstring.
+        rows, _ = _rows(request, params={"conversation": conversation, "to": before})
+        pairs = [
+            (int(row["id"]), str(row["timestamp"]))
+            for row in rows
+            if _conversation(row)["key"] == conversation
+        ]
+        marked = mark_conversation_read(
             account=request.user,  # type: ignore[invalid-argument-type]
             poses=pairs,
         )

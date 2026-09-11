@@ -14,6 +14,7 @@ import {
   usePlayPreferences,
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
+import { markConversationRead } from '../playQueries';
 
 /**
  * Wraps one rendered pose in the element `usePoseReadTracking` dwell-tracks.
@@ -148,6 +149,27 @@ export function ThreadedNarrativeReader({
     setCollapsed(new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key)));
   }, [groups]);
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
+  // Optimistic mirror of "Mark conversation read" (#3759 spec section 7): the
+  // server call is fire-and-forget, like markPosesRead's dwell-tracked path,
+  // so unread badges are cleared locally immediately rather than waiting on
+  // whatever next refetches `interactions` -- a pose's timestamp is stable and
+  // ISO-8601-sortable (same string-compare convention `groups`/`chronologicalItems`
+  // already use above), so "was this pose covered by the last mark-read click"
+  // is just a string comparison against the snapshot boundary sent to the server.
+  const [locallyReadBefore, setLocallyReadBefore] = useState<string | null>(null);
+  const isEffectivelyUnread = (item: Interaction) =>
+    Boolean(item.is_unread) && (locallyReadBefore === null || item.timestamp > locallyReadBefore);
+  const handleMarkConversationRead = () => {
+    if (interactions.length === 0) return;
+    const before = interactions.reduce(
+      (latest, item) => (item.timestamp > latest ? item.timestamp : latest),
+      interactions[0].timestamp
+    );
+    setLocallyReadBefore(before);
+    markConversationRead(conversationKey, before).catch((error: unknown) => {
+      console.error('Failed to mark conversation read', error);
+    });
+  };
   const { observe } = usePoseReadTracking();
   const { preferences, update } = usePlayPreferences();
   const chronological = preferences.readerMode === 'chronological';
@@ -223,6 +245,11 @@ export function ThreadedNarrativeReader({
                   Collapse loaded threads
                 </button>
               </>
+            )}
+            {interactions.length > 0 && (
+              <button className="underline" onClick={handleMarkConversationRead}>
+                Mark conversation read
+              </button>
             )}
             <button
               className="underline"
@@ -315,7 +342,7 @@ export function ThreadedNarrativeReader({
             groups.map((group) => {
               const root = group.interactions[0];
               const isCollapsed = collapsed.has(group.key);
-              const unread = group.interactions.filter((item) => item.is_unread).length;
+              const unread = group.interactions.filter(isEffectivelyUnread).length;
               return (
                 <section
                   key={group.key}

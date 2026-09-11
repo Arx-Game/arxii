@@ -70,6 +70,26 @@ export async function markPosesRead(
   return response.json();
 }
 
+/**
+ * Mark-all-before-snapshot bulk dismissal (#3759 spec section 7): mark every
+ * interaction the account can see in `conversation` with timestamp <= `before`
+ * as read, in one call, instead of enumerating individual poses like
+ * `markPosesRead`. Same endpoint, alternate request body shape (see
+ * `PlayReadView` on the backend).
+ */
+export async function markConversationRead(
+  conversation: string,
+  before: string
+): Promise<{ marked: number }> {
+  const response = await apiFetch('/api/play/read/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversation, before }),
+  });
+  if (!response.ok) throw new Error('Unable to mark conversation read');
+  return response.json();
+}
+
 /** Load the authorized neighborhood around one historical pose. */
 export function fetchPlayContext(params: {
   id: string;

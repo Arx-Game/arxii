@@ -593,12 +593,23 @@ rather than offset pagination.
   already-rendered content. Requires a 2-200 character query AND at least one of `conversation`/
   `kind`/`from`/`to`/`until`/`participant` (an unbounded scan is rejected with 400); cursor-paginated
   30/page.
-- `POST /api/play/read/` (#3759) - Marks up to `MAX_POSES_PER_BATCH` (100) `{id, timestamp}` pose
-  references read for the calling account (`read_state_services.mark_poses_read`), creating a
-  private `InteractionReadReceipt` per pose. Idempotent — already-read poses are silently skipped,
-  not errors. Not visibility-gated itself (a read receipt is a private per-account marker never
-  serialized to any other viewer); callers are expected to only mark poses they were actually
-  shown.
+- `POST /api/play/read/` (#3759) - Two request-body shapes, both creating private
+  `InteractionReadReceipt` rows for the calling account and both idempotent (already-read poses are
+  silently skipped, not errors). Neither is visibility-gated on its own output (a read receipt is a
+  private per-account marker never serialized to any other viewer):
+  - `{"poses": [{"id", "timestamp"}, ...]}` - Marks up to `MAX_POSES_PER_BATCH` (100) explicit pose
+    references read (`read_state_services.mark_poses_read`); callers are expected to only mark poses
+    they were actually shown.
+  - `{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}` (mark-all-before-snapshot bulk
+    dismissal, spec section 7) - Marks every interaction the account can see in that conversation with
+    `timestamp <= before` read in one call, without the client enumerating poses. Routes the read
+    through the SAME authorized `_rows()`/`_queryset()` path every other play view uses (never a raw
+    `Interaction.objects.filter(...)`), pushing the `timestamp <= before` bound into the DB query via
+    `_queryset`'s `to` alias before any row is fetched. Capped at `MAX_CONVERSATION_MARK_READ` (5000,
+    `read_state_services.mark_conversation_read`) — keeping the newest poses over cap, since those are
+    likeliest still unread. Frontend: `ThreadedNarrativeReader`'s "Mark conversation read" toolbar
+    button (`playQueries.markConversationRead`), which sends the latest visible pose's timestamp as
+    `before` and optimistically clears local unread badges pending the next natural refetch.
 
 ---
 
