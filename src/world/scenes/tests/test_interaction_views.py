@@ -828,6 +828,32 @@ class PoseSubmitViewTests(APITestCase):
         _caller_state, text = mock_message_location.call_args.args
         assert text == "waves at the room."
 
+    @patch("world.scenes.interaction_views.message_location")
+    def test_submit_pose_retry_broadcasts_via_message_location_only_once(
+        self, mock_message_location
+    ) -> None:
+        """A retry of a normal (persisted) pose must not double-broadcast (#3760).
+
+        The primary-case sibling of test_submit_pose_retry_in_ephemeral_scene_
+        replays_not_conflicts: the telnet broadcast is gated on `not
+        result.replayed`, so a same-payload retry must not repeat it even though
+        the Interaction itself is correctly deduped to one row.
+        """
+        payload = {
+            "client_request_id": str(uuid.uuid4()),
+            "persona_id": self.persona.pk,
+            "content": "waves at the room.",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+        assert mock_message_location.call_count == 1
+
     def test_submit_pose_creates_scene_participation_for_latecomer(self) -> None:
         """A web pose into a scene the poser has no SceneParticipation row in yet
 

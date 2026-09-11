@@ -56,7 +56,6 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
-    PoseSubmission,
     ReactionEmoji,
     Scene,
     SceneParticipation,
@@ -399,26 +398,7 @@ class InteractionViewSet(
             else:
                 auto_link_pose_to_actions(created)
 
-        # Broadcast raw text for telnet clients (WS parity — mirrors
-        # PoseAction.execute's message_location call, which fires unconditionally
-        # before persistence, ephemeral scenes included). Gated on this being the
-        # first time this (persona, client_request_id) pair is submitted (#3760):
-        # idempotent_record_interaction below dedupes the persisted/pushed side of
-        # a retry, but this telnet broadcast happens here in the view, outside that
-        # wrapper — left unconditional, a retry would double-broadcast the same
-        # raw text into the room even though the REST/WS response is correctly
-        # deduped. A submission that never reaches the ledger (e.g. the
-        # InteractionThreadError 400 below) is, by design, re-validated fresh on
-        # every attempt (spec Decision 3) and so broadcasts again on retry too.
         client_request_id = data["client_request_id"]
-        is_first_attempt = not PoseSubmission.objects.filter(
-            persona=persona, client_request_id=client_request_id
-        ).exists()
-        sdm = SceneDataManager()
-        caller_state = sdm.initialize_state_for_object(character)
-        if is_first_attempt:
-            message_location(caller_state, content)
-
         reply_data = data.get("reply_to")
         reply_target = (
             ReplyTarget(
@@ -457,6 +437,22 @@ class InteractionViewSet(
                 {"detail": "This request id was already used for different content."},
                 status=status.HTTP_409_CONFLICT,
             )
+
+        # Broadcast raw text for telnet clients (WS parity — mirrors
+        # PoseAction.execute's message_location call). Gated on `not result.replayed`
+        # rather than a separate pre-check query (#3760 review fix): a bare
+        # PoseSubmission.exists() pre-check race-loses to two genuinely concurrent
+        # retries (both can observe "not found" before either commits), whereas
+        # `result.replayed` is already race-safe — idempotent_record_interaction's
+        # IntegrityError-catch-and-reread path also reports replayed=True for the
+        # loser of a true race, so deriving the gate from it closes that hole too.
+        # A submission that never reaches the ledger (e.g. the InteractionThreadError
+        # 400 above) is, by design, re-validated fresh on every attempt (spec
+        # Decision 3) and so broadcasts again on retry.
+        if not result.replayed:
+            sdm = SceneDataManager()
+            caller_state = sdm.initialize_state_for_object(character)
+            message_location(caller_state, content)
 
         interaction = result.interaction
         response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
