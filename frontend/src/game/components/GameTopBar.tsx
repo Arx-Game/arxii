@@ -125,7 +125,7 @@ function CombatBanner({ onJumpToCombat }: { onJumpToCombat?: () => void }) {
         onClick={onJumpToCombat}
         className="min-h-6 text-left underline-offset-2 hover:underline"
       >
-        In combat — your turn
+        In combat: your turn
       </button>
       <button
         type="button"
