@@ -3371,6 +3371,39 @@ action consent flow, and a three-mode non-combat round framework.
   perceive-the-real mechanic resolves through; ADR-0033 boundary: reveals wrongness,
   never identity. See [scenes.md](scenes.md) §"Perception & altered reality" for the
   full taxonomy and decision checklist.
+- **Reliable pose delivery — idempotent submission + safe drafts (#3760):** `PoseSubmission`
+  (`persona`/`client_request_id`/`interaction` nullable, `UniqueConstraint` on
+  `(persona, client_request_id)`) is the idempotency ledger `idempotent_record_interaction`
+  (`interaction_services.py`) writes on acceptance, in the same transaction as the
+  `Interaction` it points to; a retried `client_request_id` with matching
+  `comparison_fields` replays (no re-roll, no duplicate row, no second broadcast), a
+  mismatched replay is a `payload_conflict`, and a race between two retries resolves via
+  the `IntegrityError`-catch-and-reread path. `record_fn` (default `record_interaction`)
+  lets a caller substitute a differently-shaped recorder — `WhisperAction` passes
+  `record_whisper_interaction` so its ephemeral-scene branch keeps whisper delivery
+  receiver-scoped instead of leaking to the whole scene, a real privacy-preserving
+  generalization found during implementation. Writer-only lookup: `GET
+  /api/play/submissions/{client_request_id}/` (`PoseSubmissionDetailView`,
+  `play_views.py`, a plain `APIView` under the existing `/api/play/` convention, not a
+  `/api/scenes/...` ViewSet) — 404s for a non-owner rather than 403ing. Cleanup:
+  `pose_submission_cleanup_task` (`tasks.py`, alongside the pre-existing
+  `block_finalize_task`) prunes rows older than 24h, registered hourly via
+  `world.game_clock.task_registry`. `_resolve_pose_place` (`actions/definitions/
+  communication.py`) requires a genuine `PlacePresence` before trusting a
+  client-asserted place id for tabletalk sends. Frontend: `useDraftStore`
+  (`frontend/src/game/useDraftStore.ts`) persists one draft per account/persona/
+  conversation to `sessionStorage`, preserving the original send `mode` across an
+  unmodified retry (never re-derived from whatever mode is live at retry time — closes
+  a real privacy leak where a stranded whisper draft could redispatch as a public
+  say/pose) and re-capturing it fresh only on a genuine content edit;
+  `reconcileStoredDrafts` (called from `useGameSocket.ts`'s reconnect handler) resolves
+  stranded drafts against the lookup endpoint; a per-character connection-generation
+  counter discards belated frames/callbacks from a superseded connection; and the
+  room-anchor composer's `draftScope` is keyed on the character's actual physical room
+  id (`GamePage`'s `roomData?.id`), not a constant string, so walking through an exit no
+  longer carries unsent text into the wrong room's composer. See
+  [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
+  Drafts" for the full contract.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
