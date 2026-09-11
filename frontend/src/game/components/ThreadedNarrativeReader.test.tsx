@@ -192,6 +192,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'root', 'thread-a'),
           interaction(2, 'reply', 'thread-a'),
@@ -216,6 +217,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -243,6 +245,7 @@ describe('ThreadedNarrativeReader', () => {
         key="scene:1"
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'scene1 older', 'thread-a'),
           interaction(2, 'scene1 newer', 'thread-b'),
@@ -258,6 +261,7 @@ describe('ThreadedNarrativeReader', () => {
         key="scene:2"
         sceneId="2"
         conversationKey="scene:2"
+        conversationRef="scene:2"
         interactions={[
           interaction(1, 'scene2 older', 'thread-x'),
           interaction(2, 'scene2 newer', 'thread-y'),
@@ -283,6 +287,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[]}
         fetchNextPage={vi.fn()}
       />
@@ -295,6 +300,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -319,6 +325,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -335,6 +342,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -354,6 +362,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         // Passed out of timestamp order (3, 1, 2) so a component that merely
         // rendered visibleInteractions in prop/array order — never sorting by
         // (timestamp, id) at all — would fail this assertion. interaction(id, ...)
@@ -388,6 +397,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={many}
         fetchNextPage={vi.fn()}
       />
@@ -441,6 +451,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -488,6 +499,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[interaction(1, 'root', 'thread-a'), interaction(2, 'reply', 'thread-a')]}
         fetchNextPage={vi.fn()}
       />
@@ -514,6 +526,7 @@ describe('ThreadedNarrativeReader', () => {
       <ThreadedNarrativeReader
         sceneId="1"
         conversationKey="scene:1"
+        conversationRef="scene:1"
         interactions={[
           interaction(1, 'older root', 'thread-a'),
           interaction(2, 'newer root', 'thread-b'),
@@ -565,6 +578,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -602,6 +616,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[]}
           fetchNextPage={vi.fn()}
         />
@@ -613,6 +628,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -638,6 +654,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -665,6 +682,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[
             interaction(1, 'older root', 'thread-a'),
             interaction(2, 'newer root', 'thread-b'),
@@ -700,6 +718,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
           persistAnchor={false}
@@ -724,6 +743,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[]}
           fetchNextPage={vi.fn()}
         />
@@ -736,6 +756,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -762,6 +783,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
           readOnly={readOnly}
@@ -790,6 +812,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
           readOnly
@@ -817,6 +840,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
           readOnly
@@ -838,6 +862,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
           readOnly={readOnly}
@@ -900,6 +925,7 @@ describe('ThreadedNarrativeReader', () => {
             <ThreadedNarrativeReader
               sceneId="1"
               conversationKey="scene:1"
+              conversationRef="scene:1"
               interactions={[
                 interaction(1, 'first', 'thread-a'),
                 interaction(2, 'second', 'thread-a'),
@@ -954,6 +980,7 @@ describe('ThreadedNarrativeReader', () => {
               <ThreadedNarrativeReader
                 sceneId="1"
                 conversationKey="scene:1"
+                conversationRef="scene:1"
                 interactions={[interaction(1, 'first', 'thread-a')]}
                 fetchNextPage={vi.fn()}
                 persistAnchor={persistAnchor}
@@ -1007,6 +1034,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -1034,6 +1062,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
           persistAnchor={false}
@@ -1072,6 +1101,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={many}
           fetchNextPage={vi.fn()}
         />
@@ -1113,6 +1143,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
           fetchNextPage={vi.fn()}
         />
@@ -1146,6 +1177,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={many}
           fetchNextPage={vi.fn()}
         />
@@ -1183,6 +1215,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
           readOnly={readOnly}
@@ -1222,6 +1255,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[
             interaction(1, 'older root', 'thread-a'),
             interaction(2, 'newer root', 'thread-b'),
@@ -1245,6 +1279,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={[
             interaction(1, 'older root', 'thread-a'),
             interaction(2, 'newer root', 'thread-b'),
@@ -1276,6 +1311,7 @@ describe('ThreadedNarrativeReader', () => {
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
+          conversationRef="scene:1"
           interactions={many}
           fetchNextPage={vi.fn()}
           readOnly
@@ -1311,6 +1347,7 @@ describe('ThreadedNarrativeReader', () => {
           <ThreadedNarrativeReader
             sceneId="1"
             conversationKey="scene:1"
+            conversationRef="scene:1"
             interactions={many}
             fetchNextPage={vi.fn()}
             readOnly

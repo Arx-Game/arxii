@@ -150,13 +150,16 @@ interface ThreadedNarrativeReaderProps {
    * `conversationKey` and the server's conversation ref are NOT
    * interchangeable, and conflating them is exactly how "Mark conversation
    * read" silently no-op'd in production (sent a bare scene id where the
-   * server expects `"scene:<id>"`, so no row's ref ever matched). Optional
-   * and defaults to `conversationKey` purely so standalone/unit-test callers
-   * that don't care about the read-marking wire format are unaffected --
-   * every real caller (`GameWindow.tsx`) supplies the correct value
-   * explicitly.
+   * server expects `"scene:<id>"`, so no row's ref ever matched).
+   *
+   * REQUIRED, deliberately with no `?? conversationKey`-style fallback
+   * (#3759 review Fix round 1): a fallback would silently re-arm the exact
+   * C1 bug for any future caller that forgets to pass this prop -- the
+   * backend's 400 rejection of an unrecognized ref is defense in depth, not
+   * a substitute for this compile-time guarantee. Every caller, including
+   * standalone/test renders, must supply the real value explicitly.
    */
-  conversationRef?: string;
+  conversationRef: string;
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
@@ -321,7 +324,7 @@ export function ThreadedNarrativeReader({
       interactions[0].timestamp
     );
     setLocallyReadBefore(before);
-    markConversationRead(conversationRef ?? conversationKey, before).catch((error: unknown) => {
+    markConversationRead(conversationRef, before).catch((error: unknown) => {
       console.error('Failed to mark conversation read', error);
     });
   };
