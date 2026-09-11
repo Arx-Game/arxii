@@ -3,10 +3,11 @@
 import factory
 
 from world.skills.factories import SpecializationFactory
-from world.worship.constants import BeingResonanceTier
+from world.worship.constants import BeingRelationshipValence, BeingResonanceTier
 from world.worship.models import (
     BeingFacet,
     BeingNickname,
+    BeingRelationship,
     BeingResonance,
     DevotionStanding,
     WorshipDeclaration,
@@ -57,6 +58,15 @@ class BeingNicknameFactory(factory.django.DjangoModelFactory):
 
     being = factory.SubFactory(WorshippedBeingFactory)
     name = factory.Sequence(lambda n: f"Nickname {n}")
+
+
+class BeingRelationshipFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingRelationship
+
+    being_a = factory.SubFactory(WorshippedBeingFactory)
+    being_b = factory.SubFactory(WorshippedBeingFactory)
+    valence = BeingRelationshipValence.ALLY
 
 
 class DevotionStandingFactory(factory.django.DjangoModelFactory):

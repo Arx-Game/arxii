@@ -8269,7 +8269,12 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
   it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
   FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
-  reward calculation, #3777), `WorshipGrant` (audit ledger),
+  reward calculation, #3777), `BeingRelationship` (#3776: `being_a`/`being_b` FKs +
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`; NO
+  hidden-truth field, a real hidden truth is a separately-authored `CodexEntry` reached
+  via a `Clue`; `save()` sorts being_a/being_b into pk-ascending order, DB-enforced, so
+  a caller can't record the same undirected pair twice under swapped args),
+  `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,

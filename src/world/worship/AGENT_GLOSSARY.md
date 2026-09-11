@@ -32,6 +32,15 @@
   Conversion ceremony (`world.ceremonies` glossary). Old `DevotionStanding` favor and
   the old secret faith's `Secret` row are left standing as history — conversion never
   deletes or mutates either.
+- **Being relationship** — a public relationship fact between two gods
+  (`BeingRelationship`, #3776): `being_a`/`being_b` + `valence`
+  (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`. Deliberately
+  NO hidden-truth field — a real hidden truth (why two beings actually feud) is a
+  separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
+  maybe-secret field here, because even a hidden/blank field on a public row would leak
+  presence/absence of a mystery. `being_a`/`being_b` are undirected (ALLY of X reads the
+  same as ALLY of Y) and get sorted into canonical pk order automatically, so the same
+  pair can never be recorded twice with the sides swapped.
 - **God's Favorite** — the achievement for reaching (or tying) a being's top devotion;
   three gendered rows (Princess/Prince/Chosen); never names the being.
 - **Miracle** — an authored effect a WorshippedBeing can perform by spending its

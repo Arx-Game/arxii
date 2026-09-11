@@ -31,3 +31,12 @@ class BeingResonanceTier(models.TextChoices):
 
     FAVORED = "favored", "Favored"
     ASSOCIATED = "associated", "Associated"
+
+
+class BeingRelationshipValence(models.TextChoices):
+    """The public-facing nature of a relationship between two beings (#3776)."""
+
+    ALLY = "ally", "Ally"
+    RIVAL = "rival", "Rival"
+    FEUD = "feud", "Feud"
+    UNKNOWN = "unknown", "Unclear"

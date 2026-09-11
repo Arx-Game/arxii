@@ -10386,6 +10386,11 @@
 **Pointed to by:**
   - patron_organizations <- societies.Organization
 
+### BeingRelationship
+**Foreign Keys:**
+  - being_a -> worship.WorshippedBeing [FK]
+  - being_b -> worship.WorshippedBeing [FK]
+
 ### BeingResonance
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -10453,6 +10458,8 @@
   - being_facets <- worship.BeingFacet
   - resonances <- worship.BeingResonance
   - nicknames <- worship.BeingNickname
+  - relationships_as_a <- worship.BeingRelationship
+  - relationships_as_b <- worship.BeingRelationship
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration

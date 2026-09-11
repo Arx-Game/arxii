@@ -35,6 +35,20 @@ issue bodies; the model decision is ADR-0132.
   the same being. Read by issue #3777's `WorshipRite` reward calculation
   (FAVORED pays double, ASSOCIATED the ordinary rate) and by #3776 Task 9's
   tarot/feast-day mechanic.
+- `BeingRelationship` (#3776) — a public relationship fact between two gods:
+  `being_a`/`being_b` FKs (`related_name`s `relationships_as_a`/`relationships_as_b`),
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN), `public_story`
+  (freeform prose). Exactly one prose field — deliberately NO hidden-truth field on
+  this model: a real hidden truth (why two beings actually feud) lives entirely as a
+  separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
+  maybe-secret field here, because even a hidden/blank field on a public row would leak
+  presence/absence of a mystery. ALLY/RIVAL/FEUD/UNKNOWN all read as undirected facts,
+  so `being_a`/`being_b` carry no meaning of their own — `save()`/`clean()` sort the
+  pair into pk-ascending order (mirrors `scenes.PersonaDiscovery` and
+  `positioning.PositionEdge`), and `being_relationship_canonical_order` enforces it at
+  the DB level too, so a caller can never record the same pair twice under swapped
+  argument order. Unique per (being_a, being_b) post-normalization;
+  `being_relationship_not_self` blocks a being from relating to itself.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:

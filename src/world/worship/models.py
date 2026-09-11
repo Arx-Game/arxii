@@ -16,7 +16,7 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
 )
-from world.worship.constants import BeingResonanceTier, MiracleTrigger
+from world.worship.constants import BeingRelationshipValence, BeingResonanceTier, MiracleTrigger
 
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
@@ -170,6 +170,72 @@ class BeingNickname(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.name} ({self.being})"
+
+
+class BeingRelationship(SharedMemoryModel):
+    """A public relationship fact between two gods (#3776).
+
+    Exactly one prose field — no hidden-truth field on this model at all. A real
+    hidden truth (why two beings actually feud) lives entirely as a separately-
+    authored, separately-gated CodexEntry reached through a Clue; putting it here
+    instead would leak presence/absence of a mystery even with the text hidden.
+
+    ALLY/RIVAL/FEUD/UNKNOWN all read as undirected facts — being_a/being_b carry no
+    meaning of their own beyond which side happened to be passed first. Without
+    normalization, a caller creating (Fleshreaper, Leviathan) and a second caller
+    creating (Leviathan, Fleshreaper) would each satisfy ``unique_being_relationship_pair``
+    (different ordered pairs) and produce two rows for the same fact (#3776 Task 8
+    investigation). ``save()``/``clean()`` sort the pair into pk-ascending order
+    (mirroring ``scenes.PersonaDiscovery`` and ``positioning.PositionEdge``) so every
+    caller — including a future creation service/admin — gets this for free; the
+    ``being_relationship_canonical_order`` constraint enforces it at the DB level too,
+    for writes that bypass ``save()`` (raw SQL, ``bulk_create``).
+    """
+
+    being_a = models.ForeignKey(
+        WorshippedBeing, on_delete=models.CASCADE, related_name="relationships_as_a"
+    )
+    being_b = models.ForeignKey(
+        WorshippedBeing, on_delete=models.CASCADE, related_name="relationships_as_b"
+    )
+    valence = models.CharField(max_length=20, choices=BeingRelationshipValence.choices)
+    public_story = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["being_a", "being_b"]
+        constraints = [
+            models.CheckConstraint(
+                check=~models.Q(being_a=models.F("being_b")),
+                name="being_relationship_not_self",
+            ),
+            models.CheckConstraint(
+                check=models.Q(being_a__lt=models.F("being_b")),
+                name="being_relationship_canonical_order",
+            ),
+            models.UniqueConstraint(
+                fields=["being_a", "being_b"], name="unique_being_relationship_pair"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.being_a} {self.get_valence_display()} {self.being_b}"
+
+    def clean(self) -> None:
+        super().clean()
+        self._normalize_order()
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        self._normalize_order()
+        super().save(*args, **kwargs)
+
+    def _normalize_order(self) -> None:
+        """Swap being_a/being_b into canonical (pk-ascending) order, in place."""
+        if (
+            self.being_a_id is not None
+            and self.being_b_id is not None
+            and self.being_a_id > self.being_b_id
+        ):
+            self.being_a, self.being_b = self.being_b, self.being_a
 
 
 class WorshipGrant(SharedMemoryModel):

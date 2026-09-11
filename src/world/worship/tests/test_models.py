@@ -6,14 +6,15 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import ResonanceFactory
 from world.magic.models import Facet
-from world.worship.constants import BeingResonanceTier
+from world.worship.constants import BeingRelationshipValence, BeingResonanceTier
 from world.worship.factories import (
+    BeingRelationshipFactory,
     DevotionStandingFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
-from world.worship.models import BeingFacet, BeingNickname, BeingResonance
+from world.worship.models import BeingFacet, BeingNickname, BeingRelationship, BeingResonance
 
 
 class WorshipModelTests(TestCase):
@@ -101,4 +102,55 @@ class BeingResonanceTests(TestCase):
         with transaction.atomic(), self.assertRaises(IntegrityError):
             BeingResonance.objects.create(
                 being=being, resonance=savagery, tier=BeingResonanceTier.ASSOCIATED
+            )
+
+
+class BeingRelationshipTests(TestCase):
+    def test_relationship_has_only_public_story(self) -> None:
+        fleshreaper = WorshippedBeingFactory(name="Fleshreaper")
+        leviathan = WorshippedBeingFactory(name="Leviathan")
+        rel = BeingRelationship.objects.create(
+            being_a=fleshreaper,
+            being_b=leviathan,
+            valence=BeingRelationshipValence.ALLY,
+            public_story="Old friends since before the Godswar.",
+        )
+        self.assertEqual(rel.public_story, "Old friends since before the Godswar.")
+        self.assertFalse(hasattr(rel, "hidden_truth"))
+
+    def test_no_self_relationship(self) -> None:
+        being = WorshippedBeingFactory()
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            BeingRelationship.objects.create(
+                being_a=being, being_b=being, valence=BeingRelationshipValence.ALLY
+            )
+
+    def test_normalizes_reversed_args_to_canonical_pk_order(self) -> None:
+        """ALLY/RIVAL/FEUD/UNKNOWN are undirected facts — being_a/being_b carry no
+        meaning of their own, so ``save()`` sorts them into pk-ascending order
+        regardless of which order a caller passes them in (#3776 Task 8
+        investigation: closes the reverse-pair duplicate gap — see
+        ``test_reversed_duplicate_conflicts_with_existing_pair``)."""
+        first = WorshippedBeingFactory()
+        second = WorshippedBeingFactory()
+        self.assertLess(first.pk, second.pk)
+        rel = BeingRelationship.objects.create(
+            being_a=second, being_b=first, valence=BeingRelationshipValence.FEUD
+        )
+        self.assertEqual(rel.being_a_id, first.pk)
+        self.assertEqual(rel.being_b_id, second.pk)
+
+    def test_reversed_duplicate_conflicts_with_existing_pair(self) -> None:
+        """Without normalization, recording (a, b) and then (b, a) would satisfy
+        ``unique_being_relationship_pair`` twice over and produce two rows for the
+        same undirected fact. Normalization collapses both onto one row, so the
+        second attempt collides with the first instead of duplicating it."""
+        fleshreaper = WorshippedBeingFactory(name="Fleshreaper Duplicate Check")
+        leviathan = WorshippedBeingFactory(name="Leviathan Duplicate Check")
+        BeingRelationshipFactory(
+            being_a=fleshreaper, being_b=leviathan, valence=BeingRelationshipValence.RIVAL
+        )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            BeingRelationship.objects.create(
+                being_a=leviathan, being_b=fleshreaper, valence=BeingRelationshipValence.RIVAL
             )
