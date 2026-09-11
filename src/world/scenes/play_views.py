@@ -14,6 +14,16 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from world.scenes.constants import (
+    KIND_CHANNEL,
+    KIND_PLACE,
+    KIND_ROOM,
+    KIND_SCENE_OOC,
+    KIND_WHISPER,
+    OOC_MODES,
+    TABLETALK_MODE,
+    WHISPER_MODE,
+)
 from world.scenes.interaction_filters import InteractionFilter
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
@@ -22,14 +32,8 @@ from world.scenes.models import Interaction
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
 DATE_ONLY_LENGTH = 10
-WHISPER_MODE = "whisper"
-OOC_MODES = frozenset({"ooc", "system"})
 TEMPORARY_AVAILABILITY = "temporary"
 RETAINED_AVAILABILITY = "retained"
-ROOM_KEY = "room"
-SCENE_OOC_KIND = "scene_ooc"
-CHANNEL_KIND = "channel"
-TABLETALK_MODE = "tt"
 
 
 def _row_key(row: dict[str, Any]) -> tuple[str, int]:
@@ -130,7 +134,7 @@ def _queryset(request: Request) -> tuple[QuerySet[Interaction], dict[str, Any]]:
     conversation = request.query_params.get("conversation")
     if conversation and conversation.startswith("scene:"):
         queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
-    elif conversation == ROOM_KEY:
+    elif conversation == KIND_ROOM:
         queryset = queryset.filter(scene__isnull=True)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
@@ -147,20 +151,20 @@ def _conversation(row: dict[str, Any]) -> dict[str, str]:
         speaker = row.get("persona", {}).get("id")
         participants = [speaker, *receivers] if speaker is not None else receivers
         return {
-            "kind": WHISPER_MODE,
+            "kind": KIND_WHISPER,
             "key": "whisper:" + ",".join(str(i) for i in sorted(set(participants))),
         }
     place = row.get("place")
     if place is not None:
-        return {"kind": "place", "key": f"place:{place}"}
+        return {"kind": KIND_PLACE, "key": f"place:{place}"}
     if mode in OOC_MODES:
-        return {"kind": SCENE_OOC_KIND, "key": mode}
+        return {"kind": KIND_SCENE_OOC, "key": mode}
     if mode == TABLETALK_MODE:
-        return {"kind": CHANNEL_KIND, "key": "tt"}
+        return {"kind": KIND_CHANNEL, "key": "tt"}
     scene = row.get("scene")
     if scene is not None:
-        return {"kind": "room", "key": f"scene:{scene}"}
-    return {"kind": "room", "key": ROOM_KEY}
+        return {"kind": KIND_ROOM, "key": f"scene:{scene}"}
+    return {"kind": KIND_ROOM, "key": KIND_ROOM}
 
 
 def _rows(request: Request) -> tuple[list[dict[str, Any]], QuerySet[Interaction]]:
@@ -300,9 +304,10 @@ class PlayThreadsView(APIView):
 
     def get(self, request: Request) -> Response:
         conversation = request.query_params.get("conversation")  # noqa: USE_FILTERSET
+        if not conversation:
+            return Response({"detail": "A conversation reference is required."}, status=400)
         rows, _ = _rows(request)
-        if conversation:
-            rows = [row for row in rows if _conversation(row)["key"] == conversation]
+        rows = [row for row in rows if _conversation(row)["key"] == conversation]
         read_ids: set[int] = set()
         if request.user.is_authenticated and rows:
             from world.scenes.read_state_services import has_read  # noqa: PLC0415

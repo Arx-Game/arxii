@@ -1,22 +1,22 @@
 from django.db.models import Exists, OuterRef, Q, QuerySet
 import django_filters
 
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import (
+    KIND_CHANNEL,
+    KIND_PLACE,
+    KIND_ROOM,
+    KIND_SCENE_OOC,
+    KIND_WHISPER,
+    OOC_MODES,
+    TABLETALK_MODE,
+    WHISPER_MODE,
+)
 from world.scenes.models import (
     Interaction,
     InteractionFavorite,
     InteractionReaction,
     InteractionReceiver,
 )
-
-WHISPER_MODE = InteractionMode.WHISPER
-OOC_MODES = ("ooc", "system")
-TABLETALK_MODE = "tt"
-KIND_WHISPER = "whisper"
-KIND_PLACE = "place"
-KIND_SCENE_OOC = "scene_ooc"
-KIND_CHANNEL = "channel"
-KIND_ROOM = "room"
 
 
 class InteractionFilter(django_filters.FilterSet):
@@ -46,29 +46,38 @@ class InteractionFilter(django_filters.FilterSet):
         """Mirror `play_views._conversation()`'s kind derivation as a queryset filter.
 
         Kept in lockstep with that function deliberately -- `kind` is not a
-        stored column (#3759 ledger). `_conversation()` only classifies a row as
-        "whisper" when `mode == WHISPER_MODE` AND it has receivers (line 131 of
-        `play_views.py`); a whisper-mode row with no `InteractionReceiver` rows
-        falls through to "room" instead. The `has_receivers` annotation keeps
-        that precedence exact rather than checking mode alone.
+        stored column (#3759 ledger). `_conversation()`'s precedence is an
+        if/elif chain checked in exactly this order: whisper (mode==WHISPER_MODE
+        AND has receivers) > place (place is set) > scene_ooc (mode in OOC_MODES)
+        > channel (mode==TABLETALK_MODE) > room (everything else). Each branch
+        below is therefore the FULL exclusion of every higher-precedence branch,
+        not just a same-tier positive match -- e.g. a whisper-mode row that also
+        has `place` set is classified "whisper" by `_conversation()` (whisper is
+        checked first), so the `place` branch here must exclude it too, or the two
+        functions would disagree on that row's kind.
+
+        `scene_ooc` and `channel` are currently unreachable in practice --
+        `InteractionMode` has no "ooc"/"system"/"tt" value yet (#3299 is not
+        delivered) -- but the exclusions are still written out for when it does.
         """
         annotated = queryset.annotate(
             has_receivers=Exists(InteractionReceiver.objects.filter(interaction=OuterRef("pk")))
         )
+        is_whisper = Q(mode=WHISPER_MODE, has_receivers=True)
         if value == KIND_WHISPER:
-            return annotated.filter(mode=WHISPER_MODE, has_receivers=True)
+            return annotated.filter(is_whisper)
         if value == KIND_PLACE:
-            return queryset.filter(place__isnull=False)
+            return annotated.filter(place__isnull=False).exclude(is_whisper)
         if value == KIND_SCENE_OOC:
-            return queryset.filter(mode__in=OOC_MODES)
+            return annotated.filter(mode__in=OOC_MODES, place__isnull=True).exclude(is_whisper)
         if value == KIND_CHANNEL:
-            return queryset.filter(mode=TABLETALK_MODE)
+            return annotated.filter(mode=TABLETALK_MODE, place__isnull=True).exclude(is_whisper)
         if value == KIND_ROOM:
             excluded_modes = {TABLETALK_MODE} | set(OOC_MODES)
             return (
                 annotated.filter(place__isnull=True)
                 .exclude(mode__in=excluded_modes)
-                .exclude(mode=WHISPER_MODE, has_receivers=True)
+                .exclude(is_whisper)
             )
         return queryset
 

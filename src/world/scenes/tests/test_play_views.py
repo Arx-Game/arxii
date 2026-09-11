@@ -151,6 +151,19 @@ class PlayReadViewTests(APITestCase):
 
 
 class PlayThreadsViewTests(APITestCase):
+    def test_requires_a_conversation_bound(self) -> None:
+        """`PlayThreadsView` exists to group ONE conversation's rows into threads
+
+        (per its own docstring/spec) -- without a bound it serialized (and ran an
+        unbounded `has_read` IN-query over) the caller's ENTIRE authorized visible
+        history. Mirrors `PlaySearchView`'s `has_bound` 400 pattern.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        response = self.client.get("/api/play/threads/")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("conversation", response.json()["detail"])
+
     def test_groups_by_thread_and_paginates(self) -> None:
         from world.scenes.models import InteractionThread
 
@@ -219,12 +232,14 @@ class PlayThreadsViewTests(APITestCase):
             # the fix: `start_index = len(results) - limit = 3 > 0`, so `_page()`
             # unconditionally calls `_cursor(page[0])`, which needs `_row_key`'s
             # fallback to resolve -- the missing `latestVisiblePose` key crashed here.
-            latest_response = self.client.get("/api/play/threads/")
+            latest_response = self.client.get("/api/play/threads/?conversation=room")
             self.assertEqual(latest_response.status_code, 200)
             latest_page = latest_response.json()
             self.assertIsNotNone(latest_page["before"])
 
-            earlier_response = self.client.get(f"/api/play/threads/?before={latest_page['before']}")
+            earlier_response = self.client.get(
+                f"/api/play/threads/?conversation=room&before={latest_page['before']}"
+            )
             self.assertEqual(earlier_response.status_code, 200)
             earlier_page = earlier_response.json()
 
@@ -295,7 +310,7 @@ class PlayThreadsViewTests(APITestCase):
         after_token = base64.urlsafe_b64encode(after_value.encode()).decode().rstrip("=")
 
         with patch("world.scenes.play_views._rows", return_value=(rows, None)):
-            response = self.client.get(f"/api/play/threads/?after={after_token}")
+            response = self.client.get(f"/api/play/threads/?conversation=room&after={after_token}")
 
         self.assertEqual(response.status_code, 200)
         result_ids = [row["id"] for row in response.json()["results"]]

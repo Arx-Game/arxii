@@ -93,9 +93,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `threading.showAll` for exactly that reason (the bare `showAll` only resets
   the filter/mute state, not the active tab).
 - **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
-  Whispers / OOC — and date range) plus browse authorized retained
-  conversations (filtered by date range only; type does not scope the browse
-  list, only the search query); the conversation list paginates via a cursor
+  Whispers — and date range) plus browse authorized retained conversations
+  (filtered by date range only; type does not scope the browse list, only the
+  search query); the conversation list paginates via a cursor. An OOC filter
+  option is deliberately not exposed here: `filter_kind`'s `scene_ooc`/`channel`
+  branches can never match today (`InteractionMode` has no ooc/system/tt value
+  until #3299 lands) — see `interaction_filters.py`.
   ("Load more"). Opening a search result or conversation switches the reader
   into reference mode via `onOpenReference` (#3759).
 - **`ConversationTabStrip.tsx`**: The open-conversations tab strip rendered

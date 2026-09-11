@@ -19,7 +19,7 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
   const [submitted, setSubmitted] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [kind, setKind] = useState<'all' | 'room' | 'whisper' | 'scene_ooc'>('all');
+  const [kind, setKind] = useState<'all' | 'room' | 'whisper'>('all');
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [conversationsCursor, setConversationsCursor] = useState<string | undefined>(undefined);
   const ninetyDaysAgo = useMemo(() => {
@@ -112,7 +112,6 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
             <option value="all">All accessible</option>
             <option value="room">Scenes</option>
             <option value="whisper">Whispers</option>
-            <option value="scene_ooc">OOC</option>
           </select>
         </label>
       </form>

@@ -51,6 +51,47 @@ class InteractionFilterKindTests(TestCase):
         qs = InteractionFilter({"kind": "not-a-real-kind"}, queryset=Interaction.objects.all()).qs
         self.assertEqual(qs.count(), Interaction.objects.count())
 
+    def test_kind_scene_ooc_currently_matches_nothing(self) -> None:
+        """`InteractionMode` has no "ooc"/"system" value yet (#3299 not delivered),
+
+        so this branch is honest, documented dead scaffolding rather than silently
+        broken -- a passing test proving it's empty is the whole point (this is
+        exactly the state that went unnoticed the first time).
+        """
+        InteractionFactory(mode=InteractionMode.POSE, place=None, scene=SceneFactory())
+        InteractionFactory(mode=InteractionMode.WHISPER, place=None, scene=None)
+        InteractionFactory(place=PlaceFactory())
+        qs = InteractionFilter({"kind": "scene_ooc"}, queryset=Interaction.objects.all()).qs
+        self.assertFalse(qs.exists())
+
+    def test_kind_channel_currently_matches_nothing(self) -> None:
+        """`InteractionMode` has no "tt" value yet (#3299 not delivered) -- see above."""
+        InteractionFactory(mode=InteractionMode.POSE, place=None, scene=SceneFactory())
+        InteractionFactory(mode=InteractionMode.WHISPER, place=None, scene=None)
+        InteractionFactory(place=PlaceFactory())
+        qs = InteractionFilter({"kind": "channel"}, queryset=Interaction.objects.all()).qs
+        self.assertFalse(qs.exists())
+
+    def test_kind_place_excludes_whisper_with_receivers_and_place(self) -> None:
+        """Mirrors `_conversation()`'s precedence: whisper wins over place when both
+
+        conditions hold (whisper is checked first in the if/elif chain), so a
+        whisper-mode row with receivers AND a `place` set must NOT show up under
+        `kind=place` -- it belongs to `kind=whisper` instead.
+        """
+        place = PlaceFactory()
+        whisper_with_place = InteractionFactory(
+            mode=InteractionMode.WHISPER, place=place, scene=None
+        )
+        InteractionReceiverFactory(interaction=whisper_with_place)
+        plain_place_interaction = InteractionFactory(mode=InteractionMode.POSE, place=place)
+        all_interactions = Interaction.objects.all()
+        place_result = InteractionFilter({"kind": "place"}, queryset=all_interactions).qs
+        self.assertNotIn(whisper_with_place.pk, place_result.values_list("pk", flat=True))
+        self.assertIn(plain_place_interaction.pk, place_result.values_list("pk", flat=True))
+        whisper_result = InteractionFilter({"kind": "whisper"}, queryset=all_interactions).qs
+        self.assertEqual(set(whisper_result.values_list("pk", flat=True)), {whisper_with_place.pk})
+
 
 class InteractionFilterParticipantTests(TestCase):
     def test_participant_matches_writer(self) -> None:
