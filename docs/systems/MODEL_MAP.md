@@ -4558,6 +4558,7 @@
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
 **Pointed to by:**
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -5330,15 +5331,15 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - parent -> magic.Facet [FK] (nullable)
 **Pointed to by:**
-  - children <- magic.Facet
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
+  - inherent_on_templates <- items.ItemTemplate
   - item_attachments <- items.ItemFacet
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
+  - favored_by_beings <- worship.BeingFacet
 
 ### FallRedemptionConfig
 
@@ -10372,6 +10373,11 @@
 
 ## world.worship
 
+### BeingFacet
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - facet -> magic.Facet [FK]
+
 ### ChosenFavorConfig
 
 ### DevotionStanding
@@ -10431,6 +10437,7 @@
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - being_facets <- worship.BeingFacet
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration

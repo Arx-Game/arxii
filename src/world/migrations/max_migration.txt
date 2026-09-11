@@ -1,1 +1,1 @@
-0123_beingfacet
+0124_itemfacet_is_inherent_itemtemplate_inherent_facets
