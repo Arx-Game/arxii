@@ -1,10 +1,11 @@
-import { render as rtlRender, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render as rtlRender, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { RenderOptions } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
+import { emitActionResult } from '@/hooks/actionResultBus';
 
 // Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -17,6 +18,8 @@ function render(ui: ReactElement, options?: RenderOptions) {
 }
 
 const sendMock = vi.fn();
+// #3760 Task 10 — say/whisper now dispatch via executeAction instead of send().
+const executeActionMock = vi.fn();
 // Loosely typed: submitPose resolves with the created interaction payload
 // (#2183 reads `id` off it) or undefined in older tests.
 const submitPoseMock = vi.fn((): Promise<unknown> => Promise.resolve());
@@ -24,7 +27,7 @@ const fetchSceneMock = vi.fn();
 const toastErrorMock = vi.fn();
 
 vi.mock('@/hooks/useGameSocket', () => ({
-  useGameSocket: () => ({ send: sendMock }),
+  useGameSocket: () => ({ send: sendMock, executeAction: executeActionMock }),
 }));
 
 vi.mock('sonner', () => ({
@@ -39,6 +42,11 @@ vi.mock('@/scenes/queries', () => ({
   },
 }));
 
+// Bob carries a resolvable dbref (#3760 Task 10 — whisper resolves its
+// composerMode target NAME against this room-character list, via `dbref`,
+// to the `target_id` the WS wire actually needs; `sceneDetail.participants`
+// carries no dbref, only a Persona id, the wrong id space for a whisper
+// target).
 vi.mock('@/store/hooks', () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
     selector({
@@ -46,7 +54,7 @@ vi.mock('@/store/hooks', () => ({
         active: 'Alice',
         sessions: {
           Alice: {
-            room: { characters: [{ name: 'Bob', thumbnail_url: null }] },
+            room: { characters: [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }] },
           },
         },
       },
@@ -116,6 +124,7 @@ vi.mock('@/scenes/actionQueries', () => ({
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
+    executeActionMock.mockClear();
     submitPoseMock.mockClear();
     submitPoseMock.mockImplementation(() => Promise.resolve());
     fetchSceneMock.mockClear();
@@ -123,6 +132,11 @@ describe('CommandInput', () => {
     createActionRequestMock.mockClear();
     createActionRequestMock.mockImplementation(() => Promise.resolve({ status: 'resolved' }));
     queryClient.clear();
+    // useDraftStore (#3760 Task 10) persists to sessionStorage under a key
+    // derived from account/persona/conversation — several tests in this file
+    // share the same derived key (no draftScope passed), so a leftover draft
+    // from one test would otherwise leak into the next test's hydration.
+    sessionStorage.clear();
   });
 
   it('keeps drafts editable while entry is unconfirmed and blocks button and keyboard sends', () => {
@@ -199,7 +213,7 @@ describe('CommandInput', () => {
     expect(sendMock).toHaveBeenCalledWith('Alice', 'page Bob=meet me ooc for a sec');
   });
 
-  it('whisper mode uses target=text syntax', () => {
+  it('whisper mode dispatches via executeAction with a resolved target_id and client_request_id (#3760)', () => {
     const mode: ComposerMode = {
       command: 'whisper',
       targets: ['Bob'],
@@ -211,7 +225,15 @@ describe('CommandInput', () => {
     fireEvent.change(textarea, { target: { value: 'secret message' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Bob=secret message');
+    expect(sendMock).not.toHaveBeenCalled();
+    // Bob's dbref (#501, from the @/store/hooks mock) resolves to target_id
+    // 501 -- the WS wire's `_resolve_registry_kwargs` only auto-resolves
+    // `<field>_id` int kwargs, never a bare name.
+    expect(executeActionMock).toHaveBeenCalledWith('Alice', 'whisper', {
+      text: 'secret message',
+      target_id: 501,
+      client_request_id: expect.any(String),
+    });
   });
 
   it('prepends targets with @ syntax for non-whisper commands', () => {
@@ -417,7 +439,7 @@ describe('CommandInput', () => {
     expect(submitPoseMock).not.toHaveBeenCalled();
   });
 
-  it('whisper composer mode with sceneId still uses WebSocket send (non-pose commands keep WS)', () => {
+  it('whisper composer mode with sceneId still dispatches via executeAction, never REST submitPose (#3760)', () => {
     const mode: ComposerMode = {
       command: 'whisper',
       targets: ['Bob'],
@@ -429,8 +451,13 @@ describe('CommandInput', () => {
     fireEvent.change(textarea, { target: { value: 'secret message' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Bob=secret message');
+    expect(sendMock).not.toHaveBeenCalled();
     expect(submitPoseMock).not.toHaveBeenCalled();
+    expect(executeActionMock).toHaveBeenCalledWith('Alice', 'whisper', {
+      text: 'secret message',
+      target_id: 501,
+      client_request_id: expect.any(String),
+    });
   });
 
   it('directed pose composer mode sends target_names on the REST path (#2156)', () => {
@@ -597,6 +624,94 @@ describe('CommandInput', () => {
 
     await waitFor(() => expect(submitPoseMock).toHaveBeenCalled());
     expect(createActionRequestMock).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------------
+  // say/whisper via executeAction, ack-gated clearing (#3760 Task 10)
+  // ---------------------------------------------------------------------------
+
+  it('sends say via executeAction with a registry key and client_request_id, not raw text', () => {
+    const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'hello' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(executeActionMock).toHaveBeenCalledWith('Alice', 'say', {
+      text: 'hello',
+      client_request_id: expect.any(String),
+    });
+  });
+
+  it('tt (tabletalk) composer mode still uses the legacy WebSocket send, not executeAction (#3760 scope note)', () => {
+    // Deliberately unmigrated this task: PoseAction (tt's registry action)
+    // requires a resolved Place kwarg the composer has no id for anywhere
+    // (isAtPlace is a bare boolean) -- see EXECUTE_ACTION_SPEECH_MODES's
+    // comment in CommandInput.tsx.
+    const mode: ComposerMode = { command: 'tt', targets: [], label: 'Tabletalk' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'leans in' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(executeActionMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'tt leans in');
+  });
+
+  it('whisper falls back to legacy send when the target cannot be resolved to a room character', () => {
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Nobody'],
+      label: 'Whisper → Nobody',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'secret message' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(executeActionMock).not.toHaveBeenCalled();
+    expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Nobody=secret message');
+  });
+
+  it('keeps the draft until the ACTION_RESULT ack arrives, then clears it (ack-gated clearing)', () => {
+    const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: 'hello there' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(executeActionMock).toHaveBeenCalled();
+    // Unlike the old unconditional clear-on-submit, the text survives until
+    // the server confirms the send.
+    expect(textarea.value).toBe('hello there');
+
+    act(() => {
+      emitActionResult({ success: true, message: null, data: null });
+    });
+
+    expect(textarea.value).toBe('');
+  });
+
+  it('keeps the draft and surfaces an error toast when the ACTION_RESULT reports failure', () => {
+    const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: 'hello there' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    act(() => {
+      emitActionResult({ success: false, message: 'You have been muted.', data: null });
+    });
+
+    expect(toastErrorMock).toHaveBeenCalledWith('You have been muted.');
+    // The rejected content is preserved so the player can revise and resend.
+    expect(textarea.value).toBe('hello there');
   });
 });
 

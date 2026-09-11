@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 export interface DraftKey {
   accountId: number;
@@ -56,6 +56,25 @@ function persist(key: DraftKey, draft: Draft): void {
 export function useDraftStore(key: DraftKey) {
   const [draft, setDraft] = useState<Draft>(() => readStoredDraft(key));
   const lastSentContentRef = useRef<string | null>(null);
+  // `useState(() => readStoredDraft(key))` above only hydrates once, at
+  // mount. A caller that keeps one `useDraftStore` instance mounted across a
+  // `key` change (e.g. `CommandInput` never remounts when its conversation
+  // changes — see its own `previousDraftKey`/re-hydration effect, the exact
+  // same problem, in `CommandInput.tsx`) would otherwise keep the OLD
+  // conversation's `draft` in memory while `persist()`/`acknowledge()`/etc.
+  // write under the NEW key: silently mixing draft state across
+  // conversations (#3760 Task 8 review finding, fixed here rather than at
+  // every call site). Compares the derived storage-key STRING, not `key`
+  // object identity, so a caller re-creating the key object every render
+  // (a plain object literal) doesn't spuriously re-hydrate.
+  const currentStorageKeyRef = useRef<string>(draftStorageKey(key));
+  useEffect(() => {
+    const nextStorageKey = draftStorageKey(key);
+    if (currentStorageKeyRef.current === nextStorageKey) return;
+    currentStorageKeyRef.current = nextStorageKey;
+    lastSentContentRef.current = null;
+    setDraft(readStoredDraft(key));
+  }, [key]);
 
   const update = useCallback(
     (patch: Partial<Draft>) => {

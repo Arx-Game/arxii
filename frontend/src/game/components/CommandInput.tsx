@@ -2,6 +2,11 @@ import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
+import { useActionResult } from '@/hooks/actionResultBus';
+import type { ActionResultPayload } from '@/hooks/types';
+import { useDraftStore } from '@/game/useDraftStore';
+import type { DraftKey } from '@/game/useDraftStore';
+import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { ModeSelector } from '@/scenes/components/ModeSelector';
@@ -52,6 +57,17 @@ const KNOWN_COMMANDS: ReadonlySet<string> = new Set([
 // gating applies to say/whisper/mutter; pose/emit/tt carry no in-fiction language).
 const SPEECH_COMPOSER_MODES = new Set(['say', 'whisper', 'mutter']);
 const MAX_POSE_LENGTH = 10_000;
+
+// #3760 Task 10 — composer modes dispatched via `executeAction` (structured
+// ack + idempotency) instead of raw WS text. `tt` (tabletalk) is NOT here:
+// `PoseAction` (its registry action, key `"pose"`) requires a resolved
+// `Place` kwarg to scope the message to the table, and neither this
+// component nor its callers currently hold a Place id anywhere (`isAtPlace`
+// is a bare boolean) — dispatching tt via `executeAction` today would either
+// crash (an unresolvable `place` kwarg) or silently broadcast to the whole
+// room instead of the table. Left on the legacy `send()` path until a Place
+// id is threaded down; see the Task 10 report for the full trace.
+const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper']);
 
 /**
  * Builds the full command string for a trimmed input given the active composer
@@ -204,7 +220,7 @@ export function CommandInput({
     null
   );
   const submittingRef = useRef(false);
-  const { send } = useGameSocket();
+  const { send, executeAction } = useGameSocket();
 
   const activeCharacter = useAppSelector((state) => state.game.active);
   const roomCharacters = useAppSelector((state) => {
@@ -212,6 +228,42 @@ export function CommandInput({
     const room = state.game.sessions[activeCharacter]?.room;
     return room?.characters ?? [];
   });
+  // Optional chained even though `RootState.auth` isn't nullable in the real
+  // store: several existing tests mock `@/store/hooks` with a partial state
+  // that omits `auth` entirely, and this must not throw for them.
+  const accountId = useAppSelector((state) => state.auth?.account?.id) ?? 0;
+
+  // #3760 Task 10 — say/whisper draft acknowledgement (Task 8's
+  // `useDraftStore`). Keyed by `draftScope` (falling back to a
+  // per-character default), the same scope the legacy `command`/
+  // sessionStorage-v1 draft below already uses — mode-switching within one
+  // conversation tab already shares one textarea/draft today, so sharing one
+  // `useDraftStore` slot across say/whisper modes on the same tab is not a
+  // new behavior.
+  const draftKey = useMemo<DraftKey>(
+    () => ({
+      accountId,
+      personaId: personaId ?? 0,
+      conversationKey: draftScope ?? `character:${character}`,
+    }),
+    [accountId, personaId, draftScope, character]
+  );
+  const draftStore = useDraftStore(draftKey);
+  // Mirrors `command` without forcing `handleActionResult` (below) to
+  // resubscribe to the action-result bus on every keystroke.
+  const commandRef = useRef(command);
+  useEffect(() => {
+    commandRef.current = command;
+  }, [command]);
+  // The most recently dispatched say/whisper send awaiting its ACTION_RESULT.
+  // `ActionResultPayload` carries no client_request_id (see
+  // `hooks/types.ts`), so correlation is best-effort: the next action_result
+  // event on the bus is assumed to be this dispatch's response, the same
+  // assumption every other `useActionResult` consumer in this codebase
+  // already makes (WardrobePage, StatusPanel, ...). A fast concurrent
+  // dispatch from elsewhere in the app could in principle misattribute —
+  // see the Task 10 report.
+  const pendingSpeechRef = useRef<{ clientRequestId: string; text: string } | null>(null);
 
   const { data: sceneDetail } = useQuery<SceneDetail>({
     queryKey: sceneKeys.detail(sceneId ?? ''),
@@ -228,6 +280,36 @@ export function CommandInput({
       /* keep in memory */
     }
   }, [draftStorageKey]);
+
+  // #3760 Task 10 — resolves the say/whisper dispatch tracked in
+  // `pendingSpeechRef`: acknowledge/clear on success, reject + toast on
+  // failure. Ack-gated clearing (mirrors the REST `submitPose` path just
+  // below: the draft is only cleared on success — a rejected/failed send
+  // must not silently eat the player's text). Guards against clobbering a
+  // newer, unsent edit the same way `useDraftStore.acknowledge` guards its
+  // own state: only clears `command` when it still matches the text that was
+  // actually sent.
+  const handleActionResult = useCallback(
+    (payload: ActionResultPayload) => {
+      const pending = pendingSpeechRef.current;
+      if (!pending) return;
+      pendingSpeechRef.current = null;
+      if (payload.success) {
+        draftStore.acknowledge(pending.clientRequestId);
+        if (commandRef.current === pending.text) {
+          setHistory((prev) => [...prev, pending.text]);
+          setHistoryIndex(-1);
+          setCommand('');
+          clearStoredDraft();
+        }
+      } else {
+        draftStore.reject(pending.clientRequestId, payload.message ?? 'Failed to send.');
+        toast.error(payload.message ?? 'Failed to send.');
+      }
+    },
+    [draftStore, clearStoredDraft]
+  );
+  useActionResult(handleActionResult);
 
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
@@ -272,6 +354,58 @@ export function CommandInput({
 
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
+    }
+
+    // #3760 Task 10 — say/whisper dispatch via `executeAction` (structured
+    // ack + idempotency), replacing the raw WS text-command send for these
+    // two modes. Only when the active mode itself is say/whisper AND the
+    // player didn't type an explicit different command inline (the
+    // KNOWN_COMMANDS override buildFullCommand already detects above stays
+    // on the legacy `send()` path unchanged — that's free-text, not a
+    // structured dispatch). `tt` is deliberately excluded — see
+    // EXECUTE_ACTION_SPEECH_MODES's comment.
+    const firstWord = trimmed.split(' ')[0].toLowerCase();
+    const hasExplicitCommandOverride = KNOWN_COMMANDS.has(firstWord);
+    const speechComposerMode: ComposerMode | null =
+      !hasExplicitCommandOverride &&
+      composerMode &&
+      EXECUTE_ACTION_SPEECH_MODES.has(composerMode.command)
+        ? composerMode
+        : null;
+
+    if (speechComposerMode && speechComposerMode.command === 'say') {
+      const clientRequestId = draftStore.beginSend();
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
+      submittingRef.current = false;
+      return;
+    }
+
+    if (speechComposerMode && speechComposerMode.command === 'whisper') {
+      // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
+      // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
+      // it cannot resolve a target by name. `composerMode.targets` only ever
+      // carries persona display names (see `ComposerMode.targets` doc
+      // comment), so the name is resolved against `roomCharacters` (which
+      // carries a `dbref`, unlike `sceneDetail.participants`) to a
+      // `target_id`. When it can't be resolved (target not in this room's
+      // character list — e.g. a scene participant who has since left),
+      // fall through to the legacy `send()` path below rather than crash or
+      // silently drop the whisper.
+      const whisperTargetName = speechComposerMode.targets[0];
+      const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
+      const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
+      if (whisperTargetId > 0) {
+        const clientRequestId = draftStore.beginSend();
+        pendingSpeechRef.current = { clientRequestId, text: trimmed };
+        executeAction(character, 'whisper', {
+          text: trimmed,
+          target_id: whisperTargetId,
+          client_request_id: clientRequestId,
+        });
+        submittingRef.current = false;
+        return;
+      }
     }
 
     // Determine submission path. The REST path (submit_pose) is now the
@@ -357,6 +491,9 @@ export function CommandInput({
     command,
     composerMode,
     send,
+    executeAction,
+    draftStore,
+    roomCharacters,
     actionAttachment,
     onSubmitAction,
     sceneId,
@@ -405,10 +542,22 @@ export function CommandInput({
     [onModeChange, composerMode]
   );
 
-  const handleChange = useCallback((val: string) => {
-    setCommand(val);
-    setHistoryIndex(-1);
-  }, []);
+  const handleChange = useCallback(
+    (val: string) => {
+      setCommand(val);
+      setHistoryIndex(-1);
+      // Keeps `draftStore.draft.content` in sync with what's on screen so
+      // `beginSend()` (called at submit time, a later render) can correctly
+      // tell "same content as last send" (reuse the id — protects against a
+      // double-Enter double-dispatch) from "new content" (mint a fresh id).
+      // `beginSend()`'s own doc comment warns against calling `setContent`
+      // and `beginSend` back to back in one synchronous handler — this is
+      // why the sync lives here, in the change handler, one render ahead of
+      // any submit, rather than inline in `handleSubmit`.
+      draftStore.setContent(val);
+    },
+    [draftStore]
+  );
 
   const ghostText = useMemo(() => {
     // #3294 \u2014 a companion emote overrides the normal mode ghost text entirely
