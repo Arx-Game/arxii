@@ -70,16 +70,18 @@ export function PlaySidebar({
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
         data-testid="play-sidebar-scroll"
       >
-        {mode === 'here' && here}
-        {mode === 'conversations' && (
+        <div hidden={mode !== 'here'}>{here}</div>
+        <div hidden={mode !== 'conversations'}>
           <ConversationSidebar
             threading={threading}
             onThreadClick={onThreadClick}
             onShowAll={onShowAll}
             selectedThreadKey={selectedThreadKey}
           />
-        )}
-        {mode === 'history' && <HistoryNavigator onOpenReference={onOpenReference} />}
+        </div>
+        <div hidden={mode !== 'history'}>
+          <HistoryNavigator onOpenReference={onOpenReference} />
+        </div>
       </div>
     </aside>
   );
