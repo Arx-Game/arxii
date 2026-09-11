@@ -420,6 +420,40 @@ describe('ThreadedNarrativeReader', () => {
     expect(mountedPoses.length).toBeGreaterThan(0);
   });
 
+  it("reaches poses beyond the old flat-20 cutoff -- the virtualizer's own total size reflects the FULL interactions array, not a windowed slice (#3759 Wave 9 fix round 1 finding I-2)", async () => {
+    // The test above (`mountedPoses.length < 300 && > 0`) passes identically
+    // whether `chronologicalItems` holds all 300 items OR only the old
+    // flat-20 tail slice -- a 20-item list ALSO mounts fewer than 300 and
+    // more than 0 nodes, for the wrong reason. This asserts something that
+    // actually discriminates: `chronoVirtualizer.getTotalSize()` (rendered
+    // directly as the inner content div's own `height` style, right below)
+    // scales with the TRUE item count. With 300 items -- even though jsdom's
+    // stubbed 700px `offsetHeight` (see beforeEach) means only the handful
+    // of initially-visible/overscanned rows get MEASURED at 700px, with the
+    // rest staying at the 160px `estimateSize` -- the total comfortably
+    // exceeds what a 20-item-capped list could ever produce (its own
+    // theoretical ceiling: 20 rows all measured at 700px = 14000).
+    const user = userEvent.setup();
+    const many = Array.from({ length: 300 }, (_, i) =>
+      interaction(i + 1, `pose ${i + 1}`, 'thread-a')
+    );
+    const { container } = render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={many}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+    const totalSizeEl = container.querySelector<HTMLElement>(
+      '[data-testid="chrono-scroll-container"] > div'
+    );
+    const totalSize = Number(totalSizeEl?.style.height.replace('px', ''));
+    expect(totalSize).toBeGreaterThan(20000);
+  });
+
   it('gives the Chronological scroll container a real, bounded height rather than one relying on an inert flex-1 class (#3759 review Fix round 1 CRITICAL)', async () => {
     // This file's `beforeEach` stubs `scrollHeight`/`clientHeight` directly
     // on `[data-testid="chrono-scroll-container"]` (see above) so every OTHER
