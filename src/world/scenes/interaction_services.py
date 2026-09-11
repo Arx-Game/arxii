@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 from datetime import timedelta
 import itertools
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
+import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.scenes.constants import (
@@ -19,6 +21,7 @@ from world.scenes.models import (
     Interaction,
     InteractionTargetPersona,
     Persona,
+    PoseSubmission,
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver, Place
@@ -863,6 +866,65 @@ def personas_for_characters(characters: Iterable[ObjectDB]) -> list[Persona] | N
         if primary is not None:
             personas.append(primary)
     return personas or None
+
+
+@dataclass
+class IdempotentSubmissionResult:
+    """Outcome of an idempotency-checked interaction submission."""
+
+    interaction: Interaction | None
+    replayed: bool
+    conflict: bool
+
+
+def idempotent_record_interaction(
+    *,
+    persona: Persona,
+    client_request_id: uuid.UUID,
+    comparison_fields: dict[str, object],
+    **record_kwargs: Any,
+) -> IdempotentSubmissionResult:
+    """Idempotency-checked wrapper around `record_interaction` (#3760).
+
+    Looks up an existing `PoseSubmission` for (persona, client_request_id) first.
+    Found + `comparison_fields` match the stored Interaction's same-named
+    attributes: return that Interaction, nothing recomputed (no re-roll, no
+    duplicate row). Found + any field differs: a `payload_conflict` (the caller
+    reused a request id for genuinely different content - a client bug, not a
+    legitimate retry). Not found: run the real work via `record_interaction` and
+    write the `PoseSubmission` row in the same transaction; a concurrent duplicate
+    insert (two near-simultaneous retries) raises `IntegrityError`, which is
+    caught by re-reading and returning the winner's row rather than erroring -
+    this is what makes the check race-safe.
+    """
+    existing = (
+        PoseSubmission.objects.filter(persona=persona, client_request_id=client_request_id)
+        .select_related("interaction")
+        .first()
+    )
+    if existing is not None:
+        stored = existing.interaction
+        if stored is not None and all(
+            getattr(stored, field) == value for field, value in comparison_fields.items()
+        ):
+            return IdempotentSubmissionResult(interaction=stored, replayed=True, conflict=False)
+        return IdempotentSubmissionResult(interaction=None, replayed=False, conflict=True)
+
+    try:
+        with transaction.atomic():
+            interaction = record_interaction(**record_kwargs)
+            PoseSubmission.objects.create(
+                persona=persona, client_request_id=client_request_id, interaction=interaction
+            )
+    except IntegrityError:
+        winner = PoseSubmission.objects.select_related("interaction").get(
+            persona=persona, client_request_id=client_request_id
+        )
+        return IdempotentSubmissionResult(
+            interaction=winner.interaction, replayed=True, conflict=False
+        )
+
+    return IdempotentSubmissionResult(interaction=interaction, replayed=False, conflict=False)
 
 
 def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interaction creation
