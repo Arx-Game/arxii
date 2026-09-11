@@ -882,6 +882,7 @@ def idempotent_record_interaction(
     persona: Persona,
     client_request_id: uuid.UUID,
     comparison_fields: dict[str, object],
+    record_fn: Callable[..., Interaction | None] | None = None,
     **record_kwargs: Any,
 ) -> IdempotentSubmissionResult:
     """Idempotency-checked wrapper around `record_interaction` (#3760).
@@ -893,12 +894,19 @@ def idempotent_record_interaction(
     match the stored Interaction's same-named attributes: return that Interaction, nothing
     recomputed (no re-roll, no duplicate row). Found + any field differs: a `payload_conflict`
     (the caller reused a request id for genuinely different content - a client bug, not a
-    legitimate retry). Not found: run the real work via `record_interaction` and
-    write the `PoseSubmission` row in the same transaction; a concurrent duplicate
-    insert (two near-simultaneous retries) raises `IntegrityError`, which is
+    legitimate retry). Not found: run the real work via `record_fn` (default
+    `record_interaction`) and write the `PoseSubmission` row in the same transaction; a
+    concurrent duplicate insert (two near-simultaneous retries) raises `IntegrityError`, which is
     caught by re-reading and returning the winner's row rather than erroring -
     this is what makes the check race-safe.
+
+    ``record_fn`` (#3760 Task 5) lets a caller substitute a differently-shaped recorder for
+    `record_interaction` -- e.g. `WhisperAction` passes `record_whisper_interaction`, whose
+    ephemeral-scene branch scopes the real-time push to the writer + named target
+    (`recipients=[character, target]`) instead of `record_interaction`'s room-wide broadcast;
+    reusing `record_interaction` there would leak whisper content to the whole ephemeral scene.
     """
+    record_fn = record_fn or record_interaction
     existing = (
         PoseSubmission.objects.filter(persona=persona, client_request_id=client_request_id)
         .select_related("interaction")
@@ -917,7 +925,7 @@ def idempotent_record_interaction(
 
     try:
         with transaction.atomic():
-            interaction = record_interaction(**record_kwargs)
+            interaction = record_fn(**record_kwargs)
             PoseSubmission.objects.create(
                 persona=persona, client_request_id=client_request_id, interaction=interaction
             )

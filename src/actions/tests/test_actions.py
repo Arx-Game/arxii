@@ -1,6 +1,7 @@
 """Tests for concrete action implementations."""
 
 from unittest.mock import patch
+import uuid
 
 from django.test import TestCase, tag
 
@@ -44,6 +45,8 @@ from world.mechanics.constants import ChallengeType
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import InteractionMode
+from world.scenes.models import Interaction
 
 
 class LookActionTests(TestCase):
@@ -309,6 +312,140 @@ class WhisperActionTests(TestCase):
         target = ObjectDBFactory(db_key="Bob")
         result = action.run(actor, target=target, text="")
         assert result.success is False
+
+
+class SayActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — SayAction routes through idempotent_record_interaction when a
+    client_request_id is present, the same wrapper submit-pose (REST) uses."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Speaker", location=self.room)
+        CharacterSheetFactory(character=self.character)
+
+    def test_say_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "Hello there.", "client_request_id": request_id}
+
+        with patch.object(self.room, "msg_contents"):
+            first = SayAction().execute(actor=self.character, context=None, **kwargs)
+            second = SayAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.SAY).count() == 1
+
+    def test_say_action_conflict_on_reused_id_with_different_text(self):
+        request_id = uuid.uuid4()
+
+        with patch.object(self.room, "msg_contents"):
+            first = SayAction().execute(
+                actor=self.character,
+                context=None,
+                text="Hello there.",
+                client_request_id=request_id,
+            )
+            second = SayAction().execute(
+                actor=self.character,
+                context=None,
+                text="Something else.",
+                client_request_id=request_id,
+            )
+
+        assert first.success is True
+        assert second.success is False
+        assert Interaction.objects.filter(mode=InteractionMode.SAY).count() == 1
+
+    def test_say_action_retry_broadcasts_via_message_location_only_once(self):
+        """A retry must not double-broadcast even though the DB side is correctly
+        deduped (#3760 review fix, mirrored from submit_pose's equivalent test)."""
+        request_id = uuid.uuid4()
+        kwargs = {"text": "Hello there.", "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.message_location") as mock_broadcast:
+            SayAction().execute(actor=self.character, context=None, **kwargs)
+            SayAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_broadcast.call_count == 1
+
+
+class PoseActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — PoseAction routes through idempotent_record_interaction when a
+    client_request_id is present."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Poser", location=self.room)
+        CharacterSheetFactory(character=self.character)
+
+    def test_pose_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "stretches.", "client_request_id": request_id}
+
+        with patch.object(self.room, "msg_contents"):
+            first = PoseAction().execute(actor=self.character, context=None, **kwargs)
+            second = PoseAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+    def test_pose_action_retry_broadcasts_via_message_location_only_once(self):
+        """Mirrors submit_pose's broadcast-race fix (#3760): PoseAction.execute's
+        message_location call must not repeat on a replayed retry."""
+        request_id = uuid.uuid4()
+        kwargs = {"text": "stretches.", "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.message_location") as mock_broadcast:
+            PoseAction().execute(actor=self.character, context=None, **kwargs)
+            PoseAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_broadcast.call_count == 1
+
+
+class WhisperActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — WhisperAction routes through idempotent_record_interaction
+    (via record_whisper_interaction, not record_interaction — see the record_fn
+    docstring on idempotent_record_interaction for why) when a client_request_id
+    is present."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Whisperer", location=self.room)
+        CharacterSheetFactory(character=self.character)
+        self.target = CharacterFactory(db_key="Listener", location=self.room)
+        CharacterSheetFactory(character=self.target)
+
+    def test_whisper_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "a secret.", "target": self.target, "client_request_id": request_id}
+
+        with patch.object(self.target, "msg"):
+            first = WhisperAction().execute(actor=self.character, context=None, **kwargs)
+            second = WhisperAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.WHISPER).count() == 1
+
+    def test_whisper_action_retry_delivers_to_target_only_once(self):
+        """The telnet-delivery sibling of the say/pose broadcast-race fix (#3760):
+        a retry must not double-deliver even though the DB side is deduped.
+
+        Patches ``send_message`` (the telnet-parity delivery ``_broadcast()`` makes)
+        rather than ``target.msg`` directly: a successfully-recorded whisper also
+        reaches ``target.msg`` a second, legitimate time via
+        ``record_whisper_interaction``'s own ``push_interaction`` WS payload send —
+        a different call this test isn't about.
+        """
+        request_id = uuid.uuid4()
+        kwargs = {"text": "a secret.", "target": self.target, "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            WhisperAction().execute(actor=self.character, context=None, **kwargs)
+            WhisperAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_send.call_count == 1
 
 
 class PemitActionTests(TestCase):

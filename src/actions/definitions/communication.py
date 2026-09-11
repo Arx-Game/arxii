@@ -285,26 +285,61 @@ class SayAction(Action):
 
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        if language is None or language.is_universal:
+        def _broadcast() -> None:
             # Broadcast: raw text via Evennia msg_contents for telnet clients and
             # non-character objects. Web clients receive this as a TEXT message
             # but should prefer the structured INTERACTION payload from push_interaction.
-            message_location(
-                caller_state,
-                f'$You() $conj(say) "{text}"',
+            if language is None or language.is_universal:
+                message_location(
+                    caller_state,
+                    f'$You() $conj(say) "{text}"',
+                )
+            else:
+                _deliver_language_tagged_say(actor, text, language, sdm)
+
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                idempotent_record_interaction,
             )
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            persona = active_persona_for_sheet(actor.character_sheet)
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={"content": text},
+                character=actor,
+                content=text,
+                mode=InteractionMode.SAY,
+                target_personas=target_personas,
+                language=language,
+                reply_to=reply_to,
+            )
+            if result.conflict:
+                return ActionResult(
+                    success=False, message="This request id was already used for different text."
+                )
+            # Broadcast AFTER recording, gated on `not result.replayed` (#3760 review
+            # fix mirrored from submit_pose) -- never a separate `.exists()` pre-check,
+            # which race-loses to two genuinely concurrent retries. `result.replayed`
+            # is already race-safe: idempotent_record_interaction's IntegrityError
+            # catch-and-reread path also reports replayed=True for the loser of a
+            # true race, so gating on it closes that hole too.
+            if not result.replayed:
+                _broadcast()
         else:
-            _deliver_language_tagged_say(actor, text, language, sdm)
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_interaction(
-            character=actor,
-            content=text,
-            mode=InteractionMode.SAY,
-            target_personas=target_personas,
-            language=language,
-            reply_to=reply_to,
-        )
+            # Record + push: creates DB record and sends structured WebSocket payload.
+            # Web clients use this for the scene feed display.
+            _broadcast()
+            record_interaction(
+                character=actor,
+                content=text,
+                mode=InteractionMode.SAY,
+                target_personas=target_personas,
+                language=language,
+                reply_to=reply_to,
+            )
 
         # #1278/#2088 — flag circumvention: a blocked player directing a say at the
         # blocker via another identity. Room-wide says (no targets) are already
@@ -350,20 +385,52 @@ class PoseAction(Action):
 
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        # Broadcast: raw text via Evennia msg_contents for telnet clients and
-        # non-character objects. Web clients receive this as a TEXT message
-        # but should prefer the structured INTERACTION payload from push_interaction.
-        message_location(caller_state, text)
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_interaction(
-            character=actor,
-            content=text,
-            mode=InteractionMode.POSE,
-            target_personas=target_personas,
-            place=place,
-            reply_to=reply_to,
-        )
+        def _broadcast() -> None:
+            # Broadcast: raw text via Evennia msg_contents for telnet clients and
+            # non-character objects. Web clients receive this as a TEXT message
+            # but should prefer the structured INTERACTION payload from push_interaction.
+            message_location(caller_state, text)
+
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                idempotent_record_interaction,
+            )
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            persona = active_persona_for_sheet(actor.character_sheet)
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={"content": text},
+                character=actor,
+                content=text,
+                mode=InteractionMode.POSE,
+                target_personas=target_personas,
+                place=place,
+                reply_to=reply_to,
+            )
+            if result.conflict:
+                return ActionResult(
+                    success=False, message="This request id was already used for different text."
+                )
+            # Broadcast AFTER recording, gated on `not result.replayed` -- same
+            # fix as submit_pose (#3760): a retry must not double-broadcast even
+            # though the DB side is correctly deduped.
+            if not result.replayed:
+                _broadcast()
+        else:
+            # Record + push: creates DB record and sends structured WebSocket payload.
+            # Web clients use this for the scene feed display.
+            _broadcast()
+            record_interaction(
+                character=actor,
+                content=text,
+                mode=InteractionMode.POSE,
+                target_personas=target_personas,
+                place=place,
+                reply_to=reply_to,
+            )
 
         # #1278/#2088 — flag circumvention: a blocked player directing a pose at the
         # blocker via another identity. Room-wide poses (no targets) are already
@@ -601,23 +668,63 @@ class WhisperAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         target_state = sdm.initialize_state_for_object(target)
 
-        # Direct message: Evennia msg() to the target only, for telnet clients.
-        # Web clients receive this as a TEXT message but should prefer the
-        # structured INTERACTION payload from push_interaction. Receiver-scoped
-        # trust (#2993): the chosen audience always gets the full text, never garbled.
-        send_message(
-            target_state,
-            f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
-        )
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_whisper_interaction(
-            character=actor,
-            target=target,
-            content=text,
-            language=language,
-            reply_to=reply_to,
-        )
+        def _broadcast() -> None:
+            # Direct message: Evennia msg() to the target only, for telnet clients.
+            # Web clients receive this as a TEXT message but should prefer the
+            # structured INTERACTION payload from push_interaction. Receiver-scoped
+            # trust (#2993): the chosen audience always gets the full text, never garbled.
+            send_message(
+                target_state,
+                f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
+            )
+
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                idempotent_record_interaction,
+            )
+
+            # Whisper authorship is the primary persona, never the active/worn face
+            # (mirrors record_whisper_interaction's own resolution -- #981's
+            # active-persona substitution is not applied here, unlike say/pose).
+            persona = actor.sheet_data.primary_persona
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={"content": text},
+                # record_whisper_interaction, not record_interaction: its
+                # ephemeral-scene branch scopes the real-time push to
+                # [character, target] rather than broadcasting to the whole
+                # scene, which record_interaction would do (a privacy leak
+                # for a whisper) -- see idempotent_record_interaction's
+                # record_fn docstring.
+                record_fn=record_whisper_interaction,
+                character=actor,
+                target=target,
+                content=text,
+                language=language,
+                reply_to=reply_to,
+            )
+            if result.conflict:
+                return ActionResult(
+                    success=False, message="This request id was already used for different text."
+                )
+            # Broadcast AFTER recording, gated on `not result.replayed` -- same
+            # fix as submit_pose (#3760): a retry must not double-deliver even
+            # though the DB side is correctly deduped.
+            if not result.replayed:
+                _broadcast()
+        else:
+            # Record + push: creates DB record and sends structured WebSocket payload.
+            # Web clients use this for the scene feed display.
+            _broadcast()
+            record_whisper_interaction(
+                character=actor,
+                target=target,
+                content=text,
+                language=language,
+                reply_to=reply_to,
+            )
 
         # #1278/#2088 — flag circumvention attempts: a blocked player whispering the
         # blocker via another identity. No-op when no active block exists.
