@@ -8265,7 +8265,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
   lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
-  (#3776 Task 9, blank, no cap, `related_name="represented_beings"`)), `BeingFacet` (favored
+  (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
+  `codex.CodexEntry` (#3776 Task 11, `SET_NULL`, `related_name="worshipped_beings"` — mirrors
+  `Gift.codex_entry`/`Technique.codex_entry`; visibility reads entirely through the linked entry's
+  `is_public` tier)), `BeingFacet` (favored
   aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
   it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:

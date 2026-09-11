@@ -100,6 +100,18 @@ class WorshippedBeing(SharedMemoryModel):
         related_name="represented_beings",
         help_text="Cards people believe represent this being. Pure association, no cap.",
     )
+    codex_entry = models.ForeignKey(
+        "arxii.CodexEntry",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="worshipped_beings",
+        help_text=(
+            "This being's Codex page. Visibility (Public/Obscure/Secret) is read "
+            "entirely through the linked entry's is_public tier — no separate "
+            "visibility field on WorshippedBeing itself."
+        ),
+    )
 
     class Meta:
         ordering = ["name"]

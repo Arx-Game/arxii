@@ -4,6 +4,7 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.codex.factories import CodexEntryFactory
 from world.magic.factories import ResonanceFactory
 from world.magic.models import Facet
 from world.tarot.factories import TarotCardFactory
@@ -47,6 +48,15 @@ class WorshipModelTests(TestCase):
         self.assertIsNotNone(declaration.public_being)
         self.assertIsNone(declaration.secret_being)
         self.assertIsNone(declaration.secret)
+
+    def test_being_links_to_a_codex_entry(self) -> None:
+        entry = CodexEntryFactory()
+        being = WorshippedBeingFactory(codex_entry=entry)
+        self.assertEqual(being.codex_entry, entry)
+
+    def test_codex_entry_is_optional(self) -> None:
+        being = WorshippedBeingFactory()
+        self.assertIsNone(being.codex_entry)
 
 
 class BeingFacetTests(TestCase):

@@ -2142,6 +2142,7 @@
   - progression_milestones <- magic.MagicProgressionMilestone
   - species <- species.Species
   - mantle_level_gates <- items.MantleLevelDefinition
+  - worshipped_beings <- worship.WorshippedBeing
 
 ### CodexEntryFiling
 **Foreign Keys:**
@@ -10457,6 +10458,7 @@
 **Foreign Keys:**
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
   - tarot_cards -> tarot.TarotCard [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
