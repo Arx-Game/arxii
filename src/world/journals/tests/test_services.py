@@ -70,6 +70,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[0],
             description="Journal post: First",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_second_post_awards_2_xp(
@@ -94,6 +97,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[1],
             description="Journal post: Second",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_third_post_awards_1_xp(
@@ -118,6 +124,9 @@ class CreateJournalEntryTest(TestCase):
             account=self.account,
             amount=JOURNAL_POST_XP[2],
             description="Journal post: Third",
+            # The author's sheet is credited with the earn (#3748) — the account holds
+            # the balance, the character holds the record of having earned it.
+            character=self.author,
         )
 
     def test_fourth_post_no_xp(

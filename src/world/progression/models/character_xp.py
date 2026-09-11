@@ -1,8 +1,19 @@
 """
 Character-level XP models.
 
-Tracks XP earned by individual characters, with a transferable flag to
-distinguish locked XP (e.g., from CG conversion) from freely transferable XP.
+XP itself is account-scoped (ADR-0053). These rows record what each *character* has
+to do with it, and ``transferable`` says which of two things a row is:
+
+* ``transferable=True`` — the character's **attribution ledger** (#3748). Written by
+  every award and every purchase (``world.progression.services.xp_ledger``), it
+  answers "what has this player earned on, and invested in, this character" — the
+  number the death-kudos cap is sized on (ADR-0131) and that character-loss
+  reimbursement will read. It is not a pool: nothing is drawn from it, and
+  ``total_spent`` may exceed ``total_earned``, because XP earned on one character is
+  routinely spent on another.
+* ``transferable=False`` — a genuine **locked pool**, written once by CG conversion
+  (``award_cg_conversion_xp``) for unspent CG points. This one *is* drawn from, so
+  the no-overdraft invariant applies to it.
 """
 
 from typing import ClassVar, cast
@@ -24,33 +35,45 @@ class CharacterXP(SharedMemoryModel):
     )
     total_earned = models.PositiveIntegerField(
         default=0,
-        help_text="Total XP earned",
+        help_text="Lifetime XP earned on this character",
     )
     total_spent = models.PositiveIntegerField(
         default=0,
-        help_text="Total XP spent",
+        help_text="Lifetime XP spent on this character (may exceed earned)",
     )
     transferable = models.BooleanField(
         default=True,
-        help_text="If False, XP is locked to this character and cannot be transferred",
+        help_text="If False, XP is a pool locked to this character; if True, an attribution ledger",
     )
     created_date = models.DateTimeField(auto_now_add=True)
     updated_date = models.DateTimeField(auto_now=True)
 
     @property
     def current_available(self) -> int:
-        """XP currently available to spend."""
+        """Unspent XP in a locked pool.
+
+        Meaningless on a transferable attribution row, where the two counters are
+        independent lifetime totals and this can legitimately go negative.
+        """
         return cast(int, self.total_earned) - cast(int, self.total_spent)
 
     def clean(self) -> None:
-        """Validate XP totals are consistent."""
+        """Validate a locked pool has not overdrawn.
+
+        Only locked (``transferable=False``) rows are pools. A transferable row is
+        the attribution ledger (#3748): spending more on a character than was ever
+        earned on them is the ordinary case for anyone's second character, so the
+        no-overdraft rule would reject correct data.
+        """
         super().clean()
+        if self.transferable:
+            return
         if cast(int, self.total_spent) > cast(int, self.total_earned):
             msg = "Total spent cannot exceed total earned XP"
             raise ValidationError(msg)
 
     def can_spend(self, amount: int) -> bool:
-        """Check if enough XP is available to spend."""
+        """Check if enough XP is available to spend from a locked pool."""
         return self.current_available >= amount
 
     def spend_xp(self, amount: int) -> bool:

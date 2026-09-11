@@ -14,13 +14,13 @@ from evennia.objects.models import ObjectDB
 
 from world.character_sheets.models import CharacterSheet
 from world.magic.services.alterations import enforce_advancement_gate
-from world.progression.models import CharacterUnlock, ClassLevelUnlock, XPTransaction
-from world.progression.services.awards import get_or_create_xp_tracker
+from world.progression.exceptions import InsufficientXPError, NoAccountForCharacterError
+from world.progression.models import CharacterUnlock, ClassLevelUnlock
+from world.progression.services.xp_ledger import spend_xp_for_character
 from world.progression.types import (
     AvailableUnlocks,
     DetailedUnlockEntry,
     LevelUpRequirements,
-    ProgressionReason,
     UnlockEntry,
 )
 
@@ -58,8 +58,6 @@ def spend_xp_on_unlock(
         return False, "This character has no sheet and cannot purchase unlocks", None
     enforce_advancement_gate(sheet)
 
-    account = character.account
-
     # Check if already unlocked (only works for ClassLevelUnlock now)
     if isinstance(unlock_target, ClassLevelUnlock):
         if CharacterUnlock.objects.filter(
@@ -89,26 +87,12 @@ def spend_xp_on_unlock(
 
     with transaction.atomic():
         # Spend the XP if there's a cost
-        if xp_cost > 0:
-            xp_tracker = get_or_create_xp_tracker(account)
-            success = xp_tracker.spend_xp(xp_cost)
-
-            if not success:
-                return (
-                    False,
-                    f"Insufficient XP (need {xp_cost}, have {xp_tracker.current_available})",
-                    None,
-                )
-
-            # Record XP transaction
-            XPTransaction.objects.create(
-                account=account,
-                amount=-xp_cost,
-                reason=ProgressionReason.XP_PURCHASE,
-                description=f"Unlocked {unlock_target}",
-                character=sheet,
-                gm=gm,
-            )
+        try:
+            spend_xp_for_character(sheet, xp_cost, f"Unlocked {unlock_target}", gm=gm)
+        except InsufficientXPError as exc:
+            return False, f"Insufficient XP (need {exc.required}, have {exc.available})", None
+        except NoAccountForCharacterError as exc:
+            return False, exc.user_message, None
 
         # Create unlock record (only for ClassLevelUnlock now)
         if isinstance(unlock_target, ClassLevelUnlock):

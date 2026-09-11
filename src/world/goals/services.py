@@ -265,6 +265,7 @@ def log_goal_progress(
                 account=account,
                 amount=xp_amount,
                 description=f"Goal progress: {title}",
+                character=character,
             )
 
     return journal

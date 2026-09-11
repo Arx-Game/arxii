@@ -386,20 +386,19 @@ def approve_sheet_update_request(
         SheetUpdateRequestType,
     )
     from world.magic.services.alterations import enforce_advancement_gate  # noqa: PLC0415
-    from world.progression.models.rewards import XPTransaction  # noqa: PLC0415
-    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
-    from world.progression.types import ProgressionReason  # noqa: PLC0415
+    from world.progression.exceptions import (  # noqa: PLC0415
+        InsufficientXPError,
+        NoAccountForCharacterError,
+    )
+    from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
     character_sheet = request.character_sheet
 
     enforce_advancement_gate(character_sheet)
 
-    account = character_sheet.character.account
-    if account is None:
+    if character_sheet.character.account is None:
         msg = "This character has no linked account."
         raise SheetUpdateRequestError(msg)
-
-    xp_tracker = get_or_create_xp_tracker(account)
 
     with transaction.atomic():
         locked_req = SheetUpdateRequest.objects.select_for_update().filter(pk=request.pk).first()
@@ -407,20 +406,15 @@ def approve_sheet_update_request(
             msg = "This sheet update request has already been processed."
             raise SheetUpdateRequestError(msg)
 
-        if locked_req.xp_cost > 0:
-            if not xp_tracker.can_spend(locked_req.xp_cost):
-                msg = f"Need {locked_req.xp_cost} XP, have {xp_tracker.current_available}."
-                raise SheetUpdateRequestError(msg)
-            xp_tracker.spend_xp(locked_req.xp_cost)
-
-            XPTransaction.objects.create(
-                account=account,
-                amount=-locked_req.xp_cost,
-                reason=ProgressionReason.XP_PURCHASE,
-                description=f"Distinction change: {locked_req.get_request_type_display()}",
-                character=character_sheet,
+        try:
+            spend_xp_for_character(
+                character_sheet,
+                locked_req.xp_cost,
+                f"Distinction change: {locked_req.get_request_type_display()}",
                 gm=gm_account,
             )
+        except (InsufficientXPError, NoAccountForCharacterError) as exc:
+            raise SheetUpdateRequestError(exc.user_message) from exc
 
         # Mark APPROVED before firing the change — remove_distinction checks
         # that the request is APPROVED before deleting the CharacterDistinction.

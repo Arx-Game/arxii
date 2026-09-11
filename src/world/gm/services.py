@@ -785,6 +785,8 @@ def _do_award_gm_story_reward(
             amount=amount,
             reason=ProgressionReason.GM_STORY_REWARD,
             description=description,
+            # Running the scene is the GM's own work, not a character's play (#3748).
+            character=None,
         )
         tracker.xp_awarded_this_week += amount
         tracker.save(update_fields=["xp_awarded_this_week"])

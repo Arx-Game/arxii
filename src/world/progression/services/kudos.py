@@ -150,6 +150,8 @@ def claim_kudos_for_xp(
     amount: int,
     claim_category: KudosClaimCategory,
     description: str = "",
+    *,
+    character: CharacterSheet | None = None,
 ) -> KudosXPResult:
     """
     Claim kudos and convert the reward to account-level XP.
@@ -161,6 +163,10 @@ def claim_kudos_for_xp(
         amount: Positive integer of kudos to claim.
         claim_category: The claim category defining the conversion rate.
         description: Optional description (auto-generated if empty).
+        character: The character the claim is made as, credited with the earn
+            (#3748). Kudos itself is account-scoped and stays that way; this
+            only records which character was being played when it was cashed in.
+            ``None`` leaves the earn unattributed.
 
     Returns:
         KudosXPResult with the claim result, XP transaction, and XP awarded.
@@ -187,6 +193,7 @@ def claim_kudos_for_xp(
         amount=claim_result.reward_amount,
         reason=ProgressionReason.KUDOS_CLAIM,
         description=f"Converted {amount} kudos to {claim_result.reward_amount} XP",
+        character=character,
     )
 
     return KudosXPResult(

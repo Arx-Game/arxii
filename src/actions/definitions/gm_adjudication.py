@@ -306,8 +306,15 @@ class GMAwardAction(Action):
             return ActionResult(success=False, message="amount must be a positive whole number.")
 
         from typeclasses.characters import Character  # noqa: PLC0415
+        from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
 
         gm_account = actor.active_account if isinstance(actor, Character) else None
+        # The award is made to a named character, so it is attributed to them (#3748).
+        # A target without a sheet still gets the XP; only the attribution is skipped.
+        try:
+            target_sheet = target.sheet_data
+        except (CharacterSheet.DoesNotExist, AttributeError):
+            target_sheet = None
         try:
             award_xp(
                 account,
@@ -315,6 +322,7 @@ class GMAwardAction(Action):
                 reason=ProgressionReason.GM_AWARD,
                 description=description,
                 gm=gm_account,
+                character=target_sheet,
             )
         except ValueError as exc:
             return ActionResult(success=False, message=str(exc))

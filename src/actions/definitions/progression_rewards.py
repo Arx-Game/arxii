@@ -19,6 +19,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from actions.types import ActionContext
+    from world.character_sheets.models import CharacterSheet
 
 _NO_ACCOUNT = "You have no active character on the roster."
 _NO_ACTIVE_CHARACTER = "No active character."
@@ -28,6 +29,21 @@ def _resolve_account(actor: ObjectDB) -> AccountDB | None:
     from world.roster.selectors import get_account_for_character  # noqa: PLC0415
 
     return get_account_for_character(actor)
+
+
+def _resolve_sheet(actor: ObjectDB) -> CharacterSheet | None:
+    """The actor's sheet, or None for an actor that has none (an NPC puppet, a bare object).
+
+    Used to attribute an account-level earn to the character it was earned as
+    (#3748); a missing sheet leaves the earn unattributed rather than failing
+    the claim, which is account business either way.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+
+    try:
+        return actor.sheet_data
+    except (CharacterSheet.DoesNotExist, AttributeError):
+        return None
 
 
 @dataclass
@@ -59,7 +75,10 @@ class ClaimKudosAction(Action):
             return ActionResult(success=False, message="Invalid or inactive claim category.")
         try:
             result = claim_kudos_for_xp(
-                account=account, amount=int(kwargs["amount"]), claim_category=category
+                account=account,
+                amount=int(kwargs["amount"]),
+                claim_category=category,
+                character=_resolve_sheet(actor),
             )
         except InsufficientKudosError:
             return ActionResult(success=False, message="Insufficient kudos for this conversion.")

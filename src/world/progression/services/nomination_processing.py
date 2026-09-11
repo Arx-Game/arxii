@@ -84,7 +84,9 @@ def _award(nominee_id: int, amount: int, reason: str, description: str) -> None:
     if account is None:
         logger.warning("Nominee sheet %d has no player this week; skipping %s", nominee_id, reason)
         return
-    award_xp(account=account, amount=amount, reason=reason, description=description)
+    award_xp(
+        account=account, amount=amount, reason=reason, description=description, character=sheet
+    )
 
 
 def _pay_nominations_in_general(rows: QuerySet[Nomination]) -> None:

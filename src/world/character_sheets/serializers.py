@@ -138,6 +138,18 @@ class MaturationStateSerializer(serializers.Serializer):
     stats = MaturationStatEntrySerializer(many=True)
 
 
+class CharacterXPLedgerSerializer(serializers.Serializer):
+    """Response for CharacterSheetViewSet.xp-ledger (#3748): what this character cost.
+
+    XP is spent by the account, so these are attribution totals, not a balance —
+    ``spent`` can exceed ``earned`` when a player invests XP earned elsewhere.
+    """
+
+    earned = serializers.IntegerField()
+    spent = serializers.IntegerField()
+    locked = serializers.IntegerField()
+
+
 class StatPointStateSerializer(serializers.Serializer):
     """Response for CharacterSheetViewSet.stat-points (#3001): the level spend panel.
 
