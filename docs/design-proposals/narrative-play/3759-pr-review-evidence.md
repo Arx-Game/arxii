@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `c54de7407ec5d95e8e6f26f6293a4cbb2f37aad5`
+- Reviewed revision: `cac94c1beca24b1d41a4e8362e70304db158d285`
 - Reviewer: `demo-fidelity-reviewer` agent (real-browser Playwright/chromium render,
   vision-capable model comparison against the approved demo), cross-checked by
   independent adversarial code-review agents (opus) across 9 remediation waves,
@@ -74,7 +74,17 @@
   sidebar working around a since-replaced conditional-render design) or
   unrelated sibling-issue integration (#3758's own `accountId`/`ExplorationReader`
   work, outside #3759's demo scope per the demo's own scope table) — #3759's
-  own reviewed rendering paths are byte-for-byte unchanged by the merge.
+  own reviewed rendering paths are byte-for-byte unchanged by the merge. Two
+  further commits after the merge (this evidence report's own "Reviewed
+  revision" tracks the PR's actual tip, updated as CI required it) are
+  process/tooling-only and touch no reviewed surface: a fix to
+  `tools/skills/issue-to-merged-pr/scripts/open-pr.sh`'s own evidence-report
+  link formatting, and a `just gen-api-types` regeneration of
+  `src/schema.json`/`frontend/src/generated/api.d.ts` for two backend
+  endpoints this branch already shipped (`POST /api/play/read/`,
+  `GET /api/play/threads/`) whose generated types had drifted -- confirmed
+  by isolating the diff to exactly those two new paths, nothing else, before
+  committing.
 - Tested interactions: Threads view default render; thread header click
   (collapse/expand); "Load earlier replies" within an expanded 28-pose
   thread; "Latest activity" (expand + scroll to most-recently-active real
