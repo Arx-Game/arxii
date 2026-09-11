@@ -78,9 +78,22 @@ export function SceneDetailPage() {
   // Deliberately omits `GameWindow`'s extra `Boolean(session.room)` clause —
   // that gates on the ACTIVE character's freeform room re-entering, which
   // this page's scene-scoped composer doesn't depend on.
-  const isConnected = useAppSelector(
-    (state) => state.game.sessions?.[activeCharacter ?? '']?.isConnected ?? false
-  );
+  //
+  // Final-review Finding 1 fix — a session entry only exists in
+  // `state.game.sessions` AFTER `connect()` has been called somewhere in the
+  // app, and nothing on `/scenes/:id` ever calls it (only
+  // GamePage/GameWindow/GameTopBar do, all mounted only inside `/game`). So
+  // on a fresh load of this page (bookmark, direct link, reload) `session` is
+  // `undefined` — that means "this page isn't using a socket right now," not
+  // "disconnected," and must not permanently disable the composer (it never
+  // recovers, since nothing here ever connects one). Distinguish the two:
+  // no session at all -> the REST/executeAction paths this composer uses
+  // don't depend on the socket being up, so `ready` defaults to `true`; a
+  // session that DOES exist here (e.g. because `GameWindow` is also mounted
+  // for the same account, or a future caller connects one) still gates on
+  // its own `isConnected`, preserving Task 12's reconnect-detection logic.
+  const session = useAppSelector((state) => state.game.sessions?.[activeCharacter ?? '']);
+  const isConnected = session ? session.isConnected : true;
 
   // Combat rail fold-in (#2197): combat now renders inline on the scene page
   // instead of a separate /scenes/:id/combat route — the fight never leaves
