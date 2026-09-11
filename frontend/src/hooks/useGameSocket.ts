@@ -59,6 +59,20 @@ const connecting = new Set<string>();
 const reconnectAttempts: Record<string, number> = {};
 const reconnectTimers: Record<string, ReturnType<typeof setTimeout>> = {};
 const MAX_RECONNECT_ATTEMPTS = 6;
+// Per-character monotonic connection generation (#3760): incremented on every
+// connection attempt, including automatic reconnects. Each connection's message
+// handler closes over the generation it was created with, so a message that
+// arrives after that connection has been superseded (a newer generation now
+// current) can be dropped before it reaches any state update - reconnects are
+// frequent in production (#3745), and a stale message flipping readiness or
+// clearing an in-flight draft is exactly what this guards against.
+const connectionGenerations: Record<string, number> = {};
+
+function nextGeneration(character: string): number {
+  const next = (connectionGenerations[character] ?? 0) + 1;
+  connectionGenerations[character] = next;
+  return next;
+}
 
 /** Swallow reconnect failures so a transient socket error doesn't reject the timer. */
 const swallowReconnectError = (): void => {};
@@ -246,6 +260,7 @@ export function useGameSocket() {
       if (sockets[character] || connecting.has(character)) return;
       connecting.add(character);
       dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
+      const generation = nextGeneration(character);
 
       let currentAccount = account;
       if (!currentAccount) {
@@ -319,7 +334,15 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
+        // Discard before any state update: this connection may have already
+        // been superseded by a newer one (e.g. a reconnect fired) by the time
+        // this frame arrives. The generation check catches this earliest (it
+        // advances the instant a new connect() starts, before that attempt's
+        // socket even exists); the socket-identity check is a second,
+        // independent guard against a stale frame from an old socket object.
+        if (generation !== connectionGenerations[character]) return;
         if (sockets[character] !== socket) return;
+
         let parsed: unknown;
 
         try {
@@ -382,5 +405,11 @@ export function useGameSocket() {
     []
   );
 
-  return { connect, send, disconnectAll, executeAction };
+  /** Current connection generation for `character` (0 if never connected). */
+  const currentGeneration = useCallback(
+    (character: MyRosterEntry['name']) => connectionGenerations[character] ?? 0,
+    []
+  );
+
+  return { connect, send, disconnectAll, executeAction, currentGeneration };
 }
