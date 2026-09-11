@@ -402,6 +402,24 @@ block/mute) stays entirely the owner's.
 - **Conversation threading** — DONE. `useThreading`/`ThreadSidebar`/`ThreadFilterModal`
   (grouping by whisper-set/place/target) render on `/game` via `ConversationSidebar`;
   per-thread unread counts are backed by session last-seen, not stubbed to 0
+- **Threaded/chronological reader, read receipts, history browsing, reference
+  mode** — DONE (#3759). `ThreadedNarrativeReader` reads the live scene feed and
+  historical browsing through the same component: Threads view default-collapses
+  all but the most recently active thread (persisted per conversation, stable
+  anchors survive font/measure changes and reload — `InteractionReadReceipt`,
+  `POST /api/play/read/` including a mark-all-before-snapshot bulk path);
+  Chronological view is a flat, windowed (`@tanstack/react-virtual`) alternative
+  sharing the same read/collapse state. `PlaySidebar`'s History mode
+  (`HistoryNavigator`) browses/searches authorized retained conversations
+  (kind/participant/date filters, cursor-paginated `/api/play/threads/`,
+  `/api/play/search/`, `/api/play/context/`) without leaving `/game`; opening a
+  result switches the reader into reference mode via `GamePage`'s
+  `displaySceneFeed` swap. Dwell-tracked (`IntersectionObserver`) read receipts
+  feed per-thread unread counts. See `docs/systems/scenes.md` for the endpoint
+  list and `frontend/src/game/CLAUDE.md` for the component breakdown. Explicitly
+  out of scope (kept for future work, not silently dropped): per-persona
+  thumbnails in messages, and richer history search/filter tooling — flagged by
+  Tehom as needed once a player's conversation history spans years, not now.
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
   - **Grid presence** — "who's where" on public rooms for organic RP, future graphical map. Separate feature, not part of scenes or events
