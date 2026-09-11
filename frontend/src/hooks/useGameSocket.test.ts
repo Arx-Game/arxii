@@ -37,7 +37,7 @@ vi.mock('@/queryClient', () => ({
   queryClient: { invalidateQueries: vi.fn(() => Promise.resolve()) },
 }));
 
-import { useGameSocket } from './useGameSocket';
+import { useGameSocket, __resetGameSocketModuleStateForTests } from './useGameSocket';
 
 type Listener = (event: unknown) => void;
 
@@ -78,6 +78,11 @@ describe('useGameSocket connection generation', () => {
     vi.useFakeTimers();
     MockWebSocket.instances = [];
     vi.stubGlobal('WebSocket', MockWebSocket);
+    // useGameSocket.ts keeps its connection bookkeeping (sockets, reconnect
+    // attempts/timers, generations) at module scope, not per-hook-instance -
+    // without this, a socket or pending reconnect timer left over from a
+    // previous test case would silently leak into the next one.
+    __resetGameSocketModuleStateForTests();
   });
 
   afterEach(() => {

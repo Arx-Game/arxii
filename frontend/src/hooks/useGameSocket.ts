@@ -74,6 +74,25 @@ function nextGeneration(character: string): number {
   return next;
 }
 
+/**
+ * Exported ONLY for use in beforeEach in test files. Do not call in production
+ * code. Clears every module-level record this file keeps (`sockets`,
+ * `connecting`, `reconnectAttempts`, `connectionGenerations`) and cancels any
+ * pending reconnect timers before clearing `reconnectTimers` itself — a
+ * leftover `setTimeout` from a prior test's abnormal-close path would
+ * otherwise fire mid-way through a later, unrelated test.
+ */
+export function __resetGameSocketModuleStateForTests(): void {
+  Object.keys(sockets).forEach((character) => delete sockets[character]);
+  connecting.clear();
+  Object.keys(reconnectAttempts).forEach((character) => delete reconnectAttempts[character]);
+  Object.values(reconnectTimers).forEach((timer) => clearTimeout(timer));
+  Object.keys(reconnectTimers).forEach((character) => delete reconnectTimers[character]);
+  Object.keys(connectionGenerations).forEach(
+    (character) => delete connectionGenerations[character]
+  );
+}
+
 /** Swallow reconnect failures so a transient socket error doesn't reject the timer. */
 const swallowReconnectError = (): void => {};
 
