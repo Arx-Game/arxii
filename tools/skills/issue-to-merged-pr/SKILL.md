@@ -292,7 +292,11 @@ it pushes or opens anything. Do not write a stopping instruction like "stop
 before opening a PR" into a dispatch to a sub-skill unless the user explicitly
 asked for that checkpoint.
 
-Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. It must record the exact revision,
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict.
+
+**Prefer `PR_EVIDENCE_URL` over `PR_EVIDENCE_FILE` for the report's final delivery.** A file passed via `PR_EVIDENCE_FILE` from inside the repo (not `/tmp`/scratch) gets committed to the branch and squash-merges into `main` — evidence reports and their screenshots are review artifacts, not permanent product history, and `main` is not the place for them (#3786 shipped this mistake: `docs/reviews/<slug>.md` plus a `docs/reviews/screenshots/<issue>/` directory both landed in history before being caught and removed). The working pattern: write the report to a scratch path; since `open-pr.sh` opens the PR (it doesn't exist yet when evidence is first gathered), post the report as a comment on the tracking **issue** (`gh issue comment <issue-N> --body-file <path>`, capture the returned comment URL) and pass that via `PR_EVIDENCE_URL` — `open-pr.sh` accepts either an issue or a PR comment URL. Once the PR exists (e.g. re-validating evidence after a later push), a PR comment works the same way (`gh pr comment <PR> --body-file <path>`). For screenshots the report references: `gh gist create` needs a `gist` scope the maintainer PAT does not have and rejects binary files outright even when authorized, so host them by pushing the PNGs as a normal commit on the PR branch, referencing them in the comment via `https://raw.githubusercontent.com/<org>/<repo>/<commit-sha>/<path>` (GitHub serves any blob at any commit it has ever seen this way, whether or not that path exists at the branch tip), then removing that commit's files from the branch in a later commit so they're gone from the tip — the commit itself stays reachable indefinitely once it's part of a PR's history (`refs/pull/<PR>/head`), so the raw URLs keep resolving after squash-merge even though `main` never contains the files. Reserve a genuinely committed `PR_EVIDENCE_FILE` for the rare case where the evidence itself is meant to be permanent, versioned project history, not the default.
+
+Whichever delivery mechanism is used, the report must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual
 screenshots when a design/demo exists, one verdict per mandatory criterion, and
 an empty unresolved-findings section. A green build or component-presence test
@@ -333,7 +337,8 @@ unverified from a spec's deferred list and later closed as should-not-do; the
 genuine question became #1363.) Then:
 
 ```bash
-PR_EVIDENCE_FILE="a scratch review report" \
+gh issue comment <issue-N> --body-file <scratch-report-path>   # -> captures the comment URL
+PR_EVIDENCE_URL="<the comment URL above>" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```

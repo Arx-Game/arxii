@@ -6,9 +6,14 @@
 #   {{issue_number}}, {{summary}}, {{followup_list}},
 #   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
 #
-# Required env vars:
-#   PR_EVIDENCE_FILE - local review report (repo or scratch path)
+# Required env vars (set exactly one):
 #   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
+#                       (PREFERRED - nothing lands in the repo's history)
+#   PR_EVIDENCE_FILE - a committed report (repo path only, e.g. "docs/reviews/<slug>.md")
+#                       squash-merges into main; use only when the evidence itself
+#                       should be permanent, versioned project history, not for a
+#                       throwaway scratch path (post that as a comment via
+#                       PR_EVIDENCE_URL instead - see SKILL.md's evidence section)
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
