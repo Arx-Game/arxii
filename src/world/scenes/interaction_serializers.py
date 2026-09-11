@@ -966,6 +966,13 @@ class PoseSubmitSerializer(serializers.Serializer):
         ),
     )
 
+    client_request_id = serializers.UUIDField(
+        help_text=(
+            "Client-minted id for this send attempt. Reused verbatim on retry of "
+            "the same content/context; a content change gets a new id."
+        ),
+    )
+
     def validate_persona_id(self, value: int) -> int:
         """Confirm the persona exists and belongs to the requesting user."""
         request = self.context.get("request")

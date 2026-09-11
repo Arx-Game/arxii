@@ -1,4 +1,10 @@
-"""Authorized reader contracts for the narrative play workspace."""
+"""Authorized reader contracts for the narrative play workspace.
+
+Also hosts ``PoseSubmissionDetailView`` (#3760) -- a writer-only
+submission-status lookup by ``client_request_id``, the "did this land"
+check the composer's "Check status" affordance calls after a reconnect or a
+dropped connection leaves a send's outcome unknown.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +14,7 @@ from datetime import date, datetime, timedelta
 import json
 import re
 from typing import Any
+import uuid
 
 from django.db.models import QuerySet
 from django.utils import timezone
@@ -29,9 +36,10 @@ from world.scenes.constants import (
     WHISPER_MODE,
 )
 from world.scenes.interaction_filters import InteractionFilter
+from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
-from world.scenes.models import Interaction
+from world.scenes.models import Interaction, PoseSubmission
 
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
@@ -340,6 +348,43 @@ class PlayContextView(APIView):
             )
         # Do not distinguish an unauthorized reference from a missing one.
         return Response({"detail": "This pose is no longer available."}, status=404)
+
+
+class PoseSubmissionDetailView(APIView):
+    """GET whether a submitted pose landed, by client_request_id (#3760).
+
+    Writer-only: scoped to the requesting account's own personas via
+    ``get_account_personas`` -- the same account-scoping seam
+    ``InteractionViewSet`` uses. A non-owner's lookup 404s rather than
+    403ing: a resend attempt is not proof of authorship, and a 403 would
+    still confirm the row exists.
+    """
+
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request: Request, client_request_id: uuid.UUID) -> Response:
+        persona_ids = get_account_personas(request)
+        # Finding 6.1 (#3760 final review): only `interaction_id` (a plain FK
+        # column already on this row) is read below -- `.interaction` (the
+        # related object) is never touched, so the `select_related` inherited
+        # from an earlier ViewSet-shaped draft of this endpoint was a wasted
+        # join. Dropped.
+        submission = PoseSubmission.objects.filter(
+            persona_id__in=persona_ids,
+            client_request_id=client_request_id,
+        ).first()
+        if submission is None:
+            return Response({"detail": "Submission not found."}, status=404)
+        return Response(
+            {
+                "interaction_id": submission.interaction_id,
+                # Every row this endpoint can return already represents an
+                # accepted, persisted submission -- a lookup never creates
+                # one, so a found row is always a replay from the caller's
+                # perspective.
+                "replayed": True,
+            }
+        )
 
 
 class PlaySearchView(APIView):

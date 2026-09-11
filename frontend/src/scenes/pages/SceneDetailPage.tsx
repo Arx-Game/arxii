@@ -61,6 +61,39 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+  // #3760 Task 12 review fix — this page previously passed no `ready` prop to
+  // `CommandInput` at all, silently taking its `ready = true` default, which
+  // never changes: there is no `useGameSocket` reference on this page to flip
+  // it. That made a reconnect mid-send invisible here (CommandInput's
+  // markUnknown-on-reconnect effect keys off a `ready` false -> true
+  // transition) even though this composer dispatches say/whisper/tt through
+  // the exact same `executeAction`/`pendingSpeechRef` path `GameWindow` uses.
+  // `state.game.sessions[character].isConnected` is the same global signal
+  // `GameWindow.tsx` reads (`useGameSocket`'s module-level socket/session
+  // bookkeeping and the Redux session state it dispatches into are shared
+  // across the whole app, not owned by whichever page happens to be mounted
+  // — `ConsentAttentionNotifier.tsx` already calls `connect()` from outside
+  // `GamePage` on that same assumption), so reading it here (rather than
+  // duplicating `GameWindow`'s own connection management) is the correct fix.
+  // Deliberately omits `GameWindow`'s extra `Boolean(session.room)` clause —
+  // that gates on the ACTIVE character's freeform room re-entering, which
+  // this page's scene-scoped composer doesn't depend on.
+  //
+  // Final-review Finding 1 fix — a session entry only exists in
+  // `state.game.sessions` AFTER `connect()` has been called somewhere in the
+  // app, and nothing on `/scenes/:id` ever calls it (only
+  // GamePage/GameWindow/GameTopBar do, all mounted only inside `/game`). So
+  // on a fresh load of this page (bookmark, direct link, reload) `session` is
+  // `undefined` — that means "this page isn't using a socket right now," not
+  // "disconnected," and must not permanently disable the composer (it never
+  // recovers, since nothing here ever connects one). Distinguish the two:
+  // no session at all -> the REST/executeAction paths this composer uses
+  // don't depend on the socket being up, so `ready` defaults to `true`; a
+  // session that DOES exist here (e.g. because `GameWindow` is also mounted
+  // for the same account, or a future caller connects one) still gates on
+  // its own `isConnected`, preserving Task 12's reconnect-detection logic.
+  const session = useAppSelector((state) => state.game.sessions?.[activeCharacter ?? '']);
+  const isConnected = session ? session.isConnected : true;
 
   // Combat rail fold-in (#2197): combat now renders inline on the scene page
   // instead of a separate /scenes/:id/combat route — the fight never leaves
@@ -238,7 +271,11 @@ export function SceneDetailPage() {
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
-  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+  // #3760 Task 10 fix — `currentPlace` (not just the boolean) is threaded down to
+  // CommandInput so tt (tabletalk) can dispatch via executeAction with a real
+  // place kwarg, mirroring GamePage.tsx's identical fix.
+  const currentPlace = placesData?.results?.find((place) => place.viewer_is_present);
+  const isAtPlace = !!currentPlace;
 
   // The foldable part of the header (#3557): rendered inline when idle, inside
   // the "Scene tools" accordion during an encounter. Same order as before.
@@ -406,11 +443,13 @@ export function SceneDetailPage() {
                     detachedActionIds={detachedActionIds}
                     onPoseSubmitted={handlePoseSubmitted}
                     isAtPlace={isAtPlace}
+                    currentPlaceId={currentPlace?.id ?? null}
                     speakingAs={
                       activeEntry
                         ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
                         : undefined
                     }
+                    ready={isConnected}
                   />
                 </>
               )}

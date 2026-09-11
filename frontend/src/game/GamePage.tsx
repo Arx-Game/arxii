@@ -705,7 +705,11 @@ export function GamePage() {
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
-  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+  // #3760 Task 10 fix — `currentPlace` (not just the boolean) is threaded down to
+  // CommandInput so tt (tabletalk) can dispatch via executeAction with a real
+  // place kwarg, the same way say/whisper already do.
+  const currentPlace = placesData?.results?.find((place) => place.viewer_is_present);
+  const isAtPlace = !!currentPlace;
 
   // Pending unlinked actions for the chip strip — only fetched once a scene
   // is active (personaId gated to null otherwise disables the query).
@@ -832,7 +836,10 @@ export function GamePage() {
               replyTarget={reference ? null : replyTarget}
               onCancelReply={() => setReplyTarget(null)}
               draftScopePrefix={`account:${account.id}`}
+              roomId={roomData?.id ?? null}
+              roomName={roomName}
               isAtPlace={isAtPlace}
+              currentPlaceId={currentPlace?.id ?? null}
               conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}

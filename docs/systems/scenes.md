@@ -1417,6 +1417,210 @@ identity resolution into it.
 
 ---
 
+## Reliable Pose Delivery — Idempotent Submission & Safe Drafts (#3760)
+
+The narrative-play delivery slate closes two gaps in `/game`'s composer: a retried
+send (reconnect, double-click, a client that never saw the ack) could double-post,
+and a stranded draft (tab closed, connection dropped mid-send) could silently vanish
+or bleed into the wrong room/thread on reload. The design spans a backend
+idempotency ledger and a frontend draft-safety contract; both are described here.
+
+### `PoseSubmission` — the idempotency ledger
+
+**Source:** `src/world/scenes/models.py`
+
+```python
+from world.scenes.models import PoseSubmission
+
+# persona (FK, CASCADE) + client_request_id (UUIDField) -> interaction (FK, nullable,
+# db_constraint=False -- Interaction is partitioned). UniqueConstraint
+# "unique_submission_per_persona" on (persona, client_request_id); Index on created_at.
+```
+
+Written only on acceptance, inside the same transaction as the `Interaction` it
+points to — see `idempotent_record_interaction` below. Rejections are never
+recorded here; they are re-validated fresh on every attempt. `interaction` is
+nullable because an ephemeral-scene acceptance never persists an `Interaction` in
+the first place (see "Found + no stored Interaction" below) — the row still records
+that the attempt was accepted. Pruned after 24h by `pose_submission_cleanup_task`
+(see "Cleanup task" below); this table's steady-state size tracks recent
+web-submission volume only, never total historical `Interaction` volume.
+
+### `idempotent_record_interaction` — the wrapper
+
+**Source:** `src/world/scenes/interaction_services.py`
+
+```python
+from world.scenes.interaction_services import (
+    idempotent_record_interaction,
+    IdempotentSubmissionResult,
+)
+
+result = idempotent_record_interaction(
+    persona=persona,
+    client_request_id=client_request_id,   # uuid.UUID, client-minted
+    comparison_fields={
+        "content": text,
+        # A plain (non-callable) value compares via getattr(stored, field) == value.
+        # A callable value is called with the stored Interaction and its truthy/falsy
+        # return IS the match result -- needed when identity isn't a scalar attribute,
+        # e.g. target_personas is M2M (via InteractionTargetPersona):
+        "target": lambda stored: (
+            {p.pk for p in stored.target_personas.all()} == {target_pk}
+        ),
+    },
+    record_fn=record_interaction,   # optional; defaults to record_interaction
+    **record_kwargs,                # forwarded verbatim to record_fn
+) -> IdempotentSubmissionResult  # (interaction: Interaction | None, replayed: bool, conflict: bool)
+```
+
+Looks up an existing `PoseSubmission` for `(persona, client_request_id)` first:
+
+- **Found, no stored `Interaction`** — an ephemeral-scene acceptance (`record_fn`
+  returns `None` there; nothing was ever persisted to compare against). A clean
+  replay (`replayed=True, conflict=False`), never a conflict — there is nothing to
+  recompute either way.
+- **Found, `comparison_fields` match the stored `Interaction`** (`_comparison_fields_match`)
+  — returns that `Interaction`, `replayed=True`. Nothing is recomputed: no re-roll,
+  no duplicate row, no second broadcast.
+- **Found, any field differs** — a `payload_conflict` (`replayed=False, conflict=True`):
+  the caller reused a request id for genuinely different content/target/place, a
+  client bug rather than a legitimate retry. Callers surface this as a failure
+  `ActionResult` ("This request id was already used for different text.").
+- **Not found** — runs the real work via `record_fn` and writes the `PoseSubmission`
+  row in the same transaction. A concurrent duplicate insert (two near-simultaneous
+  retries) raises `IntegrityError`, caught by re-reading and returning the winner's
+  row (`replayed=True`) rather than erroring — this is what makes the check
+  race-safe.
+
+**Callers gate the broadcast on `not result.replayed`** — a retry must never
+double-broadcast even though the DB side is already deduped. `PoseAction`, `SayAction`
+(both `src/actions/definitions/communication.py`) and `InteractionViewSet.submit_pose`
+(`interaction_views.py`) all follow this pattern when a `client_request_id`
+kwarg is present; the plain non-idempotent path (`record_interaction` called
+directly) still runs unchanged for callers that pass no `client_request_id`
+(telnet, and any caller predating #3760).
+
+**`record_fn` generalization (#3760, discovered during implementation — not in the
+original design):** `record_fn` lets a caller substitute a differently-shaped
+recorder for the default `record_interaction`. `WhisperAction` passes
+`record_fn=record_whisper_interaction`: `record_whisper_interaction`'s
+ephemeral-scene branch scopes the real-time push to `recipients=[character, target]`
+instead of `record_interaction`'s room-wide broadcast — reusing `record_interaction`
+for a whisper would leak the whisper's content to the whole ephemeral scene. This is
+a real privacy-preserving generalization, not part of the plan's original
+single-`record_interaction` design — any future caller whose delivery shape differs
+from the default (another receiver-scoped mode, say) should pass its own `record_fn`
+rather than special-casing inside `idempotent_record_interaction` itself.
+
+### Writer-only submission lookup
+
+**Source:** `src/world/scenes/play_views.py` (`PoseSubmissionDetailView`)
+
+```
+GET /api/play/submissions/{client_request_id}/
+```
+
+A plain `APIView` (**not** a ViewSet under `/api/scenes/...` — the plan's original
+sketch — corrected mid-implementation to match this codebase's existing `/api/play/`
+convention, see the `PlayConversationsView`/`PlayPosesView`/`PlayContextView`/
+`PlaySearchView` siblings in the same file). Writer-only: scoped to the requesting
+account's own personas via `get_account_personas` — the same account-scoping seam
+`InteractionViewSet` uses. A non-owner's lookup 404s rather than 403ing: a resend
+attempt is not proof of authorship, and a 403 would still confirm the row exists.
+Returns `{"interaction_id": ..., "replayed": true}` on a hit — every row this
+endpoint can return already represents an accepted, persisted submission, so a
+found row is always a replay from the caller's perspective; 404 on a miss. This is
+the reconciliation channel the frontend's `reconcileStoredDrafts` (see below) and
+`CommandInput`'s "Check status"/"Resume & retry" affordances call.
+
+### Cleanup task
+
+**Source:** `src/world/scenes/tasks.py`
+
+```python
+from world.scenes.tasks import pose_submission_cleanup_task
+
+# Prunes PoseSubmission rows with created_at older than 24h. Registered as
+# "scenes.pose_submission_cleanup" via world.game_clock.task_registry.register_task
+# (CronDefinition, hourly, FrequencyType.REAL, CronPhase.CLEANUP) in register_all_tasks().
+```
+
+`tasks.py` already existed for `block_finalize_task` (#1278); `pose_submission_cleanup_task`
+was added alongside it rather than starting a new module. Both are registered
+through `world.game_clock.task_registry`, the shared cron seam every periodic app
+task in this codebase uses.
+
+### Place-presence authorization for tabletalk
+
+**Source:** `_resolve_pose_place`, `src/actions/definitions/communication.py`
+
+Telnet's `CmdTabletalk` always resolves the caller's own current place server-side
+and never accepts a place by id from the client. The web composer has no
+command-layer resolution step, so `PoseAction`/`_resolve_pose_place` mirrors the
+established `_resolve_room()` REST/WS-dispatch pattern: an already-resolved `Place`
+instance passes through unchanged (telnet/legacy call shape), and a raw int pk (the
+WS dispatch shape) is resolved here. Unlike `_resolve_room()`, this also requires
+the actor's active persona to have a genuine `PlacePresence` at the resolved place —
+a plain pk lookup alone would let a client assert presence at an arbitrary table by
+guessing its id, which the telnet path never allows. Not-found and not-present
+collapse to the same message ("You are not at that place.") — no existence probe
+that would let a client distinguish a wrong table id from a table it isn't seated at.
+
+### Frontend draft-safety contract
+
+**Source:** `frontend/src/game/useDraftStore.ts`, `frontend/src/hooks/useGameSocket.ts`,
+`frontend/src/game/components/GameWindow.tsx` / `GamePage.tsx`
+
+`useDraftStore(key: DraftKey)` persists one draft per `(accountId, personaId,
+conversationKey)` to `sessionStorage` (`draftStorageKey`), surviving a reload or a
+closed-then-reopened tab. Key points:
+
+- **Mode preservation (#3760 Task 11 critical fix, closes a real privacy leak).**
+  `Draft.mode` (`{command, targets}`) is captured at `beginSend()` time and persisted
+  alongside `clientRequestId`. `beginSend(liveMode)`'s `contentUnchanged` check (same
+  content as `lastSentContentRef`, same stored `clientRequestId`) decides which mode
+  wins: an **unmodified retry** reuses the stored `mode` from the original attempt,
+  ignoring whatever mode is live right now; a **genuine content edit** (via
+  `setContent`, which always clears `clientRequestId`/`status`/`mode`) is a new
+  attempt free to capture `liveMode` fresh. Without this, a stranded whisper draft
+  reloaded mid-send had nothing distinguishing it from a pose/say once the
+  composer's live mode had moved on — Retry, "Resume & retry", or even a plain Send
+  on an untouched `rejected`/`unknown` draft, would silently redispatch a private
+  whisper as a public say/pose. Callers must treat `Draft.mode` as the single source
+  of truth for "what mode this send actually goes out under" once a
+  `pending`/`rejected`/`unknown` draft exists — never read a live mode prop
+  separately at dispatch time.
+- **`reconcileStoredDrafts(lookup)`** (exported, non-hook) is the reconnect-time
+  reconciliation entry point called from `useGameSocket.ts`'s socket `open` handler,
+  outside React entirely (module scope, no live composer to resend through). It
+  scans every `sessionStorage` draft left `pending`/`rejected`/`unknown` and
+  resolves each against `lookup` — `fetchPoseSubmission`, the
+  `GET /api/play/submissions/{client_request_id}/` client (`frontend/src/scenes/queries.ts`).
+  A found record clears the stored draft (the send landed while nobody was
+  watching); a miss or lookup failure leaves it for the composer's own
+  ack/reject/stranded UI to resolve later.
+- **Connection-generation discard (`useGameSocket.ts`).** A per-character monotonic
+  `connectionGenerations` counter increments on every connect, including automatic
+  reconnects; each connection's message handler and its `reconcileStoredDrafts(...).finally(...)`
+  callback close over the generation they were created with and discard themselves
+  (`if (generation !== connectionGenerations[character]) return;`) if a newer
+  reconnect has already superseded them by the time they run — a belated frame or a
+  belated "ready" flip from a stale connection can otherwise corrupt state from a
+  connection that's already gone.
+- **Room-identity draft scoping (#3760 Task 14 fix — closes the bug the issue was
+  filed for).** `GameWindow`'s `draftScope` prop for the default room-anchor
+  composer tab is `` `${draftScopePrefix}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}` ``,
+  where `roomId` is `GamePage`'s `roomData?.id` — the character's actual physical
+  room id, freshly derived on every `room_state` broadcast (the same value already
+  threaded to `CeremonyRoomCard`/`StoryTray`/the places query) — **not** the
+  constant string `'room'` the composer used before this fix. A player's room-anchor
+  draft is now scoped to the room they are actually standing in, so walking through
+  an exit into a different room no longer silently carries typed-but-unsent text
+  into the new room's composer.
+
+---
+
 ## Permissions
 
 | Permission Class | Used For | Rule |

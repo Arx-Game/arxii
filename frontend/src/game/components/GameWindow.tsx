@@ -92,8 +92,42 @@ interface GameWindowProps {
   onCancelReply?: () => void;
   /** Stable account scope for per-tab drafts. */
   draftScopePrefix?: string;
+  /**
+   * The active character's current physical room id (#3760 Task 14 fix) —
+   * `GamePage`'s `roomData?.id`, freshly derived on every `room_state`
+   * broadcast (the same value already threaded to `CeremonyRoomCard`,
+   * `StoryTray`, and the places query). Folded into the room-anchor
+   * conversation's `draftScope` below so a draft typed with no conversation
+   * tab open is scoped to the room the player is actually standing in,
+   * instead of the constant literal `'room'` — the prior string meant a
+   * player's room-anchor draft survived walking through an exit into an
+   * entirely different room, which is the opposite of what #3760's spec
+   * promises ("my draft in one room to stay put when I travel to
+   * another"). `null`/omitted (room state not yet resolved) falls back to
+   * the stable literal `'room:unknown'` rather than crashing on a missing
+   * id.
+   */
+  roomId?: number | null;
+  /**
+   * Human-readable current place name (#3760 demo-fidelity review) — the
+   * same value `GamePage` already derives as `sceneData?.name ??
+   * roomData?.name ?? 'Room'` for composer-mode labels. Passed through so
+   * `CommandInput`'s stranded-draft banner never falls back to the raw
+   * `draftScope` cache-key string (`account:1:Name:room:2`) when no
+   * composerMode label is set — the default state for a plain room pose.
+   */
+  roomName?: string;
   /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
   isAtPlace?: boolean;
+  /**
+   * The Place the viewer's persona is currently present at, if any (#3760
+   * Task 10 fix) — threaded straight to `CommandInput` so `tt` (tabletalk)
+   * can dispatch via `executeAction` with a real `place` kwarg, mirroring
+   * how say/whisper already do. `null`/omitted when not at a place (or the
+   * places query hasn't resolved yet); `tt` falls back to the legacy
+   * WebSocket `send()` path in that case.
+   */
+  currentPlaceId?: number | null;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
   placeBar?: ReactNode;
   /** `TavernGameWidget`, rendered alongside PlaceBar (#3292). */
@@ -154,7 +188,10 @@ export function GameWindow({
   replyTarget,
   onCancelReply,
   draftScopePrefix,
+  roomId,
+  roomName,
   isAtPlace,
+  currentPlaceId,
   placeBar,
   tavernGameWidget,
   speakerQueueBar,
@@ -519,11 +556,13 @@ export function GameWindow({
           detachedActionIds={detachedActionIds}
           onPoseSubmitted={onPoseSubmitted}
           isAtPlace={isAtPlace}
+          currentPlaceId={currentPlaceId}
           speakingAs={speakingAs}
           replyTarget={replyTarget}
           onCancelReply={onCancelReply}
           submitOnEnter={false}
-          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
+          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
+          roomName={roomName}
           ready={playReady}
         />
       )}

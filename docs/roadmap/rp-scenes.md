@@ -342,6 +342,57 @@ block/mute) stays entirely the owner's.
 - **Details:** [companions.md](../systems/companions.md#companion-emote-3294),
   [scenes.md](../systems/scenes.md#companion-pose-attribution-3294).
 
+### Narrative Play Delivery: Safe Drafts, Acknowledgements, Retries, Reconnect — DONE (#3760)
+
+The composer no longer trusts a send until the server confirms it: every pose/say/
+whisper/tt dispatch now carries a `client_request_id` through an idempotency ledger,
+so a retry (double-Enter, a reconnect, a reopened tab) replays cleanly instead of
+creating a duplicate row or silently misdelivering to a different audience.
+
+- **Ledger:** `PoseSubmission` (persona, client_request_id, nullable interaction FK)
+  + `idempotent_record_interaction` (`world/scenes/interaction_services.py`) — looks up
+  an existing submission first; a match on `comparison_fields` replays the stored
+  `Interaction` (no re-roll, no duplicate); a genuine mismatch (reused id, different
+  content/target/scene/place) is a `payload_conflict` (409), never a silent misfire.
+  `comparison_fields` accepts a callable per field (`_comparison_fields_match`) for
+  identity that isn't a plain scalar — `target_personas` is M2M, so target-identity
+  comparison closes over the resolved persona-pk set. `PoseAction`/`WhisperAction`
+  (`actions/definitions/communication.py`) and `submit_pose`
+  (`world/scenes/interaction_views.py`) all compare target/scene/place identity, not
+  just content — a content-only comparison would misclassify "same text, different
+  audience" as a legitimate replay and never deliver to the new one.
+- **Status lookup:** `GET /api/play/submissions/<uuid:client_request_id>/`
+  (`PoseSubmissionDetailView`, `world/scenes/play_views.py`) — writer-only,
+  account-scoped; backs the composer's "Check status" affordance after a connection
+  drop leaves a send's outcome unknown.
+- **Frontend draft store:** `useDraftStore` (`frontend/src/game/useDraftStore.ts`) —
+  per-account/persona/conversation draft state (`clean`/`pending`/`rejected`/`unknown`),
+  persisted to `sessionStorage` so a stranded draft survives a reload/reopened tab.
+  `CommandInput.tsx`'s composer renders exactly one delivery-state banner at a time
+  (pending "Sending…", rejected with reason, unknown "Check status"/Retry, or stranded
+  "Unsent draft from … / Discard / Resume & retry") and ack-gates every clear-on-success
+  path (`if (commandRef.current === trimmed)`) so a newer edit typed while a request is
+  in flight is never clobbered — REST pose, the WS say/whisper ack handler, and the
+  companion-emote branch all guard identically.
+  - `say`/`whisper`/`tt` dispatch via `executeAction` (structured ack); REST `submit_pose`
+    carries the same `client_request_id`; a whisper/tt whose target/place can't currently
+    be resolved (or an explicit command override) falls through to the legacy raw-WS
+    `send()` path, which now also resets the v2 draft (`draftStore.discard()`) so a
+    fallback dispatch never leaves a stale pending/rejected draft stranding the banner
+    over an emptied textarea.
+- **Reconnect:** `useGameSocket`'s reconnect-open handler reconciles every stored draft
+  (writer-only status lookup) before flipping a session's `isConnected` back to `true`;
+  `CommandInput`'s own `ready` prop tracks a `false -> true` transition to resolve any
+  send this tab was still tracking through `pendingSpeechRef` — `markUnknown()` then an
+  immediate status check, not a stuck "Sending…" forever. `SceneDetailPage.tsx` (the
+  other composer host, alongside `GameWindow.tsx`) derives `ready` from
+  `state.game.sessions[character]` when a session exists there, defaulting to `true`
+  when none does — nothing on `/scenes/:id` ever calls `connect()`, so "no session" must
+  read as "not socket-gated", never as "disconnected forever".
+- **Connection generation:** `useGameSocket` stamps each socket with a generation
+  counter so a stale connection's late message handler can never process a frame
+  addressed to a newer one after a reconnect race.
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 

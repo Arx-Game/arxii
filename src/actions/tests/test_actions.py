@@ -1,6 +1,7 @@
 """Tests for concrete action implementations."""
 
 from unittest.mock import patch
+import uuid
 
 from django.test import TestCase, tag
 
@@ -44,6 +45,10 @@ from world.mechanics.constants import ChallengeType
 from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
+from world.scenes.constants import InteractionMode, ScenePrivacyMode
+from world.scenes.factories import PlaceFactory, PlacePresenceFactory, SceneFactory
+from world.scenes.models import Interaction
+from world.scenes.services import active_persona_for_sheet
 
 
 class LookActionTests(TestCase):
@@ -309,6 +314,379 @@ class WhisperActionTests(TestCase):
         target = ObjectDBFactory(db_key="Bob")
         result = action.run(actor, target=target, text="")
         assert result.success is False
+
+
+class SayActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — SayAction routes through idempotent_record_interaction when a
+    client_request_id is present, the same wrapper submit-pose (REST) uses."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Speaker", location=self.room)
+        CharacterSheetFactory(character=self.character)
+
+    def test_say_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "Hello there.", "client_request_id": request_id}
+
+        with patch.object(self.room, "msg_contents"):
+            first = SayAction().execute(actor=self.character, context=None, **kwargs)
+            second = SayAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.SAY).count() == 1
+
+    def test_say_action_conflict_on_reused_id_with_different_text(self):
+        request_id = uuid.uuid4()
+
+        with patch.object(self.room, "msg_contents"):
+            first = SayAction().execute(
+                actor=self.character,
+                context=None,
+                text="Hello there.",
+                client_request_id=request_id,
+            )
+            second = SayAction().execute(
+                actor=self.character,
+                context=None,
+                text="Something else.",
+                client_request_id=request_id,
+            )
+
+        assert first.success is True
+        assert second.success is False
+        assert Interaction.objects.filter(mode=InteractionMode.SAY).count() == 1
+
+    def test_say_action_retry_broadcasts_via_message_location_only_once(self):
+        """A retry must not double-broadcast even though the DB side is correctly
+        deduped (#3760 review fix, mirrored from submit_pose's equivalent test)."""
+        request_id = uuid.uuid4()
+        kwargs = {"text": "Hello there.", "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.message_location") as mock_broadcast:
+            SayAction().execute(actor=self.character, context=None, **kwargs)
+            SayAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_broadcast.call_count == 1
+
+
+class PoseActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — PoseAction routes through idempotent_record_interaction when a
+    client_request_id is present."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Poser", location=self.room)
+        CharacterSheetFactory(character=self.character)
+
+    def test_pose_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "stretches.", "client_request_id": request_id}
+
+        with patch.object(self.room, "msg_contents"):
+            first = PoseAction().execute(actor=self.character, context=None, **kwargs)
+            second = PoseAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+    def test_pose_action_retry_broadcasts_via_message_location_only_once(self):
+        """Mirrors submit_pose's broadcast-race fix (#3760): PoseAction.execute's
+        message_location call must not repeat on a replayed retry."""
+        request_id = uuid.uuid4()
+        kwargs = {"text": "stretches.", "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.message_location") as mock_broadcast:
+            PoseAction().execute(actor=self.character, context=None, **kwargs)
+            PoseAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_broadcast.call_count == 1
+
+    def test_pose_action_same_target_twice_is_still_a_replay(self):
+        """#3760 review Finding 1, "same" direction: reusing a client_request_id
+        against the SAME target twice must remain a clean replay -- the new
+        target-identity comparison must not false-positive on a match."""
+        other = CharacterFactory(db_key="Passerby", location=self.room)
+        CharacterSheetFactory(character=other)
+        request_id = uuid.uuid4()
+        kwargs = {"text": "waves.", "targets": [other], "client_request_id": request_id}
+
+        with patch.object(self.room, "msg_contents"):
+            first = PoseAction().execute(actor=self.character, context=None, **kwargs)
+            second = PoseAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+    def test_pose_action_conflict_on_reused_id_with_different_target(self):
+        """#3760 review Finding 1, "different" direction: reusing a
+        client_request_id against a DIFFERENT target with the same text must be
+        a conflict, not a silently-misclassified replay that never delivers to
+        the new intended target."""
+        other = CharacterFactory(db_key="Passerby", location=self.room)
+        CharacterSheetFactory(character=other)
+        request_id = uuid.uuid4()
+
+        with patch.object(self.room, "msg_contents"):
+            first = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="waves.",
+                client_request_id=request_id,
+            )
+            second = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="waves.",
+                targets=[other],
+                client_request_id=request_id,
+            )
+
+        assert first.success is True
+        assert second.success is False
+        assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+    def test_pose_action_conflict_on_reused_id_with_different_place(self):
+        """#3760 review Finding 1: place identity (`Place`, a scalar FK on
+        Interaction) is also part of the comparison -- reusing a
+        client_request_id against a DIFFERENT place with the same text must be
+        a conflict."""
+        place = PlaceFactory()
+        request_id = uuid.uuid4()
+
+        with patch.object(self.room, "msg_contents"):
+            first = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="waves.",
+                client_request_id=request_id,
+            )
+            second = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="waves.",
+                place=place,
+                client_request_id=request_id,
+            )
+
+        assert first.success is True
+        assert second.success is False
+        assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+
+class PoseActionPlaceResolutionTests(TestCase):
+    """#3760 Task 10 fix review — `_resolve_pose_place`'s authorization check
+    (a raw int `place` pk must resolve to a real `Place` AND require the
+    actor's own `PlacePresence` there) had zero test coverage in either
+    direction. Every existing `place=` test in this module (e.g.
+    `PoseActionIdempotencyTests.test_pose_action_conflict_on_reused_id_with_
+    different_place`) passes an already-resolved `Place` **instance**, which
+    only exercises the `hasattr(place, "pk")` early passthrough — none
+    exercise the actual raw-int-id resolution + `PlacePresence` check the web
+    composer's `tt` dispatch (`executeAction(..., 'pose', {place: <int>,
+    ...})`) rides.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Poser", location=self.room)
+        CharacterSheetFactory(character=self.character)
+        self.persona = active_persona_for_sheet(self.character.character_sheet)
+
+    def test_pose_action_resolves_int_place_when_actor_is_present(self):
+        """Success path: a real PlacePresence row lets a raw int pk resolve,
+        and the resulting Interaction is attributed to that place."""
+        place = PlaceFactory()
+        PlacePresenceFactory(place=place, persona=self.persona)
+
+        with patch.object(self.room, "msg_contents"):
+            result = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="leans in.",
+                place=place.pk,
+            )
+
+        assert result.success is True
+        interaction = Interaction.objects.get(mode=InteractionMode.POSE)
+        assert interaction.place_id == place.pk
+
+    def test_pose_action_rejects_int_place_when_actor_is_not_present(self):
+        """Rejection path: break the invariant (no PlacePresence for this
+        actor's persona at the claimed place) and watch it actually fail —
+        this repo's own standard for verifying a guard. No PlacePresence row
+        is created here at all, so the resolution must refuse rather than
+        silently broadcast room-wide."""
+        place = PlaceFactory()
+
+        result = PoseAction().execute(
+            actor=self.character,
+            context=None,
+            text="leans in.",
+            place=place.pk,
+        )
+
+        assert result.success is False
+        assert result.message == "You are not at that place."
+        assert not Interaction.objects.filter(mode=InteractionMode.POSE).exists()
+
+    def test_pose_action_rejects_int_place_when_present_at_a_different_place(self):
+        """Same rejection, but the actor genuinely has a PlacePresence — just
+        not at the place being claimed. Guards against a resolution that
+        checks "does this persona have ANY PlacePresence" instead of "at THIS
+        place."""
+        actual_place = PlaceFactory()
+        claimed_place = PlaceFactory()
+        PlacePresenceFactory(place=actual_place, persona=self.persona)
+
+        result = PoseAction().execute(
+            actor=self.character,
+            context=None,
+            text="leans in.",
+            place=claimed_place.pk,
+        )
+
+        assert result.success is False
+        assert result.message == "You are not at that place."
+        assert not Interaction.objects.filter(mode=InteractionMode.POSE).exists()
+
+
+class WhisperActionIdempotencyTests(TestCase):
+    """#3760 Task 5 — WhisperAction routes through idempotent_record_interaction
+    (via record_whisper_interaction, not record_interaction — see the record_fn
+    docstring on idempotent_record_interaction for why) when a client_request_id
+    is present."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Whisperer", location=self.room)
+        CharacterSheetFactory(character=self.character)
+        self.target = CharacterFactory(db_key="Listener", location=self.room)
+        CharacterSheetFactory(character=self.target)
+
+    def test_whisper_action_is_idempotent_on_client_request_id(self):
+        request_id = uuid.uuid4()
+        kwargs = {"text": "a secret.", "target": self.target, "client_request_id": request_id}
+
+        with patch.object(self.target, "msg"):
+            first = WhisperAction().execute(actor=self.character, context=None, **kwargs)
+            second = WhisperAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert first.success is True
+        assert second.success is True
+        assert Interaction.objects.filter(mode=InteractionMode.WHISPER).count() == 1
+
+    def test_whisper_action_conflict_on_reused_id_with_different_target(self):
+        """#3760 review Finding 1: reusing a client_request_id against a
+        DIFFERENT target with the same text must not be misclassified as a
+        replay -- target identity isn't a scalar Interaction field (it's M2M
+        via InteractionTargetPersona), so the generic content-only comparison
+        used to silently treat "same text, different target" as a clean
+        replay and never delivered to the new target."""
+        other_target = CharacterFactory(db_key="Other", location=self.room)
+        CharacterSheetFactory(character=other_target)
+        request_id = uuid.uuid4()
+
+        with patch.object(self.target, "msg"), patch.object(other_target, "msg"):
+            first = WhisperAction().execute(
+                actor=self.character,
+                context=None,
+                text="a secret.",
+                target=self.target,
+                client_request_id=request_id,
+            )
+            second = WhisperAction().execute(
+                actor=self.character,
+                context=None,
+                text="a secret.",
+                target=other_target,
+                client_request_id=request_id,
+            )
+
+        assert first.success is True
+        assert second.success is False
+        assert Interaction.objects.filter(mode=InteractionMode.WHISPER).count() == 1
+
+    def test_whisper_action_retry_delivers_to_target_only_once(self):
+        """The telnet-delivery sibling of the say/pose broadcast-race fix (#3760):
+        a retry must not double-deliver even though the DB side is deduped.
+
+        Patches ``send_message`` (the telnet-parity delivery ``_broadcast()`` makes)
+        rather than ``target.msg`` directly: a successfully-recorded whisper also
+        reaches ``target.msg`` a second, legitimate time via
+        ``record_whisper_interaction``'s own ``push_interaction`` WS payload send —
+        a different call this test isn't about.
+        """
+        request_id = uuid.uuid4()
+        kwargs = {"text": "a secret.", "target": self.target, "client_request_id": request_id}
+
+        with patch("actions.definitions.communication.send_message") as mock_send:
+            WhisperAction().execute(actor=self.character, context=None, **kwargs)
+            WhisperAction().execute(actor=self.character, context=None, **kwargs)
+
+        assert mock_send.call_count == 1
+
+
+class WhisperActionEphemeralPrivacyTests(TestCase):
+    """#3760 review Finding 2 — the actual privacy property the `record_fn` fix
+    protects.
+
+    Every other WhisperAction idempotency test in this module runs with no
+    active Scene, so `get_active_scene()` returns None and
+    `record_whisper_interaction` always takes the PERSISTED branch — never the
+    EPHEMERAL branch where `push_ephemeral_interaction`'s `recipients` scoping
+    (the actual leak-prevention mechanism) lives. If the `record_fn` fix (or its
+    default) were ever dropped or reverted, WhisperAction would silently fall
+    back to `record_interaction`'s ephemeral branch, which never passes
+    `recipients` and so broadcasts to the whole room — a real privacy leak —
+    and no other test in this file would go red. This test exercises that
+    branch directly.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        # An EPHEMERAL scene may only be held in a non-publicly-listed room
+        # (#1287) -- Room.at_object_creation auto-creates a RoomProfile with
+        # is_public=True by default, so flip it before creating the scene.
+        self.room.room_profile.is_public = False
+        self.room.room_profile.save()
+        self.character = CharacterFactory(db_key="Whisperer", location=self.room)
+        CharacterSheetFactory(character=self.character)
+        self.target = CharacterFactory(db_key="Listener", location=self.room)
+        CharacterSheetFactory(character=self.target)
+        self.bystander = CharacterFactory(db_key="Bystander", location=self.room)
+        CharacterSheetFactory(character=self.bystander)
+        SceneFactory(location=self.room, privacy_mode=ScenePrivacyMode.EPHEMERAL, is_active=True)
+
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    @patch("world.scenes.interaction_services._send_to_objects")
+    def test_ephemeral_whisper_reaches_only_writer_and_target(
+        self, mock_send_to_objects, mock_broadcast_to_location
+    ):
+        request_id = uuid.uuid4()
+
+        with patch.object(self.target, "msg"), patch.object(self.bystander, "msg"):
+            result = WhisperAction().execute(
+                actor=self.character,
+                context=None,
+                text="a secret.",
+                target=self.target,
+                client_request_id=request_id,
+            )
+
+        assert result.success is True
+        # EPHEMERAL scenes never persist -- nothing to compare on a retry either.
+        assert not Interaction.objects.filter(mode=InteractionMode.WHISPER).exists()
+        # The room-wide broadcast path must never fire for a whisper.
+        mock_broadcast_to_location.assert_not_called()
+        # The scoped-delivery path fires exactly once, to writer + target only --
+        # the bystander (present in the same room) must never be in the list.
+        mock_send_to_objects.assert_called_once()
+        recipients, _payload = mock_send_to_objects.call_args.args
+        assert set(recipients) == {self.character, self.target}
 
 
 class PemitActionTests(TestCase):

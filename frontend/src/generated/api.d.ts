@@ -17086,6 +17086,31 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/play/submissions/{client_request_id}/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description GET whether a submitted pose landed, by client_request_id (#3760).
+     *
+     *     Writer-only: scoped to the requesting account's own personas via
+     *     ``get_account_personas`` -- the same account-scoping seam
+     *     ``InteractionViewSet`` uses. A non-owner's lookup 404s rather than
+     *     403ing: a resend attempt is not proof of authorship, and a 403 would
+     *     still confirm the row exists.
+     */
+    get: operations['play_submissions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/play/threads/': {
     parameters: {
       query?: never;
@@ -70783,6 +70808,26 @@ export interface operations {
       query?: never;
       header?: never;
       path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  play_submissions_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        client_request_id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;

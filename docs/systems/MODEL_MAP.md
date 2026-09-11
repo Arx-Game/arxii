@@ -8183,6 +8183,7 @@
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
+  - pose_submission <- scenes.PoseSubmission
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - action_request_result <- scenes.SceneActionRequest
   - action_request_action <- scenes.SceneActionRequest
@@ -8365,6 +8366,7 @@
   - interactions_written <- scenes.Interaction
   - interactions_targeted <- scenes.Interaction
   - targeted_in_interactions <- scenes.InteractionTargetPersona
+  - pose_submissions <- scenes.PoseSubmission
   - summary_revisions <- scenes.SceneSummaryRevision
   - targeted_scene_declarations <- scenes.SceneActionDeclaration
   - initiated_action_requests <- scenes.SceneActionRequest
@@ -8413,6 +8415,11 @@
 **Foreign Keys:**
   - place -> scenes.Place [FK]
   - persona -> scenes.Persona [FK]
+
+### PoseSubmission
+**Foreign Keys:**
+  - persona -> scenes.Persona [FK]
+  - interaction -> scenes.Interaction [FK] (nullable)
 
 ### PrecaptureConsentRequest
 **Foreign Keys:**

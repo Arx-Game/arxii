@@ -1,8 +1,10 @@
-import { useState, useMemo } from 'react';
-import { Zap, X, Loader2 } from 'lucide-react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
+import { Zap, X, Loader2, Check } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { useAppSelector } from '@/store/hooks';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useActionResult } from '@/hooks/actionResultBus';
+import type { ActionResultPayload } from '@/hooks/types';
 import { useAvailableActionsQuery } from '../actionQueries';
 import type { ActionAttachmentInfo, PlayerAction } from '../actionTypes';
 
@@ -35,6 +37,32 @@ export function ActionAttachment({
     enabled: open,
     staleTime: 30_000,
   });
+
+  // #3760 demo-fidelity review Finding 2 — the attached action's own
+  // acknowledged/pending identity (demo Screen 7's "✓ <name> · acknowledged"
+  // badge next to the composer's Send button). `ActionResultPayload` carries
+  // no correlation id (see `hooks/types.ts`), so this is the SAME best-effort
+  // "the next action_result on the bus is this dispatch's response"
+  // assumption `CommandInput.tsx`'s own `handleActionResult` already makes
+  // for the composer's send ack — the established pattern for every
+  // `useActionResult` consumer in this codebase, not a new one invented here.
+  // Resets to `pending` whenever a DIFFERENT action gets attached (a fresh
+  // attachment is a fresh, unconfirmed attempt); stays `pending` across
+  // re-renders of the SAME attachment until a successful result arrives.
+  const attachmentIdentity = attachment
+    ? `${attachment.actionKey}:${attachment.target ?? ''}`
+    : null;
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    setAcknowledged(false);
+  }, [attachmentIdentity]);
+  const handleActionResult = useCallback(
+    (payload: ActionResultPayload) => {
+      if (attachmentIdentity && payload.success) setAcknowledged(true);
+    },
+    [attachmentIdentity]
+  );
+  useActionResult(handleActionResult);
 
   function handleSelect(action: PlayerAction, isTargeted: boolean) {
     const techniqueId = action.ref.technique_id ?? undefined;
@@ -109,6 +137,14 @@ export function ActionAttachment({
         </PopoverContent>
       </Popover>
 
+      {/* #3760 demo-fidelity review Finding 1 (round 2): Screen 7 shows ONE
+          combined pill (check icon, action name, dot separator, then
+          "acknowledged"), not the action chip and the acknowledged/pending
+          status as two adjacent elements. The status (icon + text) is
+          nested inside this same detach button, after the name and before
+          the target text/detach-X, so it reads as one pill while the button
+          keeps its exact pre-existing detach behavior (aria-label, onClick,
+          structure) tests already cover. */}
       {attachment && (
         <button
           type="button"
@@ -118,6 +154,20 @@ export function ActionAttachment({
         >
           <Zap className="h-3 w-3" />
           {attachment.name}
+          <span
+            data-testid="action-attachment-status"
+            className={`flex items-center gap-1 ${
+              acknowledged ? 'text-emerald-600' : 'text-amber-600'
+            }`}
+          >
+            <span aria-hidden="true">&middot;</span>
+            {acknowledged ? (
+              <Check className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            )}
+            {acknowledged ? 'acknowledged' : 'pending'}
+          </span>
           {attachment.requiresTarget && (
             <span className="text-muted-foreground">
               {attachment.target ? `\u2192 ${attachment.target}` : '(select target)'}

@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+from dataclasses import dataclass
 from datetime import timedelta
 import itertools
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
+import uuid
 
 from django.core.exceptions import ObjectDoesNotExist
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from world.scenes.constants import (
@@ -19,6 +21,7 @@ from world.scenes.models import (
     Interaction,
     InteractionTargetPersona,
     Persona,
+    PoseSubmission,
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver, Place
@@ -863,6 +866,114 @@ def personas_for_characters(characters: Iterable[ObjectDB]) -> list[Persona] | N
         if primary is not None:
             personas.append(primary)
     return personas or None
+
+
+@dataclass
+class IdempotentSubmissionResult:
+    """Outcome of an idempotency-checked interaction submission."""
+
+    interaction: Interaction | None
+    replayed: bool
+    conflict: bool
+
+
+def _comparison_fields_match(
+    stored: Interaction, comparison_fields: dict[str, object | Callable[[Interaction], bool]]
+) -> bool:
+    """True when every `comparison_fields` entry matches `stored` (#3760 review fix).
+
+    A plain (non-callable) value is compared via `getattr(stored, field) == value` -- the
+    original scalar-only behavior, unchanged; `SayAction` still uses this form only (directed-say
+    idempotency is out of scope, see #3760). `submit_pose` now also uses the callable form below
+    for target identity. A callable value is called with `stored` and its truthy/falsy
+    return is the match result directly -- the caller closes over whatever "current" value
+    it wants to compare against, since target/place identity isn't always a simple scalar
+    attribute (`Interaction.target_personas` is M2M via `InteractionTargetPersona`, so
+    `getattr(stored, "target_personas")` returns a manager, not a comparable value):
+
+        comparison_fields={
+            "content": text,
+            "target": lambda stored: {p.pk for p in stored.target_personas.all()} == {pk},
+        }
+
+    Without this, a reused `client_request_id` against the same text but a genuinely
+    different target/place was silently misclassified as a replay -- `replayed=True`,
+    nothing (re-)delivered to the new intended audience, caller told it succeeded.
+    """
+    for field, value in comparison_fields.items():
+        if callable(value):
+            # `ty` can't narrow `object | Callable[[Interaction], bool]` from a bare
+            # `callable()` check alone -- the cast asserts the concrete signature the
+            # docstring above already documents as the contract.
+            matcher = cast("Callable[[Interaction], bool]", value)
+            if not matcher(stored):
+                return False
+        elif getattr(stored, field) != value:
+            return False
+    return True
+
+
+def idempotent_record_interaction(
+    *,
+    persona: Persona,
+    client_request_id: uuid.UUID,
+    comparison_fields: dict[str, object | Callable[[Interaction], bool]],
+    record_fn: Callable[..., Interaction | None] | None = None,
+    **record_kwargs: Any,
+) -> IdempotentSubmissionResult:
+    """Idempotency-checked wrapper around `record_interaction` (#3760).
+
+    Looks up an existing `PoseSubmission` for (persona, client_request_id) first.
+    Found + no `Interaction` stored (an ephemeral-scene acceptance - `record_interaction`
+    returns `None` there, nothing is ever persisted to compare against): a clean replay,
+    never a conflict - there is nothing to recompute either way. Found + `comparison_fields`
+    match the stored Interaction (see `_comparison_fields_match`): return that Interaction,
+    nothing recomputed (no re-roll, no duplicate row). Found + any field differs: a
+    `payload_conflict` (the caller reused a request id for genuinely different content/target/
+    place - a client bug, not a legitimate retry). Not found: run the real work via `record_fn`
+    (default `record_interaction`) and write the `PoseSubmission` row in the same transaction; a
+    concurrent duplicate insert (two near-simultaneous retries) raises `IntegrityError`, which is
+    caught by re-reading and returning the winner's row rather than erroring -
+    this is what makes the check race-safe.
+
+    ``record_fn`` (#3760 Task 5) lets a caller substitute a differently-shaped recorder for
+    `record_interaction` -- e.g. `WhisperAction` passes `record_whisper_interaction`, whose
+    ephemeral-scene branch scopes the real-time push to the writer + named target
+    (`recipients=[character, target]`) instead of `record_interaction`'s room-wide broadcast;
+    reusing `record_interaction` there would leak whisper content to the whole ephemeral scene.
+    """
+    record_fn = record_fn or record_interaction
+    existing = (
+        PoseSubmission.objects.filter(persona=persona, client_request_id=client_request_id)
+        .select_related("interaction")
+        .first()
+    )
+    if existing is not None:
+        stored = existing.interaction
+        if stored is None:
+            # Ephemeral-scene acceptance: nothing was persisted the first time either, so
+            # there is nothing to compare against and nothing left to (re)execute - a clean
+            # replay, never a conflict.
+            return IdempotentSubmissionResult(interaction=None, replayed=True, conflict=False)
+        if _comparison_fields_match(stored, comparison_fields):
+            return IdempotentSubmissionResult(interaction=stored, replayed=True, conflict=False)
+        return IdempotentSubmissionResult(interaction=None, replayed=False, conflict=True)
+
+    try:
+        with transaction.atomic():
+            interaction = record_fn(**record_kwargs)
+            PoseSubmission.objects.create(
+                persona=persona, client_request_id=client_request_id, interaction=interaction
+            )
+    except IntegrityError:
+        winner = PoseSubmission.objects.select_related("interaction").get(
+            persona=persona, client_request_id=client_request_id
+        )
+        return IdempotentSubmissionResult(
+            interaction=winner.interaction, replayed=True, conflict=False
+        )
+
+    return IdempotentSubmissionResult(interaction=interaction, replayed=False, conflict=False)
 
 
 def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interaction creation

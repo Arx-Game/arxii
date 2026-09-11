@@ -590,15 +590,18 @@ def _register_external_app_tasks() -> None:
 
     #676 Phase A: renown decay (societies). #514 Outfits Phase C: trendsetter
     ceremony + vogue-momentum decay (items). #2846: sunlight reconcile
-    (species — stationary dawn pickup + escalation).
+    (species — stationary dawn pickup + escalation). #3760: PoseSubmission
+    idempotency-ledger cleanup (scenes).
     """
     from world.items.tasks import register_all_tasks as register_fashion_tasks
+    from world.scenes.tasks import register_all_tasks as register_scenes_tasks
     from world.societies.tasks import register_all_tasks as register_renown_tasks
     from world.species.tasks import register_all_tasks as register_species_tasks
 
     register_renown_tasks()
     register_fashion_tasks()
     register_species_tasks()
+    register_scenes_tasks()
 
 
 def register_all_tasks() -> None:

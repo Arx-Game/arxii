@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { emitActionResult } from '@/hooks/actionResultBus';
 import type { PlayerActionsResponse } from '../actionTypes';
 
 vi.mock('../actionQueries', async () => {
@@ -275,5 +276,128 @@ describe('ActionAttachment', () => {
     );
 
     expect(screen.getByText('(select target)')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // #3760 demo-fidelity review Finding 2 — the attached action's own
+  // acknowledged/pending badge (demo Screen 7: "✓ <name> · acknowledged"),
+  // sourced from the ACTION_RESULT bus (`useActionResult`). Finding 1 (round
+  // 2) folded this status into the SAME pill as the detach chip — the demo
+  // shows one combined pill, not two adjacent elements — so the status
+  // testid below now lives nested inside the "Detach action" button.
+  // -------------------------------------------------------------------------
+
+  it('renders the status inside the single detach pill, not as a separate element', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const detachButton = screen.getByRole('button', { name: 'Detach action' });
+    const status = screen.getByTestId('action-attachment-status');
+
+    expect(detachButton).toContainElement(status);
+    expect(within(detachButton).getByText('Intimidate')).toBeInTheDocument();
+    // Merged into one pill means there's exactly one "Detach action" control
+    // carrying both the name and the status — not a second floating badge.
+    expect(screen.getAllByTestId('action-attachment-status')).toHaveLength(1);
+  });
+
+  it('shows the pending badge while an action is attached but no result has arrived yet', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const status = screen.getByTestId('action-attachment-status');
+    expect(status).toHaveTextContent('pending');
+    expect(status).not.toHaveTextContent('acknowledged');
+  });
+
+  it('does not show any status badge when no action is attached', () => {
+    render(
+      <ActionAttachment sceneId="1" attachment={null} onAttach={vi.fn()} onDetach={vi.fn()} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('action-attachment-status')).not.toBeInTheDocument();
+  });
+
+  it('flips to the acknowledged badge once a successful ACTION_RESULT arrives on the bus', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
+
+    act(() => {
+      emitActionResult({ success: true, message: null, data: null });
+    });
+
+    const status = screen.getByTestId('action-attachment-status');
+    expect(status).toHaveTextContent('acknowledged');
+    expect(status).not.toHaveTextContent('pending');
+  });
+
+  it('does not acknowledge on a failed ACTION_RESULT — the badge stays pending', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    act(() => {
+      emitActionResult({ success: false, message: 'Failed.', data: null });
+    });
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
+  });
+
+  it('resets to pending when a different action gets attached (rerender)', () => {
+    const { rerender } = render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    act(() => {
+      emitActionResult({ success: true, message: null, data: null });
+    });
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('acknowledged');
+
+    rerender(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'perform', name: 'Perform', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
   });
 });

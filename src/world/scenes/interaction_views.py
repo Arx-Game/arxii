@@ -3,7 +3,6 @@ from __future__ import annotations
 from http import HTTPMethod
 from typing import Any
 
-from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
@@ -46,9 +45,9 @@ from world.scenes.interaction_serializers import (
 )
 from world.scenes.interaction_services import (
     delete_interaction,
+    idempotent_record_interaction,
     mark_very_private,
     personas_for_characters,
-    record_interaction,
     resolve_characters_by_name,
 )
 from world.scenes.models import (
@@ -399,13 +398,7 @@ class InteractionViewSet(
             else:
                 auto_link_pose_to_actions(created)
 
-        # Broadcast raw text for telnet clients (WS parity — mirrors
-        # PoseAction.execute's message_location call, which fires unconditionally
-        # before persistence, ephemeral scenes included).
-        sdm = SceneDataManager()
-        caller_state = sdm.initialize_state_for_object(character)
-        message_location(caller_state, content)
-
+        client_request_id = data["client_request_id"]
         reply_data = data.get("reply_to")
         reply_target = (
             ReplyTarget(
@@ -415,19 +408,40 @@ class InteractionViewSet(
             if reply_data is not None
             else None
         )
+        # Target/scene identity (#3760 final review Finding 3): a content-only
+        # comparison silently misclassified "same text, different target or
+        # scene" as a legitimate replay -- nothing (re-)delivered to the new
+        # audience, caller told it succeeded. Mirrors the fix already applied
+        # to PoseAction/WhisperAction (commit 64d7ce3e1,
+        # actions/definitions/communication.py) for this REST sibling.
+        # target_personas is M2M (via InteractionTargetPersona), so it can't
+        # be a plain getattr(stored, field) == value comparison like
+        # scene_id can; see idempotent_record_interaction's
+        # _comparison_fields_match for the callable contract.
+        target_persona_pks = (
+            frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+        )
         try:
-            with transaction.atomic():
-                interaction = record_interaction(
-                    character=character,
-                    content=content,
-                    mode=InteractionMode.POSE,
-                    scene=scene,
-                    persona=persona,
-                    pose_kind=pose_kind,
-                    target_personas=target_personas,
-                    reply_to=reply_target,
-                    on_created=_on_created,
-                )
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={
+                    "content": content,
+                    "pose_kind": pose_kind,
+                    "scene_id": scene.pk if scene is not None else None,
+                    "target": lambda stored: (
+                        frozenset(p.pk for p in stored.target_personas.all()) == target_persona_pks
+                    ),
+                },
+                character=character,
+                content=content,
+                mode=InteractionMode.POSE,
+                scene=scene,
+                pose_kind=pose_kind,
+                target_personas=target_personas,
+                reply_to=reply_target,
+                on_created=_on_created,
+            )
         except InteractionThreadError:
             return Response(
                 {
@@ -438,16 +452,47 @@ class InteractionViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if result.conflict:
+            return Response(
+                {"detail": "This request id was already used for different content."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        # Broadcast raw text for telnet clients (WS parity — mirrors
+        # PoseAction.execute's message_location call). Gated on `not result.replayed`
+        # rather than a separate pre-check query (#3760 review fix): a bare
+        # PoseSubmission.exists() pre-check race-loses to two genuinely concurrent
+        # retries (both can observe "not found" before either commits), whereas
+        # `result.replayed` is already race-safe — idempotent_record_interaction's
+        # IntegrityError-catch-and-reread path also reports replayed=True for the
+        # loser of a true race, so deriving the gate from it closes that hole too.
+        # A submission that never reaches the ledger (e.g. the InteractionThreadError
+        # 400 above) is, by design, re-validated fresh on every attempt (spec
+        # Decision 3) and so broadcasts again on retry.
+        if not result.replayed:
+            sdm = SceneDataManager()
+            caller_state = sdm.initialize_state_for_object(character)
+            message_location(caller_state, content)
+
+        interaction = result.interaction
+        response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+
         if interaction is None:
             # Ephemeral scene: record_interaction already pushed the real-time
             # payload (push_ephemeral_interaction) and deliberately never persists
             # an Interaction row — there is nothing to serialize as a resource.
-            return Response({"ephemeral": True}, status=status.HTTP_201_CREATED)
+            # Reachable both on first acceptance and on a clean replay of one
+            # (idempotent_record_interaction never treats an ephemeral acceptance
+            # as a conflict — there is nothing stored to compare against).
+            return Response(
+                {"ephemeral": True, "replayed": result.replayed}, status=response_status
+            )
 
-        # The freshly-created interaction has not been through get_queryset()'s
-        # Prefetch pipeline, so the cached_* to_attr attributes used by
-        # InteractionListSerializer do not exist yet. Set them to empty lists
-        # to avoid AttributeError on serialization; a new pose has no receivers,
+        # The interaction has not been through get_queryset()'s Prefetch pipeline —
+        # freshly created, or (on replay) fetched via idempotent_record_interaction's
+        # bare select_related lookup — so the cached_* to_attr attributes used by
+        # InteractionListSerializer do not exist yet. Set them to empty lists to
+        # avoid AttributeError on serialization; a new pose has no receivers,
         # favorites, or reactions (target personas are whatever we just resolved).
         interaction.cached_receivers = []
         interaction.cached_target_personas = target_personas or []
@@ -463,7 +508,9 @@ class InteractionViewSet(
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )
-        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(
+            {**out_serializer.data, "replayed": result.replayed}, status=response_status
+        )
 
 
 class InteractionFavoritePagination(PageNumberPagination):

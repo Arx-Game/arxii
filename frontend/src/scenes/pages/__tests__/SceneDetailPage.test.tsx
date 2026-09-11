@@ -290,11 +290,17 @@ vi.mock('@/checks/queries', () => ({
 // Mutable so #3412 S4's speakingAs tests can drive `state.game.active`
 // without a real store — every other test relies on the null default.
 let mockGameActive: string | null = null;
+// Mutable so the Finding 1 fix-wave tests below (#3760 final review) can
+// drive `state.game.sessions` — default `undefined`, matching the real store
+// shape when `connect()` has never been called on this page (the exact
+// condition that triggered the bug: nothing on `/scenes/:id` ever connects a
+// socket, so `sessions` never gains an entry for the active character here).
+let mockGameSessions: Record<string, { isConnected: boolean }> | undefined = undefined;
 
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
     selector({
-      game: { active: mockGameActive },
+      game: { active: mockGameActive, sessions: mockGameSessions },
       auth: {
         account: {
           id: 1,
@@ -447,6 +453,9 @@ describe('SceneDetailPage', () => {
     mockUseMyRosterEntriesQuery.mockReturnValue({ data: [], isLoading: false, isError: false });
     // Reset the mocked game.active selector to default (no active character).
     mockGameActive = null;
+    // Reset the mocked game.sessions selector to default (no session at all —
+    // the common case on this page, since nothing here ever calls connect()).
+    mockGameSessions = undefined;
   });
 
   it('renders without crashing', () => {
@@ -837,6 +846,58 @@ describe('SceneDetailPage', () => {
     expect(mockCommandInput).toHaveBeenCalledWith(
       expect.objectContaining({ speakingAs: undefined })
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // Final review Finding 1 (#3760) — a WS session only exists in
+  // `state.game.sessions` once `connect()` has been called, and nothing on
+  // `/scenes/:id` ever calls it (only GamePage/GameWindow/GameTopBar do,
+  // mounted only inside `/game`). The composer's `ready` prop must not read
+  // "no session exists yet" as "disconnected" — that permanently disables
+  // Send on a fresh load of this page (bookmark, direct link, reload), since
+  // nothing here ever flips a session into existence.
+  // -------------------------------------------------------------------------
+
+  it('passes ready=true to CommandInput when no WS session exists for the active character (Finding 1)', () => {
+    mockGameActive = 'Aria';
+    // mockGameSessions stays at its default `undefined` — no session at all.
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(mockCommandInput).toHaveBeenCalledWith(expect.objectContaining({ ready: true }));
+  });
+
+  it('passes ready=false when a session exists for the active character but is disconnected (Finding 1, preserves Task 12)', () => {
+    mockGameActive = 'Aria';
+    mockGameSessions = { Aria: { isConnected: false } };
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(mockCommandInput).toHaveBeenCalledWith(expect.objectContaining({ ready: false }));
+  });
+
+  it('passes ready=true when a session exists for the active character and is connected (Finding 1, preserves Task 12)', () => {
+    mockGameActive = 'Aria';
+    mockGameSessions = { Aria: { isConnected: true } };
+
+    renderWithProviders(
+      <Routes>
+        <Route path="/scenes/:id" element={<SceneDetailPage />} />
+      </Routes>,
+      { initialEntries: ['/scenes/1'] }
+    );
+
+    expect(mockCommandInput).toHaveBeenCalledWith(expect.objectContaining({ ready: true }));
   });
 
   // -------------------------------------------------------------------------

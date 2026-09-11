@@ -17,6 +17,7 @@ from world.scenes.play_views import (
     PlayReadView,
     PlaySearchView,
     PlayThreadsView,
+    PoseSubmissionDetailView,
 )
 from world.scenes.precapture_views import PrecaptureConsentRequestViewSet
 from world.scenes.reaction_views import ReactionWindowViewSet
@@ -86,5 +87,10 @@ urlpatterns = [
     path("api/play/search/", PlaySearchView.as_view(), name="play-search"),
     path("api/play/threads/", PlayThreadsView.as_view(), name="play-threads"),
     path("api/play/read/", PlayReadView.as_view(), name="play-read"),
+    path(
+        "api/play/submissions/<uuid:client_request_id>/",
+        PoseSubmissionDetailView.as_view(),
+        name="pose-submission",
+    ),
     path("api/", include(router.urls)),
 ]

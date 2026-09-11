@@ -6,9 +6,14 @@
 #   {{issue_number}}, {{summary}}, {{followup_list}},
 #   {{ran_or_skipped}}, {{sync_summary}}, {{evidence_file}}, {{link_verb}}
 #
-# Required env vars:
-#   PR_EVIDENCE_FILE - local review report (repo or scratch path)
+# Required env vars (set exactly one):
 #   PR_EVIDENCE_URL  - GitHub issue/PR comment containing the review report
+#                       (PREFERRED - nothing lands in the repo's history)
+#   PR_EVIDENCE_FILE - a committed report (repo path only, e.g. "docs/reviews/<slug>.md")
+#                       squash-merges into main; use only when the evidence itself
+#                       should be permanent, versioned project history, not for a
+#                       throwaway scratch path (post that as a comment via
+#                       PR_EVIDENCE_URL instead - see SKILL.md's evidence section)
 #
 # Optional env vars (used as substitution sources if set):
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
@@ -81,7 +86,13 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     EVIDENCE_REFERENCE="$EVIDENCE_URL"
   else
     uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
-    EVIDENCE_REFERENCE="$EVIDENCE_FILE"
+    # A local path must be backtick-wrapped: the PR body's `- Report: ...` line
+    # is re-parsed by both validate_review_evidence.py's validate_pr_body and
+    # the review-evidence CI workflow against
+    # `^- Report: (?:`([^`]+)`|(https://\S+))$` — a bare local path matches
+    # neither alternative and the check fails with "labeled issue requires a
+    # review report link" even though the evidence itself is valid (#3786).
+    EVIDENCE_REFERENCE="\`$EVIDENCE_FILE\`"
   fi
 else
   EVIDENCE_REFERENCE="not required for this issue"

@@ -1466,6 +1466,50 @@ class InteractionAction(SharedMemoryModel):
             )
 
 
+class PoseSubmission(SharedMemoryModel):
+    """Idempotency ledger: (persona, client_request_id) -> the Interaction it produced.
+
+    Written only on acceptance, inside the same transaction as the Interaction
+    it points to (see `idempotent_record_interaction` in interaction_services.py).
+    Rejections are never recorded here - they are re-validated fresh on every
+    attempt. Pruned after 24h by scenes.tasks.pose_submission_cleanup_task; this
+    table's steady-state size tracks recent web-submission volume only, never
+    total historical Interaction volume.
+    """
+
+    persona = models.ForeignKey(
+        Persona,
+        on_delete=models.CASCADE,
+        related_name="pose_submissions",
+    )
+    client_request_id = models.UUIDField(
+        help_text="Client-minted id, reused verbatim on retry of the same attempt.",
+    )
+    interaction = models.ForeignKey(
+        INTERACTION_MODEL,
+        on_delete=models.CASCADE,
+        related_name="pose_submission",
+        null=True,
+        db_constraint=False,
+        help_text="The Interaction this submission produced.",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["persona", "client_request_id"],
+                name="unique_submission_per_persona",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"PoseSubmission({self.persona_id}, {self.client_request_id})"
+
+
 class InteractionPowerLedgerEntry(SharedMemoryModel):
     """One persisted stage entry of a cast's power ledger.
 

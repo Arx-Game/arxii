@@ -109,3 +109,15 @@ _Avoid_: material request, bulk gift (Material Boon specifically names this kind
 **Standing-Gap Shift** (Audacity Shift, #2540 slice 3):
 The additional NPC-only difficulty tier(s) a Boon ask picks up when the asker's standing sits well below the target's (`npc_boon_tier_shift`'s rank-gap term, banded via `RANK_GAP_TIER_BANDS`) — asking a much higher-standing NPC for a boon is harder than asking a peer or someone beneath you; punching down never adds a tier. Applies to dial 2's NPC band only — a piloted (player-controlled) target's own chosen difficulty is never band-shifted by the asker's standing.
 _Avoid_: standing penalty, rank check (the shift only ever adds difficulty tiers on NPC-target boon asks; it is not a general standing gate)
+
+**PoseSubmission** (idempotency ledger, #3760):
+The (persona, `client_request_id`) ledger row `idempotent_record_interaction` reads and writes before recording a pose/say/whisper — a retry that reuses the id replays the stored result instead of creating a duplicate; a reused id against genuinely different content/target/scene/place is a `payload_conflict`, not a silent replay. `interaction` is nullable: an ephemeral-scene acceptance never persists an `Interaction`, so the ledger row alone is what makes that case idempotent too.
+_Avoid_: submission log, dedup table (the term names the specific ledger model, not a general write-log concept)
+
+**client_request_id** (#3760):
+The client-minted UUID that correlates one composer dispatch to its server-side outcome — threaded through `executeAction`'s structured WS ack, REST `submit_pose`, and the `PoseSubmission` ledger row it keys. The same id reused unedited (a retry, "Resume & retry", a reconnect-mid-send resolution) is a replay by construction; a fresh id is minted only when the draft's content actually changes (`useDraftStore.beginSend`).
+_Avoid_: request id, idempotency key (client_request_id is the specific field/concept name throughout this ledger; do not shorten in code or docs)
+
+**Connection generation** (#3760):
+A monotonic counter `useGameSocket` stamps onto each WebSocket connection it opens, so a stale connection's message handler — still running after a reconnect replaces it — can tell it belongs to a superseded generation and no-op instead of processing a frame meant for the new connection. Distinct from `PoseSubmission`/`client_request_id` (which dedupe a *dispatch*, not a *connection*); the two mechanisms compose: a reconnect flips generation, then the stored-draft reconciliation pass resolves whatever the old generation left pending.
+_Avoid_: session generation, socket epoch (generation is the term this codebase's reconnect logic already uses)

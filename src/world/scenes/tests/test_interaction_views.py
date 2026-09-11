@@ -1,5 +1,6 @@
 from datetime import timedelta
 from unittest.mock import patch
+import uuid
 
 from django.urls import reverse
 from django.utils import timezone
@@ -408,7 +409,11 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
 
@@ -429,6 +434,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose with explicit link.",
                 "action_link_ids": [action_a.pk],
@@ -449,6 +455,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose that opts out of linking.",
                 "action_link_ids": [],
@@ -470,6 +477,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "A pose.",
                 "action_link_ids": [pose_interaction.pk],
@@ -483,7 +491,11 @@ class PoseSubmitViewTests(APITestCase):
         """action_link_ids referencing another persona's actions is rejected 400."""
         response = self.client.post(
             self.url,
-            {"persona_id": self.other_persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.other_persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -503,7 +515,11 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose while masked."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose while masked.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -514,7 +530,11 @@ class PoseSubmitViewTests(APITestCase):
         """With no active face set, authorship stays the primary persona."""
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A bare-faced pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A bare-faced pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -527,6 +547,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A posed action in a scene.",
@@ -546,6 +567,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose from the wrong room.",
@@ -561,6 +583,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose from the right room.",
@@ -575,6 +598,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A pose in a scene-less location.",
@@ -593,6 +617,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "sweeps into the hall, cloak billowing.",
@@ -614,6 +639,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "nods along.",
@@ -628,7 +654,11 @@ class PoseSubmitViewTests(APITestCase):
         self.client.force_authenticate(user=None)
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert response.status_code in {
@@ -647,7 +677,11 @@ class PoseSubmitViewTests(APITestCase):
         """
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "A fully serialized pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "A fully serialized pose.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -672,7 +706,12 @@ class PoseSubmitViewTests(APITestCase):
         scene = SceneFactory()
         resp = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "A pose."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "A pose.",
+            },
             format="json",
         )
         assert resp.status_code == 201
@@ -685,7 +724,9 @@ class PoseSubmitViewTests(APITestCase):
     @patch("world.scenes.interaction_services._broadcast_to_location")
     def test_submit_pose_no_broadcast_on_validation_error(self, mock_broadcast) -> None:
         resp = self.client.post(
-            self.url, {"persona_id": self.persona.pk, "content": ""}, format="json"
+            self.url,
+            {"client_request_id": str(uuid.uuid4()), "persona_id": self.persona.pk, "content": ""},
+            format="json",
         )
         assert resp.status_code == 400
         mock_broadcast.assert_not_called()
@@ -693,7 +734,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_blank_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "   "},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "   ",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -702,7 +747,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_oversized_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "a" * 10_001},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "a" * 10_001,
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -711,7 +760,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_null_bytes_in_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "hello\x00world"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "hello\x00world",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -720,7 +773,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_rejects_javascript_link_in_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "[click](javascript:void(0))"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "[click](javascript:void(0))",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_400_BAD_REQUEST
@@ -729,7 +786,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_accepts_markdown_link_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "[my site](https://example.com)"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "[my site](https://example.com)",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -737,7 +798,11 @@ class PoseSubmitViewTests(APITestCase):
     def test_submit_pose_accepts_mention_content(self) -> None:
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "@Alice waves hello"},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "@Alice waves hello",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
@@ -751,13 +816,43 @@ class PoseSubmitViewTests(APITestCase):
         """
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "content": "waves at the room."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "content": "waves at the room.",
+            },
             format="json",
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert mock_message_location.call_count == 1
         _caller_state, text = mock_message_location.call_args.args
         assert text == "waves at the room."
+
+    @patch("world.scenes.interaction_views.message_location")
+    def test_submit_pose_retry_broadcasts_via_message_location_only_once(
+        self, mock_message_location
+    ) -> None:
+        """A retry of a normal (persisted) pose must not double-broadcast (#3760).
+
+        The primary-case sibling of test_submit_pose_retry_in_ephemeral_scene_
+        replays_not_conflicts: the telnet broadcast is gated on `not
+        result.replayed`, so a same-payload retry must not repeat it even though
+        the Interaction itself is correctly deduped to one row.
+        """
+        payload = {
+            "client_request_id": str(uuid.uuid4()),
+            "persona_id": self.persona.pk,
+            "content": "waves at the room.",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+        assert mock_message_location.call_count == 1
 
     def test_submit_pose_creates_scene_participation_for_latecomer(self) -> None:
         """A web pose into a scene the poser has no SceneParticipation row in yet
@@ -770,7 +865,12 @@ class PoseSubmitViewTests(APITestCase):
 
         response = self.client.post(
             self.url,
-            {"persona_id": self.persona.pk, "scene_id": scene.pk, "content": "arrives late."},
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "arrives late.",
+            },
             format="json",
         )
 
@@ -785,6 +885,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "a pose that must not be written to the log.",
@@ -793,9 +894,40 @@ class PoseSubmitViewTests(APITestCase):
         )
 
         assert response.status_code == status.HTTP_201_CREATED
-        assert response.data == {"ephemeral": True}
+        assert response.data == {"ephemeral": True, "replayed": False}
         assert not Interaction.objects.filter(scene=scene).exists()
         assert mock_broadcast.call_count == 1
+
+    @patch("world.scenes.interaction_views.message_location")
+    @patch("world.scenes.interaction_services._broadcast_to_location")
+    def test_submit_pose_retry_in_ephemeral_scene_replays_not_conflicts(
+        self, mock_broadcast, mock_message_location
+    ) -> None:
+        """A retried request id against an ephemeral scene is a clean replay (#3760).
+
+        `idempotent_record_interaction` has nothing stored to compare against for
+        an ephemeral acceptance (`record_interaction` returns None, nothing is
+        persisted) - it must treat the retry as `replayed=True`, never a conflict,
+        and the telnet/WS broadcasts must not repeat on the retry.
+        """
+        scene = SceneFactory(privacy_mode=ScenePrivacyMode.EPHEMERAL)
+        payload = {
+            "client_request_id": str(uuid.uuid4()),
+            "persona_id": self.persona.pk,
+            "scene_id": scene.pk,
+            "content": "a pose that must not be written to the log.",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert first.data == {"ephemeral": True, "replayed": False}
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data == {"ephemeral": True, "replayed": True}
+        assert not Interaction.objects.filter(scene=scene).exists()
+        assert mock_broadcast.call_count == 1
+        assert mock_message_location.call_count == 1
 
     def test_submit_pose_with_target_names_creates_target_rows(self) -> None:
         """target_names resolves co-located characters into InteractionTargetPersona
@@ -809,6 +941,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "waves.",
                 "target_names": ["Bob"],
@@ -833,6 +966,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "confronts.",
                 "target_names": ["Carol"],
@@ -852,6 +986,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "content": "waves at nobody.",
                 "target_names": ["Nobody"],
@@ -874,6 +1009,7 @@ class PoseSubmitViewTests(APITestCase):
         response = self.client.post(
             self.url,
             {
+                "client_request_id": str(uuid.uuid4()),
                 "persona_id": self.persona.pk,
                 "scene_id": scene.pk,
                 "content": "A reply pose.",
@@ -889,6 +1025,102 @@ class PoseSubmitViewTests(APITestCase):
         target.refresh_from_db()
         assert target.thread_id is not None
         assert response.data["thread_id"] == str(target.thread_id)
+
+    def test_submit_pose_with_same_request_id_and_content_is_idempotent(self) -> None:
+        """A retried submission with the same id/content replays, never duplicates (#3760)."""
+        payload = {
+            "persona_id": self.persona.pk,
+            "content": "Silas nods.",
+            "client_request_id": "33333333-3333-3333-3333-333333333333",
+        }
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert first.data["replayed"] is False
+        assert second.data["replayed"] is True
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_content_is_a_conflict(self) -> None:
+        """Reusing a request id for genuinely different content is a 409, not a replay (#3760)."""
+        base = {
+            "persona_id": self.persona.pk,
+            "client_request_id": "44444444-4444-4444-4444-444444444444",
+        }
+        self.client.post(self.url, {**base, "content": "Silas nods."}, format="json")
+        response = self.client.post(self.url, {**base, "content": "Silas waves."}, format="json")
+
+        assert response.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_target_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): a content-only idempotency comparison
+        silently misclassified "same text, different target" as a legitimate
+        replay -- nothing (re-)delivered to the new intended audience, caller
+        told it succeeded. Mirrors the fix already applied to
+        PoseAction/WhisperAction (commit 64d7ce3e1,
+        actions/tests/test_actions.py) for this REST sibling.
+        """
+        target_character = CharacterFactory(db_key="Dana", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "55555555-5555-5555-5555-555555555555",
+        }
+        first = self.client.post(self.url, base, format="json")
+        second = self.client.post(self.url, {**base, "target_names": ["Dana"]}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_same_target_twice_is_still_a_replay(self) -> None:
+        """The "same" direction of Finding 3's fix: reusing a client_request_id
+        against the SAME target twice must remain a clean replay -- the new
+        target-identity comparison must not false-positive on a match."""
+        target_character = CharacterFactory(db_key="Elin", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        payload = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "66666666-6666-6666-6666-666666666666",
+            "target_names": ["Elin"],
+        }
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert second.data["replayed"] is True
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_scene_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): scene identity is also part of the
+        comparison -- reusing a client_request_id against a DIFFERENT scene
+        with the same text must be a conflict, not a silent replay.
+
+        Both requests pass `scene_id` explicitly (rather than relying on one
+        of them auto-resolving the room's active scene via
+        `record_interaction`'s `get_active_scene` fallback) so the two really
+        do target two distinct Scene rows.
+        """
+        scene_a = SceneFactory(location=self.room)
+        scene_b = SceneFactory(location=self.room)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "77777777-7777-7777-7777-777777777777",
+        }
+        first = self.client.post(self.url, {**base, "scene_id": scene_a.pk}, format="json")
+        second = self.client.post(self.url, {**base, "scene_id": scene_b.pk}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
 
 
 class ActionLinksSerializerTests(APITestCase):
