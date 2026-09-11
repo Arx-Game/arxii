@@ -1369,5 +1369,49 @@ describe('ThreadedNarrativeReader', () => {
         vi.useRealTimers();
       }
     });
+
+    it("uncollapses the target pose's own thread when it is NOT the most-recently-active one (#3759 review Fix round 1 IMPORTANT)", () => {
+      // Two threads: 'thread-old' (poses 1-3) and 'thread-new' (poses 4-5,
+      // more recent) -- the default-collapse rule expands only 'thread-new',
+      // collapsing 'thread-old'. The deep-link target (pose 2) lives in the
+      // COLLAPSED thread -- the ORDINARY multi-thread case a single-thread
+      // 51-pose fixture (the test above) structurally cannot exercise, since
+      // a single group is never collapsed at all.
+      const interactionsList = [
+        interaction(1, 'old root', 'thread-old'),
+        interaction(2, 'old reply target', 'thread-old'),
+        interaction(3, 'old reply', 'thread-old'),
+        interaction(4, 'new root', 'thread-new'),
+        interaction(5, 'new reply', 'thread-new'),
+      ];
+      const scrollIntoViewSpy = vi
+        .spyOn(Element.prototype, 'scrollIntoView')
+        .mockImplementation(() => {});
+
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={interactionsList}
+          fetchNextPage={vi.fn()}
+          readOnly
+          targetPoseId="2"
+        />
+      );
+
+      const targetEl = document.querySelector('[data-pose-id="2"]');
+      expect(targetEl).not.toBeNull();
+      expect(targetEl).toHaveAttribute('data-highlighted', 'true');
+      expect(scrollIntoViewSpy).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
+      // thread-old's own toggle now reports expanded, not just the target
+      // pose happening to be present.
+      expect(screen.getByRole('button', { name: /writer 1.*3 poses/i })).toHaveAttribute(
+        'aria-expanded',
+        'true'
+      );
+
+      scrollIntoViewSpy.mockRestore();
+    });
   });
 });

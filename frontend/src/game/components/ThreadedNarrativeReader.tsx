@@ -438,14 +438,27 @@ export function ThreadedNarrativeReader({
   // the bottom, check whether the anchored pose exists ANYWHERE in the full
   // `interactions` array (not just the currently-sliced tail window) and, if
   // so, widen the window to include it (a few poses of context above it too)
-  // instead of jumping away. Shared with the deep-link target-seek effect
-  // below (#3759 review finding C2), which needs the identical mechanism.
+  // instead of jumping away.
+  //
+  // `computeWidenTarget` is the pure core, ACTUALLY shared with the deep-link
+  // target-seek effect below (#3759 review finding C2, review Fix round 1) --
+  // both need the identical "is this pose outside the current window, and if
+  // so what's the new start index" arithmetic, but only the anchor-restore
+  // callers also want `anchorRetryPendingRef` set (which re-triggers a full
+  // restoreAnchor() once the widened window lands) -- the seek effect handles
+  // its own re-fire via its own dependency array instead, so that side effect
+  // stays out of the shared helper.
   const anchorRetryPendingRef = useRef(false);
-  const widenWindowToInclude = (poseId: string): boolean => {
+  const computeWidenTarget = (poseId: string): number | null => {
     const idx = interactions.findIndex((item) => String(item.id) === poseId);
-    if (idx === -1) return false;
+    if (idx === -1) return null;
     const desiredStart = Math.max(0, idx - 5);
-    if (desiredStart >= historyStart) return false; // already covered -- not the miss case
+    if (desiredStart >= historyStart) return null; // already covered -- not the miss case
+    return desiredStart;
+  };
+  const widenWindowToInclude = (poseId: string): boolean => {
+    const desiredStart = computeWidenTarget(poseId);
+    if (desiredStart === null) return false;
     setHistoryStartOverride(desiredStart);
     anchorRetryPendingRef.current = true;
     return true;
@@ -597,8 +610,8 @@ export function ThreadedNarrativeReader({
   // that (the common case: a search result or "Recent conversations" row
   // rarely lands in the newest 20 poses of its own +-25 window), the
   // tail-slice alone renders everything BUT the pose the user actually
-  // opened. Reuses `widenWindowToInclude` (I2, above) to seed the window,
-  // then scrolls to and briefly highlights the target once its row mounts.
+  // opened. Shares `computeWidenTarget` (I2, above) to seed the window, then
+  // scrolls to and briefly highlights the target once its row mounts.
   // `targetSeekDoneRef` guards this so it runs once per target -- a NEW
   // target (switching between reference entries without unmounting, e.g. two
   // search results in the same scene) resets it because the ref stores the
@@ -608,23 +621,54 @@ export function ThreadedNarrativeReader({
   useEffect(() => {
     if (!targetPoseId) return;
     if (targetSeekDoneRef.current === targetPoseId) return;
-    const idx = interactions.findIndex((item) => String(item.id) === targetPoseId);
-    if (idx === -1) return; // not in the loaded window at all -- nothing to seek to
-    const desiredStart = Math.max(0, idx - 5);
-    if (historyStart > desiredStart) {
+    const targetInteraction = interactions.find((item) => String(item.id) === targetPoseId);
+    if (!targetInteraction) return; // not in the loaded window at all -- nothing to seek to
+    const desiredStart = computeWidenTarget(targetPoseId);
+    if (desiredStart !== null) {
       setHistoryStartOverride(desiredStart);
       return; // the re-render with the widened window re-runs this effect
     }
+    // Uncollapse the target's own thread (#3759 review Fix round 1
+    // IMPORTANT): the "collapse all but the most recently active thread"
+    // default (declared earlier, above) would otherwise permanently hide the
+    // target's row whenever its thread ISN'T the most recently active one --
+    // the ORDINARY multi-thread case, not an edge case. A functional update
+    // composes correctly with whatever the default-collapse effect also just
+    // enqueued in the SAME commit (declared earlier, so it enqueues first);
+    // idempotent and harmless to re-issue on every pass, including once the
+    // thread is already expanded. `collapsed` is a dependency below
+    // specifically so this effect re-runs once that update actually lands.
+    const targetGroupKey = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    setCollapsed((previous) => {
+      if (!previous.has(targetGroupKey)) return previous;
+      const next = new Set(previous);
+      next.delete(targetGroupKey);
+      return next;
+    });
     const targetEl = rootRef.current?.querySelector<HTMLElement>(
       `[data-pose-id="${targetPoseId}"]`
     );
-    if (!targetEl) return; // not mounted on this pass yet (e.g. inside a collapsed thread)
+    if (!targetEl) return; // thread not expanded in the DOM on this pass yet --
+    // `collapsed` changing (once the update above lands) re-triggers this effect.
     targetSeekDoneRef.current = targetPoseId;
     targetEl.scrollIntoView({ block: 'center' });
     setHighlightedPoseId(targetPoseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetPoseId, interactions, historyStart, collapsed]);
+
+  // Clears the deep-link target highlight ~2s after it's set (#3759 review
+  // Fix round 1: the highlight could stick forever when `interactions`
+  // changed identity inside the 2s window -- the seek effect above would
+  // re-run, its cleanup would clear the pending timeout, but its body would
+  // then early-return at the `targetSeekDoneRef` guard without ever setting
+  // a NEW one). A separate effect keyed ONLY on `highlightedPoseId` is immune
+  // to that churn: it (re)arms a fresh timer whenever a pose is newly
+  // highlighted and clears it on unmount or when the highlight changes again.
+  useEffect(() => {
+    if (!highlightedPoseId) return;
     const timeout = setTimeout(() => setHighlightedPoseId(null), 2000);
     return () => clearTimeout(timeout);
-  }, [targetPoseId, interactions, historyStart]);
+  }, [highlightedPoseId]);
 
   // Threads-view scroll listener (#3759 review finding C1): attached at
   // `document` with `capture: true` rather than resolved-once onto a
