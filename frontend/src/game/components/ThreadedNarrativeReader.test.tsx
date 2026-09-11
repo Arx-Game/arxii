@@ -1983,5 +1983,58 @@ describe('ThreadedNarrativeReader', () => {
         screen.queryByRole('button', { name: /mark conversation read/i })
       ).not.toBeInTheDocument();
     });
+
+    it('renders a genuinely un-replied pose PLAINLY -- no collapsible-card header, chevron, or collapse toggle -- while a real thread still gets the full card treatment (#3759 Wave 9 fix round 1 finding I-5)', () => {
+      // `interaction()` always sets an explicit thread_id; a legacy
+      // (never-replied) pose is built by overriding it to null, mirroring
+      // what `interaction_services.py` actually produces for ordinary room
+      // narration.
+      const legacyPose = (id: number, content: string) => ({
+        ...interaction(id, content, 'unused'),
+        thread_id: null,
+      });
+      const onReply = vi.fn();
+      const { container } = render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            legacyPose(1, 'ordinary room narration'),
+            legacyPose(2, 'another ordinary pose'),
+            interaction(3, 'thread root', 'thread-a'),
+            interaction(4, 'thread reply', 'thread-a'),
+          ]}
+          fetchNextPage={vi.fn()}
+          onReply={onReply}
+        />
+      );
+      // Both legacy poses render their content directly -- no click needed,
+      // no collapsible-card affordance at all -- and are labeled
+      // "Standalone" (Minor M-1), never "Opening pose".
+      expect(screen.getByText('ordinary room narration')).toBeInTheDocument();
+      expect(screen.getByText('another ordinary pose')).toBeInTheDocument();
+      expect(screen.getAllByText('Standalone')).toHaveLength(2);
+      // Exactly ONE collapsible-card header (`aria-expanded`) exists in the
+      // whole reader -- thread-a's, the only REAL (thread_id-bearing) group.
+      const expandableHeaders = container.querySelectorAll('[aria-expanded]');
+      expect(expandableHeaders).toHaveLength(1);
+      expect(expandableHeaders[0].closest('[data-thread-id]')).toHaveAttribute(
+        'data-thread-id',
+        'thread-a'
+      );
+      // thread-a (most recent, real timestamps derived from id 3/4) starts
+      // expanded by the existing default-collapse rule -- its own poses are
+      // visible without a click, confirming the full card treatment still
+      // works normally alongside the legacy poses.
+      expect(screen.getByText('thread root')).toBeInTheDocument();
+      expect(screen.getByText('thread reply')).toBeInTheDocument();
+      // Deviation from the fix-round brief's literal wording (see this
+      // branch's own comment in the source): a legacy pose still gets its
+      // "Reply" affordance -- losing it would make it impossible to start a
+      // NEW thread from an ordinary, un-replied pose, the single most
+      // common shape a scene starts in.
+      expect(screen.getAllByRole('button', { name: /^reply$/i })).toHaveLength(4); // 2 legacy + 2 real
+    });
   });
 });

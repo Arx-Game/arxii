@@ -54,18 +54,26 @@ function excerptOf(content: string, maxLength = 84): string {
 /**
  * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
  * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
- * parent-chip persistence -- "Opening pose" for a thread's own root pose,
- * "Reply in <title>" for everything else in it. `Interaction`/the server's
- * reply topology has no persisted thread-title field (`thread_id` is the
- * only concept that exists), so `<title>` is derived the same way the
- * approved demo derives one for a thread it creates on the fly
+ * parent-chip persistence -- "Opening pose" for a REAL thread's own root
+ * pose, "Reply in <title>" for everything else in it. `Interaction`/the
+ * server's reply topology has no persisted thread-title field (`thread_id`
+ * is the only concept that exists), so `<title>` is derived the same way
+ * the approved demo derives one for a thread it creates on the fly
  * (`title: p.paras[0].slice(0, 60)`, `arx-wide-reader.html`'s own `send()`):
  * an excerpt of the thread's own root pose. Shared between Threads view
  * (where `rootPose` is already in scope as `group.interactions[0]`) and
  * Chronological view (where it's looked up via `groupByKey`, below) so both
  * views render identical labels for the identical pose.
+ *
+ * #3759 Wave 9 fix round 1 Minor M-1: `item.thread_id` (not merely "is this
+ * the group's own root") gates "Opening pose" -- an ordinary, un-replied
+ * pose (`thread_id === null`, keyed `legacy:${id}` in `groups`) is trivially
+ * its own group's root by construction, but "Opening pose" asserts a THREAD
+ * that doesn't exist for it. "Standalone" (matching Chronological's own
+ * pre-existing phrasing for this exact case) is correct for both views.
  */
 function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): string {
+  if (!item.thread_id) return 'Standalone';
   if (!rootPose || rootPose.id === item.id) return 'Opening pose';
   return `Reply in ${excerptOf(rootPose.content, 60)}`;
 }
@@ -1150,6 +1158,106 @@ export function ThreadedNarrativeReader({
           ) : (
             groups.map((group) => {
               const root = group.interactions[0];
+              // #3759 Wave 9 fix round 1 finding I-5: `thread_id` is only
+              // set for an interaction that's an EXPLICIT reply
+              // (`interaction_services.py`) -- ordinary, un-replied room
+              // narration is the COMMON case and gets `thread_id=null`,
+              // keyed `legacy:${id}` here (see `groups`'s own grouping key
+              // above). Since that key is unique per interaction id, a
+              // `legacy:`-keyed group can never hold more than its one
+              // pose -- checking the key prefix is equivalent to "this
+              // pose was never replied to" and doesn't need a separate
+              // length check. F1 makes every group always visible, so
+              // without this branch, EVERY ordinary un-replied pose in a
+              // scene would render as its own always-visible collapsible
+              // "thread" card (header, chevron, collapse toggle) -- a real
+              // scene of ordinary room chatter would be a wall of
+              // one-pose accordions. A group with a real, explicit
+              // `thread_id` (even one with only a single reply so far --
+              // more could still arrive) keeps the full card treatment
+              // below, unchanged.
+              //
+              // Deviation from the fix-round brief's literal wording (noted
+              // in the wave report): the brief describes this as "the same
+              // visual form Chronological view already gives a single
+              // pose," which has NO "Show less"/"Reply" footer at all. That
+              // exact substitution regressed a real, tested integration
+              // (`GamePage.test.tsx`'s reference-mode round-trip test): its
+              // fixture pose has no `thread_id` either -- the single most
+              // common shape a scene starts in -- and replying to a
+              // standalone pose is literally how a NEW thread begins.
+              // Keeping the per-pose fold/Reply footer (identical to a real
+              // thread's own per-pose footer, just below) doesn't
+              // reintroduce anything THREAD-level (no header/chevron/
+              // collapse toggle survives), so it still satisfies the
+              // brief's own explicit, unambiguous requirement.
+              if (group.key.startsWith('legacy:')) {
+                const item = root;
+                const poseCollapsed = collapsedPoses.has(item.id);
+                return (
+                  <div key={group.key} data-thread-id={group.key}>
+                    <PoseReadTarget
+                      pose={{ id: item.id, timestamp: item.timestamp }}
+                      observe={observe}
+                      highlighted={String(item.id) === highlightedPoseId}
+                    >
+                      {/* #3759 Wave 9 review Minor M-1: `poseRoleLabel` itself
+                          returns "Standalone" here (gated on `item.thread_id`,
+                          not merely "is this the group's root"), never
+                          "Opening pose" -- that label asserts a thread that
+                          doesn't exist for a genuinely un-replied pose. */}
+                      <p className="text-xs text-muted-foreground">{poseRoleLabel(item, root)}</p>
+                      {poseCollapsed ? (
+                        <article
+                          className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
+                          data-testid={`collapsed-pose-${item.id}`}
+                        >
+                          <strong>{item.persona.name}</strong>
+                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                            {item.content}
+                          </p>
+                          <button
+                            type="button"
+                            className="mt-1 min-h-9 underline"
+                            onClick={() => togglePose(item.id)}
+                          >
+                            Show full pose
+                          </button>
+                        </article>
+                      ) : (
+                        <>
+                          <SceneMessages
+                            sceneId={sceneId}
+                            filteredInteractions={[item]}
+                            onAvatarClick={onAvatarClick}
+                            onAddTarget={onAddTarget}
+                            onAttachAction={onAttachAction}
+                            readOnly={readOnly}
+                          />
+                          <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
+                            <button
+                              type="button"
+                              className="inline-flex min-h-9 items-center gap-1 underline"
+                              onClick={() => togglePose(item.id)}
+                            >
+                              Show less
+                            </button>
+                            {onReply && !readOnly && (
+                              <button
+                                type="button"
+                                className="inline-flex min-h-9 items-center gap-1 underline"
+                                onClick={() => onReply(item)}
+                              >
+                                <Reply className="h-3 w-3" /> Reply
+                              </button>
+                            )}
+                          </div>
+                        </>
+                      )}
+                    </PoseReadTarget>
+                  </div>
+                );
+              }
               const isCollapsed = !expandedKeys.has(group.key);
               const unread = group.interactions.filter(isEffectivelyUnread).length;
               // #3759 Wave 9 (F1/F2): per-thread pose window, replacing the
