@@ -46,8 +46,9 @@ from world.mechanics.factories import ChallengeTemplateFactory
 from world.mechanics.models import ChallengeInstance
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, ScenePrivacyMode
-from world.scenes.factories import PlaceFactory, SceneFactory
+from world.scenes.factories import PlaceFactory, PlacePresenceFactory, SceneFactory
 from world.scenes.models import Interaction
+from world.scenes.services import active_persona_for_sheet
 
 
 class LookActionTests(TestCase):
@@ -474,6 +475,83 @@ class PoseActionIdempotencyTests(TestCase):
         assert first.success is True
         assert second.success is False
         assert Interaction.objects.filter(mode=InteractionMode.POSE).count() == 1
+
+
+class PoseActionPlaceResolutionTests(TestCase):
+    """#3760 Task 10 fix review — `_resolve_pose_place`'s authorization check
+    (a raw int `place` pk must resolve to a real `Place` AND require the
+    actor's own `PlacePresence` there) had zero test coverage in either
+    direction. Every existing `place=` test in this module (e.g.
+    `PoseActionIdempotencyTests.test_pose_action_conflict_on_reused_id_with_
+    different_place`) passes an already-resolved `Place` **instance**, which
+    only exercises the `hasattr(place, "pk")` early passthrough — none
+    exercise the actual raw-int-id resolution + `PlacePresence` check the web
+    composer's `tt` dispatch (`executeAction(..., 'pose', {place: <int>,
+    ...})`) rides.
+    """
+
+    def setUp(self):
+        self.room = ObjectDBFactory(db_key="Room", db_typeclass_path="typeclasses.rooms.Room")
+        self.character = CharacterFactory(db_key="Poser", location=self.room)
+        CharacterSheetFactory(character=self.character)
+        self.persona = active_persona_for_sheet(self.character.character_sheet)
+
+    def test_pose_action_resolves_int_place_when_actor_is_present(self):
+        """Success path: a real PlacePresence row lets a raw int pk resolve,
+        and the resulting Interaction is attributed to that place."""
+        place = PlaceFactory()
+        PlacePresenceFactory(place=place, persona=self.persona)
+
+        with patch.object(self.room, "msg_contents"):
+            result = PoseAction().execute(
+                actor=self.character,
+                context=None,
+                text="leans in.",
+                place=place.pk,
+            )
+
+        assert result.success is True
+        interaction = Interaction.objects.get(mode=InteractionMode.POSE)
+        assert interaction.place_id == place.pk
+
+    def test_pose_action_rejects_int_place_when_actor_is_not_present(self):
+        """Rejection path: break the invariant (no PlacePresence for this
+        actor's persona at the claimed place) and watch it actually fail —
+        this repo's own standard for verifying a guard. No PlacePresence row
+        is created here at all, so the resolution must refuse rather than
+        silently broadcast room-wide."""
+        place = PlaceFactory()
+
+        result = PoseAction().execute(
+            actor=self.character,
+            context=None,
+            text="leans in.",
+            place=place.pk,
+        )
+
+        assert result.success is False
+        assert result.message == "You are not at that place."
+        assert not Interaction.objects.filter(mode=InteractionMode.POSE).exists()
+
+    def test_pose_action_rejects_int_place_when_present_at_a_different_place(self):
+        """Same rejection, but the actor genuinely has a PlacePresence — just
+        not at the place being claimed. Guards against a resolution that
+        checks "does this persona have ANY PlacePresence" instead of "at THIS
+        place."""
+        actual_place = PlaceFactory()
+        claimed_place = PlaceFactory()
+        PlacePresenceFactory(place=actual_place, persona=self.persona)
+
+        result = PoseAction().execute(
+            actor=self.character,
+            context=None,
+            text="leans in.",
+            place=claimed_place.pk,
+        )
+
+        assert result.success is False
+        assert result.message == "You are not at that place."
+        assert not Interaction.objects.filter(mode=InteractionMode.POSE).exists()
 
 
 class WhisperActionIdempotencyTests(TestCase):
