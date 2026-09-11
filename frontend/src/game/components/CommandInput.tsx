@@ -135,6 +135,13 @@ interface CommandInputProps {
   submitOnEnter?: boolean;
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
+  /**
+   * Human-readable current place name (#3760 demo-fidelity review), e.g.
+   * "the Gilded Hart" — used only for the stranded-draft banner's copy. Never
+   * falls back to `draftScope` itself, which is an internal cache key, not
+   * display text.
+   */
+  roomName?: string;
   replyTarget?: Interaction | null;
   onCancelReply?: () => void;
   ready?: boolean;
@@ -160,6 +167,7 @@ export function CommandInput({
   speakingAs,
   submitOnEnter = true,
   draftScope,
+  roomName,
   replyTarget,
   onCancelReply,
   ready = true,
@@ -304,9 +312,13 @@ export function CommandInput({
     pendingSpeechRef.current?.clientRequestId !== draft.clientRequestId;
   // "Unsent draft from <context>" (demo Screen 4) — the closest available
   // stand-in for a room/place name is the active composer mode's own label
-  // (e.g. "Pose → The Gilded Hart"), falling back to the draft scope or bare
-  // character name for legacy callers that don't supply one.
-  const strandedContext = composerMode?.label ?? draftScope ?? character;
+  // (e.g. "Pose → The Gilded Hart"), falling back to `roomName` for the
+  // default (no-mode-selected) room-pose state. `draftScope` is deliberately
+  // NEVER in this chain — it's an internal cache key (`account:1:Name:room:2`),
+  // not display text (#3760 demo-fidelity review: a plain room pose with no
+  // mode switch — the default state in demo Screen 1 itself — was leaking
+  // that raw key into this banner).
+  const strandedContext = composerMode?.label ?? roomName ?? character;
 
   // #3760 Task 11 review fix — exactly ONE delivery-state banner renders at a
   // time. The demo's Screen 3b ("unknown, still actively failed") and Screen

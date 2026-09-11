@@ -965,6 +965,28 @@ describe('CommandInput', () => {
       expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     });
 
+    // #3760 demo-fidelity review — the default room-pose state (no
+    // composerMode label set, the state demo Screen 1 itself shows) must
+    // never leak the raw `draftScope` cache key into this banner's copy.
+    it('falls back to roomName, never the raw draftScope cache key, when no composerMode label is set', () => {
+      seedDraft(
+        { status: 'pending', clientRequestId: 'req-stranded' },
+        'account:1:Alice:room:2',
+        0
+      );
+
+      render(
+        <CommandInput
+          character="Alice"
+          draftScope="account:1:Alice:room:2"
+          roomName="The Gilded Hart"
+        />
+      );
+
+      expect(screen.getByText(/Unsent draft from The Gilded Hart/)).toBeInTheDocument();
+      expect(screen.queryByText(/account:1:Alice:room:2/)).not.toBeInTheDocument();
+    });
+
     it('Discard on the stranded banner clears the draft and dismisses the banner', () => {
       const mode: ComposerMode = { command: 'pose', targets: [], label: 'The Gilded Hart' };
       seedDraft({ status: 'pending', clientRequestId: 'req-stranded' });

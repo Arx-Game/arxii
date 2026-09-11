@@ -109,6 +109,15 @@ interface GameWindowProps {
    * id.
    */
   roomId?: number | null;
+  /**
+   * Human-readable current place name (#3760 demo-fidelity review) — the
+   * same value `GamePage` already derives as `sceneData?.name ??
+   * roomData?.name ?? 'Room'` for composer-mode labels. Passed through so
+   * `CommandInput`'s stranded-draft banner never falls back to the raw
+   * `draftScope` cache-key string (`account:1:Name:room:2`) when no
+   * composerMode label is set — the default state for a plain room pose.
+   */
+  roomName?: string;
   /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
   isAtPlace?: boolean;
   /**
@@ -168,6 +177,7 @@ export function GameWindow({
   onCancelReply,
   draftScopePrefix,
   roomId,
+  roomName,
   isAtPlace,
   currentPlaceId,
   placeBar,
@@ -454,6 +464,7 @@ export function GameWindow({
           onCancelReply={onCancelReply}
           submitOnEnter={false}
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
+          roomName={roomName}
           ready={playReady}
         />
       )}
