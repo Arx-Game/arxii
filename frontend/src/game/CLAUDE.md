@@ -101,7 +101,8 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   room row, or the "All" button, re-anchors the tab strip back to the room and
   resets the composer; `onShowAll` is `GamePage`'s override of
   `threading.showAll` for exactly that reason (the bare `showAll` only resets
-  the filter/mute state, not the active tab).
+  the filter/mute state, not the active tab). States 'OOC channels unavailable,
+  pending #3299' explicitly (#3761) rather than leaving the gap silent.
 - **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
   Whispers — and date range) plus browse authorized retained conversations
   (filtered by date range only; type does not scope the browse list, only the
@@ -144,7 +145,7 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `true`) must be `false` whenever a non-room conversation tab is the one
   actually on screen, since `conversationKey` is always scoped to the scene
   regardless of tab — GameWindow passes `activeConvKey === 'room'`.
-- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `NarrativeMessageReader` —
+- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error

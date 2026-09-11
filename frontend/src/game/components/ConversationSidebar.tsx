@@ -43,6 +43,9 @@ export function ConversationSidebar({
         <div className="border-b px-3 py-2">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">Conversations</h3>
         </div>
+        <p className="border-b px-3 py-2 text-xs italic text-muted-foreground">
+          OOC channels unavailable, pending #3299.
+        </p>
         <div className="flex-1">
           <button className="flex w-full items-center gap-2 bg-accent px-3 py-2 text-sm">
             <MessageSquare className="h-4 w-4" />
@@ -62,6 +65,9 @@ export function ConversationSidebar({
       <div className="border-b px-3 py-2">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">Conversations</h3>
       </div>
+      <p className="border-b px-3 py-2 text-xs italic text-muted-foreground">
+        OOC channels unavailable, pending #3299.
+      </p>
       <ThreadSidebar
         threads={threading.threads}
         selectedThreadKey={selectedThreadKey ?? threading.selectedThreadKey}
