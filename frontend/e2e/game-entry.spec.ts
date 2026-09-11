@@ -93,16 +93,64 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   await expect(editor).toHaveValue('A quiet beginning.\n\nThe draft stays here.');
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeEnabled();
   await expect(page.getByText(/puppet_changed/)).toHaveCount(0);
+  const unnamedControls = await page
+    .locator('button:visible, a:visible, textarea:visible')
+    .evaluateAll((controls) =>
+      controls
+        .filter((control) => {
+          const label =
+            control.getAttribute('aria-label') ||
+            control.getAttribute('title') ||
+            control.textContent?.trim() ||
+            control.getAttribute('placeholder');
+          return !label;
+        })
+        .map((control) => control.outerHTML)
+    );
+  expect(unnamedControls).toEqual([]);
   expect(errors).toEqual([]);
   await page.screenshot({ path: 'test-results/3758-desktop.png', fullPage: true });
+  await page.evaluate(() => document.documentElement.classList.add('dark'));
+  await page.screenshot({ path: 'test-results/3758-dark-desktop.png', fullPage: true });
+  await page.evaluate(() => document.documentElement.classList.remove('dark'));
 
   // Required responsive/a11y review states: the same live app fixture at
   // 320px, both pane choices, and 200% browser-style zoom. No demo assets are
   // committed; these files are copied to the review report only when captured.
   await page.setViewportSize({ width: 320, height: 800 });
   await expect(page.getByRole('button', { name: 'Sidebar', exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Sidebar', exact: true }).click();
+  await page.touchscreen.tap(
+    (await page.getByRole('button', { name: 'Sidebar', exact: true }).boundingBox())!.x + 20,
+    (await page.getByRole('button', { name: 'Sidebar', exact: true }).boundingBox())!.y + 20
+  );
   await page.screenshot({ path: 'test-results/3758-mobile-sidebar.png', fullPage: true });
+  for (const tab of await page.getByRole('tab').all()) {
+    expect((await tab.boundingBox())?.height ?? 0).toBeGreaterThanOrEqual(44);
+  }
+  const storyButton = page.getByRole('button', { name: 'Story', exact: true });
+  await storyButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(storyButton).toHaveAttribute('aria-pressed', 'true');
+  const sidebarButton = page.getByRole('button', { name: 'Sidebar', exact: true });
+  await sidebarButton.focus();
+  await page.keyboard.press('Enter');
+  await expect(sidebarButton).toHaveAttribute('aria-pressed', 'true');
+  await storyButton.focus();
+  await page.touchscreen.tap(
+    (await storyButton.boundingBox())!.x + 20,
+    (await storyButton.boundingBox())!.y + 20
+  );
+  await expect(storyButton).toHaveAttribute('aria-pressed', 'true');
+  await page.setViewportSize({ width: 960, height: 800 });
+  await page.screenshot({ path: 'test-results/3758-960.png', fullPage: true });
+  await page.evaluate(() => {
+    document.documentElement.classList.add('dark');
+  });
+  await page.screenshot({ path: 'test-results/3758-dark.png', fullPage: true });
+  await page.evaluate(() => {
+    document.documentElement.classList.remove('dark');
+  });
+  await page.setViewportSize({ width: 320, height: 800 });
   await page.getByRole('button', { name: 'Story', exact: true }).click();
   await page.evaluate(() => {
     document.documentElement.style.zoom = '2';
@@ -111,4 +159,8 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   await page.evaluate(() => {
     document.documentElement.style.zoom = '1';
   });
+  // A scene end is an aftermath transition, not a readiness transition.
+  socket!.send(JSON.stringify(['scene', [], { action: 'end' }]));
+  await expect(page.getByText('The scene has ended.', { exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/3758-aftermath.png', fullPage: true });
 });
