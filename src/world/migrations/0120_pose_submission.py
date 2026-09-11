@@ -49,9 +49,7 @@ class Migration(migrations.Migration):
             ],
             options={
                 "indexes": [
-                    models.Index(
-                        fields=["created_at"], name="arxii_poses_created_acb573_idx"
-                    )
+                    models.Index(fields=["created_at"], name="arxii_poses_created_acb573_idx")
                 ],
                 "constraints": [
                     models.UniqueConstraint(
