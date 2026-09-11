@@ -1,6 +1,9 @@
-import { act, screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
+import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { GamePage } from './GamePage';
 import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -24,7 +27,7 @@ import type { InteractionWsPayload } from '@/hooks/types';
 import type { DreamState } from '@/dreams/types';
 import { dreamKeys } from '@/dreams/queries';
 import { emitActionResult } from '@/hooks/actionResultBus';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -173,10 +176,19 @@ vi.mock('@/scenes/actionQueries', async (importOriginal) => {
 
 // PoseUnit → PersonaContextMenu pulls in combat/queries for the duel-challenge
 // affordance; mirrors PoseUnit.test.tsx's mock to keep it from firing real fetches.
+// Separate, module-level mock (mirrors `mockUseDreamState` below) so
+// individual tests can flip its return value mid-test — used by the
+// encounter/aftermath boundary regression guard (#3760 Task 13) to prove
+// `hasActiveEncounter` flipping doesn't unmount the composer/draft tree.
+const mockUseEncounterForScene = vi.fn().mockReturnValue({
+  data: null,
+  isLoading: false,
+  isError: false,
+});
 vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
-  useEncounterForScene: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
+  useEncounterForScene: (...args: [number]) => mockUseEncounterForScene(...args),
   combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
 }));
 
@@ -303,7 +315,11 @@ describe('GamePage', () => {
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
     localStorage.clear();
+    // useDraftStore (#3760) persists to sessionStorage; clear between tests
+    // for the same reason.
+    sessionStorage.clear();
     mockUseDreamState.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
     connectMock.mockClear();
   });
 
@@ -985,6 +1001,85 @@ describe('GamePage', () => {
       await user.click(trigger);
 
       expect(screen.queryByText('Tabletalk')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Encounter/aftermath boundary (#3760 Task 13): `hasActiveEncounter`
+  // (derived from `useEncounterForScene`) only ever flows into
+  // `GameRightSidebar` -> `FocusPanel`, a subtree the composer/draft tree
+  // (`GameWindow` -> `CommandInput` -> `useDraftStore`) is never nested
+  // inside or keyed on. This is a regression guard, not a fix: reading
+  // GamePage's render tree (the `center` prop always renders `GameWindow`
+  // unconditionally; `hasActiveEncounter` is only threaded into the
+  // `sidebar` prop's `GameRightSidebar`) confirms flipping the flag cannot
+  // unmount the composer today. The test proves it by simulating a live,
+  // uncommitted draft and flipping the encounter mock mid-test.
+  // ---------------------------------------------------------------------------
+
+  describe('encounter/aftermath boundary (#3760 Task 13)', () => {
+    it('does not reset or unmount the draft-store-owning composer when hasActiveEncounter flips', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      // A single stable provider tree across both render calls: `render`'s
+      // own `rerender` re-renders exactly the element it's given, so
+      // reusing `renderWithProviders` for the second call would swap in a
+      // bare `<GamePage />` with no Provider/QueryClientProvider/Router and
+      // unmount+remount the whole tree — masking the very question this
+      // test asks (same pattern as `SceneDetailPage.test.tsx`'s lingering-
+      // encounter coverage).
+      const queryClient = new QueryClient();
+      function wrap(ui: ReactNode) {
+        return (
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <MemoryRouter>{ui}</MemoryRouter>
+            </QueryClientProvider>
+          </Provider>
+        );
+      }
+
+      const { rerender } = render(wrap(<GamePage />));
+
+      const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'An uncommitted draft mid-fight.' } });
+      expect(textarea).toHaveValue('An uncommitted draft mid-fight.');
+
+      // Exactly one draft is persisted, under one storage key, before the
+      // encounter starts.
+      const draftKeysBefore = Object.keys(sessionStorage).filter((k) =>
+        k.startsWith('arx:play-draft:v2:')
+      );
+      expect(draftKeysBefore).toHaveLength(1);
+      const [draftKey] = draftKeysBefore;
+      const storedBefore = sessionStorage.getItem(draftKey);
+      expect(storedBefore).toContain('An uncommitted draft mid-fight.');
+
+      // An encounter starts on the active scene — this is what GamePage's
+      // own `hasActiveEncounter` flag would flip to true on the next poll.
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+      rerender(wrap(<GamePage />));
+
+      // The composer must not have remounted: the same textarea instance
+      // still shows the unsent draft...
+      const textareaAfter = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textareaAfter).toBe(textarea);
+      expect(textareaAfter).toHaveValue('An uncommitted draft mid-fight.');
+
+      // ...and the persisted draft is untouched: same key, same content. A
+      // remount of `useDraftStore` would have re-hydrated from storage (a
+      // no-op here) but a *reset* (unmount with no persist, or a fresh key)
+      // would show up as either a missing/second key or altered content.
+      const draftKeysAfter = Object.keys(sessionStorage).filter((k) =>
+        k.startsWith('arx:play-draft:v2:')
+      );
+      expect(draftKeysAfter).toEqual(draftKeysBefore);
+      expect(sessionStorage.getItem(draftKey)).toBe(storedBefore);
     });
   });
 
