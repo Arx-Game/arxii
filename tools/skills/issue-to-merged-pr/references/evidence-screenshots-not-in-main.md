@@ -21,8 +21,16 @@ question.
    fixing findings.
 2. Once the report is final (verdicts settled, nothing left to fix), **before
    opening the PR or as a follow-up commit on an already-open one**, post the
-   report as an issue/PR comment instead, rewriting its screenshot links from
-   repo-relative paths to
+   report **as a comment on the PR itself** (`gh pr comment <N> --body-file`)
+   — not the issue. The PR is where a reviewer and CI both actually look;
+   `validate_review_evidence.py`'s regex accepts an issue-comment URL too
+   (`.../issues/*#issuecomment-*`), but that's a fallback for when no PR
+   exists yet, not the default. (#3759's first attempt at this posted only to
+   the issue, on a literal reading of an early instruction to do that — the
+   PR then had no evidence comment at all, which is confusing to anyone
+   reviewing the PR directly and doesn't match this convention. #3760 got it
+   right the first time: evidence comment on the PR, from the start.) Before
+   posting, rewrite the report's screenshot links from repo-relative paths to
    `https://raw.githubusercontent.com/<owner>/<repo>/<full-40-char-commit-sha>/<path>`
    — the SHA of the commit that has the files right now (verify at least one
    resolves: `curl -sI <url>` should return `200` and `content-type: image/…`,
@@ -31,11 +39,20 @@ question.
    every commit that was ever pushed as part of an open PR** (reachable via
    that PR's own `refs/pull/<N>/head`) independent of what the branch's
    current tip contains — the URL doesn't stop resolving once the branch
-   moves past that commit.
+   moves past that commit. After posting, confirm the images actually
+   rendered (don't just trust the markdown syntax): `gh api
+   repos/<owner>/<repo>/issues/comments/<id> -H "Accept:
+   application/vnd.github.html+json" --jq .body_html | grep -c '<img'` should
+   match the number of screenshots you linked.
 3. Get the new comment's URL, then switch `PR_EVIDENCE_FILE` to `PR_EVIDENCE_URL`
    pointing at it (or edit the PR body's `- Report:` line directly with
    `gh api -X PATCH` — `gh pr edit --body-file` is known to silently fail on
-   this repo).
+   this repo). Validate locally before patching:
+   `uv run python tools/validate_review_evidence.py <(gh api
+   repos/<owner>/<repo>/issues/comments/<id> --jq .body) --revision <sha>
+   --pr-body <(gh pr view <N> --json body --jq .body)` (with the edited body,
+   not the live one, if you haven't patched yet) — this is the exact check
+   CI runs; don't push and find out.
 4. `git rm` the local report + screenshots directory, commit, push. Since
    `main` only ever receives a **squash-merge's tree snapshot at the PR's
    final tip**, this removal commit is what decides what lands in `main` —

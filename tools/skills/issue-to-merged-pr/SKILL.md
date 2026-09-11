@@ -303,8 +303,8 @@ mandatory criterion is passed.
 **The evidence report and its screenshots never belong in `main`'s permanent
 history** — commit them to the branch while iterating (the easiest way to let
 CI validate a local `PR_EVIDENCE_FILE` path), but once the report is final,
-move it to an issue/PR comment (`PR_EVIDENCE_URL`) and remove the local
-copies before the PR merges. See
+move it to a comment **on the PR itself** (`PR_EVIDENCE_URL`) and remove the
+local copies before the PR merges. See
 `references/evidence-screenshots-not-in-main.md` for the exact technique
 (screenshot links survive as `raw.githubusercontent.com/.../<commit-sha>/...`
 even after the branch's tip no longer has the file) and the sequencing gotcha
