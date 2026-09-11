@@ -677,31 +677,12 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
 
 
 class FacetSerializer(serializers.ModelSerializer):
-    """Serializer for Facet model with hierarchy info."""
-
-    depth = serializers.IntegerField(read_only=True)
-    full_path = serializers.CharField(read_only=True)
-    parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+    """Serializer for the flat Facet vocabulary."""
 
     class Meta:
         model = Facet
-        fields = ["id", "name", "parent", "parent_name", "description", "depth", "full_path"]
-        read_only_fields = ["id", "depth", "full_path"]
-
-
-class FacetTreeSerializer(serializers.ModelSerializer):
-    """Serializer for Facet with nested children for tree display."""
-
-    children = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Facet
-        fields = ["id", "name", "description", "children"]
-
-    def get_children(self, obj) -> list[dict]:
-        """Recursively serialize children."""
-        children = obj.children.all()
-        return FacetTreeSerializer(children, many=True).data
+        fields = ["id", "name", "description"]
+        read_only_fields = ["id"]
 
 
 # =============================================================================
@@ -713,12 +694,11 @@ class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
     """Serializer for MotifResonanceAssociation records."""
 
     facet_name = serializers.CharField(source="facet.name", read_only=True)
-    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
 
     class Meta:
         model = MotifResonanceAssociation
-        fields = ["id", "facet", "facet_name", "facet_path"]
-        read_only_fields = ["id", "facet_name", "facet_path"]
+        fields = ["id", "facet", "facet_name"]
+        read_only_fields = ["id", "facet_name"]
 
 
 class MotifResonanceStyleSerializer(serializers.ModelSerializer):

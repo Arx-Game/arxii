@@ -965,26 +965,16 @@ class MotifResonanceAdmin(admin.ModelAdmin):
 
 @admin.register(Facet)
 class FacetAdmin(admin.ModelAdmin):
-    """Admin for hierarchical Facet model."""
+    """Admin for the flat Facet vocabulary."""
 
-    list_display = ["name", "parent", "get_depth", "get_full_path"]
-    list_filter = ["parent"]
+    list_display = ["name", "description"]
     search_fields = ["name", "description"]
-    autocomplete_fields = ["parent"]
-    ordering = ["parent__name", "name"]
+    ordering = ["name"]
     readonly_fields = ["get_connections"]
-
-    @admin.display(description="Depth")
-    def get_depth(self, obj):
-        return obj.depth
-
-    @admin.display(description="Full Path")
-    def get_full_path(self, obj):
-        return obj.full_path
 
     @admin.display(description="Connections")
     def get_connections(self, obj):
-        return describe_reverse_relations(obj, exclude=frozenset({"children"}))
+        return describe_reverse_relations(obj)
 
 
 @admin.register(Reincarnation)

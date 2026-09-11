@@ -342,61 +342,21 @@ class MotifResonanceAssociationSerializerTest(TestCase):
 class FacetSerializerTest(TestCase):
     """Tests for FacetSerializer."""
 
-    def test_serialization_with_hierarchy(self):
-        """Test FacetSerializer includes hierarchy info."""
+    def test_serialization(self):
+        """Test FacetSerializer returns the flat facet fields."""
         from world.magic.models import Facet
         from world.magic.serializers import FacetSerializer
 
-        creatures = Facet.objects.create(name="Creatures")
-        mammals = Facet.objects.create(name="Mammals", parent=creatures)
-        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+        wolf = Facet.objects.create(name="Wolf", description="A predator.")
 
         serializer = FacetSerializer(wolf)
         data = serializer.data
 
         self.assertEqual(data["name"], "Wolf")
-        self.assertEqual(data["depth"], 2)
-        self.assertEqual(data["full_path"], "Creatures > Mammals > Wolf")
-        self.assertEqual(data["parent"], mammals.id)
-        self.assertEqual(data["parent_name"], "Mammals")
-
-    def test_top_level_facet(self):
-        """Test serialization of top-level category."""
-        from world.magic.models import Facet
-        from world.magic.serializers import FacetSerializer
-
-        creatures = Facet.objects.create(name="Creatures", description="Animals")
-
-        serializer = FacetSerializer(creatures)
-        data = serializer.data
-
-        self.assertEqual(data["name"], "Creatures")
-        self.assertEqual(data["depth"], 0)
-        self.assertEqual(data["full_path"], "Creatures")
-        self.assertIsNone(data["parent"])
-        self.assertIsNone(data["parent_name"])
-
-
-class FacetTreeSerializerTest(TestCase):
-    """Tests for FacetTreeSerializer with nested children."""
-
-    def test_nested_tree_structure(self):
-        """Test that tree serializer includes nested children."""
-        from world.magic.models import Facet
-        from world.magic.serializers import FacetTreeSerializer
-
-        creatures = Facet.objects.create(name="Creatures")
-        mammals = Facet.objects.create(name="Mammals", parent=creatures)
-        Facet.objects.create(name="Wolf", parent=mammals)
-        Facet.objects.create(name="Bear", parent=mammals)
-
-        serializer = FacetTreeSerializer(creatures)
-        data = serializer.data
-
-        self.assertEqual(data["name"], "Creatures")
-        self.assertEqual(len(data["children"]), 1)  # Mammals
-        self.assertEqual(data["children"][0]["name"], "Mammals")
-        self.assertEqual(len(data["children"][0]["children"]), 2)  # Wolf, Bear
+        self.assertEqual(data["description"], "A predator.")
+        self.assertNotIn("parent", data)
+        self.assertNotIn("depth", data)
+        self.assertNotIn("full_path", data)
 
 
 class ResonanceSerializerTest(TestCase):

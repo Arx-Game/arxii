@@ -370,23 +370,23 @@ class TechniqueViewSetTest(APITestCase):
 
 
 class FacetViewSetTest(APITestCase):
-    """Tests for FacetViewSet."""
+    """Tests for FacetViewSet (flat vocabulary — 2026-09-11 ruling, #3776)."""
 
     @classmethod
     def setUpTestData(cls):
         from world.magic.models import Facet
 
         cls.user = AccountFactory()
-        cls.creatures = Facet.objects.create(name="Creatures")
-        cls.mammals = Facet.objects.create(name="Mammals", parent=cls.creatures)
-        cls.wolf = Facet.objects.create(name="Wolf", parent=cls.mammals)
+        cls.wolf = Facet.objects.create(name="Wolf")
+        cls.silk = Facet.objects.create(name="Silk")
+        cls.scythe = Facet.objects.create(name="Scythe")
 
     def test_list_facets(self):
         """Test listing facets."""
         self.client.force_authenticate(user=self.user)
         response = self.client.get("/api/magic/facets/")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 3)  # Creatures, Mammals, Wolf
+        self.assertEqual(len(response.data), 3)  # Wolf, Silk, Scythe
 
     def test_list_requires_auth(self):
         """Test that listing facets requires authentication."""
@@ -396,31 +396,13 @@ class FacetViewSetTest(APITestCase):
             [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
         )
 
-    def test_filter_by_parent(self):
-        """Test filtering facets by parent."""
+    def test_search_by_name(self):
+        """Test searching facets by name."""
         self.client.force_authenticate(user=self.user)
-        response = self.client.get(f"/api/magic/facets/?parent={self.creatures.id}")
+        response = self.client.get("/api/magic/facets/?search=Wolf")
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["name"], "Mammals")
-
-    def test_filter_top_level(self):
-        """Test filtering for top-level facets (no parent)."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/magic/facets/?parent__isnull=true")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["name"], "Creatures")
-
-    def test_tree_endpoint(self):
-        """Test tree endpoint returns nested structure."""
-        self.client.force_authenticate(user=self.user)
-        response = self.client.get("/api/magic/facets/tree/")
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        # Should return only top-level with nested children
-        self.assertEqual(len(response.data), 1)
-        self.assertEqual(response.data[0]["name"], "Creatures")
-        self.assertIn("children", response.data[0])
+        self.assertEqual(response.data[0]["name"], "Wolf")
 
 
 @override_settings(SEED_SAMPLE_CONTENT=True)  # ensure_combat_offense_catalog_content gates on #2698
