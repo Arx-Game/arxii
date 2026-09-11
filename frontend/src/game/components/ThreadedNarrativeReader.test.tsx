@@ -892,6 +892,106 @@ describe('ThreadedNarrativeReader', () => {
       expect(ancestor.scrollTop).toBe(260);
     });
 
+    it('keeps the live anchor restored after deep-linking into reference mode and Return to live, instead of reverting to the tail slice a render later (#3759 review Fix round 1 IMPORTANT)', () => {
+      // 30 live poses (ids 1-30, one thread), mounted with NO saved anchor
+      // yet -- so the initial live mount needs no widen at all and
+      // `historyStartOverride` starts and stays null through the live
+      // phase (avoids a confound: an anchor needing ITS OWN mount-time
+      // widen would leave a coincidental non-null override that the
+      // reference-mode transition would inherit for unrelated reasons).
+      //
+      // Deep-linking into reference mode with a target pose at flat index 0
+      // of the reference's own (different, larger) interactions array
+      // GENUINELY widens `historyStartOverride` to 0 (a real C2 widen, not
+      // a stale carry-over, since override started clean at null).
+      //
+      // The live anchor (pose 5, outside the live array's own default tail
+      // of ids 11-30) is saved WHILE still in reference mode -- mirroring
+      // "a scroll happened live in the background" (the existing "restores
+      // the prior live anchor..." test above uses the same narrative). On
+      // Return to live, `historyStartOverride` is still the stale 0 left
+      // over from reference mode at the moment this commit renders -- with
+      // a `useEffect`-based reset (the ORIGINAL version of this fix), that
+      // stale 0 (which happens to also be a valid "show everything" index
+      // for the live array) lets Effect B find pose 5 DIRECTLY and scroll
+      // to it with a raw `scrollTop` mutation, never calling
+      // `widenWindowToInclude` at all -- then the reset's OWN
+      // `setHistoryStartOverride(null)` fires in the SAME commit's effect
+      // flush and, because it's a GENUINE value change this time
+      // (0 -> null, not a no-op), schedules a real extra render that
+      // narrows back to the true default tail (ids 11-30), evicting pose 5
+      // with nothing left to bring it back (I2's self-correcting retry only
+      // engages when `widenWindowToInclude` itself was the one that set the
+      // override, which never happened here). The render-time reset (this
+      // fix) narrows the window in the SAME render Effect B reads, so it
+      // can never find pose 5 directly -- forcing it through the normal
+      // widen-then-retry path instead, which correctly re-establishes and
+      // KEEPS the window.
+      const live = Array.from({ length: 30 }, (_, i) => {
+        const id = i + 1;
+        return {
+          ...interaction(id, `live pose ${id}`, 'thread-a'),
+          timestamp: `2026-01-01T00:${String(id).padStart(2, '0')}:00Z`,
+        };
+      });
+      poseOffsets = { 5: 0 };
+
+      const liveProps = (readOnly: boolean) => (
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={live}
+          fetchNextPage={vi.fn()}
+          readOnly={readOnly}
+        />
+      );
+      const referenceInteractions = Array.from({ length: 30 }, (_, i) => {
+        const id = i + 101;
+        return {
+          ...interaction(id, `ref pose ${id}`, 'thread-ref'),
+          timestamp: `2026-02-01T00:${String(i + 1).padStart(2, '0')}:00Z`,
+        };
+      });
+      const referenceProps = (
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={referenceInteractions}
+          fetchNextPage={vi.fn()}
+          readOnly
+          targetPoseId="101"
+        />
+      );
+
+      const { rerenderInner, ancestor } = renderInScrollAncestor(liveProps(false));
+      // No anchor yet -- default tail, nothing to restore.
+      expect(ancestor.querySelector('[data-pose-id="5"]')).toBeNull();
+
+      // Deep-link into reference mode -- genuinely widens the reference
+      // window's own historyStartOverride to 0.
+      rerenderInner(referenceProps);
+
+      // A live anchor now exists (as if new poses arrived, or the user
+      // scrolled, while reference mode was open).
+      saveConversationAnchor('scene:1', {
+        anchors: {
+          threads: { poseId: '5', threadId: 'thread-a', offsetPx: 0 },
+          chronological: null,
+        },
+        collapsed: [],
+      });
+
+      // Return to live -- the SAME component instance, per Decision #5.
+      rerenderInner(liveProps(false));
+
+      // The live anchor (pose 5) must be visible once everything settles,
+      // not silently evicted a render later by a stale reset undoing
+      // Effect B's just-completed restore.
+      expect(ancestor.querySelector('[data-pose-id="5"]')).not.toBeNull();
+    });
+
     it('defers the font/measure re-anchor until AFTER DisplaySettings applies the CSS variable (real GameLayout effect ordering, #3759 review finding I1)', async () => {
       // GameLayout.tsx renders `center` (GameWindow -> this reader) BEFORE
       // `sidebar` (PlaySidebar -> DisplaySettings), and React flushes

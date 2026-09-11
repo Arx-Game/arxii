@@ -220,28 +220,44 @@ export function ThreadedNarrativeReader({
   targetPoseId,
 }: ThreadedNarrativeReaderProps) {
   const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
-  // #3759 review finding, minor fold-in: `historyStartOverride` is
-  // component-local, live-feed tail-slice state. Entering/leaving reference
-  // mode reuses this SAME component instance when the scene matches
-  // (Decision #5), but a reference's `interactions` prop is a completely
-  // different (smaller, fixed +-25-pose window) array than the live feed's --
-  // a stale override index computed against one array is meaningless (or
-  // out-of-bounds) against the other. Reset on every ACTUAL readOnly
-  // transition (never on mount, where there is nothing stale to clear) --
-  // guarded by a ref rather than a bare `[readOnly]` dependency so it never
-  // fires on the initial render. Declared as the FIRST effect in this
-  // component (before restoreThreadsAnchor/Effect A/B/the deep-link seek
-  // effect below, all of which can also write `historyStartOverride`) so
-  // that whichever of THOSE effects fires in the SAME commit -- entering
-  // reference mode WITH a target pose, or leaving it back into a live anchor
-  // miss -- runs its own `setHistoryStartOverride` call AFTER this one in
-  // the same effect flush and therefore wins (same-batch, last-call-wins).
-  const prevReadOnlyForResetRef = useRef(readOnly);
-  useEffect(() => {
-    if (prevReadOnlyForResetRef.current === readOnly) return;
-    prevReadOnlyForResetRef.current = readOnly;
+  // Declared here (rather than down in the deep-link seek section below,
+  // where it's actually used) because the render-time reset immediately
+  // below needs to clear it -- see that block's own comment.
+  const targetSeekDoneRef = useRef<string | null>(null);
+  // #3759 review finding, minor fold-in (Fix round 1: converted from a
+  // useEffect to a render-time state adjustment -- see why below):
+  // `historyStartOverride` is component-local, live-feed tail-slice state.
+  // Entering/leaving reference mode reuses this SAME component instance when
+  // the scene matches (Decision #5), but a reference's `interactions` prop
+  // is a completely different (smaller, fixed +-25-pose window) array than
+  // the live feed's -- a stale override index computed against one array is
+  // meaningless (or out-of-bounds) against the other. Reset on every ACTUAL
+  // readOnly transition (never on mount, where there is nothing stale to
+  // clear).
+  //
+  // A `useEffect`-based reset (the original version of this fix) raced
+  // Effect B ("Return to live") and the C2 seek effect's OWN success path:
+  // both scroll the DOM directly WITHOUT calling `setHistoryStartOverride`
+  // themselves, so "last setState call in the same commit wins" never
+  // applied to them -- the reset's effect still fired and re-rendered to the
+  // tail slice on the NEXT tick, unmounting whatever they'd just scrolled
+  // to. Adjusting state during rendering (comparing the prop against a
+  // STATE-held previous value, React's own documented pattern for this)
+  // commits the narrowed window in the SAME render Effect B/the seek effect
+  // will read when their OWN effects run after this commit -- not one
+  // render later.
+  //
+  // Also resets `targetSeekDoneRef` (#3759 review Fix round 1: re-opening
+  // the identical deep link after "Return to live" was a no-op on the same
+  // scene, since no remount occurs and the ref still held the old pose id)
+  // for the same reason: it must land in the SAME render the seek effect
+  // will next observe, not a render later.
+  const [prevReadOnlyForReset, setPrevReadOnlyForReset] = useState(readOnly);
+  if (readOnly !== prevReadOnlyForReset) {
+    setPrevReadOnlyForReset(readOnly);
     setHistoryStartOverride(null);
-  }, [readOnly]);
+    targetSeekDoneRef.current = null;
+  }
   const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
   const visibleInteractions = interactions.slice(historyStart);
   const groups = useMemo(() => {
@@ -612,11 +628,13 @@ export function ThreadedNarrativeReader({
   // tail-slice alone renders everything BUT the pose the user actually
   // opened. Shares `computeWidenTarget` (I2, above) to seed the window, then
   // scrolls to and briefly highlights the target once its row mounts.
-  // `targetSeekDoneRef` guards this so it runs once per target -- a NEW
-  // target (switching between reference entries without unmounting, e.g. two
-  // search results in the same scene) resets it because the ref stores the
-  // id it last completed, not just a boolean.
-  const targetSeekDoneRef = useRef<string | null>(null);
+  // `targetSeekDoneRef` (declared above, near `historyStartOverride` -- see
+  // that block's own comment for why) guards this so it runs once per
+  // target: a NEW target (switching between reference entries without
+  // unmounting, e.g. two search results in the same scene) resets it because
+  // the ref stores the id it last completed, not just a boolean; a
+  // readOnly transition also resets it (re-opening the same deep link after
+  // Return to live must not be a no-op).
   const [highlightedPoseId, setHighlightedPoseId] = useState<string | null>(null);
   useEffect(() => {
     if (!targetPoseId) return;
