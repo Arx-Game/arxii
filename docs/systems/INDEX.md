@@ -6118,7 +6118,10 @@ holder is never notified a claim exists.
     override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
-    `attachment_quality_tier`; unique per (item_instance, facet)
+    `attachment_quality_tier`; unique per (item_instance, facet). `is_inherent` (#3776
+    Task 4, default `False`) marks a row auto-stamped from `ItemTemplate.inherent_facets`
+    rather than a crafter's `attach_facet_to_item` call — excluded from
+    `assert_facet_attachable`'s `facet_capacity` count
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
   - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
@@ -6315,6 +6318,12 @@ holder is never notified a claim exists.
   haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (`inherent_facets`, #3776 Task 4):** M2M to `magic.Facet`
+  (`related_name="inherent_on_templates"`) — facets this archetype always carries (a
+  "Scythe" template always carries the Scythe facet). Auto-stamped onto every new
+  `ItemInstance` by `ItemInstance.save()` (`is_new` branch, deferred import to avoid a
+  circular import with `services/facets.py`) via `stamp_inherent_facets`; does not
+  consume the instance's own `facet_capacity`.
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
   — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
   by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
@@ -6367,6 +6376,11 @@ holder is never notified a claim exists.
   - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
     — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
   - `remove_facet_from_item(*, item_facet) -> None`
+  - `stamp_inherent_facets(item_instance) -> None` (#3776 Task 4) — idempotent; creates an
+    `ItemFacet(is_inherent=True)` row for every facet on `item_instance.template
+    .inherent_facets` not already attached. Resolves `attachment_quality_tier` (a required
+    FK with no schema default) via `QualityTier.for_score(0)` rather than a crafted value,
+    since inherent facets are never crafted. Called from `ItemInstance.save()` on creation.
   - `use_item(item_instance, user, target=None) -> UseItemResult` — applies on-use pool effects;
     consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
     usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
