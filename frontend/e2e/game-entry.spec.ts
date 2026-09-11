@@ -113,8 +113,9 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   await page.evaluate(() => document.documentElement.classList.add('dark'));
   const startScene = page.getByRole('button', { name: 'Start Scene', exact: true });
   await expect(startScene).toBeVisible();
-  expect(await startScene.evaluate((element) => getComputedStyle(element).color)).not.toBe(
-    'rgb(0, 0, 0)'
+  await page.waitForTimeout(500);
+  expect(await startScene.evaluate((element) => getComputedStyle(element).color)).toBe(
+    'rgb(250, 250, 250)'
   );
   await page.screenshot({ path: 'test-results/3758-dark-desktop.png', fullPage: true });
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
