@@ -883,8 +883,9 @@ def _comparison_fields_match(
     """True when every `comparison_fields` entry matches `stored` (#3760 review fix).
 
     A plain (non-callable) value is compared via `getattr(stored, field) == value` -- the
-    original scalar-only behavior, unchanged; `submit_pose` and `SayAction` still use this
-    form and need no changes. A callable value is called with `stored` and its truthy/falsy
+    original scalar-only behavior, unchanged; `SayAction` still uses this form only (directed-say
+    idempotency is out of scope, see #3760). `submit_pose` now also uses the callable form below
+    for target identity. A callable value is called with `stored` and its truthy/falsy
     return is the match result directly -- the caller closes over whatever "current" value
     it wants to compare against, since target/place identity isn't always a simple scalar
     attribute (`Interaction.target_personas` is M2M via `InteractionTargetPersona`, so
