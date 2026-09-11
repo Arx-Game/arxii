@@ -78,6 +78,8 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(2);
@@ -472,6 +474,8 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
         },
       });
     });
@@ -568,6 +572,8 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
         },
       });
     });
@@ -657,6 +663,8 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
         },
       });
 

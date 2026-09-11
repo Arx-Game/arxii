@@ -1234,7 +1234,7 @@ describe('GamePage', () => {
       // the room feed AND re-anchor the tab strip to the room tab —
       // `threading.showAll()` alone only resets the filter/mute state, not
       // the active conversation tab.
-      const allButton = within(sidebar).getByRole('button', { name: 'All' });
+      const allButton = within(sidebar).getByRole('button', { name: 'All', hidden: true });
       await user.click(allButton);
 
       expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
