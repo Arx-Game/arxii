@@ -12553,12 +12553,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Facet records.
-     *
-     *     Provides read-only access to the facet hierarchy.
-     *     Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
-     */
+    /** @description Read-only browse of the flat Facet vocabulary. */
     get: operations['magic_facets_list'];
     put?: never;
     post?: never;
@@ -12575,30 +12570,8 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * @description ViewSet for Facet records.
-     *
-     *     Provides read-only access to the facet hierarchy.
-     *     Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
-     */
+    /** @description Read-only browse of the flat Facet vocabulary. */
     get: operations['magic_facets_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/magic/facets/tree/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Return facets as nested tree structure. */
-    get: operations['magic_facets_tree_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -29897,18 +29870,13 @@ export interface components {
       net: number;
       sheltered: boolean;
     };
-    /** @description Serializer for Facet model with hierarchy info. */
+    /** @description Serializer for the flat Facet vocabulary. */
     Facet: {
       readonly id: number;
-      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Creatures'). */
+      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Scythe'). */
       name: string;
-      /** @description Parent facet for hierarchy (null = top-level category). */
-      parent?: number | null;
-      readonly parent_name: string | null;
       /** @description Description of this facet's thematic meaning. */
       description?: string;
-      readonly depth: number;
-      readonly full_path: string;
     };
     /** @description Response for a facet-craft attempt: rolled outcome + resolved tier + the row. */
     FacetCraftResult: {
@@ -29921,18 +29889,6 @@ export interface components {
         [key: string]: unknown;
       } | null;
       consequence_label: string | null;
-    };
-    /** @description Serializer for Facet with nested children for tree display. */
-    FacetTree: {
-      readonly id: number;
-      /** @description Facet name (e.g., 'Wolf', 'Silk', 'Creatures'). */
-      name: string;
-      /** @description Description of this facet's thematic meaning. */
-      description?: string;
-      /** @description Recursively serialize children. */
-      readonly children: {
-        [key: string]: unknown;
-      }[];
     };
     /** @description Serializer for family selection and display. */
     Family: {
@@ -63894,8 +63850,6 @@ export interface operations {
   magic_facets_list: {
     parameters: {
       query?: {
-        parent?: number;
-        parent__isnull?: boolean;
         /** @description A search term. */
         search?: string;
       };
@@ -63933,25 +63887,6 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['Facet'];
-        };
-      };
-    };
-  };
-  magic_facets_tree_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['FacetTree'];
         };
       };
     };

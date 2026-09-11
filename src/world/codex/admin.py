@@ -91,7 +91,7 @@ class CodexEntryAdmin(admin.ModelAdmin):
     ordering = ["subject", "display_order", "name"]
 
     fieldsets = (
-        (None, {"fields": ("subject", "name", "summary", "art")}),
+        (None, {"fields": ("subject", "name", "summary", "quote", "art")}),
         (
             "Content",
             {
