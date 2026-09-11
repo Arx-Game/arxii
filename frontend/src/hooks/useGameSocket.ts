@@ -47,6 +47,8 @@ import { getWebSocketUrl } from '@/config';
 import { toast } from 'sonner';
 import { fetchAccount } from '@/evennia_replacements/api';
 import { queryClient } from '@/queryClient';
+import { reconcileStoredDrafts } from '@/game/useDraftStore';
+import { fetchPoseSubmission } from '@/scenes/queries';
 
 const sockets: Record<string, WebSocket> = {};
 // Names with a connect() in flight (pre-socket-creation await window) — the
@@ -309,14 +311,48 @@ export function useGameSocket() {
 
       socket.addEventListener('open', () => {
         clearReconnect(character);
-        dispatch(setSessionConnectionStatus({ character, status: true }));
         dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
+
+        // Step 1: reauthorize. Re-puppet immediately — everything downstream
+        // (room state, the ability to send) depends on this landing first.
+        // `setSessionConnectionStatus` (connected=true) is intentionally NOT
+        // dispatched here — see Step 3 below, which fires it only after
+        // reconciliation, not on the raw socket 'open' event.
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
         socket.send(JSON.stringify(puppet));
-        // Backfill anything that arrived while no socket was listening: the
-        // REST feed is the source of record and may still be "fresh" for up
-        // to staleTime, so force it stale on every (re)connect.
-        queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+
+        // Step 2: reconcile (#3760 Task 12). A reconnect means any send
+        // dispatched on the now-superseded connection may never have gotten
+        // its ACTION_RESULT - the connection that would have delivered it is
+        // gone, and a fresh connection's message handler runs under a new
+        // generation that will never receive a frame addressed to the old
+        // one (see the message listener's generation-discard check below).
+        // So before this connection is allowed to declare the session ready,
+        // resolve every stranded pending/unknown draft's fate against the
+        // Task 6 lookup endpoint - the only reconciliation channel reachable
+        // from here (this handler is module-scope, outside React, so it has
+        // no live `beginSend()` to resend through; see `reconcileStoredDrafts`'s
+        // doc comment in useDraftStore.ts for the full reasoning).
+        reconcileStoredDrafts(fetchPoseSubmission)
+          .catch(() => {
+            // A rejected lookup already left its own stored draft untouched
+            // (see reconcileStoredDrafts) - nothing further to do here.
+          })
+          .finally(() => {
+            // Step 3: only now flip ready / invalidate - but only if this
+            // connection is still the current one. Reconciliation is async;
+            // a newer reconnect may have already superseded this generation
+            // while the lookup(s) were in flight, in which case this
+            // connection's belated "ready" must be discarded exactly like
+            // the message listener discards a belated frame.
+            if (generation !== connectionGenerations[character]) return;
+            dispatch(setSessionConnectionStatus({ character, status: true }));
+            // Backfill anything that arrived while no socket was listening:
+            // the REST feed is the source of record and may still be
+            // "fresh" for up to staleTime, so force it stale on every
+            // (re)connect.
+            queryClient.invalidateQueries({ queryKey: ['scene-interactions'] }).catch(() => {});
+          });
       });
 
       socket.addEventListener('close', (event) => {

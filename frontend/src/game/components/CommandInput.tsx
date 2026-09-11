@@ -401,6 +401,38 @@ export function CommandInput({
   );
   useActionResult(handleActionResult);
 
+  // #3760 Task 12 — a reconnect can happen while a say/whisper send is
+  // genuinely in flight on THIS tab (`pendingSpeechRef` still set, its
+  // ACTION_RESULT still outstanding). The websocket connection that would
+  // have delivered that ACTION_RESULT is gone once it drops; a fresh
+  // connection's message handler runs under a new connection generation
+  // (#3760 Task 9) and will never receive a frame addressed to the old one,
+  // so waiting for `handleActionResult` to eventually resolve this send
+  // would wait forever. `useGameSocket`'s reconnect-open handler (#3760 Task
+  // 12) only flips the session's `isConnected` flag - and so only lets
+  // `ready` go back to true - AFTER it has reauthorized AND reconciled
+  // every STORED draft; a `false -> true` transition here (never the
+  // initial mount, since `wasReadyRef` seeds from the first render's own
+  // `ready` value) is therefore a genuine reconnect completing. A send this
+  // tab is still tracking through `pendingSpeechRef` is exactly the case
+  // that storage-level reconciliation cannot see (nothing persists "a send
+  // is live in this exact tab right now"), so it is handled here instead:
+  // flip the draft to `unknown` (this is `markUnknown()`'s first production
+  // call site) and immediately try the same lookup the "Check status"
+  // button uses, rather than leaving the composer stuck showing "Sending…"
+  // for a reply that will never arrive.
+  const wasReadyRef = useRef(ready);
+  useEffect(() => {
+    const wasReady = wasReadyRef.current;
+    wasReadyRef.current = ready;
+    if (wasReady || !ready) return;
+    const pending = pendingSpeechRef.current;
+    if (!pending) return;
+    pendingSpeechRef.current = null;
+    draftStore.markUnknown(pending.clientRequestId);
+    handleCheckStatus();
+  }, [ready, draftStore, handleCheckStatus]);
+
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
     const trimmed = command.trim();

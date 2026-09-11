@@ -37,7 +37,17 @@ vi.mock('@/queryClient', () => ({
   queryClient: { invalidateQueries: vi.fn(() => Promise.resolve()) },
 }));
 
+const { mockFetchPoseSubmission } = vi.hoisted(() => ({
+  mockFetchPoseSubmission: vi.fn(),
+}));
+
+vi.mock('@/scenes/queries', () => ({
+  fetchPoseSubmission: mockFetchPoseSubmission,
+}));
+
 import { useGameSocket, __resetGameSocketModuleStateForTests } from './useGameSocket';
+import { queryClient } from '@/queryClient';
+import { draftStorageKey, type Draft } from '@/game/useDraftStore';
 
 type Listener = (event: unknown) => void;
 
@@ -52,6 +62,7 @@ class MockWebSocket {
   static instances: MockWebSocket[] = [];
   readyState = 0;
   url: string;
+  sent: string[] = [];
   private listeners: Record<string, Listener[]> = {};
 
   constructor(url: string) {
@@ -63,13 +74,32 @@ class MockWebSocket {
     (this.listeners[type] ??= []).push(callback);
   }
 
-  send(): void {
-    // Outbound frames aren't under test here.
+  send(data: string): void {
+    this.sent.push(data);
   }
 
   dispatch(type: string, event: unknown = {}): void {
     (this.listeners[type] ?? []).forEach((callback) => callback(event));
   }
+}
+
+/** Seeds a `pending`/`unknown` draft directly in sessionStorage, the format
+ * `reconcileStoredDrafts` (useGameSocket.ts's reconnect-open handler) scans. */
+function seedStoredDraft(overrides: Partial<Draft> & { clientRequestId: string }): void {
+  const key = draftStorageKey({ accountId: 1, personaId: 7, conversationKey: 'room:1' });
+  const draft: Draft = {
+    content: 'Silas waves.',
+    languageId: null,
+    recipients: [],
+    replyTo: null,
+    companion: false,
+    attachment: null,
+    status: 'pending',
+    rejectionReason: null,
+    mode: null,
+    ...overrides,
+  };
+  sessionStorage.setItem(key, JSON.stringify(draft));
 }
 
 describe('useGameSocket connection generation', () => {
@@ -83,6 +113,8 @@ describe('useGameSocket connection generation', () => {
     // without this, a socket or pending reconnect timer left over from a
     // previous test case would silently leak into the next one.
     __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
   });
 
   afterEach(() => {
@@ -146,5 +178,159 @@ describe('useGameSocket connection generation', () => {
     });
 
     expect(mockDispatch.mock.calls.length).toBe(dispatchCallsBeforeStaleMessage);
+  });
+});
+
+/** Resolves/rejects on demand — lets a test hold a lookup call open mid-flight. */
+function createDeferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
+
+/**
+ * How many `game/setSessionConnectionStatus` actions with `status: true`
+ * `mockDispatch` has seen so far — the abnormal-close path also dispatches
+ * this action type (with `status: false`), so the payload must be checked
+ * too, not just the action type.
+ */
+function readyDispatchCount(): number {
+  return mockDispatch.mock.calls.filter(([action]) => {
+    const typed = action as { type?: string; payload?: { status?: boolean } };
+    return typed?.type === 'game/setSessionConnectionStatus' && typed.payload?.status === true;
+  }).length;
+}
+
+describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('reauthorizes (re-puppets) immediately, then reconciles a stranded draft, and only then flips ready / invalidates the room-snapshot query', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Reconcile-One';
+    seedStoredDraft({ clientRequestId: 'req-1', status: 'pending', content: 'Silas waves.' });
+
+    const deferred = createDeferred<{ interaction_id: number; replayed: boolean } | null>();
+    mockFetchPoseSubmission.mockReturnValueOnce(deferred.promise);
+
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const socket = MockWebSocket.instances[0];
+
+    act(() => {
+      socket.dispatch('open');
+    });
+
+    // Reauthorize: the puppet text is sent immediately, before reconciliation
+    // is even asked to start.
+    expect(socket.sent).toHaveLength(1);
+    expect(JSON.parse(socket.sent[0])).toEqual(['text', [`@ic ${character}`], {}]);
+
+    // Reconcile: the lookup for the stranded draft has been dispatched...
+    expect(mockFetchPoseSubmission).toHaveBeenCalledWith('req-1');
+    // ...but it hasn't resolved yet, so readiness must not have flipped and
+    // the room-snapshot query must not have been invalidated.
+    expect(readyDispatchCount()).toBe(0);
+    expect(queryClient.invalidateQueries).not.toHaveBeenCalled();
+
+    // The lookup resolves: the send had actually landed.
+    await act(async () => {
+      deferred.resolve({ interaction_id: 42, replayed: false });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Only now does readiness flip and the feed get invalidated.
+    expect(readyDispatchCount()).toBe(1);
+    expect(queryClient.invalidateQueries).toHaveBeenCalledWith({
+      queryKey: ['scene-interactions'],
+    });
+
+    // The stranded draft was reconciled (cleared) since the lookup found it.
+    const stored = sessionStorage.getItem(
+      draftStorageKey({ accountId: 1, personaId: 7, conversationKey: 'room:1' })
+    );
+    expect(stored && (JSON.parse(stored) as Draft).status).toBe('clean');
+  });
+
+  it('discards a reauthorization/reconciliation that completes after this generation has been superseded by a fresh reconnect', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    const character = 'Reconcile-Two';
+    seedStoredDraft({ clientRequestId: 'req-stale', status: 'unknown', content: 'Silas waves.' });
+
+    const staleDeferred = createDeferred<{ interaction_id: number; replayed: boolean } | null>();
+    // First lookup call (generation 1, slow) hangs; second call (generation
+    // 2's own reconciliation of the same still-pending stored draft)
+    // resolves immediately so generation 2 can reach Ready.
+    mockFetchPoseSubmission.mockReturnValueOnce(staleDeferred.promise).mockResolvedValueOnce(null);
+
+    await act(async () => {
+      await result.current.connect(character);
+    });
+    const staleSocket = MockWebSocket.instances[0];
+    expect(result.current.currentGeneration(character)).toBe(1);
+
+    act(() => {
+      staleSocket.dispatch('open');
+    });
+    expect(mockFetchPoseSubmission).toHaveBeenCalledTimes(1);
+    expect(readyDispatchCount()).toBe(0);
+
+    // Generation 1's connection drops abnormally before its reconciliation
+    // resolves, and the automatic reconnect supersedes it.
+    act(() => {
+      staleSocket.dispatch('close', { code: 1006 });
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(result.current.currentGeneration(character)).toBe(2);
+    const freshSocket = MockWebSocket.instances[1];
+
+    act(() => {
+      freshSocket.dispatch('open');
+    });
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    // Generation 2 reconciled (its own lookup resolved immediately) and
+    // reached Ready.
+    expect(readyDispatchCount()).toBe(1);
+    const invalidateCallsAfterGenTwo = (queryClient.invalidateQueries as ReturnType<typeof vi.fn>)
+      .mock.calls.length;
+    expect(invalidateCallsAfterGenTwo).toBeGreaterThan(0);
+
+    // Generation 1's stale reauthorization/reconciliation finally resolves —
+    // it must be discarded, not flip readiness again.
+    await act(async () => {
+      staleDeferred.resolve({ interaction_id: 1, replayed: false });
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(readyDispatchCount()).toBe(1);
+    expect((queryClient.invalidateQueries as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
+      invalidateCallsAfterGenTwo
+    );
   });
 });

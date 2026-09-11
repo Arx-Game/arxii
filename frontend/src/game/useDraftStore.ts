@@ -46,8 +46,10 @@ const EMPTY_DRAFT: Draft = {
   mode: null,
 };
 
+const DRAFT_STORAGE_PREFIX = 'arx:play-draft:v2:';
+
 export function draftStorageKey(key: DraftKey): string {
-  return `arx:play-draft:v2:${key.accountId}:${key.personaId}:${key.conversationKey}`;
+  return `${DRAFT_STORAGE_PREFIX}${key.accountId}:${key.personaId}:${key.conversationKey}`;
 }
 
 function readStoredDraft(key: DraftKey): Draft {
@@ -96,6 +98,94 @@ function persist(key: DraftKey, draft: Draft): boolean {
  */
 function initialLastSentContent(draft: Draft): string | null {
   return draft.status !== 'clean' ? draft.content : null;
+}
+
+interface StoredDraftEntry {
+  storageKey: string;
+  draft: Draft;
+}
+
+/** Every persisted draft (any conversation, any persona) not already `clean`. */
+function listReconcilableDraftEntries(): StoredDraftEntry[] {
+  const entries: StoredDraftEntry[] = [];
+  let storageKeys: string[];
+  try {
+    storageKeys = Object.keys(sessionStorage);
+  } catch {
+    return entries;
+  }
+  for (const storageKey of storageKeys) {
+    if (!storageKey.startsWith(DRAFT_STORAGE_PREFIX)) continue;
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (!raw) continue;
+      const draft: Draft = { ...EMPTY_DRAFT, ...(JSON.parse(raw) as Partial<Draft>) };
+      if (draft.status !== 'clean' && draft.clientRequestId) {
+        entries.push({ storageKey, draft });
+      }
+    } catch {
+      // Unparsable entry — skip it rather than fail the whole scan.
+    }
+  }
+  return entries;
+}
+
+function persistAtStorageKey(storageKey: string, draft: Draft): boolean {
+  try {
+    sessionStorage.setItem(storageKey, JSON.stringify(draft));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Non-hook reconciliation entry point (#3760 Task 12) for the reconnect-open
+ * handler in `useGameSocket.ts`. That handler runs at module scope, outside
+ * React entirely — it has no way to reach any particular mounted
+ * `useDraftStore` instance (there may be zero, one, or several, one per open
+ * conversation tab), so it cannot call `beginSend()`/`acknowledge()` through
+ * a live hook. What it CAN reach is the same `sessionStorage` namespace every
+ * `useDraftStore` instance reads and writes — this function scans that
+ * namespace directly for every draft left `pending`/`rejected`/`unknown`
+ * (i.e. anything a reconnect could have orphaned mid-send) and resolves each
+ * via `lookup` (the Task 6 `GET /api/play/submissions/{client_request_id}/`
+ * endpoint — the only reconciliation channel available at this call site;
+ * resending via a reused id requires a live composer instance this function
+ * cannot reach).
+ *
+ * A found record means the send landed while nobody was watching — the
+ * stored draft is cleared exactly like `acknowledge()` would. A `null`
+ * result ("no record") or a lookup failure leaves the stored draft
+ * untouched: a mounted `CommandInput` for that conversation still owns its
+ * own in-memory copy and resolves it through the normal ack/reject/stranded
+ * path the next time it checks (Task 11's "Check status"/Task 12's
+ * reconnect-triggered auto-check in `CommandInput.tsx`) — this function only
+ * exists to stop an ALREADY-LANDED send from sitting there forever for a
+ * conversation with no mounted composer left to notice. Both paths write
+ * through the same storage format, so a race between this scan and a
+ * concurrently-mounted composer's own check converges on the same answer
+ * (the lookup is an idempotent GET).
+ */
+export async function reconcileStoredDrafts(
+  lookup: (clientRequestId: string) => Promise<unknown | null>
+): Promise<void> {
+  const entries = listReconcilableDraftEntries();
+  await Promise.allSettled(
+    entries.map(async ({ storageKey, draft }) => {
+      // Non-null guaranteed by listReconcilableDraftEntries's filter.
+      const clientRequestId = draft.clientRequestId as string;
+      try {
+        const result = await lookup(clientRequestId);
+        if (result) {
+          persistAtStorageKey(storageKey, EMPTY_DRAFT);
+        }
+      } catch {
+        // Ambiguous — leave the stored draft as-is for the composer's own
+        // reconciliation surface to resolve.
+      }
+    })
+  );
 }
 
 export function useDraftStore(key: DraftKey) {

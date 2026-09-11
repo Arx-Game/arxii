@@ -986,6 +986,75 @@ describe('CommandInput', () => {
         screen.queryByText("Draft kept in this tab only — it won't survive a reload.")
       ).not.toBeInTheDocument();
     });
+
+    // #3760 Task 12 — a reconnect mid-send is the first place `markUnknown()`
+    // gets called in production (see the long comment above the effect in
+    // CommandInput.tsx, and the "hydrated unknown-status draft" test above,
+    // which documents why this exact scenario was previously unreachable).
+    // `ready` flipping false then true again (never the initial mount) is
+    // what `useGameSocket`'s reconnect-open handler (#3760 Task 12) produces
+    // once it has reauthorized and reconciled every stored draft.
+    describe('reconnect mid-send (#3760 Task 12)', () => {
+      it('marks a live in-flight send unknown on reconnect and auto-resolves it via the lookup endpoint once it landed', async () => {
+        const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        fetchPoseSubmissionMock.mockResolvedValueOnce({ interaction_id: 7, replayed: false });
+
+        const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(screen.getByText('Sending…')).toBeInTheDocument();
+        expect(fetchPoseSubmissionMock).not.toHaveBeenCalled();
+
+        // The connection drops (ready -> false) and later reconnects
+        // (useGameSocket's open handler flips ready back to true only after
+        // it has reauthorized and reconciled every stored draft).
+        rerender(<CommandInput character="Alice" composerMode={mode} ready={false} />);
+        rerender(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        // The automatic lookup this reconnect triggers found the record: the
+        // send had landed, so it resolves exactly like an ordinary ack —
+        // never left showing "Sending…" forever for a reply that can no
+        // longer arrive on the new connection.
+        await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledTimes(1));
+        expect(fetchPoseSubmissionMock).toHaveBeenCalledWith(expect.any(String));
+        await waitFor(() => expect(screen.queryByText('Sending…')).not.toBeInTheDocument());
+        expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+        expect(textarea.value).toBe('');
+      });
+
+      it('leaves the draft resolvable via the stranded banner when the reconnect lookup finds no record', async () => {
+        const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        fetchPoseSubmissionMock.mockResolvedValueOnce(null);
+
+        const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(screen.getByText('Sending…')).toBeInTheDocument();
+
+        rerender(<CommandInput character="Alice" composerMode={mode} ready={false} />);
+        rerender(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledTimes(1));
+        // No record found: the send's fate is genuinely unresolved. The text
+        // is never lost — still editable/resendable, not silently dropped.
+        expect(textarea.value).toBe('hello');
+        expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+      });
+
+      it('does not touch the draft on a plain ready toggle with nothing in flight', () => {
+        const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        rerender(<CommandInput character="Alice" composerMode={mode} ready={false} />);
+        rerender(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        expect(fetchPoseSubmissionMock).not.toHaveBeenCalled();
+      });
+    });
   });
 });
 
