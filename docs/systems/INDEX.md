@@ -8262,7 +8262,8 @@ Gods as authorable data with worship economies, and ceremonies (funerals first) 
 lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decision ADR-0132.
 
 - **Worship models** (`world/worship`): `WorshipTradition` (name, `rites_specialization` FK →
-  skills.Specialization), `WorshippedBeing` (tradition FK, `resonance_pool` + `lifetime_worship`
+  skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
+  lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `BeingFacet` (favored aesthetic
   Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
