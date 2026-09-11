@@ -89,4 +89,48 @@ describe('usePoseReadTracking', () => {
     });
     expect(playQueries.markPosesRead).not.toHaveBeenCalled();
   });
+
+  it('does not throw when markPosesRead rejects, and stays usable for the next dwell cycle', async () => {
+    // #3743 burned a month's Sentry quota when one uncaught rejection fanned
+    // out across every affected call — flush()'s fire-and-forget
+    // markPosesRead call must swallow (and log) a rejection rather than
+    // leaving it unhandled. vitest fails the test itself if a promise
+    // rejects unhandled during it, so this test's mere completion (no
+    // uncaught-rejection failure) is part of what it proves.
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    vi.mocked(playQueries.markPosesRead).mockRejectedValueOnce(new Error('network blip'));
+
+    const { result } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    result.current.observe(el, { id: 1, timestamp: '2026-01-01T00:00:00Z' });
+
+    await act(async () => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+      // *Async* advance so the fake-timer clock also drains the microtask
+      // queue between ticks, letting flush()'s `.catch()` actually settle.
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+
+    expect(playQueries.markPosesRead).toHaveBeenCalledWith([
+      { id: 1, timestamp: '2026-01-01T00:00:00Z' },
+    ]);
+    expect(consoleErrorSpy).toHaveBeenCalledWith('Failed to mark poses read', expect.any(Error));
+
+    // The hook itself must still work for a later pose — a rejected flush
+    // must not corrupt or wedge the queue/timer state for the next cycle.
+    const el2 = document.createElement('div');
+    result.current.observe(el2, { id: 2, timestamp: '2026-01-01T00:01:00Z' });
+    await act(async () => {
+      observerInstance.trigger([{ target: el2, isIntersecting: true }]);
+      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(2100);
+    });
+
+    expect(playQueries.markPosesRead).toHaveBeenLastCalledWith([
+      { id: 2, timestamp: '2026-01-01T00:01:00Z' },
+    ]);
+
+    consoleErrorSpy.mockRestore();
+  });
 });

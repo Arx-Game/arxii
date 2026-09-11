@@ -32,7 +32,18 @@ export function usePoseReadTracking() {
   const flush = useCallback(() => {
     if (queued.current.length === 0) return;
     const batch = queued.current.splice(0, MAX_BATCH);
-    void markPosesRead(batch);
+    // Fire-and-forget: `markPosesRead` throws on any non-ok response, and
+    // nothing else awaits this call, so an uncaught rejection here becomes an
+    // unhandled promise rejection on every network blip, session expiry, or
+    // transient 5xx — the exact fan-out shape #3743 burned a month's Sentry
+    // quota on (one broken path, thousands of events). Swallow and log
+    // instead of propagating. This is read-state bookkeeping the reader
+    // doesn't need to react to, so no retry: `batch` is already spliced out
+    // of `queued.current`, and if the pose scrolls back into view later it
+    // simply gets marked again.
+    markPosesRead(batch).catch((error: unknown) => {
+      console.error('Failed to mark poses read', error);
+    });
   }, []);
 
   const scheduleFlush = useCallback(() => {
