@@ -68,7 +68,7 @@ Magical resource. Each technique has a base anima cost. In combat, active techni
 - **Techniques:** Magical abilities with intensity, control, level, style, effect type, and anima cost. The primary way magic manifests in gameplay. Cantrips are the starting point; full technique creation unlocks post-CG
 - **Threads:** Magical relationships between characters. Bond strength feeds magical power — characters who are deeply connected are magically stronger together. Tying a thread to a technique gives better resonance-to-stat conversion for that technique
 - **Motifs:** A character's magical aesthetic — the imagery and symbolism that defines their magic
-- **Facets:** Hierarchical imagery/symbolism nodes. Items and fashion can have facets that map to character resonances, creating the fashion-to-power feedback loop
+- **Facets:** Imagery/symbolism nodes — a flat vocabulary since #3776 (ADR-0289); originally a Category > Subcategory > Specific hierarchy. Items and fashion can have facets that map to character resonances, creating the fashion-to-power feedback loop
 - **Traditions:** Magical schools/lineages that provide templates and community
 - **Reincarnation/Atavism:** Past life tracking that can influence current magical development
 - **Magic feeds off perception:** How others see a character influences their magical strength. "Aura farming" — making a dramatic entrance at a ball — is literally a viable strategy

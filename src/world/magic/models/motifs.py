@@ -159,7 +159,7 @@ class MotifResonanceLink(SharedMemoryModel):
 
 class MotifResonanceAssociation(MotifResonanceLink):
     """
-    Links a motif resonance to a facet (hierarchical imagery/symbolism).
+    Links a motif resonance to a facet (flat shared imagery vocabulary, #3776).
 
     Maximum 5 facets per motif resonance (enforced via MotifResonanceLink).
     """

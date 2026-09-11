@@ -32,6 +32,12 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     list_filter = ("tradition", "is_active")
     search_fields = ("name",)
     raw_id_fields = ("avatar_sheet",)
+    # codex_entry points into the whole CodexEntry corpus — a plain select would
+    # render every entry. Same widget MagicProgressionMilestoneAdmin uses against
+    # the same CodexEntryAdmin (which declares the required search_fields).
+    autocomplete_fields = ("codex_entry",)
+    # 78 tarot cards: too many for a scrolling multi-select, too few to search.
+    filter_horizontal = ("tarot_cards",)
 
 
 @admin.register(BeingFacet)

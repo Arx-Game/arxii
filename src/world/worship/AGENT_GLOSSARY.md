@@ -14,6 +14,29 @@
   CharacterResonance for beings.
 - **Devotion standing** — the one-way PC→god favor record (`DevotionStanding`).
   _Avoid_: CharacterRelationship for sheetless gods.
+- **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
+  ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
+  overlap between gods is expected and nothing matches on it mechanically, so a
+  vocabulary would only add an authoring gate. _Avoid_: portfolio, sphere table.
+- **Being facet** — a favored aesthetic facet of a being (`BeingFacet`, #3776), drawn from
+  the SAME flat `magic.Facet` pool characters bind through `Motif` — there is no separate
+  divine vocabulary (ADR-0289). Double-dipping is the point: a character's own bound facet
+  and their patron's favored facet being the same row is what the Chosen overlap bonus
+  reads. No cap, no policing. _Avoid_: divine facet, god motif.
+- **Being resonance** — a resonance a being favors or is merely associated with
+  (`BeingResonance`, #3776): `resonance` + `tier` (`BeingResonanceTier`
+  FAVORED/ASSOCIATED). FAVORED acts pay double, ASSOCIATED the ordinary rate — the model
+  for "different kinds of worshipper" serving one god. No cap. _Avoid_: `CharacterResonance`
+  for beings (that's the per-character currency).
+- **Tarot cards** — `WorshippedBeing.tarot_cards`, the cards people BELIEVE represent a
+  being (#3776). Pure association, no cap, no claim of canon. Read by birth favor (below);
+  distinct from a character's own single `tarot_card`. _Avoid_: the being's card (there may
+  be several, and belief is not fact).
+- **Being codex entry** — `WorshippedBeing.codex_entry`, the being's own Codex page,
+  following the `Gift`/`Technique`/`HouseAspectOption` precedent (#3776). Visibility
+  (public / known-to-some / researchable) is read ENTIRELY through the linked entry's
+  `is_public` tier — `WorshippedBeing` deliberately carries no visibility field of its own.
+  PROTECT, so deleting a page that a god points at is refused rather than silent.
 - **Being nickname** — an alternate name a being's worshippers use (`BeingNickname`,
   #3776); a being may carry several. No reverent/irreverent field — tone is prose, not
   data. `societies.Organization.patron_nickname` points at one of these, never
