@@ -1,6 +1,6 @@
 # Review evidence
 
-- Reviewed revision: `9231c5b0b94cbe456d4dcb4c893f8f9c8099aa4d`
+- Reviewed revision: `cf1ef94c9cebc50684923aaa46aaa553dfb4355f`
 - Reviewer: `demo-fidelity-reviewer (agent)`
 - Reviewer verdict: `PASS`
 - Application/build identity: Vite production build (`pnpm build` at the reviewed revision, `frontend/src/web/static/dist/`) served by Playwright's `vite preview`, exercised via `page.routeWebSocket`/`page.route` fixture mocks (same pattern as the branch's own `frontend/e2e/narrative-play-delivery.spec.ts`) — not a live Django/Evennia backend.
