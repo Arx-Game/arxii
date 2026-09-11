@@ -402,16 +402,17 @@ export function GamePage() {
   useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
 
   // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
-  // combat banner (Tasks 2/3) can drive the sidebar into view. `jumpToCombat`
-  // itself is deliberately NOT built here — with no caller yet it would be a
-  // genuinely unused local, and `noUnusedLocals` (tsconfig.app.json) fails the
-  // build on that (verified: even an underscore-prefixed name doesn't exempt a
-  // local from that check, only from ESLint's separate no-unused-vars rule).
-  // Tasks 2/3 build `jumpToCombat` from this state once they have a caller.
+  // combat banner (Task 3) can also drive the sidebar into view.
+  // `jumpToCombat` (Task 2) is the first real caller of this state — it jumps
+  // to Here mode + the Room tab, where `CombatRail` already renders.
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(
     sceneId && threading ? 'conversations' : 'here'
   );
   const [hereActiveTab, setHereActiveTab] = useState('room');
+  const jumpToCombat = useCallback(() => {
+    setSidebarMode('here');
+    setHereActiveTab('room');
+  }, []);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
@@ -888,6 +889,8 @@ export function GamePage() {
             accountId={account?.id}
             mode={sidebarMode}
             onModeChange={setSidebarMode}
+            hasActiveEncounter={hasActiveEncounter}
+            onJumpToCombat={jumpToCombat}
             here={
               <GameRightSidebar
                 roomTabLabel={roomTabLabel}

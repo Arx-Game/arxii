@@ -100,4 +100,48 @@ describe('PlaySidebar', () => {
     await user.click(screen.getByRole('button', { name: /history/i }));
     expect(onModeChange).toHaveBeenCalledWith('history');
   });
+
+  it('shows a 4th Combat nav button only when hasActiveEncounter is true', () => {
+    const { rerender } = render(
+      <PlaySidebar
+        here={<div>here content</div>}
+        mode="here"
+        onModeChange={vi.fn()}
+        onThreadClick={vi.fn()}
+        hasActiveEncounter={false}
+      />
+    );
+    expect(screen.queryByRole('button', { name: /combat/i })).not.toBeInTheDocument();
+
+    rerender(
+      <PlaySidebar
+        here={<div>here content</div>}
+        mode="conversations"
+        onModeChange={vi.fn()}
+        onThreadClick={vi.fn()}
+        hasActiveEncounter={true}
+        onJumpToCombat={vi.fn()}
+      />
+    );
+    expect(screen.getByRole('button', { name: /combat/i })).toBeInTheDocument();
+  });
+
+  it('calls onJumpToCombat, not onModeChange, when the Combat button is clicked', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    const onJumpToCombat = vi.fn();
+    render(
+      <PlaySidebar
+        here={<div>here content</div>}
+        mode="conversations"
+        onModeChange={onModeChange}
+        onThreadClick={vi.fn()}
+        hasActiveEncounter={true}
+        onJumpToCombat={onJumpToCombat}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /combat/i }));
+    expect(onJumpToCombat).toHaveBeenCalledTimes(1);
+    expect(onModeChange).not.toHaveBeenCalled();
+  });
 });
