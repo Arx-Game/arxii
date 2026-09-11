@@ -226,6 +226,14 @@ class CodexEntryModelTests(TestCase):
         assert entry.learn_difficulty == 10
         assert entry.learn_threshold == 10
 
+    def test_quote_defaults_blank(self) -> None:
+        entry = CodexEntryFactory()
+        self.assertEqual(entry.quote, "")
+
+    def test_quote_can_be_set(self) -> None:
+        entry = CodexEntryFactory(quote="Mercy is a debt I have never once collected.")
+        self.assertIn("Mercy", entry.quote)
+
     def test_clean_requires_at_least_one_content_field(self):
         """Validation fails if neither lore_content nor mechanics_content is provided."""
         entry = CodexEntry(

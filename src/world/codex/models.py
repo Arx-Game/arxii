@@ -187,6 +187,14 @@ class CodexEntry(NaturalKeyMixin, CreditedContent, DiscoverableContent, SharedMe
         blank=True,
         help_text="Short summary for tooltips/modals (1-2 sentences).",
     )
+    quote = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text=(
+            "An italic intro line shown at the top of this entry's Codex page "
+            "(e.g. a quote attributed to the subject). Optional; blank hides it."
+        ),
+    )
     lore_content = models.TextField(
         blank=True,
         null=True,
