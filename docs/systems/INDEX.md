@@ -1653,6 +1653,11 @@ Lore storage and character knowledge tracking.
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
+- **Quote (#3776 Task 10):** `CodexEntry.quote` — optional `CharField` (max 300, blank
+  hides it), an italic intro line meant atop any entry's page; general-purpose (not
+  worship-specific) so `worship.WorshippedBeing.codex_entry` (below) can reuse it.
+  Not yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — model
+  and admin only today.
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge), evennia_extensions (`Media`, art)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
@@ -8266,9 +8271,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
   (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
-  `codex.CodexEntry` (#3776 Task 11, `SET_NULL`, `related_name="worshipped_beings"` — mirrors
-  `Gift.codex_entry`/`Technique.codex_entry`; visibility reads entirely through the linked entry's
-  `is_public` tier)), `BeingFacet` (favored
+  `codex.CodexEntry` (#3776 Task 11, `PROTECT`, `related_name="worshipped_beings"` — mirrors
+  `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`; visibility reads
+  entirely through the linked entry's `is_public` tier)), `BeingFacet` (favored
   aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
   it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:

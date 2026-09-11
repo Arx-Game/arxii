@@ -26,6 +26,12 @@ issue bodies; the model decision is ADR-0132.
   mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
   visibility (Public/Obscure/Secret) is read entirely through the linked entry's
   `is_public` tier, no separate visibility field on `WorshippedBeing` itself).
+  Reuses `CodexEntry.quote` (#3776 Task 10, `codex/models.py`) for free: an optional
+  italic intro line shown atop any entry's Codex page (blank hides it) — added as a
+  general `CodexEntry` field (benefits every entry type, not worship-specific) so a
+  being's page could open on an attributed quote without a worship-only field. Not
+  yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — reading it
+  today means going through the model or admin, not the API.
 - `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
   `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
   unique per (being, facet).

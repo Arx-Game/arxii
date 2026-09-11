@@ -2,6 +2,9 @@ from django.contrib import admin
 
 from world.worship.models import (
     BeingFacet,
+    BeingNickname,
+    BeingRelationship,
+    BeingResonance,
     ChosenFavorConfig,
     DevotionStanding,
     DivineInterventionConfig,
@@ -10,6 +13,7 @@ from world.worship.models import (
     MiracleDamageProfile,
     MiraclePerformance,
     WorshipDeclaration,
+    WorshipFeastDay,
     WorshipGrant,
     WorshippedBeing,
     WorshipTradition,
@@ -35,6 +39,34 @@ class BeingFacetAdmin(admin.ModelAdmin):
     list_display = ("being", "facet")
     list_filter = ("being",)
     search_fields = ("being__name", "facet__name")
+
+
+@admin.register(BeingResonance)
+class BeingResonanceAdmin(admin.ModelAdmin):
+    list_display = ("being", "resonance", "tier")
+    list_filter = ("being", "tier")
+    search_fields = ("being__name", "resonance__name")
+
+
+@admin.register(BeingNickname)
+class BeingNicknameAdmin(admin.ModelAdmin):
+    list_display = ("name", "being")
+    list_filter = ("being",)
+    search_fields = ("being__name", "name")
+
+
+@admin.register(BeingRelationship)
+class BeingRelationshipAdmin(admin.ModelAdmin):
+    list_display = ("being_a", "being_b", "valence")
+    list_filter = ("valence",)
+    search_fields = ("being_a__name", "being_b__name")
+
+
+@admin.register(WorshipFeastDay)
+class WorshipFeastDayAdmin(admin.ModelAdmin):
+    list_display = ("name", "being", "ic_month", "ic_day")
+    list_filter = ("being",)
+    search_fields = ("name", "being__name")
 
 
 @admin.register(WorshipGrant)
