@@ -9,8 +9,8 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 - **`GamePage.tsx`**: Composition root for `/game` (#2156). Derives the active
   session's `sceneId`/`roomName`, calls `useSceneInteractions` +
   `useThreading` once, owns `composerMode` state, and feeds the result down
-  as props to `ConversationSidebar` (left) and `GameWindow` (center) — no
-  duplicate roster/scene-interaction queries in the children. Also owns the
+  as props to `PlaySidebar` (via `GameLayout`'s `sidebar` prop) and `GameWindow`
+  (center) — no duplicate roster/scene-interaction queries in the children. Also owns the
   **conversation-tab session state** (#2165): `openThreadTabs`/`activeThreadTab`
   live in `gameSlice` per session, and `GamePage` derives the tab strip's props,
   the tab-narrowed feed (`tabInteractions`), and the tab-locked composer mode
@@ -55,7 +55,15 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ### Layout (`components/`)
 
-- **`GameLayout.tsx`**: Three-column responsive grid (left sidebar, center, right sidebar)
+- **`GameLayout.tsx`**: App shell for play — one wide reader/composer column and
+  one contextual sidebar (`PlaySidebar`), not three columns. `sidebar`/
+  `leftSidebar`/`rightSidebar` props exist for caller compatibility, but only
+  one sidebar ever renders; below the `lg` breakpoint (1024px) the user
+  explicitly toggles between Story and Sidebar panes rather than losing either.
+- **`PlaySidebar.tsx`**: The single contextual sidebar — Here / Conversations /
+  History mode tabs sharing one scroll container. All three mode bodies stay
+  mounted (`hidden` attribute, not conditional unmount) so switching modes
+  preserves each one's scroll position and in-flight state (#3759).
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching. Each alt character's avatar carries a two-tier attention
   indicator (#2166, `sessionAttention` from `attention.ts`): a red numeric
@@ -71,7 +79,8 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `useClockQuery` directly — deliberately NOT `hh:mm`, since `WeatherWidget`
   (also rendered here) already surfaces `phase + hh:mm` from the same
   `game_clock` backend and a second hh:mm would just duplicate it.
-- **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
+- **`ConversationSidebar.tsx`**: The Conversations mode body inside
+  `PlaySidebar` (not its own column). Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
   threading state for an active scene; otherwise falls back to a static
   "Room" button. Also owns the per-thread `ThreadFilterModal` (participant
@@ -83,6 +92,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   resets the composer; `onShowAll` is `GamePage`'s override of
   `threading.showAll` for exactly that reason (the bare `showAll` only resets
   the filter/mute state, not the active tab).
+- **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
+  Whispers / OOC — and date range) plus browse authorized retained
+  conversations (filtered by date range only; type does not scope the browse
+  list, only the search query); the conversation list paginates via a cursor
+  ("Load more"). Opening a search result or conversation switches the reader
+  into reference mode via `onOpenReference` (#3759).
 - **`ConversationTabStrip.tsx`**: The open-conversations tab strip rendered
   above the feed in `GameWindow` (#2165) — the room feed as a permanent,
   unclosable anchor tab plus one closable tab per broken-out thread
@@ -92,6 +107,13 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ### Communication (`components/`)
 
+- **`ThreadedNarrativeReader.tsx`**: The reader for both the live scene feed and
+  reference-mode historical browsing (fed by `GamePage.tsx`'s `displaySceneFeed`
+  swap — the component itself does not know which source its `interactions`
+  prop came from). Threads view default-collapses all but the most recently
+  active thread; Chronological view is a flat time-ordered alternative sharing
+  the same read/collapse state. Anchors and collapse state persist per
+  conversation via `playPreferences.ts`'s LRU store (#3759).
 - **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `NarrativeMessageReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
@@ -142,8 +164,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ## Key Features
 
-- **Three-column layout**: Conversation sidebar, communication hub, room panel
-- **Responsive**: Sidebars hidden below lg breakpoint, center content fills screen
+- **Single contextual sidebar**: `PlaySidebar` (Here / Conversations / History
+  modes) plus one wide reader/composer column — not the legacy three-column
+  layout. Full layout/resize ownership: #3758.
+- **Responsive**: Below the `lg` breakpoint (1024px) the layout shows one pane
+  at a time — Story or Sidebar — via an explicit toggle, not a hidden sidebar;
+  both panes render side by side at `lg` and up.
 - **Multi-character sessions**: Multiple character tabs open simultaneously
 - **Conversation tabs (#2165)**: Keep several threads (room + place/whisper/target)
   open at once per session; the composer's audience locks to whichever tab is
