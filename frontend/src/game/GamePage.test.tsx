@@ -1,8 +1,9 @@
-import { act, screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
 import { GamePage } from './GamePage';
 import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
+import { saveConversationAnchor } from './playPreferences';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
@@ -1682,6 +1683,103 @@ describe('GamePage', () => {
       });
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GameWindow.tsx's #2165 per-tab scroll memory vs #3759's anchor bypass
+  // (review findings I2/I5)
+  // ---------------------------------------------------------------------------
+
+  describe('per-tab scroll memory vs anchor bypass (#3759 review findings I2/I5)', () => {
+    it('keeps remembering the room tab scroll position after its first anchor-based visit, instead of being permanently disabled (#3759 review finding I2)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+      // A persisted anchor for this scene, present from the very first
+      // render -- this is what makes GameWindow.tsx's bypass condition
+      // (`activeConvKey === 'room' && no per-tab entry yet && an anchor
+      // exists`) true on this FIRST room visit.
+      saveConversationAnchor('100', {
+        anchor: { poseId: '1', threadId: null, offsetPx: 0 },
+        collapsed: [],
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      await user.click(await screen.findByRole('button', { name: /expand loaded threads/i }));
+
+      const feedContainer = screen.getByTestId('feed-scroll-container');
+      // jsdom has no layout engine, so scrollHeight/clientHeight default to
+      // 0 -- handleFeedScroll's "is this near the bottom" check
+      // (`scrollHeight - scrollTop - clientHeight < 8`) would then read as
+      // true for ANY scrollTop, spuriously marking the feed "pinned" and
+      // making a later, unrelated re-render snap back to the bottom. Real
+      // dimensions make 300 genuinely NOT near the bottom, matching what a
+      // real browser would compute.
+      Object.defineProperty(feedContainer, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(feedContainer, 'clientHeight', { value: 700, configurable: true });
+      // Simulate the user scrolling the room feed to some specific spot —
+      // handleFeedScroll records this under the 'room' key.
+      feedContainer.scrollTop = 300;
+      fireEvent.scroll(feedContainer);
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperButton = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button');
+      await user.click(whisperButton as HTMLElement);
+      const roomButton = within(sidebar).getByText('The Grand Ballroom').closest('button');
+      await user.click(roomButton as HTMLElement);
+
+      // On this SECOND visit to the room tab, a `saved` entry now exists
+      // (recorded above), so GameWindow.tsx's normal #2165 per-tab-memory
+      // path applies — not the anchor bypass (scoped to the FIRST visit
+      // only), and not a fresh scroll-to-bottom. A pre-fix, overly broad
+      // bypass ("any anchor exists for this scene" rather than "no `saved`
+      // entry yet") would have ignored the remembered 300 here every time,
+      // permanently disabling #2165's memory for the room tab the moment
+      // any anchor was ever saved.
+      expect(feedContainer.scrollTop).toBe(300);
+    });
+
+    it('never records a raw room-tab scroll position while reading a historical reference, so it cannot corrupt the position restored on Return to live (#3759 review finding I5)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=scene&referenceKey=scene:100&referencePose=1' +
+            '&referenceTimestamp=2026-01-01T00%3A00%3A00.000Z',
+        ],
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/reading history/i)).toBeInTheDocument();
+      });
+
+      // Reference mode falls `activeConvKey` back to 'room' (`conversationTabs`
+      // is undefined while referencing), so a scroll here targets the SAME
+      // per-tab memory key the live room view reads from.
+      const feedContainer = screen.getByTestId('feed-scroll-container');
+      // Real dimensions (jsdom otherwise defaults scrollHeight/clientHeight
+      // to 0, which makes ANY scrollTop spuriously read as "pinned near the
+      // bottom" and would let an unrelated later pin-to-bottom re-render
+      // reset scrollTop to 0 for a reason that has nothing to do with the
+      // read-only guard this test is actually checking).
+      Object.defineProperty(feedContainer, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(feedContainer, 'clientHeight', { value: 700, configurable: true });
+      feedContainer.scrollTop = 999;
+      fireEvent.scroll(feedContainer);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /return to live/i }));
+
+      // Without the read-only guard on handleFeedScroll, this 999 would have
+      // been recorded under 'room' while browsing the reference, and
+      // GameWindow's normal per-tab-memory path (no anchor exists in this
+      // test, so its bypass never applies either) would restore exactly that
+      // corrupted value here.
+      expect(feedContainer.scrollTop).not.toBe(999);
     });
   });
 });

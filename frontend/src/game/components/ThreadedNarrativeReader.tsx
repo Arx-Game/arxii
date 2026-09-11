@@ -62,17 +62,30 @@ function PoseReadTarget({
 }
 
 /**
- * Walks up from `start` to find the nearest scrollable ancestor (the element
- * whose content actually overflows). In Threads view the reader has no
- * scroll container of its own -- GameWindow.tsx's `feedScrollRef` div is the
- * real one -- so anchor save/restore locates it this way rather than
- * threading a ref down through GameWindow, which would couple the two
- * components more tightly than the feature needs.
+ * Walks up from `start` to find the nearest scrollable ancestor. In Threads
+ * view the reader has no scroll container of its own -- GameWindow.tsx's
+ * `feedScrollRef` div is the real one -- so anchor restore locates it this
+ * way rather than threading a ref down through GameWindow, which would
+ * couple the two components more tightly than the feature needs.
+ *
+ * Checks the computed `overflow-y` FIRST, not just current geometry
+ * (`scrollHeight > clientHeight`): GameWindow.tsx's real container is
+ * `overflow-y-auto` unconditionally (a real Tailwind class, reflected in
+ * `getComputedStyle` in production), so this resolves it correctly even
+ * when nothing currently overflows -- e.g. a scene that's still loading (no
+ * poses yet) or short enough to fit on screen. Relying on geometry alone
+ * (the original version of this function) meant a cold page load, where the
+ * reader mounts before its interactions query resolves, could never resolve
+ * a container at all on that first pass -- see the effect below for why
+ * that mattered for more than just restore.
  */
 function findScrollContainer(start: HTMLElement | null): HTMLElement | null {
   let node: HTMLElement | null = start;
   while (node) {
-    if (node.scrollHeight > node.clientHeight) return node;
+    const overflowY = window.getComputedStyle(node).overflowY;
+    if (overflowY === 'auto' || overflowY === 'scroll' || node.scrollHeight > node.clientHeight) {
+      return node;
+    }
     node = node.parentElement;
   }
   return null;
@@ -119,6 +132,19 @@ interface ThreadedNarrativeReaderProps {
   onAttachAction?: (action: ActionAttachmentInfo) => void;
   onReply?: (interaction: Interaction) => void;
   readOnly?: boolean;
+  /**
+   * Whether this render represents the scene's primary/room view, as opposed
+   * to a tab-narrowed conversation (whisper/place/target). GameWindow.tsx
+   * always renders this component with `conversationKey={sceneFeed.sceneId}`
+   * regardless of which conversation tab is active (#2165), but a
+   * tab-narrowed `interactions` prop is a *different, smaller* pose set than
+   * the room's — saving an anchor computed from it into the room's shared
+   * storage row would silently overwrite/corrupt the room's own anchor with
+   * a pose id that isn't even in the room feed (#3759 review finding I4).
+   * Defaults to `true` so standalone/test callers are unaffected; GameWindow
+   * passes `activeConvKey === 'room'`.
+   */
+  persistAnchor?: boolean;
 }
 
 interface Group {
@@ -138,6 +164,7 @@ export function ThreadedNarrativeReader({
   onAttachAction,
   onReply,
   readOnly = false,
+  persistAnchor = true,
 }: ThreadedNarrativeReaderProps) {
   const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
   const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
@@ -296,6 +323,8 @@ export function ThreadedNarrativeReader({
   const rootRef = useRef<HTMLDivElement>(null);
   const readOnlyRef = useRef(readOnly);
   readOnlyRef.current = readOnly;
+  const persistAnchorRef = useRef(persistAnchor);
+  persistAnchorRef.current = persistAnchor;
   const visibleInteractionsRef = useRef(visibleInteractions);
   visibleInteractionsRef.current = visibleInteractions;
   const collapsedRef = useRef(collapsed);
@@ -309,11 +338,17 @@ export function ThreadedNarrativeReader({
     const container = findScrollContainer(rootRef.current);
     if (!container) return;
     const target = container.querySelector<HTMLElement>(`[data-pose-id="${stored.anchor.poseId}"]`);
-    // Best effort: the anchored pose isn't in the currently loaded set (e.g.
-    // it lives on an older history page not yet fetched). Rather than fail
-    // or guess, this leaves the reader at whatever position mount/pin-to-
-    // bottom already left it at -- the acceptable fallback the spec allows.
-    if (!target) return;
+    if (!target) {
+      // Best-effort miss: the anchored pose isn't in the currently loaded/
+      // expanded set (e.g. it's inside a collapsed thread, or on an older
+      // history page not yet fetched). GameWindow.tsx no longer applies its
+      // own scroll-to-bottom fallback once this scene has ANY persisted
+      // anchor (see its own bypass condition) -- so restoring that fallback
+      // here is what keeps a miss from silently stranding the reader at the
+      // very top instead (#3759 review finding I3).
+      container.scrollTop = container.scrollHeight;
+      return;
+    }
     const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
     container.scrollTop += targetTop - stored.anchor.offsetPx;
   };
@@ -322,12 +357,15 @@ export function ThreadedNarrativeReader({
     const stored = loadConversationAnchor(conversationKeyRef.current);
     if (!stored?.anchor) return;
     const idx = chronologicalItems.findIndex((item) => String(item.id) === stored.anchor?.poseId);
-    // Best effort, deliberately reduced scope (see file-level note above the
+    if (idx === -1) {
+      // Best-effort miss, same reasoning as restoreThreadsAnchor's fallback
+      // above (#3759 review finding I3).
+      chronoVirtualizer.scrollToEnd();
+      return;
+    }
+    // Deliberately reduced scope (see file-level note above the
     // Chronological branch below): restores to the nearest loaded index at
-    // the top of the viewport, not the exact recorded pixel offset. If the
-    // pose isn't loaded at all, this leaves the virtualizer at its default
-    // (latest-activity) position.
-    if (idx === -1) return;
+    // the top of the viewport, not the exact recorded pixel offset.
     chronoVirtualizer.scrollToIndex(idx, { align: 'start' });
   };
 
@@ -372,25 +410,59 @@ export function ThreadedNarrativeReader({
   // was reading -- only where it lands on screen -- so simply re-running the
   // same restore whenever one of these changes keeps the anchored pose in
   // the same relative viewport position after the change.
+  //
+  // Deferred via requestAnimationFrame rather than measured synchronously
+  // (#3759 review finding I1): in the real component tree, `DisplaySettings`
+  // (which applies these prefs as a CSS custom property on
+  // `document.documentElement`) is a SIBLING rendered after this reader
+  // (GameLayout.tsx: `center` before `sidebar`). React flushes passive
+  // effects in tree order, so this effect's synchronous body would run
+  // BEFORE `DisplaySettings`'s own effect has actually applied the new CSS
+  // variable -- measuring the OLD layout and computing a near-zero,
+  // effectively-a-no-op delta. rAF fires after all of this commit's passive
+  // effects (and the browser's/jsdom's next paint), by which point the CSS
+  // variable is guaranteed to have been applied regardless of which
+  // component's effect happened to run first.
   useEffect(() => {
     if (readOnly) return;
-    restoreAnchor();
+    const rafId = requestAnimationFrame(() => {
+      restoreAnchor();
+    });
+    return () => cancelAnimationFrame(rafId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preferences.proseSize, preferences.proseFamily, preferences.measure]);
 
-  // Threads-view scroll listener: attaches once per Threads-view session
-  // directly to the ancestor GameWindow.tsx owns (this reader has no scroll
-  // container of its own in that view), debounced so a save only fires once
-  // scrolling has settled rather than on every scroll tick.
+  // Threads-view scroll listener (#3759 review finding C1): attached at
+  // `document` with `capture: true` rather than resolved-once onto a
+  // specific ancestor element. Native 'scroll' events don't bubble, but DO
+  // propagate during the capture phase, so this single listener sees a
+  // scroll on ANY descendant scrollable ancestor -- including
+  // GameWindow.tsx's real `feedScrollRef` div -- without this reader ever
+  // needing to pre-resolve which element that is.
+  //
+  // The original version of this effect called `findScrollContainer` once,
+  // at mount, and permanently gave up if it returned `null` -- which it
+  // always does on a cold page load: this component mounts (per
+  // GameWindow.tsx) the instant `sceneId` is known, while
+  // `useSceneInteractions`'s query is still in flight, so nothing has
+  // rendered/overflowed yet. No listener was ever attached for the life of
+  // that mount, so the entire save half of the feature was dead in
+  // production despite passing tests (the tests' global
+  // scrollHeight/clientHeight stub made a container resolve unconditionally,
+  // masking this). Listening at `document` sidesteps needing to resolve
+  // anything ahead of time at all.
   useEffect(() => {
     if (chronological) return;
-    const container = findScrollContainer(rootRef.current);
-    if (!container) return;
     let timeout: ReturnType<typeof setTimeout> | undefined;
-    const handleScroll = () => {
+    const handleScroll = (event: Event) => {
+      const container = event.target;
+      if (!(container instanceof HTMLElement) || !rootRef.current) return;
+      if (!container.contains(rootRef.current)) return;
       if (timeout) clearTimeout(timeout);
       timeout = setTimeout(() => {
-        if (readOnlyRef.current) return; // never persist a reference-mode scroll
+        // never persist a reference-mode scroll, or one made while a
+        // different conversation tab is active (#3759 review findings I3/I4)
+        if (readOnlyRef.current || !persistAnchorRef.current) return;
         const found = findTopVisiblePoseId(container);
         if (!found) return;
         const threadId =
@@ -402,9 +474,9 @@ export function ThreadedNarrativeReader({
         });
       }, 300);
     };
-    container.addEventListener('scroll', handleScroll, { passive: true });
+    document.addEventListener('scroll', handleScroll, { capture: true, passive: true });
     return () => {
-      container.removeEventListener('scroll', handleScroll);
+      document.removeEventListener('scroll', handleScroll, true);
       if (timeout) clearTimeout(timeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -417,7 +489,7 @@ export function ThreadedNarrativeReader({
   const handleChronoScroll = () => {
     if (chronoScrollTimeout.current) clearTimeout(chronoScrollTimeout.current);
     chronoScrollTimeout.current = setTimeout(() => {
-      if (readOnly) return;
+      if (readOnly || !persistAnchor) return;
       const container = chronoParentRef.current;
       if (!container) return;
       const found = findTopVisiblePoseId(container);

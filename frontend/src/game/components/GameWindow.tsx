@@ -161,32 +161,36 @@ export function GameWindow({
   useEffect(() => {
     const el = feedScrollRef.current;
     if (!el) return;
+    const saved = scrollPositionsRef.current.get(activeConvKey);
     // ThreadedNarrativeReader.tsx owns restoring its own pose-identity anchor
     // (#3759 Decision #3) for the room view -- this raw-scrollTop bookkeeping
-    // must not fight it. Without this check, either branch below would
-    // clobber that restore: the `saved` branch can hold a stale/corrupted
-    // offset (e.g. one written under the 'room' fallback key while briefly
-    // viewing a historical reference — see returnToLive), and the `else`
-    // branch unconditionally jumps to the bottom, which would run right
-    // after the anchor restore on first mount (child effects fire before
-    // parent effects) and undo it. Scoped to `activeConvKey === 'room'`
-    // specifically so switching between open conversation *tabs* (a
-    // different, per-tab concern this Map still owns) is unaffected.
+    // must not fight it on the FIRST visit to the room view this session
+    // (`saved === undefined`, i.e. this Map has never recorded a 'room'
+    // position yet): the `else` branch below would otherwise unconditionally
+    // jump to the bottom, which runs right after the anchor restore on first
+    // mount (child effects fire before parent effects) and undoes it.
+    //
+    // Scoped to "no `saved` entry yet" rather than "an anchor exists at all"
+    // (#3759 review finding I2): once the reader has restored (or the user
+    // has scrolled) even once, a real scroll event records a 'room' entry
+    // here (see handleFeedScroll below) -- from that point on this effect's
+    // normal `saved` branch is what should run on every return to the room
+    // tab, exactly like every other tab, so #2165's per-tab memory keeps
+    // working rather than being permanently disabled the first time any
+    // anchor is ever saved for this scene.
     if (
       activeConvKey === 'room' &&
+      saved === undefined &&
       sceneFeed &&
       loadConversationAnchor(sceneFeed.sceneId)?.anchor
     ) {
       pinnedRef.current = false;
+    } else if (saved !== undefined) {
+      el.scrollTop = saved;
+      pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
     } else {
-      const saved = scrollPositionsRef.current.get(activeConvKey);
-      if (saved !== undefined) {
-        el.scrollTop = saved;
-        pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
-      } else {
-        el.scrollTop = el.scrollHeight;
-        pinnedRef.current = true;
-      }
+      el.scrollTop = el.scrollHeight;
+      pinnedRef.current = true;
     }
     // Prune scroll offsets for tabs that are no longer open (#2165 review
     // fold-in) — otherwise a closed tab's entry lingers in the map forever.
@@ -210,6 +214,15 @@ export function GameWindow({
   }, [interactionCount, activeConvKey]);
 
   const handleFeedScroll = () => {
+    // Never record a position while browsing a historical reference (#3759
+    // review finding I5): the reference view falls back `activeConvKey` to
+    // 'room' (`conversationTabs` is undefined in reference mode), so without
+    // this guard a reference-mode scroll would corrupt the room tab's own
+    // remembered raw offset under that same key -- and unlike the
+    // downstream bypass in the effect above (which only masks the symptom
+    // once ANY anchor already exists), this fixes the corruption at the
+    // source, including for a scene that has no anchor saved yet at all.
+    if (reference) return;
     const el = feedScrollRef.current;
     if (!el) return;
     scrollPositionsRef.current.set(activeConvKey, el.scrollTop);
@@ -325,6 +338,7 @@ export function GameWindow({
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
             ref={feedScrollRef}
             onScroll={handleFeedScroll}
+            data-testid="feed-scroll-container"
           >
             {referenceLoading && reference && (
               <div
@@ -390,6 +404,7 @@ export function GameWindow({
                 onAttachAction={onAttachAction}
                 onReply={onReply}
                 readOnly={Boolean(reference)}
+                persistAnchor={activeConvKey === 'room'}
               />
             )}
           </div>

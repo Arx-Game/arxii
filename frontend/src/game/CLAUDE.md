@@ -26,7 +26,17 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
-  when the reader was already at the bottom for that tab. The multi-puppet
+  when the reader was already at the bottom for that tab. **The room tab is
+  the one exception** (#3759): `ThreadedNarrativeReader.tsx` owns restoring
+  its own pose-identity anchor for the room view, so this Map's own restore
+  only applies there once it already holds a 'room' entry (i.e. from the
+  SECOND visit onward this session) — on the very first visit, if a
+  persisted anchor exists for the scene, GameWindow defers to the reader's
+  restore instead of racing it with a scroll-to-bottom. `handleFeedScroll`
+  also never records a position while a historical reference (`reference`
+  prop) is being read, since that view falls `activeConvKey` back to 'room'
+  too and would otherwise corrupt the live room position under the same key.
+  The multi-puppet
   session tab bar carries the same direct/ambient `AttentionBadge` as
   `GameTopBar` (#2166), keyed per session name via each character's
   `primary_persona_id` — with one guard `GameTopBar` doesn't need: the
@@ -116,7 +126,23 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   prop came from). Threads view default-collapses all but the most recently
   active thread; Chronological view is a flat time-ordered alternative sharing
   the same read/collapse state. Anchors and collapse state persist per
-  conversation via `playPreferences.ts`'s LRU store (#3759).
+  conversation via `playPreferences.ts`'s LRU store (#3759). **Save/restore
+  ownership split with `GameWindow.tsx`:** this component owns restoring its
+  own pose-identity anchor (mount, the Return-to-live `readOnly` transition,
+  and font/measure preference changes — the last deferred a tick via
+  `requestAnimationFrame` so it measures AFTER `DisplaySettings.tsx`'s
+  sibling effect has actually applied the changed CSS variable, not before);
+  `GameWindow.tsx` owns its OWN separate, ephemeral per-tab raw-scrollTop
+  memory (#2165) and only steps out of the way for the anchor on the room
+  tab's first visit each session (see its own doc entry above). The Threads-
+  view scroll listener attaches at `document` with `capture: true` rather
+  than resolving a specific ancestor once at mount — this component has no
+  scroll container of its own in that view (GameWindow's own div is the real
+  one), and resolving it just once, at mount, could permanently miss it on a
+  cold load where the scene starts empty. `persistAnchor` (prop, default
+  `true`) must be `false` whenever a non-room conversation tab is the one
+  actually on screen, since `conversationKey` is always scoped to the scene
+  regardless of tab — GameWindow passes `activeConvKey === 'room'`.
 - **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `NarrativeMessageReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.

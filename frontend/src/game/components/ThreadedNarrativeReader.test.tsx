@@ -1,13 +1,14 @@
-import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
+import { DisplaySettings } from './DisplaySettings';
 import {
   DEFAULT_PLAY_PREFERENCES,
   loadConversationAnchor,
   saveConversationAnchor,
   savePlayPreferences,
-  usePlayPreferences,
 } from '../playPreferences';
 import { markConversationRead } from '../playQueries';
 import type { Interaction } from '@/scenes/types';
@@ -65,14 +66,47 @@ const interaction = (id: number, content: string, thread_id: string): Interactio
   entry_endorsed_by_me: false,
 });
 
-// Anchor save/restore (#3759 Wave 6) locates poses via `getBoundingClientRect`
-// and locates its scroll container via `scrollHeight > clientHeight` — none
-// of which jsdom computes from real layout. `poseOffsets` maps a pose id to
-// the `top` its element's getBoundingClientRect should report (relative to a
-// containerTop of 0, since the container itself never carries a
+// Anchor save/restore (#3759 Wave 6) locates poses via `getBoundingClientRect`,
+// none of which jsdom computes from real layout. `poseOffsets` maps a pose id
+// to the `top` its element's getBoundingClientRect should report (relative to
+// a containerTop of 0, since the container itself never carries a
 // `data-pose-id` and so always falls through to offset 0 below); each test
 // sets it before rendering/scrolling to simulate a specific on-screen layout.
+// `poseOffsetsResolver`, when set, takes precedence over the flat map — used
+// by the one test that needs a pose's simulated position to depend on live
+// DOM state (a real font-size CSS variable) rather than a fixed number.
 let poseOffsets: Record<string, number> = {};
+let poseOffsetsResolver: ((poseId: string) => number | undefined) | null = null;
+
+/**
+ * Wraps `ui` in a REAL scrollable ancestor (inline `overflow-y: auto`,
+ * mirroring GameWindow.tsx's actual `feedScrollRef` div) so the anchor
+ * system's `findScrollContainer` (used by every restore path) has something
+ * genuine to resolve, without relying on a global geometry/style stub.
+ *
+ * An earlier version of this suite stubbed `scrollHeight`/`clientHeight` to
+ * fixed values on `HTMLElement.prototype` globally, which made the reader's
+ * OWN root element (never the real scroll container in production) resolve
+ * as if it were one — masking a real production bug (#3759 review finding
+ * C1) where the container-resolution effect ran once at mount and gave up
+ * permanently if nothing had overflowed yet, which is always true on a cold
+ * page load. This helper renders a container that's genuinely resolvable
+ * (via computed `overflow-y`, matching `findScrollContainer`'s primary
+ * check) so restore tests exercise the real resolution path instead.
+ */
+function renderInScrollAncestor(ui: ReactElement) {
+  const wrap = (inner: ReactElement) => (
+    <div data-testid="scroll-ancestor" style={{ overflowY: 'auto', height: '700px' }}>
+      {inner}
+    </div>
+  );
+  const utils = render(wrap(ui));
+  return {
+    ...utils,
+    ancestor: screen.getByTestId('scroll-ancestor'),
+    rerenderInner: (inner: ReactElement) => utils.rerender(wrap(inner)),
+  };
+}
 
 describe('ThreadedNarrativeReader', () => {
   let offsetHeightSpy: ReturnType<typeof vi.spyOn>;
@@ -85,7 +119,9 @@ describe('ThreadedNarrativeReader', () => {
     // Each test uses conversationKey="scene:1" — clear so per-conversation
     // collapse state saved by one test never leaks into the next.
     window.localStorage.clear();
+    document.documentElement.style.removeProperty('--play-prose-size');
     poseOffsets = {};
+    poseOffsetsResolver = null;
 
     // jsdom has no layout engine, so every element's offsetHeight is always
     // 0. @tanstack/react-virtual (Chronological branch) reads the scroll
@@ -97,19 +133,35 @@ describe('ThreadedNarrativeReader', () => {
     // virtualizer computes a real, bounded window in every test.
     offsetHeightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(700);
 
-    // findScrollContainer (#3759 Wave 6) walks up from the reader's own root
-    // looking for the first ancestor whose content overflows. Stubbing this
-    // globally to always be true makes the reader's own outermost div (the
-    // first node checked) resolve as "the container" in every test — exactly
-    // mirroring GameWindow.tsx's real `feedScrollRef` div in production,
-    // without needing an extra wrapper element here.
-    scrollHeightSpy = vi.spyOn(HTMLElement.prototype, 'scrollHeight', 'get').mockReturnValue(2000);
-    clientHeightSpy = vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(700);
+    // The Chronological virtualizer's own internal scroll-offset math
+    // (`getMaxScrollOffset = scrollHeight - clientHeight`, used by
+    // scrollToIndex/scrollToEnd) needs a real, positive overflow on ITS OWN
+    // container specifically -- scoped by testid rather than stubbed
+    // globally for every element. A global stub here would make
+    // `findScrollContainer`'s geometry fallback resolve the reader's own
+    // root as if IT were the scroll container in Threads view too, exactly
+    // the production masking bug #3759 review finding C1 describes (this
+    // same function backs both views' restore).
+    scrollHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.dataset.testid === 'chrono-scroll-container' ? 8000 : 0;
+      });
+    clientHeightSpy = vi
+      .spyOn(HTMLElement.prototype, 'clientHeight', 'get')
+      .mockImplementation(function (this: HTMLElement) {
+        return this.dataset.testid === 'chrono-scroll-container' ? 700 : 0;
+      });
+
     rectSpy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
       this: HTMLElement
     ) {
       const poseId = this.dataset?.poseId;
-      const top = poseId !== undefined ? (poseOffsets[poseId] ?? 0) : 0;
+      let top = 0;
+      if (poseId !== undefined) {
+        const resolved = poseOffsetsResolver?.(poseId);
+        top = resolved !== undefined ? resolved : (poseOffsets[poseId] ?? 0);
+      }
       return {
         top,
         bottom: top,
@@ -131,6 +183,7 @@ describe('ThreadedNarrativeReader', () => {
     scrollHeightSpy.mockRestore();
     clientHeightSpy.mockRestore();
     rectSpy.mockRestore();
+    document.documentElement.style.removeProperty('--play-prose-size');
   });
 
   it('keeps explicit threads collapsed and exposes keyboard accessible controls', async () => {
@@ -445,7 +498,7 @@ describe('ThreadedNarrativeReader', () => {
     expect(markConversationRead).toHaveBeenCalledWith('scene:1', '2026-01-01T00:02:00Z');
   });
 
-  describe('reading-position anchors (#3759 Wave 6)', () => {
+  describe('reading-position anchors (#3759 Wave 6 + review fix pass)', () => {
     it('does not save an anchor synchronously on scroll -- only after the debounce settles', async () => {
       poseOffsets = { 1: -50, 2: 100 };
       render(
@@ -470,6 +523,48 @@ describe('ThreadedNarrativeReader', () => {
         poseId: '1',
         threadId: 'thread-a',
         offsetPx: -50,
+      });
+    });
+
+    it('attaches its scroll listener even when the scene starts empty and gets data later (#3759 review finding C1: a cold page load)', async () => {
+      // Mirrors a real page load: this component mounts (per GameWindow.tsx)
+      // the instant sceneId is known, while useSceneInteractions's query is
+      // still in flight, so `interactions` is `[]` on the very first render
+      // -- nothing has rendered/overflowed yet. A container-resolution
+      // effect that resolves once at mount and permanently gives up if that
+      // resolution fails (the pre-fix version of this listener) would never
+      // attach for the life of this mount, no matter how much data arrived
+      // afterward -- the entire save half of the feature would be dead. This
+      // uses `renderInScrollAncestor` (a real ancestor, not the global
+      // scrollHeight/clientHeight stub the pre-fix suite relied on) so the
+      // scenario is actually representative.
+      const { rerenderInner, ancestor } = renderInScrollAncestor(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      expect(screen.getByText('New conversation')).toBeInTheDocument();
+
+      poseOffsets = { 1: -25 };
+      rerenderInner(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+
+      fireEvent.scroll(ancestor);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      expect(loadConversationAnchor('scene:1')?.anchor).toEqual({
+        poseId: '1',
+        threadId: 'thread-a',
+        offsetPx: -25,
       });
     });
 
@@ -534,12 +629,35 @@ describe('ThreadedNarrativeReader', () => {
       expect(stored?.collapsed).toEqual([]);
     });
 
+    it('does not persist an anchor while a non-room conversation tab is active (#3759 review finding I4, persistAnchor=false)', async () => {
+      // GameWindow.tsx always uses `conversationKey={sceneFeed.sceneId}`
+      // regardless of which conversation tab is active (#2165), but a
+      // tab-narrowed `interactions` prop is a different, smaller pose set
+      // than the room's -- so a scroll while a non-room tab is active must
+      // never write into the room's shared storage row.
+      poseOffsets = { 1: -20 };
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+          persistAnchor={false}
+        />
+      );
+
+      fireEvent.scroll(screen.getByLabelText('Story reader'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      expect(loadConversationAnchor('scene:1')).toBeNull();
+    });
+
     it('restores scroll position to the anchored pose once real data has arrived (mirrors the default-collapse async-arrival timing fix)', () => {
       saveConversationAnchor('scene:1', {
         anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
         collapsed: [],
       });
-      const { rerender } = render(
+      const { rerenderInner, ancestor } = renderInScrollAncestor(
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
@@ -547,12 +665,11 @@ describe('ThreadedNarrativeReader', () => {
           fetchNextPage={vi.fn()}
         />
       );
-      const root = screen.getByLabelText('Story reader');
       // No poses rendered yet — nothing to restore into, and nothing throws.
-      expect(root.scrollTop).toBe(0);
+      expect(ancestor.scrollTop).toBe(0);
 
       poseOffsets = { 2: 300 };
-      rerender(
+      rerenderInner(
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
@@ -562,27 +679,42 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       // scrollTop += (pose 2's current top, 300) - (its recorded offset, 40).
-      expect(root.scrollTop).toBe(260);
+      expect(ancestor.scrollTop).toBe(260);
     });
 
-    it("falls back to the reader's default position when the anchored pose is not in the currently loaded set", () => {
+    it('falls back to the bottom when the anchored pose is not in the currently loaded set (#3759 review finding I3)', () => {
+      // GameWindow.tsx no longer applies its own scroll-to-bottom fallback
+      // once this scene has ANY persisted anchor (see its own bypass
+      // condition), so the reader must restore that fallback itself on a
+      // miss rather than silently stranding the reader at the top.
       saveConversationAnchor('scene:1', {
         anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
         collapsed: [],
       });
       poseOffsets = { 1: 0 };
-      render(
+      const props = (readOnly: boolean) => (
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
           interactions={[interaction(1, 'first', 'thread-a')]}
           fetchNextPage={vi.fn()}
+          readOnly={readOnly}
         />
       );
+      // Mount read-only first (restore doesn't run yet) so `ancestor` exists
+      // to stub `scrollHeight` on directly -- an own-property override,
+      // scoped to just this element, rather than a prototype-wide spy that
+      // would affect container resolution itself (see the shared
+      // scrollHeight/clientHeight mocks in beforeEach above for why that
+      // matters).
+      const { rerenderInner, ancestor } = renderInScrollAncestor(props(true));
+      Object.defineProperty(ancestor, 'scrollHeight', { value: 5000, configurable: true });
+      rerenderInner(props(false)); // triggers the restore now that the stub is in place
 
-      // Best-effort: pose 999 (e.g. on an older, not-yet-fetched history
-      // page) isn't found, so nothing crashes and scrollTop is left alone.
-      expect(screen.getByLabelText('Story reader').scrollTop).toBe(0);
+      // Best-effort miss: pose 999 (e.g. on an older, not-yet-fetched
+      // history page) isn't found, so this falls back to the bottom instead
+      // of leaving scrollTop at 0.
+      expect(ancestor.scrollTop).toBe(5000);
       expect(screen.getByText('first')).toBeInTheDocument();
     });
 
@@ -612,7 +744,7 @@ describe('ThreadedNarrativeReader', () => {
         collapsed: [],
       });
       poseOffsets = { 2: 300 };
-      render(
+      const { ancestor } = renderInScrollAncestor(
         <ThreadedNarrativeReader
           sceneId="1"
           conversationKey="scene:1"
@@ -622,7 +754,7 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
 
-      expect(screen.getByLabelText('Story reader').scrollTop).toBe(0);
+      expect(ancestor.scrollTop).toBe(0);
     });
 
     it('restores the prior live anchor when readOnly flips back to false (Return to live, Decision #5)', () => {
@@ -641,62 +773,84 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       poseOffsets = { 2: 40 };
-      const { rerender } = render(props(false));
-      const root = screen.getByLabelText('Story reader');
+      const { rerenderInner, ancestor } = renderInScrollAncestor(props(false));
       // Live mount: pose 2 is already sitting exactly at its recorded offset.
-      expect(root.scrollTop).toBe(0);
+      expect(ancestor.scrollTop).toBe(0);
 
       // Enter a historical reference on the SAME component instance (as
       // GameWindow.tsx does when the reference targets the same scene) —
       // mirrors a cached reference that never shows a loading interstitial,
       // so this is the same mounted instance the whole way through.
-      rerender(props(true));
+      rerenderInner(props(true));
 
       // Layout shifted while away (e.g. new poses arrived live in the
       // background) — pose 2 now sits further down.
       poseOffsets = { 2: 300 };
-      rerender(props(false));
+      rerenderInner(props(false));
 
       // Restored again on the readOnly:true -> false transition, even
       // though the reader's one-shot initial-mount restore already ran
       // above — proving this is the explicit return-to-live re-anchor, not
       // just the initial seed re-firing.
-      expect(root.scrollTop).toBe(260);
+      expect(ancestor.scrollTop).toBe(260);
     });
 
-    it('keeps the anchored pose in the same relative position after a prose-size/measure preference change (font/measure survival, Acceptance A08)', () => {
+    it('defers the font/measure re-anchor until AFTER DisplaySettings applies the CSS variable (real GameLayout effect ordering, #3759 review finding I1)', async () => {
+      // GameLayout.tsx renders `center` (GameWindow -> this reader) BEFORE
+      // `sidebar` (PlaySidebar -> DisplaySettings), and React flushes
+      // passive effects in that tree order -- so on a real preference
+      // update, this reader's own effect fires before DisplaySettings' own
+      // effect has actually applied the new CSS variable. A prior version
+      // of this test drove the update through a decoupled `renderHook` and
+      // mutated the fake layout BEFORE calling `update()`, which inverted
+      // that ordering by construction and never actually exercised it. This
+      // one renders the reader and the REAL `DisplaySettings` component as
+      // siblings (reader first) and makes the simulated layout depend on
+      // whatever the CSS variable's CURRENT value is, so it only reports
+      // the new position once DisplaySettings' effect has actually run.
       saveConversationAnchor('scene:1', {
         anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
         collapsed: [],
       });
-      poseOffsets = { 2: 40 };
+      document.documentElement.style.setProperty('--play-prose-size', '14px');
+      poseOffsetsResolver = (poseId) => {
+        if (poseId !== '2') return undefined;
+        const applied = document.documentElement.style.getPropertyValue('--play-prose-size');
+        return applied === '18px' ? 220 : 40;
+      };
+
       render(
-        <ThreadedNarrativeReader
-          sceneId="1"
-          conversationKey="scene:1"
-          interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
-          fetchNextPage={vi.fn()}
-        />
+        <>
+          <div data-testid="scroll-ancestor" style={{ overflowY: 'auto', height: '700px' }}>
+            <ThreadedNarrativeReader
+              sceneId="1"
+              conversationKey="scene:1"
+              interactions={[
+                interaction(1, 'first', 'thread-a'),
+                interaction(2, 'second', 'thread-a'),
+              ]}
+              fetchNextPage={vi.fn()}
+            />
+          </div>
+          <DisplaySettings />
+        </>
       );
-      const root = screen.getByLabelText('Story reader');
-      expect(root.scrollTop).toBe(0);
+      const ancestor = screen.getByTestId('scroll-ancestor');
+      // Initial restore: pose 2 already sitting exactly at its recorded
+      // offset (the CSS var is still '14px', so the resolver returns 40).
+      expect(ancestor.scrollTop).toBe(0);
 
-      // A font-size change made elsewhere (DisplaySettings.tsx) is a second,
-      // independent usePlayPreferences() consumer — the two only observe
-      // each other through the shared external store (#3759 Wave 6
-      // playPreferences.ts fix; a plain per-instance useState would leave
-      // the reader's own `preferences.proseSize` stale forever).
-      const otherInstance = renderHook(() => usePlayPreferences());
-      // The larger font reflows everything below pose 1, moving pose 2
-      // further down the page.
-      poseOffsets = { 2: 220 };
-      act(() => {
-        otherInstance.result.current.update({ proseSize: 18 });
+      fireEvent.change(screen.getByLabelText('Prose text size'), { target: { value: '18' } });
+
+      // If this reader's restore ran synchronously (not deferred), it would
+      // run before DisplaySettings' own effect (real tree order) and see
+      // the STALE '14px' value -- the resolver would still return 40, and
+      // scrollTop would stay 0. Deferring via requestAnimationFrame lets
+      // DisplaySettings' effect apply the new CSS variable first, so the
+      // resolver now returns 220 and this computes the correct delta.
+      await waitFor(() => {
+        expect(ancestor.scrollTop).toBe(180);
       });
-
-      // Re-anchored: scrollTop += (pose 2's new top, 220) - (its recorded
-      // offset, 40) — the same pose stays at the same relative position.
-      expect(root.scrollTop).toBe(180);
     });
 
     it('debounces anchor saves in Chronological view too, using its own virtualized scroll container', async () => {
@@ -721,6 +875,26 @@ describe('ThreadedNarrativeReader', () => {
         threadId: 'thread-a',
         offsetPx: -40,
       });
+    });
+
+    it('does not persist a Chronological-view anchor while a non-room conversation tab is active (#3759 review finding I4)', async () => {
+      poseOffsets = { 1: -40 };
+      const user = userEvent.setup();
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+          persistAnchor={false}
+        />
+      );
+      await user.click(screen.getByRole('button', { name: /chronological/i }));
+
+      fireEvent.scroll(screen.getByTestId('chrono-scroll-container'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      expect(loadConversationAnchor('scene:1')).toBeNull();
     });
 
     it('restores by virtualized index when mounted directly into Chronological view (documented reduced scope: nearest loaded index, not exact pixel offset)', async () => {
@@ -769,6 +943,29 @@ describe('ThreadedNarrativeReader', () => {
       // is why Chronological view's restore is documented (see
       // restoreChronoAnchor's own comment) as reduced-scope in the first
       // place. Threads view's restore, covered exhaustively above, is exact.
+      expect(chronoContainer.scrollTop).toBeGreaterThan(0);
+    });
+
+    it('falls back to the end of the loaded Chronological page when the anchored pose is not found (#3759 review finding I3)', () => {
+      savePlayPreferences({ ...DEFAULT_PLAY_PREFERENCES, readerMode: 'chronological' });
+      saveConversationAnchor('scene:1', {
+        anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+        collapsed: [],
+      });
+
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      const chronoContainer = screen.getByTestId('chrono-scroll-container');
+
+      // scrollToEnd's own scrollTo() write (polyfilled above) moves scrollTop
+      // away from 0 -- a no-op/pre-fix implementation (idx === -1 silently
+      // returning) would leave it there.
       expect(chronoContainer.scrollTop).toBeGreaterThan(0);
     });
   });
