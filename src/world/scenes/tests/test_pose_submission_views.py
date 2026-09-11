@@ -7,7 +7,6 @@ authorship, and a 403 would still confirm the row exists.
 
 import uuid
 
-from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
@@ -32,18 +31,9 @@ class PoseSubmissionViewTests(APITestCase):
         cls.other_account, cls.other_character, cls.other_persona = build_account()
 
     def _url(self, client_request_id: uuid.UUID) -> str:
-        return reverse(
-            "pose-submission-detail",
-            kwargs={"client_request_id": str(client_request_id)},
-        )
-
-    def test_url_matches_confirmed_spec_path(self) -> None:
-        """Guards the literal path the spec names (#3760 Task 6 Interfaces)."""
-        request_id = uuid.uuid4()
-        self.assertEqual(
-            self._url(request_id),
-            f"/api/scenes/submissions/{request_id}/",
-        )
+        # Plain-APIView path (matches the api/play/... siblings in
+        # play_views.py / test_play_views.py -- a literal path, not reverse()).
+        return f"/api/play/submissions/{client_request_id}/"
 
     def test_owner_can_look_up_their_own_submission(self) -> None:
         request_id = uuid.uuid4()
@@ -91,10 +81,10 @@ class PoseSubmissionViewTests(APITestCase):
             mode=InteractionMode.POSE,
         )
         response = self.client.get(self._url(request_id))
-        self.assertIn(
-            response.status_code,
-            (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN),
-        )
+        # Matches the api/play/... sibling convention (test_play_views.py's
+        # test_reader_endpoints_require_authentication): this project's DRF
+        # auth config returns 403, not 401, for an unauthenticated request.
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_endpoint_is_read_only(self) -> None:
         """No create/update/delete is exposed on this lookup."""
@@ -121,3 +111,9 @@ class PoseSubmissionViewTests(APITestCase):
             self.client.delete(url).status_code,
             status.HTTP_405_METHOD_NOT_ALLOWED,
         )
+
+    def test_malformed_client_request_id_404s(self) -> None:
+        """A non-UUID path segment never matches the route at all (404, not 500)."""
+        self.client.force_authenticate(user=self.account)
+        response = self.client.get("/api/play/submissions/not-a-uuid/")
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

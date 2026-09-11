@@ -13,7 +13,6 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
-    PoseSubmission,
     ReactionEmoji,
     Scene,
 )
@@ -885,26 +884,6 @@ class ReplyTargetSerializer(serializers.Serializer):
         if not timezone.is_aware(attrs["timestamp"]):
             raise serializers.ValidationError(_REPLY_TARGET_TIMEZONE_ERROR)
         return attrs
-
-
-class PoseSubmissionSerializer(serializers.Serializer):
-    """Read serializer for the writer-only submission lookup endpoint (#3760).
-
-    Exposes only what a client needs to answer "did my submission land?" --
-    never the persona or content, which the client already holds locally.
-    """
-
-    interaction_id = serializers.SerializerMethodField()
-    replayed = serializers.SerializerMethodField()
-
-    def get_interaction_id(self, obj: PoseSubmission) -> int | None:
-        return obj.interaction_id
-
-    def get_replayed(self, _obj: PoseSubmission) -> bool:
-        # Every row this endpoint can return already represents an accepted,
-        # persisted submission -- a lookup never creates one, so a found row
-        # is always a replay from the caller's perspective.
-        return True
 
 
 class PoseSubmitSerializer(serializers.Serializer):

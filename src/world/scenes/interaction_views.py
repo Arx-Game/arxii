@@ -40,7 +40,6 @@ from world.scenes.interaction_serializers import (
     InteractionFavoriteSerializer,
     InteractionListSerializer,
     InteractionReactionSerializer,
-    PoseSubmissionSerializer,
     PoseSubmitSerializer,
     ReactionEmojiSerializer,
 )
@@ -57,7 +56,6 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
-    PoseSubmission,
     ReactionEmoji,
     Scene,
     SceneParticipation,
@@ -492,33 +490,6 @@ class InteractionViewSet(
         )
         return Response(
             {**out_serializer.data, "replayed": result.replayed}, status=response_status
-        )
-
-
-class PoseSubmissionPagination(PageNumberPagination):
-    page_size = 20
-
-
-class PoseSubmissionViewSet(viewsets.ReadOnlyModelViewSet):
-    """Writer-only lookup: has my submission landed? (#3760)
-
-    Scoped to the requesting account's own personas via ``get_account_personas``
-    -- the same account-scoping seam ``InteractionViewSet``'s permissions use
-    -- so it never exposes another account's submission state. A non-owner's
-    lookup 404s rather than 403ing: a resend attempt is not proof of
-    authorship, and a 403 would still confirm the row exists.
-    """
-
-    serializer_class = PoseSubmissionSerializer
-    permission_classes = [IsAuthenticated]
-    pagination_class = PoseSubmissionPagination
-    lookup_field = "client_request_id"
-    lookup_value_regex = "[0-9a-fA-F-]{36}"
-
-    def get_queryset(self) -> QuerySet[PoseSubmission]:
-        persona_ids = get_account_personas(self.request)
-        return PoseSubmission.objects.filter(persona_id__in=persona_ids).select_related(
-            "interaction"
         )
 
 
