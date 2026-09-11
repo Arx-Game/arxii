@@ -887,10 +887,12 @@ def idempotent_record_interaction(
     """Idempotency-checked wrapper around `record_interaction` (#3760).
 
     Looks up an existing `PoseSubmission` for (persona, client_request_id) first.
-    Found + `comparison_fields` match the stored Interaction's same-named
-    attributes: return that Interaction, nothing recomputed (no re-roll, no
-    duplicate row). Found + any field differs: a `payload_conflict` (the caller
-    reused a request id for genuinely different content - a client bug, not a
+    Found + no `Interaction` stored (an ephemeral-scene acceptance - `record_interaction`
+    returns `None` there, nothing is ever persisted to compare against): a clean replay,
+    never a conflict - there is nothing to recompute either way. Found + `comparison_fields`
+    match the stored Interaction's same-named attributes: return that Interaction, nothing
+    recomputed (no re-roll, no duplicate row). Found + any field differs: a `payload_conflict`
+    (the caller reused a request id for genuinely different content - a client bug, not a
     legitimate retry). Not found: run the real work via `record_interaction` and
     write the `PoseSubmission` row in the same transaction; a concurrent duplicate
     insert (two near-simultaneous retries) raises `IntegrityError`, which is
@@ -904,9 +906,12 @@ def idempotent_record_interaction(
     )
     if existing is not None:
         stored = existing.interaction
-        if stored is not None and all(
-            getattr(stored, field) == value for field, value in comparison_fields.items()
-        ):
+        if stored is None:
+            # Ephemeral-scene acceptance: nothing was persisted the first time either, so
+            # there is nothing to compare against and nothing left to (re)execute - a clean
+            # replay, never a conflict.
+            return IdempotentSubmissionResult(interaction=None, replayed=True, conflict=False)
+        if all(getattr(stored, field) == value for field, value in comparison_fields.items()):
             return IdempotentSubmissionResult(interaction=stored, replayed=True, conflict=False)
         return IdempotentSubmissionResult(interaction=None, replayed=False, conflict=True)
 
