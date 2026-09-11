@@ -1036,6 +1036,71 @@ describe('ThreadedNarrativeReader', () => {
       expect(ancestor.querySelector('[data-pose-id="5"]')).not.toBeNull();
     });
 
+    it("resets threadWindows on Return to live so a COLLIDING thread key's stale reference-mode window is never reused against the live array (#3759 Wave 9 fix round 1 finding I-3)", () => {
+      // Unlike the test above (deliberately non-colliding 'thread-a'/
+      // 'thread-ref' keys, which passes whether or not the reset actually
+      // fires -- see its own updated comment), THIS test uses the SAME
+      // thread_id ('thread-a') in both the live and reference `interactions`
+      // arrays, with the reference's own version smaller and different (5
+      // poses, ids 201-205, vs. live's 30, ids 1-30). If the render-time
+      // reset didn't clear `threadWindows` on the readOnly transition, a
+      // stale `{ start: 0, end: 5 }` entry set while widening the reference
+      // thread would get clamped and reused against the live 30-pose
+      // 'thread-a' on return -- silently showing its OLDEST 5 poses instead
+      // of the correct default tail (its newest 20).
+      const live = Array.from({ length: 30 }, (_, i) => {
+        const id = i + 1;
+        return {
+          ...interaction(id, `live pose ${id}`, 'thread-a'),
+          timestamp: `2026-01-01T00:${String(id).padStart(2, '0')}:00Z`,
+        };
+      });
+      const referenceInteractions = Array.from({ length: 5 }, (_, i) => {
+        const id = i + 201;
+        return {
+          ...interaction(id, `ref pose ${id}`, 'thread-a'), // SAME thread_id as live
+          timestamp: `2026-02-01T00:${String(i + 1).padStart(2, '0')}:00Z`,
+        };
+      });
+      const liveProps = (readOnly: boolean) => (
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={live}
+          fetchNextPage={vi.fn()}
+          readOnly={readOnly}
+        />
+      );
+      const referenceProps = (
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={referenceInteractions}
+          fetchNextPage={vi.fn()}
+          readOnly
+          targetPoseId="203" // triggers C2's widen, setting threadWindows['thread-a'] = { start: 0, end: 5 }
+        />
+      );
+
+      const { rerenderInner, ancestor } = renderInScrollAncestor(liveProps(false));
+      rerenderInner(referenceProps);
+      // Confirms the widen genuinely fired (the reference's own 5-pose
+      // 'thread-a' is small enough that the default tail would ALSO show
+      // pose 203 without any widen -- so this asserts C2's widen path, not
+      // just "it happened to already be visible").
+      expect(ancestor.querySelector('[data-pose-id="203"]')).not.toBeNull();
+
+      rerenderInner(liveProps(false)); // Return to live -- same component instance.
+
+      // Correct: live 'thread-a' shows its own default tail (newest poses),
+      // NOT the reference's stale { start: 0, end: 5 } window reused
+      // against the live array (which would show the OLDEST live poses).
+      expect(ancestor.querySelector('[data-pose-id="30"]')).not.toBeNull();
+      expect(ancestor.querySelector('[data-pose-id="1"]')).toBeNull();
+    });
+
     it('defers the font/measure re-anchor until AFTER DisplaySettings applies the CSS variable (real GameLayout effect ordering, #3759 review finding I1)', async () => {
       // GameLayout.tsx renders `center` (GameWindow -> this reader) BEFORE
       // `sidebar` (PlaySidebar -> DisplaySettings), and React flushes
