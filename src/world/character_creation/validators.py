@@ -400,7 +400,14 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     Every ``is_required`` trait for the species needs a selection, and every
     selected option must sit in the species' own palette or among the
     inherited options a cross-species parent makes legal (pinned-aware).
+
+    A trait the draft has made distinctive (#3739) is exempt from the palette
+    check: the point the player spent buys exactly that, every option the trait
+    carries including the Unnatural umbrella, on the standing assumption that
+    an off-species colour has a magical explanation. The required-trait check
+    still applies — a distinctive trait is still a trait you have to choose.
     """
+    from world.character_creation.offers import opened_feature_traits  # noqa: PLC0415
     from world.forms.models import SpeciesFormTrait  # noqa: PLC0415
     from world.roster.services.heredity import (  # noqa: PLC0415
         base_trait_options,
@@ -441,9 +448,10 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
                 opt.pk for opt in entry.options
             )
     trait_names = {trait.name: trait.display_name for trait in base_palette}
+    opened = opened_feature_traits(draft.draft_data)
     for trait_name, option_id in selections.items():
         legal = legal_by_trait.get(trait_name)
-        if legal is None:
+        if legal is None or trait_name in opened:
             continue
         if isinstance(option_id, int) and option_id not in legal:
             display = trait_names.get(trait_name, trait_name)

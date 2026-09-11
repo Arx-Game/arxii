@@ -28,6 +28,18 @@ _REQUIRED_FIELDS = (
 )
 _LEDGER_COLUMNS = 4
 _UNRESOLVED_HEADING = "## unresolved findings"
+_ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
+
+
+def linked_issue_number(body: str) -> str | None:
+    """Return the first workflow issue reference in a PR body, if present.
+
+    The evidence workflow is opt-in through a label on this linked issue.
+    Unlinked PRs, including dependency updates, therefore have no evidence
+    requirement to evaluate.
+    """
+    match = _ISSUE_LINK.search(body)
+    return match.group(2) if match else None
 
 
 def _field(lines: list[str], label: str) -> str:
@@ -45,11 +57,11 @@ def _usable(value: str) -> bool:
 def validate_pr_body(body: str, expected_issue: str | None = None) -> list[str]:
     """Return errors when a PR body omits the durable evidence contract."""
     errors: list[str] = []
-    link = re.search(r"^(Refs|Closes) #([0-9]+)$", body, re.MULTILINE)
-    if link is None:
+    linked_issue = linked_issue_number(body)
+    if linked_issue is None:
         errors.append("PR body must begin with Refs or Closes followed by an issue number")
-    elif expected_issue and link.group(2) != expected_issue:
-        errors.append(f"PR body links issue #{link.group(2)}, expected #{expected_issue}")
+    elif expected_issue and linked_issue != expected_issue:
+        errors.append(f"PR body links issue #{linked_issue}, expected #{expected_issue}")
     report = re.search(r"^- Report: (?:`([^`]+)`|(https://\S+))$", body, re.MULTILINE)
     if report is None:
         errors.append("PR body is missing the committed review report link")

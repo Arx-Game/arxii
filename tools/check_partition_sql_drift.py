@@ -73,6 +73,7 @@ POST_PARTITION_COLUMNS = {
     "writer_account_id",
     "language_id",
     "attributed_companion_id",
+    "thread_id",
 }
 
 

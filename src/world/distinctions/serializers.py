@@ -337,6 +337,10 @@ class DraftDistinctionEntrySerializer(serializers.Serializer):
     offer_ids = serializers.ListField(required=False)
     sources = serializers.ListField(child=serializers.CharField(), required=False)
     arrivals = serializers.ListField(child=serializers.CharField(), required=False)
+    #: The feature this entry is aimed at (#3739). Empty/zero on everything that is
+    #: not ``taken_per_feature``, and on entries stored before #3739 landed.
+    feature_trait = serializers.CharField(required=False, allow_blank=True, default="")
+    feature_marking = serializers.IntegerField(required=False, default=0)
 
 
 class DraftDistinctionCreateSerializer(serializers.Serializer):
@@ -372,11 +376,19 @@ class DraftDistinctionSyncItemSerializer(serializers.Serializer):
     ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
     from; required, since carried/bundled entries are re-applied by
     ``reconcile_offer_picks`` rather than sent by the client.
+
+    ``feature_trait``/``feature_marking`` (#3739) name the one feature a
+    ``taken_per_feature`` pick is aimed at -- a ``FormTrait.name`` or a
+    ``DraftMarking`` pk, never both, and neither on any other distinction. The
+    view rejects the wrong combination rather than silently ignoring it, because
+    the feature is the only thing that keeps two picks of one distinction apart.
     """
 
     id = serializers.IntegerField()
     rank = serializers.IntegerField(required=False, default=1)
     offer_id = serializers.IntegerField()
+    feature_trait = serializers.CharField(required=False, allow_blank=True, default="")
+    feature_marking = serializers.IntegerField(required=False, default=0)
 
 
 class DraftDistinctionSyncSerializer(serializers.Serializer):

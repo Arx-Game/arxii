@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0116_nominations_replace_weekly_votes"),
-    ]
+    dependencies = [("arxii", "0118_interactionthread_interaction_thread_and_more")]
 
     operations = [
         migrations.AlterField(

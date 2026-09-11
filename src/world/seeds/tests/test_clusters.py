@@ -42,6 +42,7 @@ class TestClusterRegistry(TestCase):
                 "proclamations",
                 "justice",
                 "governance",
+                "distinctive_features",
                 "scandal",
                 "domain_dev",
                 "domain_tasks",

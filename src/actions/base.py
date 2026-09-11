@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.prerequisites import Prerequisite
 from actions.types import ActionAvailability, ActionContext, ActionResult, TargetType
+from world.scenes.thread_services import InteractionThreadError
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
@@ -419,7 +420,10 @@ class Action:
                 return self._emit_result(actor, context, cost_failure)
 
         # Execute with potentially modified kwargs
-        context.result = self.execute(actor, context=context, **context.kwargs)
+        try:
+            context.result = self.execute(actor, context=context, **context.kwargs)
+        except InteractionThreadError as error:
+            context.result = ActionResult(success=False, message=str(error))
 
         # Run post-effects
         for effect in context.post_effects:

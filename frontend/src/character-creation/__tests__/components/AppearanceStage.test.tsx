@@ -19,6 +19,7 @@ import {
 } from '../fixtures';
 import { renderWithCharacterCreationProviders } from '../testUtils';
 import type { OffersResponse, VisibleOffer } from '../../types';
+import type { DraftDistinctionEntry } from '@/types/distinctions';
 import { unreachableClasses } from './offers/classGuard';
 
 const mutate = vi.fn();
@@ -38,6 +39,10 @@ vi.mock('../../queries', async (importOriginal) => ({
           trait: { id: 1, name: 'hair_color', display_name: 'Hair color', trait_type: 'color' },
           is_required: true,
           options: [{ id: 5, name: 'black', display_name: 'Black', sort_order: 1 }],
+          all_options: [
+            { id: 5, name: 'black', display_name: 'Black', sort_order: 1 },
+            { id: 6, name: 'unnatural', display_name: 'Unnatural', sort_order: 9 },
+          ],
         },
       ],
       inherited: [],
@@ -52,9 +57,14 @@ vi.mock('../../api', () => ({
   deleteDraftMarking: vi.fn(),
 }));
 vi.mock('@/hooks/useDistinctions', () => ({
-  useDraftDistinctions: () => ({ data: [] }),
-  useSyncDistinctions: () => ({ mutate: vi.fn() }),
+  useDraftDistinctions: () => ({ data: draftDistinctions }),
+  useSyncDistinctions: () => ({ mutate: syncMutate }),
 }));
+
+const syncMutate = vi.fn();
+// The draft's distinction entries (#3739): a "Make it distinctive" entry naming
+// a trait is what opens that trait's widened palette and its description field.
+let draftDistinctions: DraftDistinctionEntry[] = [];
 
 const giantsBlood: VisibleOffer = {
   offer_id: 201,
@@ -72,6 +82,10 @@ const giantsBlood: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 const attractive: VisibleOffer = {
@@ -90,6 +104,33 @@ const attractive: VisibleOffer = {
   first_look: false,
   held: false,
   effect_line: '',
+  taken_per_feature: false,
+  opens_feature: false,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
+};
+
+/** The one-point per-feature unlock (#3739), offered on every feature row. */
+const makeDistinctive: VisibleOffer = {
+  offer_id: 900,
+  distinction_id: 90,
+  name: 'Make it distinctive',
+  player_line: '',
+  chapter: 'appearance',
+  arrives_as: 'choice',
+  opener_label: 'a feature',
+  cost_per_rank: 1,
+  max_rank: 1,
+  is_locked: false,
+  lock_reason: '',
+  opener_key: 'feature',
+  first_look: false,
+  held: false,
+  effect_line: '',
+  taken_per_feature: true,
+  opens_feature: true,
+  requires_feature_opened: false,
+  cg_max_rank: 0,
 };
 
 let offersResponse: OffersResponse;
@@ -106,6 +147,8 @@ describe('AppearanceStage (folio)', () => {
     heightBands = [mockHeightBandAverage, mockHeightBandTall];
     copy = mockCGExplanations;
     offersResponse = { offers: [giantsBlood, attractive], closed: [] };
+    draftDistinctions = [];
+    syncMutate.mockClear();
   });
 
   it('offers height band and build as pressed rows and age as a field', () => {
@@ -221,6 +264,53 @@ describe('AppearanceStage (folio)', () => {
     const group = screen.getByRole('group', { name: 'Height band' });
     const towering = within(group).getByRole('button', { name: 'Towering' });
     expect(towering).toHaveAttribute('title', mockHeightBandTowering.cg_hint);
+  });
+
+  it('offers the one-point unlock on every trait row (#3739)', () => {
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [] };
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
+    expect(screen.getByRole('button', { name: /make it distinctive/i })).toBeInTheDocument();
+  });
+
+  it('keeps the description shut and the palette narrow until the feature is bought', () => {
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [] };
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
+    expect(screen.queryByLabelText('Describe it')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Unnatural' })).toBeNull();
+  });
+
+  it('opens the description and the whole palette once the feature is distinctive', () => {
+    offersResponse = { offers: [giantsBlood, attractive, makeDistinctive], closed: [] };
+    draftDistinctions = [
+      {
+        distinction_id: 90,
+        distinction_name: 'Make it distinctive',
+        distinction_slug: 'make-it-distinctive',
+        category_slug: 'physical',
+        rank: 1,
+        cost: 1,
+        notes: '',
+        offer_ids: [900],
+        sources: ['Hair color'],
+        arrivals: ['choice'],
+        feature_trait: 'hair_color',
+        feature_marking: 0,
+      },
+    ];
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
+    expect(screen.getByLabelText('Describe it')).toHaveAttribute('maxlength', '120');
+    const unnatural = screen.getByRole('button', { name: 'Unnatural' });
+    expect(unnatural).toBeInTheDocument();
+    // Drawn apart from the species' own values, so the point that opened it shows.
+    expect(unnatural).toHaveClass('beyond');
+    expect(screen.getByRole('button', { name: 'Black' })).not.toHaveClass('beyond');
+  });
+
+  it('does not mount the per-feature line as a section of its own (#3739)', () => {
+    offersResponse = { offers: [makeDistinctive], closed: [] };
+    renderWithCharacterCreationProviders(<AppearanceStage {...props} />);
+    // "a feature" is the generic opener label; it must never head a section.
+    expect(screen.queryByRole('heading', { name: /a feature/i })).toBeNull();
   });
 
   it('emits no class hook that cg.css has no rule for (#3667 shape)', () => {

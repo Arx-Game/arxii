@@ -340,6 +340,13 @@ export interface FormTraitWithOptions {
   trait: FormTrait;
   is_required: boolean;
   options: FormTraitOption[];
+  /**
+   * Every option the trait carries, palette or not (#3739). Offered in place of
+   * `options` once the draft has made this feature distinctive; the server's
+   * Appearance validator is the gate that decides whether a pick from here is
+   * legal, so holding the list is never itself permission to use it.
+   */
+  all_options?: FormTraitOption[];
 }
 
 /** Cross-line options unlocked by a cross-species parent (#2815). */

@@ -39,7 +39,9 @@ import {
 } from '../queries';
 import { formatHeight } from '../utils';
 import { ChapterOffers } from './offers/ChapterOffers';
+import { FeatureDistinctions } from './offers/FeatureDistinctions';
 import { MarkingsEditor } from './MarkingsEditor';
+import { useDraftDistinctions } from '@/hooks/useDistinctions';
 import { Stage } from '../types';
 import type { Build, CharacterDraft, FormTraitOption, HeightBand } from '../types';
 
@@ -88,6 +90,9 @@ export function AppearanceStage({
   const sections = useMemo(() => {
     const seen = new Map<string, string>();
     for (const offer of appearanceOffers?.offers ?? []) {
+      // A per-feature line (#3739) is not a section: it is offered on every
+      // trait row and marking, and `FeatureDistinctions` mounts it there.
+      if (offer.taken_per_feature) continue;
       if (offer.opener_key && !seen.has(offer.opener_key)) {
         seen.set(offer.opener_key, offer.opener_label);
       }
@@ -102,6 +107,20 @@ export function AppearanceStage({
     draft.id
   );
   const draftData = draft.draft_data;
+  // Which trait rows the draft has paid to make distinctive (#3739). The unlock
+  // is what opens the widened palette and the description field, so the leaf
+  // reads it from the draft's own entries rather than re-deriving the rule.
+  const { data: draftDistinctions } = useDraftDistinctions(draft.id);
+  const openedTraits = useMemo(() => {
+    const opensIds = new Set(
+      (appearanceOffers?.offers ?? []).filter((o) => o.opens_feature).map((o) => o.distinction_id)
+    );
+    return new Set(
+      (draftDistinctions ?? [])
+        .filter((e) => opensIds.has(e.distinction_id) && e.feature_trait)
+        .map((e) => e.feature_trait as string)
+    );
+  }, [appearanceOffers, draftDistinctions]);
 
   // Traits the species offers directly (#2815); a trait id absent from this
   // set but present in `formOptions.inherited` is a stray pinned value (e.g.
@@ -521,33 +540,58 @@ export function AppearanceStage({
               Loading physical features…
             </p>
           )}
-          {(formOptions?.traits ?? []).map((t) => (
-            <div key={t.trait.id}>
-              <h3 className="section-h" id={`trait-${t.trait.id}`}>
-                {t.trait.display_name}
-                {t.is_required && ' (required)'}
-              </h3>
-              <ChoiceRow
-                labelledBy={`trait-${t.trait.id}`}
-                label={t.trait.display_name}
-                options={[...t.options, ...inheritedOptionsFor(t.trait.id)].map((o) => ({
-                  value: o.id,
-                  label: o.display_name,
-                }))}
-                value={getSelectedOptionId(t.trait.name)}
-                onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
-                clearable={!t.is_required}
-              />
-              <Field id={`desc-${t.trait.id}`} label="In your own words" hint="Optional.">
-                <input
-                  id={`desc-${t.trait.id}`}
-                  type="text"
-                  defaultValue={getTraitDescriptor(t.trait.name)}
-                  onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
+          {(formOptions?.traits ?? []).map((t) => {
+            const opened = openedTraits.has(t.trait.name);
+            // Made distinctive, the row reaches past the species palette to
+            // every option the trait carries, the Unnatural umbrella included
+            // (#3739); otherwise it offers the palette and the lineage's own
+            // inherited options, exactly as before.
+            const palette = opened
+              ? (t.all_options ?? t.options)
+              : [...t.options, ...inheritedOptionsFor(t.trait.id)];
+            // Which of those the species does not itself list: drawn apart, so the
+            // point the player spent is visible in the row it opened (#3739).
+            const ownIds = new Set(t.options.map((o) => o.id));
+            return (
+              <div key={t.trait.id}>
+                <h3 className="section-h" id={`trait-${t.trait.id}`}>
+                  {t.trait.display_name}
+                  {t.is_required && ' (required)'}
+                </h3>
+                <ChoiceRow
+                  labelledBy={`trait-${t.trait.id}`}
+                  label={t.trait.display_name}
+                  options={palette.map((o) => ({
+                    value: o.id,
+                    label: o.display_name,
+                    beyond: opened && !ownIds.has(o.id),
+                  }))}
+                  value={getSelectedOptionId(t.trait.name)}
+                  onChange={(optionId) => handleFormTraitChange(t.trait.name, optionId)}
+                  clearable={!t.is_required}
                 />
-              </Field>
-            </div>
-          ))}
+                <FeatureDistinctions
+                  draft={draft}
+                  feature={{ feature_trait: t.trait.name }}
+                  featureLabel={t.trait.display_name}
+                  unlockLabel={copy?.appearance_make_distinctive}
+                  unlockWhy={copy?.appearance_make_distinctive_why}
+                  perTierWord={copy?.appearance_per_tier}
+                />
+                {opened && (
+                  <Field id={`desc-${t.trait.id}`} label="Describe it" hint="Optional.">
+                    <input
+                      id={`desc-${t.trait.id}`}
+                      type="text"
+                      maxLength={120}
+                      defaultValue={getTraitDescriptor(t.trait.name)}
+                      onBlur={(e) => handleTraitDescriptorCommit(t.trait.name, e.target.value)}
+                    />
+                  </Field>
+                )}
+              </div>
+            );
+          })}
           {strayInherited.map((group) => (
             <div key={`${group.trait.id}-${group.source}`}>
               <h3 className="section-h" id={`trait-${group.trait.id}-${group.source}`}>
@@ -562,18 +606,29 @@ export function AppearanceStage({
                 onChange={(optionId) => handleFormTraitChange(group.trait.name, optionId)}
                 clearable
               />
-              <Field
-                id={`desc-${group.trait.id}-${group.source}`}
-                label="In your own words"
-                hint="Optional."
-              >
-                <input
+              <FeatureDistinctions
+                draft={draft}
+                feature={{ feature_trait: group.trait.name }}
+                featureLabel={group.trait.display_name}
+                unlockLabel={copy?.appearance_make_distinctive}
+                unlockWhy={copy?.appearance_make_distinctive_why}
+                perTierWord={copy?.appearance_per_tier}
+              />
+              {openedTraits.has(group.trait.name) && (
+                <Field
                   id={`desc-${group.trait.id}-${group.source}`}
-                  type="text"
-                  defaultValue={getTraitDescriptor(group.trait.name)}
-                  onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
-                />
-              </Field>
+                  label="Describe it"
+                  hint="Optional."
+                >
+                  <input
+                    id={`desc-${group.trait.id}-${group.source}`}
+                    type="text"
+                    maxLength={120}
+                    defaultValue={getTraitDescriptor(group.trait.name)}
+                    onBlur={(e) => handleTraitDescriptorCommit(group.trait.name, e.target.value)}
+                  />
+                </Field>
+              )}
             </div>
           ))}
         </>
@@ -587,7 +642,12 @@ export function AppearanceStage({
       </Field>
 
       <h2 className="section-h">{copy?.appearance_markings_heading ?? 'Markings'}</h2>
-      <MarkingsEditor />
+      <MarkingsEditor
+        draft={draft}
+        markingUnlockLabel={copy?.appearance_make_distinctive}
+        markingUnlockWhy={copy?.appearance_marking_distinctive_why}
+        perTierWord={copy?.appearance_per_tier}
+      />
     </ChapterLeaf>
   );
 }

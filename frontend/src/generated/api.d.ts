@@ -28647,6 +28647,10 @@ export interface components {
       offer_ids?: unknown[];
       sources?: string[];
       arrivals?: string[];
+      /** @default  */
+      feature_trait: string;
+      /** @default 0 */
+      feature_marking: number;
     };
     /**
      * @description Request body for swapping mutually-exclusive distinctions.
@@ -28673,12 +28677,22 @@ export interface components {
      *     ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
      *     from; required, since carried/bundled entries are re-applied by
      *     ``reconcile_offer_picks`` rather than sent by the client.
+     *
+     *     ``feature_trait``/``feature_marking`` (#3739) name the one feature a
+     *     ``taken_per_feature`` pick is aimed at -- a ``FormTrait.name`` or a
+     *     ``DraftMarking`` pk, never both, and neither on any other distinction. The
+     *     view rejects the wrong combination rather than silently ignoring it, because
+     *     the feature is the only thing that keeps two picks of one distinction apart.
      */
     DraftDistinctionSyncItemRequest: {
       id: number;
       /** @default 1 */
       rank: number;
       offer_id: number;
+      /** @default  */
+      feature_trait: string;
+      /** @default 0 */
+      feature_marking: number;
     };
     /** @description Request body for replacing the full distinction list (sync). */
     DraftDistinctionSyncRequest: {
@@ -31440,7 +31454,7 @@ export interface components {
     };
     InteractionDetail: {
       readonly id: number;
-      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
       /** @description Do not infer a parent from neighboring interactions. */
       readonly reply_to: {
@@ -31638,7 +31652,7 @@ export interface components {
     };
     InteractionList: {
       readonly id: number;
-      /** @description Return only explicit topology; legacy rows remain standalone roots. */
+      /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
       /** @description Do not infer a parent from neighboring interactions. */
       readonly reply_to: {
@@ -46884,6 +46898,10 @@ export interface components {
       first_look: boolean;
       held: boolean;
       effect_line: string;
+      taken_per_feature: boolean;
+      opens_feature: boolean;
+      requires_feature_opened: boolean;
+      cg_max_rank: number;
     };
     /** @description All three fatigue pools plus global flags. */
     VitalsFatigue: {

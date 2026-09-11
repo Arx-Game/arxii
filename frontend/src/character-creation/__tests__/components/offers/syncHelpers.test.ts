@@ -100,7 +100,9 @@ describe('choiceEntries', () => {
       sources: ['A group question', 'The player chose it'],
       arrivals: ['bundled', 'choice'],
     });
-    expect(choiceEntries([mixed])).toEqual([{ id: 4, rank: 2, offer_id: 302 }]);
+    expect(choiceEntries([mixed])).toEqual([
+      { id: 4, rank: 2, offer_id: 302, feature_trait: '', feature_marking: 0 },
+    ]);
   });
 
   it('excludes a legacy entry without offer_ids', () => {

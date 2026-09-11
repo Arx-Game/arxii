@@ -28,6 +28,18 @@ class ReviewEvidenceTests(unittest.TestCase):
         errors = validate_pr_body(body, expected_issue="3731")
         self.assertIn("missing the committed review report link", " ".join(errors))
 
+    def test_pr_body_accepts_terminal_punctuation_after_issue_reference(self) -> None:
+        body = "Closes #3748.\n\n## Review evidence\n\n"
+        body += "- Report: `docs/reviews/3748.md`\n"
+        self.assertEqual(validate_pr_body(body, expected_issue="3748"), [])
+
+    def test_unlinked_pr_has_no_opt_in_issue(self) -> None:
+        self.assertIsNone(_VALIDATOR.linked_issue_number("Dependabot update\n"))
+
+    def test_linked_issue_number_ignores_unrelated_issue_mentions(self) -> None:
+        body = "See #3748 for context.\n\nRefs #3750.\n"
+        self.assertEqual(_VALIDATOR.linked_issue_number(body), "3750")
+
     def test_pr_body_accepts_issue_comment_report_url(self) -> None:
         body = "Refs #3750\n\n## Review evidence\n\n"
         body += "- Report: https://github.com/Arx-Game/arxii/issues/3750#issuecomment-1\n"
