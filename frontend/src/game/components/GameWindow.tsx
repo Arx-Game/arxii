@@ -93,6 +93,22 @@ interface GameWindowProps {
   onCancelReply?: () => void;
   /** Stable account scope for per-tab drafts. */
   draftScopePrefix?: string;
+  /**
+   * The active character's current physical room id (#3760 Task 14 fix) —
+   * `GamePage`'s `roomData?.id`, freshly derived on every `room_state`
+   * broadcast (the same value already threaded to `CeremonyRoomCard`,
+   * `StoryTray`, and the places query). Folded into the room-anchor
+   * conversation's `draftScope` below so a draft typed with no conversation
+   * tab open is scoped to the room the player is actually standing in,
+   * instead of the constant literal `'room'` — the prior string meant a
+   * player's room-anchor draft survived walking through an exit into an
+   * entirely different room, which is the opposite of what #3760's spec
+   * promises ("my draft in one room to stay put when I travel to
+   * another"). `null`/omitted (room state not yet resolved) falls back to
+   * the stable literal `'room:unknown'` rather than crashing on a missing
+   * id.
+   */
+  roomId?: number | null;
   /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
   isAtPlace?: boolean;
   /**
@@ -151,6 +167,7 @@ export function GameWindow({
   replyTarget,
   onCancelReply,
   draftScopePrefix,
+  roomId,
   isAtPlace,
   currentPlaceId,
   placeBar,
@@ -436,7 +453,7 @@ export function GameWindow({
           replyTarget={replyTarget}
           onCancelReply={onCancelReply}
           submitOnEnter={false}
-          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
+          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
           ready={playReady}
         />
       )}

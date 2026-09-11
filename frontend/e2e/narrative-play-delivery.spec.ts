@@ -316,6 +316,104 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
   });
 
   test('travel preserves separate drafts per room', async ({ page }) => {
+    // Genuine physical room-to-room travel: the SAME conversation context
+    // (the room anchor, no tab ever opened) throughout, driven by real
+    // `room_state` broadcasts — the exact frame a server-side move/look
+    // sends on arrival (see `handleRoomStatePayload.ts`). This is the
+    // literal #3760 spec promise (User Story #4: "my draft in one room to
+    // stay put when I travel to another"), made true by threading
+    // `GamePage`'s `roomData?.id` through to `GameWindow`'s `draftScope`
+    // (#3760 Task 14 fix — previously the room-anchor composer's
+    // `draftScope` was the constant literal `'room'`, unkeyed by physical
+    // room, so this exact scenario silently leaked a room A draft into room
+    // B; see the sibling "per conversation tab" test below for the
+    // previously-existing, narrower property this codebase has always had).
+    await mockRestRoutes(page);
+    const connections = await reachReadySession(page);
+    const editor = page.getByRole('textbox');
+    const sameScene = {
+      id: 1,
+      name: 'Evening in the courtyard',
+      description: '',
+      is_owner: false,
+      has_unseen_observer: false,
+    };
+
+    // Room A is the room `reachReadySession` already placed the player in
+    // ("Quiet courtyard", #2) — confirm it's actually showing before typing.
+    await expect(page.getByRole('heading', { name: 'Quiet courtyard', exact: true })).toBeVisible();
+    await editor.fill('Room A draft: the courtyard is quiet tonight.');
+
+    // Travel: a real room_state broadcast for a DIFFERENT physical room —
+    // no conversation tab opened or closed, no scene change, just the room
+    // itself changing under the player's feet.
+    connections[0].route.send(
+      JSON.stringify([
+        'room_state',
+        [],
+        {
+          room: { dbref: '#9', name: 'The market square', description: 'Stalls line the square.' },
+          characters: [],
+          objects: [],
+          exits: [],
+          scene: sameScene,
+        },
+      ])
+    );
+    await expect(
+      page.getByRole('heading', { name: 'The market square', exact: true })
+    ).toBeVisible();
+
+    // Room B's composer starts empty — nothing typed in room A leaked in.
+    await expect(editor).toHaveValue('');
+    await editor.fill('Room B draft: haggling over silk.');
+
+    // Travel back to room A — the original draft is restored verbatim.
+    connections[0].route.send(
+      JSON.stringify([
+        'room_state',
+        [],
+        {
+          room: { dbref: '#2', name: 'Quiet courtyard', description: 'Rain rests on the stones.' },
+          characters: [NYX],
+          objects: [],
+          exits: [],
+          scene: sameScene,
+        },
+      ])
+    );
+    await expect(page.getByRole('heading', { name: 'Quiet courtyard', exact: true })).toBeVisible();
+    await expect(editor).toHaveValue('Room A draft: the courtyard is quiet tonight.');
+
+    // And room B's own draft survived the round trip too.
+    connections[0].route.send(
+      JSON.stringify([
+        'room_state',
+        [],
+        {
+          room: { dbref: '#9', name: 'The market square', description: 'Stalls line the square.' },
+          characters: [],
+          objects: [],
+          exits: [],
+          scene: sameScene,
+        },
+      ])
+    );
+    await expect(
+      page.getByRole('heading', { name: 'The market square', exact: true })
+    ).toBeVisible();
+    await expect(editor).toHaveValue('Room B draft: haggling over silk.');
+  });
+
+  test('travel preserves separate drafts per conversation tab', async ({ page }) => {
+    // A narrower, PRE-EXISTING property, distinct from genuine room-to-room
+    // travel above: switching the open conversation TAB (room anchor vs. a
+    // Place thread — Places are this codebase's in-room travel destinations,
+    // see `PlaceBar`/`travel_to`) is a different draftScope axis
+    // (`GameWindow`'s `conversationTabs?.activeKey`) that was already wired
+    // correctly before the #3760 Task 14 fix and is untouched by it — kept
+    // here under its own honest title rather than folded into the room-travel
+    // test above, which now tests the literal spec promise instead.
     await mockRestRoutes(page);
     const connections = await reachReadySession(page);
 
@@ -331,14 +429,8 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     // "Room A" — the room's own anchor conversation (no tab open yet).
     await editor.fill('Room A draft: the courtyard is quiet tonight.');
 
-    // "Travel" to a different physical context. A Place thread within the
-    // same scene is this codebase's real, currently-wired per-conversation
-    // draft boundary (`GameWindow`'s `draftScope` includes the open
-    // conversation tab's key, and a Place IS a travel destination within a
-    // room — see `PlaceBar`/`travel_to`) — the room composer's OWN
-    // draftScope is not keyed by which physical room a character is
-    // standing in when no tab is open, only by the open tab, so a Place tab
-    // is the real "somewhere else" this UI isolates a draft into.
+    // "Travel" to a different conversation tab (a Place within the same
+    // room/scene).
     connections[0].route.send(
       JSON.stringify([
         'interaction',

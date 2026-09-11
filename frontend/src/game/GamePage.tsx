@@ -828,6 +828,7 @@ export function GamePage() {
               replyTarget={reference ? null : replyTarget}
               onCancelReply={() => setReplyTarget(null)}
               draftScopePrefix={`account:${account.id}`}
+              roomId={roomData?.id ?? null}
               isAtPlace={isAtPlace}
               currentPlaceId={currentPlace?.id ?? null}
               conversationTabs={reference ? undefined : conversationTabs}
