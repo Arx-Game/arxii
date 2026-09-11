@@ -301,7 +301,10 @@ export function GameWindow({
           className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm"
           role="status"
         >
-          <span>Reading history · {reference.title}</span>
+          {/* #3759 Wave 9 review finding, section 5: demo copy reads "Reading
+              history · read-only" -- adds that suffix here (one-line change,
+              the string isn't otherwise composed/parameterized). */}
+          <span>Reading history · {reference.title} · read-only</span>
           <button
             type="button"
             className="rounded border px-3 py-1 text-xs font-medium"
