@@ -189,6 +189,15 @@ vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
   useEncounterForScene: (...args: [number]) => mockUseEncounterForScene(...args),
+  useCombatEncounter: vi
+    .fn()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false }),
+  useAvailableActions: vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false }),
+  useConsequenceOutcomes: vi
+    .fn()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false }),
+  useJoinMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  useLeaveMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
   combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
 }));
 
