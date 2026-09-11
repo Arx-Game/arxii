@@ -3,7 +3,6 @@ from __future__ import annotations
 from http import HTTPMethod
 from typing import Any
 
-from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
@@ -46,9 +45,9 @@ from world.scenes.interaction_serializers import (
 )
 from world.scenes.interaction_services import (
     delete_interaction,
+    idempotent_record_interaction,
     mark_very_private,
     personas_for_characters,
-    record_interaction,
     resolve_characters_by_name,
 )
 from world.scenes.models import (
@@ -57,6 +56,7 @@ from world.scenes.models import (
     InteractionFavorite,
     InteractionReaction,
     Persona,
+    PoseSubmission,
     ReactionEmoji,
     Scene,
     SceneParticipation,
@@ -401,10 +401,23 @@ class InteractionViewSet(
 
         # Broadcast raw text for telnet clients (WS parity — mirrors
         # PoseAction.execute's message_location call, which fires unconditionally
-        # before persistence, ephemeral scenes included).
+        # before persistence, ephemeral scenes included). Gated on this being the
+        # first time this (persona, client_request_id) pair is submitted (#3760):
+        # idempotent_record_interaction below dedupes the persisted/pushed side of
+        # a retry, but this telnet broadcast happens here in the view, outside that
+        # wrapper — left unconditional, a retry would double-broadcast the same
+        # raw text into the room even though the REST/WS response is correctly
+        # deduped. A submission that never reaches the ledger (e.g. the
+        # InteractionThreadError 400 below) is, by design, re-validated fresh on
+        # every attempt (spec Decision 3) and so broadcasts again on retry too.
+        client_request_id = data["client_request_id"]
+        is_first_attempt = not PoseSubmission.objects.filter(
+            persona=persona, client_request_id=client_request_id
+        ).exists()
         sdm = SceneDataManager()
         caller_state = sdm.initialize_state_for_object(character)
-        message_location(caller_state, content)
+        if is_first_attempt:
+            message_location(caller_state, content)
 
         reply_data = data.get("reply_to")
         reply_target = (
@@ -416,18 +429,19 @@ class InteractionViewSet(
             else None
         )
         try:
-            with transaction.atomic():
-                interaction = record_interaction(
-                    character=character,
-                    content=content,
-                    mode=InteractionMode.POSE,
-                    scene=scene,
-                    persona=persona,
-                    pose_kind=pose_kind,
-                    target_personas=target_personas,
-                    reply_to=reply_target,
-                    on_created=_on_created,
-                )
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={"content": content, "pose_kind": pose_kind},
+                character=character,
+                content=content,
+                mode=InteractionMode.POSE,
+                scene=scene,
+                pose_kind=pose_kind,
+                target_personas=target_personas,
+                reply_to=reply_target,
+                on_created=_on_created,
+            )
         except InteractionThreadError:
             return Response(
                 {
@@ -438,16 +452,31 @@ class InteractionViewSet(
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        if result.conflict:
+            return Response(
+                {"detail": "This request id was already used for different content."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        interaction = result.interaction
+        response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+
         if interaction is None:
             # Ephemeral scene: record_interaction already pushed the real-time
             # payload (push_ephemeral_interaction) and deliberately never persists
             # an Interaction row — there is nothing to serialize as a resource.
-            return Response({"ephemeral": True}, status=status.HTTP_201_CREATED)
+            # Reachable both on first acceptance and on a clean replay of one
+            # (idempotent_record_interaction never treats an ephemeral acceptance
+            # as a conflict — there is nothing stored to compare against).
+            return Response(
+                {"ephemeral": True, "replayed": result.replayed}, status=response_status
+            )
 
-        # The freshly-created interaction has not been through get_queryset()'s
-        # Prefetch pipeline, so the cached_* to_attr attributes used by
-        # InteractionListSerializer do not exist yet. Set them to empty lists
-        # to avoid AttributeError on serialization; a new pose has no receivers,
+        # The interaction has not been through get_queryset()'s Prefetch pipeline —
+        # freshly created, or (on replay) fetched via idempotent_record_interaction's
+        # bare select_related lookup — so the cached_* to_attr attributes used by
+        # InteractionListSerializer do not exist yet. Set them to empty lists to
+        # avoid AttributeError on serialization; a new pose has no receivers,
         # favorites, or reactions (target personas are whatever we just resolved).
         interaction.cached_receivers = []
         interaction.cached_target_personas = target_personas or []
@@ -463,7 +492,9 @@ class InteractionViewSet(
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )
-        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        return Response(
+            {**out_serializer.data, "replayed": result.replayed}, status=response_status
+        )
 
 
 class InteractionFavoritePagination(PageNumberPagination):
