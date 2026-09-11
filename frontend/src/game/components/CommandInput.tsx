@@ -6,7 +6,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore } from '@/game/useDraftStore';
-import type { DraftKey } from '@/game/useDraftStore';
+import type { DraftKey, DraftMode } from '@/game/useDraftStore';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
@@ -308,6 +308,26 @@ export function CommandInput({
   // character name for legacy callers that don't supply one.
   const strandedContext = composerMode?.label ?? draftScope ?? character;
 
+  // #3760 Task 11 review fix — exactly ONE delivery-state banner renders at a
+  // time. The demo's Screen 3b ("unknown, still actively failed") and Screen
+  // 4 ("stranded, reopened tab") are ALTERNATIVES, not simultaneous states:
+  // a reloaded `unknown`-status draft is by definition stranded (see
+  // `isStrandedDraft` above), so it gets the stranded banner's
+  // Discard/"Resume & retry" pair, never the live-unknown banner's "Check
+  // status"/Retry pair layered on top of it too. `checkingSubmissionStatus`
+  // deliberately doesn't participate here (it's a transient loading flag on
+  // the `unknown` banner itself, not a banner-selection input).
+  let composerBanner: 'stranded' | 'pending' | 'rejected' | 'unknown' | null = null;
+  if (isStrandedDraft) {
+    composerBanner = 'stranded';
+  } else if (draft.status === 'pending') {
+    composerBanner = 'pending';
+  } else if (draft.status === 'rejected' && draft.rejectionReason) {
+    composerBanner = 'rejected';
+  } else if (draft.status === 'unknown') {
+    composerBanner = 'unknown';
+  }
+
   // #3760 Task 11 — "Check status" against the Task 6 writer-only lookup
   // endpoint. `enabled: false`: never fetched automatically, only via the
   // button's explicit `refetch()` (the established `enabled: false` +
@@ -390,8 +410,44 @@ export function CommandInput({
       return;
     }
 
-    // I4: Whisper mode requires a target — don't send a malformed command
-    if (composerMode?.command === 'whisper' && composerMode.targets.length === 0) {
+    // #3760 Task 10 — say/whisper/tt candidate mode from the LIVE composer
+    // selection right now. Only relevant when the active mode itself is
+    // say/whisper/tt AND the player didn't type an explicit different
+    // command inline (KNOWN_COMMANDS override stays on the legacy `send()`
+    // path unchanged — that's free-text, not a structured dispatch).
+    const firstWord = trimmed.split(' ')[0].toLowerCase();
+    const hasExplicitCommandOverride = KNOWN_COMMANDS.has(firstWord);
+    const liveSpeechMode: DraftMode | null =
+      !hasExplicitCommandOverride &&
+      composerMode &&
+      EXECUTE_ACTION_SPEECH_MODES.has(composerMode.command)
+        ? { command: composerMode.command, targets: composerMode.targets }
+        : null;
+    // #3760 Task 11 critical fix — an untouched `pending`/`rejected`/`unknown`
+    // draft (nothing has gone through `setContent` since the original
+    // attempt, which is what `draft.status !== 'clean'` implies here — see
+    // `beginSend`'s doc comment for the precise, ref-based version of this
+    // same check) MUST dispatch under the mode it was ORIGINALLY composed in,
+    // never whatever mode happens to be live right now — a stranded whisper
+    // reopened on the room tab, or a mode switch mid-session without editing
+    // the text, must not silently redispatch as a public say/pose. This is
+    // the SAME rule `beginSend()` applies for `clientRequestId` reuse,
+    // applied here so the caller can decide WHICH dispatch branch to take
+    // before calling it (a plain Send, Retry, and "Resume & retry" — every
+    // path that can reach `handleSubmit` — all resolve through this one spot,
+    // never a live `composerMode` prop read separately at dispatch time).
+    const resolvedSpeechMode: DraftMode | null =
+      draft.status !== 'clean' && draft.mode ? draft.mode : liveSpeechMode;
+    // The mode actually driving this send: prefer the resolved speech mode
+    // (say/whisper/tt, live or preserved); fall back to the live composerMode
+    // for a genuine pose/explicit-override send, where there is no stored
+    // override to defend against.
+    const dispatchMode = resolvedSpeechMode ?? composerMode;
+
+    // I4: Whisper mode requires a target — don't send a malformed command.
+    // Checked against the RESOLVED mode, not the live composerMode prop, for
+    // the same reason as above.
+    if (resolvedSpeechMode?.command === 'whisper' && resolvedSpeechMode.targets.length === 0) {
       return;
     }
 
@@ -420,7 +476,19 @@ export function CommandInput({
       return;
     }
 
-    const fullCommand = buildFullCommand(trimmed, composerMode);
+    // #3760 Task 11 critical fix — `buildFullCommand`'s legacy-WS fallback
+    // (used by the whisper/tt branches below when their dispatch precondition
+    // fails, and by the plain-pose path) must build against `dispatchMode`,
+    // never the live `composerMode` prop directly: a stored whisper/tt
+    // override whose target/place can't be resolved right now still has to
+    // fall through AS THE ORIGINAL MODE (e.g. `whisper <name>=...`), not as
+    // whatever the live ModeSelector currently shows.
+    const fullCommand = buildFullCommand(
+      trimmed,
+      dispatchMode
+        ? { command: dispatchMode.command, targets: dispatchMode.targets, label: '' }
+        : undefined
+    );
 
     if (actionAttachment && onSubmitAction) {
       onSubmitAction(actionAttachment);
@@ -428,45 +496,35 @@ export function CommandInput({
 
     // #3760 Task 10 — say/whisper dispatch via `executeAction` (structured
     // ack + idempotency), replacing the raw WS text-command send for these
-    // two modes. Only when the active mode itself is say/whisper AND the
-    // player didn't type an explicit different command inline (the
-    // KNOWN_COMMANDS override buildFullCommand already detects above stays
-    // on the legacy `send()` path unchanged — that's free-text, not a
-    // structured dispatch). `tt` is deliberately excluded — see
-    // EXECUTE_ACTION_SPEECH_MODES's comment.
-    const firstWord = trimmed.split(' ')[0].toLowerCase();
-    const hasExplicitCommandOverride = KNOWN_COMMANDS.has(firstWord);
-    const speechComposerMode: ComposerMode | null =
-      !hasExplicitCommandOverride &&
-      composerMode &&
-      EXECUTE_ACTION_SPEECH_MODES.has(composerMode.command)
-        ? composerMode
-        : null;
-
-    if (speechComposerMode && speechComposerMode.command === 'say') {
-      const clientRequestId = draftStore.beginSend();
+    // two modes. `tt` is deliberately excluded from `executeAction` itself
+    // (it rides the `pose` registry action below) — see
+    // EXECUTE_ACTION_SPEECH_MODES's comment. `resolvedSpeechMode` (not a live
+    // composerMode read) decides which branch fires, per the critical-fix
+    // comment above `resolvedSpeechMode`'s own declaration.
+    if (resolvedSpeechMode && resolvedSpeechMode.command === 'say') {
+      const clientRequestId = draftStore.beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
       submittingRef.current = false;
       return;
     }
 
-    if (speechComposerMode && speechComposerMode.command === 'whisper') {
+    if (resolvedSpeechMode && resolvedSpeechMode.command === 'whisper') {
       // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
       // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
-      // it cannot resolve a target by name. `composerMode.targets` only ever
-      // carries persona display names (see `ComposerMode.targets` doc
-      // comment), so the name is resolved against `roomCharacters` (which
-      // carries a `dbref`, unlike `sceneDetail.participants`) to a
+      // it cannot resolve a target by name. `resolvedSpeechMode.targets`
+      // only ever carries persona display names (see `ComposerMode.targets`
+      // doc comment), so the name is resolved against `roomCharacters`
+      // (which carries a `dbref`, unlike `sceneDetail.participants`) to a
       // `target_id`. When it can't be resolved (target not in this room's
       // character list — e.g. a scene participant who has since left),
       // fall through to the legacy `send()` path below rather than crash or
       // silently drop the whisper.
-      const whisperTargetName = speechComposerMode.targets[0];
+      const whisperTargetName = resolvedSpeechMode.targets[0];
       const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
       const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
       if (whisperTargetId > 0) {
-        const clientRequestId = draftStore.beginSend();
+        const clientRequestId = draftStore.beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         executeAction(character, 'whisper', {
           text: trimmed,
@@ -478,7 +536,7 @@ export function CommandInput({
       }
     }
 
-    if (speechComposerMode && speechComposerMode.command === 'tt') {
+    if (resolvedSpeechMode && resolvedSpeechMode.command === 'tt') {
       // tt (tabletalk) rides the `pose` registry action, scoped to the
       // viewer's current Place via the `place` kwarg (PoseAction.execute(),
       // `src/actions/definitions/communication.py` — resolves an int pk
@@ -489,7 +547,7 @@ export function CommandInput({
       // place, or the query hasn't loaded), fall through to the legacy
       // `send()` path below rather than risk a room-wide broadcast.
       if (currentPlaceId != null) {
-        const clientRequestId = draftStore.beginSend();
+        const clientRequestId = draftStore.beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         executeAction(character, 'pose', {
           text: trimmed,
@@ -507,7 +565,11 @@ export function CommandInput({
     // room) that the WebSocket command protocol can't express. WS remains
     // for non-pose commands (say, whisper, tt, ...) and for poses outside a
     // scene (no sceneId/personaId — e.g. room-only poses with no active scene).
-    const isPose = !composerMode || composerMode.command === 'pose';
+    // Gated on `dispatchMode` (not live `composerMode`) for the same reason
+    // as `fullCommand` above — a stored whisper/tt override that fell
+    // through the branches above (target/place unresolvable) must never be
+    // treated as a pose and REST-submitted to the whole room.
+    const isPose = !dispatchMode || dispatchMode.command === 'pose';
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
@@ -583,6 +645,8 @@ export function CommandInput({
     character,
     command,
     composerMode,
+    draft.status,
+    draft.mode,
     send,
     executeAction,
     draftStore,
@@ -714,7 +778,7 @@ export function CommandInput({
           <span>Draft kept in this tab only — it won&#39;t survive a reload.</span>
         </div>
       )}
-      {isStrandedDraft && (
+      {composerBanner === 'stranded' && (
         <div
           className="flex flex-wrap items-center gap-2 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600"
           data-testid="stranded-draft-banner"
@@ -737,7 +801,7 @@ export function CommandInput({
           </span>
         </div>
       )}
-      {!isStrandedDraft && draft.status === 'pending' && (
+      {composerBanner === 'pending' && (
         <div
           className="flex items-center gap-2 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600"
           data-testid="send-pending-banner"
@@ -746,7 +810,7 @@ export function CommandInput({
           <span>Sending…</span>
         </div>
       )}
-      {draft.status === 'rejected' && draft.rejectionReason && (
+      {composerBanner === 'rejected' && (
         <div
           className="flex items-center gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
           data-testid="send-rejected-banner"
@@ -754,7 +818,7 @@ export function CommandInput({
           <span>Not sent — {draft.rejectionReason}</span>
         </div>
       )}
-      {draft.status === 'unknown' && (
+      {composerBanner === 'unknown' && (
         <div
           className="flex flex-wrap items-center gap-2 bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground"
           data-testid="send-unknown-banner"

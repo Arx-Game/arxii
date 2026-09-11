@@ -6,6 +6,20 @@ export interface DraftKey {
   conversationKey: string;
 }
 
+/**
+ * What action type (say/whisper/tt/...) and target(s) a `pending`/`rejected`/
+ * `unknown` attempt was actually sent under. Deliberately a minimal,
+ * independent shape (not the frontend's `ComposerMode`, which also carries
+ * UI-only `label`/`locked` fields) — this is the one piece of state a retry
+ * MUST reproduce exactly, so it's persisted alongside `clientRequestId`
+ * rather than re-derived from whatever the live composer mode happens to be
+ * at retry time (#3760 Task 11 critical fix; see `beginSend`'s doc comment).
+ */
+export interface DraftMode {
+  command: string;
+  targets: string[];
+}
+
 export interface Draft {
   content: string;
   languageId: number | null;
@@ -16,6 +30,7 @@ export interface Draft {
   clientRequestId: string | null;
   status: 'clean' | 'pending' | 'rejected' | 'unknown';
   rejectionReason: string | null;
+  mode: DraftMode | null;
 }
 
 const EMPTY_DRAFT: Draft = {
@@ -28,6 +43,7 @@ const EMPTY_DRAFT: Draft = {
   clientRequestId: null,
   status: 'clean',
   rejectionReason: null,
+  mode: null,
 };
 
 export function draftStorageKey(key: DraftKey): string {
@@ -61,18 +77,25 @@ function persist(key: DraftKey, draft: Draft): boolean {
 }
 
 /**
- * `beginSend()`'s "same content as last time -> reuse the id" check compares
- * against `lastSentContentRef`, an in-memory ref that starts life empty on
- * every mount. For a draft hydrated from storage already `pending`/`unknown`
- * (a stranded draft from a reload, #3760 Task 11's Retry/"Resume & retry"),
- * that would otherwise mint a FRESH id on the first `beginSend()` after
- * reload even though the content is unchanged from the original attempt --
- * defeating the "retry is always safe, never a duplicate" guarantee across
- * exactly the reload/reopened-tab case it matters most for. Seeding the ref
- * from the hydrated draft closes that gap.
+ * `beginSend()`'s "same content as last time -> reuse the id (and mode)"
+ * check compares against `lastSentContentRef`, an in-memory ref that starts
+ * life empty on every mount. For a draft hydrated from storage already
+ * `pending`/`rejected`/`unknown` (a stranded draft from a reload, #3760 Task
+ * 11's Retry/"Resume & retry", or a plain Send on an untouched
+ * `rejected`/`unknown` draft), that would otherwise mint a FRESH id -- and
+ * capture whatever mode is live right now instead of the one it was
+ * originally sent under -- on the first `beginSend()` after reload, even
+ * though the content is unchanged from the original attempt. That defeats
+ * BOTH the "retry is always safe, never a duplicate" id guarantee AND the
+ * "an unmodified resend keeps its original mode" guarantee across exactly
+ * the reload/reopened-tab case they matter most for. Seeding the ref from
+ * the hydrated draft closes both gaps. Any NON-`clean` status qualifies
+ * (not just `pending`/`unknown`): `clean` is the only status `setContent`
+ * ever produces, so any other status means the content hasn't been edited
+ * since the attempt that produced it.
  */
 function initialLastSentContent(draft: Draft): string | null {
-  return draft.status === 'pending' || draft.status === 'unknown' ? draft.content : null;
+  return draft.status !== 'clean' ? draft.content : null;
 }
 
 export function useDraftStore(key: DraftKey) {
@@ -122,23 +145,63 @@ export function useDraftStore(key: DraftKey) {
       // Editing invalidates whatever attempt is in flight: the outstanding
       // clientRequestId no longer names the current content, so a stale
       // ack/reject/unknown for it must not touch this newer, unsent edit.
-      update({ content, clientRequestId: null, status: 'clean', rejectionReason: null }),
+      // `mode` is cleared right alongside it for the identical reason -- an
+      // edit is a genuinely NEW attempt, free to pick up whatever mode is
+      // live right now; only an UNCHANGED resend must keep the mode it was
+      // originally composed under (#3760 Task 11 critical fix).
+      update({
+        content,
+        clientRequestId: null,
+        status: 'clean',
+        rejectionReason: null,
+        mode: null,
+      }),
     [update]
   );
 
-  const beginSend = useCallback((): string => {
-    // Computed from the current `draft` closure rather than inside a setState
-    // updater: React does not guarantee the updater callback runs
-    // synchronously, so a value it assigns is not safe to read immediately
-    // after calling setDraft (only across a re-render).
-    const contentUnchanged = lastSentContentRef.current === draft.content && draft.clientRequestId;
-    const id = contentUnchanged ? (draft.clientRequestId as string) : crypto.randomUUID();
-    lastSentContentRef.current = draft.content;
-    const next: Draft = { ...draft, clientRequestId: id, status: 'pending', rejectionReason: null };
-    setStorageUnavailable(!persist(key, next));
-    setDraft(next);
-    return id;
-  }, [key, draft]);
+  /**
+   * `liveMode` is what the caller would send under RIGHT NOW if this were a
+   * fresh attempt. Whether that's actually used depends on the SAME
+   * `contentUnchanged` check that already governs `clientRequestId` reuse: an
+   * unmodified retry preserves the STORED `mode` (from the original attempt)
+   * and ignores `liveMode` entirely; a changed-content send captures
+   * `liveMode` fresh, exactly like it mints a fresh id.
+   *
+   * This is the fix for a real privacy leak (#3760 Task 11 review): `Draft`
+   * used to carry no mode/target info at all, so a stranded draft reloaded
+   * mid-whisper had nothing to distinguish it from a pose/say once the
+   * composer's live mode had moved on (a mode switch, or a fresh page load
+   * whose composer defaults to the room tab) -- Retry/"Resume & retry", and
+   * even a plain Send on an untouched `rejected`/`unknown` draft, would
+   * silently redispatch a private whisper as a public say/pose. Callers MUST
+   * treat this rule as the single source of truth for "what mode is this
+   * send actually going out under" -- never read a live mode prop separately
+   * at dispatch time once a `pending`/`rejected`/`unknown` draft exists.
+   */
+  const beginSend = useCallback(
+    (liveMode: DraftMode | null = null): string => {
+      // Computed from the current `draft` closure rather than inside a
+      // setState updater: React does not guarantee the updater callback runs
+      // synchronously, so a value it assigns is not safe to read immediately
+      // after calling setDraft (only across a re-render).
+      const contentUnchanged =
+        lastSentContentRef.current === draft.content && draft.clientRequestId;
+      const id = contentUnchanged ? (draft.clientRequestId as string) : crypto.randomUUID();
+      const mode = contentUnchanged ? draft.mode : liveMode;
+      lastSentContentRef.current = draft.content;
+      const next: Draft = {
+        ...draft,
+        clientRequestId: id,
+        status: 'pending',
+        rejectionReason: null,
+        mode,
+      };
+      setStorageUnavailable(!persist(key, next));
+      setDraft(next);
+      return id;
+    },
+    [key, draft]
+  );
 
   const acknowledge = useCallback(
     (clientRequestId: string) => {

@@ -762,6 +762,7 @@ describe('CommandInput', () => {
       clientRequestId: 'req-1',
       status: 'clean',
       rejectionReason: null,
+      mode: null,
       ...overrides,
     };
     sessionStorage.setItem(key, JSON.stringify(draft));
@@ -815,65 +816,31 @@ describe('CommandInput', () => {
       expect(textarea).toBeEnabled();
     });
 
-    it('shows Check status and Retry buttons when the hydrated draft status is unknown', () => {
+    // #3760 Task 11 review fix — "Check status"/Retry (the live-unknown
+    // banner, demo Screen 3b) and the stranded banner (demo Screen 4) are
+    // ALTERNATIVES that never render together (see `composerBanner` in
+    // CommandInput.tsx). A draft hydrated from storage as `unknown` is BY
+    // DEFINITION stranded (nothing dispatched this session can match its
+    // `clientRequestId`), so it always resolves to the stranded banner here —
+    // there is currently no way to reach the live-unknown banner from
+    // CommandInput's own props/events, since nothing in this task (or yet in
+    // the codebase) calls `markUnknown()` while a send is still genuinely in
+    // flight in the SAME tab; that trigger is Task 12's reconnect
+    // reconciliation. The "Check status"/Retry code path is intentionally
+    // implemented ahead of that wiring (per the plan's task split) and is
+    // exercised at the `useDraftStore` unit level (`markUnknown` tests) —
+    // Task 12 should add its own CommandInput-level coverage once it can
+    // actually reach this banner.
+    it('a hydrated unknown-status draft resolves to the stranded banner, not the live Check status/Retry pair', () => {
       seedDraft({ status: 'unknown', clientRequestId: 'req-unknown' });
 
       render(<CommandInput character="Alice" />);
 
-      expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    });
-
-    it('Check status looks up the submission and clears the draft once it is found to have landed', async () => {
-      fetchPoseSubmissionMock.mockResolvedValue({ interaction_id: 42, replayed: true });
-      seedDraft({ status: 'unknown', clientRequestId: 'req-landed', content: 'leans in' });
-
-      render(<CommandInput character="Alice" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
-
-      await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledWith('req-landed'));
-      await waitFor(() =>
-        expect(screen.queryByRole('button', { name: 'Check status' })).not.toBeInTheDocument()
-      );
-    });
-
-    it('Check status surfaces a toast and leaves the draft resendable when nothing was found', async () => {
-      fetchPoseSubmissionMock.mockResolvedValue(null);
-      seedDraft({ status: 'unknown', clientRequestId: 'req-missing', content: 'leans in' });
-
-      render(<CommandInput character="Alice" />);
-      fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
-
-      await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledWith('req-missing'));
-      await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
-      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
-    });
-
-    it('Retry re-dispatches via executeAction reusing the same client_request_id', () => {
-      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
-      // The composer's own (legacy v1) draft text is a separate sessionStorage
-      // key from useDraftStore's (v2); seed both under `draftScope` so
-      // `command` hydrates to the same text a real reload would have
-      // produced, without an intervening `fireEvent.change` — editing
-      // through `handleChange` resets `useDraftStore`'s status back to
-      // `clean` (see `setContent`'s doc comment), which would defeat this
-      // test's whole premise before Retry is ever clicked.
-      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'hello again');
-      seedDraft(
-        { status: 'unknown', clientRequestId: 'req-retry', content: 'hello again' },
-        'test-scope'
-      );
-
-      render(<CommandInput character="Alice" composerMode={mode} draftScope="test-scope" />);
-      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
-      expect(textarea.value).toBe('hello again');
-
-      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
-
-      expect(executeActionMock).toHaveBeenCalledWith('Alice', 'say', {
-        text: 'hello again',
-        client_request_id: 'req-retry',
-      });
+      expect(screen.getByText(/Unsent draft from/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Resume & retry' })).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Check status' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     });
 
     it('shows the stranded-draft banner for a pending draft hydrated from storage with no live send in flight', () => {
@@ -885,8 +852,10 @@ describe('CommandInput', () => {
       expect(screen.getByText(/Unsent draft from The Gilded Hart/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Resume & retry' })).toBeInTheDocument();
-      // Stranded, not actively sending — no false "Sending…" spinner.
+      // Mutually exclusive with every other banner (#3760 Task 11 review fix).
       expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Check status' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
     });
 
     it('Discard on the stranded banner clears the draft and dismisses the banner', () => {
@@ -899,6 +868,96 @@ describe('CommandInput', () => {
       expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
       const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
       expect(textarea.value).toBe('');
+    });
+
+    // -------------------------------------------------------------------------
+    // Critical fix (#3760 Task 11 review): an unmodified retry/resend of an
+    // already-composed whisper must redispatch AS A WHISPER, never as
+    // whatever mode the composer currently shows — see `resolvedSpeechMode`'s
+    // doc comment in CommandInput.tsx and `beginSend`'s in useDraftStore.ts.
+    // -------------------------------------------------------------------------
+
+    it('"Resume & retry" redispatches under the ORIGINALLY stored whisper mode even though the live composerMode has since changed to pose', () => {
+      // Bob is resolvable via the `@/store/hooks` mock's roomCharacters (dbref
+      // #501) — see the top of this file.
+      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
+      seedDraft(
+        {
+          status: 'pending',
+          clientRequestId: 'req-whisper-stranded',
+          content: 'secret message',
+          mode: { command: 'whisper', targets: ['Bob'] },
+        },
+        'test-scope'
+      );
+      // The LIVE composer mode is now 'pose' — e.g. the tab reopened on the
+      // room feed, or the player switched modes without touching the text.
+      const liveMode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+
+      render(<CommandInput character="Alice" composerMode={liveMode} draftScope="test-scope" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Resume & retry' }));
+
+      expect(executeActionMock).toHaveBeenCalledWith('Alice', 'whisper', {
+        text: 'secret message',
+        target_id: 501,
+        client_request_id: 'req-whisper-stranded',
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(submitPoseMock).not.toHaveBeenCalled();
+    });
+
+    it('an ordinary Send on an untouched rejected whisper draft redispatches as whisper, not the live pose mode (the Send-button leak)', () => {
+      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
+      seedDraft(
+        {
+          status: 'rejected',
+          rejectionReason: 'Bob stepped away.',
+          clientRequestId: 'req-whisper-rejected',
+          content: 'secret message',
+          mode: { command: 'whisper', targets: ['Bob'] },
+        },
+        'test-scope'
+      );
+      const liveMode: ComposerMode = { command: 'pose', targets: [], label: 'Pose' };
+
+      render(<CommandInput character="Alice" composerMode={liveMode} draftScope="test-scope" />);
+      // The textarea is enabled for a `rejected` draft — this is the ordinary
+      // Send button, not a Task-11-specific Retry affordance.
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      expect(executeActionMock).toHaveBeenCalledWith('Alice', 'whisper', {
+        text: 'secret message',
+        target_id: 501,
+        client_request_id: 'req-whisper-rejected',
+      });
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(submitPoseMock).not.toHaveBeenCalled();
+    });
+
+    it('editing the text after a stranded whisper draft picks up the CURRENT live mode instead (an edit is a genuinely new attempt)', () => {
+      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
+      seedDraft(
+        {
+          status: 'rejected',
+          rejectionReason: 'Bob stepped away.',
+          clientRequestId: 'req-whisper-rejected',
+          content: 'secret message',
+          mode: { command: 'whisper', targets: ['Bob'] },
+        },
+        'test-scope'
+      );
+      const liveMode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+
+      render(<CommandInput character="Alice" composerMode={liveMode} draftScope="test-scope" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      // A genuine edit — the whole point of `setContent` clearing `mode`.
+      fireEvent.change(textarea, { target: { value: 'secret message, revised' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+
+      expect(executeActionMock).toHaveBeenCalledWith('Alice', 'say', {
+        text: 'secret message, revised',
+        client_request_id: expect.any(String),
+      });
     });
 
     it('shows the storage-unavailable notice when sessionStorage writes fail', () => {

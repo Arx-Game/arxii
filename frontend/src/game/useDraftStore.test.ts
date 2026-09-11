@@ -124,6 +124,7 @@ describe('useDraftStore', () => {
         clientRequestId: 'stranded-id',
         status: 'pending',
         rejectionReason: null,
+        mode: null,
       })
     );
     const { result } = renderHook(() => useDraftStore(key));
@@ -132,6 +133,97 @@ describe('useDraftStore', () => {
       id = result.current.beginSend();
     });
     expect(id).toBe('stranded-id');
+  });
+
+  it('reuses the persisted client_request_id on the first beginSend after a fresh mount with an already-REJECTED draft (#3760 Task 11 review fix)', () => {
+    // The `pending`/`unknown` cases above are not the only ones: a resend of
+    // an untouched `rejected` draft after a reload must reuse its id too --
+    // this was a real bug in the first version of `initialLastSentContent`,
+    // which special-cased only `pending`/`unknown` and missed `rejected`.
+    sessionStorage.setItem(
+      draftStorageKey(key),
+      JSON.stringify({
+        content: 'Silas nods.',
+        languageId: null,
+        recipients: [],
+        replyTo: null,
+        companion: false,
+        attachment: null,
+        clientRequestId: 'rejected-id',
+        status: 'rejected',
+        rejectionReason: 'You cannot pose here.',
+        mode: null,
+      })
+    );
+    const { result } = renderHook(() => useDraftStore(key));
+    let id = '';
+    act(() => {
+      id = result.current.beginSend();
+    });
+    expect(id).toBe('rejected-id');
+  });
+
+  describe('mode (#3760 Task 11 critical review fix)', () => {
+    it('beginSend captures the live mode fresh when minting a new id', () => {
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas whispers.'));
+      act(() => {
+        result.current.beginSend({ command: 'whisper', targets: ['Bob'] });
+      });
+      expect(result.current.draft.mode).toEqual({ command: 'whisper', targets: ['Bob'] });
+    });
+
+    it('beginSend PRESERVES the stored mode when reusing an id (content unchanged), ignoring a different live mode', () => {
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas whispers.'));
+      act(() => {
+        result.current.beginSend({ command: 'whisper', targets: ['Bob'] });
+      });
+      // Retried with a DIFFERENT live mode (e.g. the ModeSelector switched to
+      // pose) -- since the content is unchanged, the ORIGINAL mode must win.
+      act(() => {
+        result.current.beginSend({ command: 'pose', targets: [] });
+      });
+      expect(result.current.draft.mode).toEqual({ command: 'whisper', targets: ['Bob'] });
+    });
+
+    it('a fresh mount with an already-pending draft preserves its stored mode on the first beginSend, ignoring the live mode passed in', () => {
+      sessionStorage.setItem(
+        draftStorageKey(key),
+        JSON.stringify({
+          content: 'Silas whispers.',
+          languageId: null,
+          recipients: [],
+          replyTo: null,
+          companion: false,
+          attachment: null,
+          clientRequestId: 'stranded-id',
+          status: 'pending',
+          rejectionReason: null,
+          mode: { command: 'whisper', targets: ['Bob'] },
+        })
+      );
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => {
+        // A live mode of 'pose' -- e.g. the tab reopened on the room feed.
+        result.current.beginSend({ command: 'pose', targets: [] });
+      });
+      expect(result.current.draft.mode).toEqual({ command: 'whisper', targets: ['Bob'] });
+    });
+
+    it('setContent clears the stored mode, so the NEXT beginSend captures whatever live mode is passed', () => {
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas whispers.'));
+      act(() => {
+        result.current.beginSend({ command: 'whisper', targets: ['Bob'] });
+      });
+      act(() => result.current.setContent('Silas whispers, revised.'));
+      expect(result.current.draft.mode).toBeNull();
+      act(() => {
+        result.current.beginSend({ command: 'say', targets: [] });
+      });
+      expect(result.current.draft.mode).toEqual({ command: 'say', targets: [] });
+    });
   });
 
   it('mints a fresh id on the first beginSend after a fresh mount when the content has since changed', () => {
