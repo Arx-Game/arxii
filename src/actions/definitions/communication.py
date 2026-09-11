@@ -399,10 +399,26 @@ class PoseAction(Action):
             from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
 
             persona = active_persona_for_sheet(actor.character_sheet)
+            # Target/place identity (#3760 review fix): a plain content-only
+            # comparison silently misclassified "same text, different target or
+            # place" as a legitimate replay -- nothing (re-)delivered to the new
+            # audience, caller told it succeeded. target_personas is M2M
+            # (via InteractionTargetPersona), so it can't be a plain
+            # getattr(stored, field) == value comparison like place_id can;
+            # see idempotent_record_interaction's _comparison_fields_match.
+            target_persona_pks = (
+                frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+            )
             result = idempotent_record_interaction(
                 persona=persona,
                 client_request_id=client_request_id,
-                comparison_fields={"content": text},
+                comparison_fields={
+                    "content": text,
+                    "place_id": place.pk if place is not None else None,
+                    "target": lambda stored: (
+                        frozenset(p.pk for p in stored.target_personas.all()) == target_persona_pks
+                    ),
+                },
                 character=actor,
                 content=text,
                 mode=InteractionMode.POSE,
@@ -688,10 +704,23 @@ class WhisperAction(Action):
             # (mirrors record_whisper_interaction's own resolution -- #981's
             # active-persona substitution is not applied here, unlike say/pose).
             persona = actor.sheet_data.primary_persona
+            # Target identity (#3760 review fix): a plain content-only comparison
+            # silently misclassified "same text, different target" as a
+            # legitimate replay -- nothing (re-)delivered to the new intended
+            # target, caller told it succeeded. target_personas is M2M (via
+            # InteractionTargetPersona), so it can't be a plain
+            # getattr(stored, field) == value comparison; see
+            # idempotent_record_interaction's _comparison_fields_match.
+            target_persona_pk = target.sheet_data.primary_persona.pk
             result = idempotent_record_interaction(
                 persona=persona,
                 client_request_id=client_request_id,
-                comparison_fields={"content": text},
+                comparison_fields={
+                    "content": text,
+                    "target": lambda stored: (
+                        frozenset(p.pk for p in stored.target_personas.all()) == {target_persona_pk}
+                    ),
+                },
                 # record_whisper_interaction, not record_interaction: its
                 # ephemeral-scene branch scopes the real-time push to
                 # [character, target] rather than broadcasting to the whole

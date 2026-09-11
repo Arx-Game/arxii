@@ -877,11 +877,46 @@ class IdempotentSubmissionResult:
     conflict: bool
 
 
+def _comparison_fields_match(
+    stored: Interaction, comparison_fields: dict[str, object | Callable[[Interaction], bool]]
+) -> bool:
+    """True when every `comparison_fields` entry matches `stored` (#3760 review fix).
+
+    A plain (non-callable) value is compared via `getattr(stored, field) == value` -- the
+    original scalar-only behavior, unchanged; `submit_pose` and `SayAction` still use this
+    form and need no changes. A callable value is called with `stored` and its truthy/falsy
+    return is the match result directly -- the caller closes over whatever "current" value
+    it wants to compare against, since target/place identity isn't always a simple scalar
+    attribute (`Interaction.target_personas` is M2M via `InteractionTargetPersona`, so
+    `getattr(stored, "target_personas")` returns a manager, not a comparable value):
+
+        comparison_fields={
+            "content": text,
+            "target": lambda stored: {p.pk for p in stored.target_personas.all()} == {pk},
+        }
+
+    Without this, a reused `client_request_id` against the same text but a genuinely
+    different target/place was silently misclassified as a replay -- `replayed=True`,
+    nothing (re-)delivered to the new intended audience, caller told it succeeded.
+    """
+    for field, value in comparison_fields.items():
+        if callable(value):
+            # `ty` can't narrow `object | Callable[[Interaction], bool]` from a bare
+            # `callable()` check alone -- the cast asserts the concrete signature the
+            # docstring above already documents as the contract.
+            matcher = cast("Callable[[Interaction], bool]", value)
+            if not matcher(stored):
+                return False
+        elif getattr(stored, field) != value:
+            return False
+    return True
+
+
 def idempotent_record_interaction(
     *,
     persona: Persona,
     client_request_id: uuid.UUID,
-    comparison_fields: dict[str, object],
+    comparison_fields: dict[str, object | Callable[[Interaction], bool]],
     record_fn: Callable[..., Interaction | None] | None = None,
     **record_kwargs: Any,
 ) -> IdempotentSubmissionResult:
@@ -891,11 +926,11 @@ def idempotent_record_interaction(
     Found + no `Interaction` stored (an ephemeral-scene acceptance - `record_interaction`
     returns `None` there, nothing is ever persisted to compare against): a clean replay,
     never a conflict - there is nothing to recompute either way. Found + `comparison_fields`
-    match the stored Interaction's same-named attributes: return that Interaction, nothing
-    recomputed (no re-roll, no duplicate row). Found + any field differs: a `payload_conflict`
-    (the caller reused a request id for genuinely different content - a client bug, not a
-    legitimate retry). Not found: run the real work via `record_fn` (default
-    `record_interaction`) and write the `PoseSubmission` row in the same transaction; a
+    match the stored Interaction (see `_comparison_fields_match`): return that Interaction,
+    nothing recomputed (no re-roll, no duplicate row). Found + any field differs: a
+    `payload_conflict` (the caller reused a request id for genuinely different content/target/
+    place - a client bug, not a legitimate retry). Not found: run the real work via `record_fn`
+    (default `record_interaction`) and write the `PoseSubmission` row in the same transaction; a
     concurrent duplicate insert (two near-simultaneous retries) raises `IntegrityError`, which is
     caught by re-reading and returning the winner's row rather than erroring -
     this is what makes the check race-safe.
@@ -919,7 +954,7 @@ def idempotent_record_interaction(
             # there is nothing to compare against and nothing left to (re)execute - a clean
             # replay, never a conflict.
             return IdempotentSubmissionResult(interaction=None, replayed=True, conflict=False)
-        if all(getattr(stored, field) == value for field, value in comparison_fields.items()):
+        if _comparison_fields_match(stored, comparison_fields):
             return IdempotentSubmissionResult(interaction=stored, replayed=True, conflict=False)
         return IdempotentSubmissionResult(interaction=None, replayed=False, conflict=True)
 
