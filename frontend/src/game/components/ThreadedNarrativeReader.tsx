@@ -14,6 +14,7 @@ import {
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
 import { markConversationRead } from '../playQueries';
+import { parseFormattedContent } from '@/lib/formatParser';
 
 // #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
 // whole-list tail-slice size -- repurposed as the default number of a single
@@ -23,16 +24,29 @@ import { markConversationRead } from '../playQueries';
 const THREAD_PAGE_SIZE = 20;
 
 /**
- * A short, truncated preview of pose prose -- used for the thread header's
- * opening-pose excerpt (#3759 Wave 9 review finding F3) and the per-pose
- * "Reply in <title>" role label (F4) below. No shared truncation helper
- * exists elsewhere in this codebase for this (checked: every other call site
- * -- e.g. `StaffBugReportsPage.tsx`, `HubBrowser.tsx` -- inlines its own
- * `.slice(n) + '...'`), so this stays a small, local helper rather than a
- * new shared module for what only this file needs.
+ * A short, truncated, PLAIN-TEXT preview of pose prose -- used for the
+ * thread header's opening-pose excerpt (#3759 Wave 9 review finding F3) and
+ * the per-pose "Reply in <title>" role label (F4) below. No shared
+ * truncation helper exists elsewhere in this codebase for this (checked:
+ * every other call site -- e.g. `StaffBugReportsPage.tsx`, `HubBrowser.tsx`
+ * -- inlines its own `.slice(n) + '...'`), so this stays a small, local
+ * helper rather than a new shared module for what only this file needs.
+ *
+ * #3759 Wave 9 fix round 1 finding I-1: `content` carries MU*-style color
+ * codes and markdown (`|w`, `**bold**`, etc. -- `formatParser.ts`'s whole
+ * reason for existing), which every OTHER render path in this codebase
+ * parses via `<FormattedContent>` before display (`PoseUnit.tsx:354,405`).
+ * This is plain text, not JSX, so it can't render `<FormattedContent>`
+ * itself -- instead it strips markup by joining `parseFormattedContent`'s
+ * segments' plain `.content` fields BEFORE truncating, so a pose starting
+ * `|wMirelle turned...` (or `**The broken seal**`) never leaks raw markup
+ * into a header/label.
  */
 function excerptOf(content: string, maxLength = 84): string {
-  const trimmed = content.trim();
+  const plain = parseFormattedContent(content)
+    .map((segment) => segment.content)
+    .join('');
+  const trimmed = plain.trim();
   if (trimmed.length <= maxLength) return trimmed;
   return `${trimmed.slice(0, maxLength).trimEnd()}…`;
 }

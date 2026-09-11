@@ -1739,6 +1739,42 @@ describe('ThreadedNarrativeReader', () => {
       expect(screen.getByText('Reply in root content')).toBeInTheDocument();
     });
 
+    it('strips MU*-style color codes and markdown from the header excerpt and role label instead of leaking raw markup (#3759 Wave 9 fix round 1 finding I-1)', () => {
+      // `|w`...`|n` is a MU* color code (see `formatParser.ts`); `**bold**`
+      // is markdown -- every OTHER render path (PoseUnit.tsx via
+      // `<FormattedContent>`) parses this before display. `excerptOf` is
+      // plain text, not JSX, so it strips the markup itself rather than
+      // rendering it.
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            interaction(1, '|wSomething|n happened at the **broken seal**', 'thread-a'),
+            interaction(2, 'a reply', 'thread-a'),
+          ]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      // Both the thread header's own excerpt AND the reply's "Reply in
+      // <title>" label derive from the same root content, so the stripped
+      // phrase appears twice: once in the header (excerpt + timestamp),
+      // once in the role label.
+      expect(
+        screen.getAllByText('Something happened at the broken seal', { exact: false })
+      ).toHaveLength(2);
+      expect(
+        screen.getByText('Reply in Something happened at the broken seal')
+      ).toBeInTheDocument();
+      // The mocked `SceneMessages` below (this file's own mock, standing in
+      // for the REAL component -- which parses markup via
+      // `<FormattedContent>`, untested here) legitimately still renders the
+      // raw pose content verbatim -- only the header excerpt and role label
+      // (this component's OWN plain-text rendering) need to be markup-free,
+      // which the exact stripped-phrase matches above already prove.
+    });
+
     it('jumps to and expands the most-recently-active thread when "Latest activity" is clicked (#3759 review finding F5)', async () => {
       const user = userEvent.setup();
       render(
