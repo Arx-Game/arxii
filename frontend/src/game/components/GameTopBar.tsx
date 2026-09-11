@@ -1,5 +1,7 @@
+import { useState } from 'react';
+
 import { Link } from 'react-router-dom';
-import { Menu, ScrollText } from 'lucide-react';
+import { Menu, ScrollText, Swords, X } from 'lucide-react';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
@@ -68,6 +70,10 @@ function ClockReadout() {
 
 interface GameTopBarProps {
   characters: MyRosterEntry[];
+  /** Drives the dismissable combat banner (#3761). */
+  hasActiveEncounter?: boolean;
+  encounterId?: number;
+  onJumpToCombat?: () => void;
 }
 
 /**
@@ -101,7 +107,44 @@ function getInitials(name: string): string {
     .slice(0, 2);
 }
 
-export function GameTopBar({ characters }: GameTopBarProps) {
+/**
+ * Urgent, dismissable "in combat" strip (#3761) — full-width, rendered below
+ * the main bar so it doesn't compete for space in the already-crowded
+ * flex row. Keyed by `encounterId` at the call site so a new encounter
+ * always starts un-dismissed, without this component needing its own
+ * encounter-change effect.
+ */
+function CombatBanner({ onJumpToCombat }: { onJumpToCombat?: () => void }) {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div className="flex items-center gap-2 bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground sm:px-4">
+      <Swords className="h-3.5 w-3.5" />
+      <button
+        type="button"
+        onClick={onJumpToCombat}
+        className="min-h-6 text-left underline-offset-2 hover:underline"
+      >
+        In combat — your turn
+      </button>
+      <button
+        type="button"
+        aria-label="Dismiss"
+        onClick={() => setDismissed(true)}
+        className="ml-auto flex min-h-6 min-w-6 items-center justify-center rounded hover:bg-black/10"
+      >
+        <X className="h-3.5 w-3.5" />
+      </button>
+    </div>
+  );
+}
+
+export function GameTopBar({
+  characters,
+  hasActiveEncounter,
+  encounterId,
+  onJumpToCombat,
+}: GameTopBarProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
@@ -146,129 +189,134 @@ export function GameTopBar({ characters }: GameTopBarProps) {
   const unplayedCharacters = characters.filter((c) => c.name !== active && !sessions[c.name]);
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:gap-4 sm:px-4">
-      <Link
-        to="/"
-        aria-label="Open world menu"
-        title="World menu"
-        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 hover:bg-accent"
-      >
-        <Menu className="h-5 w-5" />
-      </Link>
-      <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
+    <>
+      <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:gap-4 sm:px-4">
+        <Link
+          to="/"
+          aria-label="Open world menu"
+          title="World menu"
+          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 hover:bg-accent"
+        >
+          <Menu className="h-5 w-5" />
+        </Link>
+        <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
 
-      <div className="mx-2 h-6 w-px bg-border" />
+        <div className="mx-2 h-6 w-px bg-border" />
 
-      {characters.length === 0 && (
-        <p className="text-sm text-muted-foreground">
-          No characters yet -{' '}
-          <Link to="/roster" className="text-primary underline">
-            browse the roster
-          </Link>{' '}
-          or{' '}
-          <Link to="/characters/create" className="text-primary underline">
-            create one
-          </Link>
-          .
-        </p>
-      )}
+        {characters.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No characters yet -{' '}
+            <Link to="/roster" className="text-primary underline">
+              browse the roster
+            </Link>{' '}
+            or{' '}
+            <Link to="/characters/create" className="text-primary underline">
+              create one
+            </Link>
+            .
+          </p>
+        )}
 
-      {active && activeCharacter ? (
-        <div className="flex items-center gap-3">
-          {/* #3412 — a hydrated-on-reload selection has no live session yet
+        {active && activeCharacter ? (
+          <div className="flex items-center gap-3">
+            {/* #3412 — a hydrated-on-reload selection has no live session yet
               (selection isn't presence, so hydration never auto-connects).
               Clickable so there's still a way to (re)connect; harmless
               no-op when already connected (handleSelectCharacter just
               re-activates the existing session). */}
-          <button
-            onClick={() => handleSelectCharacter(active)}
-            title={isConnected ? active : `Connect as ${active}`}
-          >
-            <Avatar className="h-9 w-9 ring-2 ring-primary">
-              <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
-              <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
-            </Avatar>
-          </button>
-          <PersonaSwitcher
-            characterSheetId={activeCharacter.character_id}
-            activePersonaId={activeCharacter.active_persona_id}
-          />
-          <FormSwitcher characterSheetId={activeCharacter.character_id} />
-          {/* #3412 S4 — own-sheet link, mode-preserving (new tab so leaving
+            <button
+              onClick={() => handleSelectCharacter(active)}
+              title={isConnected ? active : `Connect as ${active}`}
+            >
+              <Avatar className="h-9 w-9 ring-2 ring-primary">
+                <AvatarImage src={activeCharacter.profile_picture_url ?? undefined} alt={active} />
+                <AvatarFallback className="text-xs">{getInitials(active)}</AvatarFallback>
+              </Avatar>
+            </button>
+            <PersonaSwitcher
+              characterSheetId={activeCharacter.character_id}
+              activePersonaId={activeCharacter.active_persona_id}
+            />
+            <FormSwitcher characterSheetId={activeCharacter.character_id} />
+            {/* #3412 S4 — own-sheet link, mode-preserving (new tab so leaving
               the game window doesn't drop the WebSocket session). Route
               param is the RosterEntry id (App.tsx: /characters/:id ->
               CharacterSheetPage reads useParams().id as entryId), not
               character_id. */}
-          <Link
-            to={`/characters/${activeCharacter.id}`}
-            target="_blank"
-            rel="noopener"
-            className="text-muted-foreground transition-colors hover:text-foreground"
-            title="Your character sheet" // PLACEHOLDER copy
-            aria-label="Your character sheet" // PLACEHOLDER copy
-          >
-            <ScrollText className="h-4 w-4" />
-          </Link>
-        </div>
-      ) : null}
+            <Link
+              to={`/characters/${activeCharacter.id}`}
+              target="_blank"
+              rel="noopener"
+              className="text-muted-foreground transition-colors hover:text-foreground"
+              title="Your character sheet" // PLACEHOLDER copy
+              aria-label="Your character sheet" // PLACEHOLDER copy
+            >
+              <ScrollText className="h-4 w-4" />
+            </Link>
+          </div>
+        ) : null}
 
-      {altCharacters.map((char) => {
-        const attention = sessionAttention(sessions[char.name], actingPersonaId(char));
-        return (
-          <button
-            key={char.id}
-            onClick={() => handleSelectCharacter(char.name)}
-            className="relative opacity-60 transition-opacity hover:opacity-100"
-            title={`Switch to ${char.name}`}
-          >
-            <Avatar className="h-7 w-7">
-              <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-              <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
-            </Avatar>
-            <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
-          </button>
-        );
-      })}
+        {altCharacters.map((char) => {
+          const attention = sessionAttention(sessions[char.name], actingPersonaId(char));
+          return (
+            <button
+              key={char.id}
+              onClick={() => handleSelectCharacter(char.name)}
+              className="relative opacity-60 transition-opacity hover:opacity-100"
+              title={`Switch to ${char.name}`}
+            >
+              <Avatar className="h-7 w-7">
+                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+                <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
+              </Avatar>
+              <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+            </button>
+          );
+        })}
 
-      {!active &&
-        characters.map((char) => (
-          <button
-            key={char.id}
-            onClick={() => handleSelectCharacter(char.name)}
-            className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-accent"
-          >
-            <Avatar className="h-7 w-7">
-              <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-              <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
-            </Avatar>
-            <span>{char.name}</span>
-          </button>
-        ))}
+        {!active &&
+          characters.map((char) => (
+            <button
+              key={char.id}
+              onClick={() => handleSelectCharacter(char.name)}
+              className="flex items-center gap-2 rounded px-2 py-1 text-sm hover:bg-accent"
+            >
+              <Avatar className="h-7 w-7">
+                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+                <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
+              </Avatar>
+              <span>{char.name}</span>
+            </button>
+          ))}
 
-      {active &&
-        unplayedCharacters.map((char) => (
-          <button
-            key={char.id}
-            onClick={() => handleSelectCharacter(char.name)}
-            className="opacity-40 transition-opacity hover:opacity-80"
-            title={`Connect as ${char.name}`}
-          >
-            <Avatar className="h-6 w-6">
-              <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-              <AvatarFallback className="text-[10px]">{getInitials(char.name)}</AvatarFallback>
-            </Avatar>
-          </button>
-        ))}
+        {active &&
+          unplayedCharacters.map((char) => (
+            <button
+              key={char.id}
+              onClick={() => handleSelectCharacter(char.name)}
+              className="opacity-40 transition-opacity hover:opacity-80"
+              title={`Connect as ${char.name}`}
+            >
+              <Avatar className="h-6 w-6">
+                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+                <AvatarFallback className="text-[10px]">{getInitials(char.name)}</AvatarFallback>
+              </Avatar>
+            </button>
+          ))}
 
-      <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
-        <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
-        <ClockReadout />
-        <WeatherWidget />
-        <div className="flex items-center gap-2">
-          <div className={`h-2 w-2 rounded-full ${connectionColor}`} />
-          <span className="hidden text-xs text-muted-foreground sm:inline">{connectionLabel}</span>
+        <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+          <ComfortWidget characterId={activeCharacter?.character_id ?? null} />
+          <ClockReadout />
+          <WeatherWidget />
+          <div className="flex items-center gap-2">
+            <div className={`h-2 w-2 rounded-full ${connectionColor}`} />
+            <span className="hidden text-xs text-muted-foreground sm:inline">
+              {connectionLabel}
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+      {hasActiveEncounter && <CombatBanner key={encounterId} onJumpToCombat={onJumpToCombat} />}
+    </>
   );
 }

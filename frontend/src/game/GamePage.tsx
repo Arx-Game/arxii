@@ -820,7 +820,14 @@ export function GamePage() {
     <>
       <GameLayout
         accountId={account?.id}
-        topBar={<GameTopBar characters={characters} />}
+        topBar={
+          <GameTopBar
+            characters={characters}
+            hasActiveEncounter={hasActiveEncounter}
+            encounterId={activeEncounter?.id}
+            onJumpToCombat={jumpToCombat}
+          />
+        }
         center={
           <>
             {/* Scene toolset (#2156 Task 6) — mirrors SceneDetailPage.tsx:120-178's
