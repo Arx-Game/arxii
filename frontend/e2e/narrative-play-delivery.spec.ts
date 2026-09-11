@@ -120,10 +120,40 @@ async function mockRestRoutes(page: Page): Promise<void> {
  */
 async function reachReadySession(page: Page): Promise<Connection[]> {
   const connections: Connection[] = [];
+  // #3760 demo-fidelity review Finding 3 — the real backend's
+  // `at_post_puppet` (`src/typeclasses/characters.py`) unconditionally calls
+  // `send_room_state()` on EVERY puppet, including the reconnect-open
+  // handler's `@ic <character>` re-puppet (`useGameSocket.ts`'s `connect()`
+  // open listener), not just the very first connect. Without a matching
+  // reply here, a reconnect's `lifecycleState` is stuck at `'entering'`
+  // forever — `dispatchIncomingMessage` only advances it to
+  // `'ready-scene'`/`'ready-no-scene'` on a `room_state` frame — so
+  // `GameWindow`'s `playReady` never recovers and the composer stays
+  // disabled past what any real backend would produce. Echo the most
+  // recently sent `room_state` frame back on every connection AFTER the
+  // first one's own `@ic <character>` — the very first connection's initial
+  // `room_state` is still driven explicitly below (that path was already
+  // correct; this only closes the reconnect gap). Scoped to what the two
+  // reconnect journeys below need: neither changes rooms before
+  // reconnecting, so echoing the last-sent frame is exact, not approximate.
+  let lastRoomStateFrame: string | null = null;
   await page.routeWebSocket('**', (route) => {
     const connection: Connection = { route, sent: [] };
-    route.onMessage((message) => connection.sent.push(String(message)));
+    const isReconnect = connections.length > 0;
     connections.push(connection);
+    route.onMessage((message) => {
+      const raw = String(message);
+      connection.sent.push(raw);
+      if (!isReconnect || !lastRoomStateFrame) return;
+      try {
+        const [type, args] = JSON.parse(raw) as WireFrame;
+        if (type === 'text' && args[0] === `@ic ${CHARACTER.name}`) {
+          route.send(lastRoomStateFrame);
+        }
+      } catch {
+        /* Not a frame this echo cares about. */
+      }
+    });
   });
 
   await page.goto('/game');
@@ -131,25 +161,25 @@ async function reachReadySession(page: Page): Promise<Connection[]> {
   await expect(editor).toBeEnabled();
   await expect(page.getByText('Entering world', { exact: true })).toBeVisible();
 
-  connections[0].route.send(
-    JSON.stringify([
-      'room_state',
-      [],
-      {
-        room: { dbref: '#2', name: 'Quiet courtyard', description: 'Rain rests on the stones.' },
-        characters: [NYX],
-        objects: [],
-        exits: [],
-        scene: {
-          id: 1,
-          name: 'Evening in the courtyard',
-          description: '',
-          is_owner: false,
-          has_unseen_observer: false,
-        },
+  const initialRoomState = JSON.stringify([
+    'room_state',
+    [],
+    {
+      room: { dbref: '#2', name: 'Quiet courtyard', description: 'Rain rests on the stones.' },
+      characters: [NYX],
+      objects: [],
+      exits: [],
+      scene: {
+        id: 1,
+        name: 'Evening in the courtyard',
+        description: '',
+        is_owner: false,
+        has_unseen_observer: false,
       },
-    ])
-  );
+    },
+  ]);
+  lastRoomStateFrame = initialRoomState;
+  connections[0].route.send(initialRoomState);
   connections[0].route.send(
     JSON.stringify([
       'puppet_changed',
@@ -204,8 +234,14 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
   test('a dropped send retried with the same id lands exactly once', async ({ page }) => {
     await mockRestRoutes(page);
     // The lookup endpoint never finds a record: the send genuinely never
-    // reached (or was never acked by) the backend, so the draft goes
-    // unknown -> stranded on reconnect rather than self-healing.
+    // reached (or was never acked by) the backend, so the draft stays
+    // `unknown` after reconnect rather than self-healing. This is a LIVE
+    // reconnect-driven transition (the send was tracked in THIS tab the
+    // whole time via `pendingSpeechRef`), not a reopened-tab stranded draft
+    // — it surfaces via the live-unknown banner (demo Screen 3b: Check
+    // status/Retry), never the stranded banner (Screen 4: Discard/"Resume &
+    // retry") — see `CommandInput.tsx`'s reconnect effect doc comment
+    // (#3760 demo-fidelity review Finding 1).
     await page.route('**/api/play/submissions/**', async (route) => {
       await route.fulfill({ status: 404, json: { detail: 'Not found.' } });
     });
@@ -229,13 +265,15 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     await expect.poll(() => connections.length, { timeout: 10_000 }).toBe(2);
 
     // Reauthorize + reconcile land on the new connection; the lookup finds
-    // nothing, so the draft surfaces as stranded with the same visible text.
-    await expect(page.getByTestId('stranded-draft-banner')).toBeVisible();
+    // nothing, so the send's fate is genuinely unresolved — the live-unknown
+    // banner, not the stranded one (see the comment above this test).
+    await expect(page.getByTestId('send-unknown-banner')).toBeVisible();
+    await expect(page.getByTestId('stranded-draft-banner')).toHaveCount(0);
     await expect(editor).toHaveValue('Meet me by the fountain.');
 
     await page
-      .getByTestId('stranded-draft-banner')
-      .getByRole('button', { name: 'Resume & retry', exact: true })
+      .getByTestId('send-unknown-banner')
+      .getByRole('button', { name: 'Retry', exact: true })
       .click();
 
     await expect.poll(() => executeActionFrames(connections[1], 'whisper').length).toBe(1);
