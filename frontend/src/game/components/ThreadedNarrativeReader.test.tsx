@@ -403,6 +403,38 @@ describe('ThreadedNarrativeReader', () => {
     expect(mountedPoses.length).toBeGreaterThan(0);
   });
 
+  it('gives the Chronological scroll container a real, bounded height rather than one relying on an inert flex-1 class (#3759 review Fix round 1 CRITICAL)', async () => {
+    // This file's `beforeEach` stubs `scrollHeight`/`clientHeight` directly
+    // on `[data-testid="chrono-scroll-container"]` (see above) so every OTHER
+    // Chronological test can exercise scroll/restore logic without a real
+    // layout engine -- but that same stub means those tests CANNOT tell a
+    // genuinely scrollable container from a `flex-1` class that never
+    // resolves because the actual ancestor chain isn't a flex column (Wave
+    // 8's regression: GameWindow.tsx's feed div and this reader's own root/
+    // wrapper divs are all `display: block` from this element's own
+    // perspective, so `flex-1` was inert and the container's height silently
+    // collapsed to `auto`). This is deliberately the ONE Chronological test
+    // that does NOT rely on that stub: `getComputedStyle` reflects an
+    // explicit inline height (jsdom applies inline styles without needing a
+    // layout engine) but never resolves a Tailwind utility class (no
+    // stylesheet is loaded in this test environment), so it genuinely fails
+    // against a class-only implementation and passes only for a real,
+    // explicit bound.
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[interaction(1, 'first', 'thread-a')]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+    const chronoContainer = screen.getByTestId('chrono-scroll-container');
+    expect(window.getComputedStyle(chronoContainer).height).not.toBe('');
+  });
+
   it('persists bulk Expand/Collapse loaded threads clicks, unlike a direct setCollapsed that bypasses saveConversationAnchor', async () => {
     const user = userEvent.setup();
     render(

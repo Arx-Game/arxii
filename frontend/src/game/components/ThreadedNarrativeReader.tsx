@@ -779,7 +779,22 @@ export function ThreadedNarrativeReader({
               ref={chronoParentRef}
               onScroll={handleChronoScroll}
               data-testid="chrono-scroll-container"
-              className="min-h-0 flex-1 overflow-y-auto"
+              // Explicit, bounded height (#3759 review Fix round 1 CRITICAL) --
+              // NOT `flex-1` (tried in Wave 8, reverted here): `flex-1` only
+              // resolves against a flex *parent*, and neither GameWindow.tsx's
+              // feed div nor this reader's own root/wrapper divs are
+              // `display: flex` from THIS element's perspective, so the class
+              // was inert -- the container's height collapsed to `auto`
+              // (sized to content), `overflow-y-auto` never engaged,
+              // `onScroll` never fired a real scroll, and
+              // `@tanstack/react-virtual`'s `getScrollElement` saw a viewport
+              // covering all content, defeating Task 10's windowing
+              // entirely. Every pre-existing test still passed because they
+              // stub `scrollHeight`/`clientHeight` directly on this element
+              // and fire synthetic scroll events -- the exact masking
+              // pattern documented on the Threads-view listener below
+              // (Wave 6's original C1), now on its second occurrence.
+              style={{ height: '70vh', overflow: 'auto' }}
             >
               <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
