@@ -17086,23 +17086,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/play/threads/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description GET server-grouped, paginated thread summaries for one conversation. */
-    get: operations['play_threads_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/play/submissions/{client_request_id}/': {
     parameters: {
       query?: never;
@@ -17120,6 +17103,23 @@ export interface paths {
      *     still confirm the row exists.
      */
     get: operations['play_submissions_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/play/threads/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET server-grouped, paginated thread summaries for one conversation. */
+    get: operations['play_threads_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -70821,11 +70821,13 @@ export interface operations {
       };
     };
   };
-  play_threads_retrieve: {
+  play_submissions_retrieve: {
     parameters: {
       query?: never;
       header?: never;
-      path?: never;
+      path: {
+        client_request_id: string;
+      };
       cookie?: never;
     };
     requestBody?: never;
@@ -70839,13 +70841,11 @@ export interface operations {
       };
     };
   };
-  play_submissions_retrieve: {
+  play_threads_retrieve: {
     parameters: {
       query?: never;
       header?: never;
-      path: {
-        client_request_id: string;
-      };
+      path?: never;
       cookie?: never;
     };
     requestBody?: never;

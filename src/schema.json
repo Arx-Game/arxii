@@ -27529,17 +27529,6 @@ paths:
       responses:
         '200':
           description: No response body
-  /api/play/threads/:
-    get:
-      operationId: play_threads_retrieve
-      description: GET server-grouped, paginated thread summaries for one conversation.
-      tags:
-      - play
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          description: No response body
   /api/play/submissions/{client_request_id}/:
     get:
       operationId: play_submissions_retrieve
@@ -27558,6 +27547,17 @@ paths:
           type: string
           format: uuid
         required: true
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/threads/:
+    get:
+      operationId: play_threads_retrieve
+      description: GET server-grouped, paginated thread summaries for one conversation.
       tags:
       - play
       security:
