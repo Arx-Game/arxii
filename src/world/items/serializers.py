@@ -129,7 +129,12 @@ class TemplateInteractionSerializer(serializers.ModelSerializer):
 
 
 class ItemFacetReadSerializer(serializers.ModelSerializer):
-    """Read serializer for ItemFacet (GET list/detail)."""
+    """Read serializer for ItemFacet (GET list/detail).
+
+    ``is_inherent`` is exposed so the client can suppress the detach affordance:
+    the service refuses to remove an inherent row (``InherentFacetNotRemovable``,
+    #3776), and a button that always errors is worse than no button.
+    """
 
     class Meta:
         model = ItemFacet
@@ -137,6 +142,7 @@ class ItemFacetReadSerializer(serializers.ModelSerializer):
             "id",
             "item_instance",
             "facet",
+            "is_inherent",
             "applied_by_account",
             "attachment_quality_tier",
             "applied_at",

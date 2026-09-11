@@ -150,14 +150,18 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
                     className="flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-sm"
                   >
                     <span>Facet #{row.facet}</span>
-                    <button
-                      type="button"
-                      aria-label={`Remove facet ${row.facet}`}
-                      onClick={() => handleRemoveFacet(row.id)}
-                      className="ml-1 opacity-60 hover:opacity-100"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    {/* Inherent facets are the archetype's own identity (#3776) and the
+                        service refuses to detach them, so no remove affordance. */}
+                    {!row.is_inherent && (
+                      <button
+                        type="button"
+                        aria-label={`Remove facet ${row.facet}`}
+                        onClick={() => handleRemoveFacet(row.id)}
+                        className="ml-1 opacity-60 hover:opacity-100"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

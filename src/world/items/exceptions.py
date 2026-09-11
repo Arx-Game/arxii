@@ -90,6 +90,22 @@ class FacetAlreadyAttached(ItemError):
     )
 
 
+class InherentFacetNotRemovable(ItemError):
+    """That facet is the template's own identity, not a crafter's addition (#3776).
+
+    ``ItemTemplate.inherent_facets`` rows are auto-stamped by
+    ``stamp_inherent_facets`` at instance creation and are never re-stampable
+    afterwards (stamping only ever runs on a brand-new instance), so a detach
+    would strip a Scythe of its Scythe facet permanently. Detach is for the
+    crafter-attached "decorated BY the thing" case only.
+    """
+
+    user_message = "That facet is part of what this item is, and cannot be removed."
+    SAFE_MESSAGES: ClassVar[frozenset[str]] = frozenset(
+        {"That facet is part of what this item is, and cannot be removed."},
+    )
+
+
 class StyleCapacityExceeded(ItemError):
     """The item already carries the maximum number of styles its template allows (#546)."""
 

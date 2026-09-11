@@ -45542,6 +45542,11 @@ components:
           type: string
           description: Short summary for tooltips/modals (1-2 sentences).
           maxLength: 300
+        quote:
+          type: string
+          description: An italic intro line shown at the top of this entry's Codex
+            page (e.g. a quote attributed to the subject). Optional; blank hides it.
+          maxLength: 300
         lore_content:
           type: string
           nullable: true
@@ -55776,7 +55781,12 @@ components:
       - target
     ItemFacetRead:
       type: object
-      description: Read serializer for ItemFacet (GET list/detail).
+      description: |-
+        Read serializer for ItemFacet (GET list/detail).
+
+        ``is_inherent`` is exposed so the client can suppress the detach affordance:
+        the service refuses to remove an inherent row (``InherentFacetNotRemovable``,
+        #3776), and a button that always errors is worse than no button.
       properties:
         id:
           type: integer
@@ -55787,6 +55797,12 @@ components:
         facet:
           type: integer
           readOnly: true
+        is_inherent:
+          type: boolean
+          readOnly: true
+          description: True when this facet came from the template's inherent_facets
+            at creation time, not a crafter's own attach_facet_to_item call. Does
+            not count against the instance's facet_capacity.
         applied_by_account:
           type: integer
           readOnly: true
@@ -55804,6 +55820,7 @@ components:
       - attachment_quality_tier
       - facet
       - id
+      - is_inherent
       - item_instance
     ItemFacetWriteRequest:
       type: object

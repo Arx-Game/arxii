@@ -225,6 +225,7 @@ class CodexEntryDetailSerializer(EntryKnowledgeMixin, serializers.ModelSerialize
             "id",
             "name",
             "summary",
+            "quote",
             "lore_content",
             "mechanics_content",
             "lore_links",

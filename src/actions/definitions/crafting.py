@@ -32,6 +32,7 @@ from world.items.exceptions import (
     CraftingStationRequired,
     FacetAlreadyAttached,
     FacetCapacityExceeded,
+    InherentFacetNotRemovable,
     ItemError,
     StyleAlreadyAttached,
     StyleCapacityExceeded,
@@ -51,6 +52,7 @@ if TYPE_CHECKING:
 _CRAFT_EXCEPTIONS = (
     FacetAlreadyAttached,
     FacetCapacityExceeded,
+    InherentFacetNotRemovable,
     StyleAlreadyAttached,
     StyleCapacityExceeded,
     CraftingNotConfigured,
@@ -159,7 +161,14 @@ class CutGemAction(Action):
 
 @dataclass
 class DetachFacetAction(Action):
-    """Detach an already-attached facet from an item."""
+    """Detach a crafter-attached facet from an item.
+
+    An **inherent** facet (``ItemFacet.is_inherent``, #3776) is refused: it is the
+    template's own identity, stamped once at creation by ``stamp_inherent_facets``
+    and never re-stamped, so detaching one strips the item permanently. The service
+    raises ``InherentFacetNotRemovable``, translated here to a failure result like
+    every other domain exception in this module.
+    """
 
     key: str = "craft_detach_facet"
     name: str = "Detach Facet"
@@ -179,7 +188,10 @@ class DetachFacetAction(Action):
         item_facet: ItemFacet | None = kwargs.get("item_facet")
         if item_facet is None:
             return ActionResult(success=False, message="Detach which facet?")
-        remove_facet_from_item(item_facet=item_facet)
+        try:
+            remove_facet_from_item(item_facet=item_facet)
+        except _CRAFT_EXCEPTIONS as exc:
+            return ActionResult(success=False, message=exc.user_message)
         return ActionResult(success=True)
 
 

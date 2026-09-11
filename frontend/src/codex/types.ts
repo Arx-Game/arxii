@@ -82,6 +82,8 @@ export interface CodexLinkRef {
 }
 
 export interface CodexEntryDetail extends CodexEntryListItem {
+  /** Optional italic intro line rendered above the entry's content; '' hides it. */
+  quote: string;
   lore_content: string | null;
   mechanics_content: string | null;
   lore_links: CodexLinkRef[];
