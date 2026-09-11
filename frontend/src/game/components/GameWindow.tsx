@@ -1,6 +1,9 @@
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
-import { NarrativeMessageReader } from './NarrativeMessageReader';
+import { ExplorationReader } from './ExplorationReader';
+import type { GameLifecycleState } from '@/store/gameSlice';
+import type { InteractionWsPayload } from '@/hooks/types';
+import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
@@ -53,6 +56,13 @@ interface GameWindowProps {
   characters: MyRosterEntry[];
   /** When present, the center column renders the threaded scene reader. */
   sceneFeed?: GameWindowSceneFeed;
+  /** Structured quiet-room data; absent only while entry is pending. */
+  room?: RoomData | null;
+  /** Scene-less interaction frames for the exploration reader. */
+  ambientInteractions?: InteractionWsPayload[];
+  diagnostics?: string[];
+  ambientNotices?: string[];
+  lifecycleState?: GameLifecycleState;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
   /** The active character's persona id — lifted to GamePage to dedupe the roster query (#2156). */
@@ -120,6 +130,11 @@ interface GameWindowProps {
 export function GameWindow({
   characters,
   sceneFeed,
+  room,
+  ambientInteractions,
+  diagnostics,
+  ambientNotices,
+  lifecycleState,
   composerMode,
   onModeChange,
   personaId,
@@ -280,6 +295,16 @@ export function GameWindow({
 
   const sessionNames = Object.keys(sessions);
   const awaitingRoom = !session.room && !sceneFeed;
+  const effectiveLifecycle =
+    lifecycleState ??
+    session.lifecycleState ??
+    (!session.isConnected && session.room ? 'reconnecting' : undefined);
+  const visibleDiagnostics = diagnostics ?? session.diagnostics ?? [];
+  const playReady =
+    session.isConnected &&
+    Boolean(session.room) &&
+    (!effectiveLifecycle ||
+      ['ready-no-scene', 'ready-scene', 'encounter', 'aftermath'].includes(effectiveLifecycle));
 
   const handleTabClick = (name: MyRosterEntry['name']) => {
     // #3412 — persist the selection server-side ALONGSIDE the existing
@@ -323,6 +348,27 @@ export function GameWindow({
             ? 'Entering the world… waiting for a confirmed location. You can write while you wait.'
             : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
         </div>
+      )}
+      {!awaitingRoom &&
+        (effectiveLifecycle === 'reconnecting' ||
+          (effectiveLifecycle === 'entering' && Boolean(session.room))) && (
+          <div
+            className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+            role="status"
+          >
+            {effectiveLifecycle === 'entering'
+              ? 'Refreshing your confirmed location before play resumes…'
+              : 'Connection lost. Your confirmed story remains available while we reconnect.'}
+          </div>
+        )}
+      {visibleDiagnostics.length > 0 && (
+        <aside
+          className="shrink-0 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm"
+          role="alert"
+          aria-label="Connection notices"
+        >
+          <strong>Connection notice:</strong> {visibleDiagnostics[visibleDiagnostics.length - 1]}
+        </aside>
       )}
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
@@ -438,7 +484,15 @@ export function GameWindow({
           {!reference && <SystemLane messages={session.messages} />}
         </>
       ) : (
-        <NarrativeMessageReader messages={session.messages} />
+        <ExplorationReader
+          room={room ?? session.room}
+          ambientInteractions={ambientInteractions ?? session.ambientInteractions}
+          ambientNotices={ambientNotices ?? session.ambientNotices}
+          lifecycleState={effectiveLifecycle}
+          onRetry={() => {
+            if (active) void connect(active);
+          }}
+        />
       )}
       {placeBar}
       {tavernGameWidget}
@@ -470,7 +524,7 @@ export function GameWindow({
           onCancelReply={onCancelReply}
           submitOnEnter={false}
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? 'room'}`}
-          ready={session.isConnected && Boolean(session.room)}
+          ready={playReady}
         />
       )}
     </div>

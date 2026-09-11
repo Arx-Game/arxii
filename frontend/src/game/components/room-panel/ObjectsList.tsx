@@ -80,7 +80,7 @@ export function ObjectsList({ objects, characterId }: ObjectsListProps) {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  className="flex flex-1 items-center gap-2 text-left"
+                  className="flex min-h-11 flex-1 items-center gap-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   onClick={() => handleToggle(obj)}
                   data-testid={`examine-toggle-${obj.dbref}`}
                 >
@@ -105,7 +105,7 @@ export function ObjectsList({ objects, characterId }: ObjectsListProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-6 shrink-0 px-2 text-xs"
+                    className="min-h-11 shrink-0 px-2 text-xs"
                     onClick={() => setBoardDbref(obj.dbref)}
                     data-testid={`open-board-${obj.dbref}`}
                   >

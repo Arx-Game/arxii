@@ -21,7 +21,7 @@ export function ExitsList({ exits, onExit }: ExitsListProps) {
               key={exit.dbref}
               variant="outline"
               size="sm"
-              className="h-6 px-2 text-xs"
+              className="min-h-11 px-3 text-xs"
               onClick={() => onExit(exit)}
             >
               {exit.name}

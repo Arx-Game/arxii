@@ -177,6 +177,7 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
                     account=account,
                     amount=xp_amount,
                     description=f"Journal post: {title}",
+                    character=author,
                 )
 
         stat_keys = ["journals.total_written"]
@@ -187,18 +188,19 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
     return entry
 
 
-def _award_response_xp(
+def _award_response_xp(  # noqa: PLR0913 - the character is a required attribution, not an option
     tracker: WeeklyJournalXP,
     flag_field: str,
     account: AccountDB,
     amount: int,
     description: str,
+    character: CharacterSheet,
 ) -> None:
     """Award response XP if not already awarded this week."""
     if not getattr(tracker, flag_field):
         setattr(tracker, flag_field, True)
         tracker.save(update_fields=[flag_field])
-        award_xp(account=account, amount=amount, description=description)
+        award_xp(account=account, amount=amount, description=description, character=character)
 
 
 def create_journal_response(
@@ -273,6 +275,7 @@ def create_journal_response(
                 author_account,
                 PRAISE_GIVEN_XP,
                 f"Praised: {parent.title}",
+                author,
             )
             _award_response_xp(
                 receiver_tracker,
@@ -280,6 +283,7 @@ def create_journal_response(
                 receiver_account,
                 PRAISE_RECEIVED_XP,
                 f"Received praise on: {parent.title}",
+                parent.author,
             )
             _emit_stats(author, "journals.praises_given")
             _emit_stats(parent.author, "journals.praises_received")
@@ -290,6 +294,7 @@ def create_journal_response(
                 author_account,
                 RETORT_GIVEN_XP,
                 f"Retorted: {parent.title}",
+                author,
             )
             _award_response_xp(
                 receiver_tracker,
@@ -297,6 +302,7 @@ def create_journal_response(
                 receiver_account,
                 RETORT_RECEIVED_XP,
                 f"Received retort on: {parent.title}",
+                parent.author,
             )
             _emit_stats(author, "journals.retorts_given")
             _emit_stats(parent.author, "journals.retorts_received")

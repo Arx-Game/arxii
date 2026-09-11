@@ -151,7 +151,7 @@ export function GameTopBar({ characters }: GameTopBarProps) {
         to="/"
         aria-label="Open world menu"
         title="World menu"
-        className="rounded p-2 hover:bg-accent"
+        className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 hover:bg-accent"
       >
         <Menu className="h-5 w-5" />
       </Link>

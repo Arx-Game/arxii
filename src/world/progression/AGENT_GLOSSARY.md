@@ -26,6 +26,24 @@ _Avoid_: level-up event, training record.
 A character's mutable declared intention for their next Path — one row per sheet, overwritten on re-declaration — which the Audere Majora offer pre-selects when it is among the eligible paths.
 _Avoid_: path receipt, path choice (it is an aspiration, not a committed record).
 
+**Character XP ledger** (#3748, ADR-0288):
+The `CharacterXP` row with `transferable=True` and its `CharacterXPTransaction` receipts:
+what a player has **earned on**, and **invested in**, one character. XP itself stays
+account-scoped (ADR-0053) — this is **attribution, not a pool**: nothing is drawn from it,
+and `total_spent` may exceed `total_earned`, because XP earned on one character is routinely
+spent on another. Maintained by `services.xp_ledger` (`award_xp`'s keyword-only `character`,
+and `spend_xp_for_character`, the seam every XP purchase debits through); read through
+`selectors.character_xp_ledger`. Its sibling `transferable=False` row is a genuine **locked
+pool** written once by CG conversion, and the only one the no-overdraft rule applies to.
+_Avoid_: character XP balance, per-character wallet, second pool (all imply spendability it
+does not have).
+
+**Lifetime spend** (#3748):
+`character_xp_ledger(sheet).spent` — the total XP ever spent *on* a character, whatever it
+was bought with. What the death-kudos cap is sized on (ADR-0131) and what character-loss
+reimbursement will read.
+_Avoid_: XP invested (reserve for prose), sunk XP.
+
 **Kudos**:
 An unlimited, GM- or player-awarded "good sport" currency (`award_kudos`,
 `KudosTransaction`) recognizing graciousness — someone was a good sport, wrote a

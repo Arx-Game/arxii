@@ -22,6 +22,7 @@ from world.character_creation.services import (
 from world.character_sheets.models import CharacterSheet
 from world.character_sheets.serializers import (
     CharacterSheetSerializer,
+    CharacterXPLedgerSerializer,
     MaturationSpendInputSerializer,
     MaturationStateSerializer,
     OriginSlotClearSerializer,
@@ -218,6 +219,20 @@ class CharacterSheetViewSet(RetrieveModelMixin, GenericViewSet):
         except MaturationError as exc:
             return Response({"detail": exc.user_message}, status=status.HTTP_400_BAD_REQUEST)
         return self.maturation(request, pk=pk)
+
+    @extend_schema(responses={200: CharacterXPLedgerSerializer})
+    @action(detail=True, methods=[HTTPMethod.GET], url_path="xp-ledger")
+    def xp_ledger(self, request: Request, pk: int | None = None) -> Response:
+        """What the owner has earned on, and invested in, this character (#3748).
+
+        Owner-only: XP is the player's business, not something other players read
+        off a public sheet.
+        """
+        from world.progression.selectors import character_xp_ledger  # noqa: PLC0415
+
+        sheet = self.get_object()
+        self._check_ownership(sheet)
+        return Response(CharacterXPLedgerSerializer(character_xp_ledger(sheet)).data)
 
     @extend_schema(responses={200: StatPointStateSerializer})
     @action(detail=True, methods=[HTTPMethod.GET], url_path="stat-points")

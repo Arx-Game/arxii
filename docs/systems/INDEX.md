@@ -2073,7 +2073,10 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `check_requirements_for_unlock(character, unlock) -> tuple[bool, list[str]]`
   - `get_available_unlocks_for_character(character) -> AvailableUnlocks`
   - `ExperiencePointsData.can_spend(amount) -> bool`
-  - `CharacterXP.can_spend(amount) -> bool`
+  - `CharacterXP.can_spend(amount) -> bool` — a locked (CG) pool only; a `transferable=True` row is an attribution ledger, not a pool (#3748)
+  - `award_xp(account, amount, ..., *, character) -> XPTransaction` (`services.awards`) — `character` is keyword-only with no default; `None` only for an award no character earned (#3748)
+  - `spend_xp_for_character(sheet, amount, description, *, reason, gm) -> XPTransaction | None` (`services.xp_ledger`) — **the seam every XP purchase debits through** (class levels, skill breakthroughs, gift and thread-weaving unlocks, distinction sheet changes); raises `InsufficientXPError` / `NoAccountForCharacterError` (#3748, ADR-0288)
+  - `character_xp_ledger(sheet) -> CharacterXPLedger` (`selectors.py`, #3748) — lifetime `earned`/`spent`/`locked` for one character; read by the sheet panel, the admin, and the death-kudos cap (ADR-0131)
   - `current_path_for_character(character) -> Path | None` (`selectors.py`) — returns the character's most-recent `CharacterPathHistory` path
   - `next_path_options(character) -> list[Path]` (`selectors.py`) — returns active child paths of the current path (or all top-level paths if no current path); used by `PathOptionsView`
   - `eligible_advanced_paths_for(sheet) -> list[Path]` (`selectors.py`, #1700) — active child paths at the next level's stage (for the semi-crossing resolver); empty when not at a stage boundary
@@ -2087,6 +2090,7 @@ XP, kudos, development points, and unlock system. Contains the most explicit pre
   - `POST /api/progression/unlocks/purchase/` — buy a `class_level`, `thread_xp_lock`, or `skill_breakthrough` unlock with XP; dispatches `PurchaseUnlockAction`
   - `GET /api/progression/durance/status/` — Durance readiness hub for the played character; mirrors telnet `durance status` exactly (#3045)
   - `POST /api/progression/durance/convene/` — open a site-convened Durance session at the played character's room; calls `convene_durance_at_site` directly, not a dispatch seam (#3045)
+  - `GET /api/character-sheets/{id}/xp-ledger/` — what this character earned and what was spent on them (`{earned, spent, locked}`); owner-only. On the sheet viewset, not `/api/progression/`, because the question is per-character (#3748)
   - `GET`/`POST`/`PATCH`/`DELETE /api/skills/training-allocations/` — deliberate skill training allocations (`world.skills`, `TrainingAllocationViewSet`); dispatches `ManageTrainingAction`
 - **Web Advancement tab (#3045):** `frontend/src/progression/components/advancement/` —
   `AdvancementTab` (mounted on `CharacterSheetPage`, own-sheet + active-puppet gated) hosts

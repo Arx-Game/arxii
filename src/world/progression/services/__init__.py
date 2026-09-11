@@ -3,6 +3,7 @@ Progression services package.
 
 This package organizes progression services into logical modules:
 - awards: Functions for awarding XP and development points
+- xp_ledger: The account pool + the per-character attribution beside it (#3748)
 - cg_conversion: CG-to-XP conversion for character creation
 - spends: Functions for spending XP on unlocks
 - kudos: Functions for awarding and claiming kudos
@@ -40,6 +41,7 @@ from world.progression.services.spends import (
     get_available_unlocks_for_character,
     spend_xp_on_unlock,
 )
+from world.progression.services.xp_ledger import spend_xp_for_character
 from world.progression.types import AwardResult, ClaimResult, KudosXPResult
 
 # For backwards compatibility, make key functions available at package level
@@ -64,6 +66,7 @@ __all__ = [
     "nominate",
     "nominations_by_account",
     "on_scene_finished",
+    "spend_xp_for_character",
     "spend_xp_on_unlock",
     "withdraw_nomination",
 ]

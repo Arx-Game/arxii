@@ -1,15 +1,21 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { addSessionMessage, resetGame, setSessionConnectionStatus } from '@/store/gameSlice';
+import {
+  addSessionMessage,
+  addSessionDiagnostic,
+  addAmbientNotice,
+  resetGame,
+  setSessionConnectionStatus,
+  setSessionLifecycle,
+} from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
-import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
+import { WS_MESSAGE_TYPE } from './types';
 import { emitActionResult } from './actionResultBus';
 import { emitHazardPrompt } from './hazardPromptBus';
 
 import type {
   ActionResultPayload,
   CommandErrorPayload,
-  GameMessage,
   HazardPromptPayload,
   IncomingMessage,
   InteractionWsPayload,
@@ -66,11 +72,6 @@ function clearReconnect(character: string) {
   }
 }
 
-/** A plain system message shown when a frame is malformed or unrecognized. */
-function buildSystemFallbackMessage(content: string): GameMessage {
-  return { content, timestamp: Date.now(), type: GAME_MESSAGE_TYPE.SYSTEM };
-}
-
 /** Narrows a parsed frame to the `[type, args, kwargs?]` wire shape. */
 function isIncomingMessage(value: unknown): value is IncomingMessage {
   return Array.isArray(value) && value.length >= 2;
@@ -84,7 +85,7 @@ interface IncomingMessageContext {
   navigate: NavigateFunction;
 }
 
-type IncomingMessageHandler = (ctx: IncomingMessageContext) => void;
+type IncomingMessageHandler = (ctx: IncomingMessageContext) => boolean | void;
 
 // One case per control message type the server can push; anything not matched
 // here falls through to parseGameMessage as a regular game message. A switch on
@@ -172,13 +173,60 @@ function dispatchIncomingMessage(
   const [msgType, args, kwargs] = parsed;
   const handler = handlerFor(msgType);
   if (handler) {
-    handler({ character, args, kwargs, dispatch, navigate });
+    const accepted = handler({ character, args, kwargs, dispatch, navigate });
+    // Lifecycle is socket-owned so protocol handlers remain small and usable
+    // in isolation. A room_state frame is the only readiness confirmation.
+    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
+      const roomPayload = kwargs as { scene?: unknown } | undefined;
+      dispatch(
+        setSessionLifecycle({
+          character,
+          lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
+        })
+      );
+    } else if (msgType === WS_MESSAGE_TYPE.SCENE) {
+      // Ending a confirmed scene is a presentation transition, not a
+      // readiness claim. Start/update frames wait for room_state confirmation.
+      const scenePayload = kwargs as { action?: unknown } | undefined;
+      if (scenePayload?.action === 'end') {
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'aftermath' }));
+      }
+    }
     return;
   }
 
-  // Regular game message
-  const message = parseGameMessage(parsed);
-  dispatch(addSessionMessage({ character, message }));
+  // Only legacy text-like frames may enter the compact notice lane. Control
+  // frames must never fall through as JSON or appear as authored prose.
+  if (
+    msgType === WS_MESSAGE_TYPE.TEXT ||
+    msgType === WS_MESSAGE_TYPE.LOGGED_IN ||
+    msgType === WS_MESSAGE_TYPE.VN_MESSAGE ||
+    msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION
+  ) {
+    const message = parseGameMessage(parsed);
+    const metadata = kwargs as Record<string, unknown> | undefined;
+    if (
+      msgType === WS_MESSAGE_TYPE.TEXT &&
+      (metadata?.type === 'narrative' || metadata?.type === 'gemit')
+    ) {
+      dispatch(
+        addAmbientNotice({
+          character,
+          message: message.content,
+          timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
+        })
+      );
+    } else {
+      dispatch(addSessionMessage({ character, message }));
+    }
+    return;
+  }
+  dispatch(
+    addSessionDiagnostic({
+      character,
+      message: 'A connection message was not recognized. Try again.',
+    })
+  );
 }
 
 export function useGameSocket() {
@@ -197,6 +245,7 @@ export function useGameSocket() {
     async (character: MyRosterEntry['name']) => {
       if (sockets[character] || connecting.has(character)) return;
       connecting.add(character);
+      dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
 
       let currentAccount = account;
       if (!currentAccount) {
@@ -206,11 +255,13 @@ export function useGameSocket() {
             dispatch(setAccount(currentAccount));
           } else {
             connecting.delete(character);
+            dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
             navigate('/login');
             return;
           }
         } catch {
           connecting.delete(character);
+          dispatch(setSessionLifecycle({ character, lifecycleState: 'entry-error' }));
           navigate('/login');
           return;
         }
@@ -225,6 +276,7 @@ export function useGameSocket() {
       socket.addEventListener('open', () => {
         clearReconnect(character);
         dispatch(setSessionConnectionStatus({ character, status: true }));
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'entering' }));
         const puppet: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [`@ic ${character}`], {}];
         socket.send(JSON.stringify(puppet));
         // Backfill anything that arrived while no socket was listening: the
@@ -234,6 +286,9 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('close', (event) => {
+        // A reconnect can replace this socket before its close event arrives.
+        // Never let stale frames or stale closes mutate the current session.
+        if (sockets[character] !== socket) return;
         dispatch(setSessionConnectionStatus({ character, status: false }));
         delete sockets[character];
         if (event.code === 1000) {
@@ -248,6 +303,12 @@ export function useGameSocket() {
         // Abnormal close: reconnect with capped exponential backoff
         // (1s, 2s, 4s, ... 30s). The open handler re-puppets and backfills.
         const attempt = (reconnectAttempts[character] ?? 0) + 1;
+        dispatch(
+          setSessionLifecycle({
+            character,
+            lifecycleState: attempt > MAX_RECONNECT_ATTEMPTS ? 'entry-error' : 'reconnecting',
+          })
+        );
         if (attempt > MAX_RECONNECT_ATTEMPTS) return;
         reconnectAttempts[character] = attempt;
         const delay = Math.min(1000 * 2 ** (attempt - 1), 30_000);
@@ -258,27 +319,28 @@ export function useGameSocket() {
       });
 
       socket.addEventListener('message', (event) => {
+        if (sockets[character] !== socket) return;
         let parsed: unknown;
 
         try {
           parsed = JSON.parse(event.data);
         } catch {
-          // Bad JSON frame: surface as a system message and bail.
+          // Bad JSON is a diagnostic, not story content.
           dispatch(
-            addSessionMessage({
+            addSessionDiagnostic({
               character,
-              message: buildSystemFallbackMessage(String(event.data)),
+              message: 'A connection message was invalid. Try again.',
             })
           );
           return;
         }
 
         if (!isIncomingMessage(parsed)) {
-          // Unexpected structure: stringify and show
+          // Unexpected structure is a diagnostic, not story content.
           dispatch(
-            addSessionMessage({
+            addSessionDiagnostic({
               character,
-              message: buildSystemFallbackMessage(JSON.stringify(parsed)),
+              message: 'A connection message had an unexpected format.',
             })
           );
           return;

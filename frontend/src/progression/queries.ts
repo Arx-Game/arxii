@@ -7,6 +7,7 @@ import {
   claimKudosForXP,
   conveneDurance,
   fetchAccountProgression,
+  fetchCharacterXpLedger,
   fetchDuranceStatus,
   fetchProgressionUnlocks,
   joinDuranceSession,
@@ -99,5 +100,18 @@ export function useJoinDuranceSessionMutation() {
       queryClient.invalidateQueries({ queryKey: ['durance-status'] });
       queryClient.invalidateQueries({ queryKey: ['account-progression'] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Per-character XP attribution (#3748)
+// ---------------------------------------------------------------------------
+
+/** What this character has earned and what has been spent on them. Owner-only. */
+export function useCharacterXpLedgerQuery(sheetId: number) {
+  return useQuery({
+    queryKey: ['xp-ledger', sheetId],
+    queryFn: () => fetchCharacterXpLedger(sheetId),
+    enabled: !!sheetId,
   });
 }

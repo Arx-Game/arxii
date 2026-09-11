@@ -5,7 +5,10 @@ from django.utils import timezone
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
-from world.progression.models import CharacterXP, KudosPointsData
+from world.progression.models import CharacterXP, ExperiencePointsData, KudosPointsData
+from world.progression.services.awards import award_xp
+from world.progression.services.xp_ledger import spend_xp_for_character
+from world.progression.types import ProgressionReason
 from world.scenes.factories import SceneFactory
 from world.scenes.models import SceneParticipation
 from world.vitals.constants import CharacterLifeState
@@ -133,3 +136,55 @@ class OffscreenDeathKudosTests(TestCase):
         result = award_death_kudos(staff, self.character)
         # No CharacterXP rows: lifetime spend 0 → the staff floor of 20.
         self.assertEqual(result.amount, 20)
+
+
+class DeathKudosReadsRealSpendTests(TestCase):
+    """The cap is sized on XP actually spent in play, not on planted rows (#3748).
+
+    Every one of this game's XP purchases — class-level unlocks, skill
+    breakthroughs, gift and thread-weaving unlocks, distinction sheet changes —
+    debits the pool through ``spend_xp_for_character``. Before #3748 none of them
+    touched ``CharacterXP``, so this cap silently read whatever CG conversion had
+    locked and nothing else: a character with a lifetime of purchases behind them
+    honoured no better than one who had never spent a point.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        ensure_death_kudos_category()
+        cls.recipient_account = AccountFactory()
+        cls.sheet = CharacterSheetFactory()
+        cls.scene = SceneFactory()
+        CharacterVitalsFactory(
+            character_sheet=cls.sheet,
+            life_state=CharacterLifeState.DEAD,
+            died_at=timezone.now(),
+            died_in_scene=cls.scene,
+        )
+        cls.character = cls.sheet.character
+        cls.character.db_account = cls.recipient_account
+        cls.character.save(update_fields=["db_account"])
+
+    def setUp(self) -> None:
+        ExperiencePointsData.flush_instance_cache()
+        CharacterXP.flush_instance_cache()
+
+    def test_staff_grant_is_half_of_what_the_player_actually_spent(self) -> None:
+        award_xp(
+            self.recipient_account,
+            400,
+            ProgressionReason.NOMINATION,
+            "A season of good RP",
+            character=self.sheet,
+        )
+        spend_xp_for_character(self.sheet, 300, "Unlocked something")
+
+        staff = AccountFactory()
+        staff.is_staff = True
+        staff.save(update_fields=["is_staff"])
+
+        result = award_death_kudos(staff, self.character)
+
+        # Half of the 300 actually spent — not half of the 400 earned, and not
+        # the bare staff floor of 20.
+        self.assertEqual(result.amount, 150)

@@ -1014,7 +1014,7 @@ export function ThreadedNarrativeReader({
         fontFamily: 'var(--play-prose-family, ui-sans-serif)',
       }}
     >
-      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-3 px-4 py-4">
+      <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-[var(--play-density-gap,0.75rem)] px-4 py-4">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
             {/* realThreadGroups, not groups (#3759 Wave 9 fix-round-1 re-review

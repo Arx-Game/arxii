@@ -7,7 +7,7 @@ import django.db.models.deletion
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("arxii", "0118_interactionthread_interaction_thread_and_more"),
+        ("arxii", "0119_xp_attributed_to_character"),
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
     ]
 

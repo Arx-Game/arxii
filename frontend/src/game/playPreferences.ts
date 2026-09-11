@@ -1,111 +1,166 @@
-import { useCallback, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+
+export type SidebarSide = 'left' | 'right';
+export type PlayDensity = 'compact' | 'comfortable';
+export type ReaderMode = 'threads' | 'chronological';
 
 export interface PlayPreferences {
   proseSize: number;
   proseFamily: 'sans' | 'serif';
   measure: number;
-  sidebarSide: 'left' | 'right';
-  readerMode: 'threads' | 'chronological';
-  density: 'compact' | 'comfortable';
+  sidebarWidth: number;
+  sidebarSide: SidebarSide;
+  density: PlayDensity;
+  readerMode: ReaderMode;
 }
+
 export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   proseSize: 14,
   proseFamily: 'sans',
   measure: 90,
+  sidebarWidth: 280,
   sidebarSide: 'right',
-  readerMode: 'threads',
   density: 'compact',
+  readerMode: 'threads',
 };
-const STORAGE_KEY = 'arx:play-preferences:v1';
 
-export function loadPlayPreferences(): PlayPreferences {
+const STORAGE_KEY = 'arx:play-preferences:v2';
+const LEGACY_STORAGE_KEY = 'arx:play-preferences:v1';
+
+function clamp(value: unknown, minimum: number, maximum: number, fallback: number): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.min(maximum, Math.max(minimum, number)) : fallback;
+}
+
+export function playPreferencesKey(accountId?: number | null): string {
+  return accountId == null ? STORAGE_KEY : `${STORAGE_KEY}:account:${accountId}`;
+}
+
+export function loadPlayPreferences(accountId?: number | null): PlayPreferences {
   try {
-    const value = JSON.parse(
-      window.localStorage.getItem(STORAGE_KEY) ?? 'null'
-    ) as Partial<PlayPreferences> | null;
+    const stored =
+      window.localStorage.getItem(playPreferencesKey(accountId)) ??
+      window.localStorage.getItem(LEGACY_STORAGE_KEY);
+    const value = stored ? (JSON.parse(stored) as Partial<PlayPreferences>) : null;
     if (!value) return DEFAULT_PLAY_PREFERENCES;
-    return {
-      proseSize: Math.min(20, Math.max(12, Number(value.proseSize) || 14)),
+    const normalized: PlayPreferences = {
+      proseSize: clamp(value.proseSize, 12, 20, DEFAULT_PLAY_PREFERENCES.proseSize),
       proseFamily: value.proseFamily === 'serif' ? 'serif' : 'sans',
-      measure: Math.min(110, Math.max(72, Number(value.measure) || 90)),
+      measure: clamp(value.measure, 72, 110, DEFAULT_PLAY_PREFERENCES.measure),
+      sidebarWidth: clamp(value.sidebarWidth, 240, 360, DEFAULT_PLAY_PREFERENCES.sidebarWidth),
       sidebarSide: value.sidebarSide === 'left' ? 'left' : 'right',
-      readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
       density: value.density === 'comfortable' ? 'comfortable' : 'compact',
+      readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
     };
+    if (accountId != null && !window.localStorage.getItem(playPreferencesKey(accountId))) {
+      window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(normalized));
+    }
+    return normalized;
   } catch {
     return DEFAULT_PLAY_PREFERENCES;
   }
 }
 
-export function savePlayPreferences(preferences: PlayPreferences): void {
+export function savePlayPreferences(
+  preferences: PlayPreferences,
+  accountId?: number | null
+): boolean {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(preferences));
+    window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(preferences));
+    return true;
   } catch {
-    /* tab-only fallback */
+    // Storage can be disabled; callers continue with in-memory preferences.
+    return false;
   }
 }
 
-// Shared external store (#3759 Wave 6): DisplaySettings.tsx and
-// ThreadedNarrativeReader.tsx each call usePlayPreferences() independently.
-// A plain per-instance useState (the original implementation) means one
-// instance calling `update` never re-renders the OTHER's already-mounted
-// instance — so a font-size change made in DisplaySettings while the reader
-// is open would leave the reader's own `preferences.proseSize` stale
-// forever, and its anchor-restore effect (which needs to re-fire on exactly
-// that change, per spec Acceptance A08) would never see it. `notifyStore`
-// broadcasts a fresh snapshot to every subscribed instance on every update,
-// including instances that didn't make the change themselves.
-let cachedPreferences: PlayPreferences | null = null;
-// The raw stored string the cache above was built from -- lets
+// Shared external store (#3759 Wave 6), keyed by storage key -- storage keys
+// already encode `accountId` (`playPreferencesKey`, #3758), so this preserves
+// #3758's per-account isolation while still fixing Wave 6's original bug:
+// DisplaySettings.tsx and ThreadedNarrativeReader.tsx each call
+// usePlayPreferences() independently, and a plain per-instance useState meant
+// one instance calling `update` never re-rendered the OTHER's already-mounted
+// instance for the SAME account -- so a font-size change made in
+// DisplaySettings while the reader was open would leave the reader's own
+// `preferences.proseSize` stale forever, and its anchor-restore effect (which
+// needs to re-fire on exactly that change, per spec Acceptance A08) would
+// never see it. `notifyStore` broadcasts a fresh snapshot to every instance
+// subscribed to the SAME key. GameLayout.tsx's own sidebarWidth/sidebarSide
+// sync is a separate, pre-existing mechanism (the `arx-play-preferences`
+// window event, dispatched by DisplaySettings.tsx's own effect on every
+// preferences change) -- untouched here.
+const cachedPreferences = new Map<string, PlayPreferences>();
+// The raw stored string each cache entry was built from -- lets
 // getStoreSnapshot cheaply detect "storage changed out from under the
 // cache" (e.g. a test's `localStorage.clear()`, or any other direct write
-// that doesn't go through `update`) and rebuild instead of serving a stale
-// object indefinitely, without needing a 'storage' event (which doesn't
-// fire for same-tab writes anyway).
-let cachedRaw: string | null | undefined;
-const storeListeners = new Set<() => void>();
+// that doesn't go through `update`, such as GameLayout.tsx's own
+// sidebarWidth writes) and rebuild instead of serving a stale object
+// indefinitely, without needing a 'storage' event (which doesn't fire for
+// same-tab writes anyway).
+const cachedRaw = new Map<string, string | null | undefined>();
+const storeListeners = new Map<string, Set<() => void>>();
 
-function getStoreSnapshot(): PlayPreferences {
+function getStoreSnapshot(key: string, accountId?: number | null): PlayPreferences {
   let raw: string | null;
   try {
-    raw = window.localStorage.getItem(STORAGE_KEY);
+    raw = window.localStorage.getItem(key);
   } catch {
     raw = null;
   }
-  if (cachedPreferences === null || raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedPreferences = loadPlayPreferences();
+  if (!cachedPreferences.has(key) || raw !== cachedRaw.get(key)) {
+    cachedRaw.set(key, raw);
+    cachedPreferences.set(key, loadPlayPreferences(accountId));
   }
-  return cachedPreferences;
+  return cachedPreferences.get(key) as PlayPreferences;
 }
 
-function notifyStore(next: PlayPreferences): void {
-  cachedPreferences = next;
-  cachedRaw = JSON.stringify(next);
-  for (const listener of storeListeners) listener();
+function notifyStore(key: string, next: PlayPreferences): void {
+  cachedPreferences.set(key, next);
+  cachedRaw.set(key, JSON.stringify(next));
+  for (const listener of storeListeners.get(key) ?? []) listener();
 }
 
-function subscribeStore(listener: () => void): () => void {
-  storeListeners.add(listener);
-  return () => storeListeners.delete(listener);
+function subscribeStore(key: string, listener: () => void): () => void {
+  let listeners = storeListeners.get(key);
+  if (!listeners) {
+    listeners = new Set();
+    storeListeners.set(key, listeners);
+  }
+  listeners.add(listener);
+  return () => listeners.delete(listener);
 }
 
-export function usePlayPreferences() {
-  const preferences = useSyncExternalStore(subscribeStore, getStoreSnapshot, getStoreSnapshot);
-  const update = useCallback((patch: Partial<PlayPreferences>) => {
-    // Merge the patch over a FRESH read from storage, never over `current`
-    // (this hook instance's own stale in-memory snapshot). Two independent
-    // components (DisplaySettings.tsx, ThreadedNarrativeReader.tsx) each call
-    // usePlayPreferences() and hold their own useState snapshot from their
-    // own mount time; merging over `current` meant whichever wrote second
-    // clobbered the first's change with its own stale copy of every other
-    // field. Reading storage fresh here layers this write on top of whatever
-    // is actually persisted right now, including another instance's write.
-    const next = { ...loadPlayPreferences(), ...patch };
-    savePlayPreferences(next);
-    notifyStore(next);
+export function usePlayPreferences(accountId?: number | null) {
+  const key = useMemo(() => playPreferencesKey(accountId), [accountId]);
+  const subscribe = useCallback((listener: () => void) => subscribeStore(key, listener), [key]);
+  const getSnapshot = useCallback(() => getStoreSnapshot(key, accountId), [key, accountId]);
+  const preferences = useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  const [storageWarning, setStorageWarning] = useState(false);
+  // Catches writers OTHER than this hook's own `update` (GameLayout.tsx's
+  // direct sidebarWidth/sidebarSide writes via savePlayPreferences) failing
+  // to persist -- #3758's original contract, preserved.
+  useEffect(() => {
+    const warn = () => setStorageWarning(true);
+    window.addEventListener('arx-play-storage-warning', warn);
+    return () => window.removeEventListener('arx-play-storage-warning', warn);
   }, []);
-  return { preferences, update };
+  const update = useCallback(
+    (patch: Partial<PlayPreferences>) => {
+      // Merge the patch over a FRESH read from storage, never over a stale
+      // in-memory snapshot -- two independent components (DisplaySettings.tsx,
+      // ThreadedNarrativeReader.tsx) each call usePlayPreferences() and each
+      // held their own snapshot from their own last render; merging over that
+      // meant whichever wrote second clobbered the first's change with its
+      // own stale copy of every other field. Reading storage fresh here
+      // layers this write on top of whatever is actually persisted right
+      // now, including another instance's write.
+      const next = { ...loadPlayPreferences(accountId), ...patch };
+      if (!savePlayPreferences(next, accountId)) setStorageWarning(true);
+      notifyStore(key, next);
+    },
+    [key, accountId]
+  );
+  return { preferences, update, storageWarning };
 }
 
 /** A single reading-position anchor: which pose, which thread, and where. */

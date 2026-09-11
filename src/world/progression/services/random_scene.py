@@ -341,6 +341,7 @@ def claim_random_scene(
             amount=claimer_xp,
             reason=ProgressionReason.RANDOM_SCENE,
             description=f"Random scene with {target.target_persona.name}",
+            character=claimer_entry.character_sheet,
         )
 
         # Award XP to target's account
@@ -350,6 +351,7 @@ def claim_random_scene(
                 amount=RS_PARTNER_XP,
                 reason=ProgressionReason.RANDOM_SCENE,
                 description="Random scene partner reward",
+                character=target.target_persona.character_sheet,
             )
 
         # Create completion record

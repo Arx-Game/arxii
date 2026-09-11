@@ -40,6 +40,7 @@ import { LocationsTab } from '@/locations/components/LocationsTab';
 import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
 import { KinshipPanel } from '@/kinship/components/KinshipPanel';
 import { AdvancementTab } from '@/progression/components/advancement/AdvancementTab';
+import { XpLedgerCard } from '@/progression/components/advancement/XpLedgerCard';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -265,6 +266,9 @@ export function CharacterSheetPage() {
                 isActiveCharacter inside the tab — the backend views resolve the acting
                 character via the account's puppeted character, not this page's id, the
                 same constraint the Locations tab's Ships section already handles. */}
+            {/* Read-only and keyed by sheet id, so it stands outside the
+                isActiveCharacter gate the spend cards sit behind (#3748). */}
+            <XpLedgerCard sheetId={entry.character.id} />
             <AdvancementTab
               characterId={entry.character.id}
               isActiveCharacter={isActiveCharacter}

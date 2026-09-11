@@ -164,6 +164,7 @@ def create_first_impression(  # noqa: PLR0913
                 FIRST_IMPRESSION_AUTHOR_XP,
                 reason=ProgressionReason.FIRST_IMPRESSION,
                 description=f"First impression of {relationship.target_name}",
+                character=source,
             )
         if target is None:
             return relationship
@@ -188,6 +189,7 @@ def _award_reciprocal_first_impression(
             FIRST_IMPRESSION_TARGET_XP,
             reason=ProgressionReason.FIRST_IMPRESSION,
             description=f"First impression from {source.character.db_key}",
+            character=target,
         )
 
     try:

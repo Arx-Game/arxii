@@ -476,8 +476,12 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
     Returns:
         ``(success, message)`` — mirrors ``spend_xp_on_unlock``'s contract.
     """
-    from world.progression.models import TraitRatingUnlock, XPTransaction  # noqa: PLC0415
-    from world.progression.services.awards import get_or_create_xp_tracker  # noqa: PLC0415
+    from world.progression.exceptions import (  # noqa: PLC0415
+        InsufficientXPError,
+        NoAccountForCharacterError,
+    )
+    from world.progression.models import TraitRatingUnlock  # noqa: PLC0415
+    from world.progression.services.xp_ledger import spend_xp_for_character  # noqa: PLC0415
 
     try:
         skill_value = CharacterSkillValue.objects.get(character_id=character.pk, skill=skill)
@@ -497,23 +501,18 @@ def purchase_skill_breakthrough(character: ObjectDB, skill: Skill) -> tuple[bool
         )
 
     xp_cost = unlock.get_xp_cost_for_character(character)
-    account = character.account
 
     with transaction.atomic():
-        if xp_cost > 0:
-            xp_tracker = get_or_create_xp_tracker(account)
-            if not xp_tracker.spend_xp(xp_cost):
-                return (
-                    False,
-                    f"Insufficient XP (need {xp_cost}, have {xp_tracker.current_available}).",
-                )
-            XPTransaction.objects.create(
-                account=account,
-                amount=-xp_cost,
-                reason=ProgressionReason.XP_PURCHASE,
-                description=f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
-                character=character.sheet_data,
+        try:
+            spend_xp_for_character(
+                character.sheet_data,
+                xp_cost,
+                f"Breakthrough: {skill.name} to {target_rating / 10:.1f}",
             )
+        except InsufficientXPError as exc:
+            return False, f"Insufficient XP (need {exc.required}, have {exc.available})."
+        except NoAccountForCharacterError as exc:
+            return False, exc.user_message
 
         skill_value.value = target_rating
         skill_value.development_points = 0

@@ -6,6 +6,7 @@ import { apiFetch } from '@/evennia_replacements/api';
 import { readErrorDetail } from '@/lib/errors';
 import type {
   AccountProgressionData,
+  CharacterXpLedger,
   DuranceConveneResponse,
   DuranceStatus,
   PaginatedProgressionUnlockItemList,
@@ -103,4 +104,13 @@ export async function joinDuranceSession(
   });
   if (!res.ok) await readErrorDetail(res, 'Failed to join the Durance session');
   return res.json() as Promise<{ detail?: string; fired?: boolean }>;
+}
+
+/** The per-character XP ledger (#3748). Owner-only; lives on the sheet, not the account. */
+export async function fetchCharacterXpLedger(sheetId: number): Promise<CharacterXpLedger> {
+  const res = await apiFetch(`/api/character-sheets/${sheetId}/xp-ledger/`);
+  if (!res.ok) {
+    throw new Error('Failed to load the XP ledger');
+  }
+  return res.json();
 }
