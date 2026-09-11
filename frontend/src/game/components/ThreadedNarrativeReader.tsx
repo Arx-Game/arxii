@@ -256,6 +256,14 @@ export function ThreadedNarrativeReader({
   if (readOnly !== prevReadOnlyForReset) {
     setPrevReadOnlyForReset(readOnly);
     setHistoryStartOverride(null);
+    // A ref mutation during render is safe HERE specifically because it's
+    // idempotent (always assigning the same literal `null`, never a
+    // render-dependent value) -- React may discard and redo this render pass
+    // (StrictMode double-invoke, concurrent rendering) without changing the
+    // outcome. A future edit that made this conditional or assigned
+    // something other than a constant (e.g. `targetPoseId`) would NOT be
+    // safe the same way and could break silently under those same
+    // conditions -- keep this assignment idempotent.
     targetSeekDoneRef.current = null;
   }
   const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);

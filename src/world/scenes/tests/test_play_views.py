@@ -7,12 +7,14 @@ from unittest.mock import patch
 
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from evennia_extensions.factories import AccountFactory
 from world.scenes.constants import InteractionVisibility
-from world.scenes.factories import InteractionFactory, SceneFactory
+from world.scenes.factories import InteractionFactory, PlaceFactory, SceneFactory
 from world.scenes.models import Interaction, InteractionReadReceipt
+from world.scenes.play_views import _queryset
 
 
 class PlayReaderContractTests(APITestCase):
@@ -123,6 +125,50 @@ class PlayPosesPaginationTests(APITestCase):
         self.assertEqual(result_ids, expected_ids)
         boundary_and_later_ids = {interactions[i].pk for i in range(5, 60)}
         self.assertFalse(boundary_and_later_ids & set(result_ids))
+
+
+class PlaceConversationPushdownTests(APITestCase):
+    """`conversation=place:<id>` pushes down into `_queryset`'s own DB filter
+
+    (#3759 review Fix round 2), mirroring the existing `scene:`/room
+    branches, rather than falling back to an unbounded-by-place Python scan.
+    The FINAL results at each caller are correct either way -- both
+    `PlaySearchView` and `PlayReadView._mark_conversation_read` already
+    re-filter the fetched rows in Python against `_conversation(row)["key"]
+    == conversation` regardless of whether the DB query was scoped -- so this
+    is a scan-size/query-shape fix, not a data-integrity one, and the only
+    way to actually observe it is to inspect what `_queryset` itself
+    returns, before any caller's Python-level re-filter narrows it back down
+    to the same correct answer either way.
+    """
+
+    def test_queryset_scopes_directly_to_the_named_place(self) -> None:
+        account = AccountFactory()
+        place_a = PlaceFactory()
+        place_b = PlaceFactory()
+        # All three writer_account=account (the "party" visibility branch) so
+        # every row is visible to `account` regardless of place -- isolating
+        # the assertion to the place: filter itself, not visible_to()'s own
+        # place__isnull=True room-heard exclusion (a place-scoped interaction
+        # is otherwise only visible to its writer/receivers, per
+        # InteractionQuerySet.visible_to's own docstring).
+        in_place_a = InteractionFactory(place=place_a, writer_account=account)
+        InteractionFactory(place=place_b, writer_account=account)
+        InteractionFactory(place=None, writer_account=account)
+
+        factory = APIRequestFactory()
+        django_request = factory.get("/api/play/search/")
+        force_authenticate(django_request, user=account)
+        request = Request(django_request)
+
+        queryset, _ = _queryset(request, params={"conversation": f"place:{place_a.pk}"})
+
+        # Only the row actually AT place_a comes back from the DB query
+        # itself -- not place_b's row, and not the placeless one -- proving
+        # the filter is a real WHERE clause, not merely "whatever happens to
+        # survive a later Python re-filter that would produce the same
+        # single-row answer regardless."
+        self.assertEqual(list(queryset.values_list("id", flat=True)), [in_place_a.pk])
 
 
 class PlayReadViewTests(APITestCase):

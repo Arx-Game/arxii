@@ -152,18 +152,31 @@ def _queryset(
         else:
             queryset = queryset.filter(timestamp__lte=until)
     queryset = InteractionFilter(query_params, queryset=queryset).qs
-    # Only pushes scene:/room refs down into the DB filter -- a place:/
-    # whisper:-scoped `conversation` (valid per `_is_recognized_conversation_ref`)
-    # falls back to scanning all visible history in Python at each of this
-    # function's callers, including `PlayReadView._mark_conversation_read`'s
-    # `pairs = [... if _conversation(row)["key"] == conversation]` filter, not
-    # just `PlaySearchView` (see its own `has_bound` comment for the same gap).
-    # Not reachable from the current UI on either path -- flagged so the next
-    # person extending either one doesn't assume `conversation` is always
-    # pushed down.
+    # scene:/room/place: refs push down into the DB filter (`place` is a
+    # plain FK column on the row, same as `scene`). `whisper:<comma-joined
+    # ids>` does NOT -- pushing it down needs a participant-set EXACT-match
+    # (not merely "any receiver present", which `filter_kind`'s
+    # `Exists`/`OuterRef` pattern gives you), a bigger lift than a filter
+    # branch. A whisper-scoped `conversation` therefore still falls back to
+    # scanning all visible history in Python at each of this function's
+    # callers -- including `PlayReadView._mark_conversation_read`'s
+    # `pairs = [... if _conversation(row)["key"] == conversation]` filter,
+    # not just `PlaySearchView` (see its own `has_bound` comment for the same
+    # gap). This whisper gap IS reachable in production, not just a
+    # theoretical one: `HistoryNavigator.tsx`'s search form offers a
+    # "Whispers" type, `onOpenReference` carries the backend's own
+    # `whisper:<ids>` ref straight through as `GameWindow.tsx`'s
+    # `conversationRef`, and "Mark conversation read" has no `readOnly` guard
+    # -- so clicking it while reading a whisper reference posts exactly this
+    # unbounded-scan shape. The result is still correct (bounded only by the
+    # `to=before` snapshot, which happens to be the conversation's own latest
+    # timestamp) -- this is a scan-size/performance gap, not a data-integrity
+    # one -- but it is NOT "unreachable," and no future edit should assume it is.
     conversation = query_params.get("conversation")
     if conversation and conversation.startswith("scene:"):
         queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
+    elif conversation and conversation.startswith("place:"):
+        queryset = queryset.filter(place_id=conversation.removeprefix("place:"))
     elif conversation == GENERAL_CONVERSATION_KEY:
         queryset = queryset.filter(scene__isnull=True)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
@@ -343,14 +356,17 @@ class PlaySearchView(APIView):
             return Response(
                 {"detail": "Search text must be between 2 and 200 characters."}, status=400
             )
-        # Accepts `conversation=place:<id>`/`conversation=whisper:<ids>` as a
-        # valid bound, but `_queryset` below only pushes `scene:`/room refs
-        # down into the DB filter -- a place/whisper-scoped search silently
-        # falls back to scanning all of this account's visible history in
-        # Python instead (#3759 review finding, minor fold-in). Not reachable
-        # from the current UI (`HistoryNavigator` always sends `from`, never a
-        # bare place/whisper `conversation`), so no behavior change here --
-        # flagged so the next person extending search doesn't assume
+        # Accepts `conversation=whisper:<ids>` as a valid bound, but
+        # `_queryset` below still doesn't push a whisper-scoped conversation
+        # down into the DB filter (place: now does -- see `_queryset`'s own
+        # comment for why whisper: is the harder case) -- a whisper-scoped
+        # search silently falls back to scanning all of this account's
+        # visible history in Python instead. NOT reachable from the current
+        # UI on THIS path specifically (`HistoryNavigator`'s search call never
+        # sends a bare `conversation` param at all, only `from`/`to`/`kind`)
+        # -- unlike `_mark_conversation_read`'s own whisper gap, which IS
+        # reachable (see `_queryset`'s comment) -- so no behavior change here,
+        # just flagged so the next person extending search doesn't assume
         # `conversation` is always pushed down to the query.
         has_bound = any(
             request.query_params.get(key)  # noqa: USE_FILTERSET
