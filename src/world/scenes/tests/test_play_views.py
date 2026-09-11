@@ -307,6 +307,60 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         )
         self.assertEqual(response.status_code, 403)
 
+    def test_rejects_an_unrecognized_conversation_ref(self) -> None:
+        """The actual production bug shape (#3759 review finding C1): a bare
+
+        scene id like ``"42"`` -- what `GameWindow.tsx` used to send before the
+        frontend fix -- matches none of `_conversation()`'s own possible output
+        shapes. Before this guard, `_queryset` applied no scene filter at all (no
+        branch matched), `pairs` filtered down to nothing (no row's real
+        `"scene:42"` ref ever equals the literal `"42"`), and the endpoint
+        silently reported `{"marked": 0}` with a 200 while having scanned the
+        account's entire visible history. Must now be a 400, not a silent no-op.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+
+        response = self.client.post(
+            "/api/play/read/",
+            {"conversation": str(scene.pk), "before": interaction.timestamp.isoformat()},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(InteractionReadReceipt.objects.filter(account=account).exists())
+
+
+class PlayConversationsViewTests(APITestCase):
+    """`unread`/`directUnread` on `/api/play/conversations/` (#3759 review finding I7).
+
+    The spec's own Design section explicitly staged `unread: 0` here until
+    `InteractionReadReceipt` existed -- it now does (this branch's own Task 1/2),
+    and `PlayThreadsView` already computes a real `unread` via `has_read`;
+    `PlayConversationsView` was never revisited to match.
+    """
+
+    def test_unread_counts_only_poses_this_account_has_not_read(self) -> None:
+        from world.scenes.read_state_services import mark_poses_read
+
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interactions = [InteractionFactory(scene=scene) for _ in range(3)]
+        mark_poses_read(
+            account=account,
+            poses=[(interactions[0].pk, interactions[0].timestamp.isoformat())],
+        )
+
+        response = self.client.get("/api/play/conversations/")
+
+        self.assertEqual(response.status_code, 200)
+        row = next(r for r in response.json()["results"] if r["ref"]["key"] == f"scene:{scene.pk}")
+        self.assertEqual(row["unread"], 2)
+        self.assertEqual(row["directUnread"], 0)
+
 
 class PlayThreadsViewTests(APITestCase):
     def test_requires_a_conversation_bound(self) -> None:

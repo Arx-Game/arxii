@@ -6,6 +6,7 @@ import base64
 from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 import json
+import re
 from typing import Any
 
 from django.db.models import QuerySet
@@ -17,6 +18,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from world.scenes.constants import (
+    GENERAL_CONVERSATION_KEY,
     KIND_CHANNEL,
     KIND_PLACE,
     KIND_ROOM,
@@ -92,6 +94,13 @@ def _page(results: list[dict[str, Any]], limit: int, request: Request) -> Respon
             )
             start_index = max(0, end_index - limit)
     page = results[start_index : min(start_index + limit, end_index)]
+    # Backward-cursor asymmetry (#3759 review finding, minor fold-in): paging
+    # backward (`before`) always computes `start_index + len(page) == end_index`
+    # by construction, so `after` below is always `None` on that response -- a
+    # client that pages backward has no cursor to then page forward again from.
+    # Not reachable today (no frontend caller ever sends a bare `before` without
+    # also re-deriving `after` some other way), so no behavior change here --
+    # just flagging the gap for whoever extends paging next.
     return Response(
         {
             "results": page,
@@ -146,7 +155,7 @@ def _queryset(
     conversation = query_params.get("conversation")
     if conversation and conversation.startswith("scene:"):
         queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
-    elif conversation == KIND_ROOM:
+    elif conversation == GENERAL_CONVERSATION_KEY:
         queryset = queryset.filter(scene__isnull=True)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
@@ -176,7 +185,41 @@ def _conversation(row: dict[str, Any]) -> dict[str, str]:
     scene = row.get("scene")
     if scene is not None:
         return {"kind": KIND_ROOM, "key": f"scene:{scene}"}
-    return {"kind": KIND_ROOM, "key": KIND_ROOM}
+    return {"kind": KIND_ROOM, "key": GENERAL_CONVERSATION_KEY}
+
+
+_SCENE_REF_RE = re.compile(r"^scene:\d+$")
+_PLACE_REF_RE = re.compile(r"^place:\d+$")
+_WHISPER_REF_RE = re.compile(r"^whisper:\d+(?:,\d+)*$")
+
+
+def _is_recognized_conversation_ref(ref: str) -> bool:
+    """Whether `ref` matches one of `_conversation()`'s own possible output shapes.
+
+    Kept in the same lockstep-with-`_conversation()` discipline `constants.py`'s
+    module comment already documents for `filter_kind`/`_conversation()` -- this
+    is the third function that must recognize exactly the ref shapes
+    `_conversation()` can produce, so it walks the same branches: the general/
+    no-scene room (`GENERAL_CONVERSATION_KEY`), a scene-attached conversation
+    (`scene:<id>`), a place (`place:<id>`), a whisper (`whisper:<comma-joined
+    ids>`), the tabletalk channel (`TABLETALK_MODE`), and the forward-compatible
+    OOC modes (`OOC_MODES`) -- see the constants module for why the latter two
+    are dead branches today.
+
+    `PlayReadView._mark_conversation_read` uses this to reject a caller-supplied
+    ref that doesn't match ANY recognized shape (#3759 review finding C1) --
+    without it, an unrecognized ref like a bare pose id silently matched no
+    `_queryset` branch (so no scene filter applied at all) and then matched no
+    row's own `_conversation()` key either, so the whole request serialized the
+    account's entire visible history, wrote nothing, and reported success.
+    """
+    if ref == GENERAL_CONVERSATION_KEY:
+        return True
+    if ref == TABLETALK_MODE:
+        return True
+    if ref in OOC_MODES:
+        return True
+    return bool(_SCENE_REF_RE.match(ref) or _PLACE_REF_RE.match(ref) or _WHISPER_REF_RE.match(ref))
 
 
 def _rows(
@@ -198,11 +241,20 @@ class PlayConversationsView(APIView):
         for row in rows:
             ref = _conversation(row)
             grouped.setdefault(f"{ref['kind']}:{ref['key']}", []).append(row)
+        read_ids: set[int] = set()
+        if request.user.is_authenticated and rows:
+            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+
+            read_ids = has_read(
+                account=request.user,  # type: ignore[invalid-argument-type]
+                interaction_ids=[row["id"] for row in rows],
+            )
         results = []
         for group in grouped.values():
             first, latest = group[0], group[-1]
             ref = _conversation(first)
             scene = first.get("scene")
+            unread = sum(1 for row in group if int(row["id"]) not in read_ids)
             results.append(
                 {
                     "ref": ref,
@@ -212,7 +264,11 @@ class PlayConversationsView(APIView):
                     "canSend": False,
                     "sceneId": str(scene) if scene is not None else None,
                     "latestVisiblePose": _ref(latest),
-                    "unread": 0,
+                    "unread": unread,
+                    # `directUnread` -- specifically-addressed-to-me unread --
+                    # requires knowing the current persona's own targeting, a
+                    # gap `PlayThreadsView` also leaves at 0 today (#3759 spec's
+                    # own staging note); consistent, not a new gap to fix here.
                     "directUnread": 0,
                 }
             )
@@ -278,6 +334,15 @@ class PlaySearchView(APIView):
             return Response(
                 {"detail": "Search text must be between 2 and 200 characters."}, status=400
             )
+        # Accepts `conversation=place:<id>`/`conversation=whisper:<ids>` as a
+        # valid bound, but `_queryset` below only pushes `scene:`/room refs
+        # down into the DB filter -- a place/whisper-scoped search silently
+        # falls back to scanning all of this account's visible history in
+        # Python instead (#3759 review finding, minor fold-in). Not reachable
+        # from the current UI (`HistoryNavigator` always sends `from`, never a
+        # bare place/whisper `conversation`), so no behavior change here --
+        # flagged so the next person extending search doesn't assume
+        # `conversation` is always pushed down to the query.
         has_bound = any(
             request.query_params.get(key)  # noqa: USE_FILTERSET
             for key in ("conversation", "kind", "from", "to", "until", "participant")
@@ -430,6 +495,11 @@ class PlayReadView(APIView):
 
         if not isinstance(conversation, str):
             return Response({"detail": "conversation must be a string reference."}, status=400)
+        if not _is_recognized_conversation_ref(conversation):
+            return Response(
+                {"detail": "conversation is not a recognized conversation reference."},
+                status=400,
+            )
         before = request.data.get("before")
         if not isinstance(before, str) or parse_datetime(before) is None:
             return Response(

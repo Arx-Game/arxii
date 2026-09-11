@@ -195,3 +195,10 @@ KIND_PLACE = "place"
 KIND_SCENE_OOC = "scene_ooc"
 KIND_CHANNEL = "channel"
 KIND_ROOM = "room"
+
+# The general/no-scene conversation's `kind` and `key` coincide by construction
+# (see `_conversation()`'s room-fallback branch) -- this alias exists purely for
+# legibility at `_queryset`'s `conversation` comparison and `_conversation()`'s
+# own room-fallback return, both in `play_views.py`, so neither reads like a
+# kind/key mismatch (#3759 review finding 7a).
+GENERAL_CONVERSATION_KEY = KIND_ROOM
