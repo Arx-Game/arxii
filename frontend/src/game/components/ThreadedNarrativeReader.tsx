@@ -318,9 +318,9 @@ export function ThreadedNarrativeReader({
   // reference deep-link opened), reusing a stale `{ start: 0, end: 25 }`
   // entry against a much larger live `group.interactions` would silently
   // show that thread's OLDEST 25 poses instead of its most recent -- a real,
-  // silently-wrong slice, not a graceful degrade. `collapsed` (the
-  // thread-collapse Set, just below) is NOT reset the same way: a stale
-  // collapsed/expanded entry on a colliding key is a minor "wrong thread
+  // silently-wrong slice, not a graceful degrade. `expandedKeys` (the
+  // thread-expand Set, just below) is NOT reset the same way: a stale
+  // expanded/collapsed entry on a colliding key is a minor "wrong thread
   // defaulted open" UX quirk, never a wrong SET of rendered poses, so it's
   // left as pre-existing, out-of-scope behavior. `threadWindows` doesn't get
   // that same benefit of the doubt -- reset it.
@@ -420,8 +420,22 @@ export function ThreadedNarrativeReader({
     () => loadConversationAnchor(conversationKey),
     [conversationKey]
   );
-  // The "collapse all but the most recently active thread" default can only
-  // be computed once real thread data has arrived. On a real page load this
+  // #3759 Wave 9 fix round 1 finding I-4: this is `expandedKeys` -- an
+  // OPT-IN set of expanded thread keys -- not the `collapsed` opt-OUT set
+  // this component used through the rest of Wave 9. `groups` now always
+  // holds every thread the reader has ever seen (F1), and that set can grow
+  // AFTER mount (a `fetchNextPage` revealing older threads; a persisted
+  // storage row written before this wave, which only ever named ~20 keys
+  // back when `groups` itself was capped at 20). An opt-OUT `collapsed` set
+  // means any key that set doesn't already know about defaults to EXPANDED
+  // -- exactly backwards from "collapsed by default except the most
+  // recently active thread," and silently so, since nothing about a newly-
+  // revealed thread ever re-adds it to `collapsed`. An opt-IN `expandedKeys`
+  // set needs no such catch-up: a key that was never explicitly expanded is
+  // collapsed by construction, forever, with no ongoing effect required.
+  //
+  // The "expand only the most recently active thread" default can only be
+  // computed once real thread data has arrived. On a real page load this
   // component mounts (keyed by conversationKey/sceneId, per GameWindow.tsx)
   // the instant sceneId becomes truthy, while useSceneInteractions's
   // useInfiniteQuery is still in flight — so `groups` is empty on that first
@@ -429,24 +443,25 @@ export function ThreadedNarrativeReader({
   // render and never re-runs once real data lands, so the default silently
   // never applies. Instead: seed synchronously from storage if it exists
   // (and never let the async default fire on top of restored state), else
-  // leave `collapsed` empty and let the effect below apply the default the
-  // first time `groups` is actually populated. `defaultSeeded` guards that
-  // effect so it only ever runs once per mount — the user's own subsequent
-  // toggles (via toggleThread/bulk expand-collapse) are the only thing
-  // allowed to change `collapsed` after that.
-  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
-    storedAnchorState ? new Set(storedAnchorState.collapsed) : new Set()
+  // leave `expandedKeys` empty and let the effect below apply the default
+  // the first time `groups` is actually populated. `defaultSeeded` guards
+  // that effect so it only ever runs once per mount — the user's own
+  // subsequent toggles (via toggleThread/bulk expand-collapse) are the only
+  // thing allowed to change `expandedKeys` after that.
+  const [expandedKeys, setExpandedKeys] = useState<Set<string>>(() =>
+    storedAnchorState ? new Set(storedAnchorState.expanded) : new Set()
   );
   const defaultSeeded = useRef(storedAnchorState !== null);
   useEffect(() => {
     if (defaultSeeded.current) return;
     if (groups.length === 0) return;
     defaultSeeded.current = true;
-    if (groups.length <= 1) {
-      setCollapsed(new Set());
-      return;
-    }
-    setCollapsed(new Set(groups.filter((g) => g.key !== mostRecentGroupKey).map((g) => g.key)));
+    // `mostRecentGroupKey` is never null here: it's derived from `groups`
+    // (above), and this effect already returned above when `groups` was
+    // empty. A single-thread conversation is trivially its own "most
+    // recently active" thread, so this one branch also covers the old
+    // `groups.length <= 1` case -- expanded, not collapsed.
+    setExpandedKeys(new Set(mostRecentGroupKey ? [mostRecentGroupKey] : []));
   }, [groups, mostRecentGroupKey]);
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
   // Optimistic mirror of "Mark conversation read" (#3759 spec section 7): the
@@ -506,7 +521,7 @@ export function ThreadedNarrativeReader({
   // clobbered, on the next save) the OTHER mode's own remembered position.
   const persistAnchorState = (overrides: {
     anchor?: ReadingAnchor | null;
-    collapsed?: string[];
+    expanded?: string[];
   }) => {
     const current = loadConversationAnchor(conversationKey);
     const currentAnchors = current?.anchors ?? { threads: null, chronological: null };
@@ -519,48 +534,49 @@ export function ThreadedNarrativeReader({
         : currentAnchors;
     saveConversationAnchor(conversationKey, {
       anchors: nextAnchors,
-      collapsed: overrides.collapsed ?? current?.collapsed ?? [],
+      expanded: overrides.expanded ?? current?.expanded ?? [],
     });
   };
-  // Gate the WRITE only (#3759 review finding I1) -- collapsing threads stays
-  // allowed while reading a reference or a non-room conversation tab
-  // (Decision #5 governs the STORED state, not the in-memory `collapsed`
-  // React state above); it must just never corrupt someone ELSE's stored
-  // row. Same two conditions the anchor-save paths below already gate on.
-  const persistCollapsed = (next: Set<string>) => {
+  // Gate the WRITE only (#3759 review finding I1) -- expanding/collapsing
+  // threads stays allowed while reading a reference or a non-room
+  // conversation tab (Decision #5 governs the STORED state, not the
+  // in-memory `expandedKeys` React state above); it must just never corrupt
+  // someone ELSE's stored row. Same two conditions the anchor-save paths
+  // below already gate on.
+  const persistExpanded = (next: Set<string>) => {
     if (readOnly || !persistAnchor) return;
-    persistAnchorState({ collapsed: [...next] });
+    persistAnchorState({ expanded: [...next] });
   };
   const toggleThread = (key: string) =>
-    setCollapsed((previous) => {
+    setExpandedKeys((previous) => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      persistCollapsed(next);
+      persistExpanded(next);
       return next;
     });
   const expandAllThreads = () => {
-    const next = new Set<string>();
-    setCollapsed(next);
-    persistCollapsed(next);
+    const next = new Set(groups.map((group) => group.key));
+    setExpandedKeys(next);
+    persistExpanded(next);
   };
   const collapseAllThreads = () => {
-    const next = new Set(groups.map((group) => group.key));
-    setCollapsed(next);
-    persistCollapsed(next);
+    const next = new Set<string>();
+    setExpandedKeys(next);
+    persistExpanded(next);
   };
   // #3759 Wave 9 review finding F5: jumps to the most-recently-active thread
-  // (reusing `mostRecentGroupKey`, the same computation the default-collapse
+  // (reusing `mostRecentGroupKey`, the same computation the default-expand
   // effect above uses), expanding it if needed and scrolling its header into
   // view. Pure UI state + a scroll, like expand/collapse-all -- no mutation,
   // so it needs no `readOnly` gate (unlike "Mark conversation read" below).
   const handleLatestActivity = () => {
     if (!mostRecentGroupKey) return;
-    setCollapsed((previous) => {
-      if (!previous.has(mostRecentGroupKey)) return previous;
+    setExpandedKeys((previous) => {
+      if (previous.has(mostRecentGroupKey)) return previous;
       const next = new Set(previous);
-      next.delete(mostRecentGroupKey);
-      persistCollapsed(next);
+      next.add(mostRecentGroupKey);
+      persistExpanded(next);
       return next;
     });
     const el = rootRef.current?.querySelector<HTMLElement>(
@@ -581,10 +597,10 @@ export function ThreadedNarrativeReader({
   // scrollTop -- so it survives resize, font/measure changes and
   // older-page-insertion, which all change *where* that same pose happens to
   // land on screen without changing *which pose* the reader should be
-  // showing. `readOnlyRef`/`interactionsRef`/`collapsedRef` mirror the
+  // showing. `readOnlyRef`/`interactionsRef`/`expandedKeysRef` mirror the
   // latest render's values for the native (non-JSX) scroll listener below,
   // which is attached once per Threads-view session rather than
-  // re-subscribed on every interaction/collapse change (re-subscribing would
+  // re-subscribed on every interaction/expand change (re-subscribing would
   // risk dropping an in-flight debounce right when the user is mid-scroll).
   const rootRef = useRef<HTMLDivElement>(null);
   const readOnlyRef = useRef(readOnly);
@@ -593,8 +609,8 @@ export function ThreadedNarrativeReader({
   persistAnchorRef.current = persistAnchor;
   const interactionsRef = useRef(interactions);
   interactionsRef.current = interactions;
-  const collapsedRef = useRef(collapsed);
-  collapsedRef.current = collapsed;
+  const expandedKeysRef = useRef(expandedKeys);
+  expandedKeysRef.current = expandedKeys;
   const conversationKeyRef = useRef(conversationKey);
   conversationKeyRef.current = conversationKey;
 
@@ -628,7 +644,7 @@ export function ThreadedNarrativeReader({
     setThreadWindows((previous) => ({ ...previous, [key]: { start: 0, end: groupLength } }));
     return true;
   };
-  // I2's own miss-handling: uncollapses the pose's thread (if collapsed) AND
+  // I2's own miss-handling: expands the pose's thread (if collapsed) AND
   // widens its window (if not already fully shown), then flags a retry once
   // both land. Returns false ("not the miss case, don't retry") only when
   // the pose is genuinely absent from `interactions` altogether, OR when its
@@ -640,11 +656,11 @@ export function ThreadedNarrativeReader({
     if (!targetInteraction) return false; // genuinely absent from `interactions`
     const key = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
     let changed = false;
-    if (collapsed.has(key)) {
+    if (!expandedKeys.has(key)) {
       changed = true;
-      setCollapsed((previous) => {
+      setExpandedKeys((previous) => {
         const next = new Set(previous);
-        next.delete(key);
+        next.add(key);
         return next;
       });
     }
@@ -724,13 +740,13 @@ export function ThreadedNarrativeReader({
   // `widenThreadWindowToInclude` only schedules the wider `threadWindows`
   // entry (and/or the uncollapse); the pose isn't mounted (and thus
   // findable) until the resulting re-render commits, which is exactly when
-  // `threadWindows` or `collapsed` changes.
+  // `threadWindows` or `expandedKeys` changes.
   useEffect(() => {
     if (!anchorRetryPendingRef.current) return;
     anchorRetryPendingRef.current = false;
     restoreAnchor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threadWindows, collapsed]);
+  }, [threadWindows, expandedKeys]);
 
   // Effect A: initial restore, once real pose data has arrived. Mirrors the
   // `defaultSeeded` pattern above -- this component can mount (keyed by
@@ -821,26 +837,27 @@ export function ThreadedNarrativeReader({
     if (targetSeekDoneRef.current === targetPoseId) return;
     const targetInteraction = interactions.find((item) => String(item.id) === targetPoseId);
     if (!targetInteraction) return; // not in the loaded window at all -- nothing to seek to
-    // Uncollapse the target's own thread (#3759 review Fix round 1
-    // IMPORTANT, kept exactly as built/reviewed in Wave 8): the "collapse
-    // all but the most recently active thread" default (declared earlier,
-    // above) would otherwise permanently hide the target's row whenever its
-    // thread ISN'T the most recently active one -- the ORDINARY
-    // multi-thread case, not an edge case. A functional update composes
-    // correctly with whatever the default-collapse effect also just
-    // enqueued in the SAME commit (declared earlier, so it enqueues first);
-    // idempotent and harmless to re-issue on every pass, including once the
-    // thread is already expanded. `collapsed` is a dependency below
-    // specifically so this effect re-runs once that update actually lands.
+    // Expand the target's own thread (#3759 review Fix round 1 IMPORTANT;
+    // updated in Wave 9 fix round 1 finding I-4 for the `collapsed` ->
+    // `expandedKeys` model inversion, same behavior): the "expand only the
+    // most recently active thread" default (declared earlier, above) would
+    // otherwise permanently hide the target's row whenever its thread ISN'T
+    // the most recently active one -- the ORDINARY multi-thread case, not an
+    // edge case. A functional update composes correctly with whatever the
+    // default-expand effect also just enqueued in the SAME commit (declared
+    // earlier, so it enqueues first); idempotent and harmless to re-issue on
+    // every pass, including once the thread is already expanded.
+    // `expandedKeys` is a dependency below specifically so this effect
+    // re-runs once that update actually lands.
     const targetGroupKey = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
-    setCollapsed((previous) => {
-      if (!previous.has(targetGroupKey)) return previous;
+    setExpandedKeys((previous) => {
+      if (previous.has(targetGroupKey)) return previous;
       const next = new Set(previous);
-      next.delete(targetGroupKey);
+      next.add(targetGroupKey);
       return next;
     });
     // #3759 Wave 9 (F1/F2): widen the target's own per-thread window too --
-    // uncollapsing alone isn't enough for a thread whose default window
+    // expanding alone isn't enough for a thread whose default window
     // doesn't reach the target. `threadWindows` is a dependency below so
     // this effect re-runs once the widen actually lands.
     widenThreadWindow(targetGroupKey);
@@ -848,12 +865,12 @@ export function ThreadedNarrativeReader({
       `[data-pose-id="${targetPoseId}"]`
     );
     if (!targetEl) return; // thread not expanded/windowed in the DOM on this pass yet --
-    // `collapsed`/`threadWindows` changing (once the updates above land) re-triggers this effect.
+    // `expandedKeys`/`threadWindows` changing (once the updates above land) re-triggers this effect.
     targetSeekDoneRef.current = targetPoseId;
     targetEl.scrollIntoView({ block: 'center' });
     setHighlightedPoseId(targetPoseId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetPoseId, interactions, collapsed, threadWindows]);
+  }, [targetPoseId, interactions, expandedKeys, threadWindows]);
 
   // Clears the deep-link target highlight ~2s after it's set (#3759 review
   // Fix round 1: the highlight could stick forever when `interactions`
@@ -914,7 +931,7 @@ export function ThreadedNarrativeReader({
           null;
         persistAnchorState({
           anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
-          collapsed: [...collapsedRef.current],
+          expanded: [...expandedKeysRef.current],
         });
       }, 300);
     };
@@ -948,7 +965,7 @@ export function ThreadedNarrativeReader({
         interactions.find((item) => String(item.id) === found.poseId)?.thread_id ?? null;
       persistAnchorState({
         anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
-        collapsed: [...collapsed],
+        expanded: [...expandedKeys],
       });
     }, 300);
   };
@@ -1133,7 +1150,7 @@ export function ThreadedNarrativeReader({
           ) : (
             groups.map((group) => {
               const root = group.interactions[0];
-              const isCollapsed = collapsed.has(group.key);
+              const isCollapsed = !expandedKeys.has(group.key);
               const unread = group.interactions.filter(isEffectivelyUnread).length;
               // #3759 Wave 9 (F1/F2): per-thread pose window, replacing the
               // old flat whole-list tail-slice. `end < group.interactions.length`

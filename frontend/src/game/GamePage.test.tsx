@@ -1733,7 +1733,7 @@ describe('GamePage', () => {
       // exists`) true on this FIRST room visit.
       saveConversationAnchor('100', {
         anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
-        collapsed: [],
+        expanded: [],
       });
 
       const user = userEvent.setup();

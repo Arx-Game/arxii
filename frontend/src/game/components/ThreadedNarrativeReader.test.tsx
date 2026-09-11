@@ -231,15 +231,19 @@ describe('ThreadedNarrativeReader', () => {
     expect(screen.queryByText('older root')).not.toBeInTheDocument();
   });
 
-  it("re-derives the default collapse state on a scene change instead of carrying over the previous scene's stale collapsed set", () => {
+  it("re-derives the default expand state on a scene change instead of carrying over the previous scene's stale expanded set", () => {
     // Mirrors GameWindow.tsx's actual mount: `key={sceneFeed.sceneId}` on the
     // same element as `conversationKey={sceneFeed.sceneId}`, so switching
     // scenes forces React to unmount/remount this component (fresh
-    // `collapsed`/`storedAnchorState` initializers) rather than reusing one
-    // instance across scenes. Without that `key`, the old scene's `collapsed`
-    // Set (full of the OLD scene's thread keys) would survive into the new
-    // scene, where none of those keys match the new scene's groups — so
-    // every thread in the new scene would silently render expanded.
+    // `expandedKeys`/`storedAnchorState` initializers) rather than reusing
+    // one instance across scenes. Without that `key`, the old scene's
+    // `expandedKeys` Set (full of the OLD scene's thread keys) would survive
+    // into the new scene, where none of those keys match the new scene's
+    // groups — so every thread in the new scene would silently render
+    // collapsed (#3759 Wave 9 fix round 1 finding I-4: `expandedKeys` is
+    // opt-IN now, the inverse of the old opt-OUT `collapsed`, so a stale set
+    // that matches nothing means "nothing expanded," not "everything
+    // expanded" the way it used to).
     const { rerender } = render(
       <ThreadedNarrativeReader
         key="scene:1"
@@ -354,6 +358,55 @@ describe('ThreadedNarrativeReader', () => {
     // The user's manual expand of thread-a must survive — the default-collapse
     // effect is guarded from re-firing after its first seed.
     expect(screen.getByText('older root')).toBeInTheDocument();
+  });
+
+  it('renders a newly-revealed thread collapsed by default, never defaulting to expanded for a key `expandedKeys` has never seen (#3759 Wave 9 fix round 1 finding I-4)', () => {
+    // Under the OLD opt-OUT `collapsed` model, any group key that set
+    // didn't already know about defaulted to EXPANDED -- exactly backwards
+    // from "collapsed by default except the most recently active thread."
+    // This was masked before Wave 9 since `groups` never held more than 20
+    // threads at once (the old flat windowing capped it); now that F1 makes
+    // every thread visible, a thread revealed LATER -- a `fetchNextPage`
+    // click surfacing older history, or any thread arriving after the
+    // one-shot default-seed effect has already run and completed -- must
+    // still default to collapsed, matching the demo's own rule.
+    const { rerender } = render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // thread-b (more recent) starts expanded -- the default-seed effect has
+    // already run its one shot.
+    expect(screen.getByText('newer root')).toBeInTheDocument();
+
+    // A thread the reader has NEVER seen before appears -- simulating
+    // fetchNextPage revealing older history. No click, and the seed effect
+    // is guarded to run once per mount, so it does NOT re-fire.
+    rerender(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+          interaction(3, 'brand new root', 'thread-c'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('brand new root')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /writer 3.*1 pose/i })).toHaveAttribute(
+      'aria-expanded',
+      'false'
+    );
   });
 
   it('chronological mode shows all poses as a flat, time-ordered list', async () => {
@@ -486,7 +539,11 @@ describe('ThreadedNarrativeReader', () => {
     expect(window.getComputedStyle(chronoContainer).height).not.toBe('');
   });
 
-  it('persists bulk Expand/Collapse loaded threads clicks, unlike a direct setCollapsed that bypasses saveConversationAnchor', async () => {
+  it('persists bulk Expand/Collapse loaded threads clicks, unlike a direct setExpandedKeys that bypasses saveConversationAnchor', async () => {
+    // #3759 Wave 9 fix round 1 finding I-4: `expanded` is the OPT-IN set of
+    // expanded thread keys now (was `collapsed`, opt-OUT) -- "Collapse
+    // loaded threads" persists an EMPTY `expanded` list; "Expand loaded
+    // threads" persists every CURRENT group key.
     const user = userEvent.setup();
     render(
       <ThreadedNarrativeReader
@@ -502,12 +559,12 @@ describe('ThreadedNarrativeReader', () => {
     );
     // thread-a starts collapsed by default (thread-b is more recent).
     await user.click(screen.getByRole('button', { name: /collapse loaded threads/i }));
-    expect(loadConversationAnchor('scene:1')?.collapsed.sort()).toEqual(
-      ['thread-a', 'thread-b'].sort()
-    );
+    expect(loadConversationAnchor('scene:1')?.expanded).toEqual([]);
 
     await user.click(screen.getByRole('button', { name: /expand loaded threads/i }));
-    expect(loadConversationAnchor('scene:1')?.collapsed).toEqual([]);
+    expect(loadConversationAnchor('scene:1')?.expanded.sort()).toEqual(
+      ['thread-a', 'thread-b'].sort()
+    );
   });
 
   it('registers every rendered pose with the dwell-tracking observer, in both Threads and Chronological view', async () => {
@@ -711,12 +768,14 @@ describe('ThreadedNarrativeReader', () => {
       });
     });
 
-    it('preserves the collapsed-thread list already being persisted when a scroll save fires', async () => {
-      // Both poses must stay rendered for the scroll-save to find a topmost
-      // pose at all -- "Collapse loaded threads" would hide everything
-      // (including thread-b, already expanded by the recency default) and
-      // trivially pass by never saving anything, so this expands the
-      // default-collapsed thread-a instead, leaving thread-b collapsed.
+    it('preserves the expanded-thread list already being persisted when a scroll save fires', async () => {
+      // #3759 Wave 9 fix round 1 finding I-4: `expanded` is the OPT-IN set
+      // now (was `collapsed`, opt-OUT). Both poses must stay rendered for
+      // the scroll-save to find a topmost pose at all -- "Collapse loaded
+      // threads" would hide everything (including thread-b, already
+      // expanded by the recency default) and trivially pass by never saving
+      // anything, so this expands the default-collapsed thread-a instead,
+      // leaving BOTH threads expanded.
       poseOffsets = { 1: 20, 2: 200 };
       const user = userEvent.setup();
       render(
@@ -733,7 +792,9 @@ describe('ThreadedNarrativeReader', () => {
       );
       // thread-b (more recent) starts expanded; thread-a starts collapsed.
       await user.click(screen.getByRole('button', { name: /writer 1.*1 pose/i }));
-      expect(loadConversationAnchor('scene:1')?.collapsed).toEqual([]);
+      expect(loadConversationAnchor('scene:1')?.expanded.sort()).toEqual(
+        ['thread-a', 'thread-b'].sort()
+      );
       expect(screen.getByText('older root')).toBeInTheDocument();
       expect(screen.getByText('newer root')).toBeInTheDocument();
 
@@ -742,10 +803,10 @@ describe('ThreadedNarrativeReader', () => {
 
       const stored = loadConversationAnchor('scene:1');
       expect(stored?.anchors.threads).not.toBeNull();
-      // The collapse-toggle's own persisted list must survive the anchor
+      // The expand-toggle's own persisted list must survive the anchor
       // save (a stale-`storedAnchorState`-style regression would instead
-      // have reverted `collapsed` to whatever it was at mount).
-      expect(stored?.collapsed).toEqual([]);
+      // have reverted `expanded` to whatever it was at mount).
+      expect(stored?.expanded.sort()).toEqual(['thread-a', 'thread-b'].sort());
     });
 
     it('does not persist an anchor while a non-room conversation tab is active (#3759 review finding I4, persistAnchor=false)', async () => {
@@ -778,7 +839,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       const { rerenderInner, ancestor } = renderInScrollAncestor(
         <ThreadedNarrativeReader
@@ -817,7 +878,16 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        // #3759 Wave 9 fix round 1 finding I-4: `expanded` is opt-IN now
+        // (was `collapsed`, opt-OUT) -- an EMPTY list means "everything
+        // collapsed." Pose 999's own miss can't be healed by I2's widen
+        // regardless of collapse state (it's genuinely absent from
+        // `interactions`, not merely inside a collapsed thread -- see
+        // `widenThreadWindowToInclude`'s own early return), so 'thread-a'
+        // needs to be explicitly listed here for its one real pose
+        // ('first') to render at all, which this test's own final
+        // assertion checks.
+        expanded: ['thread-a'],
       });
       poseOffsets = { 1: 0 };
       const props = (readOnly: boolean) => (
@@ -874,7 +944,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       poseOffsets = { 2: 300 };
       const { ancestor } = renderInScrollAncestor(
@@ -897,7 +967,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       const props = (readOnly: boolean) => (
         <ThreadedNarrativeReader
@@ -1024,7 +1094,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '5', threadId: 'thread-a', offsetPx: 0 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
 
       // Return to live -- the SAME component instance, per Decision #5.
@@ -1119,7 +1189,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       document.documentElement.style.setProperty('--play-prose-size', '14px');
       poseOffsetsResolver = (poseId) => {
@@ -1181,7 +1251,7 @@ describe('ThreadedNarrativeReader', () => {
             threads: { poseId: '1', threadId: 'thread-a', offsetPx: 0 },
             chronological: null,
           },
-          collapsed: [],
+          expanded: [],
         });
         const props = (persistAnchor: boolean) => (
           <>
@@ -1218,7 +1288,7 @@ describe('ThreadedNarrativeReader', () => {
             threads: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
             chronological: null,
           },
-          collapsed: [],
+          expanded: [],
         });
         rerender(props(false));
         expect(ancestor.scrollTop).toBe(0); // the rerender alone restores nothing
@@ -1348,7 +1418,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: null,
           chronological: { poseId: '50', threadId: 'thread-a', offsetPx: 0 },
         },
-        collapsed: [],
+        expanded: [],
       });
 
       const { getByTestId } = render(
@@ -1390,7 +1460,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: null,
           chronological: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
         },
-        collapsed: [],
+        expanded: [],
       });
 
       render(
@@ -1423,7 +1493,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '10', threadId: 'thread-a', offsetPx: 0 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       poseOffsets = { 10: 0 };
 
@@ -1465,7 +1535,7 @@ describe('ThreadedNarrativeReader', () => {
           threads: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
           chronological: null,
         },
-        collapsed: [],
+        expanded: [],
       });
       poseOffsets = { 1: 0 };
       const props = (readOnly: boolean) => (
@@ -1522,9 +1592,9 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
       // thread-b (more recent) starts expanded -- collapse it. The toggle
-      // still WORKS (in-memory `collapsed` state changes, per Decision #5 --
-      // a reference/narrowed reader may still collapse threads for its own
-      // reading session), it just must not write into shared storage.
+      // still WORKS (in-memory `expandedKeys` state changes, per Decision #5
+      // -- a reference/narrowed reader may still collapse threads for its
+      // own reading session), it just must not write into shared storage.
       await user.click(screen.getByRole('button', { name: /writer 2.*1 pose/i }));
       expect(screen.queryByText('newer root')).not.toBeInTheDocument();
       expect(loadConversationAnchor('scene:1')).toBeNull();

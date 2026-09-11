@@ -29,14 +29,14 @@ describe('playPreferences', () => {
         threads: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
         chronological: null,
       },
-      collapsed: ['thread-b'],
+      expanded: ['thread-b'],
     });
     expect(loadConversationAnchor('scene:1')).toEqual({
       anchors: {
         threads: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
         chronological: null,
       },
-      collapsed: ['thread-b'],
+      expanded: ['thread-b'],
     });
   });
 
@@ -50,7 +50,7 @@ describe('playPreferences', () => {
         threads: { poseId: '1', threadId: null, offsetPx: 0 },
         chronological: { poseId: '2', threadId: null, offsetPx: 0 },
       },
-      collapsed: [],
+      expanded: [],
     });
     const stored = loadConversationAnchor('scene:1');
     expect(stored?.anchors.threads?.poseId).toBe('1');
@@ -61,12 +61,12 @@ describe('playPreferences', () => {
     for (let i = 0; i < 100; i++) {
       saveConversationAnchor(`scene:${i}`, {
         anchors: { threads: null, chronological: null },
-        collapsed: [],
+        expanded: [],
       });
     }
     saveConversationAnchor('scene:100', {
       anchors: { threads: null, chronological: null },
-      collapsed: [],
+      expanded: [],
     });
     expect(loadConversationAnchor('scene:0')).toBeNull();
     expect(loadConversationAnchor('scene:100')).not.toBeNull();

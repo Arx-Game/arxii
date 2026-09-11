@@ -124,15 +124,27 @@ export interface ReadingAnchor {
  * reader mode must never inherit (and then clobber, on the next save) the
  * OTHER mode's own remembered position.
  *
- * `collapsed` stays a single shared field: thread collapse state is NOT
- * mode-specific (Chronological has no threads UI of its own to collapse).
+ * `expanded` stays a single shared field: thread expand/collapse state is NOT
+ * mode-specific (Chronological has no threads UI of its own to expand).
+ *
+ * `expanded` (was `collapsed` through most of Wave 9; renamed in fix round 1
+ * finding I-4) lists thread keys the user has EXPLICITLY expanded -- opt-IN,
+ * not opt-OUT. A key `groups` doesn't yet know about (e.g. an older thread a
+ * `fetchNextPage` reveals later, or -- for a row written by a pre-I-4 client
+ * -- literally any key, since the field didn't exist yet) is absent from
+ * this list and therefore collapsed by default, which is the correct
+ * behavior; an opt-OUT `collapsed` list got this backwards for any key it
+ * didn't already know about. A pre-I-4 stored row simply has no `expanded`
+ * field at all, which `ThreadedNarrativeReader.tsx`'s own read path treats
+ * as `[]` (nothing expanded) -- a one-time, graceful degrade for a returning
+ * user on this one commit, not a migration.
  */
 export interface ConversationAnchorState {
   anchors: {
     threads: ReadingAnchor | null;
     chronological: ReadingAnchor | null;
   };
-  collapsed: string[];
+  expanded: string[];
 }
 
 const ANCHOR_STORAGE_KEY = 'arx:play-anchors:v1';
