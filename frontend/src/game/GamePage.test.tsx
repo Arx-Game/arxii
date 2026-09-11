@@ -115,6 +115,7 @@ vi.mock('@/scenes/queries', async (importOriginal) => {
     postInteractionReaction: vi.fn().mockResolvedValue(null),
     fetchReactionEmojiCatalog: vi.fn().mockResolvedValue([]),
     fetchPendingUnlinkedActions: vi.fn(() => Promise.resolve([])),
+    fetchScene: vi.fn(() => Promise.reject(new Error('fetchScene not mocked for this test'))),
   };
 });
 
@@ -1131,6 +1132,43 @@ describe('GamePage', () => {
       );
       expect(draftKeysAfter).toEqual(draftKeysBefore);
       expect(sessionStorage.getItem(draftKey)).toBe(storedBefore);
+    });
+
+    it('passes viewerCanGm and scene to CombatRail once the scene detail resolves (#3761)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 5, scene: 42 },
+        isLoading: false,
+        isError: false,
+      });
+      const scenesQueries = await import('@/scenes/queries');
+      vi.mocked(scenesQueries.fetchScene).mockResolvedValue({
+        id: 42,
+        name: 'Test Scene',
+        description: '',
+        date_started: '2026-09-01T00:00:00Z',
+        location: null,
+        participants: [],
+        is_active: true,
+        is_owner: false,
+        viewer_can_gm: true,
+        positions: [],
+        position_adjacency: [],
+        persona_positions: [],
+        active_round: null,
+        position_nodes: [],
+        position_edges: [],
+        running_beat: null,
+        declared_risk: null,
+        clock: null,
+        art_url: null,
+      });
+
+      renderWithProviders(<GamePage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
+      });
     });
   });
 

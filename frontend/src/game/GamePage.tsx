@@ -17,7 +17,7 @@ import type { ActionResultPayload } from '@/hooks/types';
 import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
-import { useEncounterForScene } from '@/combat/queries';
+import { useEncounterForScene, combatKeys } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
@@ -54,8 +54,9 @@ import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
 import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
+import { fetchScene } from '@/scenes/queries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
-import type { Interaction } from '@/scenes/types';
+import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
 import type { ConversationTabStripProps } from './components/ConversationTabStrip';
@@ -198,6 +199,8 @@ interface GameRightSidebarProps {
   hasActiveEncounter: boolean;
   hasActiveBattle: boolean;
   activeEncounter?: { id: number } | null;
+  combatSceneDetail?: SceneDetail;
+  onDismissOutcome: () => void;
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
@@ -214,6 +217,8 @@ function GameRightSidebar({
   hasActiveEncounter,
   hasActiveBattle,
   activeEncounter,
+  combatSceneDetail,
+  onDismissOutcome,
   activeTab,
   onTabChange,
 }: GameRightSidebarProps) {
@@ -236,7 +241,13 @@ function GameRightSidebar({
               hasActiveBattle={hasActiveBattle}
             />
             {sceneData && activeEncounter && (
-              <CombatRail sceneId={sceneData.id} encounterId={activeEncounter.id} />
+              <CombatRail
+                sceneId={sceneData.id}
+                encounterId={activeEncounter.id}
+                viewerCanGm={combatSceneDetail?.viewer_can_gm ?? false}
+                scene={combatSceneDetail}
+                onDismissOutcome={onDismissOutcome}
+              />
             )}
           </>
         )
@@ -371,6 +382,17 @@ export function GamePage() {
   // so it calls both hooks once here and threads the derived booleans down
   // through FocusPanel -> RoomPanel -> RoomHeader.
   const { data: activeEncounter } = useEncounterForScene(sceneData?.id ?? 0);
+
+  // #3761 — CombatRail's GM tab and outcome-dismiss need the full SceneDetail
+  // (viewer_can_gm specifically), which the websocket-derived `sceneData`
+  // (a lighter SceneSummary) doesn't carry. Only fetched once an encounter
+  // actually exists, mirroring SceneDetailPage.tsx's own plain useQuery shape.
+  const { data: combatSceneDetail } = useQuery<SceneDetail>({
+    queryKey: ['scene', String(sceneData?.id ?? '')],
+    queryFn: () => fetchScene(String(sceneData?.id)),
+    enabled: activeEncounter != null && sceneData?.id != null,
+  });
+
   const { data: activeBattle } = useBattleForSceneQuery(sceneData?.id ?? null);
   const hasActiveEncounter = activeEncounter != null;
   const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
@@ -753,6 +775,12 @@ export function GamePage() {
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
   const queryClient = useQueryClient();
 
+  const handleDismissOutcome = useCallback(() => {
+    if (sceneData?.id != null) {
+      queryClient.invalidateQueries({ queryKey: combatKeys.encountersForScene(sceneData.id) });
+    }
+  }, [queryClient, sceneData?.id]);
+
   const submitAction = useMutation({
     mutationFn: (action: ActionAttachmentInfo) =>
       createActionRequest(sceneId ?? '', {
@@ -910,6 +938,8 @@ export function GamePage() {
                 hasActiveEncounter={hasActiveEncounter}
                 hasActiveBattle={hasActiveBattle}
                 activeEncounter={activeEncounter}
+                combatSceneDetail={combatSceneDetail}
+                onDismissOutcome={handleDismissOutcome}
                 activeTab={hereActiveTab}
                 onTabChange={setHereActiveTab}
               />
