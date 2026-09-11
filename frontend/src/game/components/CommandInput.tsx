@@ -59,15 +59,12 @@ const SPEECH_COMPOSER_MODES = new Set(['say', 'whisper', 'mutter']);
 const MAX_POSE_LENGTH = 10_000;
 
 // #3760 Task 10 — composer modes dispatched via `executeAction` (structured
-// ack + idempotency) instead of raw WS text. `tt` (tabletalk) is NOT here:
-// `PoseAction` (its registry action, key `"pose"`) requires a resolved
-// `Place` kwarg to scope the message to the table, and neither this
-// component nor its callers currently hold a Place id anywhere (`isAtPlace`
-// is a bare boolean) — dispatching tt via `executeAction` today would either
-// crash (an unresolvable `place` kwarg) or silently broadcast to the whole
-// room instead of the table. Left on the legacy `send()` path until a Place
-// id is threaded down; see the Task 10 report for the full trace.
-const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper']);
+// ack + idempotency) instead of raw WS text. `tt` (tabletalk) dispatches
+// through the same registry action as `pose` (key `"pose"`), scoped to the
+// `currentPlaceId` prop -- when it's unresolved (not currently at a place,
+// or the places query hasn't loaded yet) tt falls back to the legacy
+// `send()` path rather than risk broadcasting room-wide.
+const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
 /**
  * Builds the full command string for a trimmed input given the active composer
@@ -116,6 +113,15 @@ interface CommandInputProps {
    */
   isAtPlace?: boolean;
   /**
+   * The Place the viewer's active persona is currently present at, if any
+   * (#3760 Task 10 fix) — the `pk` `tt` dispatches via `executeAction` as
+   * the registry `pose` action's `place` kwarg. Same derivation/dedupe as
+   * `isAtPlace` (from `GamePage`/`SceneDetailPage`'s shared
+   * `['scene-places', id]` query); `null`/omitted falls back to the legacy
+   * `send()` path for tt.
+   */
+  currentPlaceId?: number | null;
+  /**
    * The "speaking as" identity chip (#2166 Decision 3) — the character whose
    * voice this composer speaks in. Rendered at the START of `leftSlot`,
    * before `ModeSelector`, whenever provided; absent for legacy callers that
@@ -149,6 +155,7 @@ export function CommandInput({
   detachedActionIds,
   onPoseSubmitted,
   isAtPlace,
+  currentPlaceId,
   speakingAs,
   submitOnEnter = true,
   draftScope,
@@ -408,6 +415,29 @@ export function CommandInput({
       }
     }
 
+    if (speechComposerMode && speechComposerMode.command === 'tt') {
+      // tt (tabletalk) rides the `pose` registry action, scoped to the
+      // viewer's current Place via the `place` kwarg (PoseAction.execute(),
+      // `src/actions/definitions/communication.py` — resolves an int pk
+      // itself and verifies real PlacePresence, mirroring the established
+      // `_resolve_room()` REST/WS-dispatch pattern). `currentPlaceId` comes
+      // from the composition root's places query (`GamePage`/
+      // `SceneDetailPage`); when it's not resolved (not currently at a
+      // place, or the query hasn't loaded), fall through to the legacy
+      // `send()` path below rather than risk a room-wide broadcast.
+      if (currentPlaceId != null) {
+        const clientRequestId = draftStore.beginSend();
+        pendingSpeechRef.current = { clientRequestId, text: trimmed };
+        executeAction(character, 'pose', {
+          text: trimmed,
+          place: currentPlaceId,
+          client_request_id: clientRequestId,
+        });
+        submittingRef.current = false;
+        return;
+      }
+    }
+
     // Determine submission path. The REST path (submit_pose) is now the
     // canonical route for scene poses: it carries scene_id explicitly and the
     // server enforces the co-location check (actor must be in the scene's
@@ -494,6 +524,7 @@ export function CommandInput({
     executeAction,
     draftStore,
     roomCharacters,
+    currentPlaceId,
     actionAttachment,
     onSubmitAction,
     sceneId,

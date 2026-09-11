@@ -95,6 +95,15 @@ interface GameWindowProps {
   draftScopePrefix?: string;
   /** Whether the viewer's persona is present at a Place in this scene (#2156) — gates `tt`. */
   isAtPlace?: boolean;
+  /**
+   * The Place the viewer's persona is currently present at, if any (#3760
+   * Task 10 fix) — threaded straight to `CommandInput` so `tt` (tabletalk)
+   * can dispatch via `executeAction` with a real `place` kwarg, mirroring
+   * how say/whisper already do. `null`/omitted when not at a place (or the
+   * places query hasn't resolved yet); `tt` falls back to the legacy
+   * WebSocket `send()` path in that case.
+   */
+  currentPlaceId?: number | null;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
   placeBar?: ReactNode;
   /** `TavernGameWidget`, rendered alongside PlaceBar (#3292). */
@@ -143,6 +152,7 @@ export function GameWindow({
   onCancelReply,
   draftScopePrefix,
   isAtPlace,
+  currentPlaceId,
   placeBar,
   tavernGameWidget,
   speakerQueueBar,
@@ -421,6 +431,7 @@ export function GameWindow({
           detachedActionIds={detachedActionIds}
           onPoseSubmitted={onPoseSubmitted}
           isAtPlace={isAtPlace}
+          currentPlaceId={currentPlaceId}
           speakingAs={speakingAs}
           replyTarget={replyTarget}
           onCancelReply={onCancelReply}

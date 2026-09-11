@@ -645,11 +645,26 @@ describe('CommandInput', () => {
     });
   });
 
-  it('tt (tabletalk) composer mode still uses the legacy WebSocket send, not executeAction (#3760 scope note)', () => {
-    // Deliberately unmigrated this task: PoseAction (tt's registry action)
-    // requires a resolved Place kwarg the composer has no id for anywhere
-    // (isAtPlace is a bare boolean) -- see EXECUTE_ACTION_SPEECH_MODES's
-    // comment in CommandInput.tsx.
+  it('tt (tabletalk) dispatches via executeAction with a place kwarg and client_request_id when currentPlaceId is known (#3760 fix)', () => {
+    const mode: ComposerMode = { command: 'tt', targets: [], label: 'Tabletalk' };
+    render(<CommandInput character="Alice" composerMode={mode} currentPlaceId={7} />);
+    const textarea = screen.getByRole('textbox');
+
+    fireEvent.change(textarea, { target: { value: 'leans in' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(sendMock).not.toHaveBeenCalled();
+    expect(executeActionMock).toHaveBeenCalledWith('Alice', 'pose', {
+      text: 'leans in',
+      place: 7,
+      client_request_id: expect.any(String),
+    });
+  });
+
+  it('tt falls back to legacy send when currentPlaceId is not known', () => {
+    // Not currently at a place, or the places query hasn't resolved yet —
+    // never risk a room-wide broadcast for what the player intends as a
+    // table-scoped tabletalk line.
     const mode: ComposerMode = { command: 'tt', targets: [], label: 'Tabletalk' };
     render(<CommandInput character="Alice" composerMode={mode} />);
     const textarea = screen.getByRole('textbox');

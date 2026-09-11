@@ -42,6 +42,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.scenes.models import Persona, Scene
+    from world.scenes.place_models import Place
     from world.species.language_constants import Fluency
     from world.species.models import Language
 
@@ -104,6 +105,47 @@ def _active_scene_for(actor: ObjectDB) -> Scene | None:
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
     return get_active_scene(actor.location)
+
+
+def _resolve_pose_place(actor: ObjectDB, place: object) -> tuple[Place | None, ActionResult | None]:
+    """Resolve the `place` kwarg for a pose/tabletalk dispatch (#3760 Task 10).
+
+    Telnet's `CmdTabletalk` always resolves the CALLER'S OWN current place
+    server-side (`_get_current_place`, `commands/evennia_overrides/
+    communication.py`) -- it never accepts a place by id from the client. The
+    web composer has no equivalent command-layer resolution step
+    (`execute_action`'s generic `_resolve_registry_kwargs`,
+    `server/conf/inputfuncs.py`, only resolves ObjectDB `<field>_id` kwargs;
+    `Place` isn't an ObjectDB), so this mirrors the established
+    `_resolve_room()` REST/WS-dispatch pattern (`actions/definitions/
+    locations.py`, see `src/actions/CLAUDE.md`): an already-resolved `Place`
+    instance (the telnet/legacy call shape) passes through unchanged, and a
+    raw int pk (the WS dispatch shape) is resolved here.
+
+    Unlike `_resolve_room()`, this ALSO requires the actor's active persona to
+    have a genuine `PlacePresence` at the resolved place -- a plain pk lookup
+    alone would let a client assert presence at an arbitrary table by
+    guessing its id, which the telnet path never allows (it only ever
+    resolves wherever the caller actually is). Returns `(place, None)` on
+    success, or `(None, error_result)` on any failure -- not-found and
+    not-present collapse to the same message, mirroring
+    `_resolve_registry_kwargs`'s "Object not found" collapse for ObjectDB
+    targets (no existence probe).
+    """
+    if place is None or hasattr(place, "pk"):
+        return place, None  # type: ignore[return-value]
+
+    from world.scenes.place_models import Place, PlacePresence  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(actor.character_sheet)
+    resolved = Place.objects.filter(pk=place).first()
+    if (
+        resolved is None
+        or not PlacePresence.objects.filter(place=resolved, persona=persona).exists()
+    ):
+        return None, ActionResult(success=False, message="You are not at that place.")
+    return resolved, None
 
 
 def _resolve_spoken_language(
@@ -376,7 +418,9 @@ class PoseAction(Action):
         if reply_error is not None:
             return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
-        place = kwargs.get("place")
+        place, place_error = _resolve_pose_place(actor, kwargs.get("place"))
+        if place_error is not None:
+            return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
 

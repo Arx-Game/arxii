@@ -238,7 +238,11 @@ export function SceneDetailPage() {
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
-  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+  // #3760 Task 10 fix — `currentPlace` (not just the boolean) is threaded down to
+  // CommandInput so tt (tabletalk) can dispatch via executeAction with a real
+  // place kwarg, mirroring GamePage.tsx's identical fix.
+  const currentPlace = placesData?.results?.find((place) => place.viewer_is_present);
+  const isAtPlace = !!currentPlace;
 
   // The foldable part of the header (#3557): rendered inline when idle, inside
   // the "Scene tools" accordion during an encounter. Same order as before.
@@ -406,6 +410,7 @@ export function SceneDetailPage() {
                     detachedActionIds={detachedActionIds}
                     onPoseSubmitted={handlePoseSubmitted}
                     isAtPlace={isAtPlace}
+                    currentPlaceId={currentPlace?.id ?? null}
                     speakingAs={
                       activeEntry
                         ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
