@@ -853,6 +853,72 @@ describe('ThreadedNarrativeReader', () => {
       });
     });
 
+    it('does not re-restore (and so never falls back to the bottom) on a preference change while a non-room tab is active (#3759 review finding, second pass: Effect C also gated on persistAnchor)', async () => {
+      const scrollHeightSpy = vi
+        .spyOn(HTMLElement.prototype, 'scrollHeight', 'get')
+        .mockImplementation(function (this: HTMLElement) {
+          // Deliberately nonzero so a wrongly-triggered I3 fallback would be
+          // an OBSERVABLE change here, not coincidentally still 0.
+          return this.dataset.testid === 'scroll-ancestor' ? 9000 : 0;
+        });
+      try {
+        // Start with a matching anchor (pose 1, present, offset 0) so the
+        // one-shot initial-mount restore (Effect A -- unaffected by this
+        // fix, out of scope for this pass) is a clean, harmless hit. This
+        // isolates the test to Effect C's own guard.
+        saveConversationAnchor('scene:1', {
+          anchor: { poseId: '1', threadId: 'thread-a', offsetPx: 0 },
+          collapsed: [],
+        });
+        const props = (persistAnchor: boolean) => (
+          <>
+            <div data-testid="scroll-ancestor" style={{ overflowY: 'auto', height: '700px' }}>
+              <ThreadedNarrativeReader
+                sceneId="1"
+                conversationKey="scene:1"
+                interactions={[interaction(1, 'first', 'thread-a')]}
+                fetchNextPage={vi.fn()}
+                persistAnchor={persistAnchor}
+              />
+            </div>
+            <DisplaySettings />
+          </>
+        );
+        const { rerender } = render(props(true));
+        const ancestor = screen.getByTestId('scroll-ancestor');
+        expect(ancestor.scrollTop).toBe(0);
+
+        // Now simulate the real corruption vector this guard prevents: the
+        // user has switched to a non-room tab (persistAnchor -> false), and
+        // the room's own persisted anchor (poseId '999') no longer matches
+        // anything in this narrower, tab-scoped interaction set. Without
+        // gating Effect C on persistAnchor too (previously gated only on
+        // `readOnly`), a preference change would call restoreThreadsAnchor,
+        // fail to find pose 999, and fall into the I3 miss-fallback
+        // (scrollTop = scrollHeight) -- jumping this tab's feed to the
+        // bottom on every preference change, a behavior that didn't exist
+        // before the I3 fallback was added (pre-fix, a miss was a silent
+        // no-op).
+        saveConversationAnchor('scene:1', {
+          anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+          collapsed: [],
+        });
+        rerender(props(false));
+        expect(ancestor.scrollTop).toBe(0); // the rerender alone restores nothing
+
+        fireEvent.change(screen.getByLabelText('Prose text size'), { target: { value: '18' } });
+
+        // Give a (would-be, pre-fix) rAF-scheduled restore every chance to
+        // run before asserting nothing changed.
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+        await new Promise((resolve) => requestAnimationFrame(resolve));
+
+        expect(ancestor.scrollTop).toBe(0);
+      } finally {
+        scrollHeightSpy.mockRestore();
+      }
+    });
+
     it('debounces anchor saves in Chronological view too, using its own virtualized scroll container', async () => {
       poseOffsets = { 1: -40, 2: 90 };
       const user = userEvent.setup();

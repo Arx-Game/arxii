@@ -424,7 +424,15 @@ export function ThreadedNarrativeReader({
   // variable is guaranteed to have been applied regardless of which
   // component's effect happened to run first.
   useEffect(() => {
-    if (readOnly) return;
+    // Also gated on persistAnchor (#3759 review finding, second pass): this
+    // reader instance doesn't own the room's persisted anchor while a
+    // non-room conversation tab is active (see the save-side guards above),
+    // so re-restoring here would look up the ROOM anchor, fail to find its
+    // pose in this tab's narrower interaction set, and fall into the I3
+    // miss-fallback (scrollTop = scrollHeight) -- jumping this tab's feed to
+    // the bottom on every preference change, a behavior that didn't exist
+    // before the I3 fallback was added (a miss used to be a silent no-op).
+    if (readOnly || !persistAnchorRef.current) return;
     const rafId = requestAnimationFrame(() => {
       restoreAnchor();
     });
