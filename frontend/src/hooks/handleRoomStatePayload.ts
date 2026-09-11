@@ -22,6 +22,8 @@ export function handleRoomStatePayload(
         characters: payload.characters ?? [],
         objects: payload.objects,
         exits: payload.exits,
+        decorations: payload.decorations ?? [],
+        comfort_level: payload.comfort_level,
         is_owner: payload.room.is_owner ?? false,
         is_public: payload.room.is_public ?? false,
         hub: payload.hub ?? null,

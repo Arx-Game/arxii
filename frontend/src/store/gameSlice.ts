@@ -28,6 +28,8 @@ interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  decorations?: string[];
+  comfort_level?: number;
   is_owner: boolean;
   is_public: boolean;
   /** Civic-hub tidings block; null when no board/crier stands here (#1450). */
@@ -190,8 +192,10 @@ export const gameSlice = createSlice({
       if (session) {
         const previousRoomId = session.room?.id ?? null;
         const nextRoomId = room?.id ?? null;
-        if (previousRoomId !== nextRoomId && session.ambientInteractions)
-          session.ambientInteractions = [];
+        if (previousRoomId !== nextRoomId) {
+          if (session.ambientInteractions) session.ambientInteractions = [];
+          if (session.ambientNotices) session.ambientNotices = [];
+        }
         session.room = room;
       }
     },

@@ -21,7 +21,6 @@ export function ExplorationReader({
   room,
   ambientInteractions = [],
   lifecycleState,
-  diagnostics = [],
   ambientNotices = [],
   onRetry,
 }: ExplorationReaderProps) {
@@ -53,19 +52,6 @@ export function ExplorationReader({
             </p>
           )}
         </header>
-        {diagnostics.length > 0 && (
-          <aside
-            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4"
-            aria-label="Connection notices"
-          >
-            <p className="font-medium">Connection notice</p>
-            <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">
-              {diagnostics.map((message, index) => (
-                <li key={`${message}:${index}`}>{message}</li>
-              ))}
-            </ul>
-          </aside>
-        )}
         {isAftermath && (
           <div className="rounded-lg border bg-muted/30 p-4" role="status">
             <p className="font-medium">The scene has ended.</p>

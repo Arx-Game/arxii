@@ -48,6 +48,8 @@ export interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  decorations?: string[];
+  comfort_level?: number;
   is_owner: boolean;
   is_public: boolean;
   hub: HubTidings | null;
@@ -233,6 +235,16 @@ export function RoomPanel({
       )}
 
       {room.description && <RoomDescription description={room.description} />}
+      {(room.decorations?.length || room.comfort_level != null) && (
+        <section className="border-b px-3 py-2" aria-label="Room details">
+          {room.decorations && room.decorations.length > 0 && (
+            <p className="text-xs text-muted-foreground">{room.decorations.join(' · ')}</p>
+          )}
+          {room.comfort_level != null && (
+            <p className="mt-1 text-xs text-muted-foreground">Comfort {room.comfort_level}/10</p>
+          )}
+        </section>
+      )}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
@@ -243,6 +255,11 @@ export function RoomPanel({
         viewerPersonaId={viewerPersonaId}
       />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
+      {room.characters.length > 0 && (
+        <p className="border-b px-3 py-2 text-xs text-muted-foreground" role="note">
+          Select an occupant to open character context and authorized details.
+        </p>
+      )}
       <ObjectsList objects={room.objects} characterId={characterId} />
       {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
       {room.hub?.kind === 'NOTICE_BOARD' && (

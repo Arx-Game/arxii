@@ -95,8 +95,13 @@ export function usePlayPreferences(accountId?: number | null) {
       const detail = (event as CustomEvent<PlayPreferences>).detail;
       if (detail) setPreferences(detail);
     };
+    const warn = () => setStorageWarning(true);
     window.addEventListener('arx-play-preferences', sync);
-    return () => window.removeEventListener('arx-play-preferences', sync);
+    window.addEventListener('arx-play-storage-warning', warn);
+    return () => {
+      window.removeEventListener('arx-play-preferences', sync);
+      window.removeEventListener('arx-play-storage-warning', warn);
+    };
   }, [key, accountId]);
   return { preferences, update, storageWarning };
 }

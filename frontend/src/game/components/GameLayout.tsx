@@ -71,7 +71,9 @@ export function GameLayout({
       const width = latestWidth;
       try {
         const stored = loadPlayPreferences(accountId);
-        savePlayPreferences({ ...stored, sidebarWidth: width }, accountId);
+        if (!savePlayPreferences({ ...stored, sidebarWidth: width }, accountId)) {
+          window.dispatchEvent(new Event('arx-play-storage-warning'));
+        }
       } catch {
         // Layout remains usable when storage is unavailable.
       }

@@ -241,6 +241,7 @@ export function GameWindow({
     lifecycleState ??
     session.lifecycleState ??
     (!session.isConnected && session.room ? 'reconnecting' : undefined);
+  const visibleDiagnostics = diagnostics ?? session.diagnostics ?? [];
   const playReady =
     session.isConnected &&
     Boolean(session.room) &&
@@ -299,6 +300,15 @@ export function GameWindow({
               : 'Connection lost. Your confirmed story remains available while we reconnect.'}
           </div>
         )}
+      {visibleDiagnostics.length > 0 && (
+        <aside
+          className="shrink-0 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm"
+          role="alert"
+          aria-label="Connection notices"
+        >
+          <strong>Connection notice:</strong> {visibleDiagnostics[visibleDiagnostics.length - 1]}
+        </aside>
+      )}
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
@@ -379,7 +389,7 @@ export function GameWindow({
         <ExplorationReader
           room={room ?? session.room}
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
-          diagnostics={diagnostics ?? session.diagnostics}
+          diagnostics={visibleDiagnostics}
           ambientNotices={ambientNotices ?? session.ambientNotices}
           lifecycleState={effectiveLifecycle}
           onRetry={() => {
