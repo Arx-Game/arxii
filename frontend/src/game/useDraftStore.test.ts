@@ -57,4 +57,70 @@ describe('useDraftStore', () => {
     expect(draftStorageKey(key)).toBe('arx:play-draft:v2:1:7:room:42');
     expect(draftStorageKey({ ...key, conversationKey: 'room:43' })).not.toBe(draftStorageKey(key));
   });
+
+  it('acknowledge clears the draft back to empty/clean when the id matches', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods.'));
+    let pendingId = '';
+    act(() => {
+      pendingId = result.current.beginSend();
+    });
+    act(() => result.current.acknowledge(pendingId));
+    expect(result.current.draft.content).toBe('');
+    expect(result.current.draft.status).toBe('clean');
+    expect(result.current.draft.clientRequestId).toBeNull();
+  });
+
+  it('reject marks the draft rejected with a reason when the id matches', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods.'));
+    let pendingId = '';
+    act(() => {
+      pendingId = result.current.beginSend();
+    });
+    act(() => result.current.reject(pendingId, 'You cannot pose here.'));
+    expect(result.current.draft.status).toBe('rejected');
+    expect(result.current.draft.rejectionReason).toBe('You cannot pose here.');
+    // The rejected content is preserved so the player can revise and resend.
+    expect(result.current.draft.content).toBe('Silas nods.');
+  });
+
+  it('reject ignores a stale id and leaves the newer, unsent edit untouched', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods.'));
+    let pendingId = '';
+    act(() => {
+      pendingId = result.current.beginSend();
+    });
+    act(() => result.current.setContent('Silas nods, then waves.'));
+    act(() => result.current.reject(pendingId, 'stale rejection'));
+    expect(result.current.draft.content).toBe('Silas nods, then waves.');
+    expect(result.current.draft.status).toBe('clean');
+    expect(result.current.draft.rejectionReason).toBeNull();
+  });
+
+  it('markUnknown marks the draft unknown when the id matches', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods.'));
+    let pendingId = '';
+    act(() => {
+      pendingId = result.current.beginSend();
+    });
+    act(() => result.current.markUnknown(pendingId));
+    expect(result.current.draft.status).toBe('unknown');
+    expect(result.current.draft.content).toBe('Silas nods.');
+  });
+
+  it('markUnknown ignores a stale id and leaves the newer, unsent edit untouched', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods.'));
+    let pendingId = '';
+    act(() => {
+      pendingId = result.current.beginSend();
+    });
+    act(() => result.current.setContent('Silas nods, then waves.'));
+    act(() => result.current.markUnknown(pendingId));
+    expect(result.current.draft.content).toBe('Silas nods, then waves.');
+    expect(result.current.draft.status).toBe('clean');
+  });
 });
