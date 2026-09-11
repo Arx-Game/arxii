@@ -449,3 +449,232 @@ confirmation.
 3. **F6** — reference mode's toolbar (incl. a live "Mark conversation read" write) is not suppressed, unlike the demo's chrome-free read-only presentation (moderate, touches Decision #5).
 4. **F3/F4/F5** — dropped copy/affordances (low severity each, but real, reproducible, and against explicitly `#3759`-scoped demo rows).
 5. **Dark theme** — genuinely unverified, not a claimed pass.
+
+---
+
+## Wave 9 remediation -- follow-up verification (2026-09-11)
+
+**Reviewer:** `demo-fidelity-reviewer` agent (real-browser Playwright render,
+same session, same methodology as the original review above).
+**Reviewed commit:** `dcbdae37527d0af160fb5740934bc8ad149512a4` (HEAD of
+`feature-3759-narrative-play-reader-and-history-thread` at follow-up review
+time; branch diverges from `origin/main` at
+`c2c7c7a9e217dc7cb3ac3e3d2906ce5da5c1e4c7`). This commit is the tip of the
+Wave 9 remediation series (`a8b9a9238`..`dcbdae375`) that claims to fix F1-F6
+from the original review above, reviewed twice by independent adversarial
+reviewers against source behavior only (never rendered).
+
+**Purpose:** confirm the Wave 9 fixes actually render correctly in a real
+browser -- source-code/unit-test confirmation is not a visual review (see the
+top-level instructions this report answers to). This section does **not**
+repeat or overwrite the six original findings above; it re-renders the
+specific screens those findings named and records what the browser now
+shows.
+
+### Environment (unchanged from the original review)
+
+- **Worktree:** `feature-3759-narrative-play-reader-and-history-thread`,
+  anchored via `cd` + `pwd` + `git status --short` before any work (tree was
+  clean at both the start and end of this follow-up).
+- **Viewport:** 1440x900 desktop (same as the original review and the
+  demo's own reference screenshots).
+- **Theme:** light only -- same limitation as the original review; **dark
+  theme remains BLOCKED/unverified**, not re-checked here, not inferred as a
+  pass.
+- **Render method:** Playwright (chromium) driving a real `pnpm exec vite`
+  dev server (port 5183), mounting the REAL production components exactly as
+  `/game` imports them -- `GameLayout`, `GameWindow`, `PlaySidebar`,
+  `HistoryNavigator`, `ThreadedNarrativeReader`, and their full import tree
+  (`PoseUnit`, `SceneMessages`, real Tailwind/shadcn CSS via
+  `frontend/src/index.css`) -- with a real Redux store (`store/store.ts`'s
+  actual `gameSlice`/`authSlice` reducers, seeded via `setAccount`/
+  `startSession`/`setActiveSession`/`setSessionScene`) and a real
+  `QueryClientProvider`. No component was reimplemented or stubbed. Unlike
+  the original review, this harness mounted `GameLayout`/`GameWindow`/
+  `PlaySidebar` directly (the same components `GamePage.tsx` composes)
+  rather than the full `GamePage.tsx` composition root -- `GamePage.tsx`
+  itself pulls in combat/battle/dream/journal/inventory/travel/mission/
+  ceremony/event sidebar panels unrelated to this follow-up's scope, and the
+  five components above are the same ones the original review's own stated
+  import-tree scope named.
+
+### Fixture-vs-live boundary
+
+**No live Django backend.** `window.fetch` was monkey-patched before React
+mounted, intercepting `/api/interactions/`, `/api/play/conversations/`,
+`/api/play/search/`, `/api/play/context/`, `/api/play/poses/`,
+`/api/play/read/`, `/api/backgrounds/`, `/api/roster/entries/mine/`, and a
+catch-all (returns `[]`) for every other endpoint the full component tree
+probes (reaction-emoji catalog, nominations, etc.) -- same pattern as the
+original review, same reasoning (no live backend to seed real history
+against). The fixture is hand-built, purpose-designed for this follow-up
+(not reused verbatim from the original review's fixture), reusing the same
+demo-approved character names (Mirelle, Silas, Aureth, Sabella, Rook):
+
+- **Live scene feed** (`scene:700`): 4 real `thread_id`-bearing threads
+  spread across a 21-day timeline -- `thread-alpha` (3 poses, oldest),
+  `thread-beta` (6 poses), `thread-gamma` (4 poses, **root pose deliberately
+  seeded with MU\* color codes and markdown** -- `|wMirelle turned
+  sharply.|n **The broken seal** on the door cracked...` -- to drive the I-1
+  markup-stripping check), `thread-delta` (28 poses, the last and thus most
+  recently active thread, deliberately sized past `THREAD_PAGE_SIZE=20` to
+  exercise "Load earlier replies") -- plus 4 standalone (`thread_id: null`)
+  legacy poses interspersed between and after the threads.
+- **Retained whisper conversation** (`whisper:9001`, 3 poses): reachable via
+  a real `HistoryNavigator` search for "seal" and via the browse list, both
+  wired through the real `fetchPlaySearch`/`fetchPlayConversations`/
+  `fetchPlayContext` functions (not reimplemented) against the mocked fetch
+  -- used to drive reference mode via an actual rendered search-result click,
+  exactly as the original review's methodology required.
+
+### Tested interactions
+
+- Threads view default render (no clicks) -- full-page screenshot.
+- Clicked "Latest activity" -- confirmed it expands/scrolls to `thread-delta`
+  (the most recently active real thread).
+- Clicked `thread-delta`'s own "Load earlier replies · 8 before this page"
+  button -- confirmed the button disappears and all 28 rounds (1-28) become
+  visible, i.e. the widen actually works, not just that the control renders.
+- Expanded `thread-gamma` (the markup-seeded thread) by clicking its header
+  -- read the header excerpt and every pose's role-label text via
+  `innerText`/`allInnerTexts` and asserted none contain `|w`, `|n`, or `**`.
+- Navigated to History tab, searched "seal", clicked the real rendered
+  search-result row (not a harness shortcut) to invoke `onOpenReference`
+  exactly as `HistoryNavigator.tsx` wires it -- confirmed the "Reading
+  history" strip appears and asserted (`toHaveCount(0)`, not just visual
+  absence) that no "Mark conversation read" button exists anywhere on the
+  page in that state.
+
+### Screenshot paths (committed)
+
+All under `docs/design-proposals/narrative-play/review-evidence/`:
+`09-wave9-threads-view.png` (default render), `10-wave9-latest-activity.png`
+(after clicking Latest activity), `11-wave9-load-earlier-replies.png` (after
+clicking Load earlier replies on thread-delta), `12-wave9-thread-gamma-
+expanded.png` (markup-seeded thread expanded), `13-wave9-legacy-pose-
+plain.png` (same scroll state, confirming the trailing legacy pose), `14-
+wave9-reference-mode-toolbar-check.png` (reference mode via a real search
+result click).
+
+### Findings, per item
+
+**1. Multiple thread headers visible on first render, collapsed by default
+except the most recent -- F1.**
+`09-wave9-threads-view.png` shows all 4 real thread headers
+(`Silas · 3 poses`, `Sabella · 6 poses`, `Mirelle · 4 poses` [thread-gamma],
+`Mirelle · 28 poses` [thread-delta]) present on first render, in
+oldest-roots-first order, with only `thread-delta` (the most recently
+active) expanded -- the other three show a `›` chevron and no visible poses.
+Programmatically confirmed too: `section[data-thread-id]` count is 4 on
+first render (no "Load earlier history" click needed), matching the fixture's
+4 real threads exactly.
+**Verdict: PASS.**
+
+**2. An expanded thread with many poses shows a bounded default window with
+a working "Load earlier replies" control -- F2.**
+`09-wave9-threads-view.png` / `10-wave9-latest-activity.png` show
+`thread-delta` (28 poses) expanded with a bounded window (rounds 9-28, 20
+poses -- `THREAD_PAGE_SIZE`) and a "Load earlier replies · 8 before this
+page" button above them. Clicking it (`11-wave9-load-earlier-replies.png`)
+removes the button and reveals rounds 1-8 ("Opening pose" through "Reply in
+Round 1..." for round 8) -- the control is not just present, it actually
+works.
+**Verdict: PASS.**
+
+**3. Thread headers show an excerpt + timestamp -- F3.**
+Every collapsed header in `09-wave9-threads-view.png` shows an opening-pose
+excerpt and a locale timestamp, e.g. `Silas leaned against the doorframe,
+watching the rain streak the glass. · 8/1/2026, 12:00:00 PM`.
+**Verdict: PASS.**
+
+**4. Poses show "Opening pose"/"Reply in `<title>`"/"Standalone" role
+labels, and the label text is plain (markup-stripped) -- F4 + I-1.**
+`12-wave9-thread-gamma-expanded.png` shows `thread-gamma`'s header excerpt
+as `Mirelle turned sharply. The broken seal on the door cracked and hissed a
+thin trail… · 8/11/2026, 12:00:00 PM` -- the root pose's `|w`/`|n` color codes
+and `**bold**` markdown are gone from the plain-text excerpt, even though
+the pose's own rendered BODY correctly still shows "The broken seal" in
+**bold** (the markup renders normally in the actual message body via
+`FormattedContent`; only the plain-text excerpt/label strip it, which is the
+correct, narrower fix). The role labels read "Opening pose" for the root
+pose and "Reply in Mirelle turned sharply. The broken seal on the door
+cracked…" for its three replies. Programmatic assertion (`not.toMatch(/\|w
+|\|n|\*\*/)` over every label in the thread, plus the header excerpt)
+passed.
+**Verdict: PASS.**
+
+**5. A "Latest activity" button exists and expands/scrolls to the
+most-recently-active real thread -- F5.**
+The button is visible in the toolbar in every Threads-view screenshot.
+Clicking it (before `10-wave9-latest-activity.png`) was asserted
+programmatically to leave `thread-delta`'s `section` visible with
+`aria-expanded="true"`, then `scrollIntoView`'d it. (`thread-delta` was
+already the default-expanded thread, since it's genuinely the most recent --
+this fixture couldn't visually distinguish "jumped to" from "already there"
+in a static screenshot; the programmatic assertion is the load-bearing check
+here, not the screenshot alone.)
+**Verdict: PASS.**
+
+**6. In reference mode, "Mark conversation read" is not present in the
+toolbar at all -- F6.**
+`14-wave9-reference-mode-toolbar-check.png` shows the amber "Reading history
+· Whisper - Mirelle and Silas · read-only" strip and "Return to live", and
+**no toolbar row of Expand/Collapse/Mark-read buttons at all** -- only "0
+conversations" and a bare "Chronological" toggle (the whisper fixture is 3
+un-replied/legacy poses, so `realThreadGroups.length === 0`, which correctly
+gates out the whole Expand/Collapse/Latest-activity/Mark-read button group,
+not just Mark-read specifically). Programmatic assertion
+(`getByRole('button', { name: 'Mark conversation read' })` →
+`toHaveCount(0)`) passed -- the control isn't hidden by CSS, it isn't in the
+DOM.
+**Verdict: PASS.**
+
+**7. A single-pose (un-replied) pose renders without a collapsible card
+wrapper.**
+Every legacy pose in `09-wave9-threads-view.png` (Aureth, Rook, Sabella,
+and the trailing Rook pose after `thread-delta`) renders as a plain
+"Standalone"-labeled block with no header row, no chevron, and no
+`aria-expanded` control -- sitting directly among the thread cards, not
+visually distinguished by a border/card treatment the way real threads are.
+Programmatically confirmed: the first legacy row's `section` and
+`[aria-expanded]` descendant counts are both 0.
+**Verdict: PASS.**
+
+### Verdict summary (Wave 9 follow-up)
+
+| # | Item | Verdict |
+|---|---|---|
+| 1 | Multiple thread headers visible by default, collapsed except most recent (F1) | **PASS** |
+| 2 | Bounded default window + working per-thread "Load earlier replies" (F2) | **PASS** |
+| 3 | Thread header excerpt + timestamp (F3) | **PASS** |
+| 4 | Pose role label present AND markup-stripped (F4 + I-1) | **PASS** |
+| 5 | "Latest activity" button exists and works (F5) | **PASS** |
+| 6 | "Mark conversation read" absent (not just disabled) in reference mode (F6) | **PASS** |
+| 7 | Single un-replied pose renders without a card wrapper | **PASS** |
+| Dark theme | Not re-checked this pass | **BLOCKED -- still unverified, not inferred as a pass** |
+
+**All 6 original findings (F1-F6) are confirmed fixed by real-browser
+render, not just by source inspection or the two prior adversarial
+source-only reviews.** No new visual defect was found in the surfaces this
+follow-up specifically re-checked. Dark-theme parity remains the one
+standing BLOCKED item from the original review -- this follow-up did not
+re-verify it and does not claim to.
+
+### Mechanical companions (proposed, per the shape of what was checked)
+
+- A Vitest test asserting that, given N threads each with exactly one pose
+  spread evenly across a synthetic long timeline (the original review's own
+  F1 proposal), all N thread headers render on first mount with no "Load
+  earlier" click required -- would catch a regression of F1 mechanically.
+- A Vitest test seeding a pose's content with `|w`/`|n`/`**` markup and
+  asserting the thread-header excerpt and every role-label `<p>` text never
+  contains those literal substrings -- would catch a regression of I-1
+  mechanically (this follow-up's browser-level assertion is the same check,
+  just not yet ported into the unit suite).
+- The Vitest assertion for F6 (`getByRole('button', { name: /mark
+  conversation read/i })` absent when `readOnly` is `true`) already exists
+  -- `ThreadedNarrativeReader.test.tsx:1971`, "never renders 'Mark
+  conversation read' while reading a historical reference (#3759 review
+  finding F6)" -- confirmed present, not proposed here; this follow-up's
+  browser-level assertion is the same check at the render layer, not a
+  substitute for it.
