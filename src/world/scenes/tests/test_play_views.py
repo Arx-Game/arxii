@@ -277,6 +277,28 @@ class PlayReadViewMarkConversationReadTests(APITestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    def test_rejects_both_conversation_and_poses_in_one_request(self) -> None:
+        """Supplying both shapes at once is undefined -- reject rather than
+
+        silently favoring the bulk path and dropping `poses` with no signal.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        interaction = InteractionFactory(scene=scene)
+        response = self.client.post(
+            "/api/play/read/",
+            {
+                "conversation": f"scene:{scene.pk}",
+                "before": interaction.timestamp.isoformat(),
+                "poses": [{"id": interaction.pk, "timestamp": interaction.timestamp.isoformat()}],
+            },
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not both", response.json()["detail"])
+        self.assertFalse(InteractionReadReceipt.objects.filter(account=account).exists())
+
     def test_requires_authentication(self) -> None:
         response = self.client.post(
             "/api/play/read/",

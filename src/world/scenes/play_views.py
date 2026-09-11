@@ -380,12 +380,23 @@ class PlayReadView(APIView):
       explicit mark-all-before-snapshot operation for deliberate dismissal.").
       Marks every interaction this account can see in that conversation with
       ``timestamp <= before`` as read, without the client enumerating poses.
+
+    Supplying both ``conversation`` and ``poses`` in the same request is
+    rejected with 400 rather than silently favoring one shape.
     """
 
     permission_classes = [IsAuthenticated]
 
     def post(self, request: Request) -> Response:
         conversation = request.data.get("conversation")
+        # Both shapes present is an ambiguous request -- silently favoring one
+        # (the bulk path, previously) would drop the caller's `poses` list with
+        # no signal that it was ignored. Reject instead of guessing.
+        if conversation and request.data.get("poses") is not None:
+            return Response(
+                {"detail": "Supply either 'poses' or 'conversation', not both."},
+                status=400,
+            )
         if conversation:
             return self._mark_conversation_read(request, conversation)
         return self._mark_poses_read(request)
