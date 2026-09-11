@@ -1,5 +1,5 @@
 import { apiFetch } from '@/evennia_replacements/api';
-import type { ConversationSummary, PlayPage, PlaySearchResult } from './playTypes';
+import type { ConversationSummary, PlayPage, PlaySearchResult, ThreadSummary } from './playTypes';
 import type { Interaction } from '@/scenes/types';
 
 async function getJson<T>(path: string): Promise<T> {
@@ -19,11 +19,24 @@ export function fetchPlayConversations(
   );
 }
 
-export function fetchPlaySearch(query: string, from?: string, to?: string) {
+export function fetchPlaySearch(query: string, from?: string, to?: string, kind?: string) {
   const params = new URLSearchParams({ q: query });
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  if (kind) params.set('kind', kind);
   return getJson<PlayPage<PlaySearchResult>>(`/api/play/search/?${params}`);
+}
+
+/** Load an authorized thread page (root pose + visible replies) for a conversation. */
+export function fetchPlayThreads(params: {
+  conversation: string;
+  before?: string;
+  after?: string;
+}) {
+  const query = new URLSearchParams({ conversation: params.conversation });
+  if (params.before) query.set('before', params.before);
+  if (params.after) query.set('after', params.after);
+  return getJson<PlayPage<ThreadSummary>>(`/api/play/threads/?${query}`);
 }
 
 /** Load a bounded authorized pose page for a historical reference. */

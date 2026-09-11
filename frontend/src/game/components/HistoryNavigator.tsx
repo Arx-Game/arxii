@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, History, CalendarDays } from 'lucide-react';
 import { fetchPlayConversations, fetchPlaySearch } from '../playQueries';
@@ -19,14 +19,33 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
   const [submitted, setSubmitted] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
+  const [kind, setKind] = useState<'all' | 'room' | 'whisper' | 'scene_ooc'>('all');
+  const [showAllHistory, setShowAllHistory] = useState(false);
+  const [conversationsCursor, setConversationsCursor] = useState<string | undefined>(undefined);
+  const ninetyDaysAgo = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 90);
+    return d.toISOString().slice(0, 10);
+  }, []);
   const conversations = useQuery({
-    queryKey: ['play-conversations', from, to],
-    queryFn: () => fetchPlayConversations({ from: from || undefined, to: to || undefined }),
+    queryKey: ['play-conversations', from, to, showAllHistory, conversationsCursor],
+    queryFn: () =>
+      fetchPlayConversations({
+        from: from || (showAllHistory ? undefined : ninetyDaysAgo),
+        to: to || undefined,
+        after: conversationsCursor,
+      }),
     staleTime: 30_000,
   });
   const search = useQuery({
-    queryKey: ['play-search', submitted, from, to],
-    queryFn: () => fetchPlaySearch(submitted, from || undefined, to || undefined),
+    queryKey: ['play-search', submitted, from, to, kind],
+    queryFn: () =>
+      fetchPlaySearch(
+        submitted,
+        from || ninetyDaysAgo,
+        to || undefined,
+        kind === 'all' ? undefined : kind
+      ),
     enabled: submitted.length >= 2,
     staleTime: 30_000,
   });
@@ -82,6 +101,20 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
             />
           </label>
         </div>
+        <label className="text-xs text-muted-foreground">
+          Type
+          <select
+            aria-label="Type"
+            value={kind}
+            onChange={(event) => setKind(event.target.value as typeof kind)}
+            className="mt-1 block w-full rounded border bg-background px-2 py-1 text-sm"
+          >
+            <option value="all">All accessible</option>
+            <option value="room">Scenes</option>
+            <option value="whisper">Whispers</option>
+            <option value="scene_ooc">OOC</option>
+          </select>
+        </label>
       </form>
       {search.isLoading && <p className="text-sm text-muted-foreground">Searching…</p>}
       {submitted.length >= 2 && !search.isLoading && search.data?.results.length === 0 && (
@@ -107,6 +140,16 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
         </button>
       ))}
       <div className="border-t pt-3">
+        <button
+          type="button"
+          className="mb-2 text-xs underline"
+          onClick={() => {
+            setShowAllHistory((v) => !v);
+            setConversationsCursor(undefined);
+          }}
+        >
+          {showAllHistory ? 'Show recent only' : 'Show all my accessible history'}
+        </button>
         <h3 className="flex items-center gap-2 text-xs font-semibold uppercase text-muted-foreground">
           <CalendarDays className="h-3 w-3" /> Recent conversations
         </h3>
@@ -137,6 +180,15 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
         ))}
         {!conversations.isLoading && !conversations.data?.results.length && (
           <p className="mt-2 text-sm text-muted-foreground">No earlier conversations.</p>
+        )}
+        {conversations.data?.after && (
+          <button
+            type="button"
+            className="mt-2 block w-full rounded border p-2 text-center text-sm hover:bg-accent"
+            onClick={() => setConversationsCursor(conversations.data?.after ?? undefined)}
+          >
+            Load more
+          </button>
         )}
       </div>
     </div>
