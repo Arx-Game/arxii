@@ -16,6 +16,14 @@ issue bodies; the model decision is ADR-0132.
   tradition FK, `resonance_pool` (BigInteger, spendable by future miracles
   #2360), `lifetime_worship` (monotonic audit), nullable OneToOne
   `avatar_sheet` → CharacterSheet (rare played gods), `is_active`.
+- `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
+  `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
+  unique per (being, facet).
+- `BeingNickname` (#3776) — an alternate name a being's worshippers use:
+  `being` FK (`related_name="nicknames"`), `name`, unique per (being, name).
+  No reverent/irreverent field — tone is prose, not data. Reached
+  transitively by `Organization.patron_nickname` (see societies.md) so
+  different orgs can name the same god differently in their own records.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:

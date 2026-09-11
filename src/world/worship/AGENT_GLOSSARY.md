@@ -14,6 +14,11 @@
   CharacterResonance for beings.
 - **Devotion standing** — the one-way PC→god favor record (`DevotionStanding`).
   _Avoid_: CharacterRelationship for sheetless gods.
+- **Being nickname** — an alternate name a being's worshippers use (`BeingNickname`,
+  #3776); a being may carry several. No reverent/irreverent field — tone is prose, not
+  data. `societies.Organization.patron_nickname` points at one of these, never
+  directly at the `WorshippedBeing`, so different organizations can name the same god
+  differently in their own records.
 - **Worship declaration** — a character's public being + optional secret being
   (`WorshipDeclaration`); the secret side mints a Secret at CG finalization.
 - **Heart vs lip service** — `WorshipDeclaration.public_is_sincere` (#2361): whether a

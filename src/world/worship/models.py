@@ -120,6 +120,27 @@ class BeingFacet(SharedMemoryModel):
         return f"{self.being}: {self.facet.name}"
 
 
+class BeingNickname(SharedMemoryModel):
+    """An alternate name a being's worshippers use (#3776).
+
+    No reverent/irreverent distinction field — a nickname is just a name; its tone is
+    prose, not data. Every being should carry at least one row (repeating the canonical
+    name if nothing else) so an Organization always has something to point at.
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="nicknames")
+    name = models.CharField(max_length=100)
+
+    class Meta:
+        ordering = ["being", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "name"], name="unique_being_nickname"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.being})"
+
+
 class WorshipGrant(SharedMemoryModel):
     """Audit ledger row for worship received by a being (mirrors ResonanceGrant)."""
 

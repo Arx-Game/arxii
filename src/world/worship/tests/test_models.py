@@ -11,7 +11,7 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
-from world.worship.models import BeingFacet
+from world.worship.models import BeingFacet, BeingNickname
 
 
 class WorshipModelTests(TestCase):
@@ -56,3 +56,11 @@ class BeingFacetTests(TestCase):
         BeingFacet.objects.create(being=self.being, facet=scythe)
         with transaction.atomic(), self.assertRaises(IntegrityError):
             BeingFacet.objects.create(being=self.being, facet=scythe)
+
+
+class BeingNicknameTests(TestCase):
+    def test_being_can_have_multiple_nicknames(self) -> None:
+        being = WorshippedBeingFactory()
+        BeingNickname.objects.create(being=being, name="the Crimson")
+        BeingNickname.objects.create(being=being, name="Old Resting Murder Face")
+        self.assertEqual(being.nicknames.count(), 2)

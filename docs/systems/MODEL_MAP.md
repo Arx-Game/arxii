@@ -9174,6 +9174,7 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
+  - patron_nickname -> worship.BeingNickname [FK] (nullable)
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
@@ -10378,6 +10379,12 @@
   - being -> worship.WorshippedBeing [FK]
   - facet -> magic.Facet [FK]
 
+### BeingNickname
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - patron_organizations <- societies.Organization
+
 ### ChosenFavorConfig
 
 ### DevotionStanding
@@ -10438,6 +10445,7 @@
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - being_facets <- worship.BeingFacet
+  - nicknames <- worship.BeingNickname
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration

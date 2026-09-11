@@ -5,6 +5,7 @@ import factory
 from world.skills.factories import SpecializationFactory
 from world.worship.models import (
     BeingFacet,
+    BeingNickname,
     DevotionStanding,
     WorshipDeclaration,
     WorshippedBeing,
@@ -37,6 +38,14 @@ class BeingFacetFactory(factory.django.DjangoModelFactory):
 
     being = factory.SubFactory(WorshippedBeingFactory)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
+
+
+class BeingNicknameFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingNickname
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    name = factory.Sequence(lambda n: f"Nickname {n}")
 
 
 class DevotionStandingFactory(factory.django.DjangoModelFactory):
