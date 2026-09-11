@@ -1390,7 +1390,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
+        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 (below) + #3759
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
@@ -1405,6 +1405,10 @@ class InteractionListQueryBudgetTests(APITestCase):
             # query plus one persona query per call; the process-lifetime Account
             # cache pays for one of each, total, no matter how many call sites hit
             # it in this request.
+            # #3759 adds exactly 1 flat (not per-row) query: get_is_unread's
+            # _read_interaction_ids batch-resolves the page's read receipts in one
+            # InteractionReadReceipt query, mirroring _muted_persona_ids/#2183 —
+            # bounded by "one query per request", never by row count.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1484,7 +1488,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(51):  # 47 + #1278 block/mute-gate loads + #2183 (below)
+        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 (below) + #3759
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
@@ -1495,6 +1499,9 @@ class InteractionListQueryBudgetTests(APITestCase):
             # replace the old request-scoped memo, so get_queryset() and
             # get_serializer_context() share one roster query and one persona
             # query for the whole request instead of paying for each call site.
+            # #3759 adds exactly 1 flat (not per-row) query (see the sibling test
+            # above): get_is_unread's _read_interaction_ids batch-resolves the
+            # page's read receipts in one query regardless of endorser count.
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

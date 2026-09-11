@@ -17033,6 +17033,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  '/api/play/read/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * @description POST authorized pose references to mark them read for this account.
+     *
+     *     Two request-body shapes:
+     *
+     *     - ``{"poses": [{"id": ..., "timestamp": ...}, ...]}`` — the original
+     *       explicit-list path, capped at ``MAX_POSES_PER_BATCH``.
+     *     - ``{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}`` — the
+     *       mark-all-before-snapshot bulk dismissal (#3759 spec section 7: "Separate
+     *       explicit mark-all-before-snapshot operation for deliberate dismissal.").
+     *       Marks every interaction this account can see in that conversation with
+     *       ``timestamp <= before`` as read, without the client enumerating poses.
+     *
+     *     Supplying both ``conversation`` and ``poses`` in the same request is
+     *     rejected with 400 rather than silently favoring one shape.
+     */
+    post: operations['play_read_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   '/api/play/search/': {
     parameters: {
       query?: never;
@@ -17040,8 +17072,29 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Search only viewer-rendered, authorized interaction text. */
+    /**
+     * @description Search only viewer-rendered, authorized interaction text, bounded by
+     *     conversation/kind/date so the comprehension-aware match never scans
+     *     unbounded history (#3759).
+     */
     get: operations['play_search_retrieve'];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/play/threads/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description GET server-grouped, paginated thread summaries for one conversation. */
+    get: operations['play_threads_retrieve'];
     put?: never;
     post?: never;
     delete?: never;
@@ -31491,7 +31544,7 @@ export interface components {
       };
       /** @description Classify temporary scene rows without changing retention behavior. */
       readonly availability: string;
-      /** @description Read state is private to the play reader and defaults to unread false. */
+      /** @description True when the read-receipt table has no row for this viewer+pose (#3759). */
       readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {
@@ -31689,7 +31742,7 @@ export interface components {
       };
       /** @description Classify temporary scene rows without changing retention behavior. */
       readonly availability: string;
-      /** @description Read state is private to the play reader and defaults to unread false. */
+      /** @description True when the read-receipt table has no row for this viewer+pose (#3759). */
       readonly is_unread: boolean;
       /** @description Persona data embedded in interaction payloads. */
       readonly persona: {
@@ -60857,7 +60910,9 @@ export interface operations {
       query?: {
         /** @description The pagination cursor value. */
         cursor?: string;
+        kind?: string;
         mode?: string;
+        participant?: number;
         persona?: number;
         scene?: number;
         since?: string;
@@ -70730,7 +70785,43 @@ export interface operations {
       };
     };
   };
+  play_read_create: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
   play_search_retrieve: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description No response body */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+    };
+  };
+  play_threads_retrieve: {
     parameters: {
       query?: never;
       header?: never;

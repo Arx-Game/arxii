@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
 import { ExplorationReader } from './ExplorationReader';
 import type { GameLifecycleState } from '@/store/gameSlice';
-import type { ReaderMode } from '../playPreferences';
 import type { InteractionWsPayload } from '@/hooks/types';
 import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
@@ -21,6 +20,7 @@ import { Link } from 'react-router-dom';
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { sessionAttention } from '@/game/attention';
+import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
 
 /**
  * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
@@ -63,7 +63,6 @@ interface GameWindowProps {
   diagnostics?: string[];
   ambientNotices?: string[];
   lifecycleState?: GameLifecycleState;
-  readerMode?: ReaderMode;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
   /** The active character's persona id — lifted to GamePage to dedupe the roster query (#2156). */
@@ -143,9 +142,23 @@ interface GameWindowProps {
   speakingAs?: { name: string; thumbnailUrl: string | null };
   /** Read-only historical reference shown in the same reader. */
   reference?: { kind: string; key: string; title: string } | null;
+  /**
+   * The specific pose id a deep link (a search result or "Recent
+   * conversations" row) opened this reference to (#3759 review finding C2)
+   * — threaded straight to `ThreadedNarrativeReader`'s own `targetPoseId`
+   * prop, which seeds the visible window to include it and scrolls/
+   * highlights it once mounted. Absent for a reference opened without a
+   * specific pose (a bare conversation browse) and always absent in live mode.
+   */
+  targetPoseId?: string;
   onReturnToLive?: () => void;
   referenceUnavailable?: boolean;
   referenceLoading?: boolean;
+  /** True when the reference fetch failed with a transient/retryable error
+   * (i.e. not a 403/404 unavailable-reference) — distinct error UI + a Retry
+   * button, alongside the existing Return-to-live affordance. */
+  referenceRetryable?: boolean;
+  onRetryReference?: () => void;
 }
 
 export function GameWindow({
@@ -156,7 +169,6 @@ export function GameWindow({
   diagnostics,
   ambientNotices,
   lifecycleState,
-  readerMode = 'threads',
   composerMode,
   onModeChange,
   personaId,
@@ -187,9 +199,12 @@ export function GameWindow({
   conversationTabs,
   speakingAs,
   reference,
+  targetPoseId,
   onReturnToLive,
   referenceUnavailable,
   referenceLoading = false,
+  referenceRetryable = false,
+  onRetryReference,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -204,12 +219,40 @@ export function GameWindow({
   const pinnedRef = useRef(true);
   const activeConvKey = conversationTabs?.activeKey ?? 'room';
   const interactionCount = sceneFeed?.interactions.length ?? 0;
+  // Threads and Chronological keep their OWN anchor slot (#3759 review
+  // finding I5) -- this bypass must check whichever mode is CURRENTLY
+  // active, not a single shared `anchor` field that no longer exists.
+  const { preferences } = usePlayPreferences();
+  const activeModeAnchor = preferences.readerMode === 'chronological' ? 'chronological' : 'threads';
 
   useEffect(() => {
     const el = feedScrollRef.current;
     if (!el) return;
     const saved = scrollPositionsRef.current.get(activeConvKey);
-    if (saved !== undefined) {
+    // ThreadedNarrativeReader.tsx owns restoring its own pose-identity anchor
+    // (#3759 Decision #3) for the room view -- this raw-scrollTop bookkeeping
+    // must not fight it on the FIRST visit to the room view this session
+    // (`saved === undefined`, i.e. this Map has never recorded a 'room'
+    // position yet): the `else` branch below would otherwise unconditionally
+    // jump to the bottom, which runs right after the anchor restore on first
+    // mount (child effects fire before parent effects) and undoes it.
+    //
+    // Scoped to "no `saved` entry yet" rather than "an anchor exists at all"
+    // (#3759 review finding I2): once the reader has restored (or the user
+    // has scrolled) even once, a real scroll event records a 'room' entry
+    // here (see handleFeedScroll below) -- from that point on this effect's
+    // normal `saved` branch is what should run on every return to the room
+    // tab, exactly like every other tab, so #2165's per-tab memory keeps
+    // working rather than being permanently disabled the first time any
+    // anchor is ever saved for this scene.
+    if (
+      activeConvKey === 'room' &&
+      saved === undefined &&
+      sceneFeed &&
+      loadConversationAnchor(sceneFeed.sceneId)?.anchors?.[activeModeAnchor]
+    ) {
+      pinnedRef.current = false;
+    } else if (saved !== undefined) {
       el.scrollTop = saved;
       pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
     } else {
@@ -222,7 +265,13 @@ export function GameWindow({
     for (const key of scrollPositionsRef.current.keys()) {
       if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
     }
-  }, [activeConvKey, conversationTabs?.tabs]);
+    // Deliberately NOT depending on the whole `sceneFeed` object -- GamePage.tsx
+    // builds a fresh `sceneFeed` object every render (new interactions array
+    // included), so that would re-run this effect (and its scrollTop writes)
+    // on every unrelated re-render instead of only on an actual tab switch or
+    // scene change. `sceneFeed?.sceneId` is stable across those.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvKey, conversationTabs?.tabs, sceneFeed?.sceneId]);
 
   useEffect(() => {
     const el = feedScrollRef.current;
@@ -232,6 +281,15 @@ export function GameWindow({
   }, [interactionCount, activeConvKey]);
 
   const handleFeedScroll = () => {
+    // Never record a position while browsing a historical reference (#3759
+    // review finding I5): the reference view falls back `activeConvKey` to
+    // 'room' (`conversationTabs` is undefined in reference mode), so without
+    // this guard a reference-mode scroll would corrupt the room tab's own
+    // remembered raw offset under that same key -- and unlike the
+    // downstream bypass in the effect above (which only masks the symptom
+    // once ANY anchor already exists), this fixes the corruption at the
+    // source, including for a scene that has no anchor saved yet at all.
+    if (reference) return;
     const el = feedScrollRef.current;
     if (!el) return;
     scrollPositionsRef.current.set(activeConvKey, el.scrollTop);
@@ -305,7 +363,10 @@ export function GameWindow({
           className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm"
           role="status"
         >
-          <span>Reading history · {reference.title}</span>
+          {/* #3759 Wave 9 review finding, section 5: demo copy reads "Reading
+              history · read-only" -- adds that suffix here (one-line change,
+              the string isn't otherwise composed/parameterized). */}
+          <span>Reading history · {reference.title} · read-only</span>
           <button
             type="button"
             className="rounded border px-3 py-1 text-xs font-medium"
@@ -378,6 +439,7 @@ export function GameWindow({
             className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
             ref={feedScrollRef}
             onScroll={handleFeedScroll}
+            data-testid="feed-scroll-container"
           >
             {referenceLoading && reference && (
               <div
@@ -405,9 +467,44 @@ export function GameWindow({
                 </button>
               </div>
             )}
-            {!referenceLoading && !referenceUnavailable && (
+            {!referenceLoading && referenceRetryable && (
+              <div
+                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
+                role="alert"
+              >
+                <h2 className="font-serif text-xl">Couldn&apos;t load that history</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  This may be a temporary connection problem.
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded border px-3 py-2 text-sm"
+                  onClick={onRetryReference}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="mt-2 rounded border px-3 py-2 text-sm"
+                  onClick={onReturnToLive}
+                >
+                  Return to live
+                </button>
+              </div>
+            )}
+            {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
               <ThreadedNarrativeReader
+                key={sceneFeed.sceneId}
                 sceneId={sceneFeed.sceneId}
+                conversationKey={sceneFeed.sceneId}
+                // The REAL server-format conversation ref (#3759 review
+                // finding C1) -- `reference.key` is already in that exact
+                // shape (it's literally what's sent as the `conversation`
+                // query param to fetch this reference), and matches
+                // `_conversation()`'s own `scene:<id>` format for the live
+                // room otherwise. Distinct from `conversationKey` above,
+                // which stays the bare-id localStorage anchor/collapse key.
+                conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
                 interactions={sceneFeed.interactions}
                 hasNextPage={sceneFeed.hasNextPage}
                 fetchNextPage={sceneFeed.fetchNextPage}
@@ -416,7 +513,8 @@ export function GameWindow({
                 onAttachAction={onAttachAction}
                 onReply={onReply}
                 readOnly={Boolean(reference)}
-                readerMode={readerMode}
+                persistAnchor={activeConvKey === 'room'}
+                targetPoseId={targetPoseId}
               />
             )}
           </div>

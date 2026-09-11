@@ -101,7 +101,19 @@ EVIDENCE_MARKER=""
 EVIDENCE_STATUS="- Review evidence is not required; this issue is not labeled \`review:evidence-required\`."
 if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
   EVIDENCE_MARKER="<!-- review-evidence-required -->"
-  EVIDENCE_STATUS="- Report: $EVIDENCE_REFERENCE
+  # validate_review_evidence.py's --pr-body check (and the CI job that runs
+  # it) require this exact line shape: a bare https:// URL, or a
+  # backtick-wrapped local path -- never a bare local path. Match
+  # EVIDENCE_REFERENCE's own branching above (URL vs local file) so the PR
+  # this script opens passes the SAME regex on the first try instead of
+  # bouncing CI (#3785 hit this: a bare local path failed
+  # "labeled issue requires a review report link" and had to be patched in
+  # after the fact).
+  REPORT_LINE="$EVIDENCE_REFERENCE"
+  if [[ "$EVIDENCE_REFERENCE" != https://* ]]; then
+    REPORT_LINE="\`$EVIDENCE_REFERENCE\`"
+  fi
+  EVIDENCE_STATUS="- Report: $REPORT_LINE
 - The local reviewer report is validated against the exact reviewed code revision before this PR is opened.
 - A PASS requires concrete evidence for every mandatory criterion, including a visual checklist where applicable, and no unresolved findings."
 fi

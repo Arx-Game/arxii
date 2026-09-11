@@ -5,7 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [("arxii", "0119_xp_attributed_to_character")]
+    dependencies = [("arxii", "0120_interactionreadreceipt")]
 
     operations = [
         migrations.CreateModel(

@@ -294,8 +294,6 @@ asked for that checkpoint.
 
 Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict.
 
-**Prefer `PR_EVIDENCE_URL` over `PR_EVIDENCE_FILE` for the report's final delivery.** A file passed via `PR_EVIDENCE_FILE` from inside the repo (not `/tmp`/scratch) gets committed to the branch and squash-merges into `main` — evidence reports and their screenshots are review artifacts, not permanent product history, and `main` is not the place for them (#3786 shipped this mistake: `docs/reviews/<slug>.md` plus a `docs/reviews/screenshots/<issue>/` directory both landed in history before being caught and removed). The working pattern: write the report to a scratch path; since `open-pr.sh` opens the PR (it doesn't exist yet when evidence is first gathered), post the report as a comment on the tracking **issue** (`gh issue comment <issue-N> --body-file <path>`, capture the returned comment URL) and pass that via `PR_EVIDENCE_URL` — `open-pr.sh` accepts either an issue or a PR comment URL. Once the PR exists (e.g. re-validating evidence after a later push), a PR comment works the same way (`gh pr comment <PR> --body-file <path>`). For screenshots the report references: `gh gist create` needs a `gist` scope the maintainer PAT does not have and rejects binary files outright even when authorized, so host them by pushing the PNGs as a normal commit on the PR branch, referencing them in the comment via `https://raw.githubusercontent.com/<org>/<repo>/<commit-sha>/<path>` (GitHub serves any blob at any commit it has ever seen this way, whether or not that path exists at the branch tip), then removing that commit's files from the branch in a later commit so they're gone from the tip — the commit itself stays reachable indefinitely once it's part of a PR's history (`refs/pull/<PR>/head`), so the raw URLs keep resolving after squash-merge even though `main` never contains the files. Reserve a genuinely committed `PR_EVIDENCE_FILE` for the rare case where the evidence itself is meant to be permanent, versioned project history, not the default.
-
 Whichever delivery mechanism is used, the report must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual
 screenshots when a design/demo exists, one verdict per mandatory criterion, and
@@ -303,6 +301,16 @@ an empty unresolved-findings section. A green build or component-presence test
 is not acceptance evidence. Scoped or partial work defaults to `Refs #N`; set
 `PR_CLOSE_ISSUE=1` only after a final completeness review confirms every
 mandatory criterion is passed.
+
+**The evidence report and its screenshots never belong in `main`'s permanent
+history** — commit them to the branch while iterating (the easiest way to let
+CI validate a local `PR_EVIDENCE_FILE` path), but once the report is final,
+move it to a comment **on the PR itself** (`PR_EVIDENCE_URL`) and remove the
+local copies before the PR merges. See
+`references/evidence-screenshots-not-in-main.md` for the exact technique
+(screenshot links survive as `raw.githubusercontent.com/.../<commit-sha>/...`
+even after the branch's tip no longer has the file) and the sequencing gotcha
+with the evidence gate's own revision check.
 
 Compose the PR body's substitution values (summary, follow-ups, sync
 summary, evidence file).

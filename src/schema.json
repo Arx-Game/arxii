@@ -16083,9 +16083,17 @@ paths:
         schema:
           type: string
       - in: query
+        name: kind
+        schema:
+          type: string
+      - in: query
         name: mode
         schema:
           type: string
+      - in: query
+        name: participant
+        schema:
+          type: integer
       - in: query
         name: persona
         schema:
@@ -27482,10 +27490,49 @@ paths:
       responses:
         '200':
           description: No response body
+  /api/play/read/:
+    post:
+      operationId: play_read_create
+      description: |-
+        POST authorized pose references to mark them read for this account.
+
+        Two request-body shapes:
+
+        - ``{"poses": [{"id": ..., "timestamp": ...}, ...]}`` — the original
+          explicit-list path, capped at ``MAX_POSES_PER_BATCH``.
+        - ``{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}`` — the
+          mark-all-before-snapshot bulk dismissal (#3759 spec section 7: "Separate
+          explicit mark-all-before-snapshot operation for deliberate dismissal.").
+          Marks every interaction this account can see in that conversation with
+          ``timestamp <= before`` as read, without the client enumerating poses.
+
+        Supplying both ``conversation`` and ``poses`` in the same request is
+        rejected with 400 rather than silently favoring one shape.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/play/search/:
     get:
       operationId: play_search_retrieve
-      description: Search only viewer-rendered, authorized interaction text.
+      description: |-
+        Search only viewer-rendered, authorized interaction text, bounded by
+        conversation/kind/date so the comprehension-aware match never scans
+        unbounded history (#3759).
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/threads/:
+    get:
+      operationId: play_threads_retrieve
+      description: GET server-grouped, paginated thread summaries for one conversation.
       tags:
       - play
       security:
@@ -54934,8 +54981,8 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: Read state is private to the play reader and defaults to unread
-            false.
+          description: True when the read-receipt table has no row for this viewer+pose
+            (#3759).
           readOnly: true
         persona:
           type: object
@@ -55269,8 +55316,8 @@ components:
           readOnly: true
         is_unread:
           type: boolean
-          description: Read state is private to the play reader and defaults to unread
-            false.
+          description: True when the read-receipt table has no row for this viewer+pose
+            (#3759).
           readOnly: true
         persona:
           type: object

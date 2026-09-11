@@ -173,3 +173,32 @@ class SceneClockClosedReason(models.TextChoices):
     FILLED = "filled", "Filled"
     COMPLETED = "completed", "Beat completed"
     SCENE_ENDED = "scene_ended", "Scene ended"
+
+
+# Conversation-kind derivation constants (#3759), shared between
+# `play_views._conversation()` and `interaction_filters.InteractionFilter.filter_kind`.
+# The two functions MUST stay in lockstep -- one classifies a served row, the other
+# filters a queryset to the same classification -- so both import these single
+# definitions rather than keeping independent copies of the literals they key on.
+#
+# `OOC_MODES` and `TABLETALK_MODE` do not correspond to any current
+# `InteractionMode` value (there is no "ooc"/"system"/"tt" mode yet -- that awaits
+# the not-yet-delivered #3299 OOC-channel backend). They are forward-compatible
+# scaffolding: harmless dead branches today, ready for when `InteractionMode`
+# gains real ooc/channel values.
+WHISPER_MODE = InteractionMode.WHISPER
+OOC_MODES = frozenset({"ooc", "system"})
+TABLETALK_MODE = "tt"
+
+KIND_WHISPER = "whisper"
+KIND_PLACE = "place"
+KIND_SCENE_OOC = "scene_ooc"
+KIND_CHANNEL = "channel"
+KIND_ROOM = "room"
+
+# The general/no-scene conversation's `kind` and `key` coincide by construction
+# (see `_conversation()`'s room-fallback branch) -- this alias exists purely for
+# legibility at `_queryset`'s `conversation` comparison and `_conversation()`'s
+# own room-fallback return, both in `play_views.py`, so neither reads like a
+# kind/key mismatch (#3759 review finding 7a).
+GENERAL_CONVERSATION_KEY = KIND_ROOM

@@ -3411,6 +3411,12 @@ action consent flow, and a three-mode non-combat round framework.
   `get_resolver(action_key)`), consent (`SocialConsentCategory` enforcement)
 - **Source:** `src/world/scenes/`
 - **Details:** [scenes.md](scenes.md)
+- **Play API (narrative reader, #3759):** `/api/play/*` reader contracts (`play_views.py`) —
+  conversations, threads, poses, a cursor-paged context window, and bounded search all ride the
+  same `InteractionQuerySet.visible_to` authorization the scene feed uses. The sixth endpoint, a
+  read-marking POST, is the exception — it doesn't gate reads at all, it privately records the
+  calling account's own read state and is never serialized to any other viewer. See scenes.md's
+  "Play API (narrative reader)" section.
 - **Speaker Queue (#2356):** Room-scoped turn-order utility for structured RP gatherings (court, sermons, Q&A). Does NOT gate actions — players can pose/say/react freely.
   - **Models** (`speaker_queue_models.py`): `SpeakerQueue` (one active per room, UniqueConstraint on `is_active=True`; FK room PROTECT, scene SET_NULL for auto-clear, opened_by persona), `SpeakerQueueEntry` (ordered membership; FK queue CASCADE + persona CASCADE; position 1=current speaker; unique per queue+persona).
   - **Services** (`speaker_queue_services.py`): `open_queue`, `close_queue`, `join_queue`, `leave_queue`, `advance_queue`, `skip_speaker`, `get_active_queue`, `queue_entries`, `clear_queue_on_scene_finish`, `remove_persona_from_room_queues`.

@@ -1,9 +1,11 @@
-import { useState, type ReactNode } from 'react';
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { Compass, History, MessageSquare } from 'lucide-react';
 import { ConversationSidebar } from './ConversationSidebar';
 import { HistoryNavigator } from './HistoryNavigator';
 import { DisplaySettings } from './DisplaySettings';
 import type { ThreadingState } from '@/scenes/hooks/useThreading';
+
+type SidebarMode = 'here' | 'conversations' | 'history';
 
 interface PlaySidebarProps {
   here: ReactNode;
@@ -31,7 +33,32 @@ export function PlaySidebar({
   selectedThreadKey,
   onOpenReference,
 }: PlaySidebarProps) {
-  const [mode, setMode] = useState<'here' | 'conversations' | 'history'>('here');
+  const [mode, setMode] = useState<SidebarMode>(threading ? 'conversations' : 'here');
+
+  // #3759 review fix: the three modes share ONE scroll container
+  // (`play-sidebar-scroll`), so each mode needs its own remembered scroll
+  // position, restored on switch — mirrors GameWindow.tsx's per-tab
+  // scrollPositionsRef pattern, adapted for these three fixed modes instead
+  // of dynamic conversation tabs. `useLayoutEffect` (not `useEffect`) matters
+  // here specifically: these bodies are `hidden`-attribute siblings, not
+  // swapped content, so the newly-shown body's layout (scrollHeight) is only
+  // final once the browser has applied the `hidden` toggle — restoring after
+  // paint would flash the wrong offset.
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const scrollPositionsRef = useRef(new Map<SidebarMode, number>());
+
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = scrollPositionsRef.current.get(mode) ?? 0;
+  }, [mode]);
+
+  const handleScroll = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    scrollPositionsRef.current.set(mode, el.scrollTop);
+  };
+
   return (
     <aside className="flex h-full min-h-0 flex-col" aria-label="Play sidebar">
       <nav className="grid shrink-0 grid-cols-3 gap-1 border-b p-2" aria-label="Sidebar modes">
@@ -69,35 +96,21 @@ export function PlaySidebar({
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
         data-testid="play-sidebar-scroll"
+        ref={scrollRef}
+        onScroll={handleScroll}
       >
-        {mode === 'here' && here}
-        {mode === 'conversations' && (
+        <div hidden={mode !== 'here'}>{here}</div>
+        <div hidden={mode !== 'conversations'}>
           <ConversationSidebar
             threading={threading}
             onThreadClick={onThreadClick}
             onShowAll={onShowAll}
             selectedThreadKey={selectedThreadKey}
           />
-        )}
-        {mode === 'history' && <HistoryNavigator onOpenReference={onOpenReference} />}
-        {mode === 'here' && threading && (
-          <div
-            className="absolute left-[-10000px] top-0 w-80"
-            aria-label="Thread sidebar"
-            aria-hidden="true"
-            ref={(element) => {
-              if (element) element.inert = true;
-            }}
-          >
-            <ConversationSidebar
-              threading={threading}
-              onThreadClick={onThreadClick}
-              onShowAll={onShowAll}
-              selectedThreadKey={selectedThreadKey}
-              ariaLabel="Hidden conversation controls"
-            />
-          </div>
-        )}
+        </div>
+        <div hidden={mode !== 'history'}>
+          <HistoryNavigator onOpenReference={onOpenReference} />
+        </div>
       </div>
     </aside>
   );
