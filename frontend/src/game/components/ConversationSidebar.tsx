@@ -25,6 +25,7 @@ interface ConversationSidebarProps {
    * marking the active conversation.
    */
   selectedThreadKey?: string;
+  ariaLabel?: string;
 }
 
 export function ConversationSidebar({
@@ -32,6 +33,7 @@ export function ConversationSidebar({
   onThreadClick,
   onShowAll,
   selectedThreadKey,
+  ariaLabel,
 }: ConversationSidebarProps) {
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
@@ -68,6 +70,7 @@ export function ConversationSidebar({
         onThreadClick={onThreadClick}
         onShowAll={onShowAll ?? threading.showAll}
         onOpenFilter={setFilterThreadKey}
+        ariaLabel={ariaLabel}
       />
 
       {filterThread && filterThreadKey && (

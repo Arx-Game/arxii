@@ -54,7 +54,7 @@ export function CharactersList({
                     type="button"
                     onClick={() => onCharacterClick(char)}
                     className={cn(
-                      'flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left',
+                      'flex min-h-11 w-full items-center gap-2 rounded-md px-2 py-2 text-left',
                       'transition-colors hover:bg-accent focus-visible:outline-none',
                       'focus-visible:ring-2 focus-visible:ring-ring'
                     )}

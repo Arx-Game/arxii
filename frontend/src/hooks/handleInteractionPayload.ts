@@ -3,7 +3,12 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { InteractionWsPayload } from './types';
 import type { AppDispatch } from '@/store/store';
 import { store } from '@/store/store';
-import { addSceneInteraction, openThreadTab, setActiveSession } from '@/store/gameSlice';
+import {
+  addAmbientInteraction,
+  addSceneInteraction,
+  openThreadTab,
+  setActiveSession,
+} from '@/store/gameSlice';
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { queryClient } from '@/queryClient';
@@ -16,7 +21,11 @@ export function handleInteractionPayload(
   dispatch: AppDispatch,
   navigate: NavigateFunction
 ) {
-  dispatch(addSceneInteraction({ character, interaction: payload }));
+  if (payload.scene_id == null) {
+    dispatch(addAmbientInteraction({ character, interaction: payload }));
+  } else {
+    dispatch(addSceneInteraction({ character, interaction: payload }));
+  }
   maybeToastWhisperAttention(character, payload, dispatch, navigate);
 }
 

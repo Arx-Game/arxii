@@ -18,6 +18,8 @@ import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
 import { useEncounterForScene } from '@/combat/queries';
+import { usePlayPreferences } from './playPreferences';
+import { CombatRail } from '@/combat/components/CombatRail';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
 import { JournalTab } from '@/journals/components/JournalTab';
@@ -196,6 +198,7 @@ interface GameRightSidebarProps {
   sceneData: ComponentProps<typeof FocusPanel>['sceneData'];
   hasActiveEncounter: boolean;
   hasActiveBattle: boolean;
+  activeEncounter?: { id: number } | null;
 }
 
 /** The right-hand tab rail: room/focus, stories, events, presence, sheet panels. */
@@ -209,6 +212,7 @@ function GameRightSidebar({
   sceneData,
   hasActiveEncounter,
   hasActiveBattle,
+  activeEncounter,
 }: GameRightSidebarProps) {
   return (
     <SidebarTabPanel
@@ -217,14 +221,19 @@ function GameRightSidebar({
         isDreaming && activeCharacterId && active ? (
           <DreamspacePanel characterId={activeCharacterId} characterName={active} />
         ) : (
-          <FocusPanel
-            focus={focus}
-            roomCharacter={active}
-            roomData={roomData}
-            sceneData={sceneData}
-            hasActiveEncounter={hasActiveEncounter}
-            hasActiveBattle={hasActiveBattle}
-          />
+          <>
+            <FocusPanel
+              focus={focus}
+              roomCharacter={active}
+              roomData={roomData}
+              sceneData={sceneData}
+              hasActiveEncounter={hasActiveEncounter}
+              hasActiveBattle={hasActiveBattle}
+            />
+            {sceneData && activeEncounter && (
+              <CombatRail sceneId={sceneData.id} encounterId={activeEncounter.id} />
+            )}
+          </>
         )
       }
       storiesPanel={<StoryTray roomKey={roomData?.name ?? 'nowhere'} />}
@@ -251,6 +260,7 @@ function GameRightSidebar({
 
 export function GamePage() {
   const account = useAccount();
+  const { preferences: playPreferences } = usePlayPreferences(account?.id);
   const [searchParams, setSearchParams] = useSearchParams();
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -777,6 +787,7 @@ export function GamePage() {
   return (
     <>
       <GameLayout
+        accountId={account?.id}
         topBar={<GameTopBar characters={characters} />}
         center={
           <>
@@ -790,6 +801,10 @@ export function GamePage() {
             <GameWindow
               characters={characters}
               sceneFeed={displaySceneFeed}
+              room={roomData}
+              ambientInteractions={activeSession?.ambientInteractions}
+              lifecycleState={activeEncounter ? 'encounter' : activeSession?.lifecycleState}
+              readerMode={playPreferences.readerMode}
               composerMode={effectiveComposerMode}
               onModeChange={setComposerMode}
               personaId={personaId}
@@ -834,6 +849,7 @@ export function GamePage() {
         }
         sidebar={
           <PlaySidebar
+            accountId={account?.id}
             here={
               <GameRightSidebar
                 roomTabLabel={roomTabLabel}
@@ -845,6 +861,7 @@ export function GamePage() {
                 sceneData={sceneData}
                 hasActiveEncounter={hasActiveEncounter}
                 hasActiveBattle={hasActiveBattle}
+                activeEncounter={activeEncounter}
               />
             }
             threading={sceneId ? threading : undefined}

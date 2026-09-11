@@ -9,6 +9,7 @@ interface ThreadSidebarProps {
   onThreadClick: (key: string) => void;
   onShowAll: () => void;
   onOpenFilter: (threadKey: string) => void;
+  ariaLabel?: string;
 }
 
 function allPersonaNames(thread: Thread): string {
@@ -23,9 +24,10 @@ export function ThreadSidebar({
   onThreadClick,
   onShowAll,
   onOpenFilter,
+  ariaLabel = 'Thread sidebar',
 }: ThreadSidebarProps) {
   return (
-    <nav className="flex w-44 shrink-0 flex-col gap-1 border-r pr-2" aria-label="Thread sidebar">
+    <nav className="flex w-44 shrink-0 flex-col gap-1 border-r pr-2" aria-label={ariaLabel}>
       <button
         className={cn(
           'rounded px-2 py-1 text-left text-sm font-medium',

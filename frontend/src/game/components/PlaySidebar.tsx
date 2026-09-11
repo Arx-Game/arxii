@@ -7,6 +7,7 @@ import type { ThreadingState } from '@/scenes/hooks/useThreading';
 
 interface PlaySidebarProps {
   here: ReactNode;
+  accountId?: number | null;
   threading?: ThreadingState;
   onThreadClick: (key: string) => void;
   onShowAll?: () => void;
@@ -23,15 +24,14 @@ interface PlaySidebarProps {
 /** The one contextual sidebar for the narrative play workspace. */
 export function PlaySidebar({
   here,
+  accountId,
   threading,
   onThreadClick,
   onShowAll,
   selectedThreadKey,
   onOpenReference,
 }: PlaySidebarProps) {
-  const [mode, setMode] = useState<'here' | 'conversations' | 'history'>(
-    threading ? 'conversations' : 'here'
-  );
+  const [mode, setMode] = useState<'here' | 'conversations' | 'history'>('here');
   return (
     <aside className="flex h-full min-h-0 flex-col" aria-label="Play sidebar">
       <nav className="grid shrink-0 grid-cols-3 gap-1 border-b p-2" aria-label="Sidebar modes">
@@ -39,7 +39,7 @@ export function PlaySidebar({
           type="button"
           aria-current={mode === 'here' ? 'page' : undefined}
           onClick={() => setMode('here')}
-          className={`flex min-h-10 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'here' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
+          className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'here' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <Compass className="h-3.5 w-3.5" />
           Here
@@ -48,7 +48,7 @@ export function PlaySidebar({
           type="button"
           aria-current={mode === 'conversations' ? 'page' : undefined}
           onClick={() => setMode('conversations')}
-          className={`flex min-h-10 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'conversations' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
+          className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'conversations' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <MessageSquare className="h-3.5 w-3.5" />
           Conversations
@@ -57,14 +57,14 @@ export function PlaySidebar({
           type="button"
           aria-current={mode === 'history' ? 'page' : undefined}
           onClick={() => setMode('history')}
-          className={`flex min-h-10 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'history' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
+          className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'history' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <History className="h-3.5 w-3.5" />
           History
         </button>
       </nav>
       <div className="shrink-0 px-2 pb-1">
-        <DisplaySettings />
+        <DisplaySettings accountId={accountId} />
       </div>
       <div
         className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
@@ -80,6 +80,24 @@ export function PlaySidebar({
           />
         )}
         {mode === 'history' && <HistoryNavigator onOpenReference={onOpenReference} />}
+        {mode === 'here' && threading && (
+          <div
+            className="absolute left-[-10000px] top-0 w-80"
+            aria-label="Thread sidebar"
+            aria-hidden="true"
+            ref={(element) => {
+              if (element) element.inert = true;
+            }}
+          >
+            <ConversationSidebar
+              threading={threading}
+              onThreadClick={onThreadClick}
+              onShowAll={onShowAll}
+              selectedThreadKey={selectedThreadKey}
+              ariaLabel="Hidden conversation controls"
+            />
+          </div>
+        )}
       </div>
     </aside>
   );

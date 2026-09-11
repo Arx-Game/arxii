@@ -10,6 +10,16 @@ import type {
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
+export type GameLifecycleState =
+  | 'entry-idle'
+  | 'entering'
+  | 'entry-error'
+  | 'ready-no-scene'
+  | 'ready-scene'
+  | 'reconnecting'
+  | 'encounter'
+  | 'aftermath';
+
 interface RoomData {
   id: number;
   name: string;
@@ -18,6 +28,8 @@ interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  decorations?: string[];
+  comfort_level?: number;
   is_owner: boolean;
   is_public: boolean;
   /** Civic-hub tidings block; null when no board/crier stands here (#1450). */
@@ -34,12 +46,21 @@ interface RoomData {
  */
 export interface Session {
   isConnected: boolean;
+  /** Presentation state for entry/reconnect/exploration; server remains authoritative. */
+  lifecycleState?: GameLifecycleState;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Structured scene-less interactions for the current room, kept in memory only. */
+  ambientInteractions?: InteractionWsPayload[];
+  /** Connection diagnostics are kept separate from authored/system story text. */
+  diagnostics?: string[];
+  ambientNotices?: string[];
+  /** Epoch used to reject late interaction frames from the previous room. */
+  ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
   /**
@@ -121,6 +142,16 @@ export const gameSlice = createSlice({
         session.isConnected = status;
       }
     },
+    setSessionLifecycle: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        lifecycleState: GameLifecycleState;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) session.lifecycleState = action.payload.lifecycleState;
+    },
     addSessionMessage: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; message: GameMessage }>
@@ -161,8 +192,79 @@ export const gameSlice = createSlice({
       const { character, room } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        const previousRoomId = session.room?.id ?? null;
+        const nextRoomId = room?.id ?? null;
+        if (previousRoomId !== nextRoomId) {
+          if (session.ambientInteractions) session.ambientInteractions = [];
+          if (session.ambientNotices) session.ambientNotices = [];
+          session.ambientRoomEnteredAt = Date.now();
+        }
         session.room = room;
       }
+    },
+    addAmbientInteraction: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        interaction: InteractionWsPayload;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const frameTime = Date.parse(action.payload.interaction.timestamp);
+      if (
+        session.ambientRoomEnteredAt &&
+        Number.isFinite(frameTime) &&
+        frameTime < session.ambientRoomEnteredAt
+      )
+        return;
+      const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
+      if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
+      ambient.push(action.payload.interaction);
+      if (ambient.length > 100) session.ambientInteractions = ambient.slice(-100);
+    },
+    clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.ambientInteractions = [];
+    },
+    addSessionDiagnostic: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const diagnostics = session.diagnostics ?? (session.diagnostics = []);
+      diagnostics.push(action.payload.message);
+      if (diagnostics.length > 20) session.diagnostics = diagnostics.slice(-20);
+    },
+    clearSessionDiagnostics: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.diagnostics = [];
+    },
+    addAmbientNotice: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        message: string;
+        timestamp?: string;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const frameTime = action.payload.timestamp ? Date.parse(action.payload.timestamp) : NaN;
+      if (
+        session.ambientRoomEnteredAt &&
+        Number.isFinite(frameTime) &&
+        frameTime < session.ambientRoomEnteredAt
+      )
+        return;
+      const notices = session.ambientNotices ?? (session.ambientNotices = []);
+      notices.push(action.payload.message);
+      if (notices.length > 50) session.ambientNotices = notices.slice(-50);
+    },
+    clearAmbientNotices: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.ambientNotices = [];
     },
     setSessionScene: (
       state,
@@ -204,6 +306,7 @@ export const gameSlice = createSlice({
       const session = state.sessions[character];
       if (session) {
         const MAX_WS_INTERACTIONS = 200;
+        if (session.sceneInteractions.some((item) => item.id === interaction.id)) return;
         session.sceneInteractions.push(interaction);
         if (session.sceneInteractions.length > MAX_WS_INTERACTIONS) {
           session.sceneInteractions = session.sceneInteractions.slice(-MAX_WS_INTERACTIONS);
@@ -350,10 +453,17 @@ export const {
   startSession,
   setActiveSession,
   setSessionConnectionStatus,
+  setSessionLifecycle,
   addSessionMessage,
   clearSessionMessages,
   setSessionCommands,
   setSessionRoom,
+  addAmbientInteraction,
+  clearAmbientInteractions,
+  addSessionDiagnostic,
+  clearSessionDiagnostics,
+  addAmbientNotice,
+  clearAmbientNotices,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
