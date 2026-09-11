@@ -5,7 +5,7 @@ import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
-import { PlaySidebar } from './components/PlaySidebar';
+import { PlaySidebar, type SidebarMode } from './components/PlaySidebar';
 import { fetchPlayContext, fetchPlayPoses, PlayFetchError } from './playQueries';
 import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
@@ -198,6 +198,8 @@ interface GameRightSidebarProps {
   hasActiveEncounter: boolean;
   hasActiveBattle: boolean;
   activeEncounter?: { id: number } | null;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 /** The right-hand tab rail: room/focus, stories, events, presence, sheet panels. */
@@ -212,9 +214,13 @@ function GameRightSidebar({
   hasActiveEncounter,
   hasActiveBattle,
   activeEncounter,
+  activeTab,
+  onTabChange,
 }: GameRightSidebarProps) {
   return (
     <SidebarTabPanel
+      activeTab={activeTab}
+      onTabChange={onTabChange}
       roomTabLabel={roomTabLabel}
       roomPanel={
         isDreaming && activeCharacterId && active ? (
@@ -394,6 +400,18 @@ export function GamePage() {
       : null;
 
   useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
+
+  // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
+  // combat banner (Tasks 2/3) can drive the sidebar into view. `jumpToCombat`
+  // itself is deliberately NOT built here — with no caller yet it would be a
+  // genuinely unused local, and `noUnusedLocals` (tsconfig.app.json) fails the
+  // build on that (verified: even an underscore-prefixed name doesn't exempt a
+  // local from that check, only from ESLint's separate no-unused-vars rule).
+  // Tasks 2/3 build `jumpToCombat` from this state once they have a caller.
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(
+    sceneId && threading ? 'conversations' : 'here'
+  );
+  const [hereActiveTab, setHereActiveTab] = useState('room');
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
@@ -868,6 +886,8 @@ export function GamePage() {
         sidebar={
           <PlaySidebar
             accountId={account?.id}
+            mode={sidebarMode}
+            onModeChange={setSidebarMode}
             here={
               <GameRightSidebar
                 roomTabLabel={roomTabLabel}
@@ -880,6 +900,8 @@ export function GamePage() {
                 hasActiveEncounter={hasActiveEncounter}
                 hasActiveBattle={hasActiveBattle}
                 activeEncounter={activeEncounter}
+                activeTab={hereActiveTab}
+                onTabChange={setHereActiveTab}
               />
             }
             threading={sceneId ? threading : undefined}

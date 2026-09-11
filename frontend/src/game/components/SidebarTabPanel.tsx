@@ -36,6 +36,9 @@ interface SidebarTabPanelProps {
    * tab's ``title`` tooltip.
    */
   roomTabLabel?: string;
+  /** Controlled by `GamePage` (#3761) so a top-bar banner can jump straight to the room tab. */
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 export function SidebarTabPanel({
@@ -49,19 +52,23 @@ export function SidebarTabPanel({
   journalPanel,
   travelPanel,
   roomTabLabel,
+  activeTab,
+  onTabChange,
 }: SidebarTabPanelProps) {
-  const [activeTab, setActiveTab] = useState('room');
-  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set(['room']));
+  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set([activeTab]));
 
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-    setActivatedTabs((prev) => {
-      if (prev.has(value)) return prev;
-      const next = new Set(prev);
-      next.add(value);
-      return next;
-    });
-  }, []);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      onTabChange(value);
+      setActivatedTabs((prev) => {
+        if (prev.has(value)) return prev;
+        const next = new Set(prev);
+        next.add(value);
+        return next;
+      });
+    },
+    [onTabChange]
+  );
 
   const label = roomTabLabel ?? 'Room';
 
