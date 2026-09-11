@@ -389,7 +389,6 @@ export function GameWindow({
         <ExplorationReader
           room={room ?? session.room}
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
-          diagnostics={visibleDiagnostics}
           ambientNotices={ambientNotices ?? session.ambientNotices}
           lifecycleState={effectiveLifecycle}
           onRetry={() => {

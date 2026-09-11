@@ -83,6 +83,7 @@ export function PlaySidebar({
         {mode === 'here' && threading && (
           <div
             className="absolute left-[-10000px] top-0 w-80"
+            aria-label="Thread sidebar"
             aria-hidden="true"
             ref={(element) => {
               if (element) element.inert = true;
@@ -93,6 +94,7 @@ export function PlaySidebar({
               onThreadClick={onThreadClick}
               onShowAll={onShowAll}
               selectedThreadKey={selectedThreadKey}
+              ariaLabel="Hidden conversation controls"
             />
           </div>
         )}

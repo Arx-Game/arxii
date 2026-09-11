@@ -59,6 +59,8 @@ export interface Session {
   /** Connection diagnostics are kept separate from authored/system story text. */
   diagnostics?: string[];
   ambientNotices?: string[];
+  /** Epoch used to reject late interaction frames from the previous room. */
+  ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
   /**
@@ -195,6 +197,7 @@ export const gameSlice = createSlice({
         if (previousRoomId !== nextRoomId) {
           if (session.ambientInteractions) session.ambientInteractions = [];
           if (session.ambientNotices) session.ambientNotices = [];
+          session.ambientRoomEnteredAt = Date.now();
         }
         session.room = room;
       }
@@ -208,6 +211,13 @@ export const gameSlice = createSlice({
     ) => {
       const session = state.sessions[action.payload.character];
       if (!session) return;
+      const frameTime = Date.parse(action.payload.interaction.timestamp);
+      if (
+        session.ambientRoomEnteredAt &&
+        Number.isFinite(frameTime) &&
+        frameTime < session.ambientRoomEnteredAt
+      )
+        return;
       const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
       if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
       ambient.push(action.payload.interaction);

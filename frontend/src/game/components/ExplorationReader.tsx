@@ -8,7 +8,6 @@ interface ExplorationReaderProps {
   room: RoomData | null;
   ambientInteractions?: InteractionWsPayload[];
   lifecycleState?: GameLifecycleState;
-  diagnostics?: string[];
   ambientNotices?: string[];
   onRetry?: () => void;
 }
