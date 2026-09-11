@@ -1,5 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftStore, draftStorageKey } from './useDraftStore';
 
 const key = { accountId: 1, personaId: 7, conversationKey: 'room:42' };
@@ -111,6 +111,53 @@ describe('useDraftStore', () => {
     expect(result.current.draft.content).toBe('Silas nods.');
   });
 
+  it('reuses the persisted client_request_id on the first beginSend after a fresh mount with an already-pending draft (#3760 Task 11 stranded-draft retry)', () => {
+    sessionStorage.setItem(
+      draftStorageKey(key),
+      JSON.stringify({
+        content: 'Silas nods.',
+        languageId: null,
+        recipients: [],
+        replyTo: null,
+        companion: false,
+        attachment: null,
+        clientRequestId: 'stranded-id',
+        status: 'pending',
+        rejectionReason: null,
+      })
+    );
+    const { result } = renderHook(() => useDraftStore(key));
+    let id = '';
+    act(() => {
+      id = result.current.beginSend();
+    });
+    expect(id).toBe('stranded-id');
+  });
+
+  it('mints a fresh id on the first beginSend after a fresh mount when the content has since changed', () => {
+    sessionStorage.setItem(
+      draftStorageKey(key),
+      JSON.stringify({
+        content: 'Silas nods.',
+        languageId: null,
+        recipients: [],
+        replyTo: null,
+        companion: false,
+        attachment: null,
+        clientRequestId: 'stranded-id',
+        status: 'unknown',
+        rejectionReason: null,
+      })
+    );
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas waves.'));
+    let id = '';
+    act(() => {
+      id = result.current.beginSend();
+    });
+    expect(id).not.toBe('stranded-id');
+  });
+
   it('markUnknown ignores a stale id and leaves the newer, unsent edit untouched', () => {
     const { result } = renderHook(() => useDraftStore(key));
     act(() => result.current.setContent('Silas nods.'));
@@ -122,5 +169,55 @@ describe('useDraftStore', () => {
     act(() => result.current.markUnknown(pendingId));
     expect(result.current.draft.content).toBe('Silas nods, then waves.');
     expect(result.current.draft.status).toBe('clean');
+  });
+
+  describe('storageUnavailable (#3760 Task 11)', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('is false by default when sessionStorage writes succeed', () => {
+      const { result } = renderHook(() => useDraftStore(key));
+      expect(result.current.storageUnavailable).toBe(false);
+      act(() => result.current.setContent('Silas nods.'));
+      expect(result.current.storageUnavailable).toBe(false);
+    });
+
+    it('becomes true when a sessionStorage write throws (private browsing)', () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('QuotaExceededError');
+      });
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas nods.'));
+      expect(result.current.storageUnavailable).toBe(true);
+      // The draft still works in memory for this tab even though it can't persist.
+      expect(result.current.draft.content).toBe('Silas nods.');
+    });
+
+    it('becomes true when beginSend cannot persist the pending attempt', () => {
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('QuotaExceededError');
+      });
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas nods.'));
+      act(() => {
+        result.current.beginSend();
+      });
+      expect(result.current.storageUnavailable).toBe(true);
+      expect(result.current.draft.status).toBe('pending');
+    });
+
+    it('recovers to false once a write succeeds again', () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('QuotaExceededError');
+      });
+      const { result } = renderHook(() => useDraftStore(key));
+      act(() => result.current.setContent('Silas nods.'));
+      expect(result.current.storageUnavailable).toBe(true);
+
+      setItemSpy.mockRestore();
+      act(() => result.current.setContent('Silas nods, then waves.'));
+      expect(result.current.storageUnavailable).toBe(false);
+    });
   });
 });

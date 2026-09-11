@@ -44,18 +44,44 @@ function readStoredDraft(key: DraftKey): Draft {
   }
 }
 
-function persist(key: DraftKey, draft: Draft): void {
+/**
+ * Returns whether the write actually landed. `useDraftStore` threads the
+ * failure case into its `storageUnavailable` field (#3760 Task 11) so the
+ * composer can surface "Draft kept in this tab only" instead of silently
+ * pretending the draft is durable — it works for this tab only either way,
+ * but the player should be told.
+ */
+function persist(key: DraftKey, draft: Draft): boolean {
   try {
     sessionStorage.setItem(draftStorageKey(key), JSON.stringify(draft));
+    return true;
   } catch {
-    // Storage unavailable (private browsing): the caller surfaces the
-    // storage-unavailable notice; the draft still works for this tab only.
+    return false;
   }
+}
+
+/**
+ * `beginSend()`'s "same content as last time -> reuse the id" check compares
+ * against `lastSentContentRef`, an in-memory ref that starts life empty on
+ * every mount. For a draft hydrated from storage already `pending`/`unknown`
+ * (a stranded draft from a reload, #3760 Task 11's Retry/"Resume & retry"),
+ * that would otherwise mint a FRESH id on the first `beginSend()` after
+ * reload even though the content is unchanged from the original attempt --
+ * defeating the "retry is always safe, never a duplicate" guarantee across
+ * exactly the reload/reopened-tab case it matters most for. Seeding the ref
+ * from the hydrated draft closes that gap.
+ */
+function initialLastSentContent(draft: Draft): string | null {
+  return draft.status === 'pending' || draft.status === 'unknown' ? draft.content : null;
 }
 
 export function useDraftStore(key: DraftKey) {
   const [draft, setDraft] = useState<Draft>(() => readStoredDraft(key));
-  const lastSentContentRef = useRef<string | null>(null);
+  // Whether the MOST RECENT write attempt failed (e.g. private-browsing
+  // sessionStorage quota) -- reflects the latest `persist()` call, not a
+  // one-shot capability probe, since availability can change mid-session.
+  const [storageUnavailable, setStorageUnavailable] = useState(false);
+  const lastSentContentRef = useRef<string | null>(initialLastSentContent(draft));
   // `useState(() => readStoredDraft(key))` above only hydrates once, at
   // mount. A caller that keeps one `useDraftStore` instance mounted across a
   // `key` change (e.g. `CommandInput` never remounts when its conversation
@@ -72,15 +98,19 @@ export function useDraftStore(key: DraftKey) {
     const nextStorageKey = draftStorageKey(key);
     if (currentStorageKeyRef.current === nextStorageKey) return;
     currentStorageKeyRef.current = nextStorageKey;
-    lastSentContentRef.current = null;
-    setDraft(readStoredDraft(key));
+    const nextDraft = readStoredDraft(key);
+    lastSentContentRef.current = initialLastSentContent(nextDraft);
+    setDraft(nextDraft);
+    // A fresh conversation gets a fresh read, not the last conversation's
+    // write-failure verdict.
+    setStorageUnavailable(false);
   }, [key]);
 
   const update = useCallback(
     (patch: Partial<Draft>) => {
       setDraft((prev) => {
         const next = { ...prev, ...patch };
-        persist(key, next);
+        setStorageUnavailable(!persist(key, next));
         return next;
       });
     },
@@ -105,7 +135,7 @@ export function useDraftStore(key: DraftKey) {
     const id = contentUnchanged ? (draft.clientRequestId as string) : crypto.randomUUID();
     lastSentContentRef.current = draft.content;
     const next: Draft = { ...draft, clientRequestId: id, status: 'pending', rejectionReason: null };
-    persist(key, next);
+    setStorageUnavailable(!persist(key, next));
     setDraft(next);
     return id;
   }, [key, draft]);
@@ -114,7 +144,7 @@ export function useDraftStore(key: DraftKey) {
     (clientRequestId: string) => {
       setDraft((prev) => {
         if (prev.clientRequestId !== clientRequestId) return prev; // stale ack, ignore
-        persist(key, EMPTY_DRAFT);
+        setStorageUnavailable(!persist(key, EMPTY_DRAFT));
         return EMPTY_DRAFT;
       });
     },
@@ -126,7 +156,7 @@ export function useDraftStore(key: DraftKey) {
       setDraft((prev) => {
         if (prev.clientRequestId !== clientRequestId) return prev;
         const next: Draft = { ...prev, status: 'rejected', rejectionReason: reason };
-        persist(key, next);
+        setStorageUnavailable(!persist(key, next));
         return next;
       });
     },
@@ -138,7 +168,7 @@ export function useDraftStore(key: DraftKey) {
       setDraft((prev) => {
         if (prev.clientRequestId !== clientRequestId) return prev;
         const next: Draft = { ...prev, status: 'unknown' };
-        persist(key, next);
+        setStorageUnavailable(!persist(key, next));
         return next;
       });
     },
@@ -146,9 +176,18 @@ export function useDraftStore(key: DraftKey) {
   );
 
   const discard = useCallback(() => {
-    persist(key, EMPTY_DRAFT);
+    setStorageUnavailable(!persist(key, EMPTY_DRAFT));
     setDraft(EMPTY_DRAFT);
   }, [key]);
 
-  return { draft, setContent, beginSend, acknowledge, reject, markUnknown, discard };
+  return {
+    draft,
+    setContent,
+    beginSend,
+    acknowledge,
+    reject,
+    markUnknown,
+    discard,
+    storageUnavailable,
+  };
 }

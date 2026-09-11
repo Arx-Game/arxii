@@ -275,6 +275,30 @@ export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult
   return res.json();
 }
 
+/** The `PoseSubmissionDetailView` lookup response (#3760 Task 6). */
+export interface PoseSubmissionLookup {
+  interaction_id: number;
+  replayed: boolean;
+}
+
+/**
+ * "Did this send land?" — the composer's Check-status button (#3760 Task 11)
+ * against the writer-only lookup endpoint (`GET
+ * /api/play/submissions/{client_request_id}/`, Task 6). `null` means the
+ * server has no record of this attempt — the caller can safely retry, since
+ * the endpoint 404s both for "never received" and "not yours" alike (an
+ * unfound row is never proof the send failed, only that nothing landed
+ * *under this id*). Any other non-OK status is a real fetch failure.
+ */
+export async function fetchPoseSubmission(
+  clientRequestId: string
+): Promise<PoseSubmissionLookup | null> {
+  const res = await apiFetch(`/api/play/submissions/${clientRequestId}/`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to check submission status.');
+  return res.json();
+}
+
 // ---------------------------------------------------------------------------
 // Dramatic-moment types + tags (#1139)
 // ---------------------------------------------------------------------------

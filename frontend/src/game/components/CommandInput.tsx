@@ -1,5 +1,6 @@
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
@@ -25,7 +26,7 @@ import type { MyRosterEntry } from '@/roster/types';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
-import { submitPose, fetchScene, sceneKeys } from '@/scenes/queries';
+import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
 
 export interface ComposerMode {
@@ -256,6 +257,7 @@ export function CommandInput({
     [accountId, personaId, draftScope, character]
   );
   const draftStore = useDraftStore(draftKey);
+  const { draft } = draftStore;
   // Mirrors `command` without forcing `handleActionResult` (below) to
   // resubscribe to the action-result bus on every keystroke.
   const commandRef = useRef(command);
@@ -287,6 +289,67 @@ export function CommandInput({
       /* keep in memory */
     }
   }, [draftStorageKey]);
+
+  // #3760 Task 11 — a `pending`/`unknown` draft hydrated from storage with
+  // NO live send in flight means the tab was reopened (or navigated back to)
+  // mid-flight, not that a send is actively in progress right now.
+  // Recomputed every render rather than latched in state: `pendingSpeechRef`
+  // is set synchronously by `handleSubmit` (below) in the same tick as the
+  // `beginSend()` call that flips `draft.status` to `pending`, so a genuine
+  // live send's very first "pending" render already has a matching ref and
+  // never reads as stranded; discarding or resuming naturally clears this
+  // too, since both take `draft.status` out of pending/unknown.
+  const isStrandedDraft =
+    (draft.status === 'pending' || draft.status === 'unknown') &&
+    pendingSpeechRef.current?.clientRequestId !== draft.clientRequestId;
+  // "Unsent draft from <context>" (demo Screen 4) — the closest available
+  // stand-in for a room/place name is the active composer mode's own label
+  // (e.g. "Pose → The Gilded Hart"), falling back to the draft scope or bare
+  // character name for legacy callers that don't supply one.
+  const strandedContext = composerMode?.label ?? draftScope ?? character;
+
+  // #3760 Task 11 — "Check status" against the Task 6 writer-only lookup
+  // endpoint. `enabled: false`: never fetched automatically, only via the
+  // button's explicit `refetch()` (the established `enabled: false` +
+  // manual-trigger pattern in this codebase, e.g. `stories/queries.ts`'s
+  // `useSessionRequest`).
+  const { refetch: checkSubmissionStatus, isFetching: checkingSubmissionStatus } = useQuery({
+    queryKey: ['pose-submission', draft.clientRequestId ?? ''],
+    queryFn: () => {
+      const clientRequestId = draft.clientRequestId;
+      return clientRequestId ? fetchPoseSubmission(clientRequestId) : Promise.resolve(null);
+    },
+    enabled: false,
+  });
+
+  const handleCheckStatus = useCallback(() => {
+    const clientRequestId = draft.clientRequestId;
+    if (!clientRequestId) return;
+    checkSubmissionStatus().then((result) => {
+      if (result.data) {
+        // Found: the send landed after all. Same ack-gated clearing as a
+        // live ACTION_RESULT success (only clears `command` when it still
+        // matches the content that was actually sent).
+        draftStore.acknowledge(clientRequestId);
+        if (commandRef.current === draft.content) {
+          setCommand('');
+          clearStoredDraft();
+        }
+      } else if (!result.error) {
+        toast.error('No record of that send — safe to retry.');
+      } else {
+        toast.error(
+          result.error instanceof Error ? result.error.message : 'Failed to check status.'
+        );
+      }
+    });
+  }, [draft.clientRequestId, draft.content, checkSubmissionStatus, draftStore, clearStoredDraft]);
+
+  const handleDiscardStrandedDraft = useCallback(() => {
+    draftStore.discard();
+    setCommand('');
+    clearStoredDraft();
+  }, [draftStore, clearStoredDraft]);
 
   // #3760 Task 10 — resolves the say/whisper dispatch tracked in
   // `pendingSpeechRef`: acknowledge/clear on success, reject + toast on
@@ -643,6 +706,77 @@ export function CommandInput({
 
   return (
     <div className="play-composer-safe shrink-0 border-t">
+      {draftStore.storageUnavailable && (
+        <div
+          className="flex items-center gap-2 bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground"
+          data-testid="storage-unavailable-notice"
+        >
+          <span>Draft kept in this tab only — it won&#39;t survive a reload.</span>
+        </div>
+      )}
+      {isStrandedDraft && (
+        <div
+          className="flex flex-wrap items-center gap-2 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600"
+          data-testid="stranded-draft-banner"
+        >
+          <span className="min-w-0 flex-1">
+            <strong>Unsent draft from {strandedContext}.</strong> This never got a response last
+            time.
+          </span>
+          <span className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              className="min-h-8 underline"
+              onClick={handleDiscardStrandedDraft}
+            >
+              Discard
+            </button>
+            <button type="button" className="min-h-8 underline" onClick={handleSubmit}>
+              Resume &amp; retry
+            </button>
+          </span>
+        </div>
+      )}
+      {!isStrandedDraft && draft.status === 'pending' && (
+        <div
+          className="flex items-center gap-2 bg-amber-500/10 px-3 py-1.5 text-xs text-amber-600"
+          data-testid="send-pending-banner"
+        >
+          <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+          <span>Sending…</span>
+        </div>
+      )}
+      {draft.status === 'rejected' && draft.rejectionReason && (
+        <div
+          className="flex items-center gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+          data-testid="send-rejected-banner"
+        >
+          <span>Not sent — {draft.rejectionReason}</span>
+        </div>
+      )}
+      {draft.status === 'unknown' && (
+        <div
+          className="flex flex-wrap items-center gap-2 bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground"
+          data-testid="send-unknown-banner"
+        >
+          <span className="min-w-0 flex-1">
+            Connection dropped before we heard back. We don&#39;t know if this sent.
+          </span>
+          <span className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              className="min-h-8 underline"
+              onClick={handleCheckStatus}
+              disabled={checkingSubmissionStatus}
+            >
+              Check status
+            </button>
+            <button type="button" className="min-h-8 underline" onClick={handleSubmit}>
+              Retry
+            </button>
+          </span>
+        </div>
+      )}
       {replyTarget && (
         <div
           className="flex items-center gap-2 bg-accent/40 px-3 py-1.5 text-xs"
@@ -665,6 +799,7 @@ export function CommandInput({
         rows={5}
         submitOnEnter={submitOnEnter}
         submitDisabled={!ready}
+        disabled={draft.status === 'pending'}
         leftSlot={
           <div className="flex items-center gap-1">
             {speakingAs && (

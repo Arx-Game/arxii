@@ -6,6 +6,8 @@ import type { ReactElement, ReactNode } from 'react';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 import { emitActionResult } from '@/hooks/actionResultBus';
+import { draftStorageKey } from '@/game/useDraftStore';
+import type { Draft } from '@/game/useDraftStore';
 
 // Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -25,6 +27,9 @@ const executeActionMock = vi.fn();
 const submitPoseMock = vi.fn((): Promise<unknown> => Promise.resolve());
 const fetchSceneMock = vi.fn();
 const toastErrorMock = vi.fn();
+// #3760 Task 11 — the Task 6 writer-only lookup endpoint the "Check status"
+// button queries.
+const fetchPoseSubmissionMock = vi.fn();
 
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({ send: sendMock, executeAction: executeActionMock }),
@@ -37,6 +42,7 @@ vi.mock('sonner', () => ({
 vi.mock('@/scenes/queries', () => ({
   submitPose: (...args: unknown[]) => submitPoseMock(...(args as [])),
   fetchScene: (...args: unknown[]) => fetchSceneMock(...(args as [])),
+  fetchPoseSubmission: (...args: unknown[]) => fetchPoseSubmissionMock(...(args as [])),
   sceneKeys: {
     detail: (id: string) => ['scene', String(id)] as const,
   },
@@ -129,6 +135,8 @@ describe('CommandInput', () => {
     submitPoseMock.mockImplementation(() => Promise.resolve());
     fetchSceneMock.mockClear();
     toastErrorMock.mockClear();
+    fetchPoseSubmissionMock.mockClear();
+    fetchPoseSubmissionMock.mockResolvedValue(null);
     createActionRequestMock.mockClear();
     createActionRequestMock.mockImplementation(() => Promise.resolve({ status: 'resolved' }));
     queryClient.clear();
@@ -727,6 +735,198 @@ describe('CommandInput', () => {
     expect(toastErrorMock).toHaveBeenCalledWith('You have been muted.');
     // The rejected content is preserved so the player can revise and resend.
     expect(textarea.value).toBe('hello there');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Composer delivery states: pending/rejected/unknown/stranded/storage-unavailable
+  // (#3760 Task 11)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Seeds the v2 useDraftStore sessionStorage row a fresh `CommandInput`
+   * mount (character="Alice", no personaId/draftScope props unless
+   * overridden) will hydrate from — the only way to reach the `unknown`
+   * status and the stranded-draft-on-mount path from outside the component,
+   * since nothing in this task wires a live trigger for either (Task 12's
+   * reconnect reconciliation owns that).
+   */
+  function seedDraft(overrides: Partial<Draft>, conversationKey = 'character:Alice') {
+    const key = draftStorageKey({ accountId: 0, personaId: 0, conversationKey });
+    const draft: Draft = {
+      content: 'leans against the doorframe',
+      languageId: null,
+      recipients: [],
+      replyTo: null,
+      companion: false,
+      attachment: null,
+      clientRequestId: 'req-1',
+      status: 'clean',
+      rejectionReason: null,
+      ...overrides,
+    };
+    sessionStorage.setItem(key, JSON.stringify(draft));
+  }
+
+  describe('composer delivery states (#3760 Task 11)', () => {
+    it('shows the pending "Sending…" indicator and disables the textarea while a live send is in flight', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      expect(screen.getByText('Sending…')).toBeInTheDocument();
+      expect(textarea).toBeDisabled();
+      // A genuine live send is not a stranded draft.
+      expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+    });
+
+    it('re-enables the textarea once the pending send resolves', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(textarea).toBeDisabled();
+
+      act(() => {
+        emitActionResult({ success: true, message: null, data: null });
+      });
+
+      expect(textarea).toBeEnabled();
+      expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+    });
+
+    it('shows the typed rejection reason inline and keeps the textarea editable', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello there' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+
+      act(() => {
+        emitActionResult({ success: false, message: 'You have been muted.', data: null });
+      });
+
+      expect(screen.getByText(/You have been muted\./)).toBeInTheDocument();
+      expect(textarea).toBeEnabled();
+    });
+
+    it('shows Check status and Retry buttons when the hydrated draft status is unknown', () => {
+      seedDraft({ status: 'unknown', clientRequestId: 'req-unknown' });
+
+      render(<CommandInput character="Alice" />);
+
+      expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('Check status looks up the submission and clears the draft once it is found to have landed', async () => {
+      fetchPoseSubmissionMock.mockResolvedValue({ interaction_id: 42, replayed: true });
+      seedDraft({ status: 'unknown', clientRequestId: 'req-landed', content: 'leans in' });
+
+      render(<CommandInput character="Alice" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
+
+      await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledWith('req-landed'));
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Check status' })).not.toBeInTheDocument()
+      );
+    });
+
+    it('Check status surfaces a toast and leaves the draft resendable when nothing was found', async () => {
+      fetchPoseSubmissionMock.mockResolvedValue(null);
+      seedDraft({ status: 'unknown', clientRequestId: 'req-missing', content: 'leans in' });
+
+      render(<CommandInput character="Alice" />);
+      fireEvent.click(screen.getByRole('button', { name: 'Check status' }));
+
+      await waitFor(() => expect(fetchPoseSubmissionMock).toHaveBeenCalledWith('req-missing'));
+      await waitFor(() => expect(toastErrorMock).toHaveBeenCalled());
+      expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+    });
+
+    it('Retry re-dispatches via executeAction reusing the same client_request_id', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      // The composer's own (legacy v1) draft text is a separate sessionStorage
+      // key from useDraftStore's (v2); seed both under `draftScope` so
+      // `command` hydrates to the same text a real reload would have
+      // produced, without an intervening `fireEvent.change` — editing
+      // through `handleChange` resets `useDraftStore`'s status back to
+      // `clean` (see `setContent`'s doc comment), which would defeat this
+      // test's whole premise before Retry is ever clicked.
+      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'hello again');
+      seedDraft(
+        { status: 'unknown', clientRequestId: 'req-retry', content: 'hello again' },
+        'test-scope'
+      );
+
+      render(<CommandInput character="Alice" composerMode={mode} draftScope="test-scope" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textarea.value).toBe('hello again');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+
+      expect(executeActionMock).toHaveBeenCalledWith('Alice', 'say', {
+        text: 'hello again',
+        client_request_id: 'req-retry',
+      });
+    });
+
+    it('shows the stranded-draft banner for a pending draft hydrated from storage with no live send in flight', () => {
+      const mode: ComposerMode = { command: 'pose', targets: [], label: 'The Gilded Hart' };
+      seedDraft({ status: 'pending', clientRequestId: 'req-stranded' });
+
+      render(<CommandInput character="Alice" composerMode={mode} />);
+
+      expect(screen.getByText(/Unsent draft from The Gilded Hart/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Discard' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Resume & retry' })).toBeInTheDocument();
+      // Stranded, not actively sending — no false "Sending…" spinner.
+      expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+    });
+
+    it('Discard on the stranded banner clears the draft and dismisses the banner', () => {
+      const mode: ComposerMode = { command: 'pose', targets: [], label: 'The Gilded Hart' };
+      seedDraft({ status: 'pending', clientRequestId: 'req-stranded' });
+
+      render(<CommandInput character="Alice" composerMode={mode} />);
+      fireEvent.click(screen.getByRole('button', { name: 'Discard' }));
+
+      expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textarea.value).toBe('');
+    });
+
+    it('shows the storage-unavailable notice when sessionStorage writes fail', () => {
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new DOMException('QuotaExceededError');
+      });
+      try {
+        render(<CommandInput character="Alice" />);
+        const textarea = screen.getByRole('textbox');
+        fireEvent.change(textarea, { target: { value: 'a private-browsing draft' } });
+
+        expect(
+          screen.getByText("Draft kept in this tab only — it won't survive a reload.")
+        ).toBeInTheDocument();
+      } finally {
+        setItemSpy.mockRestore();
+      }
+    });
+
+    it('does not show the storage-unavailable notice when sessionStorage writes succeed', () => {
+      render(<CommandInput character="Alice" />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: 'an ordinary draft' } });
+
+      expect(
+        screen.queryByText("Draft kept in this tab only — it won't survive a reload.")
+      ).not.toBeInTheDocument();
+    });
   });
 });
 
