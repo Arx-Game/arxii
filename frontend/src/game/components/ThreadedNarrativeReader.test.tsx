@@ -198,4 +198,54 @@ describe('ThreadedNarrativeReader', () => {
     expect(mountedPoses.length).toBeLessThan(300);
     expect(mountedPoses.length).toBeGreaterThan(0);
   });
+
+  it('registers every rendered pose with the dwell-tracking observer, in both Threads and Chronological view', async () => {
+    // usePoseReadTracking.test.ts already covers the dwell-timer/flush timing
+    // math in isolation. This test covers the other half: that
+    // ThreadedNarrativeReader actually feeds `observe()` a real element for
+    // every rendered pose in BOTH view branches — the wiring the ref
+    // collision in Chronological view (Task 10's chronoVirtualizer.measureElement
+    // already on the row) could easily have silently dropped.
+    const user = userEvent.setup();
+    const observedElements: Element[] = [];
+    const unobservedElements: Element[] = [];
+    class SpyIntersectionObserver {
+      observe(element: Element) {
+        observedElements.push(element);
+      }
+      unobserve(element: Element) {
+        unobservedElements.push(element);
+      }
+      disconnect(): void {
+        return undefined;
+      }
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', SpyIntersectionObserver);
+
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[interaction(1, 'root', 'thread-a'), interaction(2, 'reply', 'thread-a')]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // Threads view: the single thread is also the most recent, so it starts
+    // expanded and both its poses are mounted (and thus observed) already.
+    expect(observedElements).toHaveLength(2);
+
+    observedElements.length = 0;
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+    // Switching view unmounts the Threads-view wrappers (unobserving them)
+    // and mounts the Chronological-view wrappers (observing the new ones) —
+    // confirms the Chronological branch's inner PoseReadTarget wrapper
+    // reaches the observer independently of chronoVirtualizer.measureElement.
+    expect(unobservedElements).toHaveLength(2);
+    expect(observedElements).toHaveLength(2);
+
+    vi.unstubAllGlobals();
+  });
 });

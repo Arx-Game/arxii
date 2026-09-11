@@ -57,6 +57,19 @@ export function fetchPlayPoses(
   return getJson<PlayPage<Interaction>>(`/api/play/poses/${query.toString() ? `?${query}` : ''}`);
 }
 
+/** Mark a batch of poses as read (dwell-tracked by `usePoseReadTracking`). */
+export async function markPosesRead(
+  poses: { id: number; timestamp: string }[]
+): Promise<{ marked: number }> {
+  const response = await apiFetch('/api/play/read/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ poses }),
+  });
+  if (!response.ok) throw new Error('Unable to mark poses read');
+  return response.json();
+}
+
 /** Load the authorized neighborhood around one historical pose. */
 export function fetchPlayContext(params: {
   id: string;

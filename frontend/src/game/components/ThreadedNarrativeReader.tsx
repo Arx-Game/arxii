@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 
 const INITIAL_PAGE_SIZE = 20;
@@ -12,6 +13,43 @@ import {
   saveConversationAnchor,
   usePlayPreferences,
 } from '../playPreferences';
+import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
+
+/**
+ * Wraps one rendered pose in the element `usePoseReadTracking` dwell-tracks.
+ *
+ * In Chronological view the row wrapper already carries
+ * `ref={chronoVirtualizer.measureElement}` (Task 10) — a second, different
+ * `ref` on the same element would silently drop one of the two assignments.
+ * Rather than merge refs, this wraps just the pose's own content in its own
+ * inner element nested inside that row, so the virtualizer keeps measuring
+ * the row and this component independently dwell-tracks the pose within it.
+ * In Threads view there's no existing ref to collide with, but the same
+ * wrapper is reused there for one code path instead of two.
+ */
+function PoseReadTarget({
+  pose,
+  observe,
+  children,
+}: {
+  pose: { id: number; timestamp: string };
+  observe: (element: HTMLElement, pose: { id: number; timestamp: string }) => () => void;
+  children: ReactNode;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    return observe(element, pose);
+    // Depend on pose.id/pose.timestamp (stable primitives), not the pose
+    // object itself: the caller passes a fresh `{ id, timestamp }` literal
+    // on every render, so an object-identity dep would re-run this effect
+    // (and thus unobserve/re-observe the element) every render instead of
+    // only when the pose actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [observe, pose.id, pose.timestamp]);
+  return <div ref={ref}>{children}</div>;
+}
 
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
@@ -87,6 +125,7 @@ export function ThreadedNarrativeReader({
     return new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key));
   });
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
+  const { observe } = usePoseReadTracking();
   const { preferences, update } = usePlayPreferences();
   const chronological = preferences.readerMode === 'chronological';
   const chronologicalItems = useMemo(
@@ -190,36 +229,41 @@ export function ThreadedNarrativeReader({
                         transform: `translateY(${virtualRow.start}px)`,
                       }}
                     >
-                      <p className="text-xs text-muted-foreground">
-                        {item.thread_id ? 'In a thread' : 'Standalone'}
-                      </p>
-                      {poseCollapsed ? (
-                        <article
-                          className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                          data-testid={`collapsed-pose-${item.id}`}
-                        >
-                          <strong>{item.persona.name}</strong>
-                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                            {item.content}
-                          </p>
-                          <button
-                            type="button"
-                            className="mt-1 min-h-9 underline"
-                            onClick={() => togglePose(item.id)}
+                      <PoseReadTarget
+                        pose={{ id: item.id, timestamp: item.timestamp }}
+                        observe={observe}
+                      >
+                        <p className="text-xs text-muted-foreground">
+                          {item.thread_id ? 'In a thread' : 'Standalone'}
+                        </p>
+                        {poseCollapsed ? (
+                          <article
+                            className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
+                            data-testid={`collapsed-pose-${item.id}`}
                           >
-                            Show full pose
-                          </button>
-                        </article>
-                      ) : (
-                        <SceneMessages
-                          sceneId={sceneId}
-                          filteredInteractions={[item]}
-                          onAvatarClick={onAvatarClick}
-                          onAddTarget={onAddTarget}
-                          onAttachAction={onAttachAction}
-                          readOnly={readOnly}
-                        />
-                      )}
+                            <strong>{item.persona.name}</strong>
+                            <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                              {item.content}
+                            </p>
+                            <button
+                              type="button"
+                              className="mt-1 min-h-9 underline"
+                              onClick={() => togglePose(item.id)}
+                            >
+                              Show full pose
+                            </button>
+                          </article>
+                        ) : (
+                          <SceneMessages
+                            sceneId={sceneId}
+                            filteredInteractions={[item]}
+                            onAvatarClick={onAvatarClick}
+                            onAddTarget={onAddTarget}
+                            onAttachAction={onAttachAction}
+                            readOnly={readOnly}
+                          />
+                        )}
+                      </PoseReadTarget>
                     </div>
                   );
                 })}
@@ -276,7 +320,11 @@ export function ThreadedNarrativeReader({
                       {group.interactions.map((item) => {
                         const poseCollapsed = collapsedPoses.has(item.id);
                         return (
-                          <div key={`pose-${item.id}`}>
+                          <PoseReadTarget
+                            key={`pose-${item.id}`}
+                            pose={{ id: item.id, timestamp: item.timestamp }}
+                            observe={observe}
+                          >
                             {poseCollapsed ? (
                               <article
                                 className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -324,7 +372,7 @@ export function ThreadedNarrativeReader({
                                 </div>
                               </>
                             )}
-                          </div>
+                          </PoseReadTarget>
                         );
                       })}
                     </div>
