@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, waitFor, act, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -281,8 +281,32 @@ describe('ActionAttachment', () => {
   // -------------------------------------------------------------------------
   // #3760 demo-fidelity review Finding 2 — the attached action's own
   // acknowledged/pending badge (demo Screen 7: "✓ <name> · acknowledged"),
-  // sourced from the ACTION_RESULT bus (`useActionResult`).
+  // sourced from the ACTION_RESULT bus (`useActionResult`). Finding 1 (round
+  // 2) folded this status into the SAME pill as the detach chip — the demo
+  // shows one combined pill, not two adjacent elements — so the status
+  // testid below now lives nested inside the "Detach action" button.
   // -------------------------------------------------------------------------
+
+  it('renders the status inside the single detach pill, not as a separate element', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const detachButton = screen.getByRole('button', { name: 'Detach action' });
+    const status = screen.getByTestId('action-attachment-status');
+
+    expect(detachButton).toContainElement(status);
+    expect(within(detachButton).getByText('Intimidate')).toBeInTheDocument();
+    // Merged into one pill means there's exactly one "Detach action" control
+    // carrying both the name and the status — not a second floating badge.
+    expect(screen.getAllByTestId('action-attachment-status')).toHaveLength(1);
+  });
 
   it('shows the pending badge while an action is attached but no result has arrived yet', () => {
     render(

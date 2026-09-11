@@ -1163,7 +1163,7 @@ describe('CommandInput', () => {
         expect(textarea.value).toBe('');
       });
 
-      it('leaves the draft resolvable via the stranded banner when the reconnect lookup finds no record', async () => {
+      it('leaves the draft resolvable via the live-unknown banner when the reconnect lookup finds no record', async () => {
         const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
         fetchPoseSubmissionMock.mockResolvedValueOnce(null);
 

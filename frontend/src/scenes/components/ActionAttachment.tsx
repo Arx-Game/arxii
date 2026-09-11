@@ -137,6 +137,14 @@ export function ActionAttachment({
         </PopoverContent>
       </Popover>
 
+      {/* #3760 demo-fidelity review Finding 1 (round 2): Screen 7 shows ONE
+          combined pill (check icon, action name, dot separator, then
+          "acknowledged"), not the action chip and the acknowledged/pending
+          status as two adjacent elements. The status (icon + text) is
+          nested inside this same detach button, after the name and before
+          the target text/detach-X, so it reads as one pill while the button
+          keeps its exact pre-existing detach behavior (aria-label, onClick,
+          structure) tests already cover. */}
       {attachment && (
         <button
           type="button"
@@ -146,6 +154,20 @@ export function ActionAttachment({
         >
           <Zap className="h-3 w-3" />
           {attachment.name}
+          <span
+            data-testid="action-attachment-status"
+            className={`flex items-center gap-1 ${
+              acknowledged ? 'text-emerald-600' : 'text-amber-600'
+            }`}
+          >
+            <span aria-hidden="true">&middot;</span>
+            {acknowledged ? (
+              <Check className="h-3 w-3" aria-hidden="true" />
+            ) : (
+              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+            )}
+            {acknowledged ? 'acknowledged' : 'pending'}
+          </span>
           {attachment.requiresTarget && (
             <span className="text-muted-foreground">
               {attachment.target ? `\u2192 ${attachment.target}` : '(select target)'}
@@ -154,25 +176,6 @@ export function ActionAttachment({
           <X className="ml-1 h-3 w-3" />
         </button>
       )}
-
-      {attachment &&
-        (acknowledged ? (
-          <span
-            data-testid="action-attachment-status"
-            className="flex items-center gap-1 rounded-full border border-emerald-500/60 bg-emerald-500/10 px-2 py-0.5 text-xs text-emerald-600"
-          >
-            <Check className="h-3 w-3" aria-hidden="true" />
-            acknowledged
-          </span>
-        ) : (
-          <span
-            data-testid="action-attachment-status"
-            className="flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-600"
-          >
-            <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
-            pending
-          </span>
-        ))}
     </div>
   );
 }
