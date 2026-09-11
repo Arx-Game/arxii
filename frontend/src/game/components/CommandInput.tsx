@@ -520,10 +520,16 @@ export function CommandInput({
     if (asCompanion) {
       companionEmote(asCompanion.id, trimmed)
         .then(() => {
-          setHistory((prev) => [...prev, trimmed]);
-          setHistoryIndex(-1);
-          setCommand('');
-          clearStoredDraft();
+          // Finding 5 fix (#3760 final review) — mirrors the REST-pose
+          // branch's and the WS ack handler's own guard: only clear what's
+          // on screen if it still matches what was actually sent, so a
+          // newer edit made while this request was in flight survives.
+          if (commandRef.current === trimmed) {
+            setHistory((prev) => [...prev, trimmed]);
+            setHistoryIndex(-1);
+            setCommand('');
+            clearStoredDraft();
+          }
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
@@ -716,6 +722,20 @@ export function CommandInput({
     // WebSocket path: existing behavior. Server-side auto-link will attach
     // any pending ACTION interactions when the POSE is created.
     send(character, fullCommand);
+
+    // Finding 4 fix (#3760 final review) — this fallback (reached when a
+    // stored whisper/tt's target/place can't be resolved right now, an
+    // explicit command override, or a pose with no sceneId) never calls
+    // `draftStore.beginSend()`/`acknowledge()` — it dispatches raw WS text,
+    // not a structured ack. Left untouched, the v2 draft kept whatever
+    // pending/rejected status it had (e.g. a "Resume & retry" on a stored
+    // draft whose target has since left the room), so the stranded/rejected
+    // banner re-rendered on the next tick over the now-emptied textarea,
+    // dismissible only via Discard. `discard()` (not `acknowledge()`, which
+    // requires a matching `clientRequestId` this fire-and-forget path never
+    // tracks) resets the v2 draft to clean, matching the v1
+    // `clearStoredDraft()` call right below it.
+    draftStore.discard();
 
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);

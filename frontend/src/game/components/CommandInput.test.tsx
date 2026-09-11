@@ -1,5 +1,6 @@
 import { render as rtlRender, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import type { RenderOptions } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement, ReactNode } from 'react';
@@ -8,6 +9,7 @@ import type { ComposerMode } from './CommandInput';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import { draftStorageKey } from '@/game/useDraftStore';
 import type { Draft } from '@/game/useDraftStore';
+import type { CompanionSummary } from '@/companions/types';
 
 // Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -127,6 +129,25 @@ vi.mock('@/scenes/actionQueries', () => ({
     createActionRequestMock(...(args as [string, Record<string, unknown>])),
 }));
 
+// #3294 companion-emote branch (Finding 5, #3760 final review) — CompanionSelector
+// self-fetches via useMyCompanions and renders nothing when no companion is
+// present, so it's unreachable through the real UI without controlling this
+// query directly. Defaults to no companions (renders null, byte-identical to
+// every other test in this file); the companion-emote describe block below
+// overrides it to a single present companion.
+const mockUseMyCompanions = vi.fn((): { data: CompanionSummary[] } => ({ data: [] }));
+const companionEmoteMock = vi.fn(
+  (_companionId: number, _text: string): Promise<void> => Promise.resolve()
+);
+
+vi.mock('@/companions/queries', () => ({
+  useMyCompanions: () => mockUseMyCompanions(),
+}));
+
+vi.mock('@/companions/api', () => ({
+  companionEmote: (...args: [number, string]) => companionEmoteMock(...args),
+}));
+
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
@@ -139,6 +160,10 @@ describe('CommandInput', () => {
     fetchPoseSubmissionMock.mockResolvedValue(null);
     createActionRequestMock.mockClear();
     createActionRequestMock.mockImplementation(() => Promise.resolve({ status: 'resolved' }));
+    mockUseMyCompanions.mockClear();
+    mockUseMyCompanions.mockReturnValue({ data: [] });
+    companionEmoteMock.mockClear();
+    companionEmoteMock.mockImplementation(() => Promise.resolve());
     queryClient.clear();
     // useDraftStore (#3760 Task 10) persists to sessionStorage under a key
     // derived from account/persona/conversation — several tests in this file
@@ -1016,6 +1041,38 @@ describe('CommandInput', () => {
       expect(submitPoseMock).not.toHaveBeenCalled();
     });
 
+    it('a legacy WS fallback dispatch (unresolvable whisper target) clears the v2 draft so no stranded banner reappears (Finding 3760 final review)', () => {
+      // Bob (dbref #501) is the only resolvable name in this file's
+      // `@/store/hooks` mock — "Departed" is deliberately NOT in
+      // roomCharacters, so the whisper branch's target lookup fails and
+      // handleSubmit falls through to the legacy `send()` path instead of
+      // `executeAction`, exactly the condition Finding 4 describes.
+      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'a secret for someone gone');
+      seedDraft(
+        {
+          status: 'pending',
+          clientRequestId: 'req-legacy-fallback',
+          content: 'a secret for someone gone',
+          mode: { command: 'whisper', targets: ['Departed'] },
+        },
+        'test-scope'
+      );
+
+      render(<CommandInput character="Alice" draftScope="test-scope" />);
+      expect(screen.getByText(/Unsent draft from/)).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Resume & retry' }));
+
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'whisper Departed=a secret for someone gone');
+      expect(executeActionMock).not.toHaveBeenCalled();
+      // The v2 draft must be reset to clean, not left `pending` -- otherwise
+      // the stranded banner re-renders on the next tick over the now-empty
+      // textarea, dismissible only via Discard.
+      expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textarea.value).toBe('');
+    });
+
     it('editing the text after a stranded whisper draft picks up the CURRENT live mode instead (an edit is a genuinely new attempt)', () => {
       sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
       seedDraft(
@@ -1183,6 +1240,74 @@ describe('CommandInput', () => {
         expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
       });
     });
+  });
+});
+
+// #3294 companion-emote branch, Finding 5 (#3760 final review): the
+// REST-pose branch and the WS ack handler both guard their clear-on-success
+// with `if (commandRef.current === trimmed)` to protect a newer edit typed
+// while the request is in flight -- the companion-emote branch cleared
+// unconditionally instead.
+describe('companion emote branch (#3294, Finding 5)', () => {
+  const fenwick: CompanionSummary = {
+    id: 42,
+    name: 'Fenwick',
+    archetype: { id: 1, name: 'Fox' } as CompanionSummary['archetype'],
+    bonded_at: '2026-01-01T00:00:00Z',
+    released_at: null,
+    objectdb_id: null,
+    is_present: true,
+  };
+
+  beforeEach(() => {
+    mockUseMyCompanions.mockReturnValue({ data: [fenwick] });
+  });
+
+  async function selectCompanion() {
+    const user = userEvent.setup();
+    await user.click(screen.getByTestId('companion-selector-trigger'));
+    await user.click(screen.getByText('Fenwick'));
+  }
+
+  it('dispatches companionEmote and clears the draft on success', async () => {
+    render(<CommandInput character="Alice" />);
+    await selectCompanion();
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'grooms itself.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.'));
+    await waitFor(() => expect(textarea.value).toBe(''));
+  });
+
+  it('does not clear a newer edit made after a companion emote request was sent but before the response arrives', async () => {
+    let resolveEmote: () => void = () => {};
+    companionEmoteMock.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveEmote = resolve;
+        })
+    );
+
+    render(<CommandInput character="Alice" />);
+    await selectCompanion();
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'grooms itself.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.');
+
+    // A newer, unsent edit happens while the original request is still in
+    // flight — it must survive the eventual success response for the OLDER
+    // content, the same guarantee the REST-pose branch already has.
+    fireEvent.change(textarea, { target: { value: 'grooms itself, then yawns.' } });
+
+    resolveEmote();
+    await waitFor(() => expect(companionEmoteMock).toHaveBeenCalledTimes(1));
+
+    expect(textarea.value).toBe('grooms itself, then yawns.');
   });
 });
 
