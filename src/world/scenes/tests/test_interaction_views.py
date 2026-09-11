@@ -1055,6 +1055,73 @@ class PoseSubmitViewTests(APITestCase):
         assert response.status_code == status.HTTP_409_CONFLICT
         assert Interaction.objects.filter(persona=self.persona).count() == 1
 
+    def test_submit_pose_same_request_id_different_target_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): a content-only idempotency comparison
+        silently misclassified "same text, different target" as a legitimate
+        replay -- nothing (re-)delivered to the new intended audience, caller
+        told it succeeded. Mirrors the fix already applied to
+        PoseAction/WhisperAction (commit 64d7ce3e1,
+        actions/tests/test_actions.py) for this REST sibling.
+        """
+        target_character = CharacterFactory(db_key="Dana", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "55555555-5555-5555-5555-555555555555",
+        }
+        first = self.client.post(self.url, base, format="json")
+        second = self.client.post(self.url, {**base, "target_names": ["Dana"]}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_same_target_twice_is_still_a_replay(self) -> None:
+        """The "same" direction of Finding 3's fix: reusing a client_request_id
+        against the SAME target twice must remain a clean replay -- the new
+        target-identity comparison must not false-positive on a match."""
+        target_character = CharacterFactory(db_key="Elin", location=self.room)
+        CharacterSheetFactory(character=target_character)
+        payload = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "66666666-6666-6666-6666-666666666666",
+            "target_names": ["Elin"],
+        }
+        first = self.client.post(self.url, payload, format="json")
+        second = self.client.post(self.url, payload, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_200_OK
+        assert first.data["id"] == second.data["id"]
+        assert second.data["replayed"] is True
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_submit_pose_same_request_id_different_scene_is_a_conflict(self) -> None:
+        """Finding 3 (#3760 final review): scene identity is also part of the
+        comparison -- reusing a client_request_id against a DIFFERENT scene
+        with the same text must be a conflict, not a silent replay.
+
+        Both requests pass `scene_id` explicitly (rather than relying on one
+        of them auto-resolving the room's active scene via
+        `record_interaction`'s `get_active_scene` fallback) so the two really
+        do target two distinct Scene rows.
+        """
+        scene_a = SceneFactory(location=self.room)
+        scene_b = SceneFactory(location=self.room)
+        base = {
+            "persona_id": self.persona.pk,
+            "content": "waves.",
+            "client_request_id": "77777777-7777-7777-7777-777777777777",
+        }
+        first = self.client.post(self.url, {**base, "scene_id": scene_a.pk}, format="json")
+        second = self.client.post(self.url, {**base, "scene_id": scene_b.pk}, format="json")
+
+        assert first.status_code == status.HTTP_201_CREATED
+        assert second.status_code == status.HTTP_409_CONFLICT
+        assert Interaction.objects.filter(persona=self.persona).count() == 1
+
 
 class ActionLinksSerializerTests(APITestCase):
     """action_links field is populated by the list endpoint for POSE interactions."""

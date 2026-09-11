@@ -408,11 +408,31 @@ class InteractionViewSet(
             if reply_data is not None
             else None
         )
+        # Target/scene identity (#3760 final review Finding 3): a content-only
+        # comparison silently misclassified "same text, different target or
+        # scene" as a legitimate replay -- nothing (re-)delivered to the new
+        # audience, caller told it succeeded. Mirrors the fix already applied
+        # to PoseAction/WhisperAction (commit 64d7ce3e1,
+        # actions/definitions/communication.py) for this REST sibling.
+        # target_personas is M2M (via InteractionTargetPersona), so it can't
+        # be a plain getattr(stored, field) == value comparison like
+        # scene_id can; see idempotent_record_interaction's
+        # _comparison_fields_match for the callable contract.
+        target_persona_pks = (
+            frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+        )
         try:
             result = idempotent_record_interaction(
                 persona=persona,
                 client_request_id=client_request_id,
-                comparison_fields={"content": content, "pose_kind": pose_kind},
+                comparison_fields={
+                    "content": content,
+                    "pose_kind": pose_kind,
+                    "scene_id": scene.pk if scene is not None else None,
+                    "target": lambda stored: (
+                        frozenset(p.pk for p in stored.target_personas.all()) == target_persona_pks
+                    ),
+                },
                 character=character,
                 content=content,
                 mode=InteractionMode.POSE,
