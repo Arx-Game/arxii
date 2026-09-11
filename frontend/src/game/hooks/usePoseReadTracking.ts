@@ -22,10 +22,25 @@ interface PoseRef {
  * fetch reflects it, and `attention.ts`'s existing direct/ambient derivation
  * (unchanged by this task) starts counting it correctly with no further
  * wiring.
+ *
+ * The focus gate is re-evaluated on `visibilitychange`/`focus` as well as on
+ * intersection changes: the `IntersectionObserver` callback only fires on a
+ * threshold *crossing*, so an element already on-screen when the tab was
+ * backgrounded (or the whole page loaded backgrounded) produces no crossing
+ * when focus returns and would otherwise never start its dwell timer.
  */
 export function usePoseReadTracking() {
   const pending = useRef<Map<HTMLElement, PoseRef>>(new Map());
   const dwellTimers = useRef<Map<HTMLElement, ReturnType<typeof setTimeout>>>(new Map());
+  // Elements the IntersectionObserver currently reports as intersecting,
+  // tracked independently of `document.hasFocus()`. The observer only fires
+  // on a threshold *crossing* — an element that was already on-screen when
+  // the tab was backgrounded (or the whole page loaded backgrounded) never
+  // produces a new crossing when focus returns, so without this durable
+  // record it would never start a dwell timer until the user happened to
+  // scroll it fully out and back in. The visibilitychange/focus handler
+  // below re-derives dwell eligibility from this set instead.
+  const intersecting = useRef<Set<HTMLElement>>(new Set());
   const queued = useRef<PoseRef[]>([]);
   const flushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -70,25 +85,38 @@ export function usePoseReadTracking() {
   // always calls the latest scheduleFlush, not a stale closure.
   scheduleFlushRef.current = scheduleFlush;
 
+  // Shared by the observer callback (a fresh intersection) and the
+  // focus/visibility handler (an element already intersecting when focus
+  // returns) so the timer-creation logic exists in exactly one place.
+  // Guards against double-starting a timer for an element that already has
+  // one running.
+  const startDwellTimer = useCallback(
+    (el: HTMLElement, pose: PoseRef) => {
+      if (dwellTimers.current.has(el)) return;
+      dwellTimers.current.set(
+        el,
+        setTimeout(() => {
+          queued.current.push(pose);
+          dwellTimers.current.delete(el);
+          if (queued.current.length >= MAX_BATCH) flush();
+          else scheduleFlush();
+        }, DWELL_MS)
+      );
+    },
+    [flush, scheduleFlush]
+  );
+
   const handleIntersect = useCallback<IntersectionObserverCallback>(
     (entries) => {
       for (const entry of entries) {
         const el = entry.target as HTMLElement;
         const pose = pending.current.get(el);
         if (!pose) continue;
-        if (entry.isIntersecting && document.hasFocus()) {
-          if (!dwellTimers.current.has(el)) {
-            dwellTimers.current.set(
-              el,
-              setTimeout(() => {
-                queued.current.push(pose);
-                dwellTimers.current.delete(el);
-                if (queued.current.length >= MAX_BATCH) flush();
-                else scheduleFlush();
-              }, DWELL_MS)
-            );
-          }
+        if (entry.isIntersecting) {
+          intersecting.current.add(el);
+          if (document.hasFocus()) startDwellTimer(el, pose);
         } else {
+          intersecting.current.delete(el);
           const timer = dwellTimers.current.get(el);
           if (timer) {
             clearTimeout(timer);
@@ -97,8 +125,34 @@ export function usePoseReadTracking() {
         }
       }
     },
-    [flush, scheduleFlush]
+    [startDwellTimer]
   );
+
+  // Fires on tab-switch-away/back and minimize/restore (`visibilitychange`)
+  // and on app-switching on desktop, where the tab stays visible but the
+  // window itself loses OS focus (`focus`/`blur` on `window`). Either event
+  // re-evaluates every element the observer currently reports as
+  // intersecting — as if its intersection had just started — so a
+  // screenful of poses that were already on-screen when the reader
+  // regained focus still starts its dwell timer instead of waiting for an
+  // unrelated future scroll to produce a new intersection crossing.
+  const handleFocusRegained = useCallback(() => {
+    if (!document.hasFocus()) return;
+    for (const el of intersecting.current) {
+      const pose = pending.current.get(el);
+      if (!pose) continue;
+      startDwellTimer(el, pose);
+    }
+  }, [startDwellTimer]);
+
+  useEffect(() => {
+    document.addEventListener('visibilitychange', handleFocusRegained);
+    window.addEventListener('focus', handleFocusRegained);
+    return () => {
+      document.removeEventListener('visibilitychange', handleFocusRegained);
+      window.removeEventListener('focus', handleFocusRegained);
+    };
+  }, [handleFocusRegained]);
 
   // Built once, synchronously, during the first render — deliberately NOT
   // inside a `useEffect`. `observe()` below is invoked by a rendered pose's
@@ -133,6 +187,7 @@ export function usePoseReadTracking() {
       observer.observe(element);
       return () => {
         pending.current.delete(element);
+        intersecting.current.delete(element);
         const timer = dwellTimers.current.get(element);
         if (timer) clearTimeout(timer);
         dwellTimers.current.delete(element);

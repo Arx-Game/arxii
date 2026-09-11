@@ -181,4 +181,85 @@ describe('usePoseReadTracking', () => {
       .mock.calls.reduce((sum, [batch]) => sum + batch.length, 0);
     expect(totalMarked).toBe(45);
   });
+
+  it('does not dwell-track an already-intersecting pose while backgrounded, then starts on focus return', () => {
+    // Regression for the bug where a screenful of poses already intersecting
+    // when the tab was backgrounded (or the page loaded backgrounded) never
+    // got a fresh IntersectionObserver crossing when focus returned, so they
+    // never started their dwell timer at all.
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+
+    const { result } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    result.current.observe(el, { id: 55, timestamp: '2026-01-01T00:00:00Z' });
+
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+    });
+    act(() => {
+      // Well past both DWELL_MS and FLUSH_INTERVAL_MS — nothing should ever
+      // have started a timer while backgrounded, no matter how long it sits.
+      vi.advanceTimersByTime(5000);
+    });
+    expect(playQueries.markPosesRead).not.toHaveBeenCalled();
+
+    // Focus returns: flip the stub the same way a real tab-switch-back would
+    // flip `document.hasFocus()`, then fire the event the hook listens for.
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    act(() => {
+      document.dispatchEvent(new Event('visibilitychange'));
+    });
+    // The dwell timer only just started on focus return — not yet elapsed.
+    expect(playQueries.markPosesRead).not.toHaveBeenCalled();
+
+    act(() => {
+      vi.advanceTimersByTime(1000);
+      vi.advanceTimersByTime(2100); // clear the batch-flush debounce too
+    });
+    expect(playQueries.markPosesRead).toHaveBeenCalledWith([
+      { id: 55, timestamp: '2026-01-01T00:00:00Z' },
+    ]);
+  });
+
+  it('does not double-start a dwell timer on focus return for a pose the observer already gated in', () => {
+    // If the element was already intersecting AND focused (the ordinary
+    // case), a subsequent visibilitychange/focus event must not start a
+    // second, overlapping dwell timer for it (double-counting risk).
+    const { result } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    result.current.observe(el, { id: 8, timestamp: '2026-01-01T00:00:00Z' });
+
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+    });
+    act(() => {
+      // Fire focus-regained mid-dwell; a second timer here would push a
+      // duplicate read-mark onto the queue when it later fires.
+      vi.advanceTimersByTime(500);
+      document.dispatchEvent(new Event('visibilitychange'));
+      vi.advanceTimersByTime(500);
+      vi.advanceTimersByTime(2100);
+    });
+
+    expect(playQueries.markPosesRead).toHaveBeenCalledTimes(1);
+    expect(playQueries.markPosesRead).toHaveBeenCalledWith([
+      { id: 8, timestamp: '2026-01-01T00:00:00Z' },
+    ]);
+  });
+
+  it('does not leak the visibilitychange/focus listeners across unmount', () => {
+    const addDocListener = vi.spyOn(document, 'addEventListener');
+    const removeDocListener = vi.spyOn(document, 'removeEventListener');
+    const addWinListener = vi.spyOn(window, 'addEventListener');
+    const removeWinListener = vi.spyOn(window, 'removeEventListener');
+
+    const { unmount } = renderHook(() => usePoseReadTracking());
+    expect(addDocListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(addWinListener).toHaveBeenCalledWith('focus', expect.any(Function));
+
+    unmount();
+
+    expect(removeDocListener).toHaveBeenCalledWith('visibilitychange', expect.any(Function));
+    expect(removeWinListener).toHaveBeenCalledWith('focus', expect.any(Function));
+  });
 });
