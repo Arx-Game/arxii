@@ -1,8 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
+import { emitActionResult } from '@/hooks/actionResultBus';
 import type { PlayerActionsResponse } from '../actionTypes';
 
 vi.mock('../actionQueries', async () => {
@@ -275,5 +276,104 @@ describe('ActionAttachment', () => {
     );
 
     expect(screen.getByText('(select target)')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // #3760 demo-fidelity review Finding 2 — the attached action's own
+  // acknowledged/pending badge (demo Screen 7: "✓ <name> · acknowledged"),
+  // sourced from the ACTION_RESULT bus (`useActionResult`).
+  // -------------------------------------------------------------------------
+
+  it('shows the pending badge while an action is attached but no result has arrived yet', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    const status = screen.getByTestId('action-attachment-status');
+    expect(status).toHaveTextContent('pending');
+    expect(status).not.toHaveTextContent('acknowledged');
+  });
+
+  it('does not show any status badge when no action is attached', () => {
+    render(
+      <ActionAttachment sceneId="1" attachment={null} onAttach={vi.fn()} onDetach={vi.fn()} />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.queryByTestId('action-attachment-status')).not.toBeInTheDocument();
+  });
+
+  it('flips to the acknowledged badge once a successful ACTION_RESULT arrives on the bus', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
+
+    act(() => {
+      emitActionResult({ success: true, message: null, data: null });
+    });
+
+    const status = screen.getByTestId('action-attachment-status');
+    expect(status).toHaveTextContent('acknowledged');
+    expect(status).not.toHaveTextContent('pending');
+  });
+
+  it('does not acknowledge on a failed ACTION_RESULT — the badge stays pending', () => {
+    render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    act(() => {
+      emitActionResult({ success: false, message: 'Failed.', data: null });
+    });
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
+  });
+
+  it('resets to pending when a different action gets attached (rerender)', () => {
+    const { rerender } = render(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'intimidate', name: 'Intimidate', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />,
+      { wrapper: createWrapper() }
+    );
+
+    act(() => {
+      emitActionResult({ success: true, message: null, data: null });
+    });
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('acknowledged');
+
+    rerender(
+      <ActionAttachment
+        sceneId="1"
+        attachment={{ actionKey: 'perform', name: 'Perform', requiresTarget: false }}
+        onAttach={vi.fn()}
+        onDetach={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId('action-attachment-status')).toHaveTextContent('pending');
   });
 });
