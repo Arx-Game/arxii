@@ -41,6 +41,18 @@
   presence/absence of a mystery. `being_a`/`being_b` are undirected (ALLY of X reads the
   same as ALLY of Y) and get sorted into canonical pk order automatically, so the same
   pair can never be recorded twice with the sides swapped.
+- **Feast day** — a being's annually-recurring worship holiday (`WorshipFeastDay`,
+  #3776): `ic_month`/`ic_day`, no year, unique per being+date. Its own model rather
+  than reusing `weather.FeastDay` — a religious concept shouldn't be owned by the
+  weather app. Feeds a future universal worship-rite reward multiplier (#3777) for
+  anyone worshipping the being that day — distinct from birth favor below, which is
+  per-character, not per-date.
+- **Birth favor** — `is_birth_favored_by(sheet, being, *, today)` (#3776): True only
+  when the character's own `tarot_card` matches one of the being's `tarot_cards` AND
+  `today` is the character's `birthday_month`/`birthday_day`. Doubles a worship-rite
+  payout for that being (#3777); it does not itself grant anything. `today` defaults
+  to the current IC date (`game_clock.get_ic_now()`), matching how the Town Crier
+  birthday feed already reads the same two fields — never the real wall clock.
 - **God's Favorite** — the achievement for reaching (or tying) a being's top devotion;
   three gendered rows (Princess/Prince/Chosen); never names the being.
 - **Miracle** — an authored effect a WorshippedBeing can perform by spending its

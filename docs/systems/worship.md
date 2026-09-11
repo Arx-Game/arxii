@@ -18,7 +18,10 @@ issue bodies; the model decision is ADR-0132.
   is expected and fine, and no mechanical matching need was confirmed), tradition
   FK, `resonance_pool` (BigInteger, spendable by future miracles #2360),
   `lifetime_worship` (monotonic audit), nullable OneToOne `avatar_sheet` →
-  CharacterSheet (rare played gods), `is_active`.
+  CharacterSheet (rare played gods), `is_active`, `tarot_cards` (#3776 Task 9:
+  M2M → `tarot.TarotCard`, `related_name="represented_beings"`, blank, no cap —
+  cards people believe represent this being; pure association, read by
+  `is_birth_favored_by` below).
 - `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
   `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
   unique per (being, facet).
@@ -49,6 +52,14 @@ issue bodies; the model decision is ADR-0132.
   the DB level too, so a caller can never record the same pair twice under swapped
   argument order. Unique per (being_a, being_b) post-normalization;
   `being_relationship_not_self` blocks a being from relating to itself.
+- `WorshipFeastDay` (#3776 Task 9) — a being's annual feast day: `being` FK
+  (`related_name="feast_days"`), `ic_month`/`ic_day` (no year — recurs every
+  IC year, mirrors `weather.FeastDay`'s shape), `name`, `lore`. Worship gets
+  its own model rather than reusing weather's — a religious concept shouldn't
+  be owned by the weather app. Unique per (being, ic_month, ic_day). Feeds a
+  universal worship-rite reward multiplier for anyone worshipping the being on
+  that date (wired in #3777) — distinct from `is_birth_favored_by` below,
+  which is per-character (tarot match + personal birthday), not per-date.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -104,6 +115,18 @@ issue bodies; the model decision is ADR-0132.
   being survives untouched) or the secret side (`secret_being`/`secret` — an old
   secret faith's `Secret` row is left standing as history, still discoverable).
   Called from `world.ceremonies.services.finish_ceremony`'s CONVERSION branch.
+- `is_birth_favored_by(character_sheet, being, *, today=None)` → bool (#3776
+  Task 9) — pure query, no side effects: True only when the character's own
+  tarot card (`character_sheet.tarot_card`, a forwarding property onto
+  `character_sheets.Profile.tarot_card` via `true_profile` — there is no
+  separate `character_sheet.profile` accessor) matches one of `being`'s
+  `tarot_cards` AND `today` falls on the character's
+  `birthday_month`/`birthday_day`. `today` defaults to the current IC date
+  (`world.game_clock.services.get_ic_now()`), matching how
+  `world.tidings.services._birthday_items` already reads the same two fields
+  — never the real wall clock; returns False (never raises) with no active
+  `GameClock`. Read by issue #3777's worship-rite reward calculation to double
+  the being-scoped payout; grants nothing itself.
 
 ### Miracles & Divine Intervention (#2360)
 

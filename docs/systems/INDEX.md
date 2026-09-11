@@ -8264,8 +8264,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
 - **Worship models** (`world/worship`): `WorshipTradition` (name, `rites_specialization` FK →
   skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
   lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
-  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `BeingFacet` (favored aesthetic
-  Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
+  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
+  (#3776 Task 9, blank, no cap, `related_name="represented_beings"`)), `BeingFacet` (favored
+  aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
   it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
   FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
@@ -8274,6 +8275,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   hidden-truth field, a real hidden truth is a separately-authored `CodexEntry` reached
   via a `Clue`; `save()` sorts being_a/being_b into pk-ascending order, DB-enforced, so
   a caller can't record the same undirected pair twice under swapped args),
+  `WorshipFeastDay` (#3776 Task 9: `being` FK + `ic_month`/`ic_day` (no year, mirrors
+  `weather.FeastDay`'s shape) + `name`/`lore`, unique per being+date — worship gets its own
+  model rather than reusing weather's; feeds a future universal worship-rite multiplier, #3777),
   `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
@@ -8284,7 +8288,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
   is_sincere=True)` (#2361 — the single write path for a post-CG public conversion; get-or-
   creates the declaration, repoints `public_being`, stores `public_is_sincere`; never touches
-  `DevotionStanding` or the secret side). CG: `CharacterDraft.public_worship`/
+  `DevotionStanding` or the secret side); `is_birth_favored_by(sheet, being, *, today=None)`
+  (#3776 Task 9 — pure query: True iff `sheet.tarot_card` is one of `being.tarot_cards` AND
+  `today` is `sheet`'s birthday; `today` defaults to `game_clock.get_ic_now()`, not the wall
+  clock; read by #3777's reward calc, grants nothing itself). CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.

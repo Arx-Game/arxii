@@ -6,6 +6,7 @@ from django.test import TestCase
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import ResonanceFactory
 from world.magic.models import Facet
+from world.tarot.factories import TarotCardFactory
 from world.worship.constants import BeingRelationshipValence, BeingResonanceTier
 from world.worship.factories import (
     BeingRelationshipFactory,
@@ -14,7 +15,13 @@ from world.worship.factories import (
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
-from world.worship.models import BeingFacet, BeingNickname, BeingRelationship, BeingResonance
+from world.worship.models import (
+    BeingFacet,
+    BeingNickname,
+    BeingRelationship,
+    BeingResonance,
+    WorshipFeastDay,
+)
 
 
 class WorshipModelTests(TestCase):
@@ -154,3 +161,26 @@ class BeingRelationshipTests(TestCase):
             BeingRelationship.objects.create(
                 being_a=leviathan, being_b=fleshreaper, valence=BeingRelationshipValence.RIVAL
             )
+
+
+class WorshipFeastDayTests(TestCase):
+    def test_feast_day_recurs_by_month_and_day_no_year(self) -> None:
+        being = WorshippedBeingFactory()
+        feast = WorshipFeastDay.objects.create(
+            being=being, ic_month=9, ic_day=14, name="The Long Bleeding"
+        )
+        self.assertFalse(hasattr(feast, "year"))
+
+    def test_unique_per_being_and_date(self) -> None:
+        being = WorshippedBeingFactory()
+        WorshipFeastDay.objects.create(being=being, ic_month=9, ic_day=14, name="A")
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            WorshipFeastDay.objects.create(being=being, ic_month=9, ic_day=14, name="B")
+
+
+class WorshippedBeingTarotTests(TestCase):
+    def test_being_can_hold_multiple_tarot_cards(self) -> None:
+        being = WorshippedBeingFactory()
+        tower = TarotCardFactory(name="The Tower")
+        being.tarot_cards.add(tower)
+        self.assertEqual(being.tarot_cards.count(), 1)

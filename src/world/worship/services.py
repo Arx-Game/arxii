@@ -25,6 +25,8 @@ from world.worship.models import (
 )
 
 if TYPE_CHECKING:
+    from datetime import date
+
     from world.achievements.models import Achievement
     from world.character_sheets.models import CharacterSheet
     from world.worship.models import DivineInterventionConfig, Miracle, MiraclePerformance
@@ -456,3 +458,43 @@ def release_patronage(standing: DevotionStanding) -> None:
     """
     standing.released_at = timezone.now()
     standing.save(update_fields=["released_at"])
+
+
+def is_birth_favored_by(
+    character_sheet: "CharacterSheet", being: WorshippedBeing, *, today: "date | None" = None
+) -> bool:
+    """Whether character_sheet is birth-favored by being today (#3776).
+
+    True only when BOTH hold: the character's own tarot card matches one of the
+    being's tarot cards, AND today is the character's birthday. Being-scoped, pure
+    query — issue #3777's worship-rite reward calc doubles the payout when this is
+    True; it does not itself grant anything.
+
+    ``character_sheet.tarot_card`` is a forwarding property onto
+    ``true_profile.tarot_card`` (#1270 slice 3) — there is no separate
+    ``character_sheet.profile`` accessor to go through; it already returns None
+    when the sheet has no ``true_profile`` attached.
+
+    ``birthday_month``/``birthday_day`` are IC calendar values (#2756) — the Town
+    Crier birthday feed (``world.tidings.services._birthday_items``) already compares
+    them against ``get_ic_now()``, never the real wall clock, so a caller-omitted
+    ``today`` resolves the same way here instead of defaulting to
+    ``datetime.date.today()``. Returns False (never raises) when no ``GameClock`` is
+    active — the same "content not seeded" graceful-skip other worship service
+    functions use for a bare test DB.
+    """
+    if today is None:
+        from world.game_clock.services import get_ic_now  # noqa: PLC0415
+
+        ic_now = get_ic_now()
+        if ic_now is None:
+            return False
+        today = ic_now.date()
+    tarot_card = character_sheet.tarot_card
+    if tarot_card is None:
+        return False
+    if not being.tarot_cards.filter(pk=tarot_card.pk).exists():
+        return False
+    return (
+        character_sheet.birthday_month == today.month and character_sheet.birthday_day == today.day
+    )

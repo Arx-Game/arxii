@@ -9982,6 +9982,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - profiles <- character_sheets.Profile
+  - represented_beings <- worship.WorshippedBeing
 
 
 ## world.tasking
@@ -10437,6 +10438,10 @@
   - secret_being -> worship.WorshippedBeing [FK] (nullable)
   - secret -> secrets.Secret [FK] (nullable)
 
+### WorshipFeastDay
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+
 ### WorshipGrant
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -10452,9 +10457,11 @@
 **Foreign Keys:**
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - tarot_cards -> tarot.TarotCard [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - feast_days <- worship.WorshipFeastDay
   - being_facets <- worship.BeingFacet
   - resonances <- worship.BeingResonance
   - nicknames <- worship.BeingNickname
@@ -10478,6 +10485,7 @@
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
+- `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None) -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`

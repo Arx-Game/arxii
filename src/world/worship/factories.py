@@ -11,6 +11,7 @@ from world.worship.models import (
     BeingResonance,
     DevotionStanding,
     WorshipDeclaration,
+    WorshipFeastDay,
     WorshippedBeing,
     WorshipTradition,
 )
@@ -58,6 +59,16 @@ class BeingNicknameFactory(factory.django.DjangoModelFactory):
 
     being = factory.SubFactory(WorshippedBeingFactory)
     name = factory.Sequence(lambda n: f"Nickname {n}")
+
+
+class WorshipFeastDayFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = WorshipFeastDay
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    ic_month = 1
+    ic_day = 1
+    name = factory.Sequence(lambda n: f"Feast Day {n}")
 
 
 class BeingRelationshipFactory(factory.django.DjangoModelFactory):

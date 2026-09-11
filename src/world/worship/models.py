@@ -94,12 +94,45 @@ class WorshippedBeing(SharedMemoryModel):
         help_text="Rare: the NPC sheet a manifested god is played through.",
     )
     is_active = models.BooleanField(default=True)
+    tarot_cards = models.ManyToManyField(
+        "arxii.TarotCard",
+        blank=True,
+        related_name="represented_beings",
+        help_text="Cards people believe represent this being. Pure association, no cap.",
+    )
 
     class Meta:
         ordering = ["name"]
 
     def __str__(self) -> str:
         return self.name
+
+
+class WorshipFeastDay(SharedMemoryModel):
+    """A being's feast day (#3776). Mirrors weather.FeastDay's (ic_month, ic_day) shape.
+
+    Worship gets its own model rather than reusing weather's — a religious concept
+    shouldn't be owned by the weather app. Recurs annually; no year field. Gives a
+    universal worship-rite reward multiplier to anyone worshipping this being on this
+    date (wired in issue #3777).
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="feast_days")
+    ic_month = models.PositiveSmallIntegerField()
+    ic_day = models.PositiveSmallIntegerField()
+    name = models.CharField(max_length=100)
+    lore = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["being", "ic_month", "ic_day"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["being", "ic_month", "ic_day"], name="unique_being_feast_day"
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.name} ({self.being})"
 
 
 class BeingFacet(SharedMemoryModel):
