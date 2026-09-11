@@ -1155,6 +1155,51 @@ describe('ThreadedNarrativeReader', () => {
       expect(loadConversationAnchor('scene:1')?.anchors.threads).toBeNull();
     });
 
+    it('keeps a saved Threads anchor unchanged after saving a DIFFERENT Chronological anchor and switching back (#3759 review Fix round 1: strengthened I5 round trip)', async () => {
+      // The weaker version of this test only asserted the OTHER slot was
+      // null after one save -- an implementation that blindly zeroed the
+      // other mode's slot on every write (rather than genuinely keeping two
+      // independent slots) would also pass that. This does the actual round
+      // trip the ratified Decision #2 requires: save a real Threads anchor,
+      // switch to Chronological, save a DIFFERENT anchor there, switch back
+      // to Threads, and assert the FIRST anchor survived byte-for-byte.
+      poseOffsets = { 1: -40, 2: 90 };
+      const user = userEvent.setup();
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a'), interaction(2, 'second', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+
+      // Save a Threads anchor (pose 1, offset -40).
+      fireEvent.scroll(screen.getByLabelText('Story reader'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const threadsAnchor = loadConversationAnchor('scene:1')?.anchors.threads;
+      expect(threadsAnchor).toEqual({ poseId: '1', threadId: 'thread-a', offsetPx: -40 });
+
+      // Switch to Chronological and save a DIFFERENT anchor (pose 2, offset -5
+      // -- closer to the container's top than pose 1's -100, so it's the one
+      // `findTopVisiblePoseId` picks as "topmost").
+      poseOffsets = { 1: -100, 2: -5 };
+      await user.click(screen.getByRole('button', { name: /chronological/i }));
+      fireEvent.scroll(screen.getByTestId('chrono-scroll-container'));
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      expect(loadConversationAnchor('scene:1')?.anchors.chronological).toEqual({
+        poseId: '2',
+        threadId: 'thread-a',
+        offsetPx: -5,
+      });
+
+      // Switch back to Threads -- the FIRST anchor must be exactly what it
+      // was, untouched by the Chronological save in between.
+      await user.click(screen.getByRole('button', { name: /^threads$/i }));
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual(threadsAnchor);
+    });
+
     it('does not persist a Chronological-view anchor while a non-room conversation tab is active (#3759 review finding I4)', async () => {
       poseOffsets = { 1: -40 };
       const user = userEvent.setup();
