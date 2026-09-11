@@ -28,12 +28,6 @@ describe('PlaySidebar', () => {
     render(<PlaySidebar here={<div>Here content</div>} onThreadClick={vi.fn()} />);
     const scrollEl = screen.getByTestId('play-sidebar-scroll');
 
-    // jsdom never computes real layout, so scrollHeight/clientHeight are 0 by
-    // default — stub them so a non-zero scrollTop assignment is meaningful
-    // and so the restoring effect's read-back reflects what was "scrolled".
-    Object.defineProperty(scrollEl, 'scrollHeight', { value: 2000, configurable: true });
-    Object.defineProperty(scrollEl, 'clientHeight', { value: 200, configurable: true });
-
     // Start on "Here" (the default mode with no threading prop) and scroll it.
     scrollEl.scrollTop = 400;
     scrollEl.dispatchEvent(new Event('scroll'));

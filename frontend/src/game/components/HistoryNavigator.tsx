@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Search, History, CalendarDays } from 'lucide-react';
 import { fetchPlayConversations, fetchPlaySearch } from '../playQueries';
@@ -22,21 +22,6 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
   const [kind, setKind] = useState<'all' | 'room' | 'whisper'>('all');
   const [showAllHistory, setShowAllHistory] = useState(false);
   const [conversationsCursor, setConversationsCursor] = useState<string | undefined>(undefined);
-  // #3759 review fix: `from`/`to` are the filters that actually scope the
-  // conversations query (see its `queryKey` below — `kind` only scopes
-  // `search`, not `conversations`). Without this, paging forward with
-  // "Load more" was a one-way trap: only the showAllHistory toggle reset the
-  // cursor, so changing a date filter mid-page silently kept requesting page
-  // N+1 of the OLD filter instead of returning to page 1 of the new one.
-  // Skip the very first render (mount) so this never fires on initial values.
-  const isFirstDateFilterRender = useRef(true);
-  useEffect(() => {
-    if (isFirstDateFilterRender.current) {
-      isFirstDateFilterRender.current = false;
-      return;
-    }
-    setConversationsCursor(undefined);
-  }, [from, to]);
   const ninetyDaysAgo = useMemo(() => {
     const d = new Date();
     d.setDate(d.getDate() - 90);
@@ -102,7 +87,15 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
             <input
               type="date"
               value={from}
-              onChange={(event) => setFrom(event.target.value)}
+              onChange={(event) => {
+                setFrom(event.target.value);
+                // #3759 review fix, fold-in: reset paging back to page 1 the
+                // instant the filter that actually scopes the conversations
+                // query changes (see its `queryKey` below -- `kind` only
+                // scopes `search`), synchronously with the change rather than
+                // one render later via an effect.
+                setConversationsCursor(undefined);
+              }}
               className="mt-1 block w-full rounded border bg-background px-2 py-1 text-sm"
             />
           </label>
@@ -111,7 +104,10 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
             <input
               type="date"
               value={to}
-              onChange={(event) => setTo(event.target.value)}
+              onChange={(event) => {
+                setTo(event.target.value);
+                setConversationsCursor(undefined);
+              }}
               className="mt-1 block w-full rounded border bg-background px-2 py-1 text-sm"
             />
           </label>
@@ -201,7 +197,12 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
             className="mt-2 block w-full rounded border p-2 text-center text-sm hover:bg-accent"
             onClick={() => setConversationsCursor(conversations.data?.after ?? undefined)}
           >
-            Load more
+            {/* "Next page" (#3759 review fold-in), not "Load more" -- this
+                REPLACES the current page rather than appending to it (only
+                conversations.data?.results renders), which "Load more" would
+                misleadingly imply. Accumulating via useInfiniteQuery would be
+                a bigger change than this fold-in warrants. */}
+            Next page
           </button>
         )}
       </div>

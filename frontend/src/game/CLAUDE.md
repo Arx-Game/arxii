@@ -105,12 +105,13 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
   Whispers — and date range) plus browse authorized retained conversations
   (filtered by date range only; type does not scope the browse list, only the
-  search query); the conversation list paginates via a cursor. An OOC filter
-  option is deliberately not exposed here: `filter_kind`'s `scene_ooc`/`channel`
-  branches can never match today (`InteractionMode` has no ooc/system/tt value
-  until #3299 lands) — see `interaction_filters.py`.
-  ("Load more"). Opening a search result or conversation switches the reader
-  into reference mode via `onOpenReference` (#3759).
+  search query); the conversation list paginates via a cursor ("Next page" —
+  replaces the current page rather than appending to it, per its own name).
+  An OOC filter option is deliberately not exposed here: `filter_kind`'s
+  `scene_ooc`/`channel` branches can never match today (`InteractionMode` has
+  no ooc/system/tt value until #3299 lands) — see `interaction_filters.py`.
+  Opening a search result or conversation switches the reader into reference
+  mode via `onOpenReference` (#3759).
 - **`ConversationTabStrip.tsx`**: The open-conversations tab strip rendered
   above the feed in `GameWindow` (#2165) — the room feed as a permanent,
   unclosable anchor tab plus one closable tab per broken-out thread
