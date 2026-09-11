@@ -380,11 +380,12 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      // Task 8's default-collapse starts the older room thread collapsed
-      // (the whisper thread is more recently active) — expand every loaded
-      // thread first so this test's actual concern (tab-driven feed
-      // narrowing) isn't entangled with per-thread collapse state.
-      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       // Both interactions show before any thread is selected.
       expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
@@ -1097,14 +1098,12 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      // Task 8's default-collapse starts the room thread collapsed (the
-      // whisper thread is more recently active). This test's own concern is
-      // whether switching tabs restores the full feed, so expand every
-      // loaded thread up front — the reader's `collapsed` state lives for
-      // the life of the mount (keyed on sceneId, not the active tab), so a
-      // per-thread collapse never resets just from narrowing/widening the
-      // tab-fed `interactions` prop.
-      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
@@ -1202,13 +1201,12 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      // Task 8's default-collapse starts the room thread collapsed (the
-      // whisper thread is more recently active). This test's own concern is
-      // whether closing the tab restores the full feed, so expand every
-      // loaded thread up front — the reader's `collapsed` state lives for
-      // the life of the mount, so it never resets just from narrowing/
-      // widening the tab-fed `interactions` prop.
-      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = () =>
@@ -1275,13 +1273,12 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      // Task 8's default-collapse starts the room thread collapsed (the
-      // whisper thread is more recently active). This test's own concern is
-      // whether the "All" button restores the full feed, so expand every
-      // loaded thread up front — the reader's `collapsed` state lives for
-      // the life of the mount, so it never resets just from narrowing/
-      // widening the tab-fed `interactions` prop.
-      await user.click(await screen.findByRole('button', { name: 'Expand loaded threads' }));
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
@@ -1738,7 +1735,11 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await user.click(await screen.findByRole('button', { name: /expand loaded threads/i }));
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need is now a
+      // no-op with nothing to click, so it's been removed.
 
       const feedContainer = screen.getByTestId('feed-scroll-container');
       // jsdom has no layout engine, so scrollHeight/clientHeight default to

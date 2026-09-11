@@ -396,17 +396,28 @@ export function ThreadedNarrativeReader({
           a.interactions[0].id - b.interactions[0].id
       );
   }, [interactions]);
+  // #3759 Wave 9 fix-round-1 re-review Minor fold-in: a `legacy:` group is a
+  // single un-replied pose (I-5, above), not a "conversation" -- excluded
+  // from the toolbar's conversation count, the bulk expand/collapse-all
+  // targets, and `mostRecentGroupKey` (below), so "Latest activity" and the
+  // default-collapse seed always land on an actual thread instead of
+  // silently no-op'ing when the chronologically-last pose happens to be
+  // standalone narration.
+  const realThreadGroups = useMemo(
+    () => groups.filter((group) => !group.key.startsWith('legacy:')),
+    [groups]
+  );
   // Shared by the default-collapse effect (below) and the "Latest activity"
   // toolbar button (#3759 Wave 9 F5) -- both need "which thread's last pose
   // is the most recent," so this is computed once rather than duplicated.
   const mostRecentGroupKey = useMemo(() => {
-    if (groups.length === 0) return null;
-    return [...groups].sort((a, b) =>
+    if (realThreadGroups.length === 0) return null;
+    return [...realThreadGroups].sort((a, b) =>
       b.interactions[b.interactions.length - 1].timestamp.localeCompare(
         a.interactions[a.interactions.length - 1].timestamp
       )
     )[0].key;
-  }, [groups]);
+  }, [realThreadGroups]);
   // Looked up by Chronological view's role-label rendering (#3759 Wave 9 F4)
   // to find a pose's thread root without a linear scan of `groups` per pose.
   const groupByKey = useMemo(() => new Map(groups.map((group) => [group.key, group])), [groups]);
@@ -464,11 +475,15 @@ export function ThreadedNarrativeReader({
     if (defaultSeeded.current) return;
     if (groups.length === 0) return;
     defaultSeeded.current = true;
-    // `mostRecentGroupKey` is never null here: it's derived from `groups`
-    // (above), and this effect already returned above when `groups` was
-    // empty. A single-thread conversation is trivially its own "most
-    // recently active" thread, so this one branch also covers the old
-    // `groups.length <= 1` case -- expanded, not collapsed.
+    // `mostRecentGroupKey` CAN be null here even though `groups` isn't empty
+    // (#3759 Wave 9 fix-round-1 re-review Minor fold-in): it's derived from
+    // `realThreadGroups`, which excludes single-pose `legacy:` groups, so a
+    // scene made entirely of un-replied narration has no "most recently
+    // active thread" to expand -- correctly seeds nothing (legacy poses
+    // render plainly regardless of `expandedKeys`, so there's nothing for
+    // this default to open). A single-real-thread conversation is trivially
+    // its own "most recently active" thread, so this one branch also covers
+    // the old `groups.length <= 1` case -- expanded, not collapsed.
     setExpandedKeys(new Set(mostRecentGroupKey ? [mostRecentGroupKey] : []));
   }, [groups, mostRecentGroupKey]);
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
@@ -564,7 +579,12 @@ export function ThreadedNarrativeReader({
       return next;
     });
   const expandAllThreads = () => {
-    const next = new Set(groups.map((group) => group.key));
+    // realThreadGroups, not groups (#3759 Wave 9 fix-round-1 re-review Minor
+    // fold-in): a `legacy:` key is inert in `expandedKeys` (the single-pose
+    // branch never reads it), so including it here only persisted noise into
+    // localStorage -- a long scene of ordinary narration turned one click
+    // into hundreds of stored, meaningless strings.
+    const next = new Set(realThreadGroups.map((group) => group.key));
     setExpandedKeys(next);
     persistExpanded(next);
   };
@@ -997,12 +1017,19 @@ export function ThreadedNarrativeReader({
       <div className="mx-auto w-full max-w-[var(--play-reading-measure,90ch)] space-y-3 px-4 py-4">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <span>
+            {/* realThreadGroups, not groups (#3759 Wave 9 fix-round-1 re-review
+                Minor fold-in): a `legacy:` group is one un-replied pose, not a
+                "conversation" -- counting it here visibly contradicted the
+                single collapsible card the render actually shows once F1/I-5
+                landed. `groups.length` still gates the true-empty fallback,
+                since a scene of legacy-only narration should read "0
+                conversations", not "New conversation" (it isn't new/empty). */}
             {groups.length
-              ? `${groups.length} conversation${groups.length === 1 ? '' : 's'}`
+              ? `${realThreadGroups.length} conversation${realThreadGroups.length === 1 ? '' : 's'}`
               : 'New conversation'}
           </span>
           <div className="flex gap-2">
-            {groups.length > 0 && (
+            {realThreadGroups.length > 0 && (
               <>
                 <button className="underline" onClick={expandAllThreads}>
                   Expand loaded threads
