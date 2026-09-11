@@ -17,7 +17,7 @@ import { Link } from 'react-router-dom';
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { sessionAttention } from '@/game/attention';
-import { loadConversationAnchor } from '../playPreferences';
+import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
 
 /**
  * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
@@ -98,6 +98,15 @@ interface GameWindowProps {
   speakingAs?: { name: string; thumbnailUrl: string | null };
   /** Read-only historical reference shown in the same reader. */
   reference?: { kind: string; key: string; title: string } | null;
+  /**
+   * The specific pose id a deep link (a search result or "Recent
+   * conversations" row) opened this reference to (#3759 review finding C2)
+   * — threaded straight to `ThreadedNarrativeReader`'s own `targetPoseId`
+   * prop, which seeds the visible window to include it and scrolls/
+   * highlights it once mounted. Absent for a reference opened without a
+   * specific pose (a bare conversation browse) and always absent in live mode.
+   */
+  targetPoseId?: string;
   onReturnToLive?: () => void;
   referenceUnavailable?: boolean;
   referenceLoading?: boolean;
@@ -138,6 +147,7 @@ export function GameWindow({
   conversationTabs,
   speakingAs,
   reference,
+  targetPoseId,
   onReturnToLive,
   referenceUnavailable,
   referenceLoading = false,
@@ -157,6 +167,11 @@ export function GameWindow({
   const pinnedRef = useRef(true);
   const activeConvKey = conversationTabs?.activeKey ?? 'room';
   const interactionCount = sceneFeed?.interactions.length ?? 0;
+  // Threads and Chronological keep their OWN anchor slot (#3759 review
+  // finding I5) -- this bypass must check whichever mode is CURRENTLY
+  // active, not a single shared `anchor` field that no longer exists.
+  const { preferences } = usePlayPreferences();
+  const activeModeAnchor = preferences.readerMode === 'chronological' ? 'chronological' : 'threads';
 
   useEffect(() => {
     const el = feedScrollRef.current;
@@ -182,7 +197,7 @@ export function GameWindow({
       activeConvKey === 'room' &&
       saved === undefined &&
       sceneFeed &&
-      loadConversationAnchor(sceneFeed.sceneId)?.anchor
+      loadConversationAnchor(sceneFeed.sceneId)?.anchors?.[activeModeAnchor]
     ) {
       pinnedRef.current = false;
     } else if (saved !== undefined) {
@@ -396,6 +411,14 @@ export function GameWindow({
                 key={sceneFeed.sceneId}
                 sceneId={sceneFeed.sceneId}
                 conversationKey={sceneFeed.sceneId}
+                // The REAL server-format conversation ref (#3759 review
+                // finding C1) -- `reference.key` is already in that exact
+                // shape (it's literally what's sent as the `conversation`
+                // query param to fetch this reference), and matches
+                // `_conversation()`'s own `scene:<id>` format for the live
+                // room otherwise. Distinct from `conversationKey` above,
+                // which stays the bare-id localStorage anchor/collapse key.
+                conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
                 interactions={sceneFeed.interactions}
                 hasNextPage={sceneFeed.hasNextPage}
                 fetchNextPage={sceneFeed.fetchNextPage}
@@ -405,6 +428,7 @@ export function GameWindow({
                 onReply={onReply}
                 readOnly={Boolean(reference)}
                 persistAnchor={activeConvKey === 'room'}
+                targetPoseId={targetPoseId}
               />
             )}
           </div>

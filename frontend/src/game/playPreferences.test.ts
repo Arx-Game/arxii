@@ -25,11 +25,17 @@ describe('playPreferences', () => {
 
   it('round-trips a conversation anchor', () => {
     saveConversationAnchor('scene:1', {
-      anchor: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
+      anchors: {
+        threads: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
+        chronological: null,
+      },
       collapsed: ['thread-b'],
     });
     expect(loadConversationAnchor('scene:1')).toEqual({
-      anchor: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
+      anchors: {
+        threads: { poseId: '42', threadId: 'thread-a', offsetPx: 120 },
+        chronological: null,
+      },
       collapsed: ['thread-b'],
     });
   });
@@ -38,11 +44,30 @@ describe('playPreferences', () => {
     expect(loadConversationAnchor('scene:999')).toBeNull();
   });
 
+  it('keeps Threads and Chronological anchors in independent slots (#3759 review finding I5)', () => {
+    saveConversationAnchor('scene:1', {
+      anchors: {
+        threads: { poseId: '1', threadId: null, offsetPx: 0 },
+        chronological: { poseId: '2', threadId: null, offsetPx: 0 },
+      },
+      collapsed: [],
+    });
+    const stored = loadConversationAnchor('scene:1');
+    expect(stored?.anchors.threads?.poseId).toBe('1');
+    expect(stored?.anchors.chronological?.poseId).toBe('2');
+  });
+
   it('evicts the oldest entry once 100 conversations are stored', () => {
     for (let i = 0; i < 100; i++) {
-      saveConversationAnchor(`scene:${i}`, { anchor: null, collapsed: [] });
+      saveConversationAnchor(`scene:${i}`, {
+        anchors: { threads: null, chronological: null },
+        collapsed: [],
+      });
     }
-    saveConversationAnchor('scene:100', { anchor: null, collapsed: [] });
+    saveConversationAnchor('scene:100', {
+      anchors: { threads: null, chronological: null },
+      collapsed: [],
+    });
     expect(loadConversationAnchor('scene:0')).toBeNull();
     expect(loadConversationAnchor('scene:100')).not.toBeNull();
   });

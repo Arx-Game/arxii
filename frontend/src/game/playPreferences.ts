@@ -108,8 +108,30 @@ export function usePlayPreferences() {
   return { preferences, update };
 }
 
+/** A single reading-position anchor: which pose, which thread, and where. */
+export interface ReadingAnchor {
+  poseId: string;
+  threadId: string | null;
+  offsetPx: number;
+}
+
+/**
+ * Per-conversation storage row (#3759 Wave 6 + review finding I5).
+ *
+ * Threads and Chronological "share content and read state ... but keep their
+ * own anchor" (ratified Decision #2) -- `anchors.threads`/`anchors.chronological`
+ * are two independent slots, never a single shared `anchor` field. Switching
+ * reader mode must never inherit (and then clobber, on the next save) the
+ * OTHER mode's own remembered position.
+ *
+ * `collapsed` stays a single shared field: thread collapse state is NOT
+ * mode-specific (Chronological has no threads UI of its own to collapse).
+ */
 export interface ConversationAnchorState {
-  anchor: { poseId: string; threadId: string | null; offsetPx: number } | null;
+  anchors: {
+    threads: ReadingAnchor | null;
+    chronological: ReadingAnchor | null;
+  };
   collapsed: string[];
 }
 

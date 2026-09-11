@@ -27,6 +27,7 @@ import { dreamKeys } from '@/dreams/queries';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import { QueryClient } from '@tanstack/react-query';
 import { fetchPlayContext } from './playQueries';
+import * as playQueries from './playQueries';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -1637,6 +1638,36 @@ describe('GamePage', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // "Mark conversation read" wiring (#3759 review finding C1)
+  // ---------------------------------------------------------------------------
+
+  describe('mark conversation read wiring (#3759 review finding C1)', () => {
+    it('sends the real server-format conversation ref ("scene:<id>"), not GameWindow\'s bare conversationKey, through the actual GameWindow -> ThreadedNarrativeReader wiring', async () => {
+      // This is the test that would have caught the production bug: it
+      // renders the REAL GameWindow (not a fixture handing the reader a
+      // pre-built prop) and asserts what the wiring actually sends the
+      // service call, not just that the call happened.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      const markSpy = vi
+        .spyOn(playQueries, 'markConversationRead')
+        .mockResolvedValue({ marked: 0 });
+
+      renderWithProviders(<GamePage />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: /mark conversation read/i }));
+
+      // seedActiveSceneWithPose() sets the active scene's id to 100 --
+      // GameWindow must send "scene:100" (matching _conversation()'s own
+      // format), never the bare "100" it uses for the localStorage
+      // conversationKey.
+      expect(markSpy).toHaveBeenCalledWith('scene:100', expect.any(String));
+
+      markSpy.mockRestore();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
   // Return to live restores the prior live reading position (#3759 Decision #5)
   // ---------------------------------------------------------------------------
 
@@ -1701,7 +1732,7 @@ describe('GamePage', () => {
       // (`activeConvKey === 'room' && no per-tab entry yet && an anchor
       // exists`) true on this FIRST room visit.
       saveConversationAnchor('100', {
-        anchor: { poseId: '1', threadId: null, offsetPx: 0 },
+        anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
         collapsed: [],
       });
 

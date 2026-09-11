@@ -495,7 +495,35 @@ describe('ThreadedNarrativeReader', () => {
     expect(markConversationRead).toHaveBeenCalledTimes(1);
     // interaction(id, ...) derives timestamp `2026-01-01T00:0{id}:00Z` from id,
     // so the later pose (id 2) carries the latest timestamp of the two.
+    // No `conversationRef` supplied here -- falls back to `conversationKey`,
+    // which happens to already be a valid `"scene:<id>"` ref in this test.
     expect(markConversationRead).toHaveBeenCalledWith('scene:1', '2026-01-01T00:02:00Z');
+  });
+
+  it('sends conversationRef (the real server ref), not conversationKey (the localStorage key), to markConversationRead (#3759 review finding C1)', async () => {
+    // The actual production bug shape: `conversationKey` can be a bare id
+    // (GameWindow.tsx's localStorage anchor key), never in the server's
+    // `"scene:<id>"` ref format -- conflating the two meant the server-bound
+    // POST silently carried a ref no row ever matched. Uses deliberately
+    // DIFFERENT values for the two props so a regression that reads the
+    // wrong one is caught, not accidentally masked by them agreeing.
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="42"
+        conversationRef="scene:42"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+
+    await user.click(screen.getByRole('button', { name: /mark conversation read/i }));
+
+    expect(markConversationRead).toHaveBeenCalledWith('scene:42', '2026-01-01T00:02:00Z');
   });
 
   describe('reading-position anchors (#3759 Wave 6 + review fix pass)', () => {
@@ -519,7 +547,7 @@ describe('ThreadedNarrativeReader', () => {
       expect(loadConversationAnchor('scene:1')).toBeNull();
 
       await new Promise((resolve) => setTimeout(resolve, 350));
-      expect(loadConversationAnchor('scene:1')?.anchor).toEqual({
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
         threadId: 'thread-a',
         offsetPx: -50,
@@ -561,7 +589,7 @@ describe('ThreadedNarrativeReader', () => {
       fireEvent.scroll(ancestor);
       await new Promise((resolve) => setTimeout(resolve, 350));
 
-      expect(loadConversationAnchor('scene:1')?.anchor).toEqual({
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
         threadId: 'thread-a',
         offsetPx: -25,
@@ -586,7 +614,7 @@ describe('ThreadedNarrativeReader', () => {
       fireEvent.scroll(screen.getByLabelText('Story reader'));
       await new Promise((resolve) => setTimeout(resolve, 350));
 
-      expect(loadConversationAnchor('scene:1')?.anchor).toEqual({
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
         poseId: '1',
         threadId: 'thread-a',
         offsetPx: -12,
@@ -622,7 +650,7 @@ describe('ThreadedNarrativeReader', () => {
       await new Promise((resolve) => setTimeout(resolve, 350));
 
       const stored = loadConversationAnchor('scene:1');
-      expect(stored?.anchor).not.toBeNull();
+      expect(stored?.anchors.threads).not.toBeNull();
       // The collapse-toggle's own persisted list must survive the anchor
       // save (a stale-`storedAnchorState`-style regression would instead
       // have reverted `collapsed` to whatever it was at mount).
@@ -654,7 +682,10 @@ describe('ThreadedNarrativeReader', () => {
 
     it('restores scroll position to the anchored pose once real data has arrived (mirrors the default-collapse async-arrival timing fix)', () => {
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+        anchors: {
+          threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+          chronological: null,
+        },
         collapsed: [],
       });
       const { rerenderInner, ancestor } = renderInScrollAncestor(
@@ -688,7 +719,10 @@ describe('ThreadedNarrativeReader', () => {
       // condition), so the reader must restore that fallback itself on a
       // miss rather than silently stranding the reader at the top.
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
+        anchors: {
+          threads: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
+          chronological: null,
+        },
         collapsed: [],
       });
       poseOffsets = { 1: 0 };
@@ -740,7 +774,10 @@ describe('ThreadedNarrativeReader', () => {
 
     it('does not restore into a read-only (historical reference) view on mount', () => {
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+        anchors: {
+          threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+          chronological: null,
+        },
         collapsed: [],
       });
       poseOffsets = { 2: 300 };
@@ -759,7 +796,10 @@ describe('ThreadedNarrativeReader', () => {
 
     it('restores the prior live anchor when readOnly flips back to false (Return to live, Decision #5)', () => {
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+        anchors: {
+          threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+          chronological: null,
+        },
         collapsed: [],
       });
       const props = (readOnly: boolean) => (
@@ -809,7 +849,10 @@ describe('ThreadedNarrativeReader', () => {
       // whatever the CSS variable's CURRENT value is, so it only reports
       // the new position once DisplaySettings' effect has actually run.
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+        anchors: {
+          threads: { poseId: '2', threadId: 'thread-a', offsetPx: 40 },
+          chronological: null,
+        },
         collapsed: [],
       });
       document.documentElement.style.setProperty('--play-prose-size', '14px');
@@ -867,7 +910,10 @@ describe('ThreadedNarrativeReader', () => {
         // fix, out of scope for this pass) is a clean, harmless hit. This
         // isolates the test to Effect C's own guard.
         saveConversationAnchor('scene:1', {
-          anchor: { poseId: '1', threadId: 'thread-a', offsetPx: 0 },
+          anchors: {
+            threads: { poseId: '1', threadId: 'thread-a', offsetPx: 0 },
+            chronological: null,
+          },
           collapsed: [],
         });
         const props = (persistAnchor: boolean) => (
@@ -900,7 +946,10 @@ describe('ThreadedNarrativeReader', () => {
         // before the I3 fallback was added (pre-fix, a miss was a silent
         // no-op).
         saveConversationAnchor('scene:1', {
-          anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+          anchors: {
+            threads: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+            chronological: null,
+          },
           collapsed: [],
         });
         rerender(props(false));
@@ -936,11 +985,14 @@ describe('ThreadedNarrativeReader', () => {
       expect(loadConversationAnchor('scene:1')).toBeNull();
 
       await new Promise((resolve) => setTimeout(resolve, 350));
-      expect(loadConversationAnchor('scene:1')?.anchor).toEqual({
+      // Chronological mode writes into its OWN anchor slot (#3759 review
+      // finding I5) -- switching modes must never write over Threads'.
+      expect(loadConversationAnchor('scene:1')?.anchors.chronological).toEqual({
         poseId: '1',
         threadId: 'thread-a',
         offsetPx: -40,
       });
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toBeNull();
     });
 
     it('does not persist a Chronological-view anchor while a non-room conversation tab is active (#3759 review finding I4)', async () => {
@@ -977,7 +1029,10 @@ describe('ThreadedNarrativeReader', () => {
         };
       });
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '50', threadId: 'thread-a', offsetPx: 0 },
+        anchors: {
+          threads: null,
+          chronological: { poseId: '50', threadId: 'thread-a', offsetPx: 0 },
+        },
         collapsed: [],
       });
 
@@ -1015,7 +1070,10 @@ describe('ThreadedNarrativeReader', () => {
     it('falls back to the end of the loaded Chronological page when the anchored pose is not found (#3759 review finding I3)', () => {
       savePlayPreferences({ ...DEFAULT_PLAY_PREFERENCES, readerMode: 'chronological' });
       saveConversationAnchor('scene:1', {
-        anchor: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+        anchors: {
+          threads: null,
+          chronological: { poseId: '999', threadId: 'thread-z', offsetPx: 0 },
+        },
         collapsed: [],
       });
 
@@ -1033,6 +1091,214 @@ describe('ThreadedNarrativeReader', () => {
       // away from 0 -- a no-op/pre-fix implementation (idx === -1 silently
       // returning) would leave it there.
       expect(chronoContainer.scrollTop).toBeGreaterThan(0);
+    });
+
+    it('widens the window to include an anchored pose outside the default tail, instead of jumping to the bottom (#3759 review finding I2)', () => {
+      const many = Array.from({ length: 51 }, (_, i) => {
+        const id = i + 1;
+        return {
+          ...interaction(id, `pose ${id}`, 'thread-a'),
+          timestamp: `2026-01-01T00:${String(id).padStart(2, '0')}:00Z`,
+        };
+      });
+      saveConversationAnchor('scene:1', {
+        anchors: {
+          threads: { poseId: '10', threadId: 'thread-a', offsetPx: 0 },
+          chronological: null,
+        },
+        collapsed: [],
+      });
+      poseOffsets = { 10: 0 };
+
+      const { ancestor } = renderInScrollAncestor(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={many}
+          fetchNextPage={vi.fn()}
+        />
+      );
+
+      // Pose 10 sits at flat index 9 -- well outside the default tail window
+      // (interactions.length - 20 = 31), which a plain tail-slice alone
+      // would never include. A bottom-jump implementation would never
+      // render it at all.
+      expect(document.querySelector('[data-pose-id="10"]')).not.toBeNull();
+      // The real fallback never fired -- scrollTop reflects the anchor's own
+      // computed position, not a jump to scrollHeight.
+      expect(ancestor.scrollTop).toBe(0);
+      // And the stored anchor itself is untouched by this restore.
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
+        poseId: '10',
+        threadId: 'thread-a',
+        offsetPx: 0,
+      });
+    });
+
+    it('suppresses the anchor save the bottom-fallback scroll itself would otherwise trigger, so a genuine miss never overwrites the real anchor (#3759 review finding I2)', async () => {
+      // Pose 999 is genuinely absent from `interactions` (not merely outside
+      // the tail window) -- the widen path can't help, so this exercises the
+      // bottom-fallback itself.
+      saveConversationAnchor('scene:1', {
+        anchors: {
+          threads: { poseId: '999', threadId: 'thread-z', offsetPx: 40 },
+          chronological: null,
+        },
+        collapsed: [],
+      });
+      poseOffsets = { 1: 0 };
+      const props = (readOnly: boolean) => (
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+          readOnly={readOnly}
+        />
+      );
+      // Mount read-only first (restore doesn't run yet) so `ancestor` exists
+      // to stub `scrollHeight` on directly, mirroring the I3 fallback test
+      // above.
+      const { rerenderInner, ancestor } = renderInScrollAncestor(props(true));
+      Object.defineProperty(ancestor, 'scrollHeight', { value: 5000, configurable: true });
+      rerenderInner(props(false)); // triggers the restore + bottom-fallback now that the stub is in place
+
+      expect(ancestor.scrollTop).toBe(5000);
+
+      // A real browser fires a native 'scroll' event as a side effect of
+      // that fallback's own `scrollTop` write -- simulate it (jsdom doesn't
+      // fire one automatically for a plain property assignment) and let the
+      // debounced save listener see it.
+      fireEvent.scroll(ancestor);
+      await new Promise((resolve) => setTimeout(resolve, 350));
+
+      // The suppression flag absorbs exactly that one scroll -- the original
+      // anchor (pose 999) survives unchanged, never overwritten with
+      // whatever pose the fallback scroll landed on.
+      expect(loadConversationAnchor('scene:1')?.anchors.threads).toEqual({
+        poseId: '999',
+        threadId: 'thread-z',
+        offsetPx: 40,
+      });
+    });
+  });
+
+  describe('collapse persistence guard (#3759 review finding I1)', () => {
+    it('does not persist a thread-collapse toggle while a non-room conversation tab is active (persistAnchor=false)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[
+            interaction(1, 'older root', 'thread-a'),
+            interaction(2, 'newer root', 'thread-b'),
+          ]}
+          fetchNextPage={vi.fn()}
+          persistAnchor={false}
+        />
+      );
+      // thread-b (more recent) starts expanded -- collapse it. The toggle
+      // still WORKS (in-memory `collapsed` state changes, per Decision #5 --
+      // a reference/narrowed reader may still collapse threads for its own
+      // reading session), it just must not write into shared storage.
+      await user.click(screen.getByRole('button', { name: /writer 2.*1 pose/i }));
+      expect(screen.queryByText('newer root')).not.toBeInTheDocument();
+      expect(loadConversationAnchor('scene:1')).toBeNull();
+    });
+
+    it('does not persist a thread-collapse toggle while reading a historical reference (readOnly)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={[
+            interaction(1, 'older root', 'thread-a'),
+            interaction(2, 'newer root', 'thread-b'),
+          ]}
+          fetchNextPage={vi.fn()}
+          readOnly
+        />
+      );
+      await user.click(screen.getByRole('button', { name: /writer 2.*1 pose/i }));
+      expect(screen.queryByText('newer root')).not.toBeInTheDocument();
+      expect(loadConversationAnchor('scene:1')).toBeNull();
+    });
+  });
+
+  describe('deep-link target seek (#3759 review finding C2)', () => {
+    it('seeds the window to include a target pose outside the default tail window, scrolls to it, and highlights it', () => {
+      const many = Array.from({ length: 51 }, (_, i) => {
+        const id = i + 1;
+        return {
+          ...interaction(id, `pose ${id}`, 'thread-a'),
+          timestamp: `2026-01-01T00:${String(id).padStart(2, '0')}:00Z`,
+        };
+      });
+      const scrollIntoViewSpy = vi
+        .spyOn(Element.prototype, 'scrollIntoView')
+        .mockImplementation(() => {});
+
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          interactions={many}
+          fetchNextPage={vi.fn()}
+          readOnly
+          targetPoseId="10"
+        />
+      );
+
+      // Pose 10 sits at flat index 9 -- well outside the default tail window
+      // (interactions.length - 20 = 31, i.e. only the last-20-through-50th
+      // poses render by default), which is not reachable without "Load
+      // earlier" under the old tail-slice-only behavior.
+      const targetEl = document.querySelector('[data-pose-id="10"]');
+      expect(targetEl).not.toBeNull();
+      expect(scrollIntoViewSpy).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
+      expect(targetEl).toHaveAttribute('data-highlighted', 'true');
+
+      scrollIntoViewSpy.mockRestore();
+    });
+
+    it('clears the highlight again after the brief highlight window elapses', async () => {
+      vi.useFakeTimers();
+      try {
+        const many = Array.from({ length: 51 }, (_, i) => {
+          const id = i + 1;
+          return {
+            ...interaction(id, `pose ${id}`, 'thread-a'),
+            timestamp: `2026-01-01T00:${String(id).padStart(2, '0')}:00Z`,
+          };
+        });
+        vi.spyOn(Element.prototype, 'scrollIntoView').mockImplementation(() => {});
+
+        render(
+          <ThreadedNarrativeReader
+            sceneId="1"
+            conversationKey="scene:1"
+            interactions={many}
+            fetchNextPage={vi.fn()}
+            readOnly
+            targetPoseId="10"
+          />
+        );
+
+        expect(document.querySelector('[data-pose-id="10"]')).toHaveAttribute(
+          'data-highlighted',
+          'true'
+        );
+
+        await vi.advanceTimersByTimeAsync(2100);
+
+        expect(document.querySelector('[data-pose-id="10"]')).not.toHaveAttribute(
+          'data-highlighted'
+        );
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 });

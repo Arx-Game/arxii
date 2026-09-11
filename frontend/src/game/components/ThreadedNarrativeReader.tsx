@@ -1,14 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
-
-const INITIAL_PAGE_SIZE = 20;
 import { ChevronDown, ChevronRight, MessageCircle, Reply } from 'lucide-react';
 import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
-import type { ConversationAnchorState } from '../playPreferences';
+import type { ReadingAnchor } from '../playPreferences';
 import {
   loadConversationAnchor,
   saveConversationAnchor,
@@ -16,6 +14,8 @@ import {
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
 import { markConversationRead } from '../playQueries';
+
+const INITIAL_PAGE_SIZE = 20;
 
 /**
  * Wraps one rendered pose in the element `usePoseReadTracking` dwell-tracks.
@@ -32,10 +32,13 @@ import { markConversationRead } from '../playQueries';
 function PoseReadTarget({
   pose,
   observe,
+  highlighted,
   children,
 }: {
   pose: { id: number; timestamp: string };
   observe: (element: HTMLElement, pose: { id: number; timestamp: string }) => () => void;
+  /** True for ~2s right after this pose was scrolled to as a deep-link target (#3759 C2). */
+  highlighted?: boolean;
   children: ReactNode;
 }) {
   const ref = useRef<HTMLDivElement>(null);
@@ -53,9 +56,22 @@ function PoseReadTarget({
   // `data-pose-id` is the stable DOM handle the anchor system (#3759 Wave 6)
   // uses to find "the pose the user was reading" again after a resize, font
   // change, or history-page insertion -- see findScrollContainer/
-  // findTopVisiblePoseId below.
+  // findTopVisiblePoseId below. `data-highlighted` is the same kind of handle
+  // for the deep-link target highlight (#3759 review finding C2): a
+  // CSS-only, transition-based ring rather than an animation, so it degrades
+  // to an instant, non-distracting state change under `prefers-reduced-motion`
+  // (see the `motion-reduce:transition-none` utility below).
   return (
-    <div ref={ref} data-pose-id={pose.id}>
+    <div
+      ref={ref}
+      data-pose-id={pose.id}
+      data-highlighted={highlighted ? 'true' : undefined}
+      className={
+        highlighted
+          ? 'rounded ring-2 ring-primary transition-shadow duration-300 motion-reduce:transition-none'
+          : undefined
+      }
+    >
       {children}
     </div>
   );
@@ -124,6 +140,23 @@ function findTopVisiblePoseId(container: HTMLElement): { poseId: string; offsetP
 interface ThreadedNarrativeReaderProps {
   sceneId: string;
   conversationKey: string;
+  /**
+   * The REAL server-format conversation ref (#3759 review finding C1) --
+   * what `_conversation()` on the backend actually emits for this
+   * conversation (e.g. `"scene:42"`, or a reference-mode's `reference.key`,
+   * which is already in that exact shape). Distinct from `conversationKey`,
+   * which stays the localStorage anchor/collapse key and can be a bare id
+   * (`GameWindow.tsx` passes `sceneFeed.sceneId` there, unchanged) --
+   * `conversationKey` and the server's conversation ref are NOT
+   * interchangeable, and conflating them is exactly how "Mark conversation
+   * read" silently no-op'd in production (sent a bare scene id where the
+   * server expects `"scene:<id>"`, so no row's ref ever matched). Optional
+   * and defaults to `conversationKey` purely so standalone/unit-test callers
+   * that don't care about the read-marking wire format are unaffected --
+   * every real caller (`GameWindow.tsx`) supplies the correct value
+   * explicitly.
+   */
+  conversationRef?: string;
   interactions: Interaction[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
@@ -145,6 +178,21 @@ interface ThreadedNarrativeReaderProps {
    * passes `activeConvKey === 'room'`.
    */
   persistAnchor?: boolean;
+  /**
+   * The pose id a deep link (a search result or a "Recent conversations" row
+   * in `HistoryNavigator`) opened this reader to (#3759 review finding C2).
+   * `GamePage.tsx`'s reference-mode `interactions` prop is a fixed +-25-pose
+   * window around this pose, but the reader's own tail-slice
+   * (`historyStart`) otherwise always shows the LAST `INITIAL_PAGE_SIZE`
+   * poses of whatever window it's handed -- for a target sitting anywhere
+   * but the last 20 of that window, the tail-slice alone renders everything
+   * BUT the pose the user actually opened. When set and present in
+   * `interactions`, the reader widens `historyStartOverride` to include it
+   * (with a little context above), then scrolls to and briefly highlights
+   * its `[data-pose-id]` element once mounted. Absent in live mode, where
+   * the existing tail-slice default is unaffected.
+   */
+  targetPoseId?: string;
 }
 
 interface Group {
@@ -156,6 +204,7 @@ interface Group {
 export function ThreadedNarrativeReader({
   sceneId,
   conversationKey,
+  conversationRef,
   interactions,
   hasNextPage,
   fetchNextPage,
@@ -165,8 +214,31 @@ export function ThreadedNarrativeReader({
   onReply,
   readOnly = false,
   persistAnchor = true,
+  targetPoseId,
 }: ThreadedNarrativeReaderProps) {
   const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
+  // #3759 review finding, minor fold-in: `historyStartOverride` is
+  // component-local, live-feed tail-slice state. Entering/leaving reference
+  // mode reuses this SAME component instance when the scene matches
+  // (Decision #5), but a reference's `interactions` prop is a completely
+  // different (smaller, fixed +-25-pose window) array than the live feed's --
+  // a stale override index computed against one array is meaningless (or
+  // out-of-bounds) against the other. Reset on every ACTUAL readOnly
+  // transition (never on mount, where there is nothing stale to clear) --
+  // guarded by a ref rather than a bare `[readOnly]` dependency so it never
+  // fires on the initial render. Declared as the FIRST effect in this
+  // component (before restoreThreadsAnchor/Effect A/B/the deep-link seek
+  // effect below, all of which can also write `historyStartOverride`) so
+  // that whichever of THOSE effects fires in the SAME commit -- entering
+  // reference mode WITH a target pose, or leaving it back into a live anchor
+  // miss -- runs its own `setHistoryStartOverride` call AFTER this one in
+  // the same effect flush and therefore wins (same-batch, last-call-wins).
+  const prevReadOnlyForResetRef = useRef(readOnly);
+  useEffect(() => {
+    if (prevReadOnlyForResetRef.current === readOnly) return;
+    prevReadOnlyForResetRef.current = readOnly;
+    setHistoryStartOverride(null);
+  }, [readOnly]);
   const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
   const visibleInteractions = interactions.slice(historyStart);
   const groups = useMemo(() => {
@@ -249,7 +321,7 @@ export function ThreadedNarrativeReader({
       interactions[0].timestamp
     );
     setLocallyReadBefore(before);
-    markConversationRead(conversationKey, before).catch((error: unknown) => {
+    markConversationRead(conversationRef ?? conversationKey, before).catch((error: unknown) => {
       console.error('Failed to mark conversation read', error);
     });
   };
@@ -276,14 +348,40 @@ export function ThreadedNarrativeReader({
   // write the same localStorage row, so each write re-reads whatever the
   // OTHER side most recently saved instead of layering over a stale
   // mount-time snapshot (`storedAnchorState` is only ever fresh at mount).
-  const persistAnchorState = (overrides: Partial<ConversationAnchorState>) => {
+  //
+  // `anchor`, when present, writes into whichever mode's own slot is
+  // CURRENTLY ACTIVE (`anchors.threads` or `anchors.chronological`) --
+  // Threads and Chronological "share content and read state ... but keep
+  // their own anchor" (ratified Decision #2, #3759 review finding I5): a
+  // single shared `anchor` field meant switching reader mode inherited (then
+  // clobbered, on the next save) the OTHER mode's own remembered position.
+  const persistAnchorState = (overrides: {
+    anchor?: ReadingAnchor | null;
+    collapsed?: string[];
+  }) => {
     const current = loadConversationAnchor(conversationKey);
+    const currentAnchors = current?.anchors ?? { threads: null, chronological: null };
+    const nextAnchors =
+      'anchor' in overrides
+        ? {
+            ...currentAnchors,
+            [chronological ? 'chronological' : 'threads']: overrides.anchor ?? null,
+          }
+        : currentAnchors;
     saveConversationAnchor(conversationKey, {
-      anchor: 'anchor' in overrides ? (overrides.anchor ?? null) : (current?.anchor ?? null),
+      anchors: nextAnchors,
       collapsed: overrides.collapsed ?? current?.collapsed ?? [],
     });
   };
-  const persistCollapsed = (next: Set<string>) => persistAnchorState({ collapsed: [...next] });
+  // Gate the WRITE only (#3759 review finding I1) -- collapsing threads stays
+  // allowed while reading a reference or a non-room conversation tab
+  // (Decision #5 governs the STORED state, not the in-memory `collapsed`
+  // React state above); it must just never corrupt someone ELSE's stored
+  // row. Same two conditions the anchor-save paths below already gate on.
+  const persistCollapsed = (next: Set<string>) => {
+    if (readOnly || !persistAnchor) return;
+    persistAnchorState({ collapsed: [...next] });
+  };
   const toggleThread = (key: string) =>
     setCollapsed((previous) => {
       const next = new Set(previous);
@@ -332,34 +430,71 @@ export function ThreadedNarrativeReader({
   const conversationKeyRef = useRef(conversationKey);
   conversationKeyRef.current = conversationKey;
 
+  // #3759 review finding I2: an anchor older than the default tail window is
+  // the COMMON case, not an edge case -- before falling back to scrolling to
+  // the bottom, check whether the anchored pose exists ANYWHERE in the full
+  // `interactions` array (not just the currently-sliced tail window) and, if
+  // so, widen the window to include it (a few poses of context above it too)
+  // instead of jumping away. Shared with the deep-link target-seek effect
+  // below (#3759 review finding C2), which needs the identical mechanism.
+  const anchorRetryPendingRef = useRef(false);
+  const widenWindowToInclude = (poseId: string): boolean => {
+    const idx = interactions.findIndex((item) => String(item.id) === poseId);
+    if (idx === -1) return false;
+    const desiredStart = Math.max(0, idx - 5);
+    if (desiredStart >= historyStart) return false; // already covered -- not the miss case
+    setHistoryStartOverride(desiredStart);
+    anchorRetryPendingRef.current = true;
+    return true;
+  };
+  // Suppresses the scroll-triggered anchor SAVE the bottom-fallback's own
+  // programmatic `scrollTop`/`scrollToEnd()` would otherwise fire (#3759
+  // review finding I2) -- an unsuppressed fallback scroll reaches the
+  // debounced save listeners below, which would persist the bottom pose as
+  // the new anchor and destroy the user's actual saved place on the very
+  // reload meant to restore it. Shared between both views since only one is
+  // ever active (`chronological`) at a time.
+  const suppressNextAnchorSaveRef = useRef(false);
+
   const restoreThreadsAnchor = () => {
     const stored = loadConversationAnchor(conversationKeyRef.current);
-    if (!stored?.anchor) return;
+    const anchor = stored?.anchors?.threads;
+    if (!anchor) return;
     const container = findScrollContainer(rootRef.current);
     if (!container) return;
-    const target = container.querySelector<HTMLElement>(`[data-pose-id="${stored.anchor.poseId}"]`);
+    const target = container.querySelector<HTMLElement>(`[data-pose-id="${anchor.poseId}"]`);
     if (!target) {
       // Best-effort miss: the anchored pose isn't in the currently loaded/
       // expanded set (e.g. it's inside a collapsed thread, or on an older
-      // history page not yet fetched). GameWindow.tsx no longer applies its
-      // own scroll-to-bottom fallback once this scene has ANY persisted
-      // anchor (see its own bypass condition) -- so restoring that fallback
-      // here is what keeps a miss from silently stranding the reader at the
-      // very top instead (#3759 review finding I3).
+      // history page not yet fetched). Widen the window first (I2, above);
+      // only fall all the way back to the bottom once the pose is confirmed
+      // genuinely absent from `interactions` altogether.
+      if (widenWindowToInclude(anchor.poseId)) return;
+      // GameWindow.tsx no longer applies its own scroll-to-bottom fallback
+      // once this scene has ANY persisted anchor (see its own bypass
+      // condition) -- so restoring that fallback here is what keeps a
+      // genuine miss from silently stranding the reader at the very top
+      // instead (#3759 review finding I3).
+      suppressNextAnchorSaveRef.current = true;
       container.scrollTop = container.scrollHeight;
       return;
     }
     const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
-    container.scrollTop += targetTop - stored.anchor.offsetPx;
+    container.scrollTop += targetTop - anchor.offsetPx;
   };
 
   const restoreChronoAnchor = () => {
     const stored = loadConversationAnchor(conversationKeyRef.current);
-    if (!stored?.anchor) return;
-    const idx = chronologicalItems.findIndex((item) => String(item.id) === stored.anchor?.poseId);
+    const anchor = stored?.anchors?.chronological;
+    if (!anchor) return;
+    const idx = chronologicalItems.findIndex((item) => String(item.id) === anchor.poseId);
     if (idx === -1) {
+      // Same widen-before-fallback reasoning as restoreThreadsAnchor's own
+      // miss branch above (#3759 review finding I2).
+      if (widenWindowToInclude(anchor.poseId)) return;
       // Best-effort miss, same reasoning as restoreThreadsAnchor's fallback
       // above (#3759 review finding I3).
+      suppressNextAnchorSaveRef.current = true;
       chronoVirtualizer.scrollToEnd();
       return;
     }
@@ -373,6 +508,17 @@ export function ThreadedNarrativeReader({
     if (chronological) restoreChronoAnchor();
     else restoreThreadsAnchor();
   };
+
+  // Retries a restore once a widen (I2, above) has actually taken effect --
+  // `widenWindowToInclude` only schedules the wider `historyStartOverride`;
+  // the pose isn't mounted (and thus findable) until the resulting re-render
+  // commits, which is exactly when `historyStart` changes.
+  useEffect(() => {
+    if (!anchorRetryPendingRef.current) return;
+    anchorRetryPendingRef.current = false;
+    restoreAnchor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [historyStart]);
 
   // Effect A: initial restore, once real pose data has arrived. Mirrors the
   // `defaultSeeded` pattern above -- this component can mount (keyed by
@@ -440,6 +586,43 @@ export function ThreadedNarrativeReader({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [preferences.proseSize, preferences.proseFamily, preferences.measure]);
 
+  // --- Deep-link target seek (#3759 review finding C2) ----------------------
+  // `PlayContextView` hands the reference reader a fixed +-25-pose window
+  // around the opened pose, but this reader's own tail-slice
+  // (`historyStart`) always shows only the LAST `INITIAL_PAGE_SIZE` poses of
+  // whatever window it's given -- for a target sitting anywhere earlier than
+  // that (the common case: a search result or "Recent conversations" row
+  // rarely lands in the newest 20 poses of its own +-25 window), the
+  // tail-slice alone renders everything BUT the pose the user actually
+  // opened. Reuses `widenWindowToInclude` (I2, above) to seed the window,
+  // then scrolls to and briefly highlights the target once its row mounts.
+  // `targetSeekDoneRef` guards this so it runs once per target -- a NEW
+  // target (switching between reference entries without unmounting, e.g. two
+  // search results in the same scene) resets it because the ref stores the
+  // id it last completed, not just a boolean.
+  const targetSeekDoneRef = useRef<string | null>(null);
+  const [highlightedPoseId, setHighlightedPoseId] = useState<string | null>(null);
+  useEffect(() => {
+    if (!targetPoseId) return;
+    if (targetSeekDoneRef.current === targetPoseId) return;
+    const idx = interactions.findIndex((item) => String(item.id) === targetPoseId);
+    if (idx === -1) return; // not in the loaded window at all -- nothing to seek to
+    const desiredStart = Math.max(0, idx - 5);
+    if (historyStart > desiredStart) {
+      setHistoryStartOverride(desiredStart);
+      return; // the re-render with the widened window re-runs this effect
+    }
+    const targetEl = rootRef.current?.querySelector<HTMLElement>(
+      `[data-pose-id="${targetPoseId}"]`
+    );
+    if (!targetEl) return; // not mounted on this pass yet (e.g. inside a collapsed thread)
+    targetSeekDoneRef.current = targetPoseId;
+    targetEl.scrollIntoView({ block: 'center' });
+    setHighlightedPoseId(targetPoseId);
+    const timeout = setTimeout(() => setHighlightedPoseId(null), 2000);
+    return () => clearTimeout(timeout);
+  }, [targetPoseId, interactions, historyStart]);
+
   // Threads-view scroll listener (#3759 review finding C1): attached at
   // `document` with `capture: true` rather than resolved-once onto a
   // specific ancestor element. Native 'scroll' events don't bubble, but DO
@@ -471,6 +654,13 @@ export function ThreadedNarrativeReader({
         // never persist a reference-mode scroll, or one made while a
         // different conversation tab is active (#3759 review findings I3/I4)
         if (readOnlyRef.current || !persistAnchorRef.current) return;
+        // never persist the anchor-miss bottom-fallback's OWN scroll (#3759
+        // review finding I2) -- that would destroy the real anchor it just
+        // failed to find, instead of leaving it alone for the next attempt.
+        if (suppressNextAnchorSaveRef.current) {
+          suppressNextAnchorSaveRef.current = false;
+          return;
+        }
         const found = findTopVisiblePoseId(container);
         if (!found) return;
         const threadId =
@@ -498,6 +688,12 @@ export function ThreadedNarrativeReader({
     if (chronoScrollTimeout.current) clearTimeout(chronoScrollTimeout.current);
     chronoScrollTimeout.current = setTimeout(() => {
       if (readOnly || !persistAnchor) return;
+      // Same anchor-miss-fallback suppression as the Threads-view listener
+      // above (#3759 review finding I2).
+      if (suppressNextAnchorSaveRef.current) {
+        suppressNextAnchorSaveRef.current = false;
+        return;
+      }
       const container = chronoParentRef.current;
       if (!container) return;
       const found = findTopVisiblePoseId(container);
@@ -583,7 +779,7 @@ export function ThreadedNarrativeReader({
               ref={chronoParentRef}
               onScroll={handleChronoScroll}
               data-testid="chrono-scroll-container"
-              style={{ height: '70vh', overflow: 'auto' }}
+              className="min-h-0 flex-1 overflow-y-auto"
             >
               <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
@@ -605,6 +801,7 @@ export function ThreadedNarrativeReader({
                       <PoseReadTarget
                         pose={{ id: item.id, timestamp: item.timestamp }}
                         observe={observe}
+                        highlighted={String(item.id) === highlightedPoseId}
                       >
                         <p className="text-xs text-muted-foreground">
                           {item.thread_id ? 'In a thread' : 'Standalone'}
@@ -697,6 +894,7 @@ export function ThreadedNarrativeReader({
                             key={`pose-${item.id}`}
                             pose={{ id: item.id, timestamp: item.timestamp }}
                             observe={observe}
+                            highlighted={String(item.id) === highlightedPoseId}
                           >
                             {poseCollapsed ? (
                               <article

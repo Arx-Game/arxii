@@ -824,6 +824,7 @@ export function GamePage() {
               conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}
+              targetPoseId={reference?.poseId}
               onReturnToLive={returnToLive}
               referenceUnavailable={Boolean(reference && referenceUnavailable)}
               referenceLoading={Boolean(reference && referenceLoading)}
