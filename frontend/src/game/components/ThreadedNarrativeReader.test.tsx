@@ -377,18 +377,30 @@ describe('ThreadedNarrativeReader', () => {
       />
     );
     await user.click(screen.getByRole('button', { name: /chronological/i }));
-    const texts = screen.getAllByText(/first|second|third/).map((el) => el.textContent);
+    // Anchored (^...$) rather than a bare substring match: #3759 Wave 9 added
+    // a per-pose "Opening pose"/"Reply in <title>" role label (F4) whose
+    // title is an excerpt of the root pose's OWN content -- for thread-a's
+    // reply ("second"), that label literally reads "Reply in first" (the
+    // root pose's content is "first"), which a bare /first|second|third/
+    // substring match would also catch as a false "first".
+    const texts = screen.getAllByText(/^(first|second|third)$/).map((el) => el.textContent);
     expect(texts).toEqual(['first', 'second', 'third']);
   });
 
   it('windows a long chronological list instead of mounting every pose', async () => {
-    // INITIAL_PAGE_SIZE (20) caps the initially visible slice regardless of
-    // windowing, so a naive 300-interaction render would already show fewer
-    // than 300 nodes for the wrong reason. Load all of local history first
-    // (each click reveals another 20) so the chronological branch actually
-    // has all 300 items to render, and the bounded-mount assertion below
-    // only passes because of the virtualizer (see the offsetHeight stub in
-    // beforeEach above for why that's necessary under jsdom).
+    // #3759 Wave 9 (F1): the OLD version of this test had to click a
+    // whole-list "Load earlier history" button in a loop first, because the
+    // flat `historyStart` tail-slice capped Chronological's own data to the
+    // last `INITIAL_PAGE_SIZE` (20) poses regardless of virtualization --
+    // that whole-list windowing is gone (`chronologicalItems` now always
+    // sorts the FULL `interactions` array; see its own comment), and with no
+    // `hasNextPage` prop here, no "Load earlier history" button exists to
+    // click at all. The bounded-mount assertion below now passes purely
+    // because of `@tanstack/react-virtual` (see the offsetHeight stub in
+    // beforeEach above for why that's necessary under jsdom), which is the
+    // property this test actually exists to prove -- User Story 2 ("switch
+    // to Chronological and read EVERYTHING in one continuous timeline")
+    // without the DOM cost of mounting everything at once.
     const user = userEvent.setup();
     const many = Array.from({ length: 300 }, (_, i) =>
       interaction(i + 1, `pose ${i + 1}`, 'thread-a')
@@ -402,11 +414,6 @@ describe('ThreadedNarrativeReader', () => {
         fetchNextPage={vi.fn()}
       />
     );
-    let loadEarlier = screen.queryByRole('button', { name: /load earlier history/i });
-    while (loadEarlier) {
-      await user.click(loadEarlier);
-      loadEarlier = screen.queryByRole('button', { name: /load earlier history/i });
-    }
     await user.click(screen.getByRole('button', { name: /chronological/i }));
     const mountedPoses = container.querySelectorAll('[data-testid="scene-messages"]');
     expect(mountedPoses.length).toBeLessThan(300);
@@ -893,40 +900,43 @@ describe('ThreadedNarrativeReader', () => {
     });
 
     it('keeps the live anchor restored after deep-linking into reference mode and Return to live, instead of reverting to the tail slice a render later (#3759 review Fix round 1 IMPORTANT)', () => {
+      // #3759 Wave 9 (F1/F2) note on this test's history: the ORIGINAL bug
+      // this test guards against was a flat-array-position artifact --
+      // `historyStartOverride` was a single raw INDEX into the whole
+      // conversation, so a stale value left over from reference mode (a
+      // different, differently-sized `interactions` array) could coincidentally
+      // still be a valid-looking index into the LIVE array and get consumed
+      // directly, bypassing the widen-then-retry path that would otherwise
+      // re-establish it. That EXACT mechanism can no longer occur:
+      // `threadWindows` (the per-thread replacement) is keyed by thread id
+      // STRING, not by array position, and the live thread ('thread-a') and
+      // the reference thread ('thread-ref') below use deliberately different
+      // keys -- a stale entry for one key is simply never read while
+      // resolving the other, collision or not. The invariant this test
+      // exists to protect is still real and still worth covering, though:
+      // returning to live after a reference-mode detour must not silently
+      // strand a live anchor that was saved WHILE reference mode was open.
+      //
       // 30 live poses (ids 1-30, one thread), mounted with NO saved anchor
       // yet -- so the initial live mount needs no widen at all and
-      // `historyStartOverride` starts and stays null through the live
-      // phase (avoids a confound: an anchor needing ITS OWN mount-time
-      // widen would leave a coincidental non-null override that the
-      // reference-mode transition would inherit for unrelated reasons).
+      // `threadWindows` starts and stays empty through the live phase.
       //
-      // Deep-linking into reference mode with a target pose at flat index 0
-      // of the reference's own (different, larger) interactions array
-      // GENUINELY widens `historyStartOverride` to 0 (a real C2 widen, not
-      // a stale carry-over, since override started clean at null).
+      // Deep-linking into reference mode with a target pose (id 101) that's
+      // outside its own thread's default tail genuinely widens the
+      // reference thread's ('thread-ref') own `threadWindows` entry (a real
+      // C2 widen).
       //
-      // The live anchor (pose 5, outside the live array's own default tail
+      // The live anchor (pose 5, outside the live thread's own default tail
       // of ids 11-30) is saved WHILE still in reference mode -- mirroring
       // "a scroll happened live in the background" (the existing "restores
       // the prior live anchor..." test above uses the same narrative). On
-      // Return to live, `historyStartOverride` is still the stale 0 left
-      // over from reference mode at the moment this commit renders -- with
-      // a `useEffect`-based reset (the ORIGINAL version of this fix), that
-      // stale 0 (which happens to also be a valid "show everything" index
-      // for the live array) lets Effect B find pose 5 DIRECTLY and scroll
-      // to it with a raw `scrollTop` mutation, never calling
-      // `widenWindowToInclude` at all -- then the reset's OWN
-      // `setHistoryStartOverride(null)` fires in the SAME commit's effect
-      // flush and, because it's a GENUINE value change this time
-      // (0 -> null, not a no-op), schedules a real extra render that
-      // narrows back to the true default tail (ids 11-30), evicting pose 5
-      // with nothing left to bring it back (I2's self-correcting retry only
-      // engages when `widenWindowToInclude` itself was the one that set the
-      // override, which never happened here). The render-time reset (this
-      // fix) narrows the window in the SAME render Effect B reads, so it
-      // can never find pose 5 directly -- forcing it through the normal
-      // widen-then-retry path instead, which correctly re-establishes and
-      // KEEPS the window.
+      // Return to live, the render-time reset (still necessary here even
+      // though the ORIGINAL index-collision bug can't recur -- see its own
+      // declaration-site comment for why `threadWindows` specifically still
+      // needs it) clears the stale 'thread-ref' entry; Effect B's restore
+      // then finds pose 5 missing from live's default tail (ids 11-30),
+      // widens 'thread-a' via the normal widen-then-retry path (I2), and
+      // the retry re-render finds and restores pose 5.
       const live = Array.from({ length: 30 }, (_, i) => {
         const id = i + 1;
         return {
@@ -969,8 +979,8 @@ describe('ThreadedNarrativeReader', () => {
       // No anchor yet -- default tail, nothing to restore.
       expect(ancestor.querySelector('[data-pose-id="5"]')).toBeNull();
 
-      // Deep-link into reference mode -- genuinely widens the reference
-      // window's own historyStartOverride to 0.
+      // Deep-link into reference mode -- genuinely widens 'thread-ref''s own
+      // threadWindows entry.
       rerenderInner(referenceProps);
 
       // A live anchor now exists (as if new poses arrived, or the user
@@ -1328,10 +1338,13 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
 
-      // Pose 10 sits at flat index 9 -- well outside the default tail window
-      // (interactions.length - 20 = 31), which a plain tail-slice alone
-      // would never include. A bottom-jump implementation would never
-      // render it at all.
+      // #3759 Wave 9: pose 10 sits at index 9 of this thread's own 51-pose
+      // list -- well outside its default per-thread tail window (51 - 20 =
+      // start index 31), which the untouched default alone would never
+      // include. A bottom-jump implementation would never render it at all;
+      // the actual fix widens 'thread-a' to show the whole thread (#3759
+      // Wave 9 F1/F2's own simplification -- see `widenThreadWindow`'s
+      // comment) rather than jumping away.
       expect(document.querySelector('[data-pose-id="10"]')).not.toBeNull();
       // The real fallback never fired -- scrollTop reflects the anchor's own
       // computed position, not a jump to scrollHeight.
@@ -1464,10 +1477,12 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
 
-      // Pose 10 sits at flat index 9 -- well outside the default tail window
-      // (interactions.length - 20 = 31, i.e. only the last-20-through-50th
-      // poses render by default), which is not reachable without "Load
-      // earlier" under the old tail-slice-only behavior.
+      // #3759 Wave 9: pose 10 sits at index 9 of this (sole) thread's own
+      // 51-pose list -- well outside its default per-thread tail window
+      // (51 - 20 = start index 31, i.e. only the last-20-through-50th poses
+      // render by default), which is not reachable without a "Load earlier
+      // replies" click under the default per-thread window alone. The C2
+      // seek widens 'thread-a' to show the whole thread instead.
       const targetEl = document.querySelector('[data-pose-id="10"]');
       expect(targetEl).not.toBeNull();
       expect(scrollIntoViewSpy).toHaveBeenCalledWith(expect.objectContaining({ block: 'center' }));
@@ -1557,6 +1572,211 @@ describe('ThreadedNarrativeReader', () => {
       );
 
       scrollIntoViewSpy.mockRestore();
+    });
+  });
+
+  describe('per-thread windowing and demo-fidelity gaps (#3759 Wave 9)', () => {
+    /** N poses in one thread, with real, monotonically increasing timestamps
+     * (unlike the bare `interaction()` helper, whose own timestamp template
+     * only produces a valid string for single-digit ids). */
+    const manyInThread = (count: number, threadId = 'thread-a', startId = 1): Interaction[] =>
+      Array.from({ length: count }, (_, i) => {
+        const id = startId + i;
+        return {
+          ...interaction(id, `pose ${id}`, threadId),
+          timestamp: `2026-01-0${1 + Math.floor(i / 1000)}T${String(Math.floor(i / 60) % 24).padStart(2, '0')}:${String(i % 60).padStart(2, '0')}:00Z`,
+        };
+      });
+
+    it('renders every thread header on mount, oldest roots first, without any "Load earlier history" click (#3759 review finding F1, the demo-fidelity reviewer\'s own proposed mechanical companion)', () => {
+      // 25 single-pose threads (> THREAD_PAGE_SIZE) spread across a wide
+      // timeline -- under the OLD flat `historyStart` tail-slice (taken
+      // BEFORE grouping by thread_id), only the last 20 by ARRAY POSITION
+      // would have rendered at all; the other 5 threads' headers would have
+      // been entirely absent, not even collapsed. `groups` now derives from
+      // the full `interactions` array, so every thread gets a header row
+      // regardless of where its pose falls.
+      const threads = Array.from({ length: 25 }, (_, i) => ({
+        ...interaction(i + 1, `root ${i + 1}`, `thread-${i}`),
+        timestamp: `2026-01-01T${String(i).padStart(2, '0')}:00:00Z`,
+      }));
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={threads}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      expect(
+        screen.queryByRole('button', { name: /load earlier history/i })
+      ).not.toBeInTheDocument();
+      expect(document.querySelectorAll('[data-thread-id]')).toHaveLength(25);
+    });
+
+    it('windows an expanded thread to THREAD_PAGE_SIZE poses by default, with a per-thread "Load earlier replies" control that reveals more on click', async () => {
+      // The issue's own Acceptance workload: a single, very long thread must
+      // only render THREAD_PAGE_SIZE (20) DOM nodes by default when
+      // expanded, not all of them -- the sole thread here is also
+      // necessarily the "most recently active" one, so it starts expanded
+      // by the existing default-collapse rule.
+      const user = userEvent.setup();
+      const { container } = render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={manyInThread(45)}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      expect(container.querySelectorAll('[data-testid="scene-messages"]')).toHaveLength(20);
+      const loadEarlier = screen.getByRole('button', {
+        name: /load earlier replies · 25 before this page/i,
+      });
+
+      await user.click(loadEarlier);
+
+      expect(container.querySelectorAll('[data-testid="scene-messages"]')).toHaveLength(40);
+      expect(
+        screen.getByRole('button', { name: /load earlier replies · 5 before this page/i })
+      ).toBeInTheDocument();
+    });
+
+    it('surfaces a "Load later replies" control, and lets it catch a thread back up, once new poses arrive after the user has paged into that thread\'s history', async () => {
+      // #3759 Wave 9 open decision (see the wave brief section 1 and this
+      // PR's report for the full reasoning): `threadWindows` freezes an
+      // ABSOLUTE `end` index once a thread's window is first touched (by a
+      // "Load earlier replies" click here), unlike the untouched DEFAULT
+      // (which always recomputes from the thread's CURRENT length and so
+      // never falls behind). If poses then arrive in that thread while the
+      // frozen `end` is still the old, smaller length, the window
+      // genuinely no longer reaches either true end -- "Load earlier
+      // replies" AND "Load later replies" both need to be live at once,
+      // which this test also exercises.
+      const user = userEvent.setup();
+      const { container, rerender } = render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={manyInThread(45)}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      await user.click(
+        screen.getByRole('button', { name: /load earlier replies · 25 before this page/i })
+      );
+      expect(container.querySelectorAll('[data-testid="scene-messages"]')).toHaveLength(40);
+      expect(screen.queryByRole('button', { name: /load later replies/i })).not.toBeInTheDocument();
+
+      // 5 more poses arrive live in the same thread -- the frozen window
+      // (indices 5..45 of what's now a 50-pose thread) no longer reaches
+      // either the true start (0) or the true end (50).
+      rerender(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={manyInThread(50)}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      expect(
+        screen.getByRole('button', { name: /load earlier replies · 5 before this page/i })
+      ).toBeInTheDocument();
+      const loadLater = screen.getByRole('button', { name: /load later replies/i });
+
+      await user.click(loadLater);
+
+      // Window is now [5, 50) of the 50-pose thread -- 45 poses shown, the
+      // 5 new arrivals now included, and "Load later" has nothing left to
+      // reveal.
+      expect(container.querySelectorAll('[data-testid="scene-messages"]')).toHaveLength(45);
+      expect(screen.queryByRole('button', { name: /load later replies/i })).not.toBeInTheDocument();
+    });
+
+    it("shows the root pose's excerpt and timestamp on the thread header (#3759 review finding F3)", () => {
+      const longContent =
+        'There is a difference between knowing a thing and being able to prove it, and the difference matters more than either of us would like to admit tonight.';
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            { ...interaction(1, longContent, 'thread-a'), timestamp: '2026-01-01T00:01:00Z' },
+          ]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      // 84-char excerpt (the default `excerptOf` length) followed by an
+      // ellipsis, since `longContent` is well over 84 characters.
+      const excerpt = `${longContent.slice(0, 84)}…`;
+      expect(screen.getByText((text) => text.startsWith(excerpt))).toBeInTheDocument();
+      // Same locale-formatted timestamp convention PoseUnit.tsx uses for
+      // every per-pose timestamp elsewhere in the reader.
+      expect(
+        screen.getByText(new Date('2026-01-01T00:01:00Z').toLocaleString(), { exact: false })
+      ).toBeInTheDocument();
+    });
+
+    it('labels each pose "Opening pose" or "Reply in <title>" (#3759 review finding F4)', () => {
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            interaction(1, 'root content', 'thread-a'),
+            interaction(2, 'reply', 'thread-a'),
+          ]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      expect(screen.getByText('Opening pose')).toBeInTheDocument();
+      expect(screen.getByText('Reply in root content')).toBeInTheDocument();
+    });
+
+    it('jumps to and expands the most-recently-active thread when "Latest activity" is clicked (#3759 review finding F5)', async () => {
+      const user = userEvent.setup();
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            interaction(1, 'older root', 'thread-a'),
+            interaction(2, 'newer root', 'thread-b'),
+          ]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+      // thread-b (more recent) starts expanded -- collapse everything first
+      // so "Latest activity" has real work to do.
+      await user.click(screen.getByRole('button', { name: /collapse loaded threads/i }));
+      expect(screen.queryByText('newer root')).not.toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: /latest activity/i }));
+
+      expect(screen.getByText('newer root')).toBeInTheDocument();
+    });
+
+    it('never renders "Mark conversation read" while reading a historical reference (#3759 review finding F6)', () => {
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[interaction(1, 'first', 'thread-a')]}
+          fetchNextPage={vi.fn()}
+          readOnly
+        />
+      );
+      expect(
+        screen.queryByRole('button', { name: /mark conversation read/i })
+      ).not.toBeInTheDocument();
     });
   });
 });

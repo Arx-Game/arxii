@@ -15,7 +15,46 @@ import {
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
 import { markConversationRead } from '../playQueries';
 
-const INITIAL_PAGE_SIZE = 20;
+// #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
+// whole-list tail-slice size -- repurposed as the default number of a single
+// EXPANDED thread's own poses shown at once (see `threadWindows`/
+// `resolveThreadWindow` below). Renamed because its job changed: nothing
+// windows the flat list anymore, only individual threads.
+const THREAD_PAGE_SIZE = 20;
+
+/**
+ * A short, truncated preview of pose prose -- used for the thread header's
+ * opening-pose excerpt (#3759 Wave 9 review finding F3) and the per-pose
+ * "Reply in <title>" role label (F4) below. No shared truncation helper
+ * exists elsewhere in this codebase for this (checked: every other call site
+ * -- e.g. `StaffBugReportsPage.tsx`, `HubBrowser.tsx` -- inlines its own
+ * `.slice(n) + '...'`), so this stays a small, local helper rather than a
+ * new shared module for what only this file needs.
+ */
+function excerptOf(content: string, maxLength = 84): string {
+  const trimmed = content.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength).trimEnd()}…`;
+}
+
+/**
+ * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
+ * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
+ * parent-chip persistence -- "Opening pose" for a thread's own root pose,
+ * "Reply in <title>" for everything else in it. `Interaction`/the server's
+ * reply topology has no persisted thread-title field (`thread_id` is the
+ * only concept that exists), so `<title>` is derived the same way the
+ * approved demo derives one for a thread it creates on the fly
+ * (`title: p.paras[0].slice(0, 60)`, `arx-wide-reader.html`'s own `send()`):
+ * an excerpt of the thread's own root pose. Shared between Threads view
+ * (where `rootPose` is already in scope as `group.interactions[0]`) and
+ * Chronological view (where it's looked up via `groupByKey`, below) so both
+ * views render identical labels for the identical pose.
+ */
+function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): string {
+  if (!rootPose || rootPose.id === item.id) return 'Opening pose';
+  return `Reply in ${excerptOf(rootPose.content, 60)}`;
+}
 
 /**
  * Wraps one rendered pose in the element `usePoseReadTracking` dwell-tracks.
@@ -185,15 +224,15 @@ interface ThreadedNarrativeReaderProps {
    * The pose id a deep link (a search result or a "Recent conversations" row
    * in `HistoryNavigator`) opened this reader to (#3759 review finding C2).
    * `GamePage.tsx`'s reference-mode `interactions` prop is a fixed +-25-pose
-   * window around this pose, but the reader's own tail-slice
-   * (`historyStart`) otherwise always shows the LAST `INITIAL_PAGE_SIZE`
-   * poses of whatever window it's handed -- for a target sitting anywhere
-   * but the last 20 of that window, the tail-slice alone renders everything
-   * BUT the pose the user actually opened. When set and present in
-   * `interactions`, the reader widens `historyStartOverride` to include it
-   * (with a little context above), then scrolls to and briefly highlights
-   * its `[data-pose-id]` element once mounted. Absent in live mode, where
-   * the existing tail-slice default is unaffected.
+   * window around this pose, but a big thread within that window still only
+   * shows its own default per-thread tail (`THREAD_PAGE_SIZE`, #3759 Wave 9
+   * F1/F2) -- for a target sitting earlier than that, the default window
+   * alone renders everything BUT the pose the user actually opened. When set
+   * and present in `interactions`, the reader widens that thread's OWN
+   * `threadWindows` entry to include it (uncollapsing the thread too, if
+   * needed), then scrolls to and briefly highlights its `[data-pose-id]`
+   * element once mounted. Absent in live mode, where the existing
+   * per-thread default is unaffected.
    */
   targetPoseId?: string;
 }
@@ -201,6 +240,22 @@ interface ThreadedNarrativeReaderProps {
 interface Group {
   key: string;
   interactions: Interaction[];
+}
+
+/**
+ * A single thread's own per-thread pose window (#3759 Wave 9 F1/F2),
+ * replacing the old flat, whole-list `historyStartOverride`. `start`/`end`
+ * are indices into that thread's OWN `group.interactions` (its full pose
+ * list, not the whole conversation) -- both are always clamped against the
+ * group's current length before use (see `resolveThreadWindow`), so a stale
+ * entry from a differently-sized `interactions` array (e.g. carried over
+ * from reference mode) can never index out of bounds; see the render-time
+ * reset below for why a stale entry is cleared outright rather than relying
+ * on that clamp alone.
+ */
+interface ThreadWindow {
+  start: number;
+  end: number;
 }
 
 /** A wide, accessible reader for long-form scene poses. */
@@ -219,33 +274,54 @@ export function ThreadedNarrativeReader({
   persistAnchor = true,
   targetPoseId,
 }: ThreadedNarrativeReaderProps) {
-  const [historyStartOverride, setHistoryStartOverride] = useState<number | null>(null);
+  // #3759 Wave 9 (F1/F2): replaces the old flat, whole-list
+  // `historyStartOverride` -- one window per THREAD (keyed by `group.key`)
+  // instead of one for the whole list. See `ThreadWindow`'s own doc comment
+  // above and `resolveThreadWindow` below for how an absent entry (the
+  // common case) defaults.
+  const [threadWindows, setThreadWindows] = useState<Record<string, ThreadWindow>>({});
   // Declared here (rather than down in the deep-link seek section below,
   // where it's actually used) because the render-time reset immediately
   // below needs to clear it -- see that block's own comment.
   const targetSeekDoneRef = useRef<string | null>(null);
   // #3759 review finding, minor fold-in (Fix round 1: converted from a
   // useEffect to a render-time state adjustment -- see why below):
-  // `historyStartOverride` is component-local, live-feed tail-slice state.
+  // `threadWindows` is component-local, live-feed per-thread window state.
   // Entering/leaving reference mode reuses this SAME component instance when
   // the scene matches (Decision #5), but a reference's `interactions` prop
   // is a completely different (smaller, fixed +-25-pose window) array than
-  // the live feed's -- a stale override index computed against one array is
-  // meaningless (or out-of-bounds) against the other. Reset on every ACTUAL
-  // readOnly transition (never on mount, where there is nothing stale to
-  // clear).
+  // the live feed's -- so is every one of its per-thread `group.interactions`
+  // arrays. Reset on every ACTUAL readOnly transition (never on mount, where
+  // there is nothing stale to clear).
   //
-  // A `useEffect`-based reset (the original version of this fix) raced
-  // Effect B ("Return to live") and the C2 seek effect's OWN success path:
-  // both scroll the DOM directly WITHOUT calling `setHistoryStartOverride`
-  // themselves, so "last setState call in the same commit wins" never
-  // applied to them -- the reset's effect still fired and re-rendered to the
-  // tail slice on the NEXT tick, unmounting whatever they'd just scrolled
-  // to. Adjusting state during rendering (comparing the prop against a
-  // STATE-held previous value, React's own documented pattern for this)
-  // commits the narrowed window in the SAME render Effect B/the seek effect
-  // will read when their OWN effects run after this commit -- not one
-  // render later.
+  // #3759 Wave 9 open decision (documented per the wave brief): unlike the
+  // OLD flat `historyStartOverride` (a single index into the whole list,
+  // where `slice(-shown)` degraded gracefully to "show everything" if
+  // `shown` ever exceeded the new array's length), `threadWindows` stores
+  // explicit `{ start, end }` INDICES per thread key. If a thread key
+  // happened to collide between reference and live mode (e.g. the same
+  // `thread_id` genuinely exists in both, as it would for the very thread a
+  // reference deep-link opened), reusing a stale `{ start: 0, end: 25 }`
+  // entry against a much larger live `group.interactions` would silently
+  // show that thread's OLDEST 25 poses instead of its most recent -- a real,
+  // silently-wrong slice, not a graceful degrade. `collapsed` (the
+  // thread-collapse Set, just below) is NOT reset the same way: a stale
+  // collapsed/expanded entry on a colliding key is a minor "wrong thread
+  // defaulted open" UX quirk, never a wrong SET of rendered poses, so it's
+  // left as pre-existing, out-of-scope behavior. `threadWindows` doesn't get
+  // that same benefit of the doubt -- reset it.
+  //
+  // A `useEffect`-based reset (the original version of this fix, back when
+  // this was `historyStartOverride`) raced Effect B ("Return to live") and
+  // the C2 seek effect's OWN success path: both scroll the DOM directly
+  // WITHOUT calling `setThreadWindows` themselves, so "last setState call in
+  // the same commit wins" never applied to them -- the reset's effect still
+  // fired and re-rendered to the default window on the NEXT tick,
+  // unmounting whatever they'd just scrolled to. Adjusting state during
+  // rendering (comparing the prop against a STATE-held previous value,
+  // React's own documented pattern for this) commits the narrowed window in
+  // the SAME render Effect B/the seek effect will read when their OWN
+  // effects run after this commit -- not one render later.
   //
   // Also resets `targetSeekDoneRef` (#3759 review Fix round 1: re-opening
   // the identical deep link after "Return to live" was a no-op on the same
@@ -255,7 +331,7 @@ export function ThreadedNarrativeReader({
   const [prevReadOnlyForReset, setPrevReadOnlyForReset] = useState(readOnly);
   if (readOnly !== prevReadOnlyForReset) {
     setPrevReadOnlyForReset(readOnly);
-    setHistoryStartOverride(null);
+    setThreadWindows({});
     // A ref mutation during render is safe HERE specifically because it's
     // idempotent (always assigning the same literal `null`, never a
     // render-dependent value) -- React may discard and redo this render pass
@@ -266,11 +342,16 @@ export function ThreadedNarrativeReader({
     // conditions -- keep this assignment idempotent.
     targetSeekDoneRef.current = null;
   }
-  const historyStart = historyStartOverride ?? Math.max(0, interactions.length - INITIAL_PAGE_SIZE);
-  const visibleInteractions = interactions.slice(historyStart);
+  // #3759 Wave 9 (F1): grouped from the FULL `interactions` array, not a
+  // windowed slice -- every thread with at least one pose gets a header row,
+  // always, matching the demo (the review's F1 finding: the old flat
+  // `historyStart` tail-slice, taken BEFORE grouping, silently hid any
+  // thread whose most recent pose fell outside it -- not even a collapsed
+  // header rendered). Per-thread windowing (`resolveThreadWindow`, below)
+  // now owns limiting how much of an EXPANDED thread's own poses render.
   const groups = useMemo(() => {
     const grouped = new Map<string, Interaction[]>();
-    for (const interaction of visibleInteractions) {
+    for (const interaction of interactions) {
       // Legacy interactions have no reply topology and therefore each remain
       // an independent root. Only explicit server thread ids group replies.
       const key = interaction.thread_id || `legacy:${interaction.id}`;
@@ -292,7 +373,35 @@ export function ThreadedNarrativeReader({
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||
           a.interactions[0].id - b.interactions[0].id
       );
-  }, [visibleInteractions]);
+  }, [interactions]);
+  // Shared by the default-collapse effect (below) and the "Latest activity"
+  // toolbar button (#3759 Wave 9 F5) -- both need "which thread's last pose
+  // is the most recent," so this is computed once rather than duplicated.
+  const mostRecentGroupKey = useMemo(() => {
+    if (groups.length === 0) return null;
+    return [...groups].sort((a, b) =>
+      b.interactions[b.interactions.length - 1].timestamp.localeCompare(
+        a.interactions[a.interactions.length - 1].timestamp
+      )
+    )[0].key;
+  }, [groups]);
+  // Looked up by Chronological view's role-label rendering (#3759 Wave 9 F4)
+  // to find a pose's thread root without a linear scan of `groups` per pose.
+  const groupByKey = useMemo(() => new Map(groups.map((group) => [group.key, group])), [groups]);
+  /**
+   * Resolves a thread's currently-shown window, clamped against its OWN
+   * current pose count (#3759 Wave 9 F1/F2). Absent from `threadWindows`
+   * (the common case -- untouched by any earlier/later click or widen) means
+   * "show the default tail" and is recomputed fresh from the group's CURRENT
+   * length every render, so it always reaches the thread's true latest pose
+   * without needing any reset when new poses arrive live.
+   */
+  const resolveThreadWindow = (group: Group): ThreadWindow => {
+    const length = group.interactions.length;
+    const stored = threadWindows[group.key];
+    if (!stored) return { start: Math.max(0, length - THREAD_PAGE_SIZE), end: length };
+    return { start: Math.min(stored.start, length), end: Math.min(stored.end, length) };
+  };
   const storedAnchorState = useMemo(
     () => loadConversationAnchor(conversationKey),
     [conversationKey]
@@ -323,13 +432,8 @@ export function ThreadedNarrativeReader({
       setCollapsed(new Set());
       return;
     }
-    const mostRecentKey = [...groups].sort((a, b) =>
-      b.interactions[b.interactions.length - 1].timestamp.localeCompare(
-        a.interactions[a.interactions.length - 1].timestamp
-      )
-    )[0].key;
-    setCollapsed(new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key)));
-  }, [groups]);
+    setCollapsed(new Set(groups.filter((g) => g.key !== mostRecentGroupKey).map((g) => g.key)));
+  }, [groups, mostRecentGroupKey]);
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
   // Optimistic mirror of "Mark conversation read" (#3759 spec section 7): the
   // server call is fire-and-forget, like markPosesRead's dwell-tracked path,
@@ -355,12 +459,16 @@ export function ThreadedNarrativeReader({
   const { observe } = usePoseReadTracking();
   const { preferences, update } = usePlayPreferences();
   const chronological = preferences.readerMode === 'chronological';
+  // #3759 Wave 9 (F1): sorts the FULL `interactions` array, not a windowed
+  // slice -- this view is already virtualized via `@tanstack/react-virtual`
+  // below specifically so rendering cost doesn't scale with total item
+  // count, so it never needed flat windowing on top; capping it there
+  // directly contradicted User Story 2 ("switch to Chronological and read
+  // EVERYTHING in one continuous timeline"). No per-thread paging UI exists
+  // for this view -- the virtualizer already handles arbitrarily long lists.
   const chronologicalItems = useMemo(
-    () =>
-      [...visibleInteractions].sort(
-        (a, b) => a.timestamp.localeCompare(b.timestamp) || a.id - b.id
-      ),
-    [visibleInteractions]
+    () => [...interactions].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id - b.id),
+    [interactions]
   );
   const chronoParentRef = useRef<HTMLDivElement>(null);
   const chronoVirtualizer = useVirtualizer({
@@ -427,6 +535,25 @@ export function ThreadedNarrativeReader({
     setCollapsed(next);
     persistCollapsed(next);
   };
+  // #3759 Wave 9 review finding F5: jumps to the most-recently-active thread
+  // (reusing `mostRecentGroupKey`, the same computation the default-collapse
+  // effect above uses), expanding it if needed and scrolling its header into
+  // view. Pure UI state + a scroll, like expand/collapse-all -- no mutation,
+  // so it needs no `readOnly` gate (unlike "Mark conversation read" below).
+  const handleLatestActivity = () => {
+    if (!mostRecentGroupKey) return;
+    setCollapsed((previous) => {
+      if (!previous.has(mostRecentGroupKey)) return previous;
+      const next = new Set(previous);
+      next.delete(mostRecentGroupKey);
+      persistCollapsed(next);
+      return next;
+    });
+    const el = rootRef.current?.querySelector<HTMLElement>(
+      `[data-thread-id="${mostRecentGroupKey}"]`
+    );
+    el?.scrollIntoView({ block: 'start' });
+  };
   const togglePose = (id: number) =>
     setCollapsedPoses((previous) => {
       const next = new Set(previous);
@@ -440,7 +567,7 @@ export function ThreadedNarrativeReader({
   // scrollTop -- so it survives resize, font/measure changes and
   // older-page-insertion, which all change *where* that same pose happens to
   // land on screen without changing *which pose* the reader should be
-  // showing. `readOnlyRef`/`visibleInteractionsRef`/`collapsedRef` mirror the
+  // showing. `readOnlyRef`/`interactionsRef`/`collapsedRef` mirror the
   // latest render's values for the native (non-JSX) scroll listener below,
   // which is attached once per Threads-view session rather than
   // re-subscribed on every interaction/collapse change (re-subscribing would
@@ -450,8 +577,8 @@ export function ThreadedNarrativeReader({
   readOnlyRef.current = readOnly;
   const persistAnchorRef = useRef(persistAnchor);
   persistAnchorRef.current = persistAnchor;
-  const visibleInteractionsRef = useRef(visibleInteractions);
-  visibleInteractionsRef.current = visibleInteractions;
+  const interactionsRef = useRef(interactions);
+  interactionsRef.current = interactions;
   const collapsedRef = useRef(collapsed);
   collapsedRef.current = collapsed;
   const conversationKeyRef = useRef(conversationKey);
@@ -460,30 +587,55 @@ export function ThreadedNarrativeReader({
   // #3759 review finding I2: an anchor older than the default tail window is
   // the COMMON case, not an edge case -- before falling back to scrolling to
   // the bottom, check whether the anchored pose exists ANYWHERE in the full
-  // `interactions` array (not just the currently-sliced tail window) and, if
-  // so, widen the window to include it (a few poses of context above it too)
-  // instead of jumping away.
+  // `interactions` array (not just the currently-shown per-thread window)
+  // and, if so, widen its OWN thread's window to include it instead of
+  // jumping away.
   //
-  // `computeWidenTarget` is the pure core, ACTUALLY shared with the deep-link
-  // target-seek effect below (#3759 review finding C2, review Fix round 1) --
-  // both need the identical "is this pose outside the current window, and if
-  // so what's the new start index" arithmetic, but only the anchor-restore
-  // callers also want `anchorRetryPendingRef` set (which re-triggers a full
-  // restoreAnchor() once the widened window lands) -- the seek effect handles
-  // its own re-fire via its own dependency array instead, so that side effect
-  // stays out of the shared helper.
+  // #3759 Wave 9 (F1/F2): replaces the old flat `computeWidenTarget`/
+  // `widenWindowToInclude` pair (which widened the whole list's single tail
+  // window by array position) now that nothing windows the whole list
+  // anymore -- only individual threads do. `widenThreadWindow` is the pure
+  // core, shared with the deep-link target-seek effect below (#3759 review
+  // finding C2): both need "does this thread's OWN window already show
+  // everything it has, and if not, expand it to." Per the Wave 9 brief's own
+  // recommendation, this widens to the THREAD'S FULL pose count ("show the
+  // whole thread") rather than computing a precise partial widen around the
+  // target -- simpler and safe because both callers only ever fire on a
+  // rare, intentional action (an anchor restore, or a deep-link click), not
+  // on every render.
   const anchorRetryPendingRef = useRef(false);
-  const computeWidenTarget = (poseId: string): number | null => {
-    const idx = interactions.findIndex((item) => String(item.id) === poseId);
-    if (idx === -1) return null;
-    const desiredStart = Math.max(0, idx - 5);
-    if (desiredStart >= historyStart) return null; // already covered -- not the miss case
-    return desiredStart;
+  const widenThreadWindow = (key: string): boolean => {
+    const groupLength = interactions.reduce(
+      (count, item) => ((item.thread_id || `legacy:${item.id}`) === key ? count + 1 : count),
+      0
+    );
+    const existing = threadWindows[key];
+    if (existing && existing.start === 0 && existing.end >= groupLength) return false; // already fully shown
+    setThreadWindows((previous) => ({ ...previous, [key]: { start: 0, end: groupLength } }));
+    return true;
   };
-  const widenWindowToInclude = (poseId: string): boolean => {
-    const desiredStart = computeWidenTarget(poseId);
-    if (desiredStart === null) return false;
-    setHistoryStartOverride(desiredStart);
+  // I2's own miss-handling: uncollapses the pose's thread (if collapsed) AND
+  // widens its window (if not already fully shown), then flags a retry once
+  // both land. Returns false ("not the miss case, don't retry") only when
+  // the pose is genuinely absent from `interactions` altogether, OR when its
+  // thread is already fully expanded and windowed and the DOM still somehow
+  // didn't have it (nothing left to widen -- matches the old
+  // `computeWidenTarget`'s identical "already covered" contract).
+  const widenThreadWindowToInclude = (poseId: string): boolean => {
+    const targetInteraction = interactions.find((item) => String(item.id) === poseId);
+    if (!targetInteraction) return false; // genuinely absent from `interactions`
+    const key = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    let changed = false;
+    if (collapsed.has(key)) {
+      changed = true;
+      setCollapsed((previous) => {
+        const next = new Set(previous);
+        next.delete(key);
+        return next;
+      });
+    }
+    if (widenThreadWindow(key)) changed = true;
+    if (!changed) return false;
     anchorRetryPendingRef.current = true;
     return true;
   };
@@ -505,11 +657,12 @@ export function ThreadedNarrativeReader({
     const target = container.querySelector<HTMLElement>(`[data-pose-id="${anchor.poseId}"]`);
     if (!target) {
       // Best-effort miss: the anchored pose isn't in the currently loaded/
-      // expanded set (e.g. it's inside a collapsed thread, or on an older
-      // history page not yet fetched). Widen the window first (I2, above);
-      // only fall all the way back to the bottom once the pose is confirmed
-      // genuinely absent from `interactions` altogether.
-      if (widenWindowToInclude(anchor.poseId)) return;
+      // expanded set (e.g. it's inside a collapsed thread, or its thread's
+      // own window doesn't reach it, or it's on an older history page not
+      // yet fetched). Widen its thread first (I2, above); only fall all the
+      // way back to the bottom once the pose is confirmed genuinely absent
+      // from `interactions` altogether.
+      if (widenThreadWindowToInclude(anchor.poseId)) return;
       // GameWindow.tsx no longer applies its own scroll-to-bottom fallback
       // once this scene has ANY persisted anchor (see its own bypass
       // condition) -- so restoring that fallback here is what keeps a
@@ -529,11 +682,15 @@ export function ThreadedNarrativeReader({
     if (!anchor) return;
     const idx = chronologicalItems.findIndex((item) => String(item.id) === anchor.poseId);
     if (idx === -1) {
-      // Same widen-before-fallback reasoning as restoreThreadsAnchor's own
-      // miss branch above (#3759 review finding I2).
-      if (widenWindowToInclude(anchor.poseId)) return;
-      // Best-effort miss, same reasoning as restoreThreadsAnchor's fallback
-      // above (#3759 review finding I3).
+      // #3759 Wave 9 (F1): unlike restoreThreadsAnchor's own miss branch,
+      // this has no widen step to try -- `chronologicalItems` (above) is
+      // now always the FULL, unwindowed `interactions` array (this view's
+      // whole point is a flat, unwindowed timeline; the virtualizer handles
+      // its size), so a miss here can ONLY mean the pose is genuinely absent
+      // from `interactions` altogether -- the exact same condition
+      // `widenThreadWindowToInclude` itself checks first and bails out of.
+      // Straight to the bottom-fallback, same reasoning as
+      // restoreThreadsAnchor's own fallback above (#3759 review finding I3).
       suppressNextAnchorSaveRef.current = true;
       chronoVirtualizer.scrollToEnd();
       return;
@@ -550,15 +707,16 @@ export function ThreadedNarrativeReader({
   };
 
   // Retries a restore once a widen (I2, above) has actually taken effect --
-  // `widenWindowToInclude` only schedules the wider `historyStartOverride`;
-  // the pose isn't mounted (and thus findable) until the resulting re-render
-  // commits, which is exactly when `historyStart` changes.
+  // `widenThreadWindowToInclude` only schedules the wider `threadWindows`
+  // entry (and/or the uncollapse); the pose isn't mounted (and thus
+  // findable) until the resulting re-render commits, which is exactly when
+  // `threadWindows` or `collapsed` changes.
   useEffect(() => {
     if (!anchorRetryPendingRef.current) return;
     anchorRetryPendingRef.current = false;
     restoreAnchor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [historyStart]);
+  }, [threadWindows, collapsed]);
 
   // Effect A: initial restore, once real pose data has arrived. Mirrors the
   // `defaultSeeded` pattern above -- this component can mount (keyed by
@@ -571,11 +729,11 @@ export function ThreadedNarrativeReader({
   useEffect(() => {
     if (restoreSeeded.current) return;
     if (readOnly) return; // never restore into a historical reference view
-    if (visibleInteractions.length === 0) return;
+    if (interactions.length === 0) return;
     restoreSeeded.current = true;
     restoreAnchor();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [readOnly, visibleInteractions.length]);
+  }, [readOnly, interactions.length]);
 
   // Effect B: "Return to live" (#3759 Decision #5). Re-applies the anchor
   // specifically on the readOnly:true -> false transition, regardless of
@@ -628,38 +786,34 @@ export function ThreadedNarrativeReader({
 
   // --- Deep-link target seek (#3759 review finding C2) ----------------------
   // `PlayContextView` hands the reference reader a fixed +-25-pose window
-  // around the opened pose, but this reader's own tail-slice
-  // (`historyStart`) always shows only the LAST `INITIAL_PAGE_SIZE` poses of
-  // whatever window it's given -- for a target sitting anywhere earlier than
-  // that (the common case: a search result or "Recent conversations" row
-  // rarely lands in the newest 20 poses of its own +-25 window), the
-  // tail-slice alone renders everything BUT the pose the user actually
-  // opened. Shares `computeWidenTarget` (I2, above) to seed the window, then
+  // around the opened pose, but a big thread within that window still only
+  // shows its own default per-thread tail (`THREAD_PAGE_SIZE`, #3759 Wave 9
+  // F1/F2) -- for a target sitting earlier than that (the common case: a
+  // search result or "Recent conversations" row rarely lands in a thread's
+  // newest `THREAD_PAGE_SIZE` poses), the default window alone renders
+  // everything BUT the pose the user actually opened. Shares
+  // `widenThreadWindow` (I2, above) to widen the target's own thread, then
   // scrolls to and briefly highlights the target once its row mounts.
-  // `targetSeekDoneRef` (declared above, near `historyStartOverride` -- see
-  // that block's own comment for why) guards this so it runs once per
-  // target: a NEW target (switching between reference entries without
-  // unmounting, e.g. two search results in the same scene) resets it because
-  // the ref stores the id it last completed, not just a boolean; a
-  // readOnly transition also resets it (re-opening the same deep link after
-  // Return to live must not be a no-op).
+  // `targetSeekDoneRef` (declared above, near `threadWindows` -- see that
+  // block's own comment for why) guards this so it runs once per target: a
+  // NEW target (switching between reference entries without unmounting,
+  // e.g. two search results in the same scene) resets it because the ref
+  // stores the id it last completed, not just a boolean; a readOnly
+  // transition also resets it (re-opening the same deep link after Return
+  // to live must not be a no-op).
   const [highlightedPoseId, setHighlightedPoseId] = useState<string | null>(null);
   useEffect(() => {
     if (!targetPoseId) return;
     if (targetSeekDoneRef.current === targetPoseId) return;
     const targetInteraction = interactions.find((item) => String(item.id) === targetPoseId);
     if (!targetInteraction) return; // not in the loaded window at all -- nothing to seek to
-    const desiredStart = computeWidenTarget(targetPoseId);
-    if (desiredStart !== null) {
-      setHistoryStartOverride(desiredStart);
-      return; // the re-render with the widened window re-runs this effect
-    }
     // Uncollapse the target's own thread (#3759 review Fix round 1
-    // IMPORTANT): the "collapse all but the most recently active thread"
-    // default (declared earlier, above) would otherwise permanently hide the
-    // target's row whenever its thread ISN'T the most recently active one --
-    // the ORDINARY multi-thread case, not an edge case. A functional update
-    // composes correctly with whatever the default-collapse effect also just
+    // IMPORTANT, kept exactly as built/reviewed in Wave 8): the "collapse
+    // all but the most recently active thread" default (declared earlier,
+    // above) would otherwise permanently hide the target's row whenever its
+    // thread ISN'T the most recently active one -- the ORDINARY
+    // multi-thread case, not an edge case. A functional update composes
+    // correctly with whatever the default-collapse effect also just
     // enqueued in the SAME commit (declared earlier, so it enqueues first);
     // idempotent and harmless to re-issue on every pass, including once the
     // thread is already expanded. `collapsed` is a dependency below
@@ -671,16 +825,21 @@ export function ThreadedNarrativeReader({
       next.delete(targetGroupKey);
       return next;
     });
+    // #3759 Wave 9 (F1/F2): widen the target's own per-thread window too --
+    // uncollapsing alone isn't enough for a thread whose default window
+    // doesn't reach the target. `threadWindows` is a dependency below so
+    // this effect re-runs once the widen actually lands.
+    widenThreadWindow(targetGroupKey);
     const targetEl = rootRef.current?.querySelector<HTMLElement>(
       `[data-pose-id="${targetPoseId}"]`
     );
-    if (!targetEl) return; // thread not expanded in the DOM on this pass yet --
-    // `collapsed` changing (once the update above lands) re-triggers this effect.
+    if (!targetEl) return; // thread not expanded/windowed in the DOM on this pass yet --
+    // `collapsed`/`threadWindows` changing (once the updates above land) re-triggers this effect.
     targetSeekDoneRef.current = targetPoseId;
     targetEl.scrollIntoView({ block: 'center' });
     setHighlightedPoseId(targetPoseId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetPoseId, interactions, historyStart, collapsed]);
+  }, [targetPoseId, interactions, collapsed, threadWindows]);
 
   // Clears the deep-link target highlight ~2s after it's set (#3759 review
   // Fix round 1: the highlight could stick forever when `interactions`
@@ -737,8 +896,8 @@ export function ThreadedNarrativeReader({
         const found = findTopVisiblePoseId(container);
         if (!found) return;
         const threadId =
-          visibleInteractionsRef.current.find((item) => String(item.id) === found.poseId)
-            ?.thread_id ?? null;
+          interactionsRef.current.find((item) => String(item.id) === found.poseId)?.thread_id ??
+          null;
         persistAnchorState({
           anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
           collapsed: [...collapsedRef.current],
@@ -772,7 +931,7 @@ export function ThreadedNarrativeReader({
       const found = findTopVisiblePoseId(container);
       if (!found) return;
       const threadId =
-        visibleInteractions.find((item) => String(item.id) === found.poseId)?.thread_id ?? null;
+        interactions.find((item) => String(item.id) === found.poseId)?.thread_id ?? null;
       persistAnchorState({
         anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
         collapsed: [...collapsed],
@@ -812,9 +971,19 @@ export function ThreadedNarrativeReader({
                 <button className="underline" onClick={collapseAllThreads}>
                   Collapse loaded threads
                 </button>
+                {/* #3759 Wave 9 review finding F5. */}
+                <button className="underline" onClick={handleLatestActivity}>
+                  Latest activity
+                </button>
               </>
             )}
-            {interactions.length > 0 && (
+            {/* #3759 Wave 9 review finding F6: gated on `!readOnly`, matching the
+                existing pattern the per-pose "Reply" button already uses below --
+                a live mutating control (a real `POST /api/play/read/`) must not
+                survive into a mode Decision #5 calls read-only. Expand/Collapse/
+                Latest activity above and the Chronological toggle below are all
+                pure UI state, not mutations, so they stay ungated. */}
+            {interactions.length > 0 && !readOnly && (
               <button className="underline" onClick={handleMarkConversationRead}>
                 Mark conversation read
               </button>
@@ -873,6 +1042,18 @@ export function ThreadedNarrativeReader({
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
                   const item = chronologicalItems[virtualRow.index];
                   const poseCollapsed = collapsedPoses.has(item.id);
+                  // #3759 Wave 9 review finding F4: switched from the old
+                  // "In a thread"/"Standalone" label to the same
+                  // "Opening pose"/"Reply in <title>" phrasing Threads view
+                  // uses (see `poseRoleLabel`'s own doc comment). Decided in
+                  // favor of consistency: Chronological flattens every
+                  // thread into one timeline, so knowing WHICH thread a
+                  // reply belongs to (not just that it's "in a thread" at
+                  // all) is strictly more useful here, and there's no demo
+                  // image for this screen (the review's own scope table
+                  // marks it `textonly`) to visually contradict.
+                  const groupKey = item.thread_id || `legacy:${item.id}`;
+                  const roleLabel = poseRoleLabel(item, groupByKey.get(groupKey)?.interactions[0]);
                   return (
                     <div
                       key={item.id}
@@ -891,9 +1072,7 @@ export function ThreadedNarrativeReader({
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
                       >
-                        <p className="text-xs text-muted-foreground">
-                          {item.thread_id ? 'In a thread' : 'Standalone'}
-                        </p>
+                        <p className="text-xs text-muted-foreground">{roleLabel}</p>
                         {poseCollapsed ? (
                           <article
                             className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -942,6 +1121,20 @@ export function ThreadedNarrativeReader({
               const root = group.interactions[0];
               const isCollapsed = collapsed.has(group.key);
               const unread = group.interactions.filter(isEffectivelyUnread).length;
+              // #3759 Wave 9 (F1/F2): per-thread pose window, replacing the
+              // old flat whole-list tail-slice. `end < group.interactions.length`
+              // ("more poses hidden after what's shown") is only ever true
+              // once THIS thread has an explicit `threadWindows` entry whose
+              // `end` has fallen behind the thread's current length -- e.g.
+              // new poses arrived in this thread after the user had already
+              // paged earlier into its history. The untouched default
+              // (`resolveThreadWindow`'s no-entry branch) always recomputes
+              // `end` from the CURRENT length, so it never falls behind.
+              const { start, end } = resolveThreadWindow(group);
+              const clampedStart = Math.min(start, end);
+              const visiblePoses = isCollapsed ? [] : group.interactions.slice(clampedStart, end);
+              const hiddenEarlierCount = clampedStart;
+              const hiddenLaterCount = Math.max(0, group.interactions.length - end);
               return (
                 <section
                   key={group.key}
@@ -950,33 +1143,64 @@ export function ThreadedNarrativeReader({
                 >
                   <button
                     type="button"
-                    className="flex min-h-11 w-full items-center gap-2 px-3 py-2 text-left hover:bg-accent/40"
+                    className="flex min-h-11 w-full items-start gap-2 px-3 py-2 text-left hover:bg-accent/40"
                     aria-expanded={!isCollapsed}
                     aria-controls={`thread-${group.key}`}
                     onClick={() => toggleThread(group.key)}
                   >
                     {isCollapsed ? (
-                      <ChevronRight className="h-4 w-4" />
+                      <ChevronRight className="mt-0.5 h-4 w-4 shrink-0" />
                     ) : (
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className="mt-0.5 h-4 w-4 shrink-0" />
                     )}
-                    <span className="min-w-0 flex-1 truncate font-medium">
-                      {root?.persona.name ?? 'Conversation'}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      {group.interactions.length}{' '}
-                      {group.interactions.length === 1 ? 'pose' : 'poses'}
-                    </span>
-                    {unread > 0 && (
-                      <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] text-primary-foreground">
-                        {unread} new
-                      </span>
-                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {root?.persona.name ?? 'Conversation'}
+                        </span>
+                        <span className="text-xs text-muted-foreground">
+                          {group.interactions.length}{' '}
+                          {group.interactions.length === 1 ? 'pose' : 'poses'}
+                        </span>
+                        {unread > 0 && (
+                          <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] text-primary-foreground">
+                            {unread} new
+                          </span>
+                        )}
+                      </div>
+                      {/* #3759 Wave 9 review finding F3: opening-pose excerpt +
+                          timestamp (reuses PoseUnit.tsx's own `toLocaleString()`
+                          convention for consistency with every per-pose
+                          timestamp elsewhere in the reader). */}
+                      {root && (
+                        <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                          {excerptOf(root.content)} · {new Date(root.timestamp).toLocaleString()}
+                        </p>
+                      )}
+                    </div>
                   </button>
                   {!isCollapsed && (
                     <div id={`thread-${group.key}`} className="border-t px-2 py-2">
-                      {group.interactions.map((item) => {
+                      {hiddenEarlierCount > 0 && (
+                        <button
+                          type="button"
+                          className="mb-2 w-full rounded border px-3 py-2 text-sm"
+                          onClick={() =>
+                            setThreadWindows((previous) => ({
+                              ...previous,
+                              [group.key]: {
+                                start: Math.max(0, clampedStart - THREAD_PAGE_SIZE),
+                                end,
+                              },
+                            }))
+                          }
+                        >
+                          Load earlier replies · {hiddenEarlierCount} before this page
+                        </button>
+                      )}
+                      {visiblePoses.map((item) => {
                         const poseCollapsed = collapsedPoses.has(item.id);
+                        const roleLabel = poseRoleLabel(item, root);
                         return (
                           <PoseReadTarget
                             key={`pose-${item.id}`}
@@ -984,6 +1208,8 @@ export function ThreadedNarrativeReader({
                             observe={observe}
                             highlighted={String(item.id) === highlightedPoseId}
                           >
+                            {/* #3759 Wave 9 review finding F4. */}
+                            <p className="text-xs text-muted-foreground">{roleLabel}</p>
                             {poseCollapsed ? (
                               <article
                                 className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1034,45 +1260,45 @@ export function ThreadedNarrativeReader({
                           </PoseReadTarget>
                         );
                       })}
+                      {hiddenLaterCount > 0 && (
+                        <button
+                          type="button"
+                          className="mt-2 w-full rounded border px-3 py-2 text-sm"
+                          onClick={() =>
+                            setThreadWindows((previous) => ({
+                              ...previous,
+                              [group.key]: {
+                                start: clampedStart,
+                                end: Math.min(group.interactions.length, end + THREAD_PAGE_SIZE),
+                              },
+                            }))
+                          }
+                        >
+                          Load later replies
+                        </button>
+                      )}
                     </div>
                   )}
                 </section>
               );
             })
           ))}
-        {(historyStart > 0 || hasNextPage) && (
+        {/* #3759 Wave 9 (F1/F2): this is now the ONLY remaining whole-list
+            control -- fetching MORE data from the server (a different
+            concern than deciding how much of already-fetched data to
+            render, which per-thread windowing above now owns entirely).
+            No more local "Jump to latest": since every thread is always
+            visible and each has its own window, there's no longer a single
+            local window to jump back from. */}
+        {hasNextPage && (
           <div className="flex gap-2">
-            {historyStart > 0 && (
-              <button
-                type="button"
-                onClick={() =>
-                  setHistoryStartOverride(Math.max(0, historyStart - INITIAL_PAGE_SIZE))
-                }
-                className="flex-1 rounded border px-3 py-2 text-sm"
-              >
-                Load earlier history
-              </button>
-            )}
-            {historyStart < Math.max(0, interactions.length - INITIAL_PAGE_SIZE) && (
-              <button
-                type="button"
-                onClick={() =>
-                  setHistoryStartOverride(Math.max(0, interactions.length - INITIAL_PAGE_SIZE))
-                }
-                className="rounded border px-3 py-2 text-sm"
-              >
-                Jump to latest
-              </button>
-            )}
-            {historyStart === 0 && hasNextPage && (
-              <button
-                type="button"
-                onClick={fetchNextPage}
-                className="flex-1 rounded border px-3 py-2 text-sm"
-              >
-                Load earlier history
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={fetchNextPage}
+              className="flex-1 rounded border px-3 py-2 text-sm"
+            >
+              Load earlier history
+            </button>
           </div>
         )}
       </div>
