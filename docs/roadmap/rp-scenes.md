@@ -411,14 +411,21 @@ block/mute) stays entirely the owner's.
   Chronological view is a flat, windowed (`@tanstack/react-virtual`) alternative
   sharing the same read/collapse state. `PlaySidebar`'s History mode
   (`HistoryNavigator`) browses/searches authorized retained conversations
-  (kind/participant/date filters, cursor-paginated `/api/play/threads/`,
+  (kind/date filters, cursor-paginated `/api/play/conversations/`,
   `/api/play/search/`, `/api/play/context/`) without leaving `/game`; opening a
   result switches the reader into reference mode via `GamePage`'s
   `displaySceneFeed` swap. Dwell-tracked (`IntersectionObserver`) read receipts
-  feed per-thread unread counts. See `docs/systems/scenes.md` for the endpoint
-  list and `frontend/src/game/CLAUDE.md` for the component breakdown. Explicitly
-  out of scope (kept for future work, not silently dropped): per-persona
-  thumbnails in messages, and richer history search/filter tooling — flagged by
+  feed per-thread unread counts in the reader. `GET /api/play/threads/` (paginated
+  `ThreadSummary` per conversation, with real unread counts) is **built and
+  tested but not yet consumed by any frontend surface** — see
+  `docs/systems/scenes.md`'s Play API section; wiring it into a
+  conversation-thread-drill-down view in `HistoryNavigator` is follow-up work,
+  since no screen for it was in the approved demo. See `docs/systems/scenes.md`
+  for the endpoint list and `frontend/src/game/CLAUDE.md` for the component
+  breakdown. Explicitly out of scope (kept for future work, not silently
+  dropped): per-persona thumbnails in messages, richer history search/filter
+  tooling, and feeding server read state into the account-wide `attention.ts`
+  badges (today those stay session-local, same as before this issue) — flagged by
   Tehom as needed once a player's conversation history spans years, not now.
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
