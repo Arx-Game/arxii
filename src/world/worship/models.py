@@ -104,7 +104,7 @@ class WorshippedBeing(SharedMemoryModel):
         "arxii.CodexEntry",
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
+        on_delete=models.PROTECT,
         related_name="worshipped_beings",
         help_text=(
             "This being's Codex page. Visibility (Public/Obscure/Secret) is read "

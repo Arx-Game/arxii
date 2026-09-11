@@ -22,7 +22,7 @@ issue bodies; the model decision is ADR-0132.
   M2M → `tarot.TarotCard`, `related_name="represented_beings"`, blank, no cap —
   cards people believe represent this being; pure association, read by
   `is_birth_favored_by` below), nullable `codex_entry` FK (#3776 Task 11:
-  `codex.CodexEntry`, `on_delete=SET_NULL`, `related_name="worshipped_beings"` —
+  `codex.CodexEntry`, `on_delete=PROTECT`, `related_name="worshipped_beings"` —
   mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
   visibility (Public/Obscure/Secret) is read entirely through the linked entry's
   `is_public` tier, no separate visibility field on `WorshippedBeing` itself).

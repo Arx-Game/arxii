@@ -1,6 +1,7 @@
 """Model tests for the worship foundation (#2355)."""
 
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
@@ -57,6 +58,14 @@ class WorshipModelTests(TestCase):
     def test_codex_entry_is_optional(self) -> None:
         being = WorshippedBeingFactory()
         self.assertIsNone(being.codex_entry)
+
+    def test_bound_codex_entry_is_protected(self) -> None:
+        """PROTECT: deleting a linked entry must not silently orphan the being's
+        Codex link, matching Gift/Technique/HouseAspectOption's own codex_entry."""
+        entry = CodexEntryFactory()
+        WorshippedBeingFactory(codex_entry=entry)
+        with transaction.atomic(), self.assertRaises(ProtectedError):
+            entry.delete()
 
 
 class BeingFacetTests(TestCase):
