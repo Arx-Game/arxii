@@ -8,6 +8,8 @@ interface ExplorationReaderProps {
   room: RoomData | null;
   ambientInteractions?: InteractionWsPayload[];
   lifecycleState?: GameLifecycleState;
+  diagnostics?: string[];
+  ambientNotices?: string[];
   onRetry?: () => void;
 }
 
@@ -19,6 +21,8 @@ export function ExplorationReader({
   room,
   ambientInteractions = [],
   lifecycleState,
+  diagnostics = [],
+  ambientNotices = [],
   onRetry,
 }: ExplorationReaderProps) {
   const awaitingSnapshot = lifecycleState === 'entering' && Boolean(room);
@@ -49,6 +53,19 @@ export function ExplorationReader({
             </p>
           )}
         </header>
+        {diagnostics.length > 0 && (
+          <aside
+            className="rounded-lg border border-destructive/40 bg-destructive/5 p-4"
+            aria-label="Connection notices"
+          >
+            <p className="font-medium">Connection notice</p>
+            <ul className="mt-1 list-disc pl-5 text-sm text-muted-foreground">
+              {diagnostics.map((message, index) => (
+                <li key={`${message}:${index}`}>{message}</li>
+              ))}
+            </ul>
+          </aside>
+        )}
         {isAftermath && (
           <div className="rounded-lg border bg-muted/30 p-4" role="status">
             <p className="font-medium">The scene has ended.</p>
@@ -130,6 +147,24 @@ export function ExplorationReader({
               </section>
             )}
 
+            {ambientNotices.length > 0 && (
+              <section aria-labelledby="ambient-notices-heading" className="space-y-2">
+                <h2
+                  id="ambient-notices-heading"
+                  className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
+                >
+                  Nearby activity
+                </h2>
+                {ambientNotices.map((notice, index) => (
+                  <p
+                    key={`${notice}:${index}`}
+                    className="rounded border-l-2 border-primary/40 pl-3 text-sm"
+                  >
+                    {notice}
+                  </p>
+                ))}
+              </section>
+            )}
             {ambientInteractions.length > 0 && (
               <section aria-labelledby="ambient-heading" className="space-y-3">
                 <h2

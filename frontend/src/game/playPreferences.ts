@@ -61,22 +61,28 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
   }
 }
 
-export function savePlayPreferences(preferences: PlayPreferences, accountId?: number | null): void {
+export function savePlayPreferences(
+  preferences: PlayPreferences,
+  accountId?: number | null
+): boolean {
   try {
     window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(preferences));
+    return true;
   } catch {
     // Storage can be disabled; callers continue with in-memory preferences.
+    return false;
   }
 }
 
 export function usePlayPreferences(accountId?: number | null) {
   const key = useMemo(() => playPreferencesKey(accountId), [accountId]);
   const [preferences, setPreferences] = useState(() => loadPlayPreferences(accountId));
+  const [storageWarning, setStorageWarning] = useState(false);
   const update = useCallback(
     (patch: Partial<PlayPreferences>) => {
       setPreferences((current) => {
         const next = { ...current, ...patch };
-        savePlayPreferences(next, accountId);
+        if (!savePlayPreferences(next, accountId)) setStorageWarning(true);
         return next;
       });
     },
@@ -92,5 +98,5 @@ export function usePlayPreferences(accountId?: number | null) {
     window.addEventListener('arx-play-preferences', sync);
     return () => window.removeEventListener('arx-play-preferences', sync);
   }, [key, accountId]);
-  return { preferences, update };
+  return { preferences, update, storageWarning };
 }

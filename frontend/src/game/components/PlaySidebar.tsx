@@ -81,7 +81,13 @@ export function PlaySidebar({
         )}
         {mode === 'history' && <HistoryNavigator onOpenReference={onOpenReference} />}
         {mode === 'here' && threading && (
-          <div className="absolute left-[-10000px] top-0 w-80">
+          <div
+            className="absolute left-[-10000px] top-0 w-80"
+            aria-hidden="true"
+            ref={(element) => {
+              if (element) element.inert = true;
+            }}
+          >
             <ConversationSidebar
               threading={threading}
               onThreadClick={onThreadClick}

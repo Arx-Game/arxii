@@ -60,6 +60,8 @@ interface GameWindowProps {
   room?: RoomData | null;
   /** Scene-less interaction frames for the exploration reader. */
   ambientInteractions?: InteractionWsPayload[];
+  diagnostics?: string[];
+  ambientNotices?: string[];
   lifecycleState?: GameLifecycleState;
   readerMode?: ReaderMode;
   composerMode?: ComposerMode;
@@ -117,6 +119,8 @@ export function GameWindow({
   sceneFeed,
   room,
   ambientInteractions,
+  diagnostics,
+  ambientNotices,
   lifecycleState,
   readerMode = 'threads',
   composerMode,
@@ -283,14 +287,18 @@ export function GameWindow({
             : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
         </div>
       )}
-      {!awaitingRoom && lifecycleState === 'reconnecting' && (
-        <div
-          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
-          role="status"
-        >
-          Connection lost. Your confirmed story remains available while we reconnect.
-        </div>
-      )}
+      {!awaitingRoom &&
+        (effectiveLifecycle === 'reconnecting' ||
+          (effectiveLifecycle === 'entering' && Boolean(session.room))) && (
+          <div
+            className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+            role="status"
+          >
+            {effectiveLifecycle === 'entering'
+              ? 'Refreshing your confirmed location before play resumes…'
+              : 'Connection lost. Your confirmed story remains available while we reconnect.'}
+          </div>
+        )}
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
@@ -371,6 +379,8 @@ export function GameWindow({
         <ExplorationReader
           room={room ?? session.room}
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
+          diagnostics={diagnostics ?? session.diagnostics}
+          ambientNotices={ambientNotices ?? session.ambientNotices}
           lifecycleState={effectiveLifecycle}
           onRetry={() => {
             if (active) void connect(active);

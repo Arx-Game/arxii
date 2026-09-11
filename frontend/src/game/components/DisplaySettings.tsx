@@ -8,7 +8,7 @@ interface DisplaySettingsProps {
 
 /** Compact account-scoped controls for the narrative workspace. */
 export function DisplaySettings({ accountId }: DisplaySettingsProps) {
-  const { preferences, update } = usePlayPreferences(accountId);
+  const { preferences, update, storageWarning } = usePlayPreferences(accountId);
   useEffect(() => {
     document.documentElement.style.setProperty('--play-prose-size', `${preferences.proseSize}px`);
     document.documentElement.style.setProperty(
@@ -32,6 +32,11 @@ export function DisplaySettings({ accountId }: DisplaySettingsProps) {
     <details className="rounded border px-2 py-1 text-xs">
       <summary className="cursor-pointer font-medium">Display settings</summary>
       <div className="mt-2 space-y-2 pb-1">
+        {storageWarning && (
+          <p className="rounded bg-muted px-2 py-1 text-muted-foreground" role="status">
+            Preferences are active for this tab but could not be saved in this browser.
+          </p>
+        )}
         <label className="flex min-h-11 items-center justify-between gap-2">
           Text size{' '}
           <input

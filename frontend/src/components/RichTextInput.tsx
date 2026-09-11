@@ -107,14 +107,23 @@ export function RichTextInput({
   // Beyond 35% of the viewport the editor scrolls internally instead of
   // pushing the reader and Here panel off-screen.
   React.useLayoutEffect(() => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-    const maxHeight = Math.floor(viewportHeight * 0.35);
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
-    textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    const resize = () => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const maxHeight = Math.floor(viewportHeight * 0.35);
+      textarea.style.height = 'auto';
+      const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
+    };
   }, [value]);
 
   const filteredItems = React.useMemo(() => {

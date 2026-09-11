@@ -54,6 +54,9 @@ export interface Session {
   sceneInteractions: InteractionWsPayload[];
   /** Structured scene-less interactions for the current room, kept in memory only. */
   ambientInteractions?: InteractionWsPayload[];
+  /** Connection diagnostics are kept separate from authored/system story text. */
+  diagnostics?: string[];
+  ambientNotices?: string[];
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
   /**
@@ -209,6 +212,34 @@ export const gameSlice = createSlice({
     clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) session.ambientInteractions = [];
+    },
+    addSessionDiagnostic: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const diagnostics = session.diagnostics ?? (session.diagnostics = []);
+      diagnostics.push(action.payload.message);
+      if (diagnostics.length > 20) session.diagnostics = diagnostics.slice(-20);
+    },
+    clearSessionDiagnostics: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.diagnostics = [];
+    },
+    addAmbientNotice: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const notices = session.ambientNotices ?? (session.ambientNotices = []);
+      notices.push(action.payload.message);
+      if (notices.length > 50) session.ambientNotices = notices.slice(-50);
+    },
+    clearAmbientNotices: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.ambientNotices = [];
     },
     setSessionScene: (
       state,
@@ -404,6 +435,10 @@ export const {
   setSessionRoom,
   addAmbientInteraction,
   clearAmbientInteractions,
+  addSessionDiagnostic,
+  clearSessionDiagnostics,
+  addAmbientNotice,
+  clearAmbientNotices,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,

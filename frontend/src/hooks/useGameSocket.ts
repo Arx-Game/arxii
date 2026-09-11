@@ -1,20 +1,21 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
   addSessionMessage,
+  addSessionDiagnostic,
+  addAmbientNotice,
   resetGame,
   setSessionConnectionStatus,
   setSessionLifecycle,
 } from '@/store/gameSlice';
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
-import { GAME_MESSAGE_TYPE, WS_MESSAGE_TYPE } from './types';
+import { WS_MESSAGE_TYPE } from './types';
 import { emitActionResult } from './actionResultBus';
 import { emitHazardPrompt } from './hazardPromptBus';
 
 import type {
   ActionResultPayload,
   CommandErrorPayload,
-  GameMessage,
   HazardPromptPayload,
   IncomingMessage,
   InteractionWsPayload,
@@ -69,13 +70,6 @@ function clearReconnect(character: string) {
     clearTimeout(timer);
     delete reconnectTimers[character];
   }
-}
-
-/** A concise notice shown when a frame cannot be safely classified for play. */
-function buildSystemFallbackMessage(
-  content = 'A connection message could not be displayed.'
-): GameMessage {
-  return { content, timestamp: Date.now(), type: GAME_MESSAGE_TYPE.ERROR };
 }
 
 /** Narrows a parsed frame to the `[type, args, kwargs?]` wire shape. */
@@ -190,6 +184,13 @@ function dispatchIncomingMessage(
           lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
         })
       );
+    } else if (msgType === WS_MESSAGE_TYPE.SCENE) {
+      // Ending a confirmed scene is a presentation transition, not a
+      // readiness claim. Start/update frames wait for room_state confirmation.
+      const scenePayload = kwargs as { action?: unknown } | undefined;
+      if (scenePayload?.action === 'end') {
+        dispatch(setSessionLifecycle({ character, lifecycleState: 'aftermath' }));
+      }
     }
     return;
   }
@@ -203,13 +204,21 @@ function dispatchIncomingMessage(
     msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION
   ) {
     const message = parseGameMessage(parsed);
-    dispatch(addSessionMessage({ character, message }));
+    const metadata = kwargs as Record<string, unknown> | undefined;
+    if (
+      msgType === WS_MESSAGE_TYPE.TEXT &&
+      (metadata?.type === 'narrative' || metadata?.type === 'gemit')
+    ) {
+      dispatch(addAmbientNotice({ character, message: message.content }));
+    } else {
+      dispatch(addSessionMessage({ character, message }));
+    }
     return;
   }
   dispatch(
-    addSessionMessage({
+    addSessionDiagnostic({
       character,
-      message: buildSystemFallbackMessage('A connection message was not recognized. Try again.'),
+      message: 'A connection message was not recognized. Try again.',
     })
   );
 }
@@ -312,9 +321,9 @@ export function useGameSocket() {
         } catch {
           // Bad JSON is a diagnostic, not story content.
           dispatch(
-            addSessionMessage({
+            addSessionDiagnostic({
               character,
-              message: buildSystemFallbackMessage('A connection message was invalid. Try again.'),
+              message: 'A connection message was invalid. Try again.',
             })
           );
           return;
@@ -323,9 +332,9 @@ export function useGameSocket() {
         if (!isIncomingMessage(parsed)) {
           // Unexpected structure is a diagnostic, not story content.
           dispatch(
-            addSessionMessage({
+            addSessionDiagnostic({
               character,
-              message: buildSystemFallbackMessage('A connection message had an unexpected format.'),
+              message: 'A connection message had an unexpected format.',
             })
           );
           return;

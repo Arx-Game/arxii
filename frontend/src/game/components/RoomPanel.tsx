@@ -232,19 +232,7 @@ export function RoomPanel({
         <RoomAuraPicker characterId={characterId} roomId={room.id} />
       )}
 
-      {room.thumbnail_url && (
-        <div className="border-b">
-          <img src={room.thumbnail_url} alt={room.name} className="h-32 w-full object-cover" />
-        </div>
-      )}
-
       {room.description && <RoomDescription description={room.description} />}
-
-      {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
-
-      {room.hub?.kind === 'NOTICE_BOARD' && (
-        <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
-      )}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
@@ -255,10 +243,22 @@ export function RoomPanel({
         viewerPersonaId={viewerPersonaId}
       />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
+      <ObjectsList objects={room.objects} characterId={characterId} />
+      {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
+      {room.hub?.kind === 'NOTICE_BOARD' && (
+        <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
+      )}
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
       <TrapsBlock characterId={characterId} />
-      <ObjectsList objects={room.objects} characterId={characterId} />
+      {room.thumbnail_url && (
+        <details className="border-t">
+          <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
+            Room art
+          </summary>
+          <img src={room.thumbnail_url} alt={room.name} className="h-32 w-full object-cover" />
+        </details>
+      )}
     </div>
   );
 }

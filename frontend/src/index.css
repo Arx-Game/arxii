@@ -451,3 +451,7 @@
     display: none !important;
   }
 }
+
+.play-composer-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
