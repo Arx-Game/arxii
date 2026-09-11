@@ -7,6 +7,7 @@ from world.scenes.interaction_views import (
     InteractionFavoriteViewSet,
     InteractionReactionViewSet,
     InteractionViewSet,
+    PoseSubmissionViewSet,
     ReactionEmojiViewSet,
 )
 from world.scenes.place_views import PlaceViewSet
@@ -44,6 +45,17 @@ router.register(
     r"reaction-emoji",
     ReactionEmojiViewSet,
     basename="reactionemoji",
+)
+# Nested under "scenes/" per the narrative-play-delivery spec (#3760): a client
+# looks up its own submission at /api/scenes/submissions/{client_request_id}/.
+# No other registration in this file lives under a "scenes/..." prefix -- this
+# is the first, and deliberately opted into the literal path the spec names
+# rather than joining the flat top-level namespace every other viewset here
+# uses.
+router.register(
+    r"scenes/submissions",
+    PoseSubmissionViewSet,
+    basename="pose-submission",
 )
 router.register(
     r"summary-revisions",
