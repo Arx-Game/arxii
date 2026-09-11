@@ -22,7 +22,6 @@ import type {
   DraftApplicationDetail,
   EffectType,
   Facet,
-  FacetTreeNode,
   Family,
   FamilySlots,
   FormOptionsResponse,
@@ -719,15 +718,6 @@ export async function getPathSkillSuggestions(pathId: number): Promise<PathSkill
 export async function getFacets(): Promise<Facet[]> {
   const res = await apiFetch(`${MAGIC_URL}/facets/`);
   if (!res.ok) throw new Error('Failed to load facets');
-  return res.json();
-}
-
-/**
- * Get facets as nested tree structure.
- */
-export async function getFacetTree(): Promise<FacetTreeNode[]> {
-  const res = await apiFetch(`${MAGIC_URL}/facets/tree/`);
-  if (!res.ok) throw new Error('Failed to load facet tree');
   return res.json();
 }
 

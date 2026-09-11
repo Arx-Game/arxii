@@ -72,7 +72,7 @@ export function AttachFacetDialog({ open, onOpenChange, itemInstanceId }: Attach
 
   const comboboxItems = (facetsQuery.data ?? []).map((f) => ({
     value: String(f.id),
-    label: f.full_path,
+    label: f.name,
   }));
 
   function handleOpenChange(next: boolean) {

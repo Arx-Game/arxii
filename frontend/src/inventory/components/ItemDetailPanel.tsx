@@ -160,7 +160,6 @@ interface ItemFacetRow {
 interface FacetRecord {
   id: number;
   name: string;
-  full_path: string;
 }
 
 interface QualityTierRecord {
@@ -317,7 +316,7 @@ function ItemContent({
             <div className="flex flex-wrap gap-1.5">
               {liveFacets.map((row) => {
                 const facetRecord = facetMap.get(row.facet);
-                const facetLabel = facetRecord?.full_path ?? `Facet #${row.facet}`;
+                const facetLabel = facetRecord?.name ?? `Facet #${row.facet}`;
                 const tierRecord = tierMap.get(row.attachment_quality_tier);
                 const dotColor = tierRecord?.color_hex;
                 return (
