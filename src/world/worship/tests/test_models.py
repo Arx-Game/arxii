@@ -4,12 +4,14 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.models import Facet
 from world.worship.factories import (
     DevotionStandingFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
+from world.worship.models import BeingFacet
 
 
 class WorshipModelTests(TestCase):
@@ -35,3 +37,22 @@ class WorshipModelTests(TestCase):
         self.assertIsNotNone(declaration.public_being)
         self.assertIsNone(declaration.secret_being)
         self.assertIsNone(declaration.secret)
+
+
+class BeingFacetTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.being = WorshippedBeingFactory()
+
+    def test_being_can_hold_multiple_facets(self) -> None:
+        scythe = Facet.objects.create(name="Scythe")
+        red = Facet.objects.create(name="Red")
+        BeingFacet.objects.create(being=self.being, facet=scythe)
+        BeingFacet.objects.create(being=self.being, facet=red)
+        self.assertEqual(self.being.being_facets.count(), 2)
+
+    def test_unique_per_being_and_facet(self) -> None:
+        scythe = Facet.objects.create(name="Scythe")
+        BeingFacet.objects.create(being=self.being, facet=scythe)
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            BeingFacet.objects.create(being=self.being, facet=scythe)

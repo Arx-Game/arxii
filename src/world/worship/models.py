@@ -94,6 +94,32 @@ class WorshippedBeing(SharedMemoryModel):
         return self.name
 
 
+class BeingFacet(SharedMemoryModel):
+    """A favored aesthetic facet of a WorshippedBeing (#3776).
+
+    Draws from the same shared Facet pool characters use via Motif — double-dipping is
+    fine (a character's own bound facet and their patron's favored facet can be the
+    same row). No policing mechanism; bounded in practice by ordinary authoring
+    discretion, matching the existing light-touch precedent for Facet application.
+    """
+
+    being = models.ForeignKey(
+        WorshippedBeing, on_delete=models.CASCADE, related_name="being_facets"
+    )
+    facet = models.ForeignKey(
+        "arxii.Facet", on_delete=models.PROTECT, related_name="favored_by_beings"
+    )
+
+    class Meta:
+        ordering = ["being", "facet__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "facet"], name="unique_being_facet"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.being}: {self.facet.name}"
+
+
 class WorshipGrant(SharedMemoryModel):
     """Audit ledger row for worship received by a being (mirrors ResonanceGrant)."""
 

@@ -1,6 +1,7 @@
 from django.contrib import admin
 
 from world.worship.models import (
+    BeingFacet,
     ChosenFavorConfig,
     DevotionStanding,
     DivineInterventionConfig,
@@ -27,6 +28,13 @@ class WorshippedBeingAdmin(admin.ModelAdmin):
     list_filter = ("tradition", "is_active")
     search_fields = ("name",)
     raw_id_fields = ("avatar_sheet",)
+
+
+@admin.register(BeingFacet)
+class BeingFacetAdmin(admin.ModelAdmin):
+    list_display = ("being", "facet")
+    list_filter = ("being",)
+    search_fields = ("being__name", "facet__name")
 
 
 @admin.register(WorshipGrant)

@@ -4,6 +4,7 @@ import factory
 
 from world.skills.factories import SpecializationFactory
 from world.worship.models import (
+    BeingFacet,
     DevotionStanding,
     WorshipDeclaration,
     WorshippedBeing,
@@ -28,6 +29,14 @@ class WorshippedBeingFactory(factory.django.DjangoModelFactory):
     description = "PLACEHOLDER being lore."
     tradition = factory.SubFactory(WorshipTraditionFactory)
     is_active = True
+
+
+class BeingFacetFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingFacet
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
 
 
 class DevotionStandingFactory(factory.django.DjangoModelFactory):
