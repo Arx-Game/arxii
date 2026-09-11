@@ -44,7 +44,20 @@ export function usePoseReadTracking() {
     markPosesRead(batch).catch((error: unknown) => {
       console.error('Failed to mark poses read', error);
     });
+    // More than MAX_BATCH could still be queued (dwell timers can fire faster
+    // than the flush interval drains them); if so, reschedule immediately
+    // instead of waiting for the next dwell event to call scheduleFlush()
+    // again, which could stall the remainder indefinitely.
+    if (queued.current.length > 0) scheduleFlushRef.current();
   }, []);
+
+  // `flush` and `scheduleFlush` are mutually recursive (flush reschedules
+  // itself; scheduleFlush's timer calls flush), so a plain closure over
+  // `scheduleFlush` from inside `flush` would need `scheduleFlush` declared
+  // first, and `scheduleFlush` depends on `flush`, which depends on
+  // `scheduleFlush`... A ref sidesteps the cycle without adding either
+  // callback to the other's dependency array.
+  const scheduleFlushRef = useRef<() => void>(() => {});
 
   const scheduleFlush = useCallback(() => {
     if (flushTimer.current) return;
@@ -53,6 +66,9 @@ export function usePoseReadTracking() {
       flush();
     }, FLUSH_INTERVAL_MS);
   }, [flush]);
+  // Keep the ref current every render so flush()'s reference to it (above)
+  // always calls the latest scheduleFlush, not a stale closure.
+  scheduleFlushRef.current = scheduleFlush;
 
   const handleIntersect = useCallback<IntersectionObserverCallback>(
     (entries) => {
@@ -99,7 +115,17 @@ export function usePoseReadTracking() {
   // so that's inert.
   const [observer] = useState(() => new IntersectionObserver(handleIntersect));
 
-  useEffect(() => () => observer.disconnect(), [observer]);
+  useEffect(
+    () => () => {
+      // Send whatever is still queued (up to FLUSH_INTERVAL_MS worth of
+      // pending read-marks) before tearing down — otherwise navigating away
+      // from a scene silently drops them, since nothing else ever flushes on
+      // unmount.
+      flush();
+      observer.disconnect();
+    },
+    [observer, flush]
+  );
 
   const observe = useCallback(
     (element: HTMLElement, pose: PoseRef) => {

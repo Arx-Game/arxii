@@ -1,9 +1,11 @@
+import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   loadPlayPreferences,
   DEFAULT_PLAY_PREFERENCES,
   loadConversationAnchor,
   saveConversationAnchor,
+  usePlayPreferences,
 } from './playPreferences';
 
 describe('playPreferences', () => {
@@ -43,5 +45,33 @@ describe('playPreferences', () => {
     saveConversationAnchor('scene:100', { anchor: null, collapsed: [] });
     expect(loadConversationAnchor('scene:0')).toBeNull();
     expect(loadConversationAnchor('scene:100')).not.toBeNull();
+  });
+
+  it('treats a corrupted `entries: null` anchor store as empty instead of throwing', () => {
+    localStorage.setItem('arx:play-anchors:v1', JSON.stringify({ order: [], entries: null }));
+    expect(() => loadConversationAnchor('scene:1')).not.toThrow();
+    expect(loadConversationAnchor('scene:1')).toBeNull();
+  });
+
+  it("does not let two independent usePlayPreferences() instances clobber each other's writes", () => {
+    // DisplaySettings.tsx and ThreadedNarrativeReader.tsx each call
+    // usePlayPreferences() independently, so each holds its own local
+    // useState snapshot of the persisted blob from its own mount time. If
+    // `update` merges a patch over that stale `current` snapshot instead of
+    // a fresh read from storage, whichever instance writes second reverts
+    // whatever the other instance had just set.
+    const first = renderHook(() => usePlayPreferences());
+    const second = renderHook(() => usePlayPreferences());
+
+    act(() => {
+      first.result.current.update({ readerMode: 'chronological' });
+    });
+    act(() => {
+      second.result.current.update({ proseSize: 18 });
+    });
+
+    const persisted = loadPlayPreferences();
+    expect(persisted.readerMode).toBe('chronological');
+    expect(persisted.proseSize).toBe(18);
   });
 });

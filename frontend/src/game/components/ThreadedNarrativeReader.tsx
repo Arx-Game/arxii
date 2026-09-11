@@ -114,16 +114,39 @@ export function ThreadedNarrativeReader({
     () => loadConversationAnchor(conversationKey),
     [conversationKey]
   );
-  const [collapsed, setCollapsed] = useState<Set<string>>(() => {
-    if (storedAnchorState) return new Set(storedAnchorState.collapsed);
-    if (groups.length <= 1) return new Set();
+  // The "collapse all but the most recently active thread" default can only
+  // be computed once real thread data has arrived. On a real page load this
+  // component mounts (keyed by conversationKey/sceneId, per GameWindow.tsx)
+  // the instant sceneId becomes truthy, while useSceneInteractions's
+  // useInfiniteQuery is still in flight — so `groups` is empty on that first
+  // render. A lazy useState initializer only ever sees that one, empty
+  // render and never re-runs once real data lands, so the default silently
+  // never applies. Instead: seed synchronously from storage if it exists
+  // (and never let the async default fire on top of restored state), else
+  // leave `collapsed` empty and let the effect below apply the default the
+  // first time `groups` is actually populated. `defaultSeeded` guards that
+  // effect so it only ever runs once per mount — the user's own subsequent
+  // toggles (via toggleThread/bulk expand-collapse) are the only thing
+  // allowed to change `collapsed` after that.
+  const [collapsed, setCollapsed] = useState<Set<string>>(() =>
+    storedAnchorState ? new Set(storedAnchorState.collapsed) : new Set()
+  );
+  const defaultSeeded = useRef(storedAnchorState !== null);
+  useEffect(() => {
+    if (defaultSeeded.current) return;
+    if (groups.length === 0) return;
+    defaultSeeded.current = true;
+    if (groups.length <= 1) {
+      setCollapsed(new Set());
+      return;
+    }
     const mostRecentKey = [...groups].sort((a, b) =>
       b.interactions[b.interactions.length - 1].timestamp.localeCompare(
         a.interactions[a.interactions.length - 1].timestamp
       )
     )[0].key;
-    return new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key));
-  });
+    setCollapsed(new Set(groups.filter((g) => g.key !== mostRecentKey).map((g) => g.key)));
+  }, [groups]);
   const [collapsedPoses, setCollapsedPoses] = useState<Set<number>>(new Set());
   const { observe } = usePoseReadTracking();
   const { preferences, update } = usePlayPreferences();
@@ -143,17 +166,29 @@ export function ThreadedNarrativeReader({
     overscan: 8,
   });
 
+  const persistCollapsed = (next: Set<string>) =>
+    saveConversationAnchor(conversationKey, {
+      anchor: storedAnchorState?.anchor ?? null,
+      collapsed: [...next],
+    });
   const toggleThread = (key: string) =>
     setCollapsed((previous) => {
       const next = new Set(previous);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      saveConversationAnchor(conversationKey, {
-        anchor: storedAnchorState?.anchor ?? null,
-        collapsed: [...next],
-      });
+      persistCollapsed(next);
       return next;
     });
+  const expandAllThreads = () => {
+    const next = new Set<string>();
+    setCollapsed(next);
+    persistCollapsed(next);
+  };
+  const collapseAllThreads = () => {
+    const next = new Set(groups.map((group) => group.key));
+    setCollapsed(next);
+    persistCollapsed(next);
+  };
   const togglePose = (id: number) =>
     setCollapsedPoses((previous) => {
       const next = new Set(previous);
@@ -181,13 +216,10 @@ export function ThreadedNarrativeReader({
           <div className="flex gap-2">
             {groups.length > 0 && (
               <>
-                <button className="underline" onClick={() => setCollapsed(new Set())}>
+                <button className="underline" onClick={expandAllThreads}>
                   Expand loaded threads
                 </button>
-                <button
-                  className="underline"
-                  onClick={() => setCollapsed(new Set(groups.map((group) => group.key)))}
-                >
+                <button className="underline" onClick={collapseAllThreads}>
                   Collapse loaded threads
                 </button>
               </>

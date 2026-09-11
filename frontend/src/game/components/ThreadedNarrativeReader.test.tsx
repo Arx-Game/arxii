@@ -2,6 +2,7 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
+import { loadConversationAnchor } from '../playPreferences';
 import type { Interaction } from '@/scenes/types';
 
 vi.mock('@/scenes/components/SceneMessages', () => ({
@@ -144,6 +145,85 @@ describe('ThreadedNarrativeReader', () => {
     expect(screen.queryByText('scene2 older')).not.toBeInTheDocument();
   });
 
+  it('applies the default-collapse-but-most-recent rule once real data arrives after an empty first render', () => {
+    // Mirrors a real page load: ThreadedNarrativeReader mounts (same
+    // component instance — no `key` change here, unlike the scene-change
+    // test above) the instant sceneId becomes truthy, while
+    // useSceneInteractions's useInfiniteQuery is still in flight, so
+    // `interactions` is `[]` on the very first render. A lazy useState
+    // initializer only ever sees that first, empty render and never
+    // re-derives the default once real data lands (the bug this test
+    // guards against) — the fix instead applies the default via an effect
+    // the first time `groups` actually has data.
+    const { rerender } = render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // Empty state: nothing crashes, no group renders.
+    expect(screen.getByText('New conversation')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /poses/i })).not.toBeInTheDocument();
+
+    rerender(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // The newly-arrived data should get the same default-collapse treatment
+    // as data present at mount: most-recent thread (thread-b) expanded,
+    // the rest (thread-a) collapsed.
+    expect(screen.getByText('newer root')).toBeInTheDocument();
+    expect(screen.queryByText('older root')).not.toBeInTheDocument();
+  });
+
+  it('does not re-apply the default collapse after the user has toggled a thread', async () => {
+    // Once the default has been seeded and the user has made their own
+    // choice, a later re-render with more groups (e.g. a new pose arriving
+    // in a third thread) must not re-run the "collapse all but most recent"
+    // logic and stomp the user's manual toggle.
+    const user = userEvent.setup();
+    const { rerender } = render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // Expand the default-collapsed thread-a manually.
+    await user.click(screen.getByRole('button', { name: /writer 1.*1 pose/i }));
+    expect(screen.getByText('older root')).toBeInTheDocument();
+
+    // A new pose arrives in a brand new thread-c.
+    rerender(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+          interaction(3, 'newest root', 'thread-c'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // The user's manual expand of thread-a must survive — the default-collapse
+    // effect is guarded from re-firing after its first seed.
+    expect(screen.getByText('older root')).toBeInTheDocument();
+  });
+
   it('chronological mode shows all poses as a flat, time-ordered list', async () => {
     const user = userEvent.setup();
     render(
@@ -197,6 +277,29 @@ describe('ThreadedNarrativeReader', () => {
     const mountedPoses = container.querySelectorAll('[data-testid="scene-messages"]');
     expect(mountedPoses.length).toBeLessThan(300);
     expect(mountedPoses.length).toBeGreaterThan(0);
+  });
+
+  it('persists bulk Expand/Collapse loaded threads clicks, unlike a direct setCollapsed that bypasses saveConversationAnchor', async () => {
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={[
+          interaction(1, 'older root', 'thread-a'),
+          interaction(2, 'newer root', 'thread-b'),
+        ]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    // thread-a starts collapsed by default (thread-b is more recent).
+    await user.click(screen.getByRole('button', { name: /collapse loaded threads/i }));
+    expect(loadConversationAnchor('scene:1')?.collapsed.sort()).toEqual(
+      ['thread-a', 'thread-b'].sort()
+    );
+
+    await user.click(screen.getByRole('button', { name: /expand loaded threads/i }));
+    expect(loadConversationAnchor('scene:1')?.collapsed).toEqual([]);
   });
 
   it('registers every rendered pose with the dwell-tracking observer, in both Threads and Chronological view', async () => {

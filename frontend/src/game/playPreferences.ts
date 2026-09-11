@@ -48,8 +48,16 @@ export function savePlayPreferences(preferences: PlayPreferences): void {
 export function usePlayPreferences() {
   const [preferences, setPreferences] = useState(loadPlayPreferences);
   const update = useCallback((patch: Partial<PlayPreferences>) => {
-    setPreferences((current) => {
-      const next = { ...current, ...patch };
+    // Merge the patch over a FRESH read from storage, never over `current`
+    // (this hook instance's own stale in-memory snapshot). Two independent
+    // components (DisplaySettings.tsx, ThreadedNarrativeReader.tsx) each call
+    // usePlayPreferences() and hold their own useState snapshot from their
+    // own mount time; merging over `current` meant whichever wrote second
+    // clobbered the first's change with its own stale copy of every other
+    // field. Reading storage fresh here layers this write on top of whatever
+    // is actually persisted right now, including another instance's write.
+    setPreferences(() => {
+      const next = { ...loadPlayPreferences(), ...patch };
       savePlayPreferences(next);
       return next;
     });
@@ -75,7 +83,7 @@ function loadAnchorStore(): AnchorStore {
     const raw = window.localStorage.getItem(ANCHOR_STORAGE_KEY);
     if (!raw) return { order: [], entries: {} };
     const parsed = JSON.parse(raw) as AnchorStore;
-    if (!Array.isArray(parsed.order) || typeof parsed.entries !== 'object') {
+    if (!Array.isArray(parsed.order) || !parsed.entries || typeof parsed.entries !== 'object') {
       return { order: [], entries: {} };
     }
     return parsed;

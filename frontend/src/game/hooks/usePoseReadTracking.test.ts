@@ -133,4 +133,52 @@ describe('usePoseReadTracking', () => {
 
     consoleErrorSpy.mockRestore();
   });
+
+  it('flushes any still-pending queue on unmount instead of losing it', () => {
+    // Before this fix, nothing ever flushed on unmount — up to
+    // FLUSH_INTERVAL_MS (2s) worth of dwell-completed poses were silently
+    // dropped when the reader unmounted (e.g. navigating away from a scene)
+    // before the periodic flush timer got a chance to fire.
+    const { result, unmount } = renderHook(() => usePoseReadTracking());
+    const el = document.createElement('div');
+    result.current.observe(el, { id: 99, timestamp: '2026-01-01T00:00:00Z' });
+
+    act(() => {
+      observerInstance.trigger([{ target: el, isIntersecting: true }]);
+      vi.advanceTimersByTime(1000); // dwell completes; queued but not yet flushed
+    });
+    expect(playQueries.markPosesRead).not.toHaveBeenCalled();
+
+    unmount();
+
+    expect(playQueries.markPosesRead).toHaveBeenCalledWith([
+      { id: 99, timestamp: '2026-01-01T00:00:00Z' },
+    ]);
+  });
+
+  it('drains a backlog larger than one batch to completion without a new dwell event', () => {
+    // A burst larger than MAX_BATCH (20) must not strand its remainder
+    // waiting indefinitely for some unrelated future pose to dwell-complete
+    // and re-trigger scheduling; every queued item eventually reaches
+    // markPosesRead from this one burst alone.
+    const { result } = renderHook(() => usePoseReadTracking());
+    const elements = Array.from({ length: 45 }, () => document.createElement('div'));
+    elements.forEach((el, i) =>
+      result.current.observe(el, { id: i, timestamp: `2026-01-01T00:00:00Z` })
+    );
+
+    act(() => {
+      observerInstance.trigger(elements.map((el) => ({ target: el, isIntersecting: true })));
+      vi.advanceTimersByTime(1000);
+      // Advance well past FLUSH_INTERVAL_MS with no new intersection/dwell
+      // event at all — only this initial burst's own scheduling is allowed
+      // to account for every item.
+      vi.advanceTimersByTime(5000);
+    });
+
+    const totalMarked = vi
+      .mocked(playQueries.markPosesRead)
+      .mock.calls.reduce((sum, [batch]) => sum + batch.length, 0);
+    expect(totalMarked).toBe(45);
+  });
 });
