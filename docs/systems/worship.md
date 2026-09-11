@@ -24,6 +24,14 @@ issue bodies; the model decision is ADR-0132.
   No reverent/irreverent field — tone is prose, not data. Reached
   transitively by `Organization.patron_nickname` (see societies.md) so
   different orgs can name the same god differently in their own records.
+- `BeingResonance` (#3776) — a resonance a being favors or is merely
+  associated with: `being` FK (`related_name="resonances"`), `resonance` FK →
+  `magic.Resonance` (PROTECT, `related_name="favored_by_beings"`), `tier`
+  (`BeingResonanceTier`: FAVORED/ASSOCIATED), unique per (being, resonance). No
+  cap on how many a being holds — models "different kinds of worshippers" for
+  the same being. Read by issue #3777's `WorshipRite` reward calculation
+  (FAVORED pays double, ASSOCIATED the ordinary rate) and by #3776 Task 9's
+  tarot/feast-day mechanic.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:

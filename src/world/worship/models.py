@@ -16,7 +16,7 @@ from world.magic.models.techniques import (
     AbstractAppliedCondition,
     AbstractDamageProfile,
 )
-from world.worship.constants import MiracleTrigger
+from world.worship.constants import BeingResonanceTier, MiracleTrigger
 
 # Verbose name reused across Meta verbose_name / verbose_name_plural / __str__ (python:S1192).
 CHOSEN_FAVOR_CONFIG_VERBOSE = "Chosen Favor Config"
@@ -118,6 +118,29 @@ class BeingFacet(SharedMemoryModel):
 
     def __str__(self) -> str:
         return f"{self.being}: {self.facet.name}"
+
+
+class BeingResonance(SharedMemoryModel):
+    """A resonance a being favors or is associated with (#3776).
+
+    No cap on how many a being holds. FAVORED acts pay double, ASSOCIATED pays the
+    ordinary rate — models "different kinds of worshippers" for the same being.
+    """
+
+    being = models.ForeignKey(WorshippedBeing, on_delete=models.CASCADE, related_name="resonances")
+    resonance = models.ForeignKey(
+        "arxii.Resonance", on_delete=models.PROTECT, related_name="favored_by_beings"
+    )
+    tier = models.CharField(max_length=20, choices=BeingResonanceTier.choices)
+
+    class Meta:
+        ordering = ["being", "-tier", "resonance__name"]
+        constraints = [
+            models.UniqueConstraint(fields=["being", "resonance"], name="unique_being_resonance"),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.being}: {self.resonance.name} ({self.get_tier_display()})"
 
 
 class BeingNickname(SharedMemoryModel):

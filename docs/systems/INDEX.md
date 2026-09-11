@@ -8266,7 +8266,9 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `BeingFacet` (favored aesthetic
   Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
   being+name; `societies.Organization.patron_nickname` reaches the being transitively through
-  it), `WorshipGrant` (audit ledger),
+  it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
+  FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
+  reward calculation, #3777), `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,

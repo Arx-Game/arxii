@@ -5624,6 +5624,7 @@
   - cascade_modifiers <- locations.LocationValueModifier
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+  - favored_by_beings <- worship.BeingResonance
 
 ### ResonanceAlignmentBoonTier
 **Foreign Keys:**
@@ -10385,6 +10386,11 @@
 **Pointed to by:**
   - patron_organizations <- societies.Organization
 
+### BeingResonance
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - resonance -> magic.Resonance [FK]
+
 ### ChosenFavorConfig
 
 ### DevotionStanding
@@ -10445,6 +10451,7 @@
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
   - being_facets <- worship.BeingFacet
+  - resonances <- worship.BeingResonance
   - nicknames <- worship.BeingNickname
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding

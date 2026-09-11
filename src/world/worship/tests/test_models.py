@@ -4,14 +4,16 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
+from world.magic.factories import ResonanceFactory
 from world.magic.models import Facet
+from world.worship.constants import BeingResonanceTier
 from world.worship.factories import (
     DevotionStandingFactory,
     WorshipDeclarationFactory,
     WorshippedBeingFactory,
     WorshipTraditionFactory,
 )
-from world.worship.models import BeingFacet, BeingNickname
+from world.worship.models import BeingFacet, BeingNickname, BeingResonance
 
 
 class WorshipModelTests(TestCase):
@@ -64,3 +66,29 @@ class BeingNicknameTests(TestCase):
         BeingNickname.objects.create(being=being, name="the Crimson")
         BeingNickname.objects.create(being=being, name="Old Resting Murder Face")
         self.assertEqual(being.nicknames.count(), 2)
+
+
+class BeingResonanceTests(TestCase):
+    def test_being_can_hold_favored_and_associated_resonances(self) -> None:
+        being = WorshippedBeingFactory()
+        savagery = ResonanceFactory(name="Savagery")
+        wrath = ResonanceFactory(name="Wrath")
+        BeingResonance.objects.create(
+            being=being, resonance=savagery, tier=BeingResonanceTier.FAVORED
+        )
+        BeingResonance.objects.create(
+            being=being, resonance=wrath, tier=BeingResonanceTier.ASSOCIATED
+        )
+        self.assertEqual(being.resonances.count(), 2)
+        self.assertEqual(being.resonances.get(resonance=savagery).tier, BeingResonanceTier.FAVORED)
+
+    def test_unique_per_being_and_resonance(self) -> None:
+        being = WorshippedBeingFactory()
+        savagery = ResonanceFactory(name="Savagery")
+        BeingResonance.objects.create(
+            being=being, resonance=savagery, tier=BeingResonanceTier.FAVORED
+        )
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            BeingResonance.objects.create(
+                being=being, resonance=savagery, tier=BeingResonanceTier.ASSOCIATED
+            )

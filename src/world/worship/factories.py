@@ -3,9 +3,11 @@
 import factory
 
 from world.skills.factories import SpecializationFactory
+from world.worship.constants import BeingResonanceTier
 from world.worship.models import (
     BeingFacet,
     BeingNickname,
+    BeingResonance,
     DevotionStanding,
     WorshipDeclaration,
     WorshippedBeing,
@@ -38,6 +40,15 @@ class BeingFacetFactory(factory.django.DjangoModelFactory):
 
     being = factory.SubFactory(WorshippedBeingFactory)
     facet = factory.SubFactory("world.magic.factories.FacetFactory")
+
+
+class BeingResonanceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingResonance
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    tier = BeingResonanceTier.FAVORED
 
 
 class BeingNicknameFactory(factory.django.DjangoModelFactory):
