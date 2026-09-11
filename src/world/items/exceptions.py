@@ -29,7 +29,13 @@ class ItemError(Exception):
 
 
 class CraftingNotConfigured(Exception):
-    """Raised when crafting is attempted before a CheckType is configured."""
+    """Raised when a crafting-adjacent operation needs configuration that isn't seeded.
+
+    Covers "no CheckType is wired for this recipe" and "no QualityTier rows exist
+    in this database" — the latter also covers stamp_inherent_facets
+    (services/facets.py), which resolves a baseline QualityTier for its
+    auto-stamped rows even though stamping itself isn't a crafting action.
+    """
 
     user_message = "Crafting is not available yet."
 

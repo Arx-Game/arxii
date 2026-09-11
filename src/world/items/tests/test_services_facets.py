@@ -4,8 +4,12 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
-from world.items.models import ItemFacet
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+)
+from world.items.models import ItemFacet, QualityTier
 from world.items.services.facets import (
     attach_facet_to_item,
     remove_facet_from_item,
@@ -275,3 +279,26 @@ class InherentFacetStampingTests(TestCase):
         instance = ItemInstanceFactory(template=template)
         stamp_inherent_facets(instance)  # calling again must not duplicate or error
         self.assertEqual(instance.item_facets.filter(facet=scythe_facet).count(), 1)
+
+
+class InherentFacetStampingUnconfiguredTests(TestCase):
+    """stamp_inherent_facets raises CraftingNotConfigured when no QualityTier rows exist.
+
+    #3776 Task 4 review finding: QualityTier.for_score(0) returns None (per its own
+    docstring) only when the QualityTier table is empty, and attachment_quality_tier
+    is a required (non-nullable) FK — without a guard, ItemFacet.objects.create would
+    raise a raw IntegrityError from inside ItemInstance.save(). Deliberately a
+    separate TestCase (not InherentFacetStampingTests, whose setUpTestData seeds a
+    QualityTier row) so no tier ever exists in this class's test database.
+    """
+
+    def test_raises_crafting_not_configured_when_no_tiers(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        self.assertFalse(QualityTier.objects.exists())
+        scythe_facet = Facet.objects.create(name="ScytheUnconfigured")
+        template = ItemTemplateFactory(facet_capacity=1)
+        template.inherent_facets.add(scythe_facet)
+
+        with self.assertRaises(CraftingNotConfigured):
+            ItemInstanceFactory(template=template)

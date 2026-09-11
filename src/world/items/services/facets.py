@@ -7,7 +7,11 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+)
 from world.items.models import EquippedItem, ItemFacet, ItemInstance, QualityTier
 
 if TYPE_CHECKING:
@@ -90,12 +94,19 @@ def stamp_inherent_facets(item_instance: ItemInstance) -> None:
     facets weren't crafted, so there's no natural quality to record. Resolves the
     baseline tier via QualityTier.for_score(0) (reusing the model's own "lowest
     tier" resolution) rather than inventing a new convention.
+
+    Raises:
+        CraftingNotConfigured: No ``QualityTier`` rows are seeded (``for_score``
+            returns ``None`` only in an unconfigured deployment) — same guard as
+            the sibling call site in ``crafting/quality.py``.
     """
     existing_facet_ids = set(item_instance.item_facets.values_list("facet_id", flat=True))
     inherent_facets = item_instance.template.inherent_facets.exclude(id__in=existing_facet_ids)
     if not inherent_facets.exists():
         return
     baseline_tier = QualityTier.for_score(0)
+    if baseline_tier is None:
+        raise CraftingNotConfigured
     for facet in inherent_facets:
         ItemFacet.objects.create(
             item_instance=item_instance,
