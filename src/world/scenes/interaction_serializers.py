@@ -201,9 +201,35 @@ class InteractionListSerializer(serializers.ModelSerializer):
             pass
         return RETAINED_AVAILABILITY
 
-    def get_is_unread(self, _obj: Interaction) -> bool:
-        """Read state is private to the play reader and defaults to unread false."""
-        return False
+    def get_is_unread(self, obj: Interaction) -> bool:
+        """True when the read-receipt table has no row for this viewer+pose (#3759)."""
+        return obj.id not in self._read_interaction_ids()
+
+    def _read_interaction_ids(self) -> set[int]:
+        """Batch-resolve which of this page's interactions the viewer has read.
+
+        Cached on the shared serializer context (one query per page, not per row),
+        mirroring ``_muted_persona_ids``'s lazy cache-on-context pattern; the
+        page-wide row batching mirrors ``_persona_display_map``.
+        """
+        cache_key = "_read_interaction_ids_cache"
+        if cache_key not in self.context:
+            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            if self.parent is not None:
+                rows = list(self.parent.instance or [])
+            elif self.instance is not None:
+                rows = [self.instance]
+            else:
+                rows = []
+            ids = [row.id for row in rows if row is not None]
+            if user and user.is_authenticated and ids:
+                self.context[cache_key] = has_read(account=user, interaction_ids=ids)
+            else:
+                self.context[cache_key] = set()
+        return self.context[cache_key]
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
         # Per-viewer name resolution (#1109): own faces and named-public faces render real;

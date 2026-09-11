@@ -1308,6 +1308,46 @@ class InteractionReaction(SharedMemoryModel):
         return f"{self.account} reacted {self.emoji} to interaction {self.interaction_id}"
 
 
+class InteractionReadReceipt(SharedMemoryModel):
+    """Private, cross-device record that an account has read a pose.
+
+    Mirrors `InteractionReaction`'s partition-bridge shape exactly: a real
+    `ForeignKey(Interaction, db_constraint=False, ...)` plus a denormalized
+    `timestamp`, required because `Interaction`'s actual database PK is the
+    composite `(id, timestamp)` of its monthly-partitioned table. Never
+    serialized to any viewer other than the reading account (#3759 Decision 7).
+    """
+
+    interaction = models.ForeignKey(
+        Interaction,
+        on_delete=models.CASCADE,
+        related_name="read_receipts",
+        db_constraint=False,
+        help_text="The pose marked read",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction — required for composite FK "
+        "with partitioned table",
+    )
+    account = models.ForeignKey(
+        ACCOUNT_MODEL,
+        on_delete=models.CASCADE,
+        related_name="interaction_read_receipts",
+    )
+    seen_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction", "timestamp", "account"],
+                name="unique_read_receipt_per_account",
+            ),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.account} read interaction {self.interaction_id}"
+
+
 class ReactionEmoji(SharedMemoryModel):
     """Staff-editable catalog of reaction emoji and their relationship valence (#1699).
 

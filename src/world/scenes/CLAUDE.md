@@ -76,6 +76,12 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`Interaction`**: Atomic IC interaction record (pose, say, whisper, etc.) with privacy controls
 - **`InteractionFavorite`**: Private bookmarks for cherished RP moments
 - **`InteractionReaction`**: Emoji reactions on interactions
+- **`InteractionReadReceipt`** (#3759): private, cross-device per-account read-state marker on a
+  pose. Mirrors `InteractionReaction`'s partition-bridge shape (`interaction` FK with
+  `db_constraint=False` + denormalized `timestamp`, since `Interaction`'s real DB PK is the
+  composite `(id, timestamp)` of its monthly-partitioned table), plus `account` FK and
+  `seen_at` (auto-now-add). Unique per `(interaction, timestamp, account)`. Never serialized to
+  any viewer other than the reading account.
 - **`InteractionTargetPersona`**: Explicit IC targets for thread derivation
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
 - **`SceneRound`**: Non-combat round/turn structure anchored to a room. Fields: `mode` (`SceneRoundMode`),

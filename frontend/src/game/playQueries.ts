@@ -1,10 +1,19 @@
 import { apiFetch } from '@/evennia_replacements/api';
-import type { ConversationSummary, PlayPage, PlaySearchResult } from './playTypes';
+import type { ConversationSummary, PlayPage, PlaySearchResult, ThreadSummary } from './playTypes';
 import type { Interaction } from '@/scenes/types';
+
+export class PlayFetchError extends Error {
+  status: number;
+  constructor(status: number) {
+    super('Unable to load history');
+    this.name = 'PlayFetchError';
+    this.status = status;
+  }
+}
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await apiFetch(path);
-  if (!response.ok) throw new Error('Unable to load history');
+  if (!response.ok) throw new PlayFetchError(response.status);
   return response.json() as Promise<T>;
 }
 
@@ -19,11 +28,24 @@ export function fetchPlayConversations(
   );
 }
 
-export function fetchPlaySearch(query: string, from?: string, to?: string) {
+export function fetchPlaySearch(query: string, from?: string, to?: string, kind?: string) {
   const params = new URLSearchParams({ q: query });
   if (from) params.set('from', from);
   if (to) params.set('to', to);
+  if (kind) params.set('kind', kind);
   return getJson<PlayPage<PlaySearchResult>>(`/api/play/search/?${params}`);
+}
+
+/** Load an authorized thread page (root pose + visible replies) for a conversation. */
+export function fetchPlayThreads(params: {
+  conversation: string;
+  before?: string;
+  after?: string;
+}) {
+  const query = new URLSearchParams({ conversation: params.conversation });
+  if (params.before) query.set('before', params.before);
+  if (params.after) query.set('after', params.after);
+  return getJson<PlayPage<ThreadSummary>>(`/api/play/threads/?${query}`);
 }
 
 /** Load a bounded authorized pose page for a historical reference. */
@@ -33,6 +55,39 @@ export function fetchPlayPoses(
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) if (value) query.set(key, value);
   return getJson<PlayPage<Interaction>>(`/api/play/poses/${query.toString() ? `?${query}` : ''}`);
+}
+
+/** Mark a batch of poses as read (dwell-tracked by `usePoseReadTracking`). */
+export async function markPosesRead(
+  poses: { id: number; timestamp: string }[]
+): Promise<{ marked: number }> {
+  const response = await apiFetch('/api/play/read/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ poses }),
+  });
+  if (!response.ok) throw new Error('Unable to mark poses read');
+  return response.json();
+}
+
+/**
+ * Mark-all-before-snapshot bulk dismissal (#3759 spec section 7): mark every
+ * interaction the account can see in `conversation` with timestamp <= `before`
+ * as read, in one call, instead of enumerating individual poses like
+ * `markPosesRead`. Same endpoint, alternate request body shape (see
+ * `PlayReadView` on the backend).
+ */
+export async function markConversationRead(
+  conversation: string,
+  before: string
+): Promise<{ marked: number }> {
+  const response = await apiFetch('/api/play/read/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ conversation, before }),
+  });
+  if (!response.ok) throw new Error('Unable to mark conversation read');
+  return response.json();
 }
 
 /** Load the authorized neighborhood around one historical pose. */
@@ -48,7 +103,10 @@ export function fetchPlayContext(params: {
   if (params.timestamp) query.set('timestamp', params.timestamp);
   if (params.conversation) query.set('conversation', params.conversation);
   if (params.from) query.set('from', params.from);
-  return getJson<{ results: Interaction[]; threadId: string | null }>(
-    `/api/play/context/?${query}`
-  );
+  return getJson<{
+    results: Interaction[];
+    threadId: string | null;
+    before: string | null;
+    after: string | null;
+  }>(`/api/play/context/?${query}`);
 }
