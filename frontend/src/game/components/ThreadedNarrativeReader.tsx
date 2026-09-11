@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 
 const INITIAL_PAGE_SIZE = 20;
 import { ChevronDown, ChevronRight, MessageCircle, Reply } from 'lucide-react';
@@ -95,6 +96,13 @@ export function ThreadedNarrativeReader({
       ),
     [visibleInteractions]
   );
+  const chronoParentRef = useRef<HTMLDivElement>(null);
+  const chronoVirtualizer = useVirtualizer({
+    count: chronologicalItems.length,
+    getScrollElement: () => chronoParentRef.current,
+    estimateSize: () => 160,
+    overscan: 8,
+  });
 
   const toggleThread = (key: string) =>
     setCollapsed((previous) => {
@@ -164,43 +172,59 @@ export function ThreadedNarrativeReader({
               </p>
             </div>
           ) : (
-            chronologicalItems.map((item) => {
-              const poseCollapsed = collapsedPoses.has(item.id);
-              return (
-                <div key={`chrono-${item.id}`}>
-                  <p className="text-xs text-muted-foreground">
-                    {item.thread_id ? 'In a thread' : 'Standalone'}
-                  </p>
-                  {poseCollapsed ? (
-                    <article
-                      className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
-                      data-testid={`collapsed-pose-${item.id}`}
+            <div ref={chronoParentRef} style={{ height: '70vh', overflow: 'auto' }}>
+              <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
+                {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = chronologicalItems[virtualRow.index];
+                  const poseCollapsed = collapsedPoses.has(item.id);
+                  return (
+                    <div
+                      key={item.id}
+                      data-index={virtualRow.index}
+                      ref={chronoVirtualizer.measureElement}
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
                     >
-                      <strong>{item.persona.name}</strong>
-                      <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                        {item.content}
+                      <p className="text-xs text-muted-foreground">
+                        {item.thread_id ? 'In a thread' : 'Standalone'}
                       </p>
-                      <button
-                        type="button"
-                        className="mt-1 min-h-9 underline"
-                        onClick={() => togglePose(item.id)}
-                      >
-                        Show full pose
-                      </button>
-                    </article>
-                  ) : (
-                    <SceneMessages
-                      sceneId={sceneId}
-                      filteredInteractions={[item]}
-                      onAvatarClick={onAvatarClick}
-                      onAddTarget={onAddTarget}
-                      onAttachAction={onAttachAction}
-                      readOnly={readOnly}
-                    />
-                  )}
-                </div>
-              );
-            })
+                      {poseCollapsed ? (
+                        <article
+                          className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
+                          data-testid={`collapsed-pose-${item.id}`}
+                        >
+                          <strong>{item.persona.name}</strong>
+                          <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
+                            {item.content}
+                          </p>
+                          <button
+                            type="button"
+                            className="mt-1 min-h-9 underline"
+                            onClick={() => togglePose(item.id)}
+                          >
+                            Show full pose
+                          </button>
+                        </article>
+                      ) : (
+                        <SceneMessages
+                          sceneId={sceneId}
+                          filteredInteractions={[item]}
+                          onAvatarClick={onAvatarClick}
+                          onAddTarget={onAddTarget}
+                          onAttachAction={onAttachAction}
+                          readOnly={readOnly}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           ))}
         {!chronological &&
           (groups.length === 0 ? (

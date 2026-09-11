@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import type { Interaction } from '@/scenes/types';
 
@@ -39,10 +39,26 @@ const interaction = (id: number, content: string, thread_id: string): Interactio
 });
 
 describe('ThreadedNarrativeReader', () => {
+  let offsetHeightSpy: ReturnType<typeof vi.spyOn>;
+
   beforeEach(() => {
     // Each test uses conversationKey="scene:1" — clear so per-conversation
     // collapse state saved by one test never leaks into the next.
     window.localStorage.clear();
+
+    // jsdom has no layout engine, so every element's offsetHeight is always
+    // 0. @tanstack/react-virtual (Chronological branch) reads the scroll
+    // container's offsetHeight synchronously — before any ResizeObserver
+    // callback, and this repo's ResizeObserver polyfill in src/test/setup.ts
+    // is a no-op besides — to decide the visible range; a 0-height container
+    // makes it conclude nothing is visible and render zero rows rather than
+    // all of them. Stub offsetHeight to a plausible viewport size so the
+    // virtualizer computes a real, bounded window in every test.
+    offsetHeightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(700);
+  });
+
+  afterEach(() => {
+    offsetHeightSpy.mockRestore();
   });
 
   it('keeps explicit threads collapsed and exposes keyboard accessible controls', async () => {
@@ -150,5 +166,36 @@ describe('ThreadedNarrativeReader', () => {
     await user.click(screen.getByRole('button', { name: /chronological/i }));
     const texts = screen.getAllByText(/first|second|third/).map((el) => el.textContent);
     expect(texts).toEqual(['first', 'second', 'third']);
+  });
+
+  it('windows a long chronological list instead of mounting every pose', async () => {
+    // INITIAL_PAGE_SIZE (20) caps the initially visible slice regardless of
+    // windowing, so a naive 300-interaction render would already show fewer
+    // than 300 nodes for the wrong reason. Load all of local history first
+    // (each click reveals another 20) so the chronological branch actually
+    // has all 300 items to render, and the bounded-mount assertion below
+    // only passes because of the virtualizer (see the offsetHeight stub in
+    // beforeEach above for why that's necessary under jsdom).
+    const user = userEvent.setup();
+    const many = Array.from({ length: 300 }, (_, i) =>
+      interaction(i + 1, `pose ${i + 1}`, 'thread-a')
+    );
+    const { container } = render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        interactions={many}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    let loadEarlier = screen.queryByRole('button', { name: /load earlier history/i });
+    while (loadEarlier) {
+      await user.click(loadEarlier);
+      loadEarlier = screen.queryByRole('button', { name: /load earlier history/i });
+    }
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+    const mountedPoses = container.querySelectorAll('[data-testid="scene-messages"]');
+    expect(mountedPoses.length).toBeLessThan(300);
+    expect(mountedPoses.length).toBeGreaterThan(0);
   });
 });
