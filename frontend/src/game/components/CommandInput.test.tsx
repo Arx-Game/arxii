@@ -1054,6 +1054,52 @@ describe('CommandInput', () => {
 
         expect(fetchPoseSubmissionMock).not.toHaveBeenCalled();
       });
+
+      // #3760 Task 12 review fix — `useGameSocket`'s own storage-level
+      // `reconcileStoredDrafts` scan (the session-wide reconciliation that
+      // gates `ready` itself) can resolve this EXACT draft as landed before
+      // this effect ever runs, by writing straight to sessionStorage. Proves
+      // the fix in CommandInput.tsx's effect: it must notice that and
+      // acknowledge, never clobber the already-correct resolution back to
+      // `unknown`.
+      it('does not clobber a draft the session-level reconciliation scan already resolved as landed', () => {
+        const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(screen.getByText('Sending…')).toBeInTheDocument();
+
+        rerender(<CommandInput character="Alice" composerMode={mode} ready={false} />);
+
+        // Simulate `useGameSocket`'s open handler resolving this exact draft
+        // via its own sessionStorage-level scan WHILE `ready` is still
+        // false — writing straight to storage the same way
+        // `reconcileStoredDrafts` does, bypassing this hook's in-memory
+        // state entirely.
+        const storageKey = draftStorageKey({
+          accountId: 0,
+          personaId: 0,
+          conversationKey: 'character:Alice',
+        });
+        const rawBefore = sessionStorage.getItem(storageKey);
+        expect(rawBefore).not.toBeNull();
+        const draftBefore = JSON.parse(rawBefore as string) as Draft;
+        expect(draftBefore.status).toBe('pending');
+        sessionStorage.setItem(
+          storageKey,
+          JSON.stringify({ ...draftBefore, status: 'clean', clientRequestId: null })
+        );
+
+        // The reconnect completes (ready -> true): this must acknowledge
+        // (sync to `clean`), not mark unknown and fire a redundant lookup.
+        rerender(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        expect(fetchPoseSubmissionMock).not.toHaveBeenCalled();
+        expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+      });
     });
   });
 });

@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
-import { useDraftStore } from '@/game/useDraftStore';
+import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
 import type { DraftKey, DraftMode } from '@/game/useDraftStore';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
@@ -421,6 +421,21 @@ export function CommandInput({
   // call site) and immediately try the same lookup the "Check status"
   // button uses, rather than leaving the composer stuck showing "Sending…"
   // for a reply that will never arrive.
+  //
+  // #3760 Task 12 review fix — `ready` only flips true AFTER
+  // `useGameSocket`'s own storage-level `reconcileStoredDrafts` scan has
+  // fully settled, so by the time this effect runs that scan has ALREADY
+  // had a chance to resolve this exact draft (if this conversation's
+  // `client_request_id` had, in fact, landed) by writing straight to
+  // `sessionStorage` — bypassing this hook's in-memory `draft` state (there
+  // is no `storage`-event listener anywhere that would mirror an
+  // externally-written value back into a mounted `useDraftStore`). Blindly
+  // calling `markUnknown()` here would clobber that already-correct
+  // resolution back to `unknown` and fire a redundant lookup on every single
+  // reconnect-mid-send, right when the backend is also digesting a fresh
+  // connection. So re-read the CURRENT stored value for this exact draft key
+  // first: if the session-level scan already cleared it, sync this hook's
+  // state to match (`acknowledge`, not `markUnknown`) instead.
   const wasReadyRef = useRef(ready);
   useEffect(() => {
     const wasReady = wasReadyRef.current;
@@ -429,9 +444,21 @@ export function CommandInput({
     const pending = pendingSpeechRef.current;
     if (!pending) return;
     pendingSpeechRef.current = null;
+    if (readStoredDraft(draftKey).status === 'clean') {
+      draftStore.acknowledge(pending.clientRequestId);
+      // Mirrors `handleActionResult`'s own success path: only clears the
+      // visible textarea when it still matches the text that was actually
+      // sent, so a newer, unsent edit typed while disconnected is never
+      // clobbered.
+      if (commandRef.current === pending.text) {
+        setCommand('');
+        clearStoredDraft();
+      }
+      return;
+    }
     draftStore.markUnknown(pending.clientRequestId);
     handleCheckStatus();
-  }, [ready, draftStore, handleCheckStatus]);
+  }, [ready, draftStore, draftKey, handleCheckStatus, clearStoredDraft]);
 
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;

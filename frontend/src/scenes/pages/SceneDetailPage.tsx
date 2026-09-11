@@ -61,6 +61,26 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+  // #3760 Task 12 review fix — this page previously passed no `ready` prop to
+  // `CommandInput` at all, silently taking its `ready = true` default, which
+  // never changes: there is no `useGameSocket` reference on this page to flip
+  // it. That made a reconnect mid-send invisible here (CommandInput's
+  // markUnknown-on-reconnect effect keys off a `ready` false -> true
+  // transition) even though this composer dispatches say/whisper/tt through
+  // the exact same `executeAction`/`pendingSpeechRef` path `GameWindow` uses.
+  // `state.game.sessions[character].isConnected` is the same global signal
+  // `GameWindow.tsx` reads (`useGameSocket`'s module-level socket/session
+  // bookkeeping and the Redux session state it dispatches into are shared
+  // across the whole app, not owned by whichever page happens to be mounted
+  // — `ConsentAttentionNotifier.tsx` already calls `connect()` from outside
+  // `GamePage` on that same assumption), so reading it here (rather than
+  // duplicating `GameWindow`'s own connection management) is the correct fix.
+  // Deliberately omits `GameWindow`'s extra `Boolean(session.room)` clause —
+  // that gates on the ACTIVE character's freeform room re-entering, which
+  // this page's scene-scoped composer doesn't depend on.
+  const isConnected = useAppSelector(
+    (state) => state.game.sessions?.[activeCharacter ?? '']?.isConnected ?? false
+  );
 
   // Combat rail fold-in (#2197): combat now renders inline on the scene page
   // instead of a separate /scenes/:id/combat route — the fight never leaves
@@ -416,6 +436,7 @@ export function SceneDetailPage() {
                         ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
                         : undefined
                     }
+                    ready={isConnected}
                   />
                 </>
               )}

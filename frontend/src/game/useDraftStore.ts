@@ -52,7 +52,14 @@ export function draftStorageKey(key: DraftKey): string {
   return `${DRAFT_STORAGE_PREFIX}${key.accountId}:${key.personaId}:${key.conversationKey}`;
 }
 
-function readStoredDraft(key: DraftKey): Draft {
+/**
+ * Exported (#3760 Task 12 review fix) so a caller with its own draft state
+ * can re-read the CURRENT persisted value before acting on stale in-memory
+ * state — see `CommandInput.tsx`'s reconnect effect, which uses this to
+ * detect when `useGameSocket`'s storage-level `reconcileStoredDrafts` scan
+ * has already resolved this exact draft out from under a mounted composer.
+ */
+export function readStoredDraft(key: DraftKey): Draft {
   try {
     const raw = sessionStorage.getItem(draftStorageKey(key));
     if (!raw) return EMPTY_DRAFT;
