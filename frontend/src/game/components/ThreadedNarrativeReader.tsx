@@ -8,6 +8,7 @@ import { SceneMessages } from '@/scenes/components/SceneMessages';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
+import type { ConversationAnchorState } from '../playPreferences';
 import {
   loadConversationAnchor,
   saveConversationAnchor,
@@ -49,7 +50,62 @@ function PoseReadTarget({
     // only when the pose actually changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [observe, pose.id, pose.timestamp]);
-  return <div ref={ref}>{children}</div>;
+  // `data-pose-id` is the stable DOM handle the anchor system (#3759 Wave 6)
+  // uses to find "the pose the user was reading" again after a resize, font
+  // change, or history-page insertion -- see findScrollContainer/
+  // findTopVisiblePoseId below.
+  return (
+    <div ref={ref} data-pose-id={pose.id}>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Walks up from `start` to find the nearest scrollable ancestor (the element
+ * whose content actually overflows). In Threads view the reader has no
+ * scroll container of its own -- GameWindow.tsx's `feedScrollRef` div is the
+ * real one -- so anchor save/restore locates it this way rather than
+ * threading a ref down through GameWindow, which would couple the two
+ * components more tightly than the feature needs.
+ */
+function findScrollContainer(start: HTMLElement | null): HTMLElement | null {
+  let node: HTMLElement | null = start;
+  while (node) {
+    if (node.scrollHeight > node.clientHeight) return node;
+    node = node.parentElement;
+  }
+  return null;
+}
+
+/**
+ * Finds the pose currently occupying the top of `container`'s visible area:
+ * the last pose whose top edge has scrolled at or above the container's own
+ * top (i.e. it's the one "in charge" of the top of the viewport), or the
+ * very first pose if none have scrolled past yet. Returns the pose's id and
+ * its offset (px, negative when partially scrolled past) relative to the
+ * container's top -- the same coordinate space `offsetPx` is stored and
+ * restored in.
+ */
+function findTopVisiblePoseId(container: HTMLElement): { poseId: string; offsetPx: number } | null {
+  const poseEls = Array.from(container.querySelectorAll<HTMLElement>('[data-pose-id]'));
+  if (poseEls.length === 0) return null;
+  const containerTop = container.getBoundingClientRect().top;
+  let best: HTMLElement | null = null;
+  let bestOffset = -Infinity;
+  for (const el of poseEls) {
+    const offset = el.getBoundingClientRect().top - containerTop;
+    if (offset <= 0 && offset > bestOffset) {
+      bestOffset = offset;
+      best = el;
+    }
+  }
+  if (!best) {
+    best = poseEls[0];
+    bestOffset = best.getBoundingClientRect().top - containerTop;
+  }
+  const poseId = best.dataset.poseId;
+  return poseId ? { poseId, offsetPx: bestOffset } : null;
 }
 
 interface ThreadedNarrativeReaderProps {
@@ -188,11 +244,19 @@ export function ThreadedNarrativeReader({
     overscan: 8,
   });
 
-  const persistCollapsed = (next: Set<string>) =>
+  // Shared read-merge-write so a collapse toggle never clobbers a
+  // concurrently-saved anchor (and vice versa): both sides of this feature
+  // write the same localStorage row, so each write re-reads whatever the
+  // OTHER side most recently saved instead of layering over a stale
+  // mount-time snapshot (`storedAnchorState` is only ever fresh at mount).
+  const persistAnchorState = (overrides: Partial<ConversationAnchorState>) => {
+    const current = loadConversationAnchor(conversationKey);
     saveConversationAnchor(conversationKey, {
-      anchor: storedAnchorState?.anchor ?? null,
-      collapsed: [...next],
+      anchor: 'anchor' in overrides ? (overrides.anchor ?? null) : (current?.anchor ?? null),
+      collapsed: overrides.collapsed ?? current?.collapsed ?? [],
     });
+  };
+  const persistCollapsed = (next: Set<string>) => persistAnchorState({ collapsed: [...next] });
   const toggleThread = (key: string) =>
     setCollapsed((previous) => {
       const next = new Set(previous);
@@ -219,8 +283,163 @@ export function ThreadedNarrativeReader({
       return next;
     });
 
+  // --- Reading-position anchors (#3759 Decision #3 / Wave 6) ---------------
+  // The anchor identifies a pose (+ thread) and a pixel offset, never a raw
+  // scrollTop -- so it survives resize, font/measure changes and
+  // older-page-insertion, which all change *where* that same pose happens to
+  // land on screen without changing *which pose* the reader should be
+  // showing. `readOnlyRef`/`visibleInteractionsRef`/`collapsedRef` mirror the
+  // latest render's values for the native (non-JSX) scroll listener below,
+  // which is attached once per Threads-view session rather than
+  // re-subscribed on every interaction/collapse change (re-subscribing would
+  // risk dropping an in-flight debounce right when the user is mid-scroll).
+  const rootRef = useRef<HTMLDivElement>(null);
+  const readOnlyRef = useRef(readOnly);
+  readOnlyRef.current = readOnly;
+  const visibleInteractionsRef = useRef(visibleInteractions);
+  visibleInteractionsRef.current = visibleInteractions;
+  const collapsedRef = useRef(collapsed);
+  collapsedRef.current = collapsed;
+  const conversationKeyRef = useRef(conversationKey);
+  conversationKeyRef.current = conversationKey;
+
+  const restoreThreadsAnchor = () => {
+    const stored = loadConversationAnchor(conversationKeyRef.current);
+    if (!stored?.anchor) return;
+    const container = findScrollContainer(rootRef.current);
+    if (!container) return;
+    const target = container.querySelector<HTMLElement>(`[data-pose-id="${stored.anchor.poseId}"]`);
+    // Best effort: the anchored pose isn't in the currently loaded set (e.g.
+    // it lives on an older history page not yet fetched). Rather than fail
+    // or guess, this leaves the reader at whatever position mount/pin-to-
+    // bottom already left it at -- the acceptable fallback the spec allows.
+    if (!target) return;
+    const targetTop = target.getBoundingClientRect().top - container.getBoundingClientRect().top;
+    container.scrollTop += targetTop - stored.anchor.offsetPx;
+  };
+
+  const restoreChronoAnchor = () => {
+    const stored = loadConversationAnchor(conversationKeyRef.current);
+    if (!stored?.anchor) return;
+    const idx = chronologicalItems.findIndex((item) => String(item.id) === stored.anchor?.poseId);
+    // Best effort, deliberately reduced scope (see file-level note above the
+    // Chronological branch below): restores to the nearest loaded index at
+    // the top of the viewport, not the exact recorded pixel offset. If the
+    // pose isn't loaded at all, this leaves the virtualizer at its default
+    // (latest-activity) position.
+    if (idx === -1) return;
+    chronoVirtualizer.scrollToIndex(idx, { align: 'start' });
+  };
+
+  const restoreAnchor = () => {
+    if (chronological) restoreChronoAnchor();
+    else restoreThreadsAnchor();
+  };
+
+  // Effect A: initial restore, once real pose data has arrived. Mirrors the
+  // `defaultSeeded` pattern above -- this component can mount (keyed by
+  // conversationKey/sceneId) before its interactions query resolves, so a
+  // lazy useState initializer would only ever see that first empty render.
+  // Guarded to fire at most once per mount so a later, unrelated arrival of
+  // new poses doesn't yank the reader back to the anchor while the user is
+  // reading elsewhere.
+  const restoreSeeded = useRef(false);
+  useEffect(() => {
+    if (restoreSeeded.current) return;
+    if (readOnly) return; // never restore into a historical reference view
+    if (visibleInteractions.length === 0) return;
+    restoreSeeded.current = true;
+    restoreAnchor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly, visibleInteractions.length]);
+
+  // Effect B: "Return to live" (#3759 Decision #5). Re-applies the anchor
+  // specifically on the readOnly:true -> false transition, regardless of
+  // whether Effect A already ran -- GameWindow reuses this same component
+  // instance across the reference/live boundary (same `conversationKey`), so
+  // without this, returning to live would just leave the reader wherever
+  // reading the historical reference left it.
+  const prevReadOnlyRef = useRef(readOnly);
+  useEffect(() => {
+    const wasReadOnly = prevReadOnlyRef.current;
+    prevReadOnlyRef.current = readOnly;
+    if (wasReadOnly && !readOnly) restoreAnchor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readOnly]);
+
+  // Effect C: font/measure-change survival (#3759 Acceptance A08). A
+  // proseSize/proseFamily/measure change doesn't move which pose the user
+  // was reading -- only where it lands on screen -- so simply re-running the
+  // same restore whenever one of these changes keeps the anchored pose in
+  // the same relative viewport position after the change.
+  useEffect(() => {
+    if (readOnly) return;
+    restoreAnchor();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preferences.proseSize, preferences.proseFamily, preferences.measure]);
+
+  // Threads-view scroll listener: attaches once per Threads-view session
+  // directly to the ancestor GameWindow.tsx owns (this reader has no scroll
+  // container of its own in that view), debounced so a save only fires once
+  // scrolling has settled rather than on every scroll tick.
+  useEffect(() => {
+    if (chronological) return;
+    const container = findScrollContainer(rootRef.current);
+    if (!container) return;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    const handleScroll = () => {
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(() => {
+        if (readOnlyRef.current) return; // never persist a reference-mode scroll
+        const found = findTopVisiblePoseId(container);
+        if (!found) return;
+        const threadId =
+          visibleInteractionsRef.current.find((item) => String(item.id) === found.poseId)
+            ?.thread_id ?? null;
+        persistAnchorState({
+          anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
+          collapsed: [...collapsedRef.current],
+        });
+      }, 300);
+    };
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', handleScroll);
+      if (timeout) clearTimeout(timeout);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chronological]);
+
+  // Chronological-view scroll handler: this view already owns its own scroll
+  // container (`chronoParentRef`), so this is a plain onScroll prop rather
+  // than a native listener -- no ancestor lookup needed.
+  const chronoScrollTimeout = useRef<ReturnType<typeof setTimeout>>();
+  const handleChronoScroll = () => {
+    if (chronoScrollTimeout.current) clearTimeout(chronoScrollTimeout.current);
+    chronoScrollTimeout.current = setTimeout(() => {
+      if (readOnly) return;
+      const container = chronoParentRef.current;
+      if (!container) return;
+      const found = findTopVisiblePoseId(container);
+      if (!found) return;
+      const threadId =
+        visibleInteractions.find((item) => String(item.id) === found.poseId)?.thread_id ?? null;
+      persistAnchorState({
+        anchor: { poseId: found.poseId, threadId, offsetPx: found.offsetPx },
+        collapsed: [...collapsed],
+      });
+    }, 300);
+  };
+  useEffect(
+    () => () => {
+      if (chronoScrollTimeout.current) clearTimeout(chronoScrollTimeout.current);
+    },
+    []
+  );
+
   return (
     <div
+      ref={rootRef}
       className="min-h-0 flex-1 [&_.text-sm]:text-[length:var(--play-prose-size,14px)]"
       aria-label="Story reader"
       style={{
@@ -270,7 +489,22 @@ export function ThreadedNarrativeReader({
               </p>
             </div>
           ) : (
-            <div ref={chronoParentRef} style={{ height: '70vh', overflow: 'auto' }}>
+            // Anchor restore here is deliberately reduced-scope (#3759 Wave
+            // 6): it calls chronoVirtualizer.scrollToIndex (see
+            // restoreChronoAnchor above) rather than reproducing Threads
+            // view's exact-pixel-offset restore. A virtualized list can't
+            // measure an off-screen row until it's mounted, so landing on
+            // the precise recorded offsetPx would need a further
+            // measure/re-scroll pass once the target row renders; the
+            // simpler nearest-index landing was judged good enough for this
+            // less-used view. A follow-up wanting pixel parity here would
+            // add that second pass once the target row's ref resolves.
+            <div
+              ref={chronoParentRef}
+              onScroll={handleChronoScroll}
+              data-testid="chrono-scroll-container"
+              style={{ height: '70vh', overflow: 'auto' }}
+            >
               <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
                   const item = chronologicalItems[virtualRow.index];

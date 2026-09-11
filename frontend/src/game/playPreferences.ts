@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useSyncExternalStore } from 'react';
 
 export interface PlayPreferences {
   proseSize: number;
@@ -45,8 +45,53 @@ export function savePlayPreferences(preferences: PlayPreferences): void {
   }
 }
 
+// Shared external store (#3759 Wave 6): DisplaySettings.tsx and
+// ThreadedNarrativeReader.tsx each call usePlayPreferences() independently.
+// A plain per-instance useState (the original implementation) means one
+// instance calling `update` never re-renders the OTHER's already-mounted
+// instance — so a font-size change made in DisplaySettings while the reader
+// is open would leave the reader's own `preferences.proseSize` stale
+// forever, and its anchor-restore effect (which needs to re-fire on exactly
+// that change, per spec Acceptance A08) would never see it. `notifyStore`
+// broadcasts a fresh snapshot to every subscribed instance on every update,
+// including instances that didn't make the change themselves.
+let cachedPreferences: PlayPreferences | null = null;
+// The raw stored string the cache above was built from -- lets
+// getStoreSnapshot cheaply detect "storage changed out from under the
+// cache" (e.g. a test's `localStorage.clear()`, or any other direct write
+// that doesn't go through `update`) and rebuild instead of serving a stale
+// object indefinitely, without needing a 'storage' event (which doesn't
+// fire for same-tab writes anyway).
+let cachedRaw: string | null | undefined;
+const storeListeners = new Set<() => void>();
+
+function getStoreSnapshot(): PlayPreferences {
+  let raw: string | null;
+  try {
+    raw = window.localStorage.getItem(STORAGE_KEY);
+  } catch {
+    raw = null;
+  }
+  if (cachedPreferences === null || raw !== cachedRaw) {
+    cachedRaw = raw;
+    cachedPreferences = loadPlayPreferences();
+  }
+  return cachedPreferences;
+}
+
+function notifyStore(next: PlayPreferences): void {
+  cachedPreferences = next;
+  cachedRaw = JSON.stringify(next);
+  for (const listener of storeListeners) listener();
+}
+
+function subscribeStore(listener: () => void): () => void {
+  storeListeners.add(listener);
+  return () => storeListeners.delete(listener);
+}
+
 export function usePlayPreferences() {
-  const [preferences, setPreferences] = useState(loadPlayPreferences);
+  const preferences = useSyncExternalStore(subscribeStore, getStoreSnapshot, getStoreSnapshot);
   const update = useCallback((patch: Partial<PlayPreferences>) => {
     // Merge the patch over a FRESH read from storage, never over `current`
     // (this hook instance's own stale in-memory snapshot). Two independent
@@ -56,11 +101,9 @@ export function usePlayPreferences() {
     // clobbered the first's change with its own stale copy of every other
     // field. Reading storage fresh here layers this write on top of whatever
     // is actually persisted right now, including another instance's write.
-    setPreferences(() => {
-      const next = { ...loadPlayPreferences(), ...patch };
-      savePlayPreferences(next);
-      return next;
-    });
+    const next = { ...loadPlayPreferences(), ...patch };
+    savePlayPreferences(next);
+    notifyStore(next);
   }, []);
   return { preferences, update };
 }

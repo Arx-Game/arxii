@@ -17,6 +17,7 @@ import { Link } from 'react-router-dom';
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { sessionAttention } from '@/game/attention';
+import { loadConversationAnchor } from '../playPreferences';
 
 /**
  * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
@@ -160,13 +161,32 @@ export function GameWindow({
   useEffect(() => {
     const el = feedScrollRef.current;
     if (!el) return;
-    const saved = scrollPositionsRef.current.get(activeConvKey);
-    if (saved !== undefined) {
-      el.scrollTop = saved;
-      pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
+    // ThreadedNarrativeReader.tsx owns restoring its own pose-identity anchor
+    // (#3759 Decision #3) for the room view -- this raw-scrollTop bookkeeping
+    // must not fight it. Without this check, either branch below would
+    // clobber that restore: the `saved` branch can hold a stale/corrupted
+    // offset (e.g. one written under the 'room' fallback key while briefly
+    // viewing a historical reference — see returnToLive), and the `else`
+    // branch unconditionally jumps to the bottom, which would run right
+    // after the anchor restore on first mount (child effects fire before
+    // parent effects) and undo it. Scoped to `activeConvKey === 'room'`
+    // specifically so switching between open conversation *tabs* (a
+    // different, per-tab concern this Map still owns) is unaffected.
+    if (
+      activeConvKey === 'room' &&
+      sceneFeed &&
+      loadConversationAnchor(sceneFeed.sceneId)?.anchor
+    ) {
+      pinnedRef.current = false;
     } else {
-      el.scrollTop = el.scrollHeight;
-      pinnedRef.current = true;
+      const saved = scrollPositionsRef.current.get(activeConvKey);
+      if (saved !== undefined) {
+        el.scrollTop = saved;
+        pinnedRef.current = el.scrollHeight - saved - el.clientHeight < 8;
+      } else {
+        el.scrollTop = el.scrollHeight;
+        pinnedRef.current = true;
+      }
     }
     // Prune scroll offsets for tabs that are no longer open (#2165 review
     // fold-in) — otherwise a closed tab's entry lingers in the map forever.
@@ -174,7 +194,13 @@ export function GameWindow({
     for (const key of scrollPositionsRef.current.keys()) {
       if (!liveKeys.has(key)) scrollPositionsRef.current.delete(key);
     }
-  }, [activeConvKey, conversationTabs?.tabs]);
+    // Deliberately NOT depending on the whole `sceneFeed` object -- GamePage.tsx
+    // builds a fresh `sceneFeed` object every render (new interactions array
+    // included), so that would re-run this effect (and its scrollTop writes)
+    // on every unrelated re-render instead of only on an actual tab switch or
+    // scene change. `sceneFeed?.sceneId` is stable across those.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConvKey, conversationTabs?.tabs, sceneFeed?.sceneId]);
 
   useEffect(() => {
     const el = feedScrollRef.current;

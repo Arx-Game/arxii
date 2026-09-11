@@ -1634,4 +1634,54 @@ describe('GamePage', () => {
       });
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Return to live restores the prior live reading position (#3759 Decision #5)
+  // ---------------------------------------------------------------------------
+
+  describe('return to live', () => {
+    it('flips the reader back out of read-only mode on the same instance, not a remount (Decision #5 precondition)', async () => {
+      // The exact pixel-level anchor restoration this depends on is unit-
+      // tested exhaustively in ThreadedNarrativeReader.test.tsx (readOnly
+      // true->false transition). This test proves the WIRING precondition
+      // that makes that mechanism reachable from GamePage: referencing a
+      // pose inside the SAME live scene (scene:100, matching
+      // seedActiveSceneWithPose's scene id) keeps `sceneFeed.sceneId` — and
+      // therefore GameWindow's `key={sceneFeed.sceneId}` — unchanged across
+      // the reference/live boundary, so clicking "Return to live" updates
+      // props on the existing ThreadedNarrativeReader instance instead of
+      // mounting a fresh one.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=scene&referenceKey=scene:100&referencePose=1' +
+            '&referenceTimestamp=2026-01-01T00%3A00%3A00.000Z',
+        ],
+      });
+
+      // In reference mode: the "Reading history" banner and its "Draft
+      // preserved" composer replacement are up, and Reply (readOnly-gated)
+      // is hidden.
+      await waitFor(() => {
+        expect(screen.getByText(/reading history/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/draft preserved for your live conversation/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /return to live/i }));
+
+      // Back in live mode: the live pose is showing again and Reply is back
+      // — readOnly flipped false on GameWindow's ThreadedNarrativeReader,
+      // which is exactly the transition ThreadedNarrativeReader's own
+      // return-to-live effect (Effect B) restores the prior anchor on.
+      await waitFor(() => {
+        expect(screen.queryByText(/reading history/i)).not.toBeInTheDocument();
+      });
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+    });
+  });
 });
