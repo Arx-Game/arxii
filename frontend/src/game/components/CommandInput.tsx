@@ -349,7 +349,15 @@ export function CommandInput({
       if (result.data) {
         // Found: the send landed after all. Same ack-gated clearing as a
         // live ACTION_RESULT success (only clears `command` when it still
-        // matches the content that was actually sent).
+        // matches the content that was actually sent). Also clears
+        // `pendingSpeechRef` when it's still tracking this exact send — the
+        // Task 12 reconnect effect above deliberately leaves it set through
+        // the live `unknown` transition (Finding 1 fix), so this is where
+        // that tracking is finally retired now that the send is genuinely
+        // resolved.
+        if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+          pendingSpeechRef.current = null;
+        }
         draftStore.acknowledge(clientRequestId);
         if (commandRef.current === draft.content) {
           setCommand('');
@@ -443,8 +451,8 @@ export function CommandInput({
     if (wasReady || !ready) return;
     const pending = pendingSpeechRef.current;
     if (!pending) return;
-    pendingSpeechRef.current = null;
     if (readStoredDraft(draftKey).status === 'clean') {
+      pendingSpeechRef.current = null;
       draftStore.acknowledge(pending.clientRequestId);
       // Mirrors `handleActionResult`'s own success path: only clears the
       // visible textarea when it still matches the text that was actually
@@ -456,6 +464,17 @@ export function CommandInput({
       }
       return;
     }
+    // Demo-fidelity review Finding 1 (#3760) — deliberately do NOT null
+    // `pendingSpeechRef` here. It must keep pointing at this exact send so
+    // `isStrandedDraft` (above) reads the very next render as a LIVE
+    // transition to `unknown` (demo Screen 3b: Check status/Retry), not a
+    // reopened-tab stranded draft (Screen 4: Discard/"Resume & retry") —
+    // nulling the ref before `markUnknown()` flips `draft.status` made every
+    // reconnect-driven `unknown` misread as stranded, since the ref/status
+    // pair briefly disagreed on the transition's own first render. The ref is
+    // cleared once this send is genuinely resolved: by `handleCheckStatus`
+    // below when its lookup finds a record, or by a fresh `beginSend()`/
+    // `discard()` on retry — the same paths that already clear it elsewhere.
     draftStore.markUnknown(pending.clientRequestId);
     handleCheckStatus();
   }, [ready, draftStore, draftKey, handleCheckStatus, clearStoredDraft]);

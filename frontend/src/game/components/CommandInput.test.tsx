@@ -1184,6 +1184,42 @@ describe('CommandInput', () => {
         expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
       });
 
+      // Demo-fidelity review Finding 1 (#3760) — the reconnect effect used to
+      // null `pendingSpeechRef.current` BEFORE calling `markUnknown()`, so the
+      // very next render's `isStrandedDraft` check saw a null ref against a
+      // non-clean `draft.status` and read this as a reopened-tab stranded
+      // draft (Screen 4: Discard/"Resume & retry"), never the live-unknown
+      // banner (Screen 3b: Check status/Retry) the demo actually specifies for
+      // a reconnect-driven transition. This drives the REAL flow (a real send
+      // through `pendingSpeechRef`, a real `ready` false->true reconnect) and
+      // inspects the banner BEFORE the lookup settles — the transient state a
+      // player actually sees — rather than mocking `draft.status: 'unknown'`
+      // directly, which is how the earlier "hydrated unknown-status draft"
+      // test above sidesteps this exact bug (see its own comment).
+      it('shows the LIVE unknown banner (Check status/Retry), not the stranded banner, right after a reconnect marks an in-flight send unknown', () => {
+        const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+        // Never resolves within this test's assertion window — inspecting the
+        // banner in the transient state between the reconnect completing and
+        // the auto-triggered "Check status" lookup settling.
+        fetchPoseSubmissionMock.mockImplementation(() => new Promise(() => {}));
+
+        const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
+        const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+        fireEvent.change(textarea, { target: { value: 'hello' } });
+        fireEvent.keyDown(textarea, { key: 'Enter' });
+        expect(screen.getByText('Sending…')).toBeInTheDocument();
+
+        rerender(<CommandInput character="Alice" composerMode={mode} ready={false} />);
+        rerender(<CommandInput character="Alice" composerMode={mode} ready />);
+
+        expect(screen.getByTestId('send-unknown-banner')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Check status' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+        expect(screen.queryByTestId('stranded-draft-banner')).not.toBeInTheDocument();
+        expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
+      });
+
       it('does not touch the draft on a plain ready toggle with nothing in flight', () => {
         const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
         const { rerender } = render(<CommandInput character="Alice" composerMode={mode} ready />);
