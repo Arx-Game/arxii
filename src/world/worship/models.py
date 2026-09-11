@@ -70,6 +70,14 @@ class WorshippedBeing(SharedMemoryModel):
     description = models.TextField(
         blank=True, help_text="PLACEHOLDER lore — Apostate rewrite pending."
     )
+    domains = models.TextField(
+        blank=True,
+        help_text=(
+            "Plain-text spheres/domains (e.g. 'Carnage, wanton bloodshed, feral "
+            "battle, ferocity'). No lookup table — overlap across gods is expected "
+            "and fine; confirmed no mechanical matching need exists (#3776)."
+        ),
+    )
     tradition = models.ForeignKey(WorshipTradition, on_delete=models.PROTECT, related_name="beings")
     resonance_pool = models.BigIntegerField(
         default=0, help_text="Spendable accumulated worship (miracles draw here, #2360)."

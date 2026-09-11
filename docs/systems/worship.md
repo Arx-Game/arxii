@@ -13,9 +13,12 @@ issue bodies; the model decision is ADR-0132.
   ceremonies roll with. Seeded (PLACEHOLDER names): Church Liturgy,
   Spiritcalling, Druidry, Occultism.
 - `WorshippedBeing` — the primitive (ADR-0132): name, PLACEHOLDER description,
-  tradition FK, `resonance_pool` (BigInteger, spendable by future miracles
-  #2360), `lifetime_worship` (monotonic audit), nullable OneToOne
-  `avatar_sheet` → CharacterSheet (rare played gods), `is_active`.
+  `domains` (#3776: plain free-text spheres, e.g. "Carnage, wanton bloodshed,
+  feral battle, ferocity" — deliberately no lookup table; overlap across gods
+  is expected and fine, and no mechanical matching need was confirmed), tradition
+  FK, `resonance_pool` (BigInteger, spendable by future miracles #2360),
+  `lifetime_worship` (monotonic audit), nullable OneToOne `avatar_sheet` →
+  CharacterSheet (rare played gods), `is_active`.
 - `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
   `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
   unique per (being, facet).

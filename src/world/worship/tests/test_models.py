@@ -68,6 +68,16 @@ class BeingNicknameTests(TestCase):
         self.assertEqual(being.nicknames.count(), 2)
 
 
+class WorshippedBeingDomainsTests(TestCase):
+    def test_domains_is_freeform_text(self) -> None:
+        being = WorshippedBeingFactory(domains="Carnage, wanton bloodshed, feral battle, ferocity")
+        self.assertIn("Carnage", being.domains)
+
+    def test_domains_defaults_blank(self) -> None:
+        being = WorshippedBeingFactory()
+        self.assertEqual(being.domains, "")
+
+
 class BeingResonanceTests(TestCase):
     def test_being_can_hold_favored_and_associated_resonances(self) -> None:
         being = WorshippedBeingFactory()
