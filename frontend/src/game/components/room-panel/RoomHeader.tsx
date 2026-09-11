@@ -54,15 +54,9 @@ export function RoomHeader({
             </Badge>
           </Link>
           {hasActiveEncounter && (
-            <Link to={`/scenes/${scene.id}`}>
-              <Badge
-                variant="destructive"
-                className="text-xs"
-                data-testid="room-header-combat-badge"
-              >
-                In Combat
-              </Badge>
-            </Link>
+            <Badge variant="destructive" className="text-xs" data-testid="room-header-combat-badge">
+              In Combat
+            </Badge>
           )}
           {hasActiveBattle && (
             <Link to={`/scenes/${scene.id}/battle`}>
