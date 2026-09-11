@@ -152,6 +152,15 @@ def _queryset(
         else:
             queryset = queryset.filter(timestamp__lte=until)
     queryset = InteractionFilter(query_params, queryset=queryset).qs
+    # Only pushes scene:/room refs down into the DB filter -- a place:/
+    # whisper:-scoped `conversation` (valid per `_is_recognized_conversation_ref`)
+    # falls back to scanning all visible history in Python at each of this
+    # function's callers, including `PlayReadView._mark_conversation_read`'s
+    # `pairs = [... if _conversation(row)["key"] == conversation]` filter, not
+    # just `PlaySearchView` (see its own `has_bound` comment for the same gap).
+    # Not reachable from the current UI on either path -- flagged so the next
+    # person extending either one doesn't assume `conversation` is always
+    # pushed down.
     conversation = query_params.get("conversation")
     if conversation and conversation.startswith("scene:"):
         queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
