@@ -100,6 +100,11 @@ interface GameWindowProps {
   onReturnToLive?: () => void;
   referenceUnavailable?: boolean;
   referenceLoading?: boolean;
+  /** True when the reference fetch failed with a transient/retryable error
+   * (i.e. not a 403/404 unavailable-reference) — distinct error UI + a Retry
+   * button, alongside the existing Return-to-live affordance. */
+  referenceRetryable?: boolean;
+  onRetryReference?: () => void;
 }
 
 export function GameWindow({
@@ -135,6 +140,8 @@ export function GameWindow({
   onReturnToLive,
   referenceUnavailable,
   referenceLoading = false,
+  referenceRetryable = false,
+  onRetryReference,
 }: GameWindowProps) {
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
@@ -319,7 +326,32 @@ export function GameWindow({
                 </button>
               </div>
             )}
-            {!referenceLoading && !referenceUnavailable && (
+            {!referenceLoading && referenceRetryable && (
+              <div
+                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
+                role="alert"
+              >
+                <h2 className="font-serif text-xl">Couldn&apos;t load that history</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  This may be a temporary connection problem.
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded border px-3 py-2 text-sm"
+                  onClick={onRetryReference}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="mt-2 rounded border px-3 py-2 text-sm"
+                  onClick={onReturnToLive}
+                >
+                  Return to live
+                </button>
+              </div>
+            )}
+            {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
               <ThreadedNarrativeReader
                 key={sceneFeed.sceneId}
                 sceneId={sceneFeed.sceneId}

@@ -25,6 +25,7 @@ import type { DreamState } from '@/dreams/types';
 import { dreamKeys } from '@/dreams/queries';
 import { emitActionResult } from '@/hooks/actionResultBus';
 import { QueryClient } from '@tanstack/react-query';
+import { fetchPlayContext } from './playQueries';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -109,6 +110,26 @@ vi.mock('@/scenes/queries', async (importOriginal) => {
     postInteractionReaction: vi.fn().mockResolvedValue(null),
     fetchReactionEmojiCatalog: vi.fn().mockResolvedValue([]),
     fetchPendingUnlinkedActions: vi.fn(() => Promise.resolve([])),
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Historical reference mode's own fetch (GamePage's `play-reference` query) —
+// stubbed so reference-mode tests don't hit the network.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/game/playQueries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/game/playQueries')>();
+  return {
+    ...actual,
+    fetchPlayContext: vi.fn(() =>
+      Promise.resolve({
+        results: [],
+        before: null,
+        after: null,
+        threadId: null,
+      })
+    ),
   };
 });
 
@@ -1589,6 +1610,28 @@ describe('GamePage', () => {
 
       expect(connectMock).not.toHaveBeenCalled();
       expect(store.getState().game.active).toBeNull();
+    });
+  });
+
+  describe('historical reference query identity', () => {
+    it('threads reference.timestamp through to fetchPlayContext, not just the pose id', async () => {
+      store.dispatch(setAccount(mockAccount));
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=room&referenceKey=room&referencePose=42' +
+            '&referenceTimestamp=2026-01-15T10%3A00%3A00.000Z',
+        ],
+      });
+
+      await waitFor(() => {
+        expect(fetchPlayContext).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: '42',
+            timestamp: '2026-01-15T10:00:00.000Z',
+          })
+        );
+      });
     });
   });
 });

@@ -2,9 +2,18 @@ import { apiFetch } from '@/evennia_replacements/api';
 import type { ConversationSummary, PlayPage, PlaySearchResult, ThreadSummary } from './playTypes';
 import type { Interaction } from '@/scenes/types';
 
+export class PlayFetchError extends Error {
+  status: number;
+  constructor(status: number) {
+    super('Unable to load history');
+    this.name = 'PlayFetchError';
+    this.status = status;
+  }
+}
+
 async function getJson<T>(path: string): Promise<T> {
   const response = await apiFetch(path);
-  if (!response.ok) throw new Error('Unable to load history');
+  if (!response.ok) throw new PlayFetchError(response.status);
   return response.json() as Promise<T>;
 }
 
@@ -61,7 +70,10 @@ export function fetchPlayContext(params: {
   if (params.timestamp) query.set('timestamp', params.timestamp);
   if (params.conversation) query.set('conversation', params.conversation);
   if (params.from) query.set('from', params.from);
-  return getJson<{ results: Interaction[]; threadId: string | null }>(
-    `/api/play/context/?${query}`
-  );
+  return getJson<{
+    results: Interaction[];
+    threadId: string | null;
+    before: string | null;
+    after: string | null;
+  }>(`/api/play/context/?${query}`);
 }

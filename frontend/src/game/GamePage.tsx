@@ -6,7 +6,7 @@ import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
 import { PlaySidebar } from './components/PlaySidebar';
-import { fetchPlayContext, fetchPlayPoses } from './playQueries';
+import { fetchPlayContext, fetchPlayPoses, PlayFetchError } from './playQueries';
 import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
 import { SidebarTabPanel } from './components/SidebarTabPanel';
@@ -500,10 +500,17 @@ export function GamePage() {
   const referenceSceneId = reference?.key.startsWith('scene:') ? reference.key.slice(6) : undefined;
   const {
     data: referencePage,
-    isError: referenceUnavailable,
+    error: referenceError,
     isPending: referenceLoading,
+    refetch: refetchReference,
   } = useQuery<PlayPage<Interaction>>({
-    queryKey: ['play-reference', reference?.kind, reference?.key, reference?.poseId],
+    queryKey: [
+      'play-reference',
+      reference?.kind,
+      reference?.key,
+      reference?.poseId,
+      reference?.timestamp,
+    ],
     queryFn: () =>
       reference?.poseId
         ? fetchPlayContext({
@@ -520,13 +527,17 @@ export function GamePage() {
               : undefined,
           }).then((context) => ({
             results: context.results,
-            before: null,
-            after: null,
+            before: context.before,
+            after: context.after,
             snapshot: new Date().toISOString(),
           }))
         : fetchPlayPoses({ scene: referenceSceneId, conversation: reference?.key }),
     enabled: Boolean(reference),
   });
+  const referenceStatus =
+    referenceError instanceof PlayFetchError ? referenceError.status : undefined;
+  const referenceUnavailable = referenceStatus === 403 || referenceStatus === 404;
+  const referenceRetryable = Boolean(referenceError) && !referenceUnavailable;
 
   const handleWhisper = useCallback(
     (name: string) => {
@@ -816,6 +827,8 @@ export function GamePage() {
               onReturnToLive={returnToLive}
               referenceUnavailable={Boolean(reference && referenceUnavailable)}
               referenceLoading={Boolean(reference && referenceLoading)}
+              referenceRetryable={Boolean(reference && referenceRetryable)}
+              onRetryReference={() => refetchReference()}
               {...placeWidgets(placesRoomId)}
               pendingAttachments={
                 sceneId ? (
