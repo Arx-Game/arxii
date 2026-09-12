@@ -86,6 +86,10 @@ class Probe:
 
     def connect(self) -> ssl.SSLSocket:
         context = ssl.create_default_context()
+        # Explicit, because the default context's floor is an OpenSSL policy
+        # rather than a stated one - and this probe exists to be trusted about
+        # what it measured.
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
         raw = socket.create_connection((self.host, 443), timeout=15)
         connected = context.wrap_socket(raw, server_hostname=self.host)
         self.log(f"connected to {connected.getpeername()}")
