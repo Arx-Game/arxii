@@ -361,6 +361,72 @@ class TestInvolvementMarkTelnetParity(TestCase):
         # from him, not that delivery to him broke outright.
         assert any("interaction" in kwargs for args, kwargs in dave_messages), dave_messages
 
+    def test_mixed_session_character_gets_mark_on_telnet_only_no_leak(self) -> None:
+        """A character connected on telnet AND web at once (#3787 review finding).
+
+        ``_non_web_sessions`` (``world/scenes/interaction_services.py``) filters
+        per SESSION, not per character, so a character holding both protocols at
+        once is the case neither existing test exercises: `test_telnet_session_
+        gets_the_mark_web_session_does_not` gives Bob a telnet-only session and
+        Dave a web-only one. Here Eve holds both simultaneously. Correct-by-
+        construction behavior is that ``_send_involvement_mark`` scopes its
+        ``obj.msg(..., session=non_web)`` call to just her telnet session -- her
+        web session still gets the structured ``interaction=`` payload it
+        already renders its own chip from, and must never also receive the raw
+        text line (no leak toward web) while the telnet session must not be
+        silently dropped just because a web session is also present (no leak
+        away from telnet).
+        """
+        from evennia.objects.objects import ObjectSessionHandler
+
+        from actions.definitions.communication import PoseAction
+        from commands.evennia_overrides.communication import CmdPose
+
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        alice = CharacterFactory(db_key="Alice", location=room)
+        eve = CharacterFactory(db_key="Eve", location=room)  # mixed telnet + web sessions
+        CharacterSheetFactory(character=alice)
+        CharacterSheetFactory(character=eve)
+
+        eve_messages: list[object] = []
+        eve.msg = lambda *args, **kwargs: eve_messages.append((args, kwargs))
+
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
+        web_session = MagicMock()
+        web_session.protocol_key = "webclient/websocket"
+        sessions_by_pk = {eve.pk: [telnet_session, web_session]}
+
+        def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+            return sessions_by_pk.get(handler.obj.pk, [])
+
+        cmd = CmdPose()
+        cmd.caller = alice
+        cmd.action = PoseAction()
+        cmd.args = " @Eve waves warmly."
+        cmd.raw_string = "pose @Eve waves warmly."
+        cmd.cmdset = None
+        cmd.cmdset_providers = {}
+        cmd.session = None
+        cmd.account = None
+        cmd.obj = None
+        with patch.object(ObjectSessionHandler, "all", _fake_all):
+            cmd.func()
+
+        mark_calls = [
+            (args, kwargs)
+            for args, kwargs in eve_messages
+            if args and "This happened to you." in str(args[0])
+        ]
+        payload_calls = [(args, kwargs) for args, kwargs in eve_messages if "interaction" in kwargs]
+
+        # No leak away from telnet: the mark was sent, exactly once.
+        assert len(mark_calls) == 1, eve_messages
+        # No leak toward web: it was scoped to the telnet session only.
+        assert mark_calls[0][1].get("session") == [telnet_session], mark_calls
+        # The structured payload (the web session's own chip source) still went out.
+        assert payload_calls, eve_messages
+
 
 class TestTabletalkCommand(TestCase):
     """Tests for CmdTabletalk (tt) command."""
