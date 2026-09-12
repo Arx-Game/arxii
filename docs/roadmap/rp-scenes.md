@@ -397,6 +397,38 @@ creating a duplicate row or silently misdelivering to a different audience.
   counter so a stale connection's late message handler can never process a frame
   addressed to a newer one after a reconnect race.
 
+### Weave Mechanical Actions Into Prose - DONE (#3787)
+
+A pose can now answer a mechanical row (a combat OUTCOME, a failed check, an NPC's
+ACTION) through the same reply mechanism it answers another pose with, and a resolved
+combat action records whom it targeted.
+
+- **Targets on mechanical rows.** `world.combat.interaction_services`'
+  `create_action_interaction_core` and `create_npc_action_interaction` now pass the
+  resolvers' own targets through the shared `write_target_personas` helper
+  (`world/scenes/interaction_services.py`), populated from `focused_opponent_target` /
+  `focused_ally_target` / the check's subject. Concealed tiers still record none
+  (ADR-0170, unchanged).
+- **The involvement mark.** Derived per viewer from `InteractionTargetPersona` rows, no
+  stored flag, one phrasing across all five row kinds. Web renders it as a reader chip;
+  telnet gets the equivalent plain-text line scoped to sessions that don't already get
+  the structured payload (`interaction_services._send_involvement_mark`/
+  `_non_web_sessions`).
+- **Grouping stays whole.** `getThreadKey` (`frontend/src/scenes/hooks/useThreading.ts`)
+  keys `action`/`outcome` rows by scene, never by target, so a multi-target round stays
+  one reader group instead of fragmenting per victim.
+- **The parent edge.** New `InteractionReply` model (see
+  [`scene-interaction-threads.md`](../systems/scene-interaction-threads.md)) records
+  which row a reply answered, read by `get_reply_to()` and rendered as the reader's
+  parent chip (web only - telnet can only quote).
+- **Reachability.** `world.scenes.reachability.persona_can_receive` is the one shared
+  predicate behind two refusals: tagging a persona outside the audience
+  (`UnreachableError`) and replying from a venue that cannot reach its target
+  (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
+  shape and a stated venue hint instead of an opaque string). Both refuse rather than
+  widen the audience, both preserve the writer's draft, and both are telnet-parity
+  (the parent chip alone is web only). See ADR-0291.
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 

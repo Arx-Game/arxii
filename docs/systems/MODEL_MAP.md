@@ -8186,6 +8186,8 @@
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
+  - reply_link <- scenes.InteractionReply
+  - reply_children <- scenes.InteractionReply
   - pose_submission <- scenes.PoseSubmission
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - action_request_result <- scenes.SceneActionRequest
@@ -8222,6 +8224,11 @@
   - interaction -> scenes.Interaction [FK]
   - persona -> scenes.Persona [FK]
   - account -> evennia.AccountDB [FK] (nullable)
+
+### InteractionReply
+**Foreign Keys:**
+  - interaction -> scenes.Interaction [FK]
+  - parent -> scenes.Interaction [FK]
 
 ### InteractionTargetPersona
 **Foreign Keys:**

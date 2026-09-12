@@ -29,8 +29,16 @@ _Avoid_: "countdown timer", "deadline" (the wall-clock `Beat.deadline` is a diff
 "world clock" (the calendar in `world.game_clock`).
 
 **Pose**:
-A single IC contribution recorded within a scene — the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas for thread derivation.
+A single IC contribution recorded within a scene - the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas that drive the involvement mark and the `direct` attention tier - NOT reader thread/group derivation, which mechanical rows key by scene instead (#3787, ADR-0291: targeting and grouping are separate concerns).
 _Avoid_: message, post, line, Interaction (at player surfaces)
+
+**Reachability** (#3787, ADR-0291):
+Whether a persona can receive content of a given audience shape right now - a live spatial-presence question (`world.scenes.reachability.persona_can_receive`), distinct from `InteractionQuerySet.visible_to`'s read-access/privacy-tier question over already-recorded history. Governs two player-facing refusals sharing one rule: tagging an unreachable persona (`UnreachableError`) and replying from a venue that cannot reach its target (`InteractionThreadError`). Both refuse rather than widen the audience, and both preserve the writer's draft. Deliberately does not govern system-authored rows (a resolved combat action's targets), which record what happened rather than address someone.
+_Avoid_: presence check, addressability (the model's own name is `persona_can_receive`)
+
+**Involvement mark** (#3787):
+The per-viewer "this happened to you" signal on a row naming the viewer's own persona in `target_persona_ids` - derived at read time from `InteractionTargetPersona` rows, never a stored flag. One neutral phrasing across all row kinds (pose, say, combat ACTION/OUTCOME, NPC action); web renders it as a reader chip, telnet gets the equivalent plain-text line scoped away from any session that already gets the structured payload.
+_Avoid_: notification, ping, tag (the mark invites an answer; it never queues one)
 
 **Spoken language** (#2993, ADR-0214):
 `Interaction.language` (nullable FK to `species.Language`) records which tongue a say/whisper/mutter pose was spoken in — null means untagged/universal (poses, emits, pre-#2993 rows). It never changes what got written; it changes how each reader sees it — read-time comprehension (garbled per the reader's fluency, `species.language_services.render_speech`) is recomputed live on every serializer read, not snapshotted, so learning the language later un-garbles old logs. `CharacterSheet.current_language` is the separate sticky default a bare `say` speaks in; a `(tongue) text` prefix on `say` overrides it for one line only. See `species` AGENT_GLOSSARY's Language/Fluency/Garble entries for the trait-backed mechanics.
