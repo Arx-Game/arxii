@@ -233,7 +233,12 @@ export function HistoryNavigator({ onOpenReference }: HistoryNavigatorProps) {
                   <span aria-hidden="true">{isExpanded ? '▾' : '▸'}</span>
                 </button>
               )}
-              {isExpanded && (
+              {/* Gated on the same condition as the Threads control above, not
+                  isExpanded alone: a background refetch that drops canRead for
+                  an already-open row must close this panel along with its
+                  control, not strand it mounted with no way to collapse it
+                  (whole-branch review, #3772). */}
+              {isExpanded && conversation.canRead && (
                 <ConversationThreadList
                   conversationKey={conversation.ref.key}
                   onCountLoaded={(loaded) =>

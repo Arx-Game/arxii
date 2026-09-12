@@ -7,7 +7,10 @@ import * as playQueries from '../playQueries';
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  const view = render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  // Exposed so a test can force a background refetch through the query layer
+  // itself (client.invalidateQueries), rather than poking component internals.
+  return { ...view, client };
 }
 
 function conversation(overrides = {}) {
@@ -313,5 +316,40 @@ describe('HistoryNavigator', () => {
     await user.click(await screen.findByRole('button', { name: /threads/i }));
     expect(await screen.findByText(/Every pose here stands on its own/i)).toBeInTheDocument();
     expect(search).toHaveValue('arbour');
+  });
+
+  it('closes an open thread list if a refetch revokes canRead (#3772 review)', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(playQueries, 'fetchPlayConversations')
+      .mockResolvedValueOnce({
+        results: [conversation()],
+        before: null,
+        after: null,
+        snapshot: '2026-06-14T12:00:00Z',
+      })
+      .mockResolvedValue({
+        results: [conversation({ canRead: false, unread: 0 })],
+        before: null,
+        after: null,
+        snapshot: '2026-06-14T12:00:01Z',
+      });
+    vi.spyOn(playQueries, 'fetchPlayThreads').mockResolvedValue({
+      results: [],
+      before: null,
+      after: null,
+      snapshot: '2026-06-14T12:00:00Z',
+    });
+    const { client } = renderWithClient(<HistoryNavigator />);
+    await user.click(await screen.findByRole('button', { name: /threads/i }));
+    expect(await screen.findByText(/Every pose here stands on its own/i)).toBeInTheDocument();
+
+    // Drive the change through the query layer, the way a real background
+    // refetch would arrive, rather than poking component state directly.
+    await client.invalidateQueries({ queryKey: ['play-conversations'] });
+
+    await waitFor(() =>
+      expect(screen.queryByText(/Every pose here stands on its own/i)).not.toBeInTheDocument()
+    );
+    expect(screen.queryByRole('button', { name: /threads/i })).not.toBeInTheDocument();
   });
 });
