@@ -989,11 +989,15 @@ magic checks at all is an open design question (#1363).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
-| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierTarget) |
-| `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
+| `Motif` | Character-level magical aesthetic; one per character, shared across all Gifts | `character` (O2O CharacterSheet), `description` |
+| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to `Resonance`), `is_from_gift` |
+| `MotifResonanceAssociation` | Links resonances to facets in a motif (cap 5 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `facet` |
 | `MotifResonanceStyle` | Player binding of a `Style` to one of the character's motif resonances (cap 3 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `style` (FK to `items.Style`) |
-| `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
+
+`CharacterFacet` **[ABSENT]** — this table used to list it as "links characters to facets".
+No such model or table exists; it was dropped in favour of Thread-on-Facet (see
+`docs/architecture/items-fashion-mantles.md`), and a character's facets are reached through
+`Motif → MotifResonance → MotifResonanceAssociation`. Verified against code 2026-09-11.
 
 **Player-facing style binding (#2030) [BUILT & WIRED]:** binding a `Style` to a
 claimed resonance is a normal player action, not admin-only. Service
