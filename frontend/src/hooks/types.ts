@@ -60,12 +60,16 @@ export type OutgoingMessage =
  * returned by the backend's action dispatcher: success indicates whether the
  * service succeeded, message is a human-readable string (may be null when the
  * action has no message), and data carries any structured payload the action
- * elects to return.
+ * elects to return. `client_request_id` echoes the id the dispatching client
+ * sent in its `kwargs`, when it sent one (#3781) — a listener that tracks a
+ * specific dispatch should compare this against its own id rather than
+ * assuming the next `action_result` event on the bus is theirs.
  */
 export interface ActionResultPayload {
   success: boolean;
   message: string | null;
   data: Record<string, unknown> | null;
+  client_request_id?: string | null;
 }
 
 export interface VnMessagePayload {

@@ -86,13 +86,13 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     EVIDENCE_REFERENCE="$EVIDENCE_URL"
   else
     uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
-    # A local path must be backtick-wrapped: the PR body's `- Report: ...` line
-    # is re-parsed by both validate_review_evidence.py's validate_pr_body and
-    # the review-evidence CI workflow against
-    # `^- Report: (?:`([^`]+)`|(https://\S+))$` — a bare local path matches
-    # neither alternative and the check fails with "labeled issue requires a
-    # review report link" even though the evidence itself is valid (#3786).
-    EVIDENCE_REFERENCE="\`$EVIDENCE_FILE\`"
+    # Left bare (not backtick-wrapped) here — the REPORT_LINE branch below
+    # (added for #3785, after this branch's own backtick-wrap was added for
+    # #3786) already wraps any non-URL EVIDENCE_REFERENCE in backticks.
+    # Wrapping here too produced a DOUBLE-backtick "- Report: ``path``" line
+    # that fails both validate_review_evidence.py's validate_pr_body and the
+    # review-evidence CI job's identical regex (#3794 hit this).
+    EVIDENCE_REFERENCE="$EVIDENCE_FILE"
   fi
 else
   EVIDENCE_REFERENCE="not required for this issue"

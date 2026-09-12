@@ -259,6 +259,102 @@ class ExecuteActionInputfuncTests(TestCase):
         _, _, passed_kwargs = mock_dispatch.call_args.args
         self.assertEqual(passed_kwargs.get("identifier_id"), "some-slug")
 
+    def test_client_request_id_is_echoed_back_on_success(self) -> None:
+        """A ``client_request_id`` in the inbound ``kwargs`` is echoed back on
+        success (#3781) — the frontend correlates the ACTION_RESULT against
+        this id instead of assuming "the next event on the bus is mine"."""
+        actor = _StubActor()
+        session = _make_session(puppet=actor)
+        stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset()
+        dispatch_result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True, message="You equip it.", data={"slot": "torso"}),
+        )
+
+        with (
+            patch("actions.registry.get_action", return_value=stub_action),
+            patch("actions.player_interface.dispatch_player_action", return_value=dispatch_result),
+        ):
+            execute_action(
+                session,
+                action="equip",
+                kwargs={"slot": "torso", "client_request_id": "req-123"},
+            )
+
+        payload = _result_payload(session)
+        self.assertEqual(payload["kwargs"]["client_request_id"], "req-123")
+
+    def test_client_request_id_is_echoed_back_on_error(self) -> None:
+        """The id is echoed even on a failure response (e.g. unknown action) so a
+        pending dispatch can still be resolved (rejected) by the client."""
+        actor = _StubActor()
+        session = _make_session(puppet=actor)
+        with patch("actions.registry.get_action", return_value=None):
+            execute_action(
+                session,
+                action="not_a_real_action",
+                kwargs={"client_request_id": "req-456"},
+            )
+
+        payload = _result_payload(session)
+        self.assertEqual(payload["kwargs"]["success"], False)
+        self.assertEqual(payload["kwargs"]["client_request_id"], "req-456")
+
+    def test_client_request_id_echoed_even_without_puppet(self) -> None:
+        """The id lives in ``kwargs.kwargs``, read before the puppet check, so
+        even the earliest failure path (no puppeted character) still echoes it."""
+        session = _make_session(puppet=None)
+        execute_action(session, action="equip", kwargs={"client_request_id": "req-789"})
+
+        payload = _result_payload(session)
+        self.assertEqual(payload["kwargs"]["client_request_id"], "req-789")
+
+    def test_missing_client_request_id_defaults_to_none(self) -> None:
+        """No ``client_request_id`` in the inbound payload sends ``None`` back —
+        not a missing key — so every ACTION_RESULT has a stable shape."""
+        actor = _StubActor()
+        session = _make_session(puppet=actor)
+        stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset()
+        dispatch_result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True),
+        )
+
+        with (
+            patch("actions.registry.get_action", return_value=stub_action),
+            patch("actions.player_interface.dispatch_player_action", return_value=dispatch_result),
+        ):
+            execute_action(session, action="equip", kwargs={})
+
+        payload = _result_payload(session)
+        self.assertIsNone(payload["kwargs"]["client_request_id"])
+
+    def test_non_string_client_request_id_is_ignored(self) -> None:
+        """A non-string ``client_request_id`` (malformed client) is treated as
+        absent rather than echoed back verbatim."""
+        actor = _StubActor()
+        session = _make_session(puppet=actor)
+        stub_action = MagicMock()
+        stub_action.objectdb_target_kwargs = frozenset()
+        dispatch_result = DispatchResult(
+            backend=ActionBackend.REGISTRY,
+            deferred=False,
+            detail=ActionResult(success=True),
+        )
+
+        with (
+            patch("actions.registry.get_action", return_value=stub_action),
+            patch("actions.player_interface.dispatch_player_action", return_value=dispatch_result),
+        ):
+            execute_action(session, action="equip", kwargs={"client_request_id": 12345})
+
+        payload = _result_payload(session)
+        self.assertIsNone(payload["kwargs"]["client_request_id"])
+
     def test_undeclared_id_kwarg_passes_through_unresolved(self) -> None:
         """Keys ending in ``_id`` not declared on the action are passed through raw.
 

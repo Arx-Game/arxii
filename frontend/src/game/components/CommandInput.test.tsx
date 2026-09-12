@@ -21,6 +21,15 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(ui, { wrapper: Wrapper, ...options });
 }
 
+// #3781 — `handleActionResult` now matches on `client_request_id` rather than
+// assuming the next bus event is this dispatch's own, so a test simulating
+// the ack must echo back the id the component actually dispatched.
+function lastDispatchedRequestId(): string {
+  const calls = executeActionMock.mock.calls;
+  const kwargs = calls[calls.length - 1][2] as { client_request_id: string };
+  return kwargs.client_request_id;
+}
+
 const sendMock = vi.fn();
 // #3760 Task 10 — say/whisper now dispatch via executeAction instead of send().
 const executeActionMock = vi.fn();
@@ -813,9 +822,46 @@ describe('CommandInput', () => {
     expect(textarea.value).toBe('hello there');
 
     act(() => {
-      emitActionResult({ success: true, message: null, data: null });
+      emitActionResult({
+        success: true,
+        message: null,
+        data: null,
+        client_request_id: lastDispatchedRequestId(),
+      });
     });
 
+    expect(textarea.value).toBe('');
+  });
+
+  it('ignores an ACTION_RESULT for a different dispatch, then resolves on the matching one (#3781)', () => {
+    const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+    render(<CommandInput character="Alice" composerMode={mode} />);
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+    fireEvent.change(textarea, { target: { value: 'hello there' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    // A concurrent, unrelated action's result (e.g. an inventory action fired
+    // from another panel) must not be mistaken for this send's ack, even
+    // though it arrives first on the same bus.
+    act(() => {
+      emitActionResult({
+        success: true,
+        message: null,
+        data: null,
+        client_request_id: 'unrelated-dispatch',
+      });
+    });
+    expect(textarea.value).toBe('hello there');
+
+    act(() => {
+      emitActionResult({
+        success: true,
+        message: null,
+        data: null,
+        client_request_id: lastDispatchedRequestId(),
+      });
+    });
     expect(textarea.value).toBe('');
   });
 
@@ -828,7 +874,12 @@ describe('CommandInput', () => {
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
     act(() => {
-      emitActionResult({ success: false, message: 'You have been muted.', data: null });
+      emitActionResult({
+        success: false,
+        message: 'You have been muted.',
+        data: null,
+        client_request_id: lastDispatchedRequestId(),
+      });
     });
 
     expect(toastErrorMock).toHaveBeenCalledWith('You have been muted.');
@@ -900,7 +951,12 @@ describe('CommandInput', () => {
       expect(textarea).toBeDisabled();
 
       act(() => {
-        emitActionResult({ success: true, message: null, data: null });
+        emitActionResult({
+          success: true,
+          message: null,
+          data: null,
+          client_request_id: lastDispatchedRequestId(),
+        });
       });
 
       expect(textarea).toBeEnabled();
@@ -916,7 +972,12 @@ describe('CommandInput', () => {
       fireEvent.keyDown(textarea, { key: 'Enter' });
 
       act(() => {
-        emitActionResult({ success: false, message: 'You have been muted.', data: null });
+        emitActionResult({
+          success: false,
+          message: 'You have been muted.',
+          data: null,
+          client_request_id: lastDispatchedRequestId(),
+        });
       });
 
       expect(screen.getByText(/You have been muted\./)).toBeInTheDocument();

@@ -40,12 +40,15 @@ export function ActionAttachment({
 
   // #3760 demo-fidelity review Finding 2 — the attached action's own
   // acknowledged/pending identity (demo Screen 7's "✓ <name> · acknowledged"
-  // badge next to the composer's Send button). `ActionResultPayload` carries
-  // no correlation id (see `hooks/types.ts`), so this is the SAME best-effort
-  // "the next action_result on the bus is this dispatch's response"
-  // assumption `CommandInput.tsx`'s own `handleActionResult` already makes
-  // for the composer's send ack — the established pattern for every
-  // `useActionResult` consumer in this codebase, not a new one invented here.
+  // badge next to the composer's Send button). This still assumes the next
+  // `action_result` on the bus is this dispatch's response: unlike
+  // `CommandInput.tsx`'s own `handleActionResult` (which now matches on
+  // `ActionResultPayload.client_request_id`, #3781), an attached action has
+  // no client-minted id of its own to correlate against here, so the gap
+  // this component's own attachment identity guards against
+  // (`attachmentIdentity`, below) is a real, if narrow, exposure — a
+  // different action's success while this one is in flight would flip
+  // `acknowledged` early.
   // Resets to `pending` whenever a DIFFERENT action gets attached (a fresh
   // attachment is a fresh, unconfirmed attempt); stays `pending` across
   // re-renders of the SAME attachment until a successful result arrives.

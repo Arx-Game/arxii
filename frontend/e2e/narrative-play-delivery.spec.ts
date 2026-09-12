@@ -294,12 +294,65 @@ test.describe('narrative play delivery (#3760) — fixture-backed journeys', () 
     expect(retryAttempt.text).toBe(firstAttempt.text);
 
     // The retry lands: ack it on the NEW connection and confirm the draft
-    // clears exactly once (no leftover banner, no leftover text).
+    // clears exactly once (no leftover banner, no leftover text). #3781 —
+    // the ack must carry the matching `client_request_id`; the composer no
+    // longer treats an unmatched `action_result` as this send's own.
     connections[1].route.send(
-      JSON.stringify(['action_result', [], { success: true, message: null, data: null }])
+      JSON.stringify([
+        'action_result',
+        [],
+        {
+          success: true,
+          message: null,
+          data: null,
+          client_request_id: retryAttempt.client_request_id,
+        },
+      ])
     );
     await expect(page.getByTestId('send-pending-banner')).toHaveCount(0);
     await expect(page.getByTestId('stranded-draft-banner')).toHaveCount(0);
+    await expect(editor).toHaveValue('');
+  });
+
+  test('a concurrent unrelated action_result does not falsely ack a pending send (#3781)', async ({
+    page,
+  }) => {
+    await mockRestRoutes(page);
+    const connections = await reachReadySession(page);
+    await openWhisperTab(page, connections[0]);
+
+    const editor = page.getByRole('textbox');
+    await editor.fill('Meet me by the fountain.');
+    await editor.press('Control+Enter');
+    await expect(page.getByTestId('send-pending-banner')).toBeVisible();
+
+    await expect.poll(() => executeActionFrames(connections[0], 'whisper').length).toBe(1);
+    const dispatchedId = executeActionFrames(connections[0], 'whisper')[0]
+      .client_request_id as string;
+    expect(dispatchedId).toBeTruthy();
+
+    // Some other in-flight action (a different panel entirely) resolves
+    // first, on the same bus, with its own unrelated id — this must NOT be
+    // mistaken for this whisper's own ack.
+    connections[0].route.send(
+      JSON.stringify([
+        'action_result',
+        [],
+        { success: true, message: null, data: null, client_request_id: 'unrelated-dispatch' },
+      ])
+    );
+    await expect(page.getByTestId('send-pending-banner')).toBeVisible();
+    await expect(editor).toHaveValue('Meet me by the fountain.');
+
+    // The real ack, carrying the matching id, resolves it.
+    connections[0].route.send(
+      JSON.stringify([
+        'action_result',
+        [],
+        { success: true, message: null, data: null, client_request_id: dispatchedId },
+      ])
+    );
+    await expect(page.getByTestId('send-pending-banner')).toHaveCount(0);
     await expect(editor).toHaveValue('');
   });
 
