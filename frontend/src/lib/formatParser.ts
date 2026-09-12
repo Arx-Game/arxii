@@ -446,3 +446,23 @@ export function parseFormattedContent(text: string): Segment[] {
 
   return buildSegments(text, ranges);
 }
+
+/**
+ * A short, truncated, PLAIN-TEXT preview of pose prose (#3759 Wave 9, moved
+ * here from `ThreadedNarrativeReader.tsx` for #3787 so `PoseUnit.tsx`'s
+ * parent-reply chip can share it too rather than writing a second truncation
+ * helper — the brief's own instruction: "export/move it rather than writing a
+ * second one"). Strips MU*-style color codes and markdown (`|w`,
+ * `**bold**`, etc.) by joining `parseFormattedContent`'s segments' plain
+ * `.content` fields BEFORE truncating, so a pose starting `|wMirelle
+ * turned...` (or `**The broken seal**`) never leaks raw markup into a
+ * header/label/chip.
+ */
+export function excerptOf(content: string, maxLength = 84): string {
+  const plain = parseFormattedContent(content)
+    .map((segment) => segment.content)
+    .join('');
+  const trimmed = plain.trim();
+  if (trimmed.length <= maxLength) return trimmed;
+  return `${trimmed.slice(0, maxLength).trimEnd()}…`;
+}
