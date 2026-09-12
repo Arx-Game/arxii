@@ -202,3 +202,10 @@ KIND_ROOM = "room"
 # own room-fallback return, both in `play_views.py`, so neither reads like a
 # kind/key mismatch (#3759 review finding 7a).
 GENERAL_CONVERSATION_KEY = KIND_ROOM
+
+# Directed unread (#3774) counts only the recent past. Read receipts did not
+# exist before the narrative reader shipped (#3759), so with no floor every
+# account's first load after this deploys would count its entire whisper
+# history at once. Ambient needs no equivalent floor: it is scoped to a scene
+# that is still running, which is inherently recent.
+DIRECTED_UNREAD_DAYS = 14
