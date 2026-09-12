@@ -272,14 +272,13 @@ export function CommandInput({
   useEffect(() => {
     commandRef.current = command;
   }, [command]);
-  // The most recently dispatched say/whisper send awaiting its ACTION_RESULT.
-  // `ActionResultPayload` carries no client_request_id (see
-  // `hooks/types.ts`), so correlation is best-effort: the next action_result
-  // event on the bus is assumed to be this dispatch's response, the same
-  // assumption every other `useActionResult` consumer in this codebase
-  // already makes (WardrobePage, StatusPanel, ...). A fast concurrent
-  // dispatch from elsewhere in the app could in principle misattribute —
-  // see the Task 10 report.
+  // The most recently dispatched say/whisper/tt send awaiting its
+  // ACTION_RESULT. `ActionResultPayload.client_request_id` (#3781) echoes
+  // back the id this component minted for the dispatch, so
+  // `handleActionResult` below can match the event against this ref instead
+  // of assuming the next `action_result` on the bus is this send's — a
+  // concurrent dispatch from elsewhere in the app (WardrobePage, StatusPanel,
+  // ...) no longer risks misattribution here.
   const pendingSpeechRef = useRef<{ clientRequestId: string; text: string } | null>(null);
 
   const { data: sceneDetail } = useQuery<SceneDetail>({
@@ -399,10 +398,15 @@ export function CommandInput({
   // newer, unsent edit the same way `useDraftStore.acknowledge` guards its
   // own state: only clears `command` when it still matches the text that was
   // actually sent.
+  // #3781 — the event is only THIS send's ack/reject when its
+  // `client_request_id` matches the id minted for `pending`; any other
+  // concurrent action's result (unrelated `client_request_id`, or none) is
+  // ignored and `pending` stays set, awaiting the real match.
   const handleActionResult = useCallback(
     (payload: ActionResultPayload) => {
       const pending = pendingSpeechRef.current;
       if (!pending) return;
+      if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
         draftStore.acknowledge(pending.clientRequestId);

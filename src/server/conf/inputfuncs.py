@@ -209,17 +209,32 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
     Outbound: ``session.msg`` with
         ``type=WebsocketMessageType.ACTION_RESULT.value`` and a kwargs
         payload of ``{"success": bool, "message": str | None,
-        "data": dict | None}``.
+        "data": dict | None, "client_request_id": str | None}``. The
+        ``client_request_id`` is echoed back unchanged from the inbound
+        ``kwargs.client_request_id`` (when the caller supplied one) so a
+        dispatching client can correlate this event with its own send
+        instead of assuming "the next ``action_result`` on the bus is
+        mine" (#3781).
     """
     from actions.errors import ActionDispatchError  # noqa: PLC0415
     from actions.player_interface import dispatch_player_action  # noqa: PLC0415
     from actions.types import ActionInterrupted  # noqa: PLC0415
     from web.webclient.message_types import WebsocketMessageType  # noqa: PLC0415
 
+    raw_kwargs: dict = kwargs.get("kwargs") or {}
+    client_request_id = raw_kwargs.get("client_request_id")
+    if not isinstance(client_request_id, str):
+        client_request_id = None
+
     def _send(success: bool, message: str | None = None, data: object = None) -> None:
         session.msg(
             type=WebsocketMessageType.ACTION_RESULT.value,
-            kwargs={"success": success, "message": message, "data": data},
+            kwargs={
+                "success": success,
+                "message": message,
+                "data": data,
+                "client_request_id": client_request_id,
+            },
         )
 
     actor = session.puppet
@@ -233,7 +248,6 @@ def execute_action(session, *args, **kwargs):  # noqa: ARG001
         return
     ref = ref_or_err
 
-    raw_kwargs: dict = kwargs.get("kwargs") or {}
     resolved_or_err = _resolve_registry_kwargs(ref, raw_kwargs, actor)
     if isinstance(resolved_or_err, str):
         _send(False, resolved_or_err)
