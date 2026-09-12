@@ -1466,6 +1466,57 @@ class InteractionAction(SharedMemoryModel):
             )
 
 
+class InteractionReply(SharedMemoryModel):
+    """Records which interaction a reply was answering.
+
+    The parent half of the narrative-play spec's thread topology. `Interaction.thread`
+    already carries membership (which exchange a row belongs to); this carries the edge
+    (which specific row it answered), which is what the reader's parent chip shows.
+
+    Both FKs use `db_constraint=False` plus a denormalized timestamp for the same reason
+    every other Interaction bridge does: arxii_interaction is range-partitioned by
+    timestamp and its primary key is composite, so an ordinary single-column FK to its id
+    cannot exist. Rows are written only for actual replies, so this table stays sparse.
+    """
+
+    interaction = models.ForeignKey(
+        INTERACTION_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reply_link",
+        db_constraint=False,
+        help_text="The reply. One row per reply; a reply answers at most one parent.",
+    )
+    timestamp = models.DateTimeField(
+        help_text="Denormalized from interaction - required for composite FK with the "
+        "partitioned table.",
+    )
+    parent = models.ForeignKey(
+        INTERACTION_MODEL,
+        on_delete=models.CASCADE,
+        related_name="reply_children",
+        db_constraint=False,
+        help_text="The interaction being answered.",
+    )
+    parent_timestamp = models.DateTimeField(
+        help_text="Denormalized from parent - required for composite FK with the "
+        "partitioned table.",
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["interaction"],
+                name="unique_reply_parent_per_interaction",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["parent", "parent_timestamp"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.interaction_id} answers {self.parent_id}"
+
+
 class PoseSubmission(SharedMemoryModel):
     """Idempotency ledger: (persona, client_request_id) -> the Interaction it produced.
 
