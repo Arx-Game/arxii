@@ -20,7 +20,6 @@ from world.scenes.models import (
     InteractionAction,
     InteractionFavorite,
     InteractionReaction,
-    InteractionReply,
     InteractionTargetPersona,
     Persona,
     PersonaDiscovery,
@@ -213,22 +212,6 @@ class InteractionReceiverFactory(factory_django.DjangoModelFactory):
     persona = factory.SubFactory(PersonaFactory)
     # Pin the receiver's party account from the persona's current tenure (#1219).
     account = factory.LazyAttribute(lambda o: _current_account_for_persona(o.persona))
-
-
-class InteractionReplyFactory(factory_django.DjangoModelFactory):
-    class Meta:
-        model = InteractionReply
-
-    interaction = factory.SubFactory(InteractionFactory)
-    parent = factory.SubFactory(InteractionFactory)
-
-    @factory.lazy_attribute
-    def timestamp(self):
-        return self.interaction.timestamp
-
-    @factory.lazy_attribute
-    def parent_timestamp(self):
-        return self.parent.timestamp
 
 
 class SceneActionRequestFactory(factory_django.DjangoModelFactory):

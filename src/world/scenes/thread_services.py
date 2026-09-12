@@ -1,4 +1,4 @@
-"""Services for assigning persisted interactions to flat narrative threads."""
+"""Services for assigning persisted interactions to anchored narrative threads."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from django.utils.dateparse import parse_datetime
 from evennia.accounts.models import AccountDB
 
 from world.scenes.constants import InteractionMode
-from world.scenes.models import Interaction, InteractionReply, InteractionThread
+from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver, Place
 
 
@@ -221,12 +221,60 @@ def _same_holder(thread: InteractionThread, signature: HolderSignature) -> bool:
 
 
 def pending_thread_update(interaction: Interaction) -> Interaction | None:
-    """Return the first thread target that needs a websocket upsert, if any."""
+    """Return the answered row that needs a websocket upsert, if any.
+
+    Set only the first time a row is answered, when the exchange it opens becomes
+    visible to the reader. The row's own payload is unchanged by being answered, so
+    this is an idempotent re-send of a row every recipient already holds.
+    """
     try:
         assignment = interaction.thread_assignment
     except AttributeError:
         return None
     return assignment.target if assignment.created else None
+
+
+def _thread_anchored_at(
+    target: Interaction,
+    signature: HolderSignature,
+) -> tuple[InteractionThread, bool]:
+    """Find or create the thread that answers ``target`` (#3787).
+
+    One thread per answered row, so two people answering the same blow land in the
+    same exchange rather than each carrying their own copy of "I answered that".
+    The anchor is the (id, timestamp) pair the partitioned interaction table needs;
+    the holder fields come from the target, so a pre-existing thread's holder always
+    matches - the check stays as a guard against a thread built for another venue.
+
+    Nesting: when the target is ITSELF a reply it already belongs to a thread, which
+    becomes this one's ``parent``; ``root`` is that thread's own root, or the parent
+    when the parent is the top. Written as ids so neither hop costs a query.
+
+    The find-or-create takes no lock of its own and does not need one: the caller
+    already holds ``select_for_update`` on ``target``, and every reply to that row
+    contends on it, so two answers to the same blow cannot both miss here and race to
+    create. ``unique_thread_per_anchor`` is the backstop if that ever stops holding.
+    """
+    thread = InteractionThread.objects.filter(
+        anchor_interaction_id=target.pk,
+        anchor_timestamp=target.timestamp,
+    ).first()
+    if thread is not None:
+        if not _same_holder(thread, signature):
+            raise _unavailable()
+        return thread, False
+
+    parent_thread = target.thread
+    parent_id = None if parent_thread is None else parent_thread.pk
+    root_id = None if parent_thread is None else (parent_thread.root_id or parent_thread.pk)
+    thread = InteractionThread.objects.create(
+        anchor_interaction_id=target.pk,
+        anchor_timestamp=target.timestamp,
+        parent_id=parent_id,
+        root_id=root_id,
+        **signature.as_thread_kwargs(),
+    )
+    return thread, True
 
 
 def assign_interaction_thread(
@@ -235,10 +283,14 @@ def assign_interaction_thread(
     reply_target: ReplyTarget,
     account_id: int | None,
 ) -> ThreadAssignment:
-    """Assign an interaction to the target's existing or newly-created thread.
+    """Put an interaction in the thread anchored at its reply target (#3787).
 
-    The caller must invoke this while the interaction write is atomic. The target
-    is locked before its visibility, holder, and existing membership are used.
+    The caller must invoke this while the interaction write is atomic. The target is
+    locked before its visibility, holder, and existing thread are used.
+
+    The target itself is NOT moved into the thread: a thread now holds the answers to
+    one row, and that row is reachable as ``anchor_interaction``. So a reply's
+    ``thread`` says what it answered, and a root pose keeps a null one.
     """
     if account_id is None or not timezone.is_aware(reply_target.timestamp):
         raise _unavailable()
@@ -275,25 +327,7 @@ def assign_interaction_thread(
     ):
         raise _unavailable()
 
-    thread = target.thread
-    created = thread is None
-    if thread is None:
-        thread = InteractionThread.objects.create(**target_signature.as_thread_kwargs())
-        target.thread = thread
-        target.save(update_fields=["thread"])
-    elif not _same_holder(thread, target_signature):
-        raise _unavailable()
-
+    thread, created = _thread_anchored_at(target, target_signature)
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
-    # The parent edge (#3787). Membership and parenthood are different facts: the
-    # thread says which exchange this belongs to, this says which row it answered,
-    # which is what the reader's parent chip shows. Written inside the caller's
-    # atomic block so a reply can never exist without its edge.
-    InteractionReply.objects.create(
-        interaction=interaction,
-        timestamp=interaction.timestamp,
-        parent=target,
-        parent_timestamp=target.timestamp,
-    )
     return ThreadAssignment(thread=thread, target=target, created=created)

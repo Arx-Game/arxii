@@ -69,7 +69,6 @@ from world.scenes.reaction_toggle_services import (
     toggle_interaction_favorite,
     toggle_interaction_reaction,
 )
-from world.scenes.reply_link_handler import InteractionReplyHandler
 from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
@@ -187,6 +186,10 @@ class InteractionViewSet(
             "place",
             "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
             "attributed_companion",  # #3294: N+1-safe companion-attribution rendering
+            # #3787: the thread IS the reply parent edge (it is anchored on the row it
+            # answers), so joining it here serves get_reply_to for the whole page with
+            # no extra query and no per-row handler.
+            "thread",
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",
@@ -533,27 +536,6 @@ class InteractionViewSet(
         return Response(
             {**out_serializer.data, "replayed": result.replayed}, status=response_status
         )
-
-    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Paginate as usual, then prime the reply-link handler for the whole page.
-
-        Read through InteractionReplyHandler (Interaction.reply_link_handler) rather
-        than a bare Prefetch with a `to_attr` kwarg in get_queryset above: that
-        spelling silently stops running the second time an instance is warm under the
-        identity map (ADR-0263, #3673) - the trap the other cached_* fields there
-        still carry, predating that ADR. Otherwise identical to
-        ListModelMixin.list(). Defined last in the class body so an earlier
-        `list[...]` annotation above (get_permissions) resolves to the builtin, not
-        this method.
-        """
-        queryset = self.filter_queryset(self.get_queryset())
-        page = self.paginate_queryset(queryset)
-        if page is not None:
-            InteractionReplyHandler.prime(list(page))
-            serializer = self.get_serializer(page, many=True)
-            return self.get_paginated_response(serializer.data)
-        serializer = self.get_serializer(queryset, many=True)
-        return Response(serializer.data)
 
 
 class InteractionFavoritePagination(PageNumberPagination):

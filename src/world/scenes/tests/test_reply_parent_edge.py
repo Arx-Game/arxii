@@ -1,4 +1,4 @@
-"""Tests for the reply parent edge (#3787): writing it, and serving it to the reader."""
+"""Tests for the reply parent (#3787): anchoring a thread, and serving it to the reader."""
 
 from __future__ import annotations
 
@@ -22,12 +22,12 @@ from world.scenes.interaction_services import (
     create_interaction,
     push_interaction,
 )
-from world.scenes.models import InteractionReply, InteractionThread
+from world.scenes.models import InteractionThread
 from world.scenes.thread_services import ReplyTarget
 
 
 class ReplyParentEdgeTest(TestCase):
-    """A reply records which interaction it answered, and the reader can read it.
+    """A reply's thread is anchored on the row it answered, and nests when that row is one.
 
     ``PersonaFactory()`` alone has no roster tenure, so ``_get_account_for_persona``
     resolves to ``None`` and ``assign_interaction_thread`` refuses (account_id is
@@ -42,51 +42,122 @@ class ReplyParentEdgeTest(TestCase):
         cls.persona = PersonaFactory()
         cls.account = AccountFactory()
 
-    def _reply_to(self, target):
+    def _reply_to(self, target, content="He goes down on one knee."):
         with patch(
             "world.scenes.interaction_services._get_account_for_persona",
             return_value=self.account.pk,
         ):
             return create_interaction(
                 persona=self.persona,
-                content="He goes down on one knee.",
+                content=content,
                 mode=InteractionMode.POSE,
                 scene=self.scene,
                 reply_to=ReplyTarget(interaction_id=target.pk, timestamp=target.timestamp),
             )
 
-    def test_replying_writes_the_parent_edge(self):
+    def _thread_of(self, reply) -> InteractionThread:
+        return InteractionThread.objects.get(pk=reply.thread_id)
+
+    def test_replying_anchors_the_thread_at_the_target(self):
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
         reply = self._reply_to(target)
-        edge = InteractionReply.objects.get(interaction=reply)
-        self.assertEqual(edge.parent_id, target.pk)
-        self.assertEqual(edge.parent_timestamp, target.timestamp)
+        thread = self._thread_of(reply)
+        self.assertEqual(thread.anchor_interaction_id, target.pk)
+        self.assertEqual(thread.anchor_timestamp, target.timestamp)
 
-    def test_replying_to_a_combat_outcome_writes_the_edge(self):
+    def test_the_answered_row_is_not_moved_into_the_thread(self):
+        """The #3787 semantic change, stated as an assertion.
+
+        A thread holds the ANSWERS to one row; the row itself is reachable as the
+        anchor. If the target were also made a member, the "which pile am I in"
+        reading would creep back and nesting would stop meaning anything.
+        """
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
+        self._reply_to(target)
+        target.refresh_from_db()
+        self.assertIsNone(target.thread_id)
+
+    def test_replying_to_a_combat_outcome_anchors_the_thread(self):
         """The case #3787 was filed for. OUTCOME rows are Narrator-authored."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
         reply = self._reply_to(target)
-        self.assertTrue(InteractionReply.objects.filter(interaction=reply).exists())
+        self.assertEqual(self._thread_of(reply).anchor_interaction_id, target.pk)
 
-    def test_replying_to_a_combat_action_writes_the_edge(self):
+    def test_replying_to_a_combat_action_anchors_the_thread(self):
         """ACTION rows take a direct objects.create path, not the full wrapper."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.ACTION)
         reply = self._reply_to(target)
-        self.assertTrue(InteractionReply.objects.filter(interaction=reply).exists())
+        self.assertEqual(self._thread_of(reply).anchor_interaction_id, target.pk)
+
+    def test_two_people_answering_the_same_blow_share_one_thread(self):
+        """What the per-reply edge table could not express (#3787 rework).
+
+        A bridge wrote one row per reply, each repeating "answers that blow". The
+        anchor carries that fact once, so the second answer JOINS the first's thread
+        instead of opening a parallel one.
+        """
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
+        first = self._reply_to(target, content="She swears and drops her guard.")
+        second = self._reply_to(target, content="He laughs at the blood.")
+
+        self.assertEqual(first.thread_id, second.thread_id)
+        self.assertEqual(
+            InteractionThread.objects.filter(anchor_interaction_id=target.pk).count(), 1
+        )
+
+    def test_answering_a_reply_nests_a_thread(self):
+        """A reply to a reply is a nested thread, the way an old mailing list nests."""
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
+        reply = self._reply_to(target, content="She swears and drops her guard.")
+        nested = self._reply_to(reply, content="He steps into the opening.")
+
+        outer = self._thread_of(reply)
+        inner = self._thread_of(nested)
+
+        self.assertNotEqual(inner.pk, outer.pk)
+        self.assertEqual(inner.anchor_interaction_id, reply.pk)
+        self.assertEqual(inner.parent_id, outer.pk)
+        self.assertEqual(inner.root_id, outer.pk)
+        self.assertIsNone(outer.parent_id)
+        self.assertIsNone(outer.root_id)
+
+    def test_a_third_level_keeps_the_root_at_the_top_of_the_tree(self):
+        """``root`` is the top of the tree, not the immediate parent."""
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
+        reply = self._reply_to(target, content="She swears and drops her guard.")
+        nested = self._reply_to(reply, content="He steps into the opening.")
+        deeper = self._reply_to(nested, content="She turns the blade aside.")
+
+        outer = self._thread_of(reply)
+        inner = self._thread_of(nested)
+        deepest = self._thread_of(deeper)
+
+        self.assertEqual(deepest.parent_id, inner.pk)
+        self.assertEqual(deepest.root_id, outer.pk)
+
+    def test_answering_the_original_parent_again_joins_the_original_thread(self):
+        """Nesting never captures later answers to the row that started it."""
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
+        reply = self._reply_to(target, content="She swears and drops her guard.")
+        nested = self._reply_to(reply, content="He steps into the opening.")
+        latecomer = self._reply_to(target, content="The crowd surges back from the rail.")
+
+        self.assertEqual(latecomer.thread_id, reply.thread_id)
+        self.assertNotEqual(latecomer.thread_id, nested.thread_id)
 
     def test_a_reply_always_carries_a_thread_id(self):
         """The invariant ``_reply_parent_payload``'s early return depends on.
 
-        ``assign_interaction_thread`` is the only writer of ``InteractionReply``, and it
-        sets the thread and writes the edge in one atomic block. That is what lets the
-        live push skip the parent lookup for every row with no ``thread_id`` instead of
-        paying a SELECT on every single push. If this ever fails, remove that early
-        return before doing anything else -- it would be silently dropping parent chips.
+        ``assign_interaction_thread`` is the only writer of ``Interaction.thread``, and
+        the thread it writes is always anchored. That is what lets the live push skip
+        the parent lookup for every row with no ``thread_id`` instead of paying a
+        SELECT on every single push. If this ever fails, remove that early return
+        before doing anything else - it would be silently dropping parent chips.
         """
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
         reply = self._reply_to(target)
         self.assertIsNotNone(reply.thread_id)
-        self.assertTrue(InteractionReply.objects.filter(interaction=reply).exists())
+        self.assertIsNotNone(self._thread_of(reply).anchor_interaction_id)
 
     def test_an_unthreaded_pose_has_no_parent(self):
         pose = create_interaction(
@@ -95,11 +166,11 @@ class ReplyParentEdgeTest(TestCase):
             mode=InteractionMode.POSE,
             scene=self.scene,
         )
-        self.assertFalse(InteractionReply.objects.filter(interaction=pose).exists())
+        self.assertIsNone(pose.thread_id)
 
 
 class ReplyToSerializationTest(TestCase):
-    """``get_reply_to`` is gated on the parent's own visibility, not the edge's existence."""
+    """``get_reply_to`` is gated on the parent's own visibility, not on the anchor existing."""
 
     def _request_for(self, account):
         request = APIRequestFactory().get("/")
@@ -158,6 +229,25 @@ class ReplyToSerializationTest(TestCase):
         self.assertIsNone(data["reply_to"])
         self.assertEqual(data["id"], reply.pk)
 
+    def test_the_chip_carries_no_actor_for_a_concealed_outcome(self):
+        """A concealed combat outcome must never be named by the chip it anchors.
+
+        The payload is an id and a timestamp and nothing else, so there is no field
+        for a persona name, content excerpt or mode to leak through. Asserted on the
+        keys rather than on one value: a future addition to this dict is exactly how
+        an actor would get named, and this is the test that would fail.
+        """
+        scene = SceneFactory()
+        persona = PersonaFactory()
+        author = AccountFactory()
+        target = InteractionFactory(
+            scene=scene, persona=persona, writer_account=author, mode=InteractionMode.OUTCOME
+        )
+        reply = self._create_reply(persona=persona, scene=scene, account=author, target=target)
+
+        data = InteractionListSerializer(reply, context={"request": self._request_for(author)}).data
+        self.assertEqual(set(data["reply_to"]), {"id", "timestamp"})
+
 
 class ReplyToWebSocketPayloadTest(TestCase):
     """The live push carries the parent chip too, on the same shape REST returns.
@@ -210,11 +300,10 @@ class ReplyToWebSocketPayloadTest(TestCase):
     def test_a_pose_that_answers_nothing_costs_no_parent_lookup(self):
         """The saving the docstring claims, pinned so it cannot silently regress.
 
-        ``reply_link_handler.load()`` runs a ``SELECT ... LIMIT 1`` on every cold
-        instance, so without the ``thread_id`` pre-check EVERY push would pay for the
-        parent lookup, not just replies. Asserted as an exact count rather than a
+        ``thread_id`` is a plain column on the row, so the "answers nothing" branch
+        must not touch the database at all. Asserted as an exact count rather than a
         budget: the point is that the lookup is absent, and a budget that happened to
-        have a spare slot would not notice it coming back.
+        have a spare slot would not notice one coming back.
         """
         pose = create_interaction(
             persona=self.persona,
@@ -242,18 +331,18 @@ class ReplyToWebSocketPayloadTest(TestCase):
         self.assertIsNone(broadcast.call_args.args[1]["reply_to"])
 
     def _edge_to(self, target):
-        """Write the parent edge directly, bypassing the reply refusal.
+        """Anchor a thread at *target* directly, bypassing the reply refusal.
 
         ``assign_interaction_thread`` already refuses most of these venues at write
-        time (ADR-0293 decision 1), but the recorded edge outlives the shape it was
+        time (ADR-0293 decision 1), but the recorded anchor outlives the shape it was
         written against: a room-heard parent can be escalated afterwards with
         ``mark_very_private``. The wire gate has to hold on the shape the parent has
-        NOW, so these cases assert it against an edge that exists.
+        NOW, so these cases assert it against an anchor that exists.
 
-        The thread is set alongside the edge deliberately, exactly as the real writer
-        does. ``_reply_parent_payload`` skips the handler lookup entirely for a row with
-        no ``thread_id``, so an edge written without one would make every case below
-        pass for the wrong reason -- never reaching the shape gate they exist to test.
+        Built exactly as the real writer builds it - an anchored thread, with the
+        reply pointed at it. ``_reply_parent_payload`` returns early for a row with no
+        ``thread_id``, so a reply left unthreaded would make every case below pass for
+        the wrong reason, never reaching the shape gate they exist to test.
         """
         reply = create_interaction(
             persona=self.persona,
@@ -262,17 +351,13 @@ class ReplyToWebSocketPayloadTest(TestCase):
             scene=self.scene,
         )
         reply.thread = InteractionThread.objects.create(
+            anchor_interaction_id=target.pk,
+            anchor_timestamp=target.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=self.scene.pk,
             scene_id=self.scene.pk,
         )
         reply.save(update_fields=["thread"])
-        InteractionReply.objects.create(
-            interaction=reply,
-            timestamp=reply.timestamp,
-            parent=target,
-            parent_timestamp=target.timestamp,
-        )
         return reply
 
     def test_a_whispered_parent_is_never_put_on_the_wire(self):
@@ -291,7 +376,7 @@ class ReplyToWebSocketPayloadTest(TestCase):
         self.assertIsNone(_reply_parent_payload(self._edge_to(target)))
 
     def test_a_parent_escalated_after_the_reply_stops_going_on_the_wire(self):
-        """The reachable case: the edge was legitimate; the parent went private after."""
+        """The reachable case: the anchor was legitimate; the parent went private after."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
         reply = self._edge_to(target)
         self.assertIsNotNone(_reply_parent_payload(reply))

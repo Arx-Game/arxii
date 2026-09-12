@@ -21,16 +21,24 @@ from world.scenes.types import PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
-    from world.scenes.models import InteractionReply
+    from world.scenes.models import InteractionThread
     from world.species.models import Language
 
 _MAX_POSE_LENGTH = 10_000
 
 
-def _reply_link(obj: Interaction) -> "InteractionReply | None":
-    """The parent edge for ``obj``, if any - via its (possibly primed) handler."""
-    rows = obj.reply_link_handler.rows
-    return rows[0] if rows else None
+def _anchored_thread(obj: Interaction) -> "InteractionThread | None":
+    """The thread ``obj`` answers, when ``obj`` is a reply (#3787).
+
+    A row's thread IS its parent edge: the thread is anchored at the row it answers,
+    so the chip's whole payload (``anchor_interaction_id``, ``anchor_timestamp``) is
+    already on the thread row. ``None`` for a root pose, and for a pre-#3787 thread
+    that carries no anchor.
+    """
+    thread = obj.thread
+    if thread is None or thread.anchor_interaction_id is None:
+        return None
+    return thread
 
 
 _DANGEROUS_LINK_RE = _re.compile(
@@ -192,18 +200,23 @@ class InteractionListSerializer(serializers.ModelSerializer):
         viewer who could already read what it answered. Never infers a parent from
         neighboring interactions.
         """
-        link = _reply_link(obj)
-        if link is None:
+        thread = _anchored_thread(obj)
+        if thread is None:
             return None
-        if link.parent_id not in self._visible_parent_ids():
+        if thread.anchor_interaction_id not in self._visible_parent_ids():
             return None
-        return {"id": str(link.parent_id), "timestamp": link.parent_timestamp.isoformat()}
+        return {
+            "id": str(thread.anchor_interaction_id),
+            "timestamp": thread.anchor_timestamp.isoformat(),
+        }
 
     def _visible_parent_ids(self) -> set[int]:
         """Batch-resolve which reply-parent ids this request's viewer may read.
 
         Cached on the shared serializer context (one query per page, not per row),
         mirroring ``_read_interaction_ids``'s lazy cache-on-context pattern below.
+        Reading each row's anchor costs nothing extra: ``thread`` is joined in by
+        ``InteractionViewSet.get_queryset``'s ``select_related``.
         """
         cache_key = "_visible_parent_ids_cache"
         if cache_key not in self.context:
@@ -215,7 +228,11 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 rows = [self.instance]
             else:
                 rows = []
-            parent_ids = {link.parent_id for row in rows if (link := _reply_link(row)) is not None}
+            parent_ids = {
+                thread.anchor_interaction_id
+                for row in rows
+                if (thread := _anchored_thread(row)) is not None
+            }
             if parent_ids:
                 self.context[cache_key] = set(
                     Interaction.objects.visible_to(user)

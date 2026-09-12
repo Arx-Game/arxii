@@ -601,39 +601,32 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
     rather than guess, and those readers still get the chip from the REST serializer's
     own per-viewer gate on their next fetch.
 
-    **Cost.** One query per reply push, and none at all for the overwhelmingly common
-    row that answers nothing -- which is true only because of the ``thread_id``
-    pre-check below. Without it, ``reply_link_handler.load()`` fires a ``SELECT ...
-    LIMIT 1`` on every cold instance, so EVERY ``push_interaction`` would pay for the
-    lookup, not just replies.
+    **Cost.** One room-heard query per reply push, and none at all for the
+    overwhelmingly common row that answers nothing: ``thread_id`` is a plain column
+    already on the row, so the ``None`` branch below never touches the database.
     """
-    # A reply always has a thread: ``assign_interaction_thread``
-    # (``world/scenes/thread_services.py``) sets ``interaction.thread`` and writes the
-    # ``InteractionReply`` edge in the same atomic block, and it is the ONLY writer of
-    # that edge anywhere in the codebase. Nothing deletes an ``InteractionThread``
-    # either (it is created there and nowhere else, and neither model is registered in
-    # the admin), so the ``on_delete=SET_NULL`` on ``Interaction.thread`` cannot strand
-    # an edge behind a null ``thread_id`` in practice. So no ``thread_id`` provably
-    # means no parent edge, and the handler never has to be touched. Pinned by
-    # ``test_a_reply_always_carries_a_thread_id`` -- if that invariant ever breaks, this
-    # early return starts silently dropping parent chips from the live push.
+    # The parent edge IS the thread (#3787): ``assign_interaction_thread``
+    # (``world/scenes/thread_services.py``) is the only writer of ``interaction.thread``
+    # and it always points at a thread anchored on the answered row. So a null
+    # ``thread_id`` means "answers nothing" without a lookup, and a set one carries the
+    # whole chip payload on the thread row itself. Pinned by
+    # ``test_a_reply_always_carries_a_thread_id``.
     if interaction.thread_id is None:
         return None
-    rows = interaction.reply_link_handler.rows
-    link = rows[0] if rows else None
-    if link is None:
+    thread = interaction.thread
+    if thread is None or thread.anchor_interaction_id is None:
         return None
     if interaction.scene_id is None:
         return None
     if not (
         Interaction.objects.room_heard()
-        .filter(pk=link.parent_id, scene_id=interaction.scene_id)
+        .filter(pk=thread.anchor_interaction_id, scene_id=interaction.scene_id)
         .exists()
     ):
         return None
     return ReplyParentPayload(
-        id=str(link.parent_id),
-        timestamp=link.parent_timestamp.isoformat(),
+        id=str(thread.anchor_interaction_id),
+        timestamp=thread.anchor_timestamp.isoformat(),
     )
 
 

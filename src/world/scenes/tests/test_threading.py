@@ -29,7 +29,7 @@ from world.scenes.interaction_serializers import (
     ReplyTargetSerializer,
 )
 from world.scenes.interaction_services import create_interaction, push_interaction
-from world.scenes.models import Interaction, InteractionReply, InteractionThread
+from world.scenes.models import Interaction, InteractionThread
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import (
     InteractionThreadError,
@@ -519,7 +519,7 @@ class TestTabletalkCommand(TestCase):
 
 
 class TestInteractionThreadModel(TestCase):
-    """Interaction threads are nullable flat membership containers."""
+    """Interaction threads are nullable containers anchored on the row they answer."""
 
     def test_interaction_thread_membership_and_set_null(self) -> None:
         interaction = InteractionFactory()
@@ -551,7 +551,7 @@ class TestInteractionThreadModel(TestCase):
 
 
 class TestInteractionThreadAssignment(TestCase):
-    """Reply targets create and reuse flat threads without parent links."""
+    """Reply targets create and reuse the thread anchored at the answered row."""
 
     def test_scene_target_creates_and_reuses_thread(self) -> None:
         account = AccountFactory()
@@ -566,9 +566,14 @@ class TestInteractionThreadAssignment(TestCase):
         )
         thread = assignment.thread
 
-        assert target.thread_id == thread.pk
+        # The answered row is the ANCHOR, not a member (#3787): it keeps its own
+        # thread, which for a root pose is none at all.
+        assert thread.anchor_interaction_id == target.pk
+        assert thread.anchor_timestamp == target.timestamp
+        assert target.thread_id is None
         assert first_reply.thread_id == thread.pk
         assert thread.parent_id is None
+        assert thread.root_id is None
 
         second_reply = InteractionFactory(scene=scene, writer_account=account)
         reused = assign_interaction_thread(
@@ -640,7 +645,6 @@ class TestInteractionThreadAssignment(TestCase):
         reply = InteractionFactory(scene=scene, place=place, writer_account=account)
 
         interaction_count = Interaction.objects.count()
-        reply_row_count = InteractionReply.objects.count()
         thread_count = InteractionThread.objects.count()
 
         with self.assertRaises(InteractionThreadError) as error:
@@ -657,8 +661,8 @@ class TestInteractionThreadAssignment(TestCase):
 
         # Nothing was written by the refused attempt.
         assert Interaction.objects.count() == interaction_count
-        assert InteractionReply.objects.count() == reply_row_count
         assert InteractionThread.objects.count() == thread_count
+        assert not InteractionThread.objects.filter(anchor_interaction_id=target.pk).exists()
         reply.refresh_from_db()
         target.refresh_from_db()
         assert reply.thread_id is None
@@ -689,8 +693,15 @@ class TestInteractionThreadAssignment(TestCase):
 
         assert reply.thread_id is not None
         assert (
+            InteractionThread.objects.filter(pk=reply.thread_id)
+            .values_list("anchor_interaction_id", flat=True)
+            .get()
+            == target.pk
+        )
+        # The target is reachable as the anchor, so it is never moved into the thread.
+        assert (
             Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
-            == reply.thread_id
+            is None
         )
 
 

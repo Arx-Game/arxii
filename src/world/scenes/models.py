@@ -41,7 +41,6 @@ if TYPE_CHECKING:
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
-    from world.scenes.reply_link_handler import InteractionReplyHandler
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -942,7 +941,21 @@ class BlockContactFlag(SharedMemoryModel):
 
 
 class InteractionThread(SharedMemoryModel):
-    """A flat conversation membership container for narrative interactions."""
+    """Every answer to one interaction, nested the way a mailing list nests.
+
+    A thread is ANCHORED: ``anchor_interaction`` is the row it answers, and its
+    members are the replies to that row. The anchor itself is not a member - it
+    is reachable as the anchor, so N people answering the same blow share one
+    thread carrying the fact once, instead of N rows each repeating it (#3787).
+
+    Answering a row that is itself a reply makes a NESTED thread: ``parent`` is
+    the thread the anchor lives in and ``root`` is the top of the tree. A reader
+    flattens a single-branch chain for display, which is a rendering concern and
+    never a reason for a second storage shape.
+
+    A row's own ``thread`` therefore means "what I am an answer to", not "which
+    pile I am in". Root poses keep ``thread_id`` null.
+    """
 
     class HolderKind(models.TextChoices):
         SCENE = "scene", "Scene"
@@ -950,12 +963,48 @@ class InteractionThread(SharedMemoryModel):
         WHISPER = "whisper", "Whisper"
 
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
+    anchor_interaction = models.ForeignKey(
+        INTERACTION_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.CASCADE,
+        db_constraint=False,
+        related_name="anchored_threads",
+        help_text=(
+            "The interaction every row in this thread answers. Null only on threads "
+            "written before #3787, when a thread was a flat membership container."
+        ),
+    )
+    anchor_timestamp = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text=(
+            "Denormalized from anchor_interaction - arxii_interaction is range-"
+            "partitioned on timestamp with a composite primary key, so a single-column "
+            "FK to its id cannot exist (the InteractionReceiver precedent)."
+        ),
+    )
     parent = models.ForeignKey(
         "self",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="child_threads",
+        help_text=(
+            "The thread the anchor row itself belongs to, when the anchor is a reply. "
+            "Null when the anchor is not a reply, which makes this thread a root."
+        ),
+    )
+    root = models.ForeignKey(
+        "self",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="descendant_threads",
+        help_text=(
+            "Denormalized top of the nesting tree, so a reader groups an exchange "
+            "without walking parents. Null when this thread IS the root."
+        ),
     )
     holder_kind = models.CharField(max_length=20, choices=HolderKind.choices)
     holder_id = models.PositiveBigIntegerField(null=True, blank=True)
@@ -988,7 +1037,24 @@ class InteractionThread(SharedMemoryModel):
                     & Q(party_key__isnull=False)
                 ),
                 name="interaction_thread_holder_shape",
-            )
+            ),
+            # The anchor is a pair, never half of one: the timestamp is the other
+            # half of the composite key into the partitioned interaction table, so
+            # an id without it cannot address a row at all.
+            models.CheckConstraint(
+                condition=(
+                    Q(anchor_interaction__isnull=True, anchor_timestamp__isnull=True)
+                    | Q(anchor_interaction__isnull=False, anchor_timestamp__isnull=False)
+                ),
+                name="interaction_thread_anchor_pair",
+            ),
+            # One thread per anchored row - this is what makes two people answering
+            # the same blow land in the SAME exchange. Null anchors (pre-#3787 rows)
+            # are distinct to Postgres, so legacy rows do not collide.
+            models.UniqueConstraint(
+                fields=["anchor_interaction", "anchor_timestamp"],
+                name="unique_thread_per_anchor",
+            ),
         ]
 
 
@@ -1225,22 +1291,6 @@ class Interaction(SharedMemoryModel):
     def cached_action_links(self, value: list[InteractionAction]) -> None:
         """Allow Prefetch(to_attr='cached_action_links') to set this."""
         self._cached_action_links = value
-
-    @cached_property
-    def reply_link_handler(self) -> InteractionReplyHandler:
-        """The parent edge for this interaction, if it is a reply (#3787).
-
-        Read through ``InteractionReplyHandler`` rather than a bare ``Prefetch`` with
-        a `to_attr` kwarg: that spelling silently stops running the second time an
-        instance is warm (ADR-0263, #3673) - the trap ``cached_action_links`` and its
-        siblings above still carry, predating that ADR.
-        ``InteractionReplyHandler.prime()`` batches this for a whole page (see
-        ``InteractionViewSet.list()``); cleared by any ``InteractionReply`` save or
-        delete through its ``related_cache_fields``.
-        """
-        from world.scenes.reply_link_handler import InteractionReplyHandler  # noqa: PLC0415
-
-        return InteractionReplyHandler(self)
 
 
 class InteractionFavorite(SharedMemoryModel):
@@ -1481,62 +1531,6 @@ class InteractionAction(SharedMemoryModel):
             raise ValidationError(
                 {"action_interaction": "Linked target must be an ACTION-mode Interaction."}
             )
-
-
-class InteractionReply(RelatedCacheClearingMixin, SharedMemoryModel):
-    """Records which interaction a reply was answering.
-
-    The parent half of the narrative-play spec's thread topology. `Interaction.thread`
-    already carries membership (which exchange a row belongs to); this carries the edge
-    (which specific row it answered), which is what the reader's parent chip shows.
-
-    Both FKs use `db_constraint=False` plus a denormalized timestamp for the same reason
-    every other Interaction bridge does: arxii_interaction is range-partitioned by
-    timestamp and its primary key is composite, so an ordinary single-column FK to its id
-    cannot exist. Rows are written only for actual replies, so this table stays sparse.
-    """
-
-    interaction = models.ForeignKey(
-        INTERACTION_MODEL,
-        on_delete=models.CASCADE,
-        related_name="reply_link",
-        db_constraint=False,
-        help_text="The reply. One row per reply; a reply answers at most one parent.",
-    )
-    timestamp = models.DateTimeField(
-        help_text="Denormalized from interaction - required for composite FK with the "
-        "partitioned table.",
-    )
-    parent = models.ForeignKey(
-        INTERACTION_MODEL,
-        on_delete=models.CASCADE,
-        related_name="reply_children",
-        db_constraint=False,
-        help_text="The interaction being answered.",
-    )
-    parent_timestamp = models.DateTimeField(
-        help_text="Denormalized from parent - required for composite FK with the "
-        "partitioned table.",
-    )
-
-    # Clears Interaction.reply_link_handler on the reply side whenever this row is
-    # saved or deleted (#3787), so a freshly-written edge is visible on the next read
-    # of the same in-process instance.
-    related_cache_fields: ClassVar[list[str]] = ["interaction"]
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["interaction"],
-                name="unique_reply_parent_per_interaction",
-            ),
-        ]
-        indexes = [
-            models.Index(fields=["parent", "parent_timestamp"]),
-        ]
-
-    def __str__(self) -> str:
-        return f"{self.interaction_id} answers {self.parent_id}"
 
 
 class PoseSubmission(SharedMemoryModel):
