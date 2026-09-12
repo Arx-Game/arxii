@@ -24,6 +24,11 @@ import type { Interaction } from '@/scenes/types';
 // Three conversation rows, matching the approved demo's own examples
 // verbatim: a retained scene with reply threads, a retained whisper with
 // none, and a temporary scene. Order matters -- it is the on-screen order.
+// `after` is a real cursor (#3772 demo-fidelity review round 2), not null:
+// HistoryNavigator's own conversations pager is gated purely on
+// `conversations.data?.after` being truthy, regardless of result count, so
+// a non-null cursor is all that's needed for the top-level "Next page"
+// control to render -- no second page of rows required.
 const CONVERSATIONS = {
   results: [
     {
@@ -61,7 +66,7 @@ const CONVERSATIONS = {
     },
   ],
   before: null,
-  after: null,
+  after: 'cursor-conversations-2',
   snapshot: '2026-06-14T12:00:00Z',
 };
 
@@ -244,12 +249,22 @@ test('history thread drill-down, four screens (#3772)', async ({ page }) => {
   const scene412Row = rowLocator('Scene 412');
   const whisperRow = rowLocator('Whisper with two others');
   const scene398Row = rowLocator('Scene 398');
+  // The "Recent conversations" section's own container, distinct from any
+  // single row's `.mt-2.rounded.border.p-2` div - scoping here (rather than
+  // a bare page-wide "Next page" lookup) keeps this assertion unambiguous
+  // even once a per-conversation thread-list pager exists lower on the page
+  // (#3772 demo-fidelity review round 2: "Next page" can appear twice on
+  // screen, once for the conversation list and once inside an expanded
+  // thread list).
+  const conversationList = historyNav.locator('.border-t.pt-3');
 
   // Screen 1: all three conversation rows collapsed, matching the demo's own
-  // browse example set (Fix 3).
+  // browse example set (Fix 3), plus the conversations pager (round 2 fix:
+  // a fixture with `after: null` never rendered this control in any capture).
   await expect(scene412Row.getByText('3 new · Retained')).toBeVisible();
   await expect(whisperRow.getByText('Retained', { exact: true })).toBeVisible();
   await expect(scene398Row.getByText('Temporary · not saved')).toBeVisible();
+  await expect(conversationList.getByRole('button', { name: /^next page$/i })).toBeVisible();
   await page.screenshot({ path: '../docs/reviews/3772-screen1-collapsed.png', fullPage: false });
 
   // Screen 2: scene:412 expanded - all three thread rows, their pose counts
