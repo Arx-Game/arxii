@@ -25,6 +25,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver, Place
+from world.scenes.reachability import UnreachableError, persona_can_receive
 from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
@@ -45,6 +46,26 @@ if TYPE_CHECKING:
 
 DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
+
+# #3787 Task 4 - approved demo copy (Screen 3). Fixed regardless of WHY a target
+# is unreachable (place-scoped, receiver-scoped, or whisper): both routes it
+# names (address the room, or whisper) are always available to the writer.
+_TARGET_UNREACHABLE_HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
+
+
+def _describe_unreachable_targets(personas: list[Persona]) -> str:
+    """Player-facing detail naming the unreachable persona(s) (#3787 demo copy).
+
+    Names only personas the caller already resolved via
+    ``resolve_characters_by_name(..., character.location)`` -- that function only
+    ever returns characters in the writer's own location, so naming them back
+    confirms nothing the writer could not already observe (the leak guard).
+    """
+    names = [p.name for p in personas]
+    if len(names) == 1:
+        return f"{names[0]} is across the room and will not see table talk."
+    joined = ", ".join(names[:-1]) + f" and {names[-1]}"
+    return f"{joined} are across the room and will not see table talk."
 
 
 def get_active_scene(location: ObjectDB | None) -> Scene | None:
@@ -250,6 +271,50 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             )
 
         if target_personas:
+            # #3787 Task 4 - the live defect: target_personas appeared nowhere in
+            # visible_to, so a Place-scoped pose (which auto-populates receivers
+            # from PlacePresence above, making this a DIRECTED row) could name a
+            # persona sitting at a different table -- the row was written and
+            # never delivered. Validate with the shared `persona_can_receive`
+            # predicate (Task 3) before writing anything.
+            #
+            # Skipped for the plain room-heard shape (no place, no explicit
+            # receivers, not a whisper): `persona_can_receive`'s room-heard branch
+            # refuses outright when `scene` is None (deliberately -- it has no
+            # room to test presence against, see its `test_no_scene_is_not_
+            # reachable`), but every target reaching this function was already
+            # resolved via `resolve_characters_by_name(target_names, character.
+            # location)` upstream, which only ever returns characters AT THE
+            # WRITER'S OWN LOCATION -- so a room-heard target is guaranteed
+            # co-located regardless of whether a Scene row exists. Running the
+            # predicate on this shape would refuse routine scene-less room
+            # tagging (an existing, tested REST path), not close the defect --
+            # the defect is specifically about Place/receiver-scoped shapes,
+            # where `persona_can_receive` needs no scene to answer.
+            check_applies = (
+                place is not None
+                or effective_receivers is not None
+                or mode == InteractionMode.WHISPER
+            )
+            if check_applies:
+                unreachable = [
+                    target
+                    for target in target_personas
+                    if not persona_can_receive(
+                        target,
+                        scene=scene,
+                        place=place,
+                        receivers=effective_receivers,
+                        mode=mode,
+                        visibility=visibility,
+                    )
+                ]
+                if unreachable:
+                    raise UnreachableError(
+                        unreachable,
+                        _TARGET_UNREACHABLE_HINT,
+                        message=_describe_unreachable_targets(unreachable),
+                    )
             InteractionTargetPersona.objects.bulk_create(
                 [
                     InteractionTargetPersona(

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from actions.prerequisites import Prerequisite
 from actions.types import ActionAvailability, ActionContext, ActionResult, TargetType
+from world.scenes.reachability import UnreachableError
 from world.scenes.thread_services import InteractionThreadError
 
 if TYPE_CHECKING:
@@ -422,7 +423,13 @@ class Action:
         # Execute with potentially modified kwargs
         try:
             context.result = self.execute(actor, context=context, **context.kwargs)
-        except InteractionThreadError as error:
+        except (InteractionThreadError, UnreachableError) as error:
+            # UnreachableError (#3787 Task 4) is the telnet sibling of the REST
+            # submit_pose 400: create_interaction/record_interaction refuse a
+            # tagged persona who cannot receive the row before anything is
+            # written. str(error) is the player-facing detail; the venue_hint
+            # (only on UnreachableError) has no telnet surface today, same as
+            # InteractionThreadError.venue_hint above.
             context.result = ActionResult(success=False, message=str(error))
 
         # Run post-effects

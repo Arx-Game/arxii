@@ -62,6 +62,7 @@ from world.scenes.models import (
     SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.reachability import UnreachableError
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
 from world.scenes.reaction_toggle_services import (
@@ -71,6 +72,21 @@ from world.scenes.reaction_toggle_services import (
 from world.scenes.reply_link_handler import InteractionReplyHandler
 from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
+
+
+def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
+    """Shared 400 body shape for a typed submit-pose refusal.
+
+    Both ``InteractionThreadError`` (reply refusal) and ``UnreachableError``
+    (#3787 Task 4 tagging refusal) translate through this one shape --
+    ``hint`` is omitted rather than sent as ``null`` when the refusal carries
+    none (``InteractionThreadError`` only sets it for the Place-to-Scene reply
+    mismatch; every ``UnreachableError`` carries one).
+    """
+    body: dict[str, str] = {"code": code, "field": field, "detail": detail}
+    if hint is not None:
+        body["hint"] = hint
+    return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -448,14 +464,15 @@ class InteractionViewSet(
                 on_created=_on_created,
             )
         except InteractionThreadError as exc:
-            body: dict[str, str] = {
-                "code": exc.code,
-                "field": "reply_to",
-                "detail": str(exc),
-            }
-            if exc.venue_hint is not None:
-                body["hint"] = exc.venue_hint
-            return Response(body, status=status.HTTP_400_BAD_REQUEST)
+            return _refusal_response(
+                code=exc.code, field="reply_to", detail=str(exc), hint=exc.venue_hint
+            )
+        except UnreachableError as exc:
+            # #3787 Task 4 - refuse tagging a persona who cannot receive the row.
+            # Nothing was written: create_interaction raises before any bulk_create.
+            return _refusal_response(
+                code=exc.code, field="target_names", detail=str(exc), hint=exc.venue_hint
+            )
 
         if result.conflict:
             return Response(

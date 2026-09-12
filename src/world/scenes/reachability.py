@@ -144,12 +144,27 @@ class UnreachableError(Exception):
 
     ``personas`` are the ones that failed ``persona_can_receive``; ``venue_hint``
     is the player-facing sentence telling them how to reach a venue where they
-    can (e.g. leave a Place). Consumed by the tagging/naming refusal; the reply
-    refusal keeps its own ``InteractionThreadError`` (a different HTTP contract
-    the frontend already matches on, see #3760).
+    can (e.g. leave a Place). Consumed by the tagging/naming refusal (Task 4,
+    ``create_interaction``); the reply refusal keeps its own
+    ``InteractionThreadError`` (a different HTTP contract the frontend already
+    matches on, see #3760).
+
+    ``message``, if given, is the detail shown to the caller (e.g. naming the
+    unreachable persona(s)); it defaults to ``venue_hint`` when omitted, which
+    keeps the original two-positional-argument shape callers already use.
+    ``code`` mirrors ``InteractionThreadError.code`` so a view can build the
+    same ``{code, field, detail, hint}`` response shape for both refusals.
     """
 
-    def __init__(self, personas: list[Persona], venue_hint: str) -> None:
+    code = "target_unreachable"
+
+    def __init__(
+        self,
+        personas: list[Persona],
+        venue_hint: str,
+        *,
+        message: str | None = None,
+    ) -> None:
         self.personas = personas
         self.venue_hint = venue_hint
-        super().__init__(venue_hint)
+        super().__init__(message if message is not None else venue_hint)
