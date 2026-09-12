@@ -19080,8 +19080,8 @@ export interface paths {
      *     Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
      *     ``NarrativeMessageDelivery`` rows per character, via a single aggregated
      *     JOIN/GROUP BY rather than a per-row query. Also attaches cross-device
-     *     attention (#3774) — ``unread_direct``, ``has_ambient_unread``, and
-     *     ``attention_as_of_id`` — computed once for the whole list via
+     *     attention (#3774) -- ``unread_direct``, ``has_ambient_unread``, and
+     *     ``attention_as_of_id`` -- computed once for the whole list via
      *     ``account_attention()`` and handed to the serializer through context.
      */
     get: operations['roster_entries_mine_retrieve'];
