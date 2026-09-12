@@ -23,8 +23,13 @@ const UNREAD_PILL_CLASS =
   'ml-1 inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full ' +
   'bg-primary px-1 text-xs text-primary-foreground';
 
+// The approved demo's format (#3772). The locale is explicit, not the
+// viewer's: a day-first row must not silently become month-first depending
+// on which browser opened it.
+const SHORT_DATE_FORMAT = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short' });
+
 function shortDate(timestamp: string): string {
-  return new Date(timestamp).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  return SHORT_DATE_FORMAT.format(new Date(timestamp));
 }
 
 /**

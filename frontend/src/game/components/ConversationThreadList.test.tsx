@@ -46,7 +46,9 @@ describe('ConversationThreadList', () => {
       name: /You came anyway\. I did wonder\./,
     });
     expect(firstRow).toBeInTheDocument();
-    expect(within(firstRow).getByText(/4 poses/)).toBeInTheDocument();
+    // Pins the demo's approved day-before-month order (#3772 demo-fidelity
+    // review): the sub-line must read "4 poses · 14 Jun", never "Jun 14".
+    expect(within(firstRow).getByText('4 poses · 14 Jun')).toBeInTheDocument();
     expect(within(firstRow).getByText('2')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Keep your voice down\./ })).toBeInTheDocument();
   });
@@ -81,7 +83,7 @@ describe('ConversationThreadList', () => {
     renderWithClient(
       <ConversationThreadList conversationKey="scene:412" onOpenThread={() => {}} />
     );
-    expect(await screen.findByRole('button', { name: /4 poses from/ })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: /4 poses from 14 Jun/ })).toBeInTheDocument();
   });
 
   it('says so when the conversation has no reply threads', async () => {
