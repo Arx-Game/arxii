@@ -467,8 +467,19 @@ class PlayThreadsView(APIView):
             )
         grouped: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
-            key = row.get("thread_id") or f"legacy:{row['id']}"
-            grouped.setdefault(key, []).append(row)
+            # An interaction carries a thread only when it is an explicit reply
+            # (`interaction_services.create_interaction`), so ordinary narration,
+            # the common case, belongs to no thread. This view is an index of
+            # reply threads for one conversation, not a second pose feed: emitting
+            # a single-pose group per unreplied pose made a 47-pose scene with 3
+            # reply chains report 47 threads across 3 server-paged pages, which a
+            # client cannot filter because the paging is server side (#3772).
+            # `ThreadedNarrativeReader` draws the same line client side for its own
+            # collapse seeding, where it excludes `legacy:`-keyed groups.
+            key = row.get("thread_id")
+            if not key:
+                continue
+            grouped.setdefault(str(key), []).append(row)
         results = []
         for key, members in grouped.items():
             root, latest = members[0], members[-1]
@@ -477,7 +488,7 @@ class PlayThreadsView(APIView):
                 {
                     "id": key,
                     "conversation": _conversation(root),
-                    "root": _ref(root) if not key.startswith("legacy:") else None,
+                    "root": _ref(root),
                     "firstVisible": _ref(root),
                     "latestVisible": _ref(latest),
                     "opening": root.get("content") or "",
