@@ -100,17 +100,8 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     # #3774 -- cross-device attention. The three fields below are one
     # `AccountAttention` computed once per request by `mine()` and handed in
     # through serializer context, never a per-row query and never a memo on
-    # the serializer (ADR-0260). Other callers of this same serializer never
-    # populate that context, so the guard in each getter answers 0/False
-    # rather than raising: `web/api/serializers.py`'s
-    # `AccountSerializer.get_selected_entry` (the `/api/user/` payload, hit
-    # on effectively every page load) and `SelectedEntryResultSerializer
-    # .selected_entry` (returned by `RosterEntryViewSet.select`) both
-    # serialize a single `RosterEntry` with no context at all, and neither
-    # has a reason to pay for an account-wide attention query just to
-    # display one already-known character. Zero is the honest answer there,
-    # not a paper-over: the true count is a different question this
-    # serializer isn't being asked at those call sites.
+    # the serializer (ADR-0260). Each getter's own docstring below states
+    # which callers do not populate that context and therefore read 0/False.
     unread_direct = serializers.SerializerMethodField()
     has_ambient_unread = serializers.SerializerMethodField()
     attention_as_of_id = serializers.SerializerMethodField()
@@ -207,7 +198,13 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         ).count()
 
     def get_unread_direct(self, obj: RosterEntry) -> int:
-        """Poses aimed at this character's personas and not yet read."""
+        """Poses aimed at this character's personas and not yet read.
+
+        Only populated on `GET /api/roster/entries/mine/`, which computes
+        attention for the whole list up front. `/api/user/`'s `selected_entry`
+        and the `select` action's response reuse this same serializer but do
+        not compute attention, so this reads 0 there, not a live count.
+        """
         attention = self.context.get("character_attention")
         if attention is None:
             return 0
@@ -215,7 +212,13 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         return entry.direct if entry else 0
 
     def get_has_ambient_unread(self, obj: RosterEntry) -> bool:
-        """Whether a scene this character is still in has moved without them."""
+        """Whether a scene this character is still in has moved without them.
+
+        Only populated on `GET /api/roster/entries/mine/`, which computes
+        attention for the whole list up front. `/api/user/`'s `selected_entry`
+        and the `select` action's response reuse this same serializer but do
+        not compute attention, so this reads False there, not a live value.
+        """
         attention = self.context.get("character_attention")
         if attention is None:
             return False
@@ -223,15 +226,18 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
         return bool(entry and entry.ambient)
 
     def get_attention_as_of_id(self, _obj: RosterEntry) -> int:
-        """The newest pose the counts above already include.
+        """The newest pose the direct/ambient counts above already include.
 
         The same for every row in a `mine()` response (one `AccountAttention`
         per request), so the entry itself is unused; kept for the
-        `SerializerMethodField` signature.
+        `SerializerMethodField` signature. The client drops session
+        interactions at or below this id before adding its own live
+        WebSocket delta, so the same pose is never counted twice.
 
-        The client drops session interactions at or below this id before
-        adding its own live WebSocket delta, so the same pose is never
-        counted twice.
+        Only populated on `GET /api/roster/entries/mine/`, which computes
+        attention for the whole list up front. `/api/user/`'s `selected_entry`
+        and the `select` action's response reuse this same serializer but do
+        not compute attention, so this reads 0 there, not a real watermark.
         """
         attention = self.context.get("character_attention")
         return attention.as_of_id if attention else 0

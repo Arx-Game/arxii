@@ -33838,20 +33838,37 @@ export interface components {
        *     a single extra query on that single-object path only.
        */
       readonly unread_narrative_count: number;
-      /** @description Poses aimed at this character's personas and not yet read. */
+      /**
+       * @description Poses aimed at this character's personas and not yet read.
+       *
+       *     Only populated on `GET /api/roster/entries/mine/`, which computes
+       *     attention for the whole list up front. `/api/user/`'s `selected_entry`
+       *     and the `select` action's response reuse this same serializer but do
+       *     not compute attention, so this reads 0 there, not a live count.
+       */
       readonly unread_direct: number;
-      /** @description Whether a scene this character is still in has moved without them. */
+      /**
+       * @description Whether a scene this character is still in has moved without them.
+       *
+       *     Only populated on `GET /api/roster/entries/mine/`, which computes
+       *     attention for the whole list up front. `/api/user/`'s `selected_entry`
+       *     and the `select` action's response reuse this same serializer but do
+       *     not compute attention, so this reads False there, not a live value.
+       */
       readonly has_ambient_unread: boolean;
       /**
-       * @description The newest pose the counts above already include.
+       * @description The newest pose the direct/ambient counts above already include.
        *
        *     The same for every row in a `mine()` response (one `AccountAttention`
        *     per request), so the entry itself is unused; kept for the
-       *     `SerializerMethodField` signature.
+       *     `SerializerMethodField` signature. The client drops session
+       *     interactions at or below this id before adding its own live
+       *     WebSocket delta, so the same pose is never counted twice.
        *
-       *     The client drops session interactions at or below this id before
-       *     adding its own live WebSocket delta, so the same pose is never
-       *     counted twice.
+       *     Only populated on `GET /api/roster/entries/mine/`, which computes
+       *     attention for the whole list up front. `/api/user/`'s `selected_entry`
+       *     and the `select` action's response reuse this same serializer but do
+       *     not compute attention, so this reads 0 there, not a real watermark.
        */
       readonly attention_as_of_id: number;
       readonly lifecycle_state: string;
