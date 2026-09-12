@@ -223,7 +223,12 @@ describe('HistoryNavigator', () => {
   });
 
   it('does not ask for threads until the Threads control is pressed', async () => {
-    const fetchThreads = vi.spyOn(playQueries, 'fetchPlayThreads');
+    const fetchThreads = vi.spyOn(playQueries, 'fetchPlayThreads').mockResolvedValue({
+      results: [],
+      before: null,
+      after: null,
+      snapshot: '2026-06-14T12:00:00Z',
+    });
     vi.spyOn(playQueries, 'fetchPlayConversations').mockResolvedValue({
       results: [conversation()],
       before: null,
