@@ -101,3 +101,32 @@ class CastResult:
     power_ledger: PowerLedger | None = None
     soulfray_warning: SoulfrayWarning | None = None
     combat_seated: bool = False
+
+
+@dataclass(frozen=True)
+class CharacterAttention:
+    """What is waiting for one character (#3774).
+
+    `direct` is a count of poses aimed at this character's personas and not yet
+    read. `ambient` is whether a scene this character is still in has moved
+    without them. Two tiers rather than one number because the badge answers
+    two different questions: did someone speak to me, or did something happen
+    near me.
+    """
+
+    direct: int
+    ambient: bool
+
+
+@dataclass(frozen=True)
+class AccountAttention:
+    """One account's attention across all of its characters (#3774).
+
+    `by_character` is keyed by `character_sheet_id`. `as_of_id` is the largest
+    `Interaction.id` the service considered; the client drops session
+    interactions at or below it so a live WebSocket delta and this server
+    baseline cannot count the same pose twice.
+    """
+
+    by_character: dict[int, CharacterAttention]
+    as_of_id: int

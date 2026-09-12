@@ -17,32 +17,10 @@ import { setActiveSession } from '@/store/gameSlice';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
-import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
-import { sessionAttention } from '@/game/attention';
+import { characterAttention } from '@/game/attention';
+import { AttentionBadge } from '@/game/components/AttentionBadge';
 import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
-
-/**
- * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
- * direct (unseen whisper/@-target aimed at that character) badges a small
- * red numeric count, mirroring `ConversationTabStrip`'s `UnreadBadge`;
- * ambient (any other unread) shows a muted dot; neither renders nothing.
- */
-function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
-  if (direct > 0) {
-    return (
-      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-        {direct}
-      </span>
-    );
-  }
-  if (ambient) {
-    return (
-      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
-    );
-  }
-  return null;
-}
 
 /** The active scene's live feed, composed once by `GamePage` (#2156). */
 export interface GameWindowSceneFeed {
@@ -423,8 +401,13 @@ export function GameWindow({
       {sessionNames.length >= 2 && (
         <div className="mb-2 flex gap-2 border-b">
           {sessionNames.map((name) => {
-            const personaId = actingPersonaId(characters.find((c) => c.name === name));
-            const attention = sessionAttention(sessions[name], personaId);
+            // #3774 -- same server-plus-delta combination as GameTopBar's
+            // avatar row (canonical version lives in `characterAttention`,
+            // frontend/src/game/attention.ts); the server baseline is what
+            // makes the count right immediately after a switch, before this
+            // session has seen anything new arrive.
+            const char = characters.find((c) => c.name === name);
+            const attention = characterAttention(char, sessions[name]);
             return (
               <button
                 key={name}

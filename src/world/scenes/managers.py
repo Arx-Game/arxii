@@ -50,6 +50,27 @@ class SceneQuerySet(models.QuerySet):
 SceneManager = SharedMemoryManager.from_queryset(SceneQuerySet)
 
 
+def room_heard_q() -> models.Q:
+    """Broadcast content everyone present perceived.
+
+    Default visibility, not place-scoped, not directed (no receiver rows, not a
+    whisper). Whispers, table-talk and receiver-scoped mutters are DIRECTED: they
+    reach only their parties, so they are never room-heard.
+
+    Shared by `InteractionQuerySet.visible_to` (read visibility) and
+    `world.scenes.attention_services` (#3774), which counts ambient unread inside
+    a scene. Both must agree on this definition: an attention count built on a
+    looser predicate would disclose that a private aside took place, as an
+    increment the viewer is not a party to. Returns a fresh Q each call, since
+    combining a Q with `&`/`|` is not safe to do to a shared instance.
+    """
+    return models.Q(
+        visibility=InteractionVisibility.DEFAULT,
+        place__isnull=True,
+        receivers__isnull=True,
+    ) & ~models.Q(mode=InteractionMode.WHISPER)
+
+
 class InteractionQuerySet(models.QuerySet):
     """Queryset helpers for Interaction read-visibility."""
 
@@ -86,14 +107,7 @@ class InteractionQuerySet(models.QuerySet):
         # Time bound for partition pruning; the 'since' param overrides the 90-day default.
         time_bound = {"timestamp__gte": since or (timezone.now() - timedelta(days=90))}
 
-        # "Room-heard" = broadcast content everyone present perceived: default visibility,
-        # not place-scoped, and not directed (no receiver rows, not a whisper). Whispers /
-        # table-talk / receiver-scoped mutters are DIRECTED -- they reach only their parties.
-        room_heard = models.Q(
-            visibility=InteractionVisibility.DEFAULT,
-            place__isnull=True,
-            receivers__isnull=True,
-        ) & ~models.Q(mode=InteractionMode.WHISPER)
+        room_heard = room_heard_q()
 
         # Public room-heard -> anyone, including unauthenticated viewers.
         public_visible = Interaction.objects.filter(
