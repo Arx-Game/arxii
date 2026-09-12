@@ -409,6 +409,44 @@ def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int
     )
 
 
+def _non_web_sessions(obj: ObjectDB) -> list[Any]:
+    """Sessions on ``obj`` that do NOT already receive the structured payload.
+
+    Evennia's webclient protocols stamp ``session.protocol_key`` as
+    ``"webclient/websocket"`` or ``"webclient/ajax"`` (see
+    ``evennia/server/portal/webclient*.py``); telnet, telnet/ssl and ssh use
+    ``"telnet"``/``"telnet/ssl"``/``"ssh"``. This mirrors the existing
+    telnet-vs-web discriminator in ``server/conf/inputfuncs.py``'s ``text()``
+    (``protocol_key.startswith("telnet")``), inverted and widened to "not
+    webclient" so ssh sessions -- which also never receive the ``interaction=``
+    outputfunc -- get the mark too.
+    """
+    return [
+        session
+        for session in obj.sessions.all()
+        if not str(session.protocol_key or "").startswith("webclient")
+    ]
+
+
+def _send_involvement_mark(obj: ObjectDB) -> None:
+    """Send the plain-text involvement mark to ``obj``'s non-web sessions only.
+
+    ``obj.msg(text)`` with no ``session=`` is protocol-agnostic -- it would
+    reach EVERY session ``obj`` has, web included. The web client already
+    renders its own ``InvolvementFlag`` chip off ``target_persona_ids``
+    (#3787 Task 7), so sending the plain-text line there too would double the
+    signal (Task 8 fix round 2, Finding 1). Scoping to ``session=`` a specific
+    list is how Evennia targets delivery (``DefaultObject.msg``); passing an
+    EMPTY list here would fall back to "all sessions" (Evennia's own
+    ``session or self.sessions.all()`` default), so a webclient-only
+    character (no non-web session) gets skipped entirely rather than sent
+    with an empty list.
+    """
+    non_web = _non_web_sessions(obj)
+    if non_web:
+        obj.msg(_INVOLVEMENT_MARK_TEXT, session=non_web)
+
+
 def _send_to_objects(
     objects: Iterable[ObjectDB],
     payload: InteractionPayload,
@@ -428,13 +466,15 @@ def _send_to_objects(
     registered for that protocol), so it gives telnet no equivalent of the
     web reader's ``InvolvementFlag`` ("This happened to you"). Every recipient
     named in ``payload["target_persona_ids"]`` additionally gets one plain-text
-    line via ``obj.msg(_INVOLVEMENT_MARK_TEXT)``, which telnet DOES render.
-    This is the one shared seam every targeted row already passes through
-    (pose tagging, whisper, mutter, and combat's unconcealed action outcome
-    all build their payload via ``_build_interaction_payload`` and reach
-    clients only through this function or ``_broadcast_to_location``), so one
-    rule here covers every row kind with no per-mode copy (decision 8) and no
-    duplicated logic in a command class.
+    line, ``_send_involvement_mark``, scoped to their non-web sessions only
+    (see that function's docstring -- a webclient session already got the
+    structured signal above and must not also get the raw line). This is the
+    one shared seam every targeted row already passes through (pose tagging,
+    whisper, mutter, and combat's unconcealed action outcome all build their
+    payload via ``_build_interaction_payload`` and reach clients only through
+    this function or ``_broadcast_to_location``), so one rule here covers
+    every row kind with no per-mode copy (decision 8) and no duplicated
+    targeting logic in a command class.
     """
     target_character_ids = _target_character_ids(payload.get("target_persona_ids"))
     for obj in objects:
@@ -444,7 +484,7 @@ def _send_to_objects(
                 obj_payload = cast(InteractionPayload, {**payload, "content": render_for(obj)})
             obj.msg(interaction=((), obj_payload))
             if obj.pk in target_character_ids:
-                obj.msg(_INVOLVEMENT_MARK_TEXT)
+                _send_involvement_mark(obj)
         except AttributeError:
             continue
 

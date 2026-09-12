@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 from django.test import TestCase
 
@@ -280,49 +280,86 @@ class TestPoseActionReplyRefusalTelnetParity(TestCase):
 
 
 class TestInvolvementMarkTelnetParity(TestCase):
-    """Telnet parity for the involvement mark (#3787 Task 8, fix round 1).
+    """Telnet parity for the involvement mark (#3787 Task 8).
 
     Spec decision 7 puts the mark on the parity side (only the parent chip is
     web-only): a telnet client must get an explicit signal that a targeted row
     was about them. Drives the real ``CmdPose`` grammar (``@Name`` targeting,
     ``commands/parsing.py``'s ``parse_targets_from_text``) so this proves a
     scenario an actual player command produces, not a synthetic kwarg shape.
+
+    Fix round 2, Finding 1: the plain-text mark must reach only sessions that
+    do NOT already get the structured ``interaction=`` payload -- a web
+    session renders its own ``InvolvementFlag`` chip off ``target_persona_ids``
+    (#3787 Task 7) and would otherwise see the raw line a second time in its
+    System lane. ``ObjectSessionHandler.all`` (the real method
+    ``_non_web_sessions`` calls via ``obj.sessions.all()``) is patched per
+    character to return a fake session stamped with the ``protocol_key`` a
+    real telnet or webclient connection would carry (mirroring
+    ``web/tests/test_text_inputfunc.py``'s ``_session()`` helper, the
+    established pattern for faking a session's protocol in this repo) --
+    this is the cleanest boundary the test harness can assert on, since there
+    is no lighter-weight way to distinguish "a session" without a live
+    connection.
     """
 
-    def test_targeted_player_gets_the_mark_and_a_bystander_does_not(self) -> None:
+    def test_telnet_session_gets_the_mark_web_session_does_not(self) -> None:
+        from evennia.objects.objects import ObjectSessionHandler
+
         from actions.definitions.communication import PoseAction
         from commands.evennia_overrides.communication import CmdPose
 
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         alice = CharacterFactory(db_key="Alice", location=room)
-        bob = CharacterFactory(db_key="Bob", location=room)
-        carol = CharacterFactory(db_key="Carol", location=room)
+        bob = CharacterFactory(db_key="Bob", location=room)  # telnet-style target
+        dave = CharacterFactory(db_key="Dave", location=room)  # web-style target
+        carol = CharacterFactory(db_key="Carol", location=room)  # untargeted bystander
         CharacterSheetFactory(character=alice)
         CharacterSheetFactory(character=bob)
+        CharacterSheetFactory(character=dave)
         CharacterSheetFactory(character=carol)
 
         bob_messages: list[object] = []
+        dave_messages: list[object] = []
         carol_messages: list[object] = []
         bob.msg = lambda *args, **kwargs: bob_messages.append((args, kwargs))
+        dave.msg = lambda *args, **kwargs: dave_messages.append((args, kwargs))
         carol.msg = lambda *args, **kwargs: carol_messages.append((args, kwargs))
+
+        telnet_session = MagicMock()
+        telnet_session.protocol_key = "telnet"
+        web_session = MagicMock()
+        web_session.protocol_key = "webclient/websocket"
+        sessions_by_pk = {bob.pk: [telnet_session], dave.pk: [web_session]}
+
+        def _fake_all(handler: ObjectSessionHandler) -> list[object]:
+            return sessions_by_pk.get(handler.obj.pk, [])
 
         cmd = CmdPose()
         cmd.caller = alice
         cmd.action = PoseAction()
-        cmd.args = " @Bob waves warmly."
-        cmd.raw_string = "pose @Bob waves warmly."
+        cmd.args = " @Bob,@Dave waves warmly."
+        cmd.raw_string = "pose @Bob,@Dave waves warmly."
         cmd.cmdset = None
         cmd.cmdset_providers = {}
         cmd.session = None
         cmd.account = None
         cmd.obj = None
-        cmd.func()
+        with patch.object(ObjectSessionHandler, "all", _fake_all):
+            cmd.func()
 
         bob_texts = [str(args[0]) for args, kwargs in bob_messages if args]
+        dave_texts = [str(args[0]) for args, kwargs in dave_messages if args]
         carol_texts = [str(args[0]) for args, kwargs in carol_messages if args]
 
         assert any("This happened to you." in text for text in bob_texts), bob_messages
+        assert not any("This happened to you." in text for text in dave_texts), dave_messages
         assert not any("This happened to you." in text for text in carol_texts), carol_messages
+
+        # Dave still gets the structured payload his web session already
+        # renders its own chip from -- this proves the mark was scoped away
+        # from him, not that delivery to him broke outright.
+        assert any("interaction" in kwargs for args, kwargs in dave_messages), dave_messages
 
 
 class TestTabletalkCommand(TestCase):
