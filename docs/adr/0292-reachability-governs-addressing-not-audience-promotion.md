@@ -1,4 +1,4 @@
-# ADR-0291: Reachability governs who can be addressed; the reply parent is a sparse bridge, not a column
+# ADR-0292: Reachability governs who can be addressed; the reply parent is a sparse bridge, not a column
 
 **Status:** Accepted (#3787, 2026-09-12). Related: ADR-0170 (concealed casts record no
 target rows), ADR-0260 (per-request memo policy, unrelated mechanism but the same

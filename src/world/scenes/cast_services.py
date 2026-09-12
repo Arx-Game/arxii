@@ -298,7 +298,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
 
     Those target rows are attached with ``write_target_personas`` AFTER the pose is
     created, never through ``create_interaction``'s own validated ``target_personas``
-    kwarg. ADR-0291 decision 3: a system-authored row records what happened, and only a
+    kwarg. ADR-0292 decision 3: a system-authored row records what happened, and only a
     player-authored row that addresses someone is governed by reachability. This is a
     Narrator-authored OUTCOME record of a resolved cast, the exact sibling of combat's
     ``broadcast_action_outcome`` (``world/combat/interaction_services.py``), which routes

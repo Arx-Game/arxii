@@ -222,4 +222,48 @@ describe('sessionAttention', () => {
 
     expect(result).toEqual({ direct: 0, ambient: true });
   });
+
+  it('drops interactions the server already counted', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'whisper',
+          receiver_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+        makeInteraction({
+          id: 9,
+          mode: 'whisper',
+          receiver_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID, 5);
+
+    expect(result.direct).toBe(1);
+  });
+
+  it('counts everything when no watermark is given', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({ id: 5, mode: 'whisper', receiver_persona_ids: [VIEWER_PERSONA_ID] }),
+      ],
+    });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID).direct).toBe(1);
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, null).direct).toBe(1);
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, 0).direct).toBe(1);
+  });
+
+  it('a watermark does not resurrect a thread the viewer already dismissed', () => {
+    const session = makeSession({
+      threadLastSeen: { [`whisper:${VIEWER_PERSONA_ID},99`]: 20 },
+      sceneInteractions: [
+        makeInteraction({ id: 15, mode: 'whisper', receiver_persona_ids: [VIEWER_PERSONA_ID] }),
+      ],
+    });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, 5).direct).toBe(0);
+  });
 });

@@ -475,20 +475,37 @@ class PlayThreadsViewTests(APITestCase):
         # 90..112 straddles the 99 -> 100 digit-length boundary, where a STRING
         # sort ("100" < "99") disagrees with an INT sort.
         synthetic_ids = list(range(90, 113))
-        rows = [
-            {
-                "id": pose_id,
-                "timestamp": shared_timestamp,
-                "thread_id": None,
-                "content": f"pose {pose_id}",
-                "mode": "pose",
-                "place": None,
-                "scene": None,
-                "receiver_persona_ids": [],
-                "persona": {"id": 1, "name": "Tester"},
-            }
-            for pose_id in synthetic_ids
-        ]
+        rows = []
+        for pose_id in synthetic_ids:
+            rows.append(
+                {
+                    "id": pose_id,
+                    "timestamp": shared_timestamp,
+                    "thread_id": f"t{pose_id}",
+                    "content": f"pose {pose_id}",
+                    "mode": "pose",
+                    "place": None,
+                    "scene": None,
+                    "receiver_persona_ids": [],
+                    "persona": {"id": 1, "name": "Tester"},
+                }
+            )
+            # A reply, so the group is a genuine thread rather than a lone pose.
+            # Its id is above every root id, and the view sorts and pages by the
+            # ROOT (`firstVisible`), so it cannot affect the ordering under test.
+            rows.append(
+                {
+                    "id": pose_id + 1000,
+                    "timestamp": shared_timestamp,
+                    "thread_id": f"t{pose_id}",
+                    "content": f"reply to {pose_id}",
+                    "mode": "pose",
+                    "place": None,
+                    "scene": None,
+                    "receiver_persona_ids": [],
+                    "persona": {"id": 1, "name": "Tester"},
+                }
+            )
 
         with patch("world.scenes.play_views._rows", return_value=(rows, None)):
             # The default (no-cursor) request is exactly the path that 500'd before
@@ -537,10 +554,10 @@ class PlayThreadsViewTests(APITestCase):
         which assumes `results` is monotonic in the SAME field it searches --
         would misplace the boundary, re-including rows a caller already saw.
 
-        Layout (26 groups, page size 20): 6 single-pose "legacy" groups at
-        minutes 01-06, then thread "A" whose root lands at minute 07 (so it
-        sorts 7th) but whose reply lands 9 days later, then 19 more legacy
-        groups at minutes 08-26. Requesting everything strictly `after`
+        Layout (26 groups, page size 20): six two-pose threads at minutes
+        01-06, then thread "A" whose root lands at minute 07 (so it
+        sorts 7th) but whose reply lands 9 days later, then 19 more two-pose
+        threads at minutes 08-26. Requesting everything strictly `after`
         legacy pose 9 (minute 09, sort position 9th) must return legacy 10
         onward only -- never "A", legacy 8, or legacy 9 again, which is
         exactly what leaks back in if the cursor key uses the reply's
@@ -562,10 +579,24 @@ class PlayThreadsViewTests(APITestCase):
                 "persona": {"id": 1, "name": "Tester"},
             }
 
-        rows = [_row(i, f"2026-01-01T00:{i:02d}:00Z", None) for i in range(1, 7)]
+        def _thread(pose_id: int, timestamp: str, thread_id: str) -> list[dict]:
+            """One genuine two-pose thread: a root at `timestamp`, then a reply.
+
+            The reply's id and timestamp sit above every root under test, and the
+            view sorts and pages by the root, so the reply cannot move a group.
+            """
+            return [
+                _row(pose_id, timestamp, thread_id),
+                _row(pose_id + 5000, "2026-02-01T00:00:00Z", thread_id),
+            ]
+
+        rows = []
+        for i in range(1, 7):
+            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", f"t{i}"))
         rows.append(_row(1000, "2026-01-01T00:07:00Z", "A"))  # thread A's root
-        rows.append(_row(2000, "2026-01-10T00:00:00Z", "A"))  # thread A's reply, 9 days later
-        rows.extend(_row(i, f"2026-01-01T00:{i:02d}:00Z", None) for i in range(8, 27))
+        rows.append(_row(2000, "2026-01-10T00:00:00Z", "A"))  # A's reply, 9 days later
+        for i in range(8, 27):
+            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", f"t{i}"))
 
         # Build the "after" cursor for legacy pose 9 the same way `_cursor()` does,
         # without importing that private helper: base64(json([timestamp, id])).
@@ -580,9 +611,59 @@ class PlayThreadsViewTests(APITestCase):
         # Thread "A" (root at minute 07) and legacy 8/9 all sort BEFORE the
         # minute-09 boundary and must never reappear once we've paged past it.
         self.assertNotIn("A", result_ids)
-        self.assertNotIn("legacy:8", result_ids)
-        self.assertNotIn("legacy:9", result_ids)
-        self.assertEqual(result_ids[0], "legacy:10")
+        self.assertNotIn("t8", result_ids)
+        self.assertNotIn("t9", result_ids)
+        self.assertEqual(result_ids[0], "t10")
+
+    def test_omits_poses_that_are_not_part_of_a_thread(self) -> None:
+        """The endpoint is an index of reply threads, not a second pose feed.
+
+        `thread_id` is set only on an explicit reply, so an ordinary pose has none
+        and used to come back as its own single-pose `legacy:<id>` group. A scene
+        where most poses are ordinary narration then reported dozens of "threads"
+        and paged them 20 at a time, which no caller can filter client side because
+        the paging happens on the server.
+        """
+        from world.scenes.models import InteractionThread
+
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        first = InteractionThread.objects.create(
+            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
+        )
+        second = InteractionThread.objects.create(
+            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
+        )
+        InteractionFactory(scene=scene, thread=first, content="you came anyway")
+        InteractionFactory(scene=scene, thread=first, content="you left the gate open")
+        InteractionFactory(scene=scene, thread=second, content="keep your voice down")
+        InteractionFactory(scene=scene, thread=second, content="the steward is at the door")
+        for index in range(15):
+            InteractionFactory(scene=scene, content=f"ordinary narration {index}")
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual({row["id"] for row in results}, {str(first.pk), str(second.pk)})
+        self.assertTrue(all(row["root"] is not None for row in results))
+
+    def test_conversation_with_no_replies_returns_an_empty_page(self) -> None:
+        """The common case: nobody used reply, so there is nothing to drill into.
+
+        The consumer renders one line for this rather than listing the poses back.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        for index in range(4):
+            InteractionFactory(scene=scene, content=f"ordinary narration {index}")
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"], [])
 
 
 class PlaySearchMaskingTests(APITestCase):

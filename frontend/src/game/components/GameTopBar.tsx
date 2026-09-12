@@ -2,17 +2,18 @@ import { useState } from 'react';
 
 import { Link } from 'react-router-dom';
 import { Menu, ScrollText, Swords, X } from 'lucide-react';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
-import { sessionAttention } from '@/game/attention';
+import { characterAttention } from '@/game/attention';
+import { AttentionBadge } from '@/game/components/AttentionBadge';
 // #3412 S4 — reused from the Hall (frontend/src/home/hall/queries.ts), not
 // duplicated: no import-boundary lint rule exists between home/ and game/
 // (checked eslint.config.js — no `boundaries`/`no-restricted-imports` rule
@@ -76,28 +77,6 @@ interface GameTopBarProps {
   onJumpToCombat?: () => void;
 }
 
-/**
- * Two-tier attention indicator (#2166 Decision 4a) — direct (unseen
- * whisper/@-target aimed at this character) badges a small red numeric
- * count, mirroring `ConversationTabStrip`'s `UnreadBadge`; ambient (any
- * other unread) shows a muted dot; neither renders nothing.
- */
-function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
-  if (direct > 0) {
-    return (
-      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-        {direct}
-      </span>
-    );
-  }
-  if (ambient) {
-    return (
-      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
-    );
-  }
-  return null;
-}
-
 function getInitials(name: string): string {
   return name
     .split(' ')
@@ -152,6 +131,7 @@ export function GameTopBar({
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
   const selectCharacter = useSelectCharacterMutation();
+  const queryClient = useQueryClient();
 
   const activeSession = active ? sessions[active] : null;
   const isConnected = activeSession?.isConnected ?? false;
@@ -185,11 +165,13 @@ export function GameTopBar({
       dispatch(startSession(name));
       connect(name);
     }
+    // #3774 -- switching is the moment the player expects the badge they just
+    // acted on to be right.
+    void queryClient.invalidateQueries({ queryKey: ['my-roster-entries'] });
   };
 
   const activeCharacter = characters.find((c) => c.name === active);
-  const altCharacters = characters.filter((c) => c.name !== active && sessions[c.name]);
-  const unplayedCharacters = characters.filter((c) => c.name !== active && !sessions[c.name]);
+  const otherCharacters = characters.filter((c) => c.name !== active);
 
   return (
     <>
@@ -259,23 +241,39 @@ export function GameTopBar({
           </div>
         ) : null}
 
-        {altCharacters.map((char) => {
-          const attention = sessionAttention(sessions[char.name], actingPersonaId(char));
-          return (
-            <button
-              key={char.id}
-              onClick={() => handleSelectCharacter(char.name)}
-              className="relative opacity-60 transition-opacity hover:opacity-100"
-              title={`Switch to ${char.name}`}
-            >
-              <Avatar className="h-7 w-7">
-                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-                <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
-              </Avatar>
-              <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
-            </button>
-          );
-        })}
+        {active &&
+          otherCharacters.map((char) => {
+            const session = sessions[char.name];
+            const attention = characterAttention(char, session);
+            // Ruling B (#3774 demo) -- a character with nothing waiting and no
+            // local session stays in the dimmest tier; anything waiting, or a
+            // live session, steps it up. A badge on a 40%-opacity avatar reads
+            // as decoration, so unread attention alone is enough to promote it.
+            const isDim = !session && attention.direct === 0 && !attention.ambient;
+            return (
+              <button
+                key={char.id}
+                onClick={() => handleSelectCharacter(char.name)}
+                className={
+                  isDim
+                    ? 'relative opacity-40 transition-opacity hover:opacity-80'
+                    : 'relative opacity-60 transition-opacity hover:opacity-100'
+                }
+                // Ruling A (#3774 review) -- the two lists this replaces had
+                // different titles for a real reason: one switches to an
+                // already-connected session, the other opens a new connection.
+                title={session ? `Switch to ${char.name}` : `Connect as ${char.name}`}
+              >
+                <Avatar className={isDim ? 'h-6 w-6' : 'h-7 w-7'}>
+                  <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+                  <AvatarFallback className={isDim ? 'text-[10px]' : 'text-xs'}>
+                    {getInitials(char.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+              </button>
+            );
+          })}
 
         {!active &&
           characters.map((char) => (
@@ -289,21 +287,6 @@ export function GameTopBar({
                 <AvatarFallback className="text-xs">{getInitials(char.name)}</AvatarFallback>
               </Avatar>
               <span>{char.name}</span>
-            </button>
-          ))}
-
-        {active &&
-          unplayedCharacters.map((char) => (
-            <button
-              key={char.id}
-              onClick={() => handleSelectCharacter(char.name)}
-              className="opacity-40 transition-opacity hover:opacity-80"
-              title={`Connect as ${char.name}`}
-            >
-              <Avatar className="h-6 w-6">
-                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-                <AvatarFallback className="text-[10px]">{getInitials(char.name)}</AvatarFallback>
-              </Avatar>
             </button>
           ))}
 

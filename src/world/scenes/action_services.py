@@ -129,7 +129,7 @@ def _resolve_treatment_request(
         mode=InteractionMode.POSE,
         scene=action_request.scene,
     )
-    # ADR-0291 decision 3: system-authored rows record what happened; only a
+    # ADR-0292 decision 3: system-authored rows record what happened; only a
     # player-authored row that addresses someone is governed by reachability. This
     # content is machine-rendered from a resolved SceneActionRequest, and its target
     # is the request's own already-validated `target_persona`, so the target row goes
@@ -1564,7 +1564,7 @@ def _create_result_interaction(
         fury_committed=fury_committed,
     )
     if target_personas:
-        # ADR-0291 decision 3, same routing as the treatment outcome above: a
+        # ADR-0292 decision 3, same routing as the treatment outcome above: a
         # machine-rendered record of a resolved action request, whose target the
         # request already validated. TABLE_TALK routes this row to a Place whose
         # presence set is resolved at RESOLUTION time, so the validated kwarg would

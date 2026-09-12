@@ -427,7 +427,7 @@ combat action records whom it targeted.
   (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
   shape and a stated venue hint instead of an opaque string). Both refuse rather than
   widen the audience, both preserve the writer's draft, and both are telnet-parity
-  (the parent chip alone is web only). See ADR-0291.
+  (the parent chip alone is web only). See ADR-0292.
 
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
@@ -503,17 +503,34 @@ combat action records whom it targeted.
   result switches the reader into reference mode via `GamePage`'s
   `displaySceneFeed` swap. Dwell-tracked (`IntersectionObserver`) read receipts
   feed per-thread unread counts in the reader. `GET /api/play/threads/` (paginated
-  `ThreadSummary` per conversation, with real unread counts) is **built and
-  tested but not yet consumed by any frontend surface** — see
-  `docs/systems/scenes.md`'s Play API section; wiring it into a
-  conversation-thread-drill-down view in `HistoryNavigator` is follow-up work,
-  since no screen for it was in the approved demo. See `docs/systems/scenes.md`
+  `ThreadSummary` per conversation, with real unread counts) is consumed by the History
+  navigator's conversation drill-down (#3772): each readable conversation row carries a
+  `Threads` disclosure that lists the conversation's reply threads (opening line, visible
+  pose count, unread pill), and opening one switches the reader into reference mode
+  anchored at that thread's first visible pose. The endpoint returns reply threads only;
+  poses belonging to no thread are not emitted (#3772). See `docs/systems/scenes.md`
   for the endpoint list and `frontend/src/game/CLAUDE.md` for the component
   breakdown. Explicitly out of scope (kept for future work, not silently
   dropped): per-persona thumbnails in messages, richer history search/filter
-  tooling, and feeding server read state into the account-wide `attention.ts`
-  badges (today those stay session-local, same as before this issue) — flagged by
-  Tehom as needed once a player's conversation history spans years, not now.
+  tooling.
+
+  **Feeding server read state into the account-wide `attention.ts` badges:
+  DONE (#3774).** The gap the previous paragraph flagged (badges stayed
+  session-local, so a character's unread state didn't survive a change of
+  device) is closed: `account_attention()` (`world/scenes/attention_services.py`)
+  computes each of an account's characters' directed-unread count and
+  ambient-unread flag server-side, in five queries total, deliberately without
+  `InteractionQuerySet.visible_to` (see `docs/systems/scenes.md`'s "Cross-device
+  attention counting" section). An open scene attributes to a character by pose
+  authorship OR physical presence in its room, so a character present but
+  silent still gets the ambient badge (Finding 1, #3774 final review).
+  `RosterEntryViewSet.mine` carries the result
+  on `MyRosterEntrySerializer` (`unread_direct`/`has_ambient_unread`/
+  `attention_as_of_id`); the frontend's `characterAttention()`
+  (`frontend/src/game/attention.ts`) adds each session's own live delta on top
+  of that baseline, watermarked by `attention_as_of_id` so nothing double-counts,
+  and `GameTopBar`/`GameWindow` both call it so a badge is correct even for a
+  character with no local session in this browser tab.
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
   - **Grid presence** — "who's where" on public rooms for organic RP, future graphical map. Separate feature, not part of scenes or events

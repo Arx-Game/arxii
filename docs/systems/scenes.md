@@ -579,9 +579,13 @@ rather than offset pagination.
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.
-- `GET /api/play/threads/` (#3759) - Server-grouped, cursor-paginated (20/page) thread summaries
-  for one `conversation`, each carrying a per-account unread count via
-  `read_state_services.has_read`.
+- `GET /api/play/threads/` (#3759, #3772) - Server-grouped, cursor-paginated (20/page)
+  thread summaries for one `conversation`, each carrying a per-account unread count via
+  `read_state_services.has_read`. Returns **reply threads only**: an interaction carries
+  a thread only when it is an explicit reply, so poses that belong to no thread are not
+  emitted as single-pose groups (#3772; before that fix a 47-pose scene with 3 reply
+  chains reported 47 threads across 3 pages). Consumed by `ConversationThreadList` in
+  the History navigator's conversation drill-down.
 - `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
   (`InteractionListSerializer`), cursor-paginated 100/page.
 - `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose
@@ -610,6 +614,26 @@ rather than offset pagination.
     likeliest still unread. Frontend: `ThreadedNarrativeReader`'s "Mark conversation read" toolbar
     button (`playQueries.markConversationRead`), which sends the latest visible pose's timestamp as
     `before` and optimistically clears local unread badges pending the next natural refetch.
+
+### Cross-device attention counting (#3774)
+
+`account_attention(*, account, entries) -> AccountAttention` (`world/scenes/attention_services.py`)
+answers what is waiting for each of an account's characters (`CharacterAttention.direct`/`.ambient`,
+keyed by `character_sheet_id`) in five queries total, none per character and none per row. It
+deliberately never calls `InteractionQuerySet.visible_to` - that queryset's staff/player branches
+return far more than one account's own waiting attention, which would make a badge meaningless and
+disclose volume - and instead builds the count from rows already scoped to the account (directed
+receipts/targets, and room-heard poses in scenes the account still participates in). An open scene
+is attributed to a specific character two ways, UNIONed: pose authorship, and physical presence in
+the scene's room right now (`ObjectDB.db_location_id`, since `CharacterSheet` shares `ObjectDB`'s
+primary key) - the latter catches a character who has a `SceneParticipation` row from being present
+when the scene opened or from joining a combat encounter (`add_present_as_co_owners`,
+`ensure_scene_participation`) but has never posed there, who would otherwise never see the ambient
+badge that scene produces (Finding 1, #3774 final review). Consumed by
+`RosterEntryViewSet.mine`, which populates `MyRosterEntrySerializer`'s `unread_direct`/
+`has_ambient_unread`/`attention_as_of_id` once per request via serializer context - the frontend's
+`characterAttention()` (`frontend/src/game/attention.ts`) then adds each session's own live delta on
+top of that server baseline.
 
 ---
 

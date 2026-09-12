@@ -42,6 +42,9 @@ const rosterEntry: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -57,6 +60,9 @@ const rosterEntry2: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -160,6 +166,72 @@ describe('GameTopBar', () => {
       expect(within(biancaButton).queryByText(/[0-9]/)).not.toBeInTheDocument();
       expect(biancaButton.querySelector('.bg-muted-foreground\\/60')).toBeNull();
       expect(biancaButton.querySelector('.bg-red-500')).toBeNull();
+    });
+  });
+
+  describe('server attention baseline (#3774)', () => {
+    it('badges a character with no local session from the server value alone', () => {
+      store.dispatch(startSession('Aria'));
+
+      renderWithProviders(
+        <GameTopBar characters={[rosterEntry, { ...rosterEntry2, unread_direct: 2 }]} />
+      );
+
+      // Bianca has no session at all (not started above), so this is the
+      // fresh-device case #3774 exists for: the server count must render on
+      // its own, not fall through a `sessions[name]` lookup to zero.
+      const biancaButton = screen.getByTitle('Connect as Bianca');
+      expect(within(biancaButton).getByText('2')).toBeInTheDocument();
+    });
+
+    it('adds the live session delta to the server count without double-counting', () => {
+      store.dispatch(startSession('Bianca'));
+      store.dispatch(startSession('Aria'));
+      store.dispatch(setSceneBaseline({ character: 'Bianca', baselineId: 0 }));
+      // Below the watermark (attention_as_of_id: 5) -- the server already
+      // counted this one, so it must not add to the delta.
+      store.dispatch(
+        addSceneInteraction({ character: 'Bianca', interaction: makeWhisperInteraction({ id: 3 }) })
+      );
+      // Above the watermark -- arrived after the server's count, so it's a
+      // genuine delta.
+      store.dispatch(
+        addSceneInteraction({ character: 'Bianca', interaction: makeWhisperInteraction({ id: 9 }) })
+      );
+
+      renderWithProviders(
+        <GameTopBar
+          characters={[rosterEntry, { ...rosterEntry2, unread_direct: 2, attention_as_of_id: 5 }]}
+        />
+      );
+
+      const biancaButton = screen.getByTitle('Switch to Bianca');
+      expect(within(biancaButton).getByText('3')).toBeInTheDocument();
+    });
+
+    it('never badges the active character, even when its own server count is nonzero', () => {
+      store.dispatch(startSession('Aria'));
+
+      renderWithProviders(<GameTopBar characters={[{ ...rosterEntry, unread_direct: 4 }]} />);
+
+      expect(screen.queryByText('4')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('no-active duplicate render (#3774 review fold-in)', () => {
+    it('renders each character exactly once when there is no active character', () => {
+      renderWithProviders(<GameTopBar characters={[rosterEntry, rosterEntry2]} />);
+
+      for (const entry of [rosterEntry, rosterEntry2]) {
+        const matches = screen
+          .getAllByRole('button')
+          .filter(
+            (btn) =>
+              btn.textContent?.includes(entry.name) ||
+              btn.getAttribute('title')?.includes(entry.name)
+          );
+        expect(matches).toHaveLength(1);
+      }
     });
   });
 

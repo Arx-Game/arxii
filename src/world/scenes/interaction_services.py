@@ -186,7 +186,7 @@ def reassign_persona_interactions(
 def write_target_personas(interaction: Interaction, target_personas: Iterable[Persona]) -> None:
     """Bulk-write the ``InteractionTargetPersona`` rows naming who this row was about.
 
-    ADR-0291 decision 3 draws the line this function sits on: a SYSTEM-authored row
+    ADR-0292 decision 3 draws the line this function sits on: a SYSTEM-authored row
     records what happened and is not governed by reachability; a PLAYER-authored row
     addresses someone and is. ``create_interaction``'s own ``target_personas`` kwarg
     is the player-authored side and validates with ``persona_can_receive`` (#3787
@@ -575,7 +575,7 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
     re-running that queryset once per recipient account would put a query per player in
     the room on every reply. So this gate is structural and evaluated once per push: the
     parent goes on the wire only when it is ROOM-HEARD IN THIS SAME SCENE (the shared
-    ``managers.ROOM_HEARD`` classification, not a second copy of it).
+    ``managers.room_heard_q`` classification, not a second copy of it).
 
     **What this gate guarantees, stated exactly.** It discloses strictly less than the
     live push it rides on already delivers to that same audience. It does NOT match
@@ -1496,7 +1496,7 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
         scene=scene,
         receivers=[persona],
     )
-    # ADR-0291 decision 3: this is a Narrator-authored system record, so its target
+    # ADR-0292 decision 3: this is a Narrator-authored system record, so its target
     # row goes through `write_target_personas` rather than `create_interaction`'s
     # validated kwarg. The whisper branch of `persona_can_receive` would happen to
     # accept (the recipient is their own receiver), but only by coincidence of shape:

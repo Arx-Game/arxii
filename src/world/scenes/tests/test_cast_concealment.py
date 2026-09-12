@@ -501,7 +501,7 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
         self.assertFalse(any(self.technique.name in c for c in contents))
 
     def test_concealed_cast_records_a_target_outside_the_attribution_audience(self) -> None:
-        """ADR-0291 decision 3: a Narrator OUTCOME row is not gated on reachability.
+        """ADR-0292 decision 3: a Narrator OUTCOME row is not gated on reachability.
 
         ``audience.full`` is who could pin the CASTER, so a hostile target who failed
         the detection roll lands in ``effect_only`` instead. Routing this row through

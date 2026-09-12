@@ -3,10 +3,12 @@ RosterEntry views and related functionality.
 """
 
 from http import HTTPMethod
+from typing import cast
 
 from django.db.models import Count, Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from drf_spectacular.utils import extend_schema
+from evennia.accounts.models import AccountDB
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.pagination import PageNumberPagination
@@ -118,8 +120,12 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
 
         Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
         ``NarrativeMessageDelivery`` rows per character, via a single aggregated
-        JOIN/GROUP BY rather than a per-row query.
+        JOIN/GROUP BY rather than a per-row query. Also attaches cross-device
+        attention (#3774) -- ``unread_direct``, ``has_ambient_unread``, and
+        ``attention_as_of_id`` -- computed once for the whole list via
+        ``account_attention()`` and handed to the serializer through context.
         """
+        from world.scenes.attention_services import account_attention  # noqa: PLC0415
 
         # Get characters through PlayerData model
         try:
@@ -142,7 +148,13 @@ class RosterEntryViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
             )
         )
-        serializer = self.get_serializer(entries, many=True)
+        entry_list = list(entries)
+        attention = account_attention(account=cast(AccountDB, request.user), entries=entry_list)
+        serializer = self.get_serializer(
+            entry_list,
+            many=True,
+            context={**self.get_serializer_context(), "character_attention": attention},
+        )
         return Response(serializer.data)
 
     @extend_schema(

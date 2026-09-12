@@ -130,6 +130,16 @@ WEBCLIENT_ENABLED = True
 # Custom WebSocket client that reads session from cookies instead of URL parameters
 WEBSOCKET_PROTOCOL_CLASS = "server.portal.secure_websocket.SecureWebSocketClient"
 
+# Websocket keepalive (#3745, ADR-0277). An idle wss:// connection to the game
+# is closed by the public edge at a measured 125.6s, with a bare TCP FIN and no
+# close frame, and nothing in our chain keeps it warm on its own: autobahn's
+# auto-ping defaults to off, Evennia's IDLE_TIMEOUT is -1, and Caddy sets no
+# proxy timeouts. 45s puts two pings inside that window, so one lost ping does
+# not cost the connection; 25s is how long a pong may take before we treat the
+# link as dead and drop it ourselves. Both are seconds.
+WEBSOCKET_AUTOPING_INTERVAL = 45
+WEBSOCKET_AUTOPING_TIMEOUT = 25
+
 ######################################################################
 # Third-party integrations
 ######################################################################

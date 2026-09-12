@@ -18,10 +18,10 @@ interface PoseRef {
  * caps a single request at 100 poses server-side (`PlayReadView`), so
  * `MAX_BATCH` stays well under that.
  *
- * Feeds `is_unread` indirectly: once a pose is marked read here, the next
- * fetch reflects it, and `attention.ts`'s existing direct/ambient derivation
- * (unchanged by this task) starts counting it correctly with no further
- * wiring.
+ * Feeds `is_unread` on the next fetch of any play endpoint, and (since #3774)
+ * the per-character counts `account_attention()` computes for the top bar's
+ * badges. Before #3774 this comment claimed the badges picked it up with no
+ * further wiring; they did not, which is what #3774 fixed.
  *
  * The focus gate is re-evaluated on `visibilitychange`/`focus` as well as on
  * intersection changes: the `IntersectionObserver` callback only fires on a
