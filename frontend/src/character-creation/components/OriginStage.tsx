@@ -111,15 +111,13 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
         <EntryList label="Starting realms">
           {areas?.map((area) => {
             const isChosen = chosen?.id === area.id;
-            const closed = !area.is_accessible;
             const realmName = REALM_NAMES[area.realm_theme] ?? REALM_NAMES.default;
             return (
               <Entry
                 key={area.id}
                 name={area.name}
-                tag={closed ? `${realmName} · not available to your account` : realmName}
+                tag={realmName}
                 chosen={isChosen}
-                closed={closed}
                 open={isChosen}
               >
                 <Paragraphs text={area.description} />
@@ -130,19 +128,12 @@ export function OriginStage({ draft, onStageSelect }: OriginStageProps) {
                     </Link>
                   </p>
                 )}
-                {closed ? (
-                  // The trust threshold that gates access is not on the serializer yet.
-                  <p className="ledger-line">
-                    This starting realm is not available to your account.
-                  </p>
-                ) : (
-                  <EntryDoors
-                    chooseLabel={`Choose ${area.name}`}
-                    onChoose={() => choose(area)}
-                    chosen={isChosen}
-                    onSetAside={() => apply(null)}
-                  />
-                )}
+                <EntryDoors
+                  chooseLabel={`Choose ${area.name}`}
+                  onChoose={() => choose(area)}
+                  chosen={isChosen}
+                  onSetAside={() => apply(null)}
+                />
               </Entry>
             );
           })}

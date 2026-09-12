@@ -46,7 +46,6 @@ export const mockBeginnings: Beginnings = {
   allowed_species_ids: [1, 2],
   grants_species_languages: true,
   cg_point_cost: 0,
-  is_accessible: true,
   codex_entry_ids: [],
   heritage: null,
 };
@@ -59,7 +58,6 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   allowed_species_ids: [1, 2, 3],
   grants_species_languages: false,
   cg_point_cost: 0,
-  is_accessible: true,
   codex_entry_ids: [],
   heritage: null,
 };
@@ -73,7 +71,6 @@ export const mockStartingArea: StartingArea = {
   name: 'Arx City',
   description: 'The great capital city, a hub of politics and intrigue.',
   crest_image: '/images/arx-crest.png',
-  is_accessible: true,
   realm_theme: 'arx',
   realm_slug: 'arx',
   realm_name: 'Arx',
@@ -84,27 +81,26 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   name: 'Northern Reaches',
   description: 'A cold, frontier region.',
   crest_image: null,
-  is_accessible: true,
   realm_theme: 'default',
   realm_slug: 'default',
   realm_name: 'Default',
 };
 
-export const mockStartingAreaInaccessible: StartingArea = {
+export const mockStartingAreaStaffOnly: StartingArea = {
   id: 3,
   name: 'Hidden Vale',
-  description: 'A secret location accessible only to trusted players.',
+  description: 'A staff testing area. Never listed to a player: the queryset omits it.',
   crest_image: null,
-  is_accessible: false,
   realm_theme: 'default',
   realm_slug: 'default',
   realm_name: 'Default',
 };
 
+// Every area a player is served is one they may pick — a staff-only area is
+// filtered out server-side rather than served with a closed flag (#3726).
 export const mockStartingAreas: StartingArea[] = [
   mockStartingArea,
   mockStartingAreaNoHeritages,
-  mockStartingAreaInaccessible,
 ];
 
 // =============================================================================
@@ -190,7 +186,6 @@ export const mockUpbringingNamed: OriginTemplate = {
   is_active: true,
   sort_order: 1,
   cg_point_cost: 6,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: true,
   allows_no_family: false,
@@ -226,7 +221,6 @@ export const mockUpbringingClaim: OriginTemplate = {
   is_active: true,
   sort_order: 2,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: true,
   allows_name_family: false,
   allows_no_family: false,
@@ -257,7 +251,6 @@ export const mockUpbringingClaim: OriginTemplate = {
           description: 'A dedicated tutor sharpened your mind.',
           cg_point_cost: 2,
           cost_per_influence: 0,
-          trust_required: 0,
           offers: [],
           sort_order: 1,
         },
@@ -267,7 +260,6 @@ export const mockUpbringingClaim: OriginTemplate = {
           description: "Standing scales with the house's reach.",
           cg_point_cost: 0,
           cost_per_influence: 1,
-          trust_required: 0,
           offers: [],
           sort_order: 2,
         },
@@ -283,7 +275,6 @@ export const mockUpbringingUnknown: OriginTemplate = {
   is_active: true,
   sort_order: 3,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
@@ -300,7 +291,6 @@ export const mockUpbringingMultiPath: OriginTemplate = {
   is_active: true,
   sort_order: 4,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: true,
   allows_name_family: true,
   allows_no_family: false,
@@ -361,7 +351,6 @@ export const mockUpbringingConnections: OriginTemplate = {
   is_active: true,
   sort_order: 5,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
@@ -399,7 +388,6 @@ export const mockUpbringingConnections: OriginTemplate = {
           description: '',
           cg_point_cost: 0,
           cost_per_influence: 0,
-          trust_required: 0,
           offers: [],
           sort_order: 1,
         },
@@ -409,7 +397,6 @@ export const mockUpbringingConnections: OriginTemplate = {
           description: '',
           cg_point_cost: 10,
           cost_per_influence: 0,
-          trust_required: 0,
           offers: [
             {
               offer_id: 6077,
@@ -497,7 +484,6 @@ export const mockUpbringingOwnFamilyGroup: OriginTemplate = {
   is_active: true,
   sort_order: 6,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: true,
   allows_name_family: false,
   allows_no_family: false,

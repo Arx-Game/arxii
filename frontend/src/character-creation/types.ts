@@ -21,7 +21,6 @@ export interface StartingArea {
   name: string;
   description: string;
   crest_image: string | null;
-  is_accessible: boolean;
   realm_theme: string;
   /** The realm page's route key and name (#3725); null when the area has no realm. */
   realm_slug: string | null;
@@ -43,7 +42,6 @@ export interface Beginnings {
   allowed_species_ids: number[];
   grants_species_languages: boolean;
   cg_point_cost: number;
-  is_accessible: boolean;
   codex_entry_ids: number[];
   heritage: BeginningsHeritage | null;
 }
@@ -1028,8 +1026,6 @@ export interface OriginTemplateSlotChoice {
   description: string;
   cg_point_cost: number;
   cost_per_influence: number;
-  /** Minimum trust to see this answer; staff always see it (#3660). */
-  trust_required: number;
   offers: AnswerOffer[];
   sort_order: number;
 }
@@ -1131,7 +1127,6 @@ export interface OriginTemplate {
   is_active: boolean;
   sort_order: number;
   cg_point_cost: number;
-  trust_required: number;
   allows_claim_family: boolean;
   allows_name_family: boolean;
   allows_no_family: boolean;
