@@ -66,6 +66,13 @@ export function getThreadKey(interaction: Interaction): string {
   if (interaction.place != null) {
     return `place:${interaction.place}`;
   }
+  // #3787 decision 5: targeting drives the involvement mark and the direct badge
+  // tier, never the grouping. Without this, giving combat rows targets (which they
+  // gained so a player can be told a blow was theirs) would split one fight into a
+  // separate group per victim.
+  if (interaction.mode === 'action' || interaction.mode === 'outcome') {
+    return interaction.scene != null ? `scene:${interaction.scene}` : 'room';
+  }
   if (interaction.target_persona_ids.length > 0) {
     const ids = [...interaction.target_persona_ids].sort((a, b) => a - b);
     return `target:${ids.join(',')}`;
