@@ -1707,7 +1707,7 @@ describe('mention autocomplete source', () => {
   });
 });
 
-// #3787 Task 7 — the reply chip's Narrator leak, wiring `reply_to` into
+// #3787 Task 7 -- the reply chip's Narrator leak, wiring `reply_to` into
 // `submitPose`, and the pre-emptive reachable-reply refusal (Screen 3).
 function makeReplyTarget(overrides: Partial<Interaction> = {}): Interaction {
   return {
@@ -1824,6 +1824,8 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
     const refusal = screen.getByTestId('reply-refusal');
     expect(refusal).toHaveTextContent('Answering the fight means speaking to the room.');
     expect(refusal).toHaveTextContent('Leave the corner table to answer this. Your draft is kept.');
+    expect(refusal).toHaveAttribute('role', 'status');
+    expect(refusal).toHaveAttribute('aria-live', 'polite');
 
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'answers anyway' } });

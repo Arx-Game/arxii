@@ -197,7 +197,7 @@ describe('parseFormattedContent', () => {
 });
 
 describe('excerptOf', () => {
-  // #3787 Task 7 — moved here from `ThreadedNarrativeReader.tsx` so
+  // #3787 Task 7 -- moved here from `ThreadedNarrativeReader.tsx` so
   // `PoseUnit.tsx`'s parent-reply chip can share it instead of writing a
   // second truncation helper.
   it('returns short content unchanged', () => {

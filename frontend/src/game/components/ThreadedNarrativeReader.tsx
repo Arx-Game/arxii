@@ -63,7 +63,7 @@ function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): st
  * plus a prominent "Answer this" control, instead of the ordinary quiet
  * Reply link every other row keeps. One phrasing for all five row kinds the
  * spec names (combat outcome, NPC action, social check, prose tag, whisper)
- * — this is gated purely on `target_persona_ids`, never on `item.mode`, so
+ * -- this is gated purely on `target_persona_ids`, never on `item.mode`, so
  * it needs no per-mode copy to maintain.
  */
 function isInvolvingViewer(item: Interaction, viewerPersonaId: number | null): boolean {
@@ -93,7 +93,12 @@ function ReplyControl({
   const label = involved ? 'Answer this' : 'Reply';
   if (!refusal.reachable) {
     return (
-      <div className="flex flex-col items-end gap-1" data-testid={`reply-refusal-${item.id}`}>
+      <div
+        className="flex flex-col items-end gap-1"
+        data-testid={`reply-refusal-${item.id}`}
+        role="status"
+        aria-live="polite"
+      >
         <button
           type="button"
           disabled
@@ -127,7 +132,7 @@ function ReplyControl({
 /**
  * The highlighted restatement box itself (demo Screen 1's `.involves`):
  * rendered only when `isInvolvingViewer` is true, right after the pose's own
- * ordinary rendering (which stays unchanged — the room's own reading of the
+ * ordinary rendering (which stays unchanged -- the room's own reading of the
  * row). Never re-derives an actor or a different sentence: it repeats
  * `item.content`, the exact already-per-viewer-rendered text the viewer's
  * own `<SceneMessages>` render just showed above it.
@@ -147,6 +152,8 @@ function InvolvementFlag({
     <div
       className="mt-1 max-w-[90%] rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2"
       data-testid={`involvement-mark-${item.id}`}
+      role="status"
+      aria-live="polite"
     >
       <span className="block text-xs font-semibold uppercase tracking-wide text-amber-600">
         This happened to you
@@ -342,11 +349,11 @@ interface ThreadedNarrativeReaderProps {
   targetPoseId?: string;
   /**
    * The viewer's current drafting venue (#3787 Screen 3, the pre-emptive
-   * reply refusal) — the same values `GamePage.tsx` already computes and
+   * reply refusal) -- the same values `GamePage.tsx` already computes and
    * threads to `CommandInput` (`isAtPlace`/`currentPlaceId`), passed one hop
    * further by `GameWindow.tsx` rather than re-derived here. Omitted
    * (standalone/test/reference callers) defaults to "in the room", so every
-   * row reads reachable — the permissive default `replyReachability` itself
+   * row reads reachable -- the permissive default `replyReachability` itself
    * uses when `isAtPlace` is false.
    */
   isAtPlace?: boolean;
@@ -395,7 +402,7 @@ export function ThreadedNarrativeReader({
   currentPlaceId = null,
   currentPlaceName = null,
 }: ThreadedNarrativeReaderProps) {
-  // #3787 — resolved the SAME way PoseUnit.tsx resolves its own self-pose
+  // #3787 -- resolved the SAME way PoseUnit.tsx resolves its own self-pose
   // guard (no second source of truth): drives the involvement mark (Screen
   // 1) below.
   const viewerPersonaId = useViewerPersonaId();
@@ -403,7 +410,7 @@ export function ThreadedNarrativeReader({
     () => ({ isAtPlace, currentPlaceId, currentPlaceName }),
     [isAtPlace, currentPlaceId, currentPlaceName]
   );
-  // #3787 — resolves `interaction.reply_to` (an `{id, timestamp}` thread
+  // #3787 -- resolves `interaction.reply_to` (an `{id, timestamp}` thread
   // selector, not the parent's content) to the parent Interaction for
   // PoseUnit's parent chip. Built once from the full loaded `interactions`
   // array (not a windowed/filtered slice), so a thread's own reply can quote

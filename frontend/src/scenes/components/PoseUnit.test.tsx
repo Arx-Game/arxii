@@ -774,7 +774,7 @@ describe('PoseUnit — GM dramatic-moment suggestion chip', () => {
     expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
   });
 
-  // #3787 Task 7 — the parent-reply chip (demo Screen 2), replacing the
+  // #3787 Task 7 -- the parent-reply chip (demo Screen 2), replacing the
   // placeholder "Replying to pose {id}".
   describe('parent-reply chip', () => {
     it('renders nothing when the pose has no reply_to', () => {

@@ -18,7 +18,7 @@ vi.mock('../playQueries', () => ({
   markConversationRead: vi.fn().mockResolvedValue({ marked: 0 }),
 }));
 
-// #3787 — `useViewerPersonaId` (the involvement mark's "who am I" source)
+// #3787 -- `useViewerPersonaId` (the involvement mark's "who am I" source)
 // pulls from a real Redux store + React Query, neither of which this file's
 // bare `render()` calls provide (unlike `PoseUnit.test.tsx`, which wraps
 // both). Mocked to a stable default so every pre-existing test here is
@@ -1903,7 +1903,7 @@ describe('ThreadedNarrativeReader', () => {
     });
 
     it('labels the thread\'s root pose "Opening pose" and leaves an ordinary reply unlabeled (#3759 review finding F4, #3787 Task 7)', () => {
-      // #3787 Task 7 — the "Reply in <title>" branch this test used to cover
+      // #3787 Task 7 -- the "Reply in <title>" branch this test used to cover
       // is deleted: its own doc comment said it was a stand-in for per-pose
       // parent data that didn't exist yet. That data exists now
       // (`Interaction.reply_to`) and `PoseUnit`'s parent chip ("Answering
@@ -2054,7 +2054,7 @@ describe('ThreadedNarrativeReader', () => {
     });
   });
 
-  // #3787 Task 7, Screen 1/3 — the involvement mark and the pre-emptive
+  // #3787 Task 7, Screen 1/3 -- the involvement mark and the pre-emptive
   // reply refusal.
   describe('involvement mark and reachable-reply affordance (#3787)', () => {
     afterEach(() => {
@@ -2087,6 +2087,10 @@ describe('ThreadedNarrativeReader', () => {
       const mark = screen.getByTestId('involvement-mark-1');
       expect(mark).toHaveTextContent('This happened to you');
       expect(mark).toHaveTextContent("Kira's Frost Bolt strikes Corvin for 24 damage.");
+      // A screen-reader user is told a new involvement box appeared -- a
+      // polite live region, not assertive (an invitation, not an alarm).
+      expect(mark).toHaveAttribute('role', 'status');
+      expect(mark).toHaveAttribute('aria-live', 'polite');
       const answerThis = screen.getByTestId('answer-this-1');
       expect(answerThis).toHaveTextContent('Answer this');
       fireEvent.click(answerThis);
@@ -2147,6 +2151,8 @@ describe('ThreadedNarrativeReader', () => {
       expect(refusal).toHaveTextContent(
         'Leave the corner table to answer this. Your draft is kept.'
       );
+      expect(refusal).toHaveAttribute('role', 'status');
+      expect(refusal).toHaveAttribute('aria-live', 'polite');
       const disabledButton = screen.getByRole('button', { name: /answer this/i });
       expect(disabledButton).toBeDisabled();
       fireEvent.click(disabledButton);

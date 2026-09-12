@@ -14,7 +14,7 @@ interface Props {
   /** Avatar identity-click affordance passthrough to PoseUnit (#2156). */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   readOnly?: boolean;
-  /** Passthrough to PoseUnit's parent-reply chip (#3787) — see its own doc comment. */
+  /** Passthrough to PoseUnit's parent-reply chip (#3787) -- see its own doc comment. */
   interactionsById?: ReadonlyMap<number, Interaction>;
 }
 

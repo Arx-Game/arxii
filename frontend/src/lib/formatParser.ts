@@ -451,7 +451,7 @@ export function parseFormattedContent(text: string): Segment[] {
  * A short, truncated, PLAIN-TEXT preview of pose prose (#3759 Wave 9, moved
  * here from `ThreadedNarrativeReader.tsx` for #3787 so `PoseUnit.tsx`'s
  * parent-reply chip can share it too rather than writing a second truncation
- * helper — the brief's own instruction: "export/move it rather than writing a
+ * helper -- the brief's own instruction: "export/move it rather than writing a
  * second one"). Strips MU*-style color codes and markdown (`|w`,
  * `**bold**`, etc.) by joining `parseFormattedContent`'s segments' plain
  * `.content` fields BEFORE truncating, so a pose starting `|wMirelle

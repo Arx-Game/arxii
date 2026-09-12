@@ -203,7 +203,7 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
 // ---------------------------------------------------------------------------
 
 /**
- * "Answering "<excerpt>"" — the parent chip. Replaces the placeholder
+ * "Answering "<excerpt>"" -- the parent chip. Replaces the placeholder
  * `Replying to pose {id}` now that `interaction.reply_to` carries real data
  * (#3787 Tasks 1-2). Clicking it reveals the parent's content in place,
  * matching the demo's "reveal-in-place" affordance.
@@ -211,7 +211,7 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
  * The chip NEVER re-derives an actor: both the quoted excerpt and the
  * revealed block below show only `parent.content` (already the exact,
  * per-viewer-rendered text the reader elsewhere shows for that row), never
- * `parent.persona.name`. That is what keeps it safe on a concealed working —
+ * `parent.persona.name`. That is what keeps it safe on a concealed working --
  * the line stays exactly as unattributed as it already was.
  */
 function ParentChip({
@@ -279,7 +279,7 @@ export interface PoseUnitProps {
   readOnly?: boolean;
   /**
    * Lookup for resolving `interaction.reply_to` to its parent Interaction
-   * (#3787) — `reply_to` itself carries only `{id, timestamp}` (a thread
+   * (#3787) -- `reply_to` itself carries only `{id, timestamp}` (a thread
    * selector, not the parent's content), so the parent chip's quoted
    * excerpt needs the full row. Built once by the caller that already holds
    * every loaded interaction (`ThreadedNarrativeReader.tsx`) rather than
@@ -325,7 +325,7 @@ export function PoseUnit({
   // characters; this gate is UX only), so PoseUnit computes it and decides
   // whether to mount (#3738). #3787: this is now `useViewerPersonaId()`, the
   // single extracted source of truth also used by `ThreadedNarrativeReader`'s
-  // involvement mark — do not add a second inline computation here.
+  // involvement mark -- do not add a second inline computation here.
   const viewerPersonaId = useViewerPersonaId();
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
   const canNominate = Boolean(sceneId) && !isSelfPose;

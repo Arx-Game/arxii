@@ -259,7 +259,7 @@ export interface SubmitPoseBody {
    */
   client_request_id: string;
   /**
-   * The pose being answered (#3787) — `PoseSubmitSerializer.reply_to`
+   * The pose being answered (#3787) -- `PoseSubmitSerializer.reply_to`
    * (`world/scenes/interaction_serializers.py`'s `ReplyTargetSerializer`)
    * already accepted this write-only field before this task; nothing on the
    * web composer ever actually sent it. `id`/`timestamp` mirror
@@ -290,12 +290,12 @@ export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    // #3787 Screen 3 — a reply-venue mismatch (`reply_to`) or an unreachable
+    // #3787 Screen 3 -- a reply-venue mismatch (`reply_to`) or an unreachable
     // named target (`target_names`) 400s with the typed `{code, field,
     // detail, hint}` body `interaction_views.py`'s `_refusal_response` builds
     // (both `InteractionThreadError` and `UnreachableError` route through
     // it). Use the server's own `hint` verbatim rather than inventing
-    // wording — it names the venue the player would actually need to reach.
+    // wording -- it names the venue the player would actually need to reach.
     const data = (await res.json().catch(() => null)) as {
       detail?: string;
       hint?: string;

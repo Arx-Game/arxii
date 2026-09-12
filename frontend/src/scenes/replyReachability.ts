@@ -1,7 +1,7 @@
 import type { Interaction } from './types';
 
 /**
- * The viewer's current drafting venue (#3787 decision 3) — the same
+ * The viewer's current drafting venue (#3787 decision 3) -- the same
  * room-vs-Place shape the composer already tracks (`isAtPlace`/
  * `currentPlaceId` on `CommandInput.tsx`/`GamePage.tsx`), reused here rather
  * than invented fresh so the reader's pre-emptive check and the composer's
@@ -35,7 +35,7 @@ const REACHABLE: ReplyRefusal = { reachable: true };
  * Every OTHER holder combination (a differing Place, a whisper party
  * mismatch, a room-heard target answered from the room, ...) has no ratified
  * copy server-side either (`thread_services.py`'s own comment: "there is no
- * ratified copy for them yet") — this stays permissive (`reachable: true`)
+ * ratified copy for them yet") -- this stays permissive (`reachable: true`)
  * for those rather than inventing wording, and the existing submit-time
  * refusal (the rejected-draft banner, carrying the server's own `hint`)
  * still catches them.

@@ -130,7 +130,7 @@ interface GameWindowProps {
   currentPlaceId?: number | null;
   /**
    * Human-readable name of the Place `currentPlaceId` refers to, if any
-   * (#3787 Screen 3) — used only for the pre-emptive reply refusal's hint
+   * (#3787 Screen 3) -- used only for the pre-emptive reply refusal's hint
    * text ("Leave <name> to answer this."), threaded to `ThreadedNarrativeReader`.
    */
   currentPlaceName?: string | null;

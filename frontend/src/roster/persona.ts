@@ -24,7 +24,7 @@ export function actingPersonaId(
 }
 
 /**
- * The viewer's own active persona id right now (#3787) — extracted from
+ * The viewer's own active persona id right now (#3787) -- extracted from
  * `PoseUnit.tsx`'s self-pose guard (`activeCharacterName` +
  * `useMyRosterEntriesQuery` + `actingPersonaId`) so a second call site (the
  * involvement mark in `ThreadedNarrativeReader.tsx`) reuses the exact same
