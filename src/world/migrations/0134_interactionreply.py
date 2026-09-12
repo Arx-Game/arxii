@@ -5,9 +5,7 @@ import django.db.models.deletion
 
 
 class Migration(migrations.Migration):
-    dependencies = [
-        ("arxii", "0131_worshippedbeing_codex_entry"),
-    ]
+    dependencies = [("arxii", "0133_normalize_trust_required_access_level")]
 
     operations = [
         migrations.CreateModel(
