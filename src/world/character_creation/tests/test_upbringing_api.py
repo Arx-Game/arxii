@@ -29,7 +29,7 @@ class UpbringingListTest(TestCase):
         cls.template = OriginTemplateFactory(cg_point_cost=2, allows_claim_family=True)
         cls.slot = OriginTemplateSlotFactory(template=cls.template, allows_text=False)
         cls.choice = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=3)
-        cls.gated = OriginTemplateFactory(beginning=cls.template.beginning, trust_required=50)
+        cls.inactive = OriginTemplateFactory(beginning=cls.template.beginning, is_active=False)
 
     def test_a_deleted_question_stops_being_served(self):
         """Reported from production: deleted questions came back with ``"id": null``.
@@ -66,7 +66,7 @@ class UpbringingListTest(TestCase):
         )
         assert doomed.id not in served, f"the deleted question is still served: {served}"
 
-    def test_list_carries_paths_prompts_and_choices_and_hides_trust_gated(self):
+    def test_list_carries_paths_prompts_and_choices_and_hides_inactive(self):
         client = APIClient()
         client.force_authenticate(self.account)
         res = client.get(
@@ -89,7 +89,6 @@ class UpbringingListTest(TestCase):
             "description": "",
             "cg_point_cost": 0,
             "cost_per_influence": 3,
-            "trust_required": 0,
             "offers": [],
             "sort_order": self.choice.sort_order,
         }

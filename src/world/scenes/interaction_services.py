@@ -186,7 +186,7 @@ def reassign_persona_interactions(
 def write_target_personas(interaction: Interaction, target_personas: Iterable[Persona]) -> None:
     """Bulk-write the ``InteractionTargetPersona`` rows naming who this row was about.
 
-    ADR-0292 decision 3 draws the line this function sits on: a SYSTEM-authored row
+    ADR-0293 decision 3 draws the line this function sits on: a SYSTEM-authored row
     records what happened and is not governed by reachability; a PLAYER-authored row
     addresses someone and is. ``create_interaction``'s own ``target_personas`` kwarg
     is the player-authored side and validates with ``persona_can_receive`` (#3787
@@ -1496,7 +1496,7 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
         scene=scene,
         receivers=[persona],
     )
-    # ADR-0292 decision 3: this is a Narrator-authored system record, so its target
+    # ADR-0293 decision 3: this is a Narrator-authored system record, so its target
     # row goes through `write_target_personas` rather than `create_interaction`'s
     # validated kwarg. The whisper branch of `persona_can_receive` would happen to
     # accept (the recipient is their own receiver), but only by coincidence of shape:

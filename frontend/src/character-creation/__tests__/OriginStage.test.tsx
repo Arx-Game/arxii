@@ -88,9 +88,7 @@ describe('OriginStage', () => {
 
   it('asks before changing a chosen realm', async () => {
     renderOrigin(mockDraftWithArea);
-    const other = mockStartingAreas.find(
-      (a) => a.id !== mockDraftWithArea.selected_area!.id && a.is_accessible
-    )!;
+    const other = mockStartingAreas.find((a) => a.id !== mockDraftWithArea.selected_area!.id)!;
     await userEvent.click(
       await screen.findByRole('button', { name: new RegExp(`choose ${other.name}`, 'i') })
     );
@@ -100,12 +98,14 @@ describe('OriginStage', () => {
     expect(mutate).toHaveBeenCalled();
   });
 
-  it('shows a gated realm as readable but closed', async () => {
+  it('offers a door on every realm it lists', async () => {
     renderOrigin();
-    const closed = mockStartingAreas.find((a) => !a.is_accessible)!;
-    const item = (await screen.findByText(closed.name)).closest('li')!;
-    expect(item).toHaveClass('closed');
-    expect(within(item).queryByRole('button', { name: /choose/i })).toBeNull();
+    const list = await screen.findByRole('list', { name: /starting realms/i });
+    for (const area of mockStartingAreas) {
+      const item = within(list).getByText(area.name).closest('li')!;
+      expect(item).not.toHaveClass('closed');
+      expect(within(item).getByRole('button', { name: /choose/i })).toBeInTheDocument();
+    }
   });
 
   it('shows the busy line while the record opens', () => {

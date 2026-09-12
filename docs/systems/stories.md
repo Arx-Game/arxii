@@ -107,7 +107,6 @@ from world.stories.types import (
     StoryStatus,            # ACTIVE, INACTIVE, COMPLETED, CANCELLED
     StoryPrivacy,           # PUBLIC, PRIVATE, INVITE_ONLY
     ParticipationLevel,     # CRITICAL, IMPORTANT, OPTIONAL
-    TrustLevel,             # UNTRUSTED (0) .. EXPERT (4)
     ConnectionType,         # THEREFORE, BUT
     AnyStoryProgress,       # StoryProgress | GroupStoryProgress | GlobalStoryProgress
 )
@@ -171,7 +170,6 @@ Top-level campaign container.
 | `owners` | M2M → accounts.AccountDB | |
 | `active_gms` | M2M → gm.GMProfile | |
 | `primary_table` | FK → gm.GMTable (nullable) | Lead GM's table; used for AGM claim permission check |
-| `required_trust_categories` | M2M through StoryTrustRequirement | |
 
 ---
 
@@ -1136,21 +1134,18 @@ All ViewSets support standard REST verbs (GET list/detail, POST create, PATCH/PU
 
 ## Pre-Phase-1 Models (unchanged)
 
-### Trust System
+### Feedback categories
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `TrustCategory` | Dynamic trust categories | `name`, `display_name`, `description`, `is_active` |
-| `PlayerTrust` | Aggregate trust profile | `account` (OneToOne AccountDB); GM trust lives on `GMProfile.level` (gm app) |
-| `PlayerTrustLevel` | Per-category trust level | `player_trust`, `trust_category`, `trust_level`, feedback counts |
-| `StoryTrustRequirement` | Trust gate for story join | `story`, `trust_category`, `minimum_trust_level` |
+| `TrustCategory` | An authored dimension a story performance is rated along ("antagonism", "mature themes"). A label for feedback, never a permission: nothing gates on it (#3726). GM trust lives on `GMProfile.level` (gm app, ADR-0097) | `name`, `display_name`, `description`, `is_active` |
 
 ### Participation & Feedback
 
 | Model | Purpose |
 |-------|---------|
 | `StoryParticipation` | Character involvement in a story |
-| `StoryFeedback` | Post-story trust-building feedback. GM feedback (`is_gm_feedback=True`) from a served participant with a positive average rating credits the reviewed GM with GM Story Reward XP (#2123) — see `services.feedback.submit_story_feedback` |
+| `StoryFeedback` | Post-story feedback on a player's or GM's participation. GM feedback (`is_gm_feedback=True`) from a served participant with a positive average rating credits the reviewed GM with GM Story Reward XP (#2123) — see `services.feedback.submit_story_feedback` |
 | `TrustCategoryFeedbackRating` | Per-category rating within feedback |
 | `EpisodeScene` | Links scenes to episodes |
 | `CrossoverInvite` | Lead-GM consent to link another GM's story to a shared event (#2002) |

@@ -154,7 +154,6 @@ class BuilderSaveTest(BuilderTestCase):
             "name": "Born to a Household",
             "frame_narrative": "You stood through dinners.",
             "cg_point_cost": "0",
-            "trust_required": "0",
             "allows_no_family": "on",
             "is_active": "on",
             "sort_order": "1",
@@ -187,7 +186,6 @@ class BuilderSaveTest(BuilderTestCase):
             f"a{self.q1.pk}-0-cg_point_cost": "5",
             f"a{self.q1.pk}-0-cost_per_influence": "1",
             f"a{self.q1.pk}-0-reputation_seed": "100",
-            f"a{self.q1.pk}-0-trust_required": "0",
             f"a{self.q1.pk}-0-is_active": "on",
             f"a{self.q1.pk}-0-sort_order": "0",
             # offers formset for the livery answer (#3675): empty by default
@@ -289,7 +287,6 @@ class BuilderSaveTest(BuilderTestCase):
                 f"a{self.q1.pk}-1-cg_point_cost": "0",
                 f"a{self.q1.pk}-1-cost_per_influence": "0",
                 f"a{self.q1.pk}-1-reputation_seed": "0",
-                f"a{self.q1.pk}-1-trust_required": "0",
                 f"a{self.q1.pk}-1-is_active": "on",
                 f"a{self.q1.pk}-1-sort_order": "1",
             }
@@ -917,9 +914,10 @@ class BuilderFieldWidthTest(BuilderStylingTest):
     widths were drawn for a narrow change form: Name came out 184px and cut off
     the template name it is a natural key for, Card text 309px for the longest
     prose on the page, Claimable kinds 90px. Measured in a browser after the
-    fix: Name 622px, Card text 846px, Claimable kinds 512px, Point cost and
-    Trust required side by side (both at y=786) instead of stacked with the
-    first one's help line pressed against the second one's label.
+    fix: Name 622px, Card text 846px, Claimable kinds 512px, and the paired
+    fields of a multi-field row side by side (both at y=786) instead of
+    stacked with the first one's help line pressed against the second one's
+    label.
 
     No test here runs a browser, so none of them can measure a rendered width.
     Two things they can ask, and both fail against the state that shipped: does
@@ -941,8 +939,8 @@ class BuilderFieldWidthTest(BuilderStylingTest):
     }
 
     #: The row that holds two or three fields. Admin sizes those boxes to their
-    #: content, which put Point cost's help line directly above Trust required's
-    #: label; a flex basis gives each field a column of its own.
+    #: content, which put the first field's help line directly above the next
+    #: one's label; a flex basis gives each field a column of its own.
     MULTILINE_RULE = ".form-row .form-multiline > div"
 
     def _parent_classes(self, body: str, element_id: str) -> list[list[str]]:

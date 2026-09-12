@@ -245,7 +245,7 @@ class ReplyToWebSocketPayloadTest(TestCase):
         """Write the parent edge directly, bypassing the reply refusal.
 
         ``assign_interaction_thread`` already refuses most of these venues at write
-        time (ADR-0292 decision 1), but the recorded edge outlives the shape it was
+        time (ADR-0293 decision 1), but the recorded edge outlives the shape it was
         written against: a room-heard parent can be escalated afterwards with
         ``mark_very_private``. The wire gate has to hold on the shape the parent has
         NOW, so these cases assert it against an edge that exists.

@@ -98,7 +98,6 @@ class FinalizationTestMixin:
             name=f"{prefix} Beginnings",
             description="Test",
             starting_area=target.area,
-            trust_required=0,
             is_active=True,
         )
         target.beginnings.allowed_species.add(target.species)

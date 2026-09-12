@@ -15,9 +15,9 @@ Captures roleplay sessions with participant tracking, interaction recording, and
 **Key Models**: `Scene`, `SceneParticipation`, `Persona` (unified with PersonaType: PRIMARY/ESTABLISHED/TEMPORARY/ALTERNATE), `PersonaDiscovery`, `Interaction`, `InteractionFavorite`, `InteractionReaction`, `InteractionReadReceipt`
 
 ### `stories/` - Narrative Campaign System
-Player-driven storytelling with hierarchical structure and trust-based participation.
+Player-driven storytelling with hierarchical structure.
 
-**Key Models**: `Story`, `Chapter`, `Episode`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`
+**Key Models**: `Story`, `Chapter`, `Episode`, `StoryParticipation`, `StoryFeedback`, `TrustCategory` (a feedback-rating dimension, not a gate - ADR-0293)
 
 ### `traits/` - Character Statistics System
 Character stats and dice rolling mechanics based on Arx I's successful system.
@@ -41,7 +41,8 @@ Experience, rewards, and character development systems.
 
 ## Integration Points
 
-- **Trust System**: Cross-app trust relationships for player agency
+- **GM authority**: `GMProfile.level` (ADR-0097) is the only trust-shaped ladder; there is
+  no player-trust axis (ADR-0293)
 - **Character Data**: Unified character information across multiple apps
 - **Flow Integration**: Models used by flows system for game logic
 - **API Integration**: REST endpoints for web interface

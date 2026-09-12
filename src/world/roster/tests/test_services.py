@@ -209,7 +209,7 @@ class RosterPolicyServiceTestCase(TestCase):
         # Restricted character should require staff review
         assert len(issues) == 1
         assert issues[0]["code"] == "restricted_requires_review"
-        assert issues[0]["message"] == "Character requires special approval and trust evaluation"
+        assert issues[0]["message"] == "Character requires special approval"
 
     def test_get_application_policy_issues_inactive_roster(self):
         """Test policy issues for characters in inactive rosters"""
@@ -257,10 +257,7 @@ class RosterPolicyServiceTestCase(TestCase):
         assert len(info["policy_issues"]) == 1
         assert info["requires_staff_review"]
         assert not info["auto_approvable"]
-        assert (
-            info["policy_issues"][0]["message"]
-            == "Character requires special approval and trust evaluation"
-        )
+        assert info["policy_issues"][0]["message"] == "Character requires special approval"
 
     def test_get_policy_review_info_includes_context(self):
         """Test that policy review info includes proper context"""

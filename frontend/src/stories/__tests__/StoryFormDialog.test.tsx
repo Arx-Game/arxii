@@ -84,7 +84,6 @@ const existingStory: Story = {
   privacy: 'invite_only',
   owners: ['player1'],
   active_gms: [],
-  trust_requirements: '',
   character_sheet: 1,
   tenure_id: null,
   chapters_count: 0,

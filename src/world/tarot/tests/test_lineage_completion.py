@@ -51,7 +51,6 @@ class LineageCompletionTests(TestCase):
             name="Lineage Claim Beginnings",
             description="Beginnings offering the claim family path",
             starting_area=cls.area,
-            trust_required=0,
             is_active=True,
         )
         cls.claim_beginnings.allowed_species.add(cls.species)
@@ -66,7 +65,6 @@ class LineageCompletionTests(TestCase):
             name="Lineage Unknown Beginnings",
             description="Unknown origins beginnings",
             starting_area=cls.area,
-            trust_required=0,
             is_active=True,
         )
         cls.unknown_beginnings.allowed_species.add(cls.species)

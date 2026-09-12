@@ -3557,7 +3557,6 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
   - category -> distinctions.DistinctionCategory [FK]
   - parent_distinction -> distinctions.Distinction [FK] (nullable)
-  - trust_category -> stories.TrustCategory [FK] (nullable)
   - mutually_exclusive_with -> distinctions.Distinction [M2M]
   - tags -> distinctions.DistinctionTag [M2M]
 **Pointed to by:**
@@ -9766,18 +9765,6 @@
   - claimed_by -> gm.GMProfile [FK] (nullable)
   - created_story -> stories.Story [FK] (nullable)
 
-### PlayerTrust
-**Foreign Keys:**
-  - account -> evennia.AccountDB [OneToOne]
-  - trust_categories -> stories.TrustCategory [M2M]
-**Pointed to by:**
-  - trust_levels <- stories.PlayerTrustLevel
-
-### PlayerTrustLevel
-**Foreign Keys:**
-  - player_trust -> stories.PlayerTrust [FK]
-  - trust_category -> stories.TrustCategory [FK]
-
 ### RiskCalibration
 
 ### SessionRequest
@@ -9846,7 +9833,6 @@
   - primary_table -> gm.GMTable [FK] (nullable)
   - owners -> evennia.AccountDB [M2M]
   - active_gms -> gm.GMProfile [M2M]
-  - required_trust_categories -> stories.TrustCategory [M2M]
 **Pointed to by:**
   - battles <- battles.Battle
   - legend_events <- societies.LegendEvent
@@ -9856,7 +9842,6 @@
   - narrative_messages <- narrative.NarrativeMessage
   - gemits <- narrative.Gemit
   - muted_by <- narrative.UserStoryMute
-  - trust_requirements <- stories.StoryTrustRequirement
   - participants <- stories.StoryParticipation
   - chapters <- stories.Chapter
   - feedback <- stories.StoryFeedback
@@ -9921,12 +9906,6 @@
   - story -> stories.Story [FK]
   - template -> missions.MissionTemplate [OneToOne]
 
-### StoryTrustRequirement
-**Foreign Keys:**
-  - story -> stories.Story [FK]
-  - trust_category -> stories.TrustCategory [FK]
-  - created_by -> evennia.AccountDB [FK] (nullable)
-
 ### TableBulletinPost
 **Foreign Keys:**
   - table -> gm.GMTable [FK]
@@ -9964,11 +9943,6 @@
 **Foreign Keys:**
   - created_by -> evennia.AccountDB [FK] (nullable)
 **Pointed to by:**
-  - gated_distinctions <- distinctions.Distinction
-  - story_set <- stories.Story
-  - storytrustrequirement_set <- stories.StoryTrustRequirement
-  - playertrust_set <- stories.PlayerTrust
-  - player_trust_levels <- stories.PlayerTrustLevel
   - storyfeedback_set <- stories.StoryFeedback
   - trustcategoryfeedbackrating_set <- stories.TrustCategoryFeedbackRating
 

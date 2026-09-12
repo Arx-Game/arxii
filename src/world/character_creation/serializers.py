@@ -41,6 +41,7 @@ from world.character_creation.models import (
 from world.character_creation.services import (
     age_bounds,
     clear_family_selection,
+    get_accessible_starting_areas,
     select_origin_template,
     set_family_path,
 )
@@ -139,7 +140,6 @@ class BeginningsSerializer(serializers.ModelSerializer):
 
     allowed_species_ids = serializers.SerializerMethodField()
     heritage = HeritageAnchorSerializer(read_only=True, allow_null=True)
-    is_accessible = serializers.SerializerMethodField()
     art_image = serializers.SerializerMethodField()
     codex_entry_ids = serializers.SerializerMethodField()
 
@@ -163,18 +163,10 @@ class BeginningsSerializer(serializers.ModelSerializer):
             "allowed_species_ids",
             "grants_species_languages",
             "cg_point_cost",
-            "is_accessible",
             "codex_entry_ids",
             "heritage",
         ]
         # Note: social_rank intentionally NOT included (staff-only)
-
-    def get_is_accessible(self, obj: Beginnings) -> bool:
-        """Check if the requesting user can access this option."""
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
-        return obj.is_accessible_by(request.user)
 
     def get_art_image(self, obj: Beginnings) -> str | None:
         """Cloudinary URL sourced from art (#2408); key name kept for frontend compat."""
@@ -186,9 +178,12 @@ class BeginningsSerializer(serializers.ModelSerializer):
 
 
 class StartingAreaSerializer(serializers.ModelSerializer):
-    """Serializer for starting areas with accessibility check."""
+    """Serializer for starting areas.
 
-    is_accessible = serializers.SerializerMethodField()
+    No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+    and it never lists an area the reader may not pick (#3726).
+    """
+
     realm_theme = serializers.CharField(source="realm.theme", read_only=True, default="default")
     # The realm page's route key (#3725); null when the area has no realm.
     realm_slug = serializers.CharField(
@@ -206,18 +201,10 @@ class StartingAreaSerializer(serializers.ModelSerializer):
             "name",
             "description",
             "crest_image",
-            "is_accessible",
             "realm_theme",
             "realm_slug",
             "realm_name",
         ]
-
-    def get_is_accessible(self, obj: StartingArea) -> bool:
-        """Check if the requesting user can access this area."""
-        request = self.context.get("request")
-        if not request or not request.user.is_authenticated:
-            return False
-        return obj.is_accessible_by(request.user)
 
     def get_crest_image(self, obj: StartingArea) -> str | None:
         """Cloudinary URL sourced from crest_art (#2408); key name kept for frontend compat."""
@@ -750,7 +737,6 @@ class OriginTemplateSlotChoiceSerializer(serializers.ModelSerializer):
             "description",
             "cg_point_cost",
             "cost_per_influence",
-            "trust_required",
             "offers",
             "sort_order",
         ]
@@ -856,7 +842,6 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
             "is_active",
             "sort_order",
             "cg_point_cost",
-            "trust_required",
             "allows_claim_family",
             "allows_name_family",
             "allows_no_family",
@@ -1398,7 +1383,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         if not request:
             return value
 
-        if not value.is_accessible_by(request.user):
+        if not get_accessible_starting_areas(request.user).filter(pk=value.pk).exists():
             msg = "You do not have access to this starting area."
             raise serializers.ValidationError(msg)
         return value
@@ -1422,9 +1407,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
             msg = "This beginnings option is not available for the selected starting area."
             raise serializers.ValidationError(msg)
 
-        # Also check accessibility by user
-        request = self.context.get("request")
-        if request and not value.is_accessible_by(request.user):
+        if not value.is_active:
             msg = "You do not have access to this beginnings option."
             raise serializers.ValidationError(msg)
 
@@ -1517,7 +1500,7 @@ class CharacterDraftSerializer(serializers.ModelSerializer):
         ``None`` clears the Upbringing and everything downstream of it; a change
         to a different Upbringing goes through ``select_origin_template`` (which
         raises a DRF ``ValidationError``, surfacing as a 400, on the wrong
-        beginning or insufficient trust, and clears downstream state itself);
+        beginning or an inactive Upbringing, and clears downstream state itself);
         the same pk is a no-op. ``family_path`` similarly goes through
         ``set_family_path`` (which raises when the Upbringing does not allow
         that path) unless it is being cleared to the empty string.

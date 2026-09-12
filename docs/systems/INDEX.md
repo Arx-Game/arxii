@@ -690,7 +690,7 @@ plus the reply parent edge and reachability rule (#3787).
 
 - **Models:** `scenes.InteractionThread`; nullable `scenes.Interaction.thread`;
   `scenes.InteractionReply` (#3787 - the sparse parent-edge bridge, one row per reply,
-  modelled on `InteractionReceiver` - see ADR-0292 for why `InteractionAction` is not the
+  modelled on `InteractionReceiver` - see ADR-0293 for why `InteractionAction` is not the
   precedent).
 - **Write target:** serializer-only `reply_to` (`id` + RFC3339 `timestamp`).
 - **Read payload:** `thread_id`, `reply_to` (gated on the parent's own `visible_to`);
@@ -699,14 +699,14 @@ plus the reply parent edge and reachability rule (#3787).
   predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
   the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
   venue's reply target is refused, never widened, and both refusals preserve the writer's
-  draft. See ADR-0292.
+  draft. See ADR-0293.
 - **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
   `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
   keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round
   stays one reader group. Combat's ACTION/OUTCOME writers now pass `target_personas`
   through the shared `write_target_personas` helper, unvalidated by reachability (a
   resolved action's targets are already governed by the encounter's own targeting rules;
-  Battle scenes have no location for `persona_can_receive` to test against). See ADR-0292.
+  Battle scenes have no location for `persona_can_receive` to test against). See ADR-0293.
 - **Source:** [`scene-interaction-threads.md`](scene-interaction-threads.md).
 
 ### Traits
@@ -1443,14 +1443,14 @@ Social structures, organizations, reputation, and legend tracking.
   (`organization`, `name`, `description`, `importance`/`presumed_importance`,
   `cg_point_cost`/`cost_per_influence` priced via `cost_for(influence)`, `rank`,
   `kin_pool`/`kin_node` (at most one; sets `basis` to `kin`, else `retainer`),
-  `count_remaining` (blank = standing, always open), `trust_required`,
-  `allowed_upbringings`, `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
+  `count_remaining` (blank = standing, always open), `allowed_upbringings`,
+  `is_active`). `NaturalKeyMixin` + `CreditedContent` (visible
   in the Authoring Workbench) but not in `CONTENT_MODELS`: it belongs to one
   installation's family, not the corpus. `OrganizationMembership.vacancy` FK records
   which Vacancy a membership was taken through.
 - **`vacancy_services.py` (#3648):** `reachable_vacancies(draft, *, require_open=True)`,
   open (unless `require_open=False`, used by CG draft validation re-checking an
-  already-selected Vacancy), realm-matched, Upbringing-gated, trust-gated CG offer;
+  already-selected Vacancy), realm-matched, Upbringing-gated CG offer;
   `take_vacancy(vacancy_id)`, locks and claims one opening inside the caller's
   `transaction.atomic()`, raising `VacancyExhaustedError` if closed. Consumed by
   `character_creation.services._bind_vacancy` at finalize.
@@ -2256,9 +2256,8 @@ Multi-stage character creation flow with draft system.
   without subclassing `RosterEmailService` itself, whose approve/deny methods take a
   roster-specific `tenure` arg). See [character_creation.md](character_creation.md#email-notifications-2162).
 - **Lineage stage: Upbringings (#3617):** the Lineage stage offers per-beginning
-  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost, a trust
-  gate, and a family path (claim a staff-authored family, name a new one, or
-  none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
+  `OriginTemplate` rows ("Upbringing" in CG copy) with a CG point cost and a
+  family path (claim a staff-authored family, name a new one, or none). Authoring recipes (an Upbringing, an orphan, a family with influence, a
   new `FamilyKind`, and more): [family-authoring-recipes.md](family-authoring-recipes.md);
   the design decisions: ADR-0268, ADR-0269.
 - **Lineage stage: Family Templates and Vacancies (#3648, ADR-0273):**
@@ -2450,9 +2449,10 @@ Character lifecycle management with web-first applications and player anonymity.
   telnet mail command exists or is planned. PlayerMail is OOC between players; IC missives
   are #3289's separate system (ADR-0226).
 - **Game invites (#2483):** `GameInvite` model + `GameInviteViewSet` for
-  player-to-friend contextual invites. Trust-gated via `PlayerTrust` (new
-  `INVITE` `TrustCategory`, `BASIC` minimum, seeded via the Big Button
-  "roster" cluster). Token-in-URL flow: inviter creates invite with a message
+  player-to-friend contextual invites. Any authenticated player may send one;
+  `registration_open` is the only gate (#3182, #3726 — the `PlayerTrust`
+  threshold that used to sit beside it refused every player, since nothing ever
+  granted a trust level). Token-in-URL flow: inviter creates invite with a message
   → friend registers via `/register?invite=TOKEN` → claims on first login
   → invite annotates their first `DraftApplication.invited_via` FK → inviter
   gets a websocket push on submission. Services use the `game_invite` prefix
@@ -3462,7 +3462,7 @@ action consent flow, and a three-mode non-combat round framework.
 ### Stories
 Player-driven narrative campaign system with hierarchical structure and task-gated progression.
 
-- **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `PlayerTrust`, `TrustCategory`, `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
+- **Models:** `Story` (incl. `summary` - player-facing "The Story So Far"; `description` = GM pitch), `Chapter`, `Episode`, `Transition`, `Beat` (incl. `outcome_key`, denormalised from `BeatCompletion.outcome_key`, #3565), `BeatCompletion` (incl. `outcome_key`), `EpisodeResolution`, `TransitionRequiredOutcome` (incl. `required_outcome_key`, #3565), `StoryProgress`, `GroupStoryProgress`, `GlobalStoryProgress`, `AggregateBeatContribution`, `AssistantGMClaim`, `SessionRequest`, `StoryGMOffer` (directed CHARACTER-scope player→GM offer), `GroupStoryRequest` (covenant-scoped broadcast ask for a GM, #2119 - see below), `StoryNote` (append-only OOC authorial memory, never player-visible), `Era`, `StoryParticipation`, `TrustCategory` (a feedback-rating dimension, not a gate — #3726), `BeatOpponentLine`/`BeatStagedTemplate` (session prep child rows on ENCOUNTER/SITUATION beats, #3425 - see below), `BeatStagedBattle`/`BeatStagedBattleUnit` (a whole pre-staged battle on an ENCOUNTER beat, O2O + child rows, mutually exclusive with `BeatOpponentLine`, #3569 - see below), `StoryScenario` (`story` FK + `template` O2O onto `missions.MissionTemplate`, `related_name="story_scenario"`; the ownership link that makes the mission scenario graph a story beat's body, #3565 - see below and Missions & Living Grid)
 - **The scenario graph is a beat's body, not a second option engine (#3565):** a `Beat` (SITUATION or TASK kind) points at a `missions.MissionTemplate` via `required_mission`; when that template is `StoryScenario`-owned, the story's Lead GM authored it under the trust ladder rather than staff. `Transition.mode`/`TransitionMode`/`AmbiguousTransitionError` are retired: routing is fully automatic, the lowest `(order, pk)` eligible outbound transition fires, and `services/routing.py`'s `routing_report`/`RoutingReport` (surfaced as `routing_problems` on the episode payloads and `EpisodeDetailSerializer.routing_ambiguous`, #3563) warns the author tree when two transitions could both be eligible at once, or when a beat/stake outcome has no accepting transition. `Beat.predicate_type` defaults to `OUTCOME_TIER` (was `GM_MARKED`) - a beat resolves from its graph, an encounter, a battle, or a decisive check by default; GM-marked is now the exception, authored only for an out-of-band fact a machine grader cannot see. See stories.md's "StoryScenario" section and Missions & Living Grid below.
 - **Session prep + Run Beat (#3425, #3569):** a GM authors `BeatOpponentLine` (creature × count × position hint) on an ENCOUNTER beat, `BeatStagedTemplate` (situation XOR challenge template) on a SITUATION beat, or - mutually exclusive with `BeatOpponentLine` - a whole `BeatStagedBattle` (blueprint/region/name/party side + `BeatStagedBattleUnit` lines) on an ENCOUNTER beat, #3569 - nested read-write on `BeatSerializer`, including the id-based-diff update path for the child lists and an omitted-vs-null convention for the single nested `staged_battle`. `RunBeatAction` (`run_beat`)/`GMListRunnableBeatsAction` (`gm_list_runnable_beats`, `actions/definitions/gm_story.py`) instantiate the authored prep into the GM's live scene in one call: for ENCOUNTER, creates a `CombatEncounter`/spawns opponents, or - when a `BeatStagedBattle` exists - stages a `Battle` from its blueprint instead (`Battle.story_beat=beat`, units spawned by side/place, the running scene's present party enlisted on the declared side, idempotent re-run); for SITUATION, instantiates situations/challenges; and sets `scenes.Scene.running_beat` (the first-class "scene is running this beat" pointer, cleared by `finish_scene_full`). Web: `BeatFormDialog`'s kind-gated repeatable rows (plus an Opponents/Battle toggle for ENCOUNTER, mounting `BattlePrepEditor` in Battle mode) + `GMAdjudicationPanel`'s Run Beat tab ("Start siege" for a staged-battle row, navigates to `/scenes/{battle_scene_id}/battle`). See stories.md's "Session prep"/"Run Beat" sections and scenes.md's "Session prep: Run Beat".
 - **Scene clock (#3567; ADR-0264):** `Beat.clock_size` (0 = no clock) authors a countdown that

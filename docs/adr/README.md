@@ -340,5 +340,6 @@ treat those names as hints to confirm, not gospel.
 - [0289 - Facet is a flat vocabulary, not a Category > Subcategory > Specific hierarchy](0289-facet-is-a-flat-vocabulary-not-a-hierarchy.md) (#3776; amends ADR-0192's PROTECT precedent argument; related ADR-0010)
 - [0290 - Combat narration shares the pose Interaction model and reply-threading](0290-combat-narration-shares-the-pose-interaction-model.md) (#3761 brainstorming; extends ADR-0127; related ADR-0274, #3757, #3787)
 - [0291 - Websocket liveness is a server-side auto-ping, not a client heartbeat](0291-websocket-liveness-is-a-server-side-auto-ping.md) (#3745; related #3742, #3743)
-- [0292 - Reachability governs who can be addressed; the reply parent is a sparse bridge, not a column](0292-reachability-governs-addressing-not-audience-promotion.md) (#3787; related ADR-0170, ADR-0260, #3757, #3760)
+- [0292 - There is no player-trust axis; per-thing permissions if we ever want one](0292-no-trust-axis-permissions-if-anything.md) (#3726; amends ADR-0097; related ADR-0237, ADR-0141)
+- [0293 - Reachability governs who can be addressed; the reply parent is a sparse bridge, not a column](0293-reachability-governs-addressing-not-audience-promotion.md) (#3787; related ADR-0170, ADR-0260, #3757, #3760)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

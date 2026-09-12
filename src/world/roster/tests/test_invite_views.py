@@ -10,9 +10,6 @@ from evennia_extensions.factories import AccountFactory
 from world.registration.models import get_registration_config
 from world.roster.factories import GameInviteFactory, PlayerDataFactory
 from world.roster.models import InviteStatus
-from world.stories.factories import PlayerTrustFactory, TrustCategoryFactory
-from world.stories.models import PlayerTrustLevel
-from world.stories.types import TrustLevel
 
 
 def _set_registration_open(is_open: bool) -> None:
@@ -26,13 +23,6 @@ class GameInviteAPITests(TestCase):
         self.client = APIClient()
         self.account = AccountFactory()
         self.player_data = PlayerDataFactory(account=self.account)
-        self.invite_category = TrustCategoryFactory(name="INVITE")
-        trust = PlayerTrustFactory(account=self.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         self.client.force_authenticate(user=self.account)
         _set_registration_open(True)
 
@@ -102,18 +92,11 @@ class GameInviteRegistrationClosedAPITests(TestCase):
         self.client = APIClient()
         self.account = AccountFactory()
         self.player_data = PlayerDataFactory(account=self.account)
-        self.invite_category = TrustCategoryFactory(name="INVITE")
-        trust = PlayerTrustFactory(account=self.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         self.client.force_authenticate(user=self.account)
         _set_registration_open(False)
 
     def test_create_returns_403_with_closed_message(self):
-        """POST create is refused with the registration-closed message, not the trust one."""
+        """POST create is refused with the registration-closed message."""
         url = reverse("roster:gameinvite-list")
         response = self.client.post(url, {"message": "Come play Arx!"}, format="json")
         self.assertEqual(response.status_code, 403)

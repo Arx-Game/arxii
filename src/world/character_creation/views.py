@@ -178,8 +178,8 @@ class StartingAreaViewSet(viewsets.ReadOnlyModelViewSet):
 
     serializer_class = StartingAreaSerializer
     # Public shop-window read (#3305): landing page realm/Beginnings pitches.
-    # Anonymous-safe by construction: get_accessible_starting_areas /
-    # trust filtering in get_queryset gate content, not this permission.
+    # Anonymous-safe by construction: get_queryset gates content (staff-only
+    # areas, inactive rows), not this permission.
     permission_classes = [AllowAny]
 
     def get_queryset(self) -> QuerySet:
@@ -192,22 +192,21 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
     ViewSet for listing Beginnings options.
 
     Filter by starting_area to get options available for a specific starting area.
-    Results are filtered by user trust level.
     """
 
     pagination_class = None  # 2026-07 audit: opt out of default paginator (ADR-0138)
 
     serializer_class = BeginningsSerializer
     # Public shop-window read (#3305): landing page realm/Beginnings pitches.
-    # Anonymous-safe by construction: get_accessible_starting_areas /
-    # trust filtering in get_queryset gate content, not this permission.
+    # Anonymous-safe by construction: get_queryset gates content (staff-only
+    # areas, inactive rows), not this permission.
     permission_classes = [AllowAny]
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ["starting_area"]
 
     def get_queryset(self) -> QuerySet[Beginnings]:
-        """Return beginnings filtered by availability and access."""
-        queryset = (
+        """Return every active Beginnings, with the list read's prefetches."""
+        return (
             Beginnings.objects.filter(is_active=True)
             .select_related("starting_area")
             .prefetch_related(
@@ -228,18 +227,6 @@ class BeginningsViewSet(viewsets.ReadOnlyModelViewSet):
                 ),
             )
         )
-
-        # Filter by trust level
-        user = self.request.user
-        if not user.is_staff:
-            try:
-                user_trust = user.trust
-                queryset = queryset.filter(trust_required__lte=user_trust)
-            except (AttributeError, NotImplementedError):
-                # Trust not implemented yet, show all with trust_required=0
-                queryset = queryset.filter(trust_required=0)
-
-        return queryset
 
     @extend_schema(responses=PerspectiveEntrySerializer(many=True))
     @action(
@@ -679,8 +666,6 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     """List active origin-story templates for the CG guided flow (#2478, #3617).
 
     Filter by ``beginning`` to get templates available for a specific beginning.
-    Trust-gated: staff see every active row, everyone else only rows whose
-    ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
     """
 
     pagination_class = None  # ADR-0138: opt out of default paginator
@@ -690,7 +675,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_fields = ["beginning"]
 
     def get_queryset(self) -> QuerySet[OriginTemplate]:
-        """Return active, trust-accessible templates with prefetched slots, ordered.
+        """Return active templates with prefetched slots, ordered.
 
         ``claimable_kinds`` and slot choices are both resolved by ``list()``/the
         serializer via a flat query grouped in Python, never a per-instance
@@ -712,22 +697,18 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         first GET's questions - including ones deleted in between, which
         serialize with ``"id": null`` (#3673, ADR-0263).
         """
-        user = self.request.user
-        qs = OriginTemplate.objects.filter(is_active=True)
-        if not user.is_staff:
-            try:
-                trust = user.trust
-            except AttributeError:
-                trust = 0
-            qs = qs.filter(trust_required__lte=trust)
-        return qs.prefetch_related(
-            # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
-            # prefetch, no ``to_attr`` - the nested serializer reads
-            # ``obj.family_templates.all()`` straight off the prefetch cache.
-            "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
-            "family_templates__features",  # noqa: PREFETCH_STRING
-            "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
-        ).order_by("sort_order", "name")
+        return (
+            OriginTemplate.objects.filter(is_active=True)
+            .prefetch_related(
+                # PREFETCH_STRING (see roster/services/kinship.py:913): plain-string
+                # prefetch, no ``to_attr`` - the nested serializer reads
+                # ``obj.family_templates.all()`` straight off the prefetch cache.
+                "family_templates__aspect_definitions__options",  # noqa: PREFETCH_STRING
+                "family_templates__features",  # noqa: PREFETCH_STRING
+                "family_templates__served_house_choices",  # noqa: PREFETCH_STRING
+            )
+            .order_by("sort_order", "name")
+        )
 
     def list(self, request: Request, *args: object, **kwargs: object) -> Response:
         """Serialize with one batched ``claimable_kind_ids`` + offers query, not one per row.

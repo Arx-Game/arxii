@@ -1,5 +1,18 @@
 # Stories glossary
 
+**Trust Category**:
+`TrustCategory` - an authored dimension a story performance is *rated* along
+("antagonism", "mature themes"). `TrustCategoryFeedbackRating` files one rating
+per category per `StoryFeedback`, and those ratings are evidence: they feed GM
+Story Reward XP (#2123) and the GM trust-ladder evidence view (ADR-0097). It is
+**not** a permission and gates nothing. The per-account trust it once implied
+(`PlayerTrust`, `PlayerTrustLevel`, `TrustLevel`, `StoryTrustRequirement`) was
+removed in #3726 - see ADR-0293. Authority in this app is story ownership,
+`StoryParticipation.trusted_by_owner` (the per-story permission an owner
+grants), and `GMProfile.level`.
+_Avoid_: trust level, trust score, trust gate (nothing is gated on a player's
+trust); player trust (the model is gone).
+
 **Story / Chapter / Episode / Beat / Transition**:
 The narrative hierarchy: a **Story** is a top-level campaign container with a scope and maturity; a **Chapter** is a major arc within it; an **Episode** is a node in the episode DAG; a **Beat** is a boolean predicate attached to an episode (the gateable unit of progress); and a **Transition** is a first-class directed edge between episodes, fired automatically - the lowest authored `(order, pk)` eligible edge, never a runtime GM pick (#3565, ADR-0258; the retired mode was called GM Choice). Episodes are nodes and Transitions are edges - a Story progresses by satisfying Beats to make Transitions eligible.
 _Avoid_: campaign (Story), arc (Chapter), session/scene (Episode), objective/flag (Beat), branch/link (Transition), GM choice (routing is never a runtime pick, #3565).

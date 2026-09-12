@@ -12,7 +12,7 @@ Multi-stage character creation flow with draft persistence, CG point budgets, ca
 ```python
 from world.character_creation.constants import (
     Stage,                    # ORIGIN(1) through REVIEW(11)
-    StartingAreaAccessLevel,  # ALL, TRUST_REQUIRED, STAFF_ONLY
+    StartingAreaAccessLevel,  # ALL, STAFF_ONLY
     ApplicationStatus,        # SUBMITTED, IN_REVIEW, REVISIONS_REQUESTED, APPROVED, DENIED, WITHDRAWN
     CommentType,              # MESSAGE, STATUS_CHANGE
 )
@@ -37,11 +37,11 @@ from world.character_creation.types import (
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `CGPointBudget` | Global CG point budget config | `name`, `starting_points`, `is_active`, `xp_conversion_rate` |
-| `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level`, `minimum_trust` |
+| `StartingArea` | Selectable origin locations | `name`, `realm` (FK), `description`, `crest_image`, `default_starting_room`, `is_active`, `sort_order`, `access_level` (ALL or STAFF_ONLY) |
 | `Beginnings` | Worldbuilding paths per area | `name`, `starting_area` (FK), `description`, `allowed_species` (M2M), `starting_languages` (M2M), `societies` (M2M), `traditions` (M2M via `BeginningTradition`), `cg_point_cost`, `social_rank` |
-| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `trust_required`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
+| `OriginTemplate` | The Upbringing a player picks within a Beginning (#3617) | `beginning` (FK), `name`, `frame_narrative`, `is_active`, `sort_order`, `cg_point_cost`, `allows_claim_family`, `allows_name_family`, `allows_no_family`, `claimable_kinds` (M2M `FamilyKind`; empty = every kind), `family_templates` (M2M `HouseTemplate`; the name path's offered templates, #3648), `closed_distinctions` (M2M `Distinction`; this route never offers these, in any chapter, #3675), `closed_reason` (the line a player reads where a closed one would have shown, #3675) |
 | `OriginTemplateSlot` | An authored prompt within an Upbringing (#2478, #3617, #3660) | `template` (FK), `name`, `prompt`, `example`, `sort_order`, `is_required`, `applies_to` (`FamilyPath`: claimed/named/none/any), `allows_text`, `kind` (`QuestionKind`: text/pick/group/person), `connection_kind` (`ConnectionKind`, GROUP tag), `life_stage` (`LifeStage`, GROUP tag), `anchor_source` (`AnchorSource`: pool/listed/same_as/served_house/own_family), `anchor_org_type` (FK `OrganizationType`, POOL), `anchor_society` (FK `Society`, POOL), `anchor_orgs` (M2M `Organization`, LISTED), `exclude_covert`, `same_anchor_as` (FK self; SAME_AS's source question, or a PERSON's group), `follow_up_to` (FK self), `shown_for_choices` (M2M `OriginTemplateSlotChoice`; empty = any answer) |
-| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `trust_required`, `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
+| `OriginTemplateSlotChoice` | One authored pick-list answer, with its price (#3617, #3660) | `slot` (FK), `name`, `description`, `cg_point_cost`, `cost_per_influence`, `reputation_seed` (int, -1000 to 1000; GROUP only), `is_active`, `sort_order`. A choice bundles a Distinction via a `DistinctionOffer` row pointed at it (#3675), not a field of its own -- see `DistinctionOffer` below. |
 
 **Content vs seeds:** the real, authored `Beginnings` rows (e.g. the Arx trio —
 Caretaker/Sleeper/Misbegotten) are **lore-repo content fixtures**
@@ -159,7 +159,7 @@ from world.character_creation.services import (
     finalize_gm_character,        # GM path: full character + Available RosterEntry (GM_TABLE
                                   #   provenance + created_for_table) + Story/StoryParticipation
     get_accessible_starting_areas,# Filter areas by account access
-    can_create_character,         # Check eligibility (email verification, trust, limits)
+    can_create_character,         # Check eligibility (email verification, limits)
     submit_draft_for_review,      # Create DraftApplication in SUBMITTED
     unsubmit_draft,               # Return to REVISIONS_REQUESTED
     resubmit_draft,               # Re-submit after revisions
@@ -357,21 +357,20 @@ stage clamps to the payload and, when the year is present, adds the sentence "Th
 Misbegotten were born in 980 AS." after the range; nothing else is said at the cap. Existing
 characters keep their recorded age; only the CG ceiling moves.
 
-**`can_create_character` eligibility gates (#3046):** staff bypass all three
+**`can_create_character` eligibility gates (#3046, #3726):** staff bypass both
 checks. (1) Email verification is real: it reuses
 `PlayerData.can_apply_for_characters()` (allauth `EmailAddress`, primary +
 verified), the same check that drives the frontend's `can_create_characters`
 field, rejecting with "Verify your email address to create a character." (2)
-Trust level defaults to 0 until the trust system lands. (3) `max_characters`
-is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var, default 3),
-counted against `account.character_drafts`.
+`max_characters` is `settings.CG_MAX_CHARACTERS` (`CG_MAX_CHARACTERS` env var,
+default 3), counted against `account.character_drafts`. The trust floor that
+used to sit between them is gone — nothing ever set `account.trust`.
 
-**`StartingArea.is_accessible_by` fails closed on `TRUST_REQUIRED`** (#3046):
-non-staff accounts have no `.trust` attribute yet (trust system unimplemented),
-so a `TRUST_REQUIRED` area is simply inaccessible to them rather than raising
-`NotImplementedError` — mirrors `Beginnings.is_accessible_by`'s existing
-fail-closed behavior. `get_accessible_starting_areas` therefore never 500s on
-a `TRUST_REQUIRED` area.
+**`access_level` is the whole gate on a starting area (#3726).**
+`get_accessible_starting_areas` filters the queryset: active rows, minus
+`STAFF_ONLY` ones for a non-staff reader. There is no per-row predicate and no
+`is_accessible` flag on the serializer — an area a reader is served is one they
+may pick. `Beginnings` and `OriginTemplate` are gated by `is_active` alone.
 
 `finalize_magic_data` also creates the CG-finalize Golden Hare Academy obligation
 row (#2428 Task 3, `_finalize_academy_entrance_obligation`): resolves the
@@ -429,12 +428,12 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
 
 ### Lookup Data
 - `GET /api/character-creation/starting-areas/` - Starting areas filtered by access level
-- `GET /api/character-creation/beginnings/` - Beginnings filtered by `starting_area` and trust
+- `GET /api/character-creation/beginnings/` - active Beginnings, filtered by `starting_area`
 - `GET /api/character-creation/species/` - Species with parent hierarchy
 - `GET /api/character-creation/families/` - Playable families, filterable by `area_id`
   and `kind=` (one or more `FamilyKind` ids, #3617)
-- `GET /api/character-creation/origin-templates/?beginning=X` - Upbringings for a beginning,
-  trust-filtered; each row carries its `slots` and `claimable_kind_ids`. The questions come
+- `GET /api/character-creation/origin-templates/?beginning=X` - active Upbringings for a
+  beginning; each row carries its `slots` and `claimable_kind_ids`. The questions come
   from `OriginTemplate.questions`, the `CachedRowsHandler` that owns them for every consumer
   (this serializer, the questionnaire resolver, the draft validators, the finalize service,
   the Builder rail); the view batches them for the page with `UpbringingQuestionsHandler.prime()`
@@ -545,7 +544,7 @@ Offers" sections.
 ## Lineage step (#3617, #3648)
 
 Per-beginning Upbringings replaced the old single family-known/orphan split: each
-`OriginTemplate` carries its own CG cost, trust gate, and choice of family paths
+`OriginTemplate` carries its own CG cost and choice of family paths
 (claim a staff-authored family, name a new one, or none), with typed prompts
 (`OriginTemplateSlot`) and costed pick-list choices (`OriginTemplateSlotChoice`)
 authored underneath it. See the authoring recipes in

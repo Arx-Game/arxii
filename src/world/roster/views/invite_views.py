@@ -31,7 +31,7 @@ INVITES_CLOSED_DETAIL = "Player invites are disabled while registration is close
 class GameInviteViewSet(viewsets.ModelViewSet):
     """Viewset for game invites.
 
-    - Create: auth + trust-gated (service validates trust)
+    - Create: auth; the service refuses while registration is closed
     - List: auth, returns only the inviter's own invites
     - Resolve: AllowAny, returns display-safe context for registration page
     - Claim: auth, links invite to the authenticated account
@@ -71,11 +71,6 @@ class GameInviteViewSet(viewsets.ModelViewSet):
         except RegistrationClosedError:
             return Response(
                 {"detail": INVITES_CLOSED_DETAIL},
-                status=status.HTTP_403_FORBIDDEN,
-            )
-        except PermissionError:
-            return Response(
-                {"detail": "You do not meet the trust threshold to send invites."},
                 status=status.HTTP_403_FORBIDDEN,
             )
 

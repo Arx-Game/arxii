@@ -15,8 +15,6 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     GroupStoryRequest,
-    PlayerTrust,
-    PlayerTrustLevel,
     SessionRequest,
     Stake,
     StakeContractActivation,
@@ -68,12 +66,6 @@ class StoryFilter(django_filters.FilterSet):
     # Owner filtering by username
     owner = django_filters.CharFilter(method="filter_owner", label="Owner Username")
 
-    # Trust category filtering
-    requires_trust_category = django_filters.CharFilter(
-        method="filter_requires_trust_category",
-        label="Requires Trust Category",
-    )
-
     # Primary table filtering — used by the Tables frontend to show stories at a table
     primary_table = django_filters.NumberFilter(field_name="primary_table_id")
 
@@ -100,12 +92,6 @@ class StoryFilter(django_filters.FilterSet):
     def filter_owner(self, queryset: QuerySet[Story], name: str, value: str) -> QuerySet[Story]:
         """Filter by owner username"""
         return queryset.filter(owners__username__icontains=value)
-
-    def filter_requires_trust_category(
-        self, queryset: QuerySet[Story], name: str, value: str
-    ) -> QuerySet[Story]:
-        """Filter stories that require a specific trust category"""
-        return queryset.filter(trust_requirements__trust_category__name=value)
 
 
 class StoryParticipationFilter(django_filters.FilterSet):
@@ -181,53 +167,6 @@ class EpisodeSceneFilter(django_filters.FilterSet):
         fields = ["episode", "order"]
 
 
-class PlayerTrustFilter(django_filters.FilterSet):
-    """Filter for PlayerTrust model"""
-
-    account = django_filters.CharFilter(
-        method="filter_account",
-        label="Account Username",
-    )
-
-    # Feedback filtering
-    has_positive_feedback = django_filters.BooleanFilter(
-        method="filter_has_positive_feedback",
-    )
-    has_negative_feedback = django_filters.BooleanFilter(
-        method="filter_has_negative_feedback",
-    )
-
-    class Meta:
-        model = PlayerTrust
-        fields = []
-
-    def filter_account(
-        self, queryset: QuerySet[PlayerTrust], name: str, value: str
-    ) -> QuerySet[PlayerTrust]:
-        """Filter by account username"""
-        return queryset.filter(account__username__icontains=value)
-
-    def filter_has_positive_feedback(
-        self, queryset: QuerySet[PlayerTrust], name: str, value: bool
-    ) -> QuerySet[PlayerTrust]:
-        """Filter for accounts with positive feedback"""
-        if value:
-            return queryset.filter(
-                trust_levels__positive_feedback_count__gt=0,
-            ).distinct()
-        return queryset.exclude(trust_levels__positive_feedback_count__gt=0).distinct()
-
-    def filter_has_negative_feedback(
-        self, queryset: QuerySet[PlayerTrust], name: str, value: bool
-    ) -> QuerySet[PlayerTrust]:
-        """Filter for accounts with negative feedback"""
-        if value:
-            return queryset.filter(
-                trust_levels__negative_feedback_count__gt=0,
-            ).distinct()
-        return queryset.exclude(trust_levels__negative_feedback_count__gt=0).distinct()
-
-
 class StoryFeedbackFilter(django_filters.FilterSet):
     """Filter for StoryFeedback model"""
 
@@ -284,9 +223,6 @@ class StoryFeedbackFilter(django_filters.FilterSet):
         return queryset.filter(trust_categories__name=value)
 
 
-# New filters for trust system
-
-
 class TrustCategoryFilter(django_filters.FilterSet):
     """Filter for TrustCategory model"""
 
@@ -297,34 +233,6 @@ class TrustCategoryFilter(django_filters.FilterSet):
     class Meta:
         model = TrustCategory
         fields = ["name", "display_name", "is_active"]
-
-
-class PlayerTrustLevelFilter(django_filters.FilterSet):
-    """Filter for PlayerTrustLevel model"""
-
-    account = django_filters.CharFilter(
-        method="filter_account",
-        label="Account Username",
-    )
-    trust_category = django_filters.CharFilter(
-        field_name="trust_category__name",
-        lookup_expr="icontains",
-    )
-    trust_level = django_filters.NumberFilter()
-    trust_level_min = django_filters.NumberFilter(
-        field_name="trust_level",
-        lookup_expr="gte",
-    )
-
-    class Meta:
-        model = PlayerTrustLevel
-        fields = ["trust_category", "trust_level"]
-
-    def filter_account(
-        self, queryset: QuerySet[PlayerTrustLevel], name: str, value: str
-    ) -> QuerySet[PlayerTrustLevel]:
-        """Filter by account username"""
-        return queryset.filter(player_trust__account__username__icontains=value)
 
 
 class GroupStoryProgressFilter(django_filters.FilterSet):

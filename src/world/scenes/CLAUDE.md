@@ -85,7 +85,7 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`InteractionTargetPersona`**: Explicit IC targets for a row. Written by the shared
   `write_target_personas` helper (`interaction_services.py`); drives the reader's
   involvement mark and `attention.ts`'s `direct` badge tier - NOT reader thread/group
-  derivation (#3787, ADR-0292: targeting and grouping are separate concerns, or a
+  derivation (#3787, ADR-0293: targeting and grouping are separate concerns, or a
   multi-target fight would fragment into one reader group per victim). `create_interaction`
   validates a player's own tagging against `reachability.persona_can_receive` before
   writing; combat's own writers (`world.combat.interaction_services`) skip that check
@@ -93,7 +93,7 @@ the unified Persona identity system, and non-combat scene rounds.
   targeting rules, and Battle scenes have no location for presence to test against.
 - **`InteractionReply`** (#3787): the reply parent edge, separate from `InteractionThread`
   membership - one row per reply, gated on the parent's own `visible_to` when read. See
-  "Scene Interaction Threads" in `docs/systems/scene-interaction-threads.md` and ADR-0292.
+  "Scene Interaction Threads" in `docs/systems/scene-interaction-threads.md` and ADR-0293.
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
 - **`SceneRound`**: Non-combat round/turn structure anchored to a room. Fields: `mode` (`SceneRoundMode`),
   `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`. `mode` and `start_reason` are

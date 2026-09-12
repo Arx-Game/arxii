@@ -427,7 +427,7 @@ combat action records whom it targeted.
   (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
   shape and a stated venue hint instead of an opaque string). Both refuse rather than
   widen the audience, both preserve the writer's draft, and both are telnet-parity
-  (the parent chip alone is web only). See ADR-0292.
+  (the parent chip alone is web only). See ADR-0293.
 
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode

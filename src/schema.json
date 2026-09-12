@@ -3742,7 +3742,6 @@ paths:
         ViewSet for listing Beginnings options.
 
         Filter by starting_area to get options available for a specific starting area.
-        Results are filtered by user trust level.
       parameters:
       - in: query
         name: starting_area
@@ -3769,7 +3768,6 @@ paths:
         ViewSet for listing Beginnings options.
 
         Filter by starting_area to get options available for a specific starting area.
-        Results are filtered by user trust level.
       parameters:
       - in: path
         name: id
@@ -4934,8 +4932,6 @@ paths:
         List active origin-story templates for the CG guided flow (#2478, #3617).
 
         Filter by ``beginning`` to get templates available for a specific beginning.
-        Trust-gated: staff see every active row, everyone else only rows whose
-        ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
       parameters:
       - in: path
         name: id
@@ -28604,175 +28600,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorReportDetail'
           description: ''
-  /api/player-trust/:
-    get:
-      operationId: player_trust_list
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: query
-        name: account
-        schema:
-          type: string
-        description: Account Username
-      - in: query
-        name: has_negative_feedback
-        schema:
-          type: boolean
-      - in: query
-        name: has_positive_feedback
-        schema:
-          type: boolean
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedPlayerTrustList'
-          description: ''
-    post:
-      operationId: player_trust_create
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-  /api/player-trust/{id}/:
-    get:
-      operationId: player_trust_retrieve
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    put:
-      operationId: player_trust_update
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    patch:
-      operationId: player_trust_partial_update
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    delete:
-      operationId: player_trust_destroy
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/player-trust/my_trust/:
-    get:
-      operationId: player_trust_my_trust_retrieve
-      description: Get the current user's trust profile
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
   /api/precapture-consent-requests/:
     get:
       operationId: precapture_consent_requests_list
@@ -31083,7 +30910,7 @@ paths:
       description: |-
         Viewset for game invites.
 
-        - Create: auth + trust-gated (service validates trust)
+        - Create: auth; the service refuses while registration is closed
         - List: auth, returns only the inviter's own invites
         - Resolve: AllowAny, returns display-safe context for registration page
         - Claim: auth, links invite to the authenticated account
@@ -31138,7 +30965,7 @@ paths:
       description: |-
         Viewset for game invites.
 
-        - Create: auth + trust-gated (service validates trust)
+        - Create: auth; the service refuses while registration is closed
         - List: auth, returns only the inviter's own invites
         - Resolve: AllowAny, returns display-safe context for registration page
         - Claim: auth, links invite to the authenticated account
@@ -35385,11 +35212,6 @@ paths:
         name: privacy
         schema:
           type: string
-      - in: query
-        name: requires_trust_category
-        schema:
-          type: string
-        description: Requires Trust Category
       - in: query
         name: scope
         schema:
@@ -41630,10 +41452,6 @@ components:
           minimum: -2147483648
           description: CG point cost for this beginning; summed with species gift
             grant costs into the character-creation points budget.
-        is_accessible:
-          type: boolean
-          description: Check if the requesting user can access this option.
-          readOnly: true
         codex_entry_ids:
           type: array
           items:
@@ -41652,7 +41470,6 @@ components:
       - description
       - heritage
       - id
-      - is_accessible
       - name
     BeginningsRequest:
       type: object
@@ -42592,10 +42409,6 @@ components:
           readOnly: true
           description: Flat CG cost of this Upbringing (#3617). Negative refunds,
             like a drawback.
-        trust_required:
-          type: integer
-          readOnly: true
-          description: Minimum trust to see/select this Upbringing (#3617).
         allows_claim_family:
           type: boolean
           readOnly: true
@@ -42637,7 +42450,6 @@ components:
       - name
       - slots
       - sort_order
-      - trust_required
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -61939,10 +61751,6 @@ components:
           type: integer
           readOnly: true
           description: CG cost per point of the claimed family's influence.
-        trust_required:
-          type: integer
-          readOnly: true
-          description: Minimum trust to see this answer; staff always see it (#3660).
         offers:
           type: array
           items:
@@ -61959,7 +61767,6 @@ components:
       - name
       - offers
       - sort_order
-      - trust_required
     OriginTemplateSlotKindEnum:
       enum:
       - text
@@ -65298,29 +65105,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerReportDetail'
-    PaginatedPlayerTrustList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PlayerTrust'
     PaginatedPortalDestinationList:
       type: object
       required:
@@ -71986,39 +71770,6 @@ components:
       - behavior_description
       - reported_persona
       - reporter_persona
-    PlayerTrust:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        account:
-          type: string
-          readOnly: true
-        total_positive_feedback:
-          type: integer
-          description: Aggregate positive feedback count from all trust levels
-          readOnly: true
-        total_negative_feedback:
-          type: integer
-          description: Aggregate negative feedback count from all trust levels
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - account
-      - created_at
-      - id
-      - total_negative_feedback
-      - total_positive_feedback
-      - updated_at
     PolishIncrement:
       type: object
       description: Per-category polish a decoration template grants on completion.
@@ -78659,7 +78410,11 @@ components:
         * `minor` - Minor Member
     StartingArea:
       type: object
-      description: Serializer for starting areas with accessibility check.
+      description: |-
+        Serializer for starting areas.
+
+        No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+        and it never lists an area the reader may not pick (#3726).
       properties:
         id:
           type: integer
@@ -78677,10 +78432,6 @@ components:
           description: Cloudinary URL sourced from crest_art (#2408); key name kept
             for frontend compat.
           readOnly: true
-        is_accessible:
-          type: boolean
-          description: Check if the requesting user can access this area.
-          readOnly: true
         realm_theme:
           type: string
           readOnly: true
@@ -78697,14 +78448,17 @@ components:
       - crest_image
       - description
       - id
-      - is_accessible
       - name
       - realm_name
       - realm_slug
       - realm_theme
     StartingAreaRequest:
       type: object
-      description: Serializer for starting areas with accessibility check.
+      description: |-
+        Serializer for starting areas.
+
+        No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+        and it never lists an area the reader may not pick (#3726).
       properties:
         name:
           type: string
@@ -79031,9 +78785,6 @@ components:
           items:
             $ref: '#/components/schemas/GMProfile'
           readOnly: true
-        trust_requirements:
-          type: string
-          readOnly: true
         character_sheet:
           type: integer
           description: The character this sheet belongs to
@@ -79088,7 +78839,6 @@ components:
       - primary_table
       - tenure_id
       - title
-      - trust_requirements
       - updated_at
     StoryDetailRequest:
       type: object

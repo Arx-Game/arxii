@@ -42,7 +42,6 @@ const template: OriginTemplate = {
   is_active: true,
   sort_order: 1,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
@@ -73,7 +72,6 @@ const template: OriginTemplate = {
           description: 'Someone saw a use for you.',
           cg_point_cost: 5,
           cost_per_influence: 0,
-          trust_required: 0,
           sort_order: 1,
           offers: [
             {
@@ -93,7 +91,6 @@ const template: OriginTemplate = {
           description: 'The road out was a wall.',
           cg_point_cost: -10,
           cost_per_influence: 0,
-          trust_required: 0,
           sort_order: 2,
           offers: [
             {

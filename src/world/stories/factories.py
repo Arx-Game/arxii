@@ -49,8 +49,6 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     GroupStoryRequest,
-    PlayerTrust,
-    PlayerTrustLevel,
     RiskCalibration,
     SessionRequest,
     Stake,
@@ -78,7 +76,6 @@ from world.stories.types import (
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
-    TrustLevel,
 )
 
 # Factory-path string for the GMProfile sub-factory, referenced by multiple
@@ -252,37 +249,6 @@ class EpisodeSceneFactory(factory_django.DjangoModelFactory):
     # Note: scene field must be set manually when creating instances
     # due to cross-app dependency issues with SceneFactory
     order = factory.Sequence(lambda n: n + 1)
-
-
-class PlayerTrustFactory(factory_django.DjangoModelFactory):
-    """Factory for creating PlayerTrust instances"""
-
-    class Meta:
-        model = PlayerTrust
-
-    # Note: account must be set manually due to cross-app dependencies
-
-
-class TrustedPlayerTrustFactory(PlayerTrustFactory):
-    """Factory for players with higher trust levels"""
-
-
-class ExperiencedGMTrustFactory(PlayerTrustFactory):
-    """Factory for experienced GM trust profiles"""
-
-
-class PlayerTrustLevelFactory(factory_django.DjangoModelFactory):
-    """Factory for creating PlayerTrustLevel instances"""
-
-    class Meta:
-        model = PlayerTrustLevel
-
-    player_trust = factory.SubFactory(PlayerTrustFactory)
-    trust_category = factory.SubFactory("world.stories.factories.TrustCategoryFactory")
-    trust_level = TrustLevel.BASIC
-    positive_feedback_count = 0
-    negative_feedback_count = 0
-    notes = factory.Faker("sentence")
 
 
 class TrustCategoryFactory(factory_django.DjangoModelFactory):

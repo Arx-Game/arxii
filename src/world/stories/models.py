@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Any, cast
 
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.utils.functional import cached_property
@@ -39,7 +39,6 @@ from world.stories.types import (
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
-    TrustLevel,
 )
 
 if TYPE_CHECKING:
@@ -88,9 +87,14 @@ def _foreclosure_resolution_fields(related_name: str) -> dict[str, object]:
 
 
 class TrustCategory(SharedMemoryModel):
-    """
-    Flexible trust categories that can be defined dynamically.
-    Each category represents something a player might need to be trusted to handle well.
+    """An authored dimension a story performance is rated along.
+
+    Staff define these dynamically ("antagonism", "mature themes") and
+    ``TrustCategoryFeedbackRating`` files one rating per category per
+    ``StoryFeedback``. Those ratings are the evidence behind the GM trust
+    ladder (``GMProfile.level``, ADR-0097) and GM Story Reward XP (#2123).
+    They do not gate anything on their own: a category is a label for
+    feedback, never a permission a player holds (#3726).
     """
 
     name = models.CharField(
@@ -232,14 +236,6 @@ class Story(SharedMemoryModel):
         ),
     )
 
-    # Trust requirements - stories can require trust in specific categories
-    required_trust_categories = models.ManyToManyField(
-        TrustCategory,
-        through="StoryTrustRequirement",
-        blank=True,
-        help_text="Trust categories required to participate in this story",
-    )
-
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -287,80 +283,14 @@ class Story(SharedMemoryModel):
         active_gms = cast(Any, self.active_gms)
         return self.status == StoryStatus.ACTIVE and active_gms.exists()
 
-    def can_player_apply(self, account: "AbstractBaseUser") -> bool:
-        """Check if a player can apply to participate in this story"""
-        if self.privacy == StoryPrivacy.PRIVATE:
-            return False
+    def can_player_apply(self, account: "AbstractBaseUser") -> bool:  # noqa: ARG002
+        """Check if a player can apply to participate in this story.
 
-        # Check trust requirements
-        try:
-            trust_profile = cast(Any, account).trust_profile
-            # Get all trust requirements for this story
-            requirements = cast(Any, self).trust_requirements.all()
-            for req in requirements:
-                current_level = trust_profile.get_trust_level_for_category(
-                    req.trust_category,
-                )
-                if current_level < req.minimum_trust_level:
-                    return False
-            return True
-        except ObjectDoesNotExist:
-            # No trust profile means no trust granted
-            return len(cast(Any, self).trust_requirements.all()) == 0
-
-    def get_trust_requirements_summary(self) -> list[dict[str, str]]:
-        """Get a summary of trust requirements for display"""
-        return [
-            {
-                "category": req.trust_category.display_name,
-                "minimum_level": req.get_minimum_trust_level_display(),
-            }
-            for req in cast(Any, self).trust_requirements.all()
-        ]
-
-
-class StoryTrustRequirement(SharedMemoryModel):
-    """
-    Through model for Story trust requirements.
-    Allows specifying minimum trust level needed for each category.
-    """
-
-    story = models.ForeignKey(
-        Story,
-        on_delete=models.CASCADE,
-        related_name="trust_requirements",
-    )
-    trust_category = models.ForeignKey(TrustCategory, on_delete=models.CASCADE)
-    minimum_trust_level = models.IntegerField(
-        choices=TrustLevel.choices,
-        default=TrustLevel.BASIC,
-        help_text="Minimum trust level required for this category",
-    )
-
-    # Optional metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    created_by = models.ForeignKey(
-        ACCOUNT_DB_MODEL,
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        help_text="Who added this requirement",
-    )
-    notes = models.TextField(
-        blank=True,
-        help_text="Why this trust requirement was added",
-    )
-
-    class Meta:
-        unique_together = ["story", "trust_category"]
-
-    def __str__(self) -> str:
-        story = cast(Any, self.story)
-        trust_category = cast(Any, self.trust_category)
-        return (
-            f"{story.title}: {trust_category.display_name} "
-            f"({cast(Any, self).get_minimum_trust_level_display()})"
-        )
+        Privacy is the whole rule (#3726). The per-category trust requirement
+        that used to sit alongside it read a profile no account was ever
+        granted, so it refused every applicant to any story that carried one.
+        """
+        return self.privacy != StoryPrivacy.PRIVATE
 
 
 class StoryParticipation(SharedMemoryModel):
@@ -516,126 +446,14 @@ class EpisodeScene(SharedMemoryModel):
         return f"{self.episode} - Scene {self.order}"
 
 
-class PlayerTrust(SharedMemoryModel):
-    """
-    Aggregate trust profile for a player.
-    This is a lightweight model that helps with queries and caching.
-    """
-
-    account = models.OneToOneField(
-        ACCOUNT_DB_MODEL,
-        on_delete=models.CASCADE,
-        related_name="trust_profile",
-    )
-
-    # Trust categories are linked via PlayerTrustLevel through model
-    trust_categories = models.ManyToManyField(
-        TrustCategory,
-        through="PlayerTrustLevel",
-        blank=True,
-        help_text="Trust categories and levels for this player",
-    )
-
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    def __str__(self) -> str:
-        account = cast(Any, self.account)
-        return f"Trust Profile: {account.username}"
-
-    @property
-    def total_positive_feedback(self) -> int:
-        """Aggregate positive feedback count from all trust levels"""
-        trust_levels = cast(Any, self).trust_levels.all()
-        return sum(level.positive_feedback_count for level in trust_levels)
-
-    @property
-    def total_negative_feedback(self) -> int:
-        """Aggregate negative feedback count from all trust levels"""
-        trust_levels = cast(Any, self).trust_levels.all()
-        return sum(level.negative_feedback_count for level in trust_levels)
-
-    def get_trust_level_for_category(self, trust_category: TrustCategory) -> int:
-        """Get trust level for a specific trust category"""
-        try:
-            trust_level = cast(Any, self).trust_levels.get(trust_category=trust_category)
-            return cast(int, trust_level.trust_level)
-        except PlayerTrustLevel.DoesNotExist:
-            return cast(int, TrustLevel.UNTRUSTED)
-
-    def get_trust_level_for_category_name(self, category_name: str) -> int:
-        """Get trust level for a trust category by name"""
-        try:
-            trust_category = cast(Any, TrustCategory).objects.get(name=category_name)
-            return self.get_trust_level_for_category(trust_category)
-        except TrustCategory.DoesNotExist:
-            return cast(int, TrustLevel.UNTRUSTED)
-
-    def has_minimum_trust_for_categories(self, required_categories: list) -> bool:
-        """Check if player has minimum required trust for all categories"""
-        for category_req in required_categories:
-            if isinstance(category_req, dict):
-                category_name = category_req.get("category")
-                min_level = category_req.get("minimum_level", TrustLevel.BASIC)
-            else:
-                # Assume it's just a category name requiring basic trust
-                category_name = str(category_req)
-                min_level = TrustLevel.BASIC
-
-            if category_name:  # Only process if category_name is not None
-                current_level = self.get_trust_level_for_category_name(category_name)
-                if current_level < min_level:
-                    return False
-
-        return True
-
-
-class PlayerTrustLevel(SharedMemoryModel):
-    """
-    Individual trust level for a player in a specific trust category.
-    This is the bridge table between PlayerTrust and TrustCategory with additional data.
-    """
-
-    player_trust = models.ForeignKey(
-        PlayerTrust,
-        on_delete=models.CASCADE,
-        related_name="trust_levels",
-    )
-    trust_category = models.ForeignKey(
-        TrustCategory,
-        on_delete=models.CASCADE,
-        related_name="player_trust_levels",
-    )
-    trust_level = models.IntegerField(
-        choices=TrustLevel.choices,
-        default=TrustLevel.UNTRUSTED,
-    )
-
-    # Trust score tracking (negative feedback hurts more than positive helps)
-    positive_feedback_count = models.PositiveIntegerField(default=0)
-    negative_feedback_count = models.PositiveIntegerField(default=0)
-
-    # Metadata
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    notes = models.TextField(
-        blank=True,
-        help_text="Notes about why this trust level was granted or revoked",
-    )
-
-    class Meta:
-        unique_together = ["player_trust", "trust_category"]
-
-    def __str__(self) -> str:
-        return (
-            f"{cast(Any, self.player_trust).account.username}: "
-            f"{cast(Any, self.trust_category).display_name} "
-            f"({cast(Any, self).get_trust_level_display()})"
-        )
-
-
 class StoryFeedback(SharedMemoryModel):
-    """Feedback on story participation for trust building"""
+    """Feedback on a player's or GM's story participation.
+
+    Ratings are filed per ``TrustCategory`` — the authored dimensions a
+    performance is judged along ("antagonism", "mature themes"). They feed the
+    GM trust ladder's evidence view and GM Story Reward XP (ADR-0097, #2123);
+    they no longer roll up into a per-account trust score (#3726).
+    """
 
     story = models.ForeignKey(Story, on_delete=models.CASCADE, related_name="feedback")
     reviewer = models.ForeignKey(

@@ -87,8 +87,8 @@ class LineagePathValidationTest(TestCase):
         draft.family = FamilyFactory(kind=crime, origin_realm=realm, is_playable=False)
         assert get_lineage_errors(draft) == ["That family is not open to this upbringing"]
 
-    def test_trust_gated_upbringing_is_rejected(self):
-        template = OriginTemplateFactory(trust_required=5)
+    def test_inactive_upbringing_is_rejected(self):
+        template = OriginTemplateFactory(is_active=False)
         draft = _draft_for(template, draft_data={"new_family_name": "Vale"})
         assert "That upbringing is not available to you" in get_lineage_errors(draft)
 

@@ -18,7 +18,7 @@ privacy, or delivery rules.
   `InteractionThread` membership. `Interaction.thread` already answers "which exchange
   does this row belong to"; `InteractionReply` answers the narrower "which specific row
   did this one answer," which is what the reader's parent chip renders. One row per
-  reply (unique on the child interaction), modelled on `InteractionReceiver` (see ADR-0292
+  reply (unique on the child interaction), modelled on `InteractionReceiver` (see ADR-0293
   for why `InteractionAction` is NOT the precedent here): child and parent FKs are both
   `db_constraint=False` with their own denormalized timestamp, since `arxii_interaction`
   is monthly range-partitioned with a composite `(id, timestamp)` primary key and cannot
@@ -48,11 +48,11 @@ Both refusals translate through the same `{code, field, detail, hint}` 400 body
 (`interaction_views._refusal_response`) and the same telnet hint-append in
 `Action.run()`'s exception handler (`actions/base.py`) - one refusal vocabulary for REST
 and telnet alike. Both preserve the writer's draft; neither ever widens the audience to
-make the reply land (ADR-0292, decision 1: refuse, never promote).
+make the reply land (ADR-0293, decision 1: refuse, never promote).
 
 **Reachability governs only player-authored addressing.** A resolved combat action's
 targets are written through `write_target_personas` directly, with no reachability check
-- see ADR-0292, decision 3, and the module's own docstring for why (Battle scenes have no
+- see ADR-0293, decision 3, and the module's own docstring for why (Battle scenes have no
 location, so the check cannot even be evaluated there).
 
 ## Targeting drives the mark and the badge, never the grouping (#3787)
@@ -72,7 +72,7 @@ location, so the check cannot even be evaluated there).
 It must NOT drive reader **grouping** for mechanical rows: `getThreadKey` special-cases
 `action`/`outcome` mode to key by `scene:<id>` (or `room`) before it ever reaches the
 `target:` fallback, so a multi-target combat round stays one reader group instead of
-fragmenting into one group per victim (ADR-0292, decision 2). Combat ACTION/OUTCOME rows
+fragmenting into one group per victim (ADR-0293, decision 2). Combat ACTION/OUTCOME rows
 now carry `target_persona_ids` (`world.combat.interaction_services.
 create_action_interaction_core` / `create_npc_action_interaction`), populated from the
 targets the resolvers already hold; concealed tiers continue to record none, unchanged

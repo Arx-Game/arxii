@@ -57,7 +57,6 @@ const mockStartingArea: StartingArea = {
   name: 'Arx',
   description: 'The city itself.',
   crest_image: null,
-  is_accessible: true,
   realm_theme: 'default',
   realm_slug: 'arx',
   realm_name: 'Arx',
@@ -71,7 +70,6 @@ const mockBeginnings: Beginnings = {
   allowed_species_ids: [],
   grants_species_languages: true,
   cg_point_cost: 0,
-  is_accessible: true,
   codex_entry_ids: [],
   heritage: null,
 };

@@ -14,7 +14,7 @@ This file provides specific guidance for working with the roster system in Arx I
 ### Account and Character Management
 - **No Character Creation on Login**: Account registration is separate from character acquisition
 - **Application Process**: Players apply for available roster characters through a structured workflow
-- **Approval Workflow**: Applications reviewed by staff or trusted player GMs
+- **Approval Workflow**: Applications reviewed by staff (`CanApproveApplications`)
 - **One Account Per Player**: Single login for each real person, multiple characters possible
 - **Player Anonymity**: Players identified only as "1st player of X", "2nd player of X", etc.
 
@@ -34,11 +34,13 @@ This file provides specific guidance for working with the roster system in Arx I
 - ✅ **Structured approval process** with audit trails
 - ✅ **Separation of concerns** between roster, applications, and accounts
 
-### Trust-Based Approval System
+### Approval is staff-only; there is no trust axis (ADR-0293)
 - **Automated Where Possible**: Routine roster management should be automated
-- **Player GM Approval**: Trusted players can approve character applications within their scope
-- **Granular Permissions**: Approval powers are specific to character types, stories, or domains
-- **Revocable Trust**: Approval permissions can be revoked if abused
+- **Staff Approval**: `PlayerData.can_approve_applications()` gates the review queue
+- **No trust score**: #3726 removed the `trust_evaluation`/`can_auto_approve` placeholders
+  and the `INSUFFICIENT_TRUST_LEVEL` denial reason. Nothing ever granted a trust level, so
+  every gate reading one refused everyone. If per-thing approval powers are ever wanted,
+  they get designed as explicit permissions then — not as a dormant number to gate on
 
 ## Models Overview
 
@@ -69,11 +71,11 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 1. **Use Models, Not Flows**: Account/roster management uses Django patterns, NOT flows
 2. **Check Permissions**: Verify player has access to requested character via RosterTenure
 3. **Maintain Anonymity**: Never expose player identities across characters
-4. **Trust-Based Actions**: Use granular permission checks for approval actions
+4. **Approval Actions**: Use explicit permission classes, never a per-account score
 
 ### Application Process
 1. **Player Applies**: `@apply <character>` creates RosterApplication
-2. **Review Process**: Staff or trusted player GMs review applications
+2. **Review Process**: Staff review applications
 3. **Approval Creates Tenure**: Approved applications create RosterTenure with proper player_number
 4. **Automatic Cleanup**: System should handle edge cases (duplicate applications, etc.)
 
@@ -101,10 +103,10 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
   different leak surface than the inbox-row exclusion/auto-file, so it needs its own gate rather
   than relying on the recipient never opening their mail list.
 
-### Trust-Based Permissions
-- Approval permissions are tied to specific characters, stories, or domains
-- Player GMs have limited scope based on their demonstrated trust
+### Approval auditing
 - System should log all approval actions for audit trail
+- GM authority elsewhere in the codebase is `GMProfile.level` (staff-set and audited,
+  ADR-0097) — the only trust-shaped ladder that exists
 
 ## Database Relationships
 
@@ -122,5 +124,5 @@ RosterTenure → PlayerMail.recipient_tenure
 - [ ] Zero attribute usage (`self.db.anything`) - all data in proper models
 - [ ] Player anonymity maintained across all character interactions
 - [ ] Single login per real person with character switching functionality
-- [ ] Trust-based approval system for character applications
+- [ ] Staff approval flow for character applications, with an audit trail
 - [ ] Proper tenure-based ownership of personal data (photos, settings)

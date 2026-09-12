@@ -1,6 +1,16 @@
 # Stories System - Narrative Campaign Management
 
-Structured narrative campaign management with hierarchical storytelling and trust-based participation system.
+Structured narrative campaign management with hierarchical storytelling.
+
+**There is no player-trust axis** (ADR-0293, #3726). `PlayerTrust`,
+`PlayerTrustLevel`, `StoryTrustRequirement` and `TrustLevel` were removed:
+nothing ever granted a level, so every gate reading them refused everyone.
+Who may do what is decided by story ownership, `StoryParticipation
+.trusted_by_owner` (granted by that story's owner), and `GMProfile.level`
+(staff-set and audited, ADR-0097). `TrustCategory` survives with its name but
+is no longer a permission: it is the dimension a `StoryFeedback` rating is filed
+under, and those ratings feed GM Story Reward XP (#2123) and the GM evidence
+view. Do not add a new gate that reads a per-account number.
 
 ## Action Endpoint Pattern (Canonical — Strictly Enforced)
 
@@ -115,38 +125,40 @@ duplicating the service's state guard in the serializer would not eliminate the 
 
 ## Key Files
 
-### `models/`
-- **`stories.py`**: `Story`, `Chapter`, `Episode` - hierarchical story structure
-- **`participation.py`**: `StoryParticipation` - character involvement tracking
-- **`trust.py`**: `PlayerTrust`, `TrustCategory` - trust system foundation
+### `models.py`
+`Story`, `Chapter`, `Episode` (hierarchical story structure),
+`StoryParticipation` (character involvement), `StoryFeedback` +
+`TrustCategoryFeedbackRating` + `TrustCategory` (per-dimension performance
+ratings; evidence, not permission).
 
 ### `views.py`
 - **`StoryViewSet`**: Story CRUD operations and management
 - **`ChapterViewSet`**: Chapter management within stories
 - **`EpisodeViewSet`**: Episode management and scheduling
-- **`TrustViewSet`**: Trust level administration
+- **`StoryFeedbackViewSet`**: Post-story feedback and its per-category ratings
 
 ### `serializers.py`
 - Story hierarchy serialization for API responses
-- Trust level and participation data serialization
+- Participation and feedback data serialization
 
 ### `permissions.py`
-- Trust-based story access control
+- Ownership- and participation-based story access control
 - GM permissions for story management
 - Visibility controls for public/private stories
 
 ### `filters.py`
-- Filter stories by status, trust requirements, participation
+- Filter stories by status, participation
 - Search by GM, participants, story content
 - Date-based filtering for archival
 
 ## Key Classes
 
-- **`Story`**: Top-level campaign container with trust-based access
-- **`Chapter`**: Major narrative arcs within stories  
+- **`Story`**: Top-level campaign container; `privacy` decides who may apply
+- **`Chapter`**: Major narrative arcs within stories
 - **`Episode`**: Individual sessions linking to scene recordings
-- **`StoryParticipation`**: Character involvement with role management
-- **`PlayerTrust`**: Trust levels across different categories (GM, approval, moderation)
+- **`StoryParticipation`**: Character involvement with role management, including
+  `trusted_by_owner` — the per-story permission its owner grants
+- **`TrustCategory`**: a dimension a story performance is rated along, not a permission
 
 ## Hierarchical Structure
 

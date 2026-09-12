@@ -661,7 +661,6 @@ class ApproveApplicationIntegrationTests(TestCase):
             name="Approve Integration Beginnings",
             description="Test beginnings",
             starting_area=cls.area,
-            trust_required=0,
             is_active=True,
         )
         cls.beginnings.allowed_species.add(cls.species)

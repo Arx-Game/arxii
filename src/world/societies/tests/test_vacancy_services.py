@@ -82,7 +82,7 @@ class ReachableVacanciesTest(TestCase):
         vacancy.allowed_upbringings.add(self.upbringing)
         assert list(reachable_vacancies(self._draft())) == [vacancy]
 
-    def test_closed_and_trust_gated_are_hidden(self):
+    def test_closed_and_inactive_are_hidden(self):
         VacancyFactory(organization=self.org, name="Heir", count_remaining=0)
-        VacancyFactory(organization=self.org, name="Secret", trust_required=99)
+        VacancyFactory(organization=self.org, name="Secret", is_active=False)
         assert list(reachable_vacancies(self._draft())) == []

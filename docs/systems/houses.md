@@ -243,7 +243,7 @@ generalized past nobles) plus the four catalogs it draws on.
   ADR-0273), `rank` (nullable; blank = the org's base rank), `kin_pool` / `kin_node`
   (at most one; set = a **kin** Vacancy, `basis == "kin"`; neither set = a
   **retainer** Vacancy), `count_remaining` (blank = a standing vacancy, always open,
-  never decremented), `trust_required`, `allowed_upbringings` (blank = any
+  never decremented), `allowed_upbringings` (blank = any
   Upbringing that can reach the org), `is_active`. Authored on the Organization
   admin page (inline) or standalone via Admin > Societies > Vacancies. It carries
   `NaturalKeyMixin` and `CreditedContent` (so it appears in the Authoring Workbench

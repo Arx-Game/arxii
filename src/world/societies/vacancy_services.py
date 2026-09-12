@@ -26,7 +26,7 @@ def _open_filter() -> Q:
 
 
 def reachable_vacancies(draft: CharacterDraft, *, require_open: bool = True) -> QuerySet[Vacancy]:
-    """Open vacancies this draft may take: realm, Upbringing gate, trust.
+    """Open vacancies this draft may take: realm and Upbringing gate.
 
     ``require_open=False`` (``character_creation.validators``, #3648) drops the
     availability filter while keeping every other gate: a vacancy closing
@@ -47,13 +47,6 @@ def reachable_vacancies(draft: CharacterDraft, *, require_open: bool = True) -> 
             Q(organization__family__origin_realm__isnull=True)
             | Q(organization__family__origin_realm=realm)
         )
-    account = draft.account
-    if not account.is_staff:
-        try:
-            trust = account.trust
-        except AttributeError:
-            trust = 0
-        queryset = queryset.filter(trust_required__lte=trust)
     return (
         queryset.select_related("organization__family", "rank", "kin_pool", "kin_node")
         .prefetch_related(

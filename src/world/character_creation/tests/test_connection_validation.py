@@ -36,7 +36,6 @@ class ConnectionValidationTest(TestCase):
         cls.q1 = GroupPromptFactory(template=cls.template, sort_order=0, name="House")
         cls.q1.anchor_orgs.add(cls.house)
         cls.livery = OriginTemplateSlotChoiceFactory(slot=cls.q1, name="Livery")
-        cls.gated = OriginTemplateSlotChoiceFactory(slot=cls.q1, name="Keys", trust_required=5)
         cls.person = OriginTemplateSlotFactory(
             template=cls.template,
             sort_order=1,
@@ -58,13 +57,17 @@ class ConnectionValidationTest(TestCase):
         )
         assert "That group is not offered for House" in get_lineage_errors(draft)
 
-    def test_trust_gated_answer_is_rejected_for_low_trust(self):
+    def test_answer_from_another_question_is_rejected(self):
+        other_slot = OriginTemplateSlotFactory(
+            template=self.template, sort_order=2, name="Elsewhere", kind=QuestionKind.PICK
+        )
+        stray = OriginTemplateSlotChoiceFactory(slot=other_slot, name="Keys")
         draft = _draft(
             self.template,
             origin_anchors={str(self.q1.id): self.house.id},
-            origin_choices={str(self.q1.id): self.gated.id},
+            origin_choices={str(self.q1.id): stray.id},
         )
-        assert "That answer is not available to you for House" in get_lineage_errors(draft)
+        assert "Invalid choice for House" in get_lineage_errors(draft)
 
     def test_person_required_only_when_shown(self):
         self.person.is_required = True

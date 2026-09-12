@@ -68,13 +68,12 @@ class DistinctionAdmin(admin.ModelAdmin):
         "cost_per_rank",
         "max_rank",
         "has_variants",
-        "has_trust_requirement",
         "is_active",
     ]
     list_filter = ["category", "is_active"]
     search_fields = ["name", "slug", "description"]
     prepopulated_fields = {"slug": ("name",)}
-    autocomplete_fields = ["category", "parent_distinction", "trust_category"]
+    autocomplete_fields = ["category", "parent_distinction"]
     filter_horizontal = ["tags", "mutually_exclusive_with"]
     inlines = [DistinctionEffectInline, DistinctionCodexGrantInline]
     readonly_fields = ["get_resonance_grants"]
@@ -97,13 +96,6 @@ class DistinctionAdmin(admin.ModelAdmin):
             "Mutual Exclusions",
             {
                 "fields": ("mutually_exclusive_with",),
-                "classes": ("collapse",),
-            },
-        ),
-        (
-            "Trust Gating",
-            {
-                "fields": ("trust_value", "trust_category"),
                 "classes": ("collapse",),
             },
         ),
@@ -133,10 +125,6 @@ class DistinctionAdmin(admin.ModelAdmin):
     @admin.display(boolean=True, description="Has Variants")
     def has_variants(self, obj):
         return obj.is_variant_parent
-
-    @admin.display(boolean=True, description="Trust Required")
-    def has_trust_requirement(self, obj):
-        return obj.trust_required
 
     @admin.display(description="Resonance grants/thresholds")
     def get_resonance_grants(self, obj: Distinction) -> str:

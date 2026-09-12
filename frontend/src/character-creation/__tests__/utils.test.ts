@@ -9,7 +9,6 @@ function makeArea(realm_theme: string): StartingArea {
     name: 'Test Area',
     description: '',
     crest_image: null,
-    is_accessible: true,
     realm_theme,
     realm_slug: realm_theme,
     realm_name: realm_theme,

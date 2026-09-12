@@ -18,9 +18,6 @@ from world.roster.services.invite_services import (
     resolve_invite,
     revoke_game_invite,
 )
-from world.stories.factories import PlayerTrustFactory, TrustCategoryFactory
-from world.stories.models import PlayerTrustLevel
-from world.stories.types import TrustLevel
 
 
 def _set_registration_open(is_open: bool) -> None:
@@ -29,31 +26,13 @@ def _set_registration_open(is_open: bool) -> None:
     config.save(update_fields=["registration_open"])
 
 
-def _make_trusted_inviter(invite_category):
-    player_data = PlayerDataFactory()
-    trust = PlayerTrustFactory(account=player_data.account)
-    PlayerTrustLevel.objects.create(
-        player_trust=trust,
-        trust_category=invite_category,
-        trust_level=TrustLevel.BASIC,
-    )
-    return player_data
-
-
 class CreateGameInviteTests(TestCase):
     def setUp(self):
-        self.invite_category = TrustCategoryFactory(name="INVITE")
         _set_registration_open(True)
 
     def test_creates_invite_with_token_and_pending_status(self):
         """create_game_invite generates a token and sets PENDING status."""
         player_data = PlayerDataFactory()
-        trust = PlayerTrustFactory(account=player_data.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         invite = create_game_invite(
             inviter=player_data,
             message="We need a healer!",
@@ -63,40 +42,15 @@ class CreateGameInviteTests(TestCase):
         self.assertEqual(invite.message, "We need a healer!")
         self.assertEqual(invite.inviter, player_data)
 
-    def test_rejects_inviter_without_trust_profile(self):
-        """create_game_invite raises if inviter has no trust profile."""
+    def test_any_player_may_invite_while_registration_is_open(self):
+        """No trust gate remains: registration_open is the whole rule (#3726)."""
         player_data = PlayerDataFactory()
-        # No PlayerTrust created → UNTRUSTED
-        with self.assertRaises(PermissionError):
-            create_game_invite(
-                inviter=player_data,
-                message="Come play!",
-            )
-
-    def test_rejects_inviter_below_trust_threshold(self):
-        """create_game_invite raises if inviter has UNTRUSTED level."""
-        player_data = PlayerDataFactory()
-        trust = PlayerTrustFactory(account=player_data.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.UNTRUSTED,
-        )
-        with self.assertRaises(PermissionError):
-            create_game_invite(
-                inviter=player_data,
-                message="Come play!",
-            )
+        invite = create_game_invite(inviter=player_data, message="Come play!")
+        self.assertEqual(invite.status, InviteStatus.PENDING)
 
     def test_sets_expiry_when_expires_in_days_provided(self):
         """create_game_invite sets expires_at when expires_in_days is given."""
         player_data = PlayerDataFactory()
-        trust = PlayerTrustFactory(account=player_data.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         invite = create_game_invite(
             inviter=player_data,
             message="Come play!",
@@ -107,21 +61,15 @@ class CreateGameInviteTests(TestCase):
     def test_no_expiry_by_default(self):
         """create_game_invite sets expires_at to None by default."""
         player_data = PlayerDataFactory()
-        trust = PlayerTrustFactory(account=player_data.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=self.invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         invite = create_game_invite(
             inviter=player_data,
             message="Come play!",
         )
         self.assertIsNone(invite.expires_at)
 
-    def test_rejects_trusted_inviter_when_registration_closed(self):
+    def test_rejects_inviter_when_registration_closed(self):
         """create_game_invite refuses while registration is closed (#3182)."""
-        player_data = _make_trusted_inviter(self.invite_category)
+        player_data = PlayerDataFactory()
         _set_registration_open(False)
         with self.assertRaises(RegistrationClosedError):
             create_game_invite(

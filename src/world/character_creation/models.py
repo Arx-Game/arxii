@@ -197,10 +197,6 @@ class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default=AccessLevel.ALL,
         help_text="Who can select this area in character creation",
     )
-    minimum_trust = models.IntegerField(
-        default=0,
-        help_text="Minimum trust required when access_level is 'trust_required'",
-    )
     grants_residence_tenancy = models.BooleanField(
         default=True,
         help_text="Whether finalizing a character here grants a LocationTenancy at the "
@@ -223,30 +219,10 @@ class StartingArea(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def __str__(self) -> str:
         return self.name
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Check if an account can select this starting area."""
-        if not self.is_active:
-            return False
-
-        # Staff bypass all restrictions
-        if account.is_staff:
-            return True
-
-        if self.access_level == self.AccessLevel.STAFF_ONLY:
-            return False
-
-        if self.access_level == self.AccessLevel.TRUST_REQUIRED:
-            # TODO: Implement trust system - fail closed until then. A single
-            # admin flipping an area to TRUST_REQUIRED must not 500 the origin
-            # stage for every non-staff account (#3046); mirrors
-            # Beginnings.is_accessible_by's own fail-closed AttributeError guard.
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return False
-            return account_trust >= self.minimum_trust
-
-        return True  # AccessLevel.ALL
+    # No ``is_accessible_by``: ``access_level`` is now a two-value distinction
+    # (ALL / STAFF_ONLY) that ``get_accessible_starting_areas`` expresses as a
+    # queryset filter, so every caller reads the same filtered queryset rather
+    # than a per-row predicate (#3726).
 
 
 class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
@@ -284,10 +260,6 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         on_delete=models.CASCADE,
         related_name="beginnings",
         help_text="The starting area this option belongs to",
-    )
-    trust_required = models.IntegerField(
-        default=0,
-        help_text="Minimum trust level required to see/select this option",
     )
     is_active = models.BooleanField(
         default=True,
@@ -456,22 +428,8 @@ class Beginnings(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         """
         return list(self.codex_grants.all())
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Check if an account can see/select this option."""
-        if not self.is_active:
-            return False
-
-        if account.is_staff:
-            return True
-
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return self.trust_required == 0
-            return account_trust >= self.trust_required
-
-        return True
+    # No ``is_accessible_by``: ``is_active`` is the only thing that gates a
+    # Beginnings now, and every consumer already filters on it (#3726).
 
     def get_available_species(self) -> models.QuerySet:
         """
@@ -750,9 +708,9 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
     itself (``["starting_area", "name"]``) and ``BeginningTradition``
     (``["beginning", "tradition"]``).
 
-    Carries a CG point cost, a trust gate, and three switches for how a
-    character's family record can relate to this Upbringing: claim a
-    staff-authored family, name a new one, or have none at all (#3617).
+    Carries a CG point cost and three switches for how a character's family
+    record can relate to this Upbringing: claim a staff-authored family, name
+    a new one, or have none at all (#3617).
     """
 
     beginning = models.ForeignKey(
@@ -774,9 +732,6 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
     cg_point_cost = models.IntegerField(
         default=0,
         help_text="Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback.",
-    )
-    trust_required = models.IntegerField(
-        default=0, help_text="Minimum trust to see/select this Upbringing (#3617)."
     )
     allows_claim_family = models.BooleanField(
         default=False, help_text="Player may claim a staff-authored family (#3617)."
@@ -853,19 +808,8 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
         ``OriginTemplateSlot.related_cache_fields``."""
         return UpbringingQuestionsHandler(self)
 
-    def is_accessible_by(self, account: AccountDB) -> bool:
-        """Trust gate, mirroring ``Beginnings.is_accessible_by``."""
-        if not self.is_active:
-            return False
-        if account.is_staff:
-            return True
-        if self.trust_required > 0:
-            try:
-                account_trust = account.trust
-            except AttributeError:
-                return False
-            return account_trust >= self.trust_required
-        return True
+    # No ``is_accessible_by``: ``is_active`` is the only thing that gates an
+    # Upbringing now, and every consumer already filters on it (#3726).
 
     # No ``clean()`` for the name path's Family Template rule. A model's
     # ``clean()`` can only read ``self.family_templates`` off the database, and a
@@ -1093,9 +1037,6 @@ class OriginTemplateSlotChoice(NaturalKeyMixin, CreditedContent, SharedMemoryMod
     reputation_seed = models.IntegerField(
         default=0,
         help_text="Starting opinion of the anchor toward the character, -1000 to 1000 (#3660).",
-    )
-    trust_required = models.IntegerField(
-        default=0, help_text="Minimum trust to see this answer; staff always see it (#3660)."
     )
     is_active = models.BooleanField(default=True)
     sort_order = models.PositiveSmallIntegerField(default=0)

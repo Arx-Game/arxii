@@ -40,7 +40,9 @@ Character creation is a multi-stage process that guides players through creating
 - Selectable origin locations with crest images
 - Gates which heritage options, species, and families are available
 - Maps to an Evennia room for character starting location
-- Access control: all players, trust-required, or staff-only
+- Access control (`access_level`): all players, or staff-only. Applied as a queryset
+  filter in `get_accessible_starting_areas`; there is no per-row accessibility flag
+  on the serializer, so an area a reader is served is one they may pick (ADR-0293)
 
 ### Beginnings
 - Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten -
@@ -49,14 +51,14 @@ Character creation is a multi-stage process that guides players through creating
 - Family paths are gated per-Upbringing instead, on `OriginTemplate` (#3617); Beginnings
   itself carries no family-known flag
 - Can override starting room (e.g., Sleeper Wake Room)
-- Has CG point cost and trust requirements
+- Has a CG point cost; `is_active` is its only gate
 
 ### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648, #3660)
 Full model shape, family-path resolution, pricing, and the authoring recipes live in
 `docs/systems/character_creation.md`'s Lineage step section and
 `docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
 CG copy) is the authored content row a player picks within a Beginning, carrying a CG
-point cost, a trust gate, and which family paths it allows (claim/name/none);
+point cost and which family paths it allows (claim/name/none);
 `OriginTemplateSlot` is an authored prompt scoped to a path (`applies_to`), and
 `OriginTemplateSlotChoice` is a priced pick-list answer (`cost_for(influence)`).
 `OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name `upbringings`,
@@ -212,7 +214,7 @@ for the five-branch validation gate this data must satisfy before submission.
 Returns StartingArea queryset filtered by account access level.
 
 ### `can_create_character(account)`
-Checks if account can create characters (verified, positive trust, under limit).
+Checks if account can create characters (email verified, under the character limit).
 
 ## Gender & Pronouns
 

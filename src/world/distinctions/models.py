@@ -173,22 +173,6 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         help_text="If True, only one variant of this parent can be selected per character.",
     )
 
-    # Trust gating - some distinctions require staff trust
-    # Non-null trust_value implies trust is required
-    trust_value = models.PositiveIntegerField(
-        null=True,
-        blank=True,
-        help_text="Minimum trust value required to take this distinction.",
-    )
-    trust_category = models.ForeignKey(
-        "arxii.TrustCategory",
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="gated_distinctions",
-        help_text="Trust category required to take this distinction.",
-    )
-
     # Mutual exclusions - symmetrical M2M
     mutually_exclusive_with = models.ManyToManyField(
         "self",
@@ -293,11 +277,6 @@ class Distinction(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     def is_variant_parent(self) -> bool:
         """Check if this distinction has variants (computed from related objects)."""
         return self.variants.exists()
-
-    @property
-    def trust_required(self) -> bool:
-        """Check if this distinction requires trust (has non-null trust_value)."""
-        return self.trust_value is not None
 
     @cached_property
     def cached_effects(self) -> list["DistinctionEffect"]:

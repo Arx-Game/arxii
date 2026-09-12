@@ -95,9 +95,9 @@ def _open_places(template: OriginTemplate, user: AccountDB) -> int | str:
 
     Built on an unsaved ``CharacterDraft`` - never written to the database -
     the same shape ``reachable_vacancies`` expects from the guided flow. An
-    in-progress route with no ``beginning``/``starting_area`` set yet, a bad
-    queryset evaluation, or an odd ``account.trust`` all degrade this one
-    rail tile rather than 500ing the whole Builder page (#3660 review Ruling
+    in-progress route with no ``beginning``/``starting_area`` set yet or a
+    bad queryset evaluation degrades this one rail tile rather than 500ing
+    the whole Builder page (#3660 review Ruling
     I, amended): concrete exception classes only, never a blind catch-all
     (the repo's broad-except ratchet count may only go down, so a new site
     here is not allowed regardless of justification).
