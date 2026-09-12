@@ -551,7 +551,6 @@ describe('CommandInput', () => {
   // ---------------------------------------------------------------------------
 
   it('a REST pose retry of unmodified content reuses the same client_request_id (#3760 fix)', () => {
-    sessionStorage.setItem('arx:play-draft:v1:pose-retry-scope', 'looks around');
     seedDraft(
       {
         status: 'rejected',
@@ -1071,7 +1070,6 @@ describe('CommandInput', () => {
     it('"Resume & retry" redispatches under the ORIGINALLY stored whisper mode even though the live composerMode has since changed to pose', () => {
       // Bob is resolvable via the `@/store/hooks` mock's roomCharacters (dbref
       // #501) — see the top of this file.
-      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
       seedDraft(
         {
           status: 'pending',
@@ -1098,7 +1096,6 @@ describe('CommandInput', () => {
     });
 
     it('an ordinary Send on an untouched rejected whisper draft redispatches as whisper, not the live pose mode (the Send-button leak)', () => {
-      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
       seedDraft(
         {
           status: 'rejected',
@@ -1131,7 +1128,6 @@ describe('CommandInput', () => {
       // roomCharacters, so the whisper branch's target lookup fails and
       // handleSubmit falls through to the legacy `send()` path instead of
       // `executeAction`, exactly the condition Finding 4 describes.
-      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'a secret for someone gone');
       seedDraft(
         {
           status: 'pending',
@@ -1158,7 +1154,6 @@ describe('CommandInput', () => {
     });
 
     it('editing the text after a stranded whisper draft picks up the CURRENT live mode instead (an edit is a genuinely new attempt)', () => {
-      sessionStorage.setItem('arx:play-draft:v1:test-scope', 'secret message');
       seedDraft(
         {
           status: 'rejected',
@@ -1359,6 +1354,227 @@ describe('CommandInput', () => {
         expect(screen.queryByText('Sending…')).not.toBeInTheDocument();
         expect(screen.queryByText(/Unsent draft from/)).not.toBeInTheDocument();
       });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // One draft store (#3784) — the composer used to keep a second, v1-keyed
+  // sessionStorage string that was what actually hydrated the textarea, and
+  // hand-sync it with `useDraftStore` in five places. These cover the
+  // behaviours that survived only because both copies happened to agree.
+  // ---------------------------------------------------------------------------
+
+  describe('single draft store (#3784)', () => {
+    function storedDraft(conversationKey: string, personaId = 0): Draft {
+      const raw = sessionStorage.getItem(
+        draftStorageKey({ accountId: 0, personaId, conversationKey })
+      );
+      expect(raw).not.toBeNull();
+      return JSON.parse(raw as string) as Draft;
+    }
+
+    it('hydrates the textarea from the stored draft content on mount', () => {
+      seedDraft({ content: 'half a thought', status: 'clean', clientRequestId: null }, 'room:1');
+
+      render(<CommandInput character="Alice" draftScope="room:1" />);
+
+      expect(screen.getByRole('textbox')).toHaveValue('half a thought');
+    });
+
+    it('writes typed text straight to the draft row, with no second key alongside it', () => {
+      // Fake timers on purpose: the retired v1 copy was written on a 500ms
+      // debounce, so a real-timer assertion here would pass either way and
+      // guard nothing. Letting that timer come due is what makes "exactly one
+      // persisted key" a claim about the code rather than about test timing.
+      vi.useFakeTimers();
+      try {
+        render(<CommandInput character="Alice" draftScope="room:1" />);
+        fireEvent.change(screen.getByRole('textbox'), { target: { value: 'a line in progress' } });
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+
+        expect(storedDraft('room:1').content).toBe('a line in progress');
+        expect(Object.keys(sessionStorage)).toEqual([
+          draftStorageKey({ accountId: 0, personaId: 0, conversationKey: 'room:1' }),
+        ]);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('swaps drafts when draftScope changes and carries no text between rooms', () => {
+      seedDraft(
+        { content: 'left in the taproom', status: 'clean', clientRequestId: null },
+        'room:1'
+      );
+      const { rerender } = render(<CommandInput character="Alice" draftScope="room:1" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textarea.value).toBe('left in the taproom');
+
+      // Walking through an exit: a different conversation, its own empty draft.
+      rerender(<CommandInput character="Alice" draftScope="room:2" />);
+      expect(textarea.value).toBe('');
+      fireEvent.change(textarea, { target: { value: 'composed upstairs' } });
+
+      // ...and back. Each room kept its own unsent text.
+      rerender(<CommandInput character="Alice" draftScope="room:1" />);
+      expect(textarea.value).toBe('left in the taproom');
+      expect(storedDraft('room:2').content).toBe('composed upstairs');
+    });
+
+    // #3784 — a draft typed during "Entering world" used to vanish the moment
+    // presence arrived: `GameWindow` scopes the room-anchor draft as
+    // `room:${roomId ?? 'unknown'}` (#3760 Task 14), so the text persisted
+    // under the placeholder while the composer re-keyed to the real room and
+    // hydrated an empty row. Covered end to end by `e2e/game-entry.spec.ts`;
+    // this is the component-level guard for the prop that fixes it.
+    it('carries the draft into the real room when a provisional scope settles', () => {
+      const { rerender } = render(
+        <CommandInput
+          character="Alice"
+          draftScope="room:unknown"
+          draftScopeSettling={{ provisional: true, conversation: 'room-anchor' }}
+        />
+      );
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'A quiet beginning.' } });
+
+      rerender(
+        <CommandInput
+          character="Alice"
+          draftScope="room:2"
+          draftScopeSettling={{ conversation: 'room-anchor' }}
+        />
+      );
+
+      expect(textarea.value).toBe('A quiet beginning.');
+      expect(storedDraft('room:2').content).toBe('A quiet beginning.');
+      expect(
+        sessionStorage.getItem(
+          draftStorageKey({ accountId: 0, personaId: 0, conversationKey: 'room:unknown' })
+        )
+      ).toBeNull();
+    });
+
+    // A conversation tab opening before `room_state` arrives is a different
+    // audience, not the same one being named — the room pose must not follow
+    // it into the whisper composer.
+    it('does not carry a provisional draft into a conversation tab that opens first', () => {
+      seedDraft(
+        { content: 'meant only for Bob', status: 'clean', clientRequestId: null },
+        'whisper:9'
+      );
+      const { rerender } = render(
+        <CommandInput
+          character="Alice"
+          draftScope="room:unknown"
+          draftScopeSettling={{ provisional: true, conversation: 'room-anchor' }}
+        />
+      );
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'a pose for the whole room' } });
+
+      rerender(
+        <CommandInput
+          character="Alice"
+          draftScope="whisper:9"
+          draftScopeSettling={{ conversation: 'whisper:9' }}
+        />
+      );
+
+      expect(textarea.value).toBe('meant only for Bob');
+      expect(storedDraft('whisper:9').content).toBe('meant only for Bob');
+    });
+
+    it('appends a @target onto the existing draft and persists the result', () => {
+      const onTargetConsumed = vi.fn();
+      const { rerender } = render(
+        <CommandInput character="Alice" draftScope="room:1" onTargetConsumed={onTargetConsumed} />
+      );
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'nods at' } });
+
+      rerender(
+        <CommandInput
+          character="Alice"
+          draftScope="room:1"
+          targetToAppend="Bob"
+          onTargetConsumed={onTargetConsumed}
+        />
+      );
+
+      expect(textarea.value).toBe('nods at @Bob');
+      expect(storedDraft('room:1').content).toBe('nods at @Bob');
+      expect(onTargetConsumed).toHaveBeenCalled();
+    });
+
+    it('a rejected send keeps its text on screen AND in storage, ready to retry', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} draftScope="room:1" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello there' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      act(() => {
+        emitActionResult({
+          success: false,
+          message: 'You have been muted.',
+          data: null,
+          client_request_id: lastDispatchedRequestId(),
+        });
+      });
+
+      expect(textarea.value).toBe('hello there');
+      const stored = storedDraft('room:1');
+      expect(stored.content).toBe('hello there');
+      expect(stored.status).toBe('rejected');
+    });
+
+    it('an ack clears content and status together — the pair that used to be able to drift', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} draftScope="room:1" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello there' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      act(() => {
+        emitActionResult({
+          success: true,
+          message: null,
+          data: null,
+          client_request_id: lastDispatchedRequestId(),
+        });
+      });
+
+      expect(textarea.value).toBe('');
+      const stored = storedDraft('room:1');
+      expect(stored.content).toBe('');
+      expect(stored.status).toBe('clean');
+      expect(stored.clientRequestId).toBeNull();
+    });
+
+    it('recalls a sent command with ArrowUp once the composer is empty again', () => {
+      const mode: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={mode} draftScope="room:1" />);
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+
+      fireEvent.change(textarea, { target: { value: 'hello there' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      act(() => {
+        emitActionResult({
+          success: true,
+          message: null,
+          data: null,
+          client_request_id: lastDispatchedRequestId(),
+        });
+      });
+      expect(textarea.value).toBe('');
+
+      fireEvent.keyDown(textarea, { key: 'ArrowUp' });
+
+      expect(textarea.value).toBe('hello there');
+      expect(storedDraft('room:1').content).toBe('hello there');
     });
   });
 });

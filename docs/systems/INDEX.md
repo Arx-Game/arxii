@@ -3397,7 +3397,9 @@ action consent flow, and a three-mode non-combat round framework.
   communication.py`) requires a genuine `PlacePresence` before trusting a
   client-asserted place id for tabletalk sends. Frontend: `useDraftStore`
   (`frontend/src/game/useDraftStore.ts`) persists one draft per account/persona/
-  conversation to `sessionStorage`, preserving the original send `mode` across an
+  conversation to `sessionStorage` — the composer's single source of truth for its own
+  text since #3784 (`draft.content` is the textarea's value; no parallel local string) —
+  preserving the original send `mode` across an
   unmodified retry (never re-derived from whatever mode is live at retry time — closes
   a real privacy leak where a stranded whisper draft could redispatch as a public
   say/pose) and re-capturing it fresh only on a genuine content edit;
@@ -3406,7 +3408,10 @@ action consent flow, and a three-mode non-combat round framework.
   counter discards belated frames/callbacks from a superseded connection; and the
   room-anchor composer's `draftScope` is keyed on the character's actual physical room
   id (`GamePage`'s `roomData?.id`), not a constant string, so walking through an exit no
-  longer carries unsent text into the wrong room's composer. See
+  longer carries unsent text into the wrong room's composer — with the entry-time
+  placeholder (`room:unknown`, before the first `room_state`) declared provisional
+  (#3784) so a draft typed during "Entering world" moves into the room once it is
+  identified instead of being stranded under the placeholder. See
   [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
   Drafts" for the full contract.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),

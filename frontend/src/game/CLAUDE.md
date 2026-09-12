@@ -165,7 +165,16 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   chatter shown alongside the structured scene feed (#2156) — no
   `bg-black`/`font-mono`, just a quiet compact strip that expands on click.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
-  newline, command history. Optional `speakingAs?: { name, thumbnailUrl }`
+  newline, command history. **All composer text lives in `useDraftStore`**
+  (#3784): `draft.content` is the textarea's `value` and `setContent` is the
+  only write path — never add a second local string or storage key mirroring
+  it. Clearing on a successful send is `acknowledge(clientRequestId)` alone;
+  it already no-ops when a newer edit has nulled that id, so no extra
+  "is the textarea still showing what was sent" check is needed.
+  `draftScopeSettling` names the conversation a draft belongs to and whether
+  its scope can address that conversation yet (`GameWindow`'s `room:unknown`
+  during entry), so the draft moves with the scope when it settles rather
+  than being stranded — and never moves to a different audience. Optional `speakingAs?: { name, thumbnailUrl }`
   prop (#2166) renders a compact `PersonaAvatar` + name chip at the start of
   `leftSlot`, before `ModeSelector` — a standing "who am I talking as right
   now" identity marker on the composer, shown even for single-character

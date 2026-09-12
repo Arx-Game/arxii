@@ -6,7 +6,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
-import type { DraftKey, DraftMode } from '@/game/useDraftStore';
+import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
@@ -136,6 +136,16 @@ interface CommandInputProps {
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
   /**
+   * Whether `draftScope` is still settling, and which conversation it names
+   * while it does (#3784) — `GameWindow`'s room-anchor scope carries a
+   * `room:unknown` placeholder during "Entering world", before the first
+   * `room_state` identifies the room. Declaring it lets the draft move with
+   * the scope when it settles instead of being stranded under the
+   * placeholder; see `DraftScopeSettling`. Omit it entirely when the scope is
+   * settled from the first render (a conversation tab, a scene composer).
+   */
+  draftScopeSettling?: DraftScopeSettling;
+  /**
    * Human-readable current place name (#3760 demo-fidelity review), e.g.
    * "the Gilded Hart" — used only for the stranded-draft banner's copy. Never
    * falls back to `draftScope` itself, which is an internal cache key, not
@@ -167,64 +177,16 @@ export function CommandInput({
   speakingAs,
   submitOnEnter = true,
   draftScope,
+  draftScopeSettling,
   roomName,
   replyTarget,
   onCancelReply,
   ready = true,
 }: CommandInputProps) {
-  const draftStorageKey = draftScope ? `arx:play-draft:v1:${draftScope}` : null;
-  const [command, setCommand] = useState(() => {
-    if (!draftStorageKey) return '';
-    try {
-      return sessionStorage.getItem(draftStorageKey) ?? '';
-    } catch {
-      return '';
-    }
-  });
+  // Sent-command recall (ArrowUp). Session-only and deliberately NOT part of
+  // the draft: it is a log of what already went out, not composer state.
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const previousDraftKey = useRef(draftStorageKey);
-  const skipPersistOnce = useRef(false);
-  const suppressDraftFlush = useRef(false);
-  useEffect(() => {
-    if (previousDraftKey.current === draftStorageKey) return;
-    previousDraftKey.current = draftStorageKey;
-    skipPersistOnce.current = true;
-    try {
-      setCommand(draftStorageKey ? (sessionStorage.getItem(draftStorageKey) ?? '') : '');
-    } catch {
-      setCommand('');
-    }
-  }, [draftStorageKey]);
-  useEffect(() => {
-    if (skipPersistOnce.current) {
-      skipPersistOnce.current = false;
-      return;
-    }
-    if (!draftStorageKey) return;
-    const timer = window.setTimeout(() => {
-      try {
-        if (command) sessionStorage.setItem(draftStorageKey, command);
-        else sessionStorage.removeItem(draftStorageKey);
-      } catch {
-        /* Storage can be unavailable; the in-memory draft remains usable. */
-      }
-    }, 500);
-    return () => {
-      window.clearTimeout(timer);
-      // A reference view can temporarily unmount the composer. Flush the
-      // current draft so opening history immediately cannot lose text.
-      if (suppressDraftFlush.current) {
-        suppressDraftFlush.current = false;
-        return;
-      }
-      try {
-        if (draftStorageKey && command) sessionStorage.setItem(draftStorageKey, command);
-      } catch {
-        /* keep the in-memory draft when storage is unavailable */
-      }
-    };
-  }, [command, draftStorageKey]);
   // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
   const [isEntrance, setIsEntrance] = useState(false);
   // #3294 — pose as this bonded, present companion instead of yourself. Sticky
@@ -249,13 +211,20 @@ export function CommandInput({
   // that omits `auth` entirely, and this must not throw for them.
   const accountId = useAppSelector((state) => state.auth?.account?.id) ?? 0;
 
-  // #3760 Task 10 — say/whisper draft acknowledgement (Task 8's
-  // `useDraftStore`). Keyed by `draftScope` (falling back to a
-  // per-character default), the same scope the legacy `command`/
-  // sessionStorage-v1 draft below already uses — mode-switching within one
-  // conversation tab already shares one textarea/draft today, so sharing one
-  // `useDraftStore` slot across say/whisper modes on the same tab is not a
-  // new behavior.
+  // #3760 Task 10 / #3784 — THE draft store, and the only one. Keyed by
+  // `draftScope` (falling back to a per-character default); mode-switching
+  // within one conversation tab already shares a single textarea, so one
+  // slot per tab covers say/whisper/tt/pose alike.
+  //
+  // #3784 — `draft.content` IS the textarea's value. The composer used to
+  // also keep a separate `arx:play-draft:v1:<scope>` string that was what
+  // actually hydrated the textarea, hand-synced with this store in five
+  // places (`handleChange`, `clearStoredDraft`, the REST-pose success
+  // branch, the WS ack handler, the legacy-WS fallback). Every new
+  // draft-touching call site had to remember all five, which is precisely
+  // the bug #3760's final review caught in the fallback branch (v1 cleared,
+  // v2 left `pending`, so the stranded banner re-rendered over an empty
+  // textarea). One store, so there is nothing left to keep in agreement.
   const draftKey = useMemo<DraftKey>(
     () => ({
       accountId,
@@ -264,14 +233,22 @@ export function CommandInput({
     }),
     [accountId, personaId, draftScope, character]
   );
-  const draftStore = useDraftStore(draftKey);
-  const { draft } = draftStore;
-  // Mirrors `command` without forcing `handleActionResult` (below) to
-  // resubscribe to the action-result bus on every keystroke.
-  const commandRef = useRef(command);
-  useEffect(() => {
-    commandRef.current = command;
-  }, [command]);
+  // Destructured rather than held as a `draftStore` object: the hook returns
+  // a fresh object literal every render, so an effect or callback that
+  // depended on it would re-run every render. Each function below is a
+  // `useCallback` keyed on the draft key, which is what the deps arrays
+  // actually want. `reject` is aliased because this file is dense with
+  // promise chains, where a bare `reject` reads as a promise rejector.
+  const {
+    draft,
+    setContent,
+    beginSend,
+    acknowledge,
+    reject: rejectDraft,
+    markUnknown,
+    discard,
+    storageUnavailable,
+  } = useDraftStore(draftKey, draftScopeSettling);
   // The most recently dispatched say/whisper/tt send awaiting its
   // ACTION_RESULT. `ActionResultPayload.client_request_id` (#3781) echoes
   // back the id this component minted for the dispatch, so
@@ -286,16 +263,6 @@ export function CommandInput({
     queryFn: () => fetchScene(sceneId!),
     enabled: !!sceneId,
   });
-
-  const clearStoredDraft = useCallback(() => {
-    suppressDraftFlush.current = true;
-    if (!draftStorageKey) return;
-    try {
-      sessionStorage.removeItem(draftStorageKey);
-    } catch {
-      /* keep in memory */
-    }
-  }, [draftStorageKey]);
 
   // #3760 Task 11 — a `pending`/`unknown` draft hydrated from storage with
   // NO live send in flight means the tab was reopened (or navigated back to)
@@ -358,22 +325,20 @@ export function CommandInput({
     if (!clientRequestId) return;
     checkSubmissionStatus().then((result) => {
       if (result.data) {
-        // Found: the send landed after all. Same ack-gated clearing as a
-        // live ACTION_RESULT success (only clears `command` when it still
-        // matches the content that was actually sent). Also clears
-        // `pendingSpeechRef` when it's still tracking this exact send — the
-        // Task 12 reconnect effect above deliberately leaves it set through
-        // the live `unknown` transition (Finding 1 fix), so this is where
-        // that tracking is finally retired now that the send is genuinely
-        // resolved.
+        // Found: the send landed after all. Clears `pendingSpeechRef` when
+        // it's still tracking this exact send — the Task 12 reconnect effect
+        // below deliberately leaves it set through the live `unknown`
+        // transition (Finding 1 fix), so this is where that tracking is
+        // finally retired now that the send is genuinely resolved.
         if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
           pendingSpeechRef.current = null;
         }
-        draftStore.acknowledge(clientRequestId);
-        if (commandRef.current === draft.content) {
-          setCommand('');
-          clearStoredDraft();
-        }
+        // #3784 — `acknowledge()` clears the draft, textarea content
+        // included, only while `clientRequestId` still matches; an edit
+        // since the send nulls that id through `setContent()`. The
+        // "don't clobber a newer, unsent edit" rule is therefore the store's
+        // own invariant, not a second check here that has to agree with it.
+        acknowledge(clientRequestId);
       } else if (!result.error) {
         toast.error('No record of that send — safe to retry.');
       } else {
@@ -382,22 +347,15 @@ export function CommandInput({
         );
       }
     });
-  }, [draft.clientRequestId, draft.content, checkSubmissionStatus, draftStore, clearStoredDraft]);
-
-  const handleDiscardStrandedDraft = useCallback(() => {
-    draftStore.discard();
-    setCommand('');
-    clearStoredDraft();
-  }, [draftStore, clearStoredDraft]);
+  }, [draft.clientRequestId, checkSubmissionStatus, acknowledge]);
 
   // #3760 Task 10 — resolves the say/whisper dispatch tracked in
   // `pendingSpeechRef`: acknowledge/clear on success, reject + toast on
   // failure. Ack-gated clearing (mirrors the REST `submitPose` path just
   // below: the draft is only cleared on success — a rejected/failed send
-  // must not silently eat the player's text). Guards against clobbering a
-  // newer, unsent edit the same way `useDraftStore.acknowledge` guards its
-  // own state: only clears `command` when it still matches the text that was
-  // actually sent.
+  // must not silently eat the player's text), and a newer, unsent edit
+  // survives it because `acknowledge` no-ops once `setContent` has nulled
+  // the id this send was dispatched under (#3784).
   // #3781 — the event is only THIS send's ack/reject when its
   // `client_request_id` matches the id minted for `pending`; any other
   // concurrent action's result (unrelated `client_request_id`, or none) is
@@ -409,19 +367,20 @@ export function CommandInput({
       if (payload.client_request_id !== pending.clientRequestId) return;
       pendingSpeechRef.current = null;
       if (payload.success) {
-        draftStore.acknowledge(pending.clientRequestId);
-        if (commandRef.current === pending.text) {
-          setHistory((prev) => [...prev, pending.text]);
-          setHistoryIndex(-1);
-          setCommand('');
-          clearStoredDraft();
-        }
+        acknowledge(pending.clientRequestId);
+        // Recorded unconditionally: this text demonstrably went out, so
+        // ArrowUp should recall it whether or not the player has since
+        // started typing something else (#3784 — it used to ride the same
+        // guard as the clear, which conflated "was it sent" with "is the
+        // textarea still showing it").
+        setHistory((prev) => [...prev, pending.text]);
+        setHistoryIndex(-1);
       } else {
-        draftStore.reject(pending.clientRequestId, payload.message ?? 'Failed to send.');
+        rejectDraft(pending.clientRequestId, payload.message ?? 'Failed to send.');
         toast.error(payload.message ?? 'Failed to send.');
       }
     },
-    [draftStore, clearStoredDraft]
+    [acknowledge, rejectDraft]
   );
   useActionResult(handleActionResult);
 
@@ -469,15 +428,7 @@ export function CommandInput({
     if (!pending) return;
     if (readStoredDraft(draftKey).status === 'clean') {
       pendingSpeechRef.current = null;
-      draftStore.acknowledge(pending.clientRequestId);
-      // Mirrors `handleActionResult`'s own success path: only clears the
-      // visible textarea when it still matches the text that was actually
-      // sent, so a newer, unsent edit typed while disconnected is never
-      // clobbered.
-      if (commandRef.current === pending.text) {
-        setCommand('');
-        clearStoredDraft();
-      }
+      acknowledge(pending.clientRequestId);
       return;
     }
     // Demo-fidelity review Finding 1 (#3760) — deliberately do NOT null
@@ -491,15 +442,15 @@ export function CommandInput({
     // cleared once this send is genuinely resolved: by `handleCheckStatus`
     // below when its lookup finds a record, or by a fresh `beginSend()`/
     // `discard()` on retry — the same paths that already clear it elsewhere.
-    draftStore.markUnknown(pending.clientRequestId);
+    markUnknown(pending.clientRequestId);
     handleCheckStatus();
-  }, [ready, draftStore, draftKey, handleCheckStatus, clearStoredDraft]);
+  }, [ready, acknowledge, markUnknown, draftKey, handleCheckStatus]);
 
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
-    const trimmed = command.trim();
+    const trimmed = draft.content.trim();
     if (!trimmed) return;
-    if (command.length > MAX_POSE_LENGTH) {
+    if (draft.content.length > MAX_POSE_LENGTH) {
       toast.error(`Your pose is too long. Maximum ${MAX_POSE_LENGTH.toLocaleString()} characters.`);
       return;
     }
@@ -560,25 +511,20 @@ export function CommandInput({
     // a rejected request (e.g. a 409 payload conflict on id reuse) keeps the
     // player's text so a retry doesn't mean retyping the whole emote.
     if (asCompanion) {
-      const clientRequestId = draftStore.beginSend(liveSpeechMode);
+      const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       companionEmote(asCompanion.id, trimmed, clientRequestId)
         .then(() => {
-          draftStore.acknowledge(clientRequestId);
-          // Finding 5 fix (#3760 final review) — mirrors the REST-pose
-          // branch's and the WS ack handler's own guard: only clear what's
-          // on screen if it still matches what was actually sent, so a
-          // newer edit made while this request was in flight survives.
-          if (commandRef.current === trimmed) {
-            setHistory((prev) => [...prev, trimmed]);
-            setHistoryIndex(-1);
-            setCommand('');
-            clearStoredDraft();
-          }
+          // Finding 5 (#3760 final review) — a newer edit made while this
+          // request was in flight survives, because `acknowledge` no-ops
+          // once that edit nulled the dispatched id (#3784).
+          acknowledge(clientRequestId);
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
-          draftStore.reject(clientRequestId, message);
+          rejectDraft(clientRequestId, message);
           toast.error(message);
         })
         .finally(() => {
@@ -616,7 +562,7 @@ export function CommandInput({
     // composerMode read) decides which branch fires, per the critical-fix
     // comment above `resolvedSpeechMode`'s own declaration.
     if (resolvedSpeechMode && resolvedSpeechMode.command === 'say') {
-      const clientRequestId = draftStore.beginSend(liveSpeechMode);
+      const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
       submittingRef.current = false;
@@ -638,7 +584,7 @@ export function CommandInput({
       const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
       const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
       if (whisperTargetId > 0) {
-        const clientRequestId = draftStore.beginSend(liveSpeechMode);
+        const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         executeAction(character, 'whisper', {
           text: trimmed,
@@ -661,7 +607,7 @@ export function CommandInput({
       // place, or the query hasn't loaded), fall through to the legacy
       // `send()` path below rather than risk a room-wide broadcast.
       if (currentPlaceId != null) {
-        const clientRequestId = draftStore.beginSend(liveSpeechMode);
+        const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
         executeAction(character, 'pose', {
           text: trimmed,
@@ -707,7 +653,7 @@ export function CommandInput({
       // it and the server's error surfaces via toast so a retry doesn't mean
       // retyping the whole pose.
       const composerTargets = composerMode?.targets ?? [];
-      const clientRequestId = draftStore.beginSend(liveSpeechMode);
+      const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
       submitPose({
         persona_id: personaId,
@@ -723,18 +669,13 @@ export function CommandInput({
           : {}),
       })
         .then((response) => {
-          draftStore.acknowledge(clientRequestId);
+          // A newer edit made after the request went out survives this ack:
+          // `acknowledge` only clears while the dispatched id is still the
+          // draft's, and `setContent` nulled it on that edit (#3784).
+          acknowledge(clientRequestId);
           onPoseSubmitted?.();
-          // Only clear what's on screen if it still matches what was
-          // actually sent — a newer edit made after the request went out
-          // must survive this ack (mirrors `handleActionResult`'s WS-path
-          // guard above, the exact safety property Task 8 built).
-          if (commandRef.current === trimmed) {
-            setHistory((prev) => [...prev, trimmed]);
-            setHistoryIndex(-1);
-            setCommand('');
-            clearStoredDraft();
-          }
+          setHistory((prev) => [...prev, trimmed]);
+          setHistoryIndex(-1);
           setIsEntrance(false);
           // #2183 — an entrance technique was attached: dispatch it now that
           // the entry pose exists, so EntranceAction can anchor to it. Plain
@@ -756,7 +697,7 @@ export function CommandInput({
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to submit pose.';
-          draftStore.reject(clientRequestId, message);
+          rejectDraft(clientRequestId, message);
           toast.error(message);
         })
         .finally(() => {
@@ -782,26 +723,27 @@ export function CommandInput({
     // banner re-rendered on the next tick over the now-emptied textarea,
     // dismissible only via Discard. `discard()` (not `acknowledge()`, which
     // requires a matching `clientRequestId` this fire-and-forget path never
-    // tracks) resets the v2 draft to clean, matching the v1
-    // `clearStoredDraft()` call right below it.
-    draftStore.discard();
+    // tracks) resets the draft to clean — which, since #3784, is also what
+    // empties the textarea: one call, not a pair that can drift apart.
+    discard();
 
     setHistory((prev) => [...prev, trimmed]);
     setHistoryIndex(-1);
-    setCommand('');
-    clearStoredDraft();
     // I3: Clear synchronously — React batches the state updates above,
     // so this runs on the same tick and prevents double-submission.
     submittingRef.current = false;
   }, [
     character,
-    command,
     composerMode,
+    draft.content,
     draft.status,
     draft.mode,
     send,
     executeAction,
-    draftStore,
+    beginSend,
+    acknowledge,
+    rejectDraft,
+    discard,
     roomCharacters,
     currentPlaceId,
     actionAttachment,
@@ -814,17 +756,16 @@ export function CommandInput({
     onPoseSubmitted,
     isEntrance,
     entranceTechnique,
-    clearStoredDraft,
     ready,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'ArrowUp' && command === '') {
+    if (e.key === 'ArrowUp' && draft.content === '') {
       e.preventDefault();
       if (history.length > 0) {
         const newIndex = historyIndex <= 0 ? history.length - 1 : historyIndex - 1;
         setHistoryIndex(newIndex);
-        setCommand(history[newIndex]);
+        setContent(history[newIndex]);
       }
     }
   };
@@ -854,19 +795,18 @@ export function CommandInput({
 
   const handleChange = useCallback(
     (val: string) => {
-      setCommand(val);
       setHistoryIndex(-1);
-      // Keeps `draftStore.draft.content` in sync with what's on screen so
-      // `beginSend()` (called at submit time, a later render) can correctly
-      // tell "same content as last send" (reuse the id — protects against a
-      // double-Enter double-dispatch) from "new content" (mint a fresh id).
-      // `beginSend()`'s own doc comment warns against calling `setContent`
-      // and `beginSend` back to back in one synchronous handler — this is
-      // why the sync lives here, in the change handler, one render ahead of
-      // any submit, rather than inline in `handleSubmit`.
-      draftStore.setContent(val);
+      // The single write path for composer text (#3784). The store holds the
+      // content AND the send-state (`clientRequestId`/`status`/`mode`) that
+      // `beginSend()` reads at submit time, so an edit invalidating an
+      // in-flight attempt is one call that cannot half-apply. It also has to
+      // happen HERE, a render ahead of any submit: `beginSend()`'s doc
+      // comment warns against calling `setContent` and `beginSend` back to
+      // back in one synchronous handler, since the latter reads the draft
+      // from its render closure.
+      setContent(val);
     },
-    [draftStore]
+    [setContent]
   );
 
   const ghostText = useMemo(() => {
@@ -911,18 +851,20 @@ export function CommandInput({
 
   // Append @name when a pending target arrives
   useEffect(() => {
-    if (targetToAppend) {
-      setCommand((prev) => {
-        const prefix = prev.trim() ? prev + ' ' : '';
-        return `${prefix}@${targetToAppend}`;
-      });
-      onTargetConsumed?.();
-    }
-  }, [targetToAppend, onTargetConsumed]);
+    if (!targetToAppend) return;
+    // The updater form (#3784) reads the CURRENT content inside the store's
+    // own setState, so this effect never has to depend on `draft.content` —
+    // which would re-run it on every keystroke.
+    setContent((previous) => {
+      const prefix = previous.trim() ? previous + ' ' : '';
+      return `${prefix}@${targetToAppend}`;
+    });
+    onTargetConsumed?.();
+  }, [targetToAppend, onTargetConsumed, setContent]);
 
   return (
     <div className="play-composer-safe shrink-0 border-t">
-      {draftStore.storageUnavailable && (
+      {storageUnavailable && (
         <div
           className="flex items-center gap-2 bg-muted/60 px-3 py-1.5 text-xs text-muted-foreground"
           data-testid="storage-unavailable-notice"
@@ -940,11 +882,7 @@ export function CommandInput({
             time.
           </span>
           <span className="flex shrink-0 gap-2">
-            <button
-              type="button"
-              className="min-h-8 underline"
-              onClick={handleDiscardStrandedDraft}
-            >
+            <button type="button" className="min-h-8 underline" onClick={discard}>
               Discard
             </button>
             <button type="button" className="min-h-8 underline" onClick={handleSubmit}>
@@ -1008,7 +946,7 @@ export function CommandInput({
         </div>
       )}
       <RichTextInput
-        value={command}
+        value={draft.content}
         onChange={handleChange}
         onSubmit={handleSubmit}
         onKeyDown={handleKeyDown}
@@ -1081,12 +1019,12 @@ export function CommandInput({
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />
-      {(command.length > MAX_POSE_LENGTH - 500 || command.length > MAX_POSE_LENGTH) && (
+      {draft.content.length > MAX_POSE_LENGTH - 500 && (
         <p
-          className={`px-3 py-1 text-xs ${command.length > MAX_POSE_LENGTH ? 'text-destructive' : 'text-muted-foreground'}`}
-          role={command.length > MAX_POSE_LENGTH ? 'alert' : undefined}
+          className={`px-3 py-1 text-xs ${draft.content.length > MAX_POSE_LENGTH ? 'text-destructive' : 'text-muted-foreground'}`}
+          role={draft.content.length > MAX_POSE_LENGTH ? 'alert' : undefined}
         >
-          {command.length.toLocaleString()} / {MAX_POSE_LENGTH.toLocaleString()} characters
+          {draft.content.length.toLocaleString()} / {MAX_POSE_LENGTH.toLocaleString()} characters
         </p>
       )}
     </div>
