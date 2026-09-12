@@ -8179,14 +8179,13 @@
   - clash_contributions <- combat.ClashContribution
   - referencing_updates <- relationships.RelationshipUpdate
   - relationship_bumps <- relationships.RelationshipBump
+  - anchored_threads <- scenes.InteractionThread
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
   - read_receipts <- scenes.InteractionReadReceipt
   - interaction_targets <- scenes.InteractionTargetPersona
   - action_links <- scenes.InteractionAction
   - pose_links <- scenes.InteractionAction
-  - reply_link <- scenes.InteractionReply
-  - reply_children <- scenes.InteractionReply
   - pose_submission <- scenes.PoseSubmission
   - power_ledger_entries <- scenes.InteractionPowerLedgerEntry
   - action_request_result <- scenes.SceneActionRequest
@@ -8224,11 +8223,6 @@
   - persona -> scenes.Persona [FK]
   - account -> evennia.AccountDB [FK] (nullable)
 
-### InteractionReply
-**Foreign Keys:**
-  - interaction -> scenes.Interaction [FK]
-  - parent -> scenes.Interaction [FK]
-
 ### InteractionTargetPersona
 **Foreign Keys:**
   - interaction -> scenes.Interaction [FK]
@@ -8236,9 +8230,12 @@
 
 ### InteractionThread
 **Foreign Keys:**
+  - anchor_interaction -> scenes.Interaction [FK]
   - parent -> scenes.InteractionThread [FK] (nullable)
+  - root -> scenes.InteractionThread [FK] (nullable)
 **Pointed to by:**
   - child_threads <- scenes.InteractionThread
+  - descendant_threads <- scenes.InteractionThread
   - interactions <- scenes.Interaction
 
 ### Mute

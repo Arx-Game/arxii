@@ -698,9 +698,10 @@ export function CommandInput({
           : {}),
         // #3787 -- `PoseSubmitSerializer.reply_to` already accepted this
         // write-only field before this task; nothing on the web composer
-        // ever actually sent it, so a "Reply" click never created the
-        // `InteractionReply` edge the reader's parent chip renders. Carries
-        // the replied-to row's own id/timestamp verbatim (never re-derived).
+        // ever actually sent it, so a "Reply" click never anchored a thread
+        // at the answered row, which is what the reader's parent chip reads.
+        // Carries the replied-to row's own id/timestamp verbatim (never
+        // re-derived).
         ...(replyTarget
           ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
           : {}),

@@ -1,4 +1,4 @@
-# ADR-0293: Reachability governs who can be addressed; the reply parent is a sparse bridge, not a column
+# ADR-0293: Reachability governs who can be addressed; the reply parent is the thread's anchor
 
 **Status:** Accepted (#3787, 2026-09-12). Related: ADR-0170 (concealed casts record no
 target rows), ADR-0260 (per-request memo policy, unrelated mechanism but the same
@@ -70,16 +70,42 @@ be a live participant/opponent); the narrative "is this persona standing somewhe
 pose actually reaches" question does not apply to a system-authored record of a mechanical
 outcome.
 
-**Decision 4: The parent edge is a sparse bridge, not a column.** The new
-`InteractionReply` model carries the reply parent as a bridge row, not an FK column on
-`Interaction` itself: a child reference and a parent reference, each paired with its own
-denormalized timestamp, both `db_constraint=False`, unique on the child
-(`world/scenes/models.py`). `arxii_interaction` is monthly range-partitioned with a
-composite primary key `(id, timestamp)`, so an ordinary single-column database FK to its
-id cannot exist at all; the approved narrative-play spec mandates exactly this
-timestamp-aware bridge shape. Keeping the edge in its own sparse table (one row per actual
-reply, never one per Interaction) also keeps a web/narrative concern off the app's largest
-table, consistent with #3760's ruling to keep `client_request_id` off it too.
+**Decision 4: The parent edge is the thread's anchor, not a table of edges.**
+`InteractionThread` carries `anchor_interaction` + `anchor_timestamp`, both required: the
+row every member of that thread answers. The anchor is not itself a member. The `parent`
+self-FK names the thread the anchor row belongs to when the anchor is itself a reply,
+which is what makes this thread a nested one, and `root` denormalizes the top of that
+tree so a reader groups a whole exchange without walking parents. A row's `thread`
+therefore means "what I am an answer to", not "which pile I am in"; root poses keep
+`thread_id` null. `parent(row) = row.thread.anchor`, and
+`exchange(row) = row.thread.root or row.thread` (`world/scenes/models.py`,
+`world/scenes/thread_services.py`).
+
+*Rejected alternative:* a per-reply edge table (`InteractionReply`), one row per reply
+holding a child reference and a parent reference with their own denormalized timestamps.
+It was built, reviewed and merged into this branch, then removed at maintainer review.
+Rejected because a flat membership container plus a separate edge table is two mechanisms
+for one topology, and nesting expresses that topology with one. The duplication showed up
+in the rows themselves: N people answering the same blow wrote N edge rows each repeating
+the same fact, where one anchored thread carries it once. A reply to a reply is a nested
+thread, the way a mailing list nests, not a new data structure.
+
+Two things fell out of the anchored shape, and they are evidence for the decision rather
+than decoration. First, `get_reply_to` needs no join and no per-row handler: the chip's
+whole payload is `{id, timestamp}`, and both are columns on the thread row the serializer
+already joins in, so `InteractionReplyHandler` and the `list()` priming that existed only
+to feed it were both deleted and the list query budgets went down. Second,
+`InteractionThread.parent` had existed since #3757 with no writer anywhere in the
+codebase, a self-FK nothing ever set. A field designed and half-built is a strong hint
+about the shape the model was already reaching for, and the edge table was building the
+other half of it somewhere else.
+
+**The partition constraint still governs the anchor.** `arxii_interaction` is monthly
+range-partitioned with a composite primary key `(id, timestamp)`, so an ordinary
+single-column database FK to its id cannot exist at all. The anchor is therefore
+`db_constraint=False` paired with a denormalized `anchor_timestamp`, and
+`unique_thread_per_anchor` over that pair is what makes "one thread per answered row"
+true in the database rather than only in the service.
 
 **The two channels gate the parent edge differently, and the WS gate is the weaker
 one.** REST gates it per viewer on `visible_to(request.user)`
@@ -105,9 +131,11 @@ this pattern. It carries `db_constraint=False` on both its FKs but no timestamp 
 either side, so it depends on the partitioned table never actually needing the timestamp
 for a join it doesn't do. `InteractionReceiver` (`world/scenes/place_models.py`) is the
 true precedent: FK plus denormalized `timestamp`, `db_constraint=False`, for the same
-composite-PK reason `InteractionReply` needed it. Do not cite `InteractionAction` as
-justification for adding a timestamp column to a future bridge; cite `InteractionReceiver`.
+composite-PK reason the thread anchor needs it. An earlier draft of this spec cited
+`InteractionAction`, and that citation was wrong. Do not cite it as justification for
+adding a timestamp column to a future reference into the partitioned table; cite
+`InteractionReceiver`.
 
-*Rejected alternative:* an ordinary FK from `Interaction.reply_to` straight at the parent's
-id. Rejected outright, not weighed: the partitioned table's composite key makes a
-single-column FK a schema error, not a style preference.
+*Rejected alternative:* an ordinary FK column `Interaction.reply_to` pointing straight at
+the parent's id. Rejected outright, not weighed: the partitioned table's composite key
+makes a single-column FK a schema error, not a style preference.

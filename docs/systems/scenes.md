@@ -579,13 +579,19 @@ rather than offset pagination.
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.
-- `GET /api/play/threads/` (#3759, #3772) - Server-grouped, cursor-paginated (20/page)
-  thread summaries for one `conversation`, each carrying a per-account unread count via
-  `read_state_services.has_read`. Returns **reply threads only**: an interaction carries
-  a thread only when it is an explicit reply, so poses that belong to no thread are not
+- `GET /api/play/threads/` (#3759, #3772, #3787) - Server-grouped, cursor-paginated
+  (20/page) exchange summaries for one `conversation`, each carrying a per-account unread
+  count via `read_state_services.has_read`. Returns **exchanges only**: an interaction
+  carries a thread only when it is an explicit reply, so poses nobody answered are not
   emitted as single-pose groups (#3772; before that fix a 47-pose scene with 3 reply
-  chains reported 47 threads across 3 pages). Consumed by `ConversationThreadList` in
-  the History navigator's conversation drill-down.
+  chains reported 47 threads across 3 pages). Grouping is by EXCHANGE, not by thread
+  (#3787): `play_views._exchange_keys` resolves each page's thread ids to
+  `root_id or pk` and each exchange to its root thread's anchor in two flat queries, so a
+  nested back-and-forth is one group, and the answered row is prepended to its members
+  when the viewer can see it (it is the thread's anchor, not one of its members). A viewer
+  who cannot see the anchor simply gets the earliest visible reply leading, which is what
+  `firstVisible` already means. Consumed by `ConversationThreadList` in the History
+  navigator's conversation drill-down.
 - `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
   (`InteractionListSerializer`), cursor-paginated 100/page.
 - `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose

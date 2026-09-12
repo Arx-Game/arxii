@@ -1,32 +1,59 @@
 # Scene Interaction Threads
 
 Narrative interaction threads group explicit replies without changing scene history,
-privacy, or delivery rules.
+privacy, or delivery rules. A thread is anchored at the row it answers, and answering a
+reply nests a thread inside the one its anchor belongs to (#3787).
 
 **Source:** `src/world/scenes/`
 **API:** `POST /api/interactions/submit-pose/` accepts an optional write-only `reply_to` target.
 
 ## Data model
 
-- `InteractionThread` owns a UUID thread identity and immutable scene, place, or
-  fixed-whisper-party holder metadata.
-- `Interaction.thread` is nullable. Existing interactions remain unthreaded.
-- `InteractionThread.parent` is nullable for a future nested-thread operation. The
-  current reply path is flat and creates top-level threads only.
+- `InteractionThread` is ANCHORED at the row it answers: `anchor_interaction` +
+  `anchor_timestamp`, both required, name that row, and the thread's members are the
+  replies to it. The anchor is not a member of its own thread. `unique_thread_per_anchor`
+  over the pair is what makes two people answering the same blow land in one exchange
+  instead of opening parallel ones.
+- `Interaction.thread` is nullable and means "what I am an answer to", not "which pile I
+  am in" (changed by #3787; #3757's flat membership put the answered row in the thread
+  too). Root poses keep `thread_id = null`, and so does a row that is only ever answered.
+- `InteractionThread.parent` names the thread the anchor row itself belongs to, when the
+  anchor is a reply. Null makes this thread a root. Answering a reply therefore nests a
+  thread rather than flattening into the enclosing one. The field has existed since #3757;
+  #3787 is the first writer.
+- `InteractionThread.root` denormalizes the top of the nesting tree, null on a root thread,
+  so a reader groups a whole exchange without walking parents.
+- `InteractionThread` also owns a UUID identity and immutable scene, place, or
+  fixed-whisper-party holder metadata. `interaction_thread_holder_shape` pins which holder
+  columns each kind may set; `interaction_thread_no_self_nesting` refuses a thread that
+  nests inside itself.
 - Thread members use existing `(timestamp, id)` chronology. No order column is stored.
-- `InteractionReply` (#3787) records the reply PARENT edge, separately from
-  `InteractionThread` membership. `Interaction.thread` already answers "which exchange
-  does this row belong to"; `InteractionReply` answers the narrower "which specific row
-  did this one answer," which is what the reader's parent chip renders. One row per
-  reply (unique on the child interaction), modelled on `InteractionReceiver` (see ADR-0293
-  for why `InteractionAction` is NOT the precedent here): child and parent FKs are both
-  `db_constraint=False` with their own denormalized timestamp, since `arxii_interaction`
-  is monthly range-partitioned with a composite `(id, timestamp)` primary key and cannot
-  take an ordinary single-column FK. Written inside `assign_interaction_thread`
-  (`world.scenes.thread_services`), which already holds the locked reply target; read by
-  `InteractionListSerializer.get_reply_to` via a prefetched, context-cached batch lookup,
-  gated on the parent's own `visible_to` (a reader who cannot see the parent gets no
-  `reply_to`, never a leaked reference).
+- `anchor_interaction` is `db_constraint=False` with its own denormalized timestamp because
+  `arxii_interaction` is monthly range-partitioned with a composite `(id, timestamp)`
+  primary key and cannot take an ordinary single-column FK. `InteractionReceiver`
+  (`world/scenes/place_models.py`) is the precedent; see ADR-0293 for why
+  `InteractionAction` is not.
+- There is no `InteractionReply` bridge and no reply-edge handler. A per-reply edge table
+  was built and removed at review, because the thread carries the edge itself (ADR-0293,
+  decision 4).
+
+## The two derivations every consumer uses
+
+`parent(row) = row.thread.anchor` and `exchange(row) = row.thread.root or row.thread`.
+Nothing walks the tree; both are columns on the one thread row.
+
+- **Parent** is the reader's chip. `InteractionListSerializer.get_reply_to` reads
+  `anchor_interaction_id` / `anchor_timestamp` straight off the joined thread row (no join
+  to the partitioned interaction table, no per-row handler), gated on the parent's own
+  `visible_to` through a context-cached batch lookup: a reader who cannot see the parent
+  gets no `reply_to`, never a leaked reference.
+- **Exchange** is the grouping key. `get_root_thread_id` serializes it as `root_thread_id`,
+  which the reader (`ThreadedNarrativeReader`) groups by so a nested back-and-forth renders
+  as ONE card opening on the anchor, and which `useThreading.getThreadKey` prefers over
+  `thread_id` so a nested exchange opens one conversation tab. Server-side,
+  `play_views._exchange_keys` resolves the same pair of facts for a whole page in two flat
+  queries, so `PlayThreadsView` groups by exchange and puts the root thread's anchor back at
+  the head of its members when the viewer can see it.
 
 ## Reachability (#3787)
 
@@ -83,11 +110,13 @@ targets the resolvers already hold; concealed tiers continue to record none, unc
 `reply_to` has the shape `{"id": integer, "timestamp": RFC3339 timestamp}`. It is
 serializer/action input only. The service validates visibility with
 `InteractionQuerySet.visible_to()`, exact timestamp, holder compatibility, and pinned
-place/whisper audience before assigning the new interaction to a thread and writing its
-`InteractionReply` parent edge.
+place/whisper audience before assigning the new interaction to the thread anchored at
+that target, creating that thread only if this is the first answer to the row.
 
-Responses and websocket payloads expose `thread_id` and `reply_to` when membership/parent
-data exists. They do not infer relationships from names, targets, proximity, or ordering.
+Responses and websocket payloads expose `thread_id`, `root_thread_id` and `reply_to` when
+the row is a reply. `root_thread_id` is null when the row's own thread IS the root (a
+first-level reply), so a consumer grouping an exchange falls back to `thread_id` there.
+They do not infer relationships from names, targets, proximity, or ordering.
 Ephemeral interactions cannot join or create persisted threads.
 
 ## Key code
@@ -97,4 +126,7 @@ Ephemeral interactions cannot join or create persisted threads.
 - `world.scenes.interaction_services.write_target_personas`
 - `world.scenes.reachability.persona_can_receive` / `UnreachableError`
 - `world.scenes.interaction_serializers.ReplyTargetSerializer`
-- `world.scenes.interaction_serializers.InteractionListSerializer` (`get_reply_to`)
+- `world.scenes.interaction_serializers.InteractionListSerializer` (`get_reply_to`,
+  `get_root_thread_id`)
+- `world.scenes.play_views.PlayThreadsView` / `_exchange_keys`
+- `frontend/src/game/components/ThreadedNarrativeReader.tsx` (exchange grouping)
