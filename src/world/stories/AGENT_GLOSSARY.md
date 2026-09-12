@@ -7,7 +7,7 @@ per category per `StoryFeedback`, and those ratings are evidence: they feed GM
 Story Reward XP (#2123) and the GM trust-ladder evidence view (ADR-0097). It is
 **not** a permission and gates nothing. The per-account trust it once implied
 (`PlayerTrust`, `PlayerTrustLevel`, `TrustLevel`, `StoryTrustRequirement`) was
-removed in #3726 - see ADR-0293. Authority in this app is story ownership,
+removed in #3726 - see ADR-0292. Authority in this app is story ownership,
 `StoryParticipation.trusted_by_owner` (the per-story permission an owner
 grants), and `GMProfile.level`.
 _Avoid_: trust level, trust score, trust gate (nothing is gated on a player's

@@ -86,7 +86,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement, three-mode round framework |
 | [Events](events.md) | **MVP complete** | Scheduled RP gatherings, calendar, invitations, room modifications |
-| [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, GM trust tiers (`GMProfile.level`; there is no player-trust axis, ADR-0293), time reconciliation |
+| [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, GM trust tiers (`GMProfile.level`; there is no player-trust axis, ADR-0292), time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
 | [Investigation & Discovery](investigation-discovery.md) | in-progress | Clue model, room search, passive triggers, NPC-held clues (#3428), collaborative research projects, gating, rescue-as-clue — core loop shipped; more trigger sources + journal UI remain |
 | [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards. Action-backed (#1350): web+telnet (`CmdJournal`/`CmdGoal`) converge on `action.run()`. Web frontend shipped (#2160): `/journals` page + in-scene sidebar tab |
@@ -251,7 +251,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   formal name, first motto, each a link, reached from World › Realms. The front page's
   realm row and the Origin index entry link to the page. `/api/realms/` amends
   ADR-0227. **Remains:** the six testaments are entered by the reviewer (18 rows, three
-  per realm). Trust gates on starting areas came out under #3726 (ADR-0293), so Begin
+  per realm). Trust gates on starting areas came out under #3726 (ADR-0292), so Begin
   here now hides only for a staff-only or inactive area — never for a player who has
   not earned something.
 - **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0245):** ships

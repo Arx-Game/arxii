@@ -5,17 +5,14 @@ import django.db.models.deletion
 class Migration(migrations.Migration):
     """Anchor every interaction thread on the row it answers (#3787).
 
-    Hand-written for one reason: the two anchor columns are NOT NULL, and
-    ``makemigrations`` can only add a non-nullable column by inventing a one-off
-    default to stamp on existing rows. There is no honest default here - an
-    ``anchor_interaction_id`` of 0 names no interaction - so the columns are added
-    nullable and immediately altered to NOT NULL instead. On an empty table that is
-    the same end state; on a populated one it fails loudly on the ALTER rather than
-    quietly writing a fabricated anchor into a real row.
-
-    Nothing to backfill: ``arxii_interactionthread`` holds zero rows in production
-    (checked against the dump, not assumed), so no row exists to carry across, and
-    this migration stays schema-only.
+    Hand-written because ``makemigrations`` can only add a non-nullable column by
+    inventing a one-off default to stamp on existing rows, and there is no honest
+    default here - an ``anchor_interaction_id`` of 0 names no interaction. Adding
+    the columns NOT NULL outright needs no default and no backfill, because
+    ``arxii_interactionthread`` holds zero rows in production (checked, not
+    assumed: the dump reports 0 threads and 0 interactions). On a populated table
+    this would fail loudly rather than fabricate an anchor, which is the correct
+    outcome there too.
     """
 
     dependencies = [
@@ -33,7 +30,6 @@ class Migration(migrations.Migration):
                     "thread exists only because someone answered a row, so there is no "
                     "such thing as an anchor-less one."
                 ),
-                null=True,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="anchored_threads",
                 to="arxii.interaction",
@@ -49,7 +45,6 @@ class Migration(migrations.Migration):
                     "single-column FK to its id cannot exist (the InteractionReceiver "
                     "precedent)."
                 ),
-                null=True,
             ),
         ),
         migrations.AddField(
@@ -82,33 +77,6 @@ class Migration(migrations.Migration):
                 on_delete=django.db.models.deletion.SET_NULL,
                 related_name="child_threads",
                 to="arxii.interactionthread",
-            ),
-        ),
-        migrations.AlterField(
-            model_name="interactionthread",
-            name="anchor_interaction",
-            field=models.ForeignKey(
-                db_constraint=False,
-                help_text=(
-                    "The interaction every row in this thread answers. Required: a "
-                    "thread exists only because someone answered a row, so there is no "
-                    "such thing as an anchor-less one."
-                ),
-                on_delete=django.db.models.deletion.CASCADE,
-                related_name="anchored_threads",
-                to="arxii.interaction",
-            ),
-        ),
-        migrations.AlterField(
-            model_name="interactionthread",
-            name="anchor_timestamp",
-            field=models.DateTimeField(
-                help_text=(
-                    "Denormalized from anchor_interaction - arxii_interaction is range-"
-                    "partitioned on timestamp with a composite primary key, so a "
-                    "single-column FK to its id cannot exist (the InteractionReceiver "
-                    "precedent)."
-                ),
             ),
         ),
         migrations.AddConstraint(

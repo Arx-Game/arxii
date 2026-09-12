@@ -31,7 +31,7 @@ Game invites live in `world/roster/` as a new model (`GameInvite`) and submodule
 - **Reuses existing infrastructure.** The `PlayerData` FK and the notification
   patterns (`notify_mail_arrived`) are roster-local or roster-adjacent. (This
   rationale also cited the `PlayerTrust` eligibility check; that gate and its
-  model were removed in #3726 — see ADR-0293. The `PlayerData`/notification
+  model were removed in #3726 — see ADR-0292. The `PlayerData`/notification
   half stands, and so does the placement decision.)
 - **ADR-0017 compliance.** New subsystems are submodules, not standalone apps.
   A single model doesn't justify a new app.

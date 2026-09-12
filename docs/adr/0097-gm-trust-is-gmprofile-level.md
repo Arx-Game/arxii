@@ -1,10 +1,10 @@
 # 0097 — GM trust is `GMProfile.level`, capped by `GMLevelCap`, advanced only via `promote_gm`
 
-**Status:** Accepted; partly amended by ADR-0293.
+**Status:** Accepted; partly amended by ADR-0292.
 
 **Amendment (#3726):** the "Rejected" paragraph below leaves `PlayerTrust`/`TrustCategory`
 scoped to per-category content trust. `PlayerTrust` and `PlayerTrustLevel` no longer exist —
-nothing ever granted a trust level, so that half never became a real signal, and ADR-0293
+nothing ever granted a trust level, so that half never became a real signal, and ADR-0292
 removed it. `TrustCategory` stands, reframed: it is the dimension a `StoryFeedback` rating is
 filed under, and those ratings are the evidence this ADR's `gm_evidence_summary` reads. The
 decision this ADR actually makes — `GMProfile.level` is canonical for GM authority — is

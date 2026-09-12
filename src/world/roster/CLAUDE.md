@@ -34,7 +34,7 @@ This file provides specific guidance for working with the roster system in Arx I
 - ✅ **Structured approval process** with audit trails
 - ✅ **Separation of concerns** between roster, applications, and accounts
 
-### Approval is staff-only; there is no trust axis (ADR-0293)
+### Approval is staff-only; there is no trust axis (ADR-0292)
 - **Automated Where Possible**: Routine roster management should be automated
 - **Staff Approval**: `PlayerData.can_approve_applications()` gates the review queue
 - **No trust score**: #3726 removed the `trust_evaluation`/`can_auto_approve` placeholders

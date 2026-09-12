@@ -82,7 +82,7 @@ class RealmListAndDetailTests(TestCase):
     def test_staff_only_starting_area_is_null_for_a_visitor_and_the_realm_still_lists(self):
         """A realm whose only way in is staff-only still lists; its Begin here stays empty.
 
-        The trust gate this used to cover is gone (#3726, ADR-0293) — STAFF_ONLY is
+        The trust gate this used to cover is gone (#3726, ADR-0292) — STAFF_ONLY is
         the one remaining reason ``get_accessible_starting_areas`` withholds an area.
         """
         gated = RealmFactory(name="Ariwn")

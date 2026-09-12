@@ -2,7 +2,7 @@
 
 Structured narrative campaign management with hierarchical storytelling.
 
-**There is no player-trust axis** (ADR-0293, #3726). `PlayerTrust`,
+**There is no player-trust axis** (ADR-0292, #3726). `PlayerTrust`,
 `PlayerTrustLevel`, `StoryTrustRequirement` and `TrustLevel` were removed:
 nothing ever granted a level, so every gate reading them refused everyone.
 Who may do what is decided by story ownership, `StoryParticipation

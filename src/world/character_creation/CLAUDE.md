@@ -42,7 +42,7 @@ Character creation is a multi-stage process that guides players through creating
 - Maps to an Evennia room for character starting location
 - Access control (`access_level`): all players, or staff-only. Applied as a queryset
   filter in `get_accessible_starting_areas`; there is no per-row accessibility flag
-  on the serializer, so an area a reader is served is one they may pick (ADR-0293)
+  on the serializer, so an area a reader is served is one they may pick (ADR-0292)
 
 ### Beginnings
 - Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten -
