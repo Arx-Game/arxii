@@ -32,7 +32,7 @@ from world.scenes.thread_services import (
     assign_interaction_thread,
     pending_thread_update,
 )
-from world.scenes.types import InteractionPayload, PersonaPayload
+from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPayload
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -531,8 +531,17 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     language_name: str | None = None,
     attributed_companion_id: int | None = None,
     attributed_companion_name: str | None = None,
+    reply_to: ReplyParentPayload | None = None,
 ) -> InteractionPayload:
-    """Build a structured interaction payload for WebSocket delivery."""
+    """Build a structured interaction payload for WebSocket delivery.
+
+    ``reply_to`` (#3787) mirrors ``InteractionSerializer.get_reply_to``'s REST shape so
+    the parent chip appears for every viewer the moment the reply lands, instead of only
+    after a refetch. It defaults to ``None`` for every payload built for a row that
+    cannot have a parent (combat outcomes, companion emotes, tavern games, GM
+    adjudications, ephemeral pushes); ``push_interaction`` is the one builder that
+    resolves it. See ``_reply_parent_payload`` for the privacy gate.
+    """
     return InteractionPayload(
         id=interaction_id,
         persona=PersonaPayload(
@@ -553,6 +562,46 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         language_name=language_name,
         attributed_companion_id=attributed_companion_id,
         attributed_companion_name=attributed_companion_name,
+        reply_to=reply_to,
+    )
+
+
+def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None:
+    """The parent chip for a LIVE push, or ``None`` when it cannot be sent safely.
+
+    The REST serializer gates this per viewer, against
+    ``Interaction.objects.visible_to(user)`` for the request's own account. A WebSocket
+    push has no single viewer -- one payload goes to every object in the room -- and
+    re-running that queryset once per recipient account would put a query per player in
+    the room on every reply. So this gate is structural and evaluated once per push: the
+    parent goes on the wire only when it is ROOM-HEARD IN THIS SAME SCENE (the shared
+    ``managers.ROOM_HEARD`` classification, not a second copy of it).
+
+    That is strictly narrower than per-recipient visibility for this audience rather
+    than an approximation of it: everyone receiving this push is present in the scene's
+    room right now and is receiving the reply itself on exactly those terms, so a
+    room-heard parent in the same scene is never something a recipient could not already
+    perceive. Every narrower parent -- a whisper, a table-scoped aside, a row escalated
+    to PERCEIVED_ONLY or VERY_PRIVATE, or a parent in another scene -- sends ``None``
+    rather than guess, and those readers still get the chip from the REST serializer's
+    own per-viewer gate on their next fetch. One query per reply push; no query at all
+    for the overwhelmingly common row that answers nothing.
+    """
+    rows = interaction.reply_link_handler.rows
+    link = rows[0] if rows else None
+    if link is None:
+        return None
+    if interaction.scene_id is None:
+        return None
+    if not (
+        Interaction.objects.room_heard()
+        .filter(pk=link.parent_id, scene_id=interaction.scene_id)
+        .exists()
+    ):
+        return None
+    return ReplyParentPayload(
+        id=str(link.parent_id),
+        timestamp=link.parent_timestamp.isoformat(),
     )
 
 
@@ -673,6 +722,7 @@ def push_interaction(
         attributed_companion_name=(
             interaction.attributed_companion.name if interaction.attributed_companion_id else None
         ),
+        reply_to=_reply_parent_payload(interaction),
     )
 
     # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this

@@ -50,8 +50,26 @@ class SceneQuerySet(models.QuerySet):
 SceneManager = SharedMemoryManager.from_queryset(SceneQuerySet)
 
 
+# "Room-heard" = broadcast content everyone present perceived: default visibility, not
+# place-scoped, and not directed (no receiver rows, not a whisper). Whispers, table talk
+# and receiver-scoped mutters are DIRECTED -- they reach only their parties. Stated once
+# here because two rules read it: ``visible_to``'s own clauses below, and the live WS
+# push's reply-parent gate (``interaction_services._reply_parent_payload``, #3787). Two
+# copies of this classification quietly disagreeing is exactly the failure
+# ``world/scenes/reachability.py``'s module docstring warns about.
+ROOM_HEARD = models.Q(
+    visibility=InteractionVisibility.DEFAULT,
+    place__isnull=True,
+    receivers__isnull=True,
+) & ~models.Q(mode=InteractionMode.WHISPER)
+
+
 class InteractionQuerySet(models.QuerySet):
     """Queryset helpers for Interaction read-visibility."""
+
+    def room_heard(self) -> InteractionQuerySet:
+        """Narrow to broadcast rows: see ``ROOM_HEARD``."""
+        return self.filter(ROOM_HEARD)
 
     def visible_to(
         self,
@@ -86,14 +104,9 @@ class InteractionQuerySet(models.QuerySet):
         # Time bound for partition pruning; the 'since' param overrides the 90-day default.
         time_bound = {"timestamp__gte": since or (timezone.now() - timedelta(days=90))}
 
-        # "Room-heard" = broadcast content everyone present perceived: default visibility,
-        # not place-scoped, and not directed (no receiver rows, not a whisper). Whispers /
-        # table-talk / receiver-scoped mutters are DIRECTED -- they reach only their parties.
-        room_heard = models.Q(
-            visibility=InteractionVisibility.DEFAULT,
-            place__isnull=True,
-            receivers__isnull=True,
-        ) & ~models.Q(mode=InteractionMode.WHISPER)
+        # See ROOM_HEARD above for what this classification means and why it is stated
+        # once at module level rather than inline here.
+        room_heard = ROOM_HEARD
 
         # Public room-heard -> anyone, including unauthenticated viewers.
         public_visible = Interaction.objects.filter(
