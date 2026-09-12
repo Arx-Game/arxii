@@ -10,13 +10,23 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        migrations.RemoveField(
-            model_name="playertrustlevel",
-            name="player_trust",
-        ),
+        # Drop the composite unique BEFORE either of the columns it names.
+        # `ProjectState.remove_field` pops the field but never prunes
+        # `options["unique_together"]`, so a `RemoveField` first leaves
+        # `_delete_composed_index` asking a model state for a field that is
+        # already gone: `FieldDoesNotExist: PlayerTrustLevel has no field named
+        # 'player_trust'`, every time, on any backend. `makemigrations`
+        # generated this pair in the other order (it got `storytrustrequirement`
+        # right in the same file); verified by replaying the chain on a scratch
+        # database, which the SQLite test tier cannot catch because it builds
+        # the schema from model state with no migration replay at all.
         migrations.AlterUniqueTogether(
             name="playertrustlevel",
             unique_together=None,
+        ),
+        migrations.RemoveField(
+            model_name="playertrustlevel",
+            name="player_trust",
         ),
         migrations.RemoveField(
             model_name="playertrustlevel",

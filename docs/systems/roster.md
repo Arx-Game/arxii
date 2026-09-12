@@ -403,8 +403,8 @@ command.
   the staff hub badge
 
 All four routes are staff-only, gated by `CanApproveApplications`
-(`PlayerData.can_approve_applications()` - staff today; trust-system integration is
-future work). Distinct from `character_creation`'s DraftApplication review: this
+(`PlayerData.can_approve_applications()` - staff only; #3726 removed the
+trust-evaluation placeholders that used to sit beside it). Distinct from `character_creation`'s DraftApplication review: this
 queue is players applying for staff-authored characters already on the Available
 shelf, not new player-made characters going through CG.
 

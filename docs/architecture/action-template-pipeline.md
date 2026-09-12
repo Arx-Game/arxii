@@ -387,7 +387,8 @@ If no matching context pools exist, the phase advances to COMPLETE immediately.
   on the same check result with the same pool. New consequence selected from the
   same outcome tier.
 - `was_rerolled=True` set on the StepResult for audit/display.
-- Resource cost validation happens in the caller (future Kudos/PlayerTrust system),
+- Resource cost validation happens in the caller (an open design question; not
+  `PlayerTrust`, removed in #3726),
   not in the resolution pipeline. The pipeline just accepts "reroll" as a valid decision.
 - A reroll rewinds the state machine to the selection step for the current phase
   (gate or main). Effects from the previous selection are NOT applied — only the
@@ -616,7 +617,7 @@ note for the full authorization/telnet detail.
   now emits for code-defined actions (#3418, ADR-0243). This is critical
   infrastructure for wards, protective effects, and environmental reactions on the
   data-driven path. See "Event Integration" section below for architecture.
-- **Reroll resource mechanics** — Kudos/PlayerTrust system determines when rerolls
+- **Reroll resource mechanics** — an unbuilt resource system would determine when rerolls
   are available and what they cost. Pipeline already supports reroll as a decision.
 - **Reactive processing** — when effects target another character, receiver-side
   checks and reactions. Separate design.

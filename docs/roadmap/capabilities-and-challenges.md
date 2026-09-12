@@ -229,7 +229,8 @@ provides a unified resolution specification for any data-driven action.
   Enables wards, protective effects, environmental reactions. Pause point architecture
   supports this. See design spec for event integration section.
 - **Reroll mechanics** — pipeline supports reroll as a decision; resource costs and
-  availability from Kudos/PlayerTrust system.
+  availability are an open design question. (Not `PlayerTrust`: that model was removed
+  in #3726 and no trust system is coming.)
 - **SyntheticAction** — wrapping ActionTemplate into a full Action with `run()` lifecycle,
   prerequisites, and enhancements. Bridges code-defined and data-driven action systems.
 - **ChallengeApproach migration** — gradually make all approaches use ActionTemplate,
