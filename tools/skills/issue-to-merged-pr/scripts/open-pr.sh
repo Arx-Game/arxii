@@ -19,7 +19,13 @@
 #   PR_SUMMARY        - replaces {{summary}}     (default: "(no summary provided)")
 #   PR_RAN_OR_SKIPPED - replaces {{ran_or_skipped}} (default: "ran")
 #   PR_SYNC_SUMMARY   - replaces {{sync_summary}} (default: "(no rebase performed)")
-#   PR_CLOSE_ISSUE    - use Closes instead of Refs only with explicit completion (default: 0)
+#   PR_KEEP_OPEN      - use Refs instead of Closes (default: 0, i.e. close by
+#                       default). Set to 1 only when this PR is a deliberate
+#                       partial step toward an issue's scope with more PRs
+#                       still planned against the SAME issue (a multi-PR
+#                       umbrella spec). Genuinely separable remaining scope
+#                       gets its own issue via file-followup.sh instead - that
+#                       does not require keeping this issue open too.
 #   PR_TITLE          - PR title (default: derived from issue title)
 #
 # Emits the new PR number on stdout.
@@ -116,9 +122,9 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
 - A PASS requires concrete evidence for every mandatory criterion, including a visual checklist where applicable, and no unresolved findings."
 fi
 
-LINK_VERB="Refs"
-if [[ "${PR_CLOSE_ISSUE:-0}" == "1" ]]; then
-  LINK_VERB="Closes"
+LINK_VERB="Closes"
+if [[ "${PR_KEEP_OPEN:-0}" == "1" ]]; then
+  LINK_VERB="Refs"
 fi
 
 # Build the follow-up list (markdown bullets) or "(none)".

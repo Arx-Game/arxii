@@ -298,9 +298,14 @@ Whichever delivery mechanism is used, the report must record the exact revision,
 build/environment, ordinary user interactions, fixture/live boundaries, visual
 screenshots when a design/demo exists, one verdict per mandatory criterion, and
 an empty unresolved-findings section. A green build or component-presence test
-is not acceptance evidence. Scoped or partial work defaults to `Refs #N`; set
-`PR_CLOSE_ISSUE=1` only after a final completeness review confirms every
-mandatory criterion is passed.
+is not acceptance evidence. **`open-pr.sh` closes the issue by default
+(`Closes #N`)** — leaving an issue open requires a stated reason, not the other
+way around. Set `PR_KEEP_OPEN=1` only when this PR is a deliberate partial step
+toward the issue's scope with more PRs still planned against the *same* issue
+(a multi-PR umbrella spec that a completeness review hasn't yet confirmed in
+full). Genuinely separable remaining scope gets its own issue via
+`file-followup.sh` (below) instead — that does not call for keeping the
+original issue open too.
 
 **The evidence report and its screenshots never belong in `main`'s permanent
 history** — commit them to the branch while iterating (the easiest way to let
@@ -351,9 +356,9 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body links the committed report and uses `Refs #<issue>` by default.
-Only an explicitly complete report may opt into `PR_CLOSE_ISSUE=1`; a partial
-repair must not auto-close its umbrella specification.
+The PR body links the committed report and uses `Closes #<issue>` by default.
+Only a deliberately partial step toward a multi-PR umbrella spec opts into
+`PR_KEEP_OPEN=1`; the ordinary case (this PR is the whole fix) closes.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the

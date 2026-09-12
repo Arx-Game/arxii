@@ -195,8 +195,9 @@ review evidence report validates against the reviewed code revision (the parent 
 `open-pr.sh` is a hard pre-PR gate: it requires provenance, the ordinary user
 path, visual screenshots when a design/demo exists, one verdict per mandatory
 criterion, and no unresolved findings. A green build is not acceptance evidence.
-Scoped or partial work defaults to `Refs`; set `PR_CLOSE_ISSUE=1` only after a
-final completeness review confirms every mandatory criterion is passed.
+`open-pr.sh` closes the issue by default (`Closes`); set `PR_KEEP_OPEN=1` only
+when this PR is a deliberate partial step toward a multi-PR umbrella spec with
+more PRs still planned against the same issue.
 
 Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict. Set `PR_EVIDENCE_FILE` to a local report (a repository or scratch path), or set `PR_EVIDENCE_URL` to the GitHub issue/PR comment where the reviewer posted it. Compose the PR body's substitution
 values. For each deferred follow-up, call
@@ -211,9 +212,9 @@ PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body links the committed report and uses `Refs #<issue>` by default.
-Only an explicitly complete report may opt into `PR_CLOSE_ISSUE=1`; a partial
-repair must not auto-close its umbrella specification.
+The PR body links the committed report and uses `Closes #<issue>` by default.
+Only a deliberately partial step toward a multi-PR umbrella spec opts into
+`PR_KEEP_OPEN=1`; the ordinary case (this PR is the whole fix) closes.
 
 **Do NOT run `uv run pre-commit run --all-files` (or whole-repo test suites) as a
 pre-push precheck — it can crash this devcontainer.** The per-file hooks already
