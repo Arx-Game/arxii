@@ -285,3 +285,104 @@ class DeployEndpointTests(CompanionWriteEndpointTestBase):
             resp = self._detail_post("deploy", _actor_user(self.character), foreign.pk)
 
         self.assertEqual(resp.status_code, 404)
+
+
+class EmoteEndpointTests(CompanionWriteEndpointTestBase):
+    """#3782 — the emote endpoint threads an optional client_request_id from
+    the serializer into CompanionEmoteAction, the same wire contract
+    submit_pose/say/whisper already have (#3760)."""
+
+    def test_emote_success_returns_200(self) -> None:
+        companion = CompanionFactory(owner=self.sheet)
+        with (
+            patch.object(CompanionViewSet, "get_object", return_value=companion),
+            patch(f"{_VIEWS}.CompanionEmoteAction") as mock_cls,
+        ):
+            mock_cls.return_value.run.return_value = self._ok_result({})
+            resp = self._detail_post(
+                "emote", _actor_user(self.character), companion.pk, {"text": "grooms itself."}
+            )
+
+        self.assertEqual(resp.status_code, 200)
+
+    def test_emote_failure_returns_400_with_detail(self) -> None:
+        companion = CompanionFactory(owner=self.sheet)
+        with (
+            patch.object(CompanionViewSet, "get_object", return_value=companion),
+            patch(f"{_VIEWS}.CompanionEmoteAction") as mock_cls,
+        ):
+            mock_cls.return_value.run.return_value = self._fail_result("Fang is not here.")
+            resp = self._detail_post(
+                "emote", _actor_user(self.character), companion.pk, {"text": "growls."}
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.data["detail"], "Fang is not here.")
+
+    def test_emote_no_puppet_returns_400(self) -> None:
+        companion = CompanionFactory(owner=self.sheet)
+        with patch.object(CompanionViewSet, "get_object", return_value=companion):
+            resp = self._detail_post("emote", _no_puppet_user(), companion.pk, {"text": "growls."})
+
+        self.assertEqual(resp.status_code, 400)
+        self.assertIn("active character", resp.data["detail"].lower())
+
+    def test_emote_missing_text_returns_400(self) -> None:
+        companion = CompanionFactory(owner=self.sheet)
+        with patch.object(CompanionViewSet, "get_object", return_value=companion):
+            resp = self._detail_post("emote", _actor_user(self.character), companion.pk, {})
+
+        self.assertEqual(resp.status_code, 400)
+
+    def test_cannot_emote_other_players_companion(self) -> None:
+        """A foreign companion is not in the caller's queryset → 404."""
+        from rest_framework.exceptions import NotFound
+
+        other_sheet = CharacterSheetFactory()
+        foreign = CompanionFactory(owner=other_sheet)
+        with patch.object(CompanionViewSet, "get_object", side_effect=NotFound):
+            resp = self._detail_post(
+                "emote", _actor_user(self.character), foreign.pk, {"text": "growls."}
+            )
+
+        self.assertEqual(resp.status_code, 404)
+
+    def test_emote_threads_client_request_id_into_the_action(self) -> None:
+        """The core #3782 wiring: a client_request_id in the request body must
+        reach CompanionEmoteAction.run() as a kwarg, not get dropped on the
+        floor between the serializer and the Action call."""
+        companion = CompanionFactory(owner=self.sheet)
+        request_id = "5b1f9b7a-6b6b-4b8a-9b3d-1a2b3c4d5e6f"
+        with (
+            patch.object(CompanionViewSet, "get_object", return_value=companion),
+            patch(f"{_VIEWS}.CompanionEmoteAction") as mock_cls,
+        ):
+            mock_cls.return_value.run.return_value = self._ok_result({})
+            resp = self._detail_post(
+                "emote",
+                _actor_user(self.character),
+                companion.pk,
+                {"text": "grooms itself.", "client_request_id": request_id},
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        _, call_kwargs = mock_cls.return_value.run.call_args
+        self.assertEqual(str(call_kwargs["client_request_id"]), request_id)
+
+    def test_emote_omitted_client_request_id_passes_none(self) -> None:
+        """Backward compatibility: a caller that omits the field must not
+        crash the view -- the Action's own None-check decides the fallback
+        path, not the view."""
+        companion = CompanionFactory(owner=self.sheet)
+        with (
+            patch.object(CompanionViewSet, "get_object", return_value=companion),
+            patch(f"{_VIEWS}.CompanionEmoteAction") as mock_cls,
+        ):
+            mock_cls.return_value.run.return_value = self._ok_result({})
+            resp = self._detail_post(
+                "emote", _actor_user(self.character), companion.pk, {"text": "grooms itself."}
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        _, call_kwargs = mock_cls.return_value.run.call_args
+        self.assertIsNone(call_kwargs["client_request_id"])

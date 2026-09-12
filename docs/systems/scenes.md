@@ -1509,11 +1509,12 @@ invoke it the same way.
 
 **Callers gate the broadcast on `not result.replayed`** — a retry must never
 double-broadcast even though the DB side is already deduped. `PoseAction`, `SayAction`
-(both `src/actions/definitions/communication.py`) and `InteractionViewSet.submit_pose`
+(both `src/actions/definitions/communication.py`), `CompanionEmoteAction`
+(`src/actions/definitions/companions.py`, #3782) and `InteractionViewSet.submit_pose`
 (`interaction_views.py`) all follow this pattern when a `client_request_id`
 kwarg is present; the plain non-idempotent path (`record_interaction` called
 directly) still runs unchanged for callers that pass no `client_request_id`
-(telnet, and any caller predating #3760).
+(telnet, and any caller predating #3760/#3782).
 
 **`record_fn` generalization (#3760, discovered during implementation — not in the
 original design):** `record_fn` lets a caller substitute a differently-shaped
