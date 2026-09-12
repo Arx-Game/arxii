@@ -523,6 +523,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     timestamp: str,
     scene_id: int | None,
     thread_id: str | None = None,
+    root_thread_id: str | None = None,
     place_id: int | None = None,
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
@@ -553,6 +554,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         mode=mode,
         timestamp=timestamp,
         thread_id=thread_id,
+        root_thread_id=root_thread_id,
         scene_id=scene_id,
         place_id=place_id,
         place_name=place_name,
@@ -564,6 +566,27 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         attributed_companion_name=attributed_companion_name,
         reply_to=reply_to,
     )
+
+
+def _root_thread_id(interaction: Interaction) -> str | None:
+    """The top of the nesting tree this row's exchange belongs to (#3787).
+
+    A row's thread is what it ANSWERS, so answering a reply nests a thread inside
+    the one the answered row lives in and a single back-and-forth spans several
+    threads. This is the one key every row of that exchange shares, so a reader
+    renders the whole of it as one card. Null when the row's own thread IS the
+    root, and for a row that answers nothing, mirroring
+    ``InteractionSerializer.get_root_thread_id`` so the live push and the refetch
+    group a row identically. No extra query: ``_reply_parent_payload`` fetches the
+    same thread row on this same push, and a row that answers nothing never
+    touches the database here.
+    """
+    if interaction.thread_id is None:
+        return None
+    thread = interaction.thread
+    if thread is None or thread.root_id is None:
+        return None
+    return str(thread.root_id)
 
 
 def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None:
@@ -736,6 +759,7 @@ def push_interaction(
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         thread_id=str(interaction.thread_id) if interaction.thread_id else None,
+        root_thread_id=_root_thread_id(interaction),
         scene_id=interaction.scene_id,
         place_id=interaction.place_id,
         place_name=interaction.place.name if interaction.place_id else None,

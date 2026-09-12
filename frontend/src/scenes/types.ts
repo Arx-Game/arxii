@@ -408,8 +408,18 @@ export interface DramaticMomentSuggestionSummary {
 
 export interface Interaction {
   id: number;
-  /** Stable server-assigned thread identity; absent on legacy rows. */
+  /**
+   * Stable server-assigned thread identity; absent on legacy rows. This is what
+   * the row ANSWERS (#3787), not which pile it sits in, so it differs per level
+   * of a nested exchange; group a whole exchange by `root_thread_id` instead.
+   */
   thread_id?: string | null;
+  /**
+   * Top of the nesting tree this row's exchange belongs to (#3787). Null when the
+   * row's own thread IS the root, and on a row that answers nothing, so a reader
+   * falls back to `thread_id` there.
+   */
+  root_thread_id?: string | null;
   /** Explicit parent reference; never inferred from ordering or names. */
   reply_to?: { id: string; timestamp: string } | null;
   /** Reader-local state, supplied by the play contract when available. */

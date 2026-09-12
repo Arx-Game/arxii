@@ -52,7 +52,7 @@ vi.mock('@/scenes/components/SceneMessages', () => ({
   ),
 }));
 
-const interaction = (id: number, content: string, thread_id: string): Interaction => ({
+const interaction = (id: number, content: string, thread_id: string | null): Interaction => ({
   id,
   thread_id,
   persona: { id: id + 10, name: `Writer ${id}` },
@@ -2217,6 +2217,74 @@ describe('ThreadedNarrativeReader', () => {
       );
       expect(screen.queryByTestId('reply-refusal-1')).toBeNull();
       expect(screen.getByRole('button', { name: /answer this/i })).not.toBeDisabled();
+    });
+  });
+
+  describe('nested exchanges (#3787 rework)', () => {
+    // A row's `thread_id` is what it ANSWERS, not which pile it sits in, so this
+    // one back-and-forth is THREE threads: the opening pose answers nothing and
+    // carries no thread at all, `root-thread` is anchored at it, and answering
+    // the reply nests `nested-thread` inside `root-thread`. Grouping on
+    // `thread_id` draws three cards -- `legacy:1`, `root-thread`,
+    // `nested-thread` -- with the opening pose stranded in a "Standalone" card
+    // of its own directly above the exchange it started. `root_thread_id` plus
+    // the anchor-adoption pass is what collapses all three into one card.
+    const opening = interaction(1, 'She lunges through his guard.', null);
+    const reply: Interaction = {
+      ...interaction(2, 'He turns the blade aside.', 'root-thread'),
+      reply_to: { id: '1', timestamp: opening.timestamp },
+    };
+    const nested: Interaction = {
+      ...interaction(3, 'She steps into the opening.', 'nested-thread'),
+      root_thread_id: 'root-thread',
+      reply_to: { id: '2', timestamp: reply.timestamp },
+    };
+
+    const renderExchange = () =>
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[opening, reply, nested]}
+          fetchNextPage={vi.fn()}
+        />
+      );
+
+    it('renders a reply to a reply as ONE card, keyed by the root thread', () => {
+      const { container } = renderExchange();
+
+      const cards = [...container.querySelectorAll('[data-thread-id]')].map((card) =>
+        card.getAttribute('data-thread-id')
+      );
+      // Exactly one, and not `legacy:1` or `nested-thread`: this is the
+      // assertion that fails the moment grouping falls back to `thread_id`.
+      expect(cards).toEqual(['root-thread']);
+      expect(screen.getByRole('button', { name: /3 poses/ })).toBeInTheDocument();
+    });
+
+    it('opens that card with the pose being answered, not with the first reply', () => {
+      renderExchange();
+
+      // The header names the opening pose's writer and quotes its prose. Were
+      // the anchor left to form its own group, `root` here would be the first
+      // reply: "Writer 2" and "He turns the blade aside."
+      const header = screen.getByRole('button', { name: /Writer 1.*3 poses/ });
+      expect(header).toHaveTextContent('She lunges through his guard.');
+      // ...and it reads as a real thread's opening pose, not as the
+      // "Standalone" an un-replied pose gets (`poseRoleLabel`).
+      expect(screen.getByText('Opening pose')).toBeInTheDocument();
+      expect(screen.queryByText('Standalone')).toBeNull();
+    });
+
+    it('keeps every pose of the exchange inside the one card, in time order', () => {
+      const { container } = renderExchange();
+
+      const card = container.querySelector('[data-thread-id="root-thread"]');
+      const poses = [...(card?.querySelectorAll('[data-pose-id]') ?? [])].map((pose) =>
+        pose.getAttribute('data-pose-id')
+      );
+      expect(poses).toEqual(['1', '2', '3']);
     });
   });
 });

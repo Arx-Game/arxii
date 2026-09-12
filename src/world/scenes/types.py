@@ -47,6 +47,7 @@ class InteractionPayload(TypedDict):
     mode: str
     timestamp: str
     thread_id: str | None
+    root_thread_id: str | None
     scene_id: int | None
     place_id: int | None
     place_name: str | None

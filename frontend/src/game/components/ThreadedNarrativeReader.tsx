@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronRight, MessageCircle, Reply } from 'lucide-react';
@@ -26,6 +26,26 @@ import { replyReachability, type ViewerVenue } from '@/scenes/replyReachability'
 const THREAD_PAGE_SIZE = 20;
 
 /**
+ * The key one EXCHANGE renders under (#3787 rework).
+ *
+ * A row's `thread_id` is what it ANSWERS, not which pile it sits in, so a
+ * back-and-forth A to B to C is three threads by construction: answering a reply
+ * nests a thread inside the one the answered row lives in. `root_thread_id` is the
+ * top of that tree and is therefore the one key every row of a single exchange
+ * shares, which is what lets a nested exchange render as ONE card. It is null on a
+ * root thread, where `thread_id` already IS the top.
+ *
+ * This is a row's key BEFORE anchor adoption: the row a root thread is anchored at
+ * answers nothing, so it carries no thread and keys `legacy:` here. `exchangeKeyById`
+ * (inside the component, where the whole loaded list is in scope) then pulls it into
+ * the exchange its replies are in, so the card opens with the pose being answered
+ * instead of leaving it stranded as a separate standalone card above.
+ */
+function ownExchangeKey(item: Interaction): string {
+  return item.root_thread_id || item.thread_id || `legacy:${item.id}`;
+}
+
+/**
  * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
  * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
  * parent-chip persistence -- "Opening pose" for a REAL thread's own root
@@ -34,12 +54,16 @@ const THREAD_PAGE_SIZE = 20;
  * Chronological view (where it's looked up via `groupByKey`, below) so both
  * views render identical labels for the identical pose.
  *
- * #3759 Wave 9 fix round 1 Minor M-1: `item.thread_id` (not merely "is this
- * the group's own root") gates "Opening pose" -- an ordinary, un-replied
- * pose (`thread_id === null`, keyed `legacy:${id}` in `groups`) is trivially
- * its own group's root by construction, but "Opening pose" asserts a THREAD
- * that doesn't exist for it. "Standalone" (matching Chronological's own
- * pre-existing phrasing for this exact case) is correct for both views.
+ * #3759 Wave 9 fix round 1 Minor M-1: the GROUP (not merely "is this the
+ * group's own root") gates "Opening pose" -- an ordinary, un-replied pose is
+ * trivially its own group's root by construction, but "Opening pose" asserts
+ * a THREAD that doesn't exist for it. "Standalone" (matching Chronological's
+ * own pre-existing phrasing for this exact case) is correct for both views.
+ * M-1 read that off `item.thread_id`, which said the same thing until #3787's
+ * rework: the row a thread is ANCHORED at carries no thread of its own now,
+ * yet it is a real thread's real opening pose and is rendered as this card's
+ * first row. So the gate is the group's own key -- a `legacy:` key is the
+ * un-replied pose M-1 is about, and any other key is a genuine exchange.
  *
  * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
  * in a real thread -- used to return `Reply in <title>` as a stand-in for
@@ -50,8 +74,12 @@ const THREAD_PAGE_SIZE = 20;
  * not a derived thread title -- so this label goes empty for that case
  * rather than duplicating weaker information beside the chip.
  */
-function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): string {
-  if (!item.thread_id) return 'Standalone';
+function poseRoleLabel(
+  item: Interaction,
+  rootPose: Interaction | undefined,
+  groupKey: string
+): string {
+  if (groupKey.startsWith('legacy:')) return 'Standalone';
   if (!rootPose || rootPose.id === item.id) return 'Opening pose';
   return '';
 }
@@ -504,6 +532,35 @@ export function ThreadedNarrativeReader({
     // conditions -- keep this assignment idempotent.
     targetSeekDoneRef.current = null;
   }
+  // #3787 rework: every one of the reader's grouping sites reads this map rather
+  // than a row's own thread id. It is `ownExchangeKey` (a row's `root_thread_id`,
+  // else its `thread_id`, else `legacy:`) plus ONE adoption pass: the row a root
+  // thread is anchored at answers nothing, so it carries no thread and would key
+  // `legacy:` and render as a separate standalone card sitting directly above the
+  // replies to it. Each reply names it (`reply_to.id`), so the pass pulls it into
+  // its replies' exchange and the card opens with the pose being answered. Only an
+  // UNTHREADED parent is adopted; a parent that is itself a reply already shares
+  // this row's root. The server's own `unique_thread_per_anchor` constraint makes
+  // that deterministic: every reply to one row lives in one thread, so no row can
+  // be claimed by two exchanges.
+  const exchangeKeyById = useMemo(() => {
+    const byId = new Map(interactions.map((item) => [item.id, item]));
+    const keys = new Map<number, string>(
+      interactions.map((item) => [item.id, ownExchangeKey(item)])
+    );
+    for (const interaction of interactions) {
+      if (!interaction.reply_to) continue;
+      const parent = byId.get(Number(interaction.reply_to.id));
+      if (!parent || parent.thread_id) continue;
+      const key = keys.get(interaction.id);
+      if (key) keys.set(parent.id, key);
+    }
+    return keys;
+  }, [interactions]);
+  const exchangeKey = useCallback(
+    (item: Interaction): string => exchangeKeyById.get(item.id) ?? ownExchangeKey(item),
+    [exchangeKeyById]
+  );
   // #3759 Wave 9 (F1): grouped from the FULL `interactions` array, not a
   // windowed slice -- every thread with at least one pose gets a header row,
   // always, matching the demo (the review's F1 finding: the old flat
@@ -516,7 +573,7 @@ export function ThreadedNarrativeReader({
     for (const interaction of interactions) {
       // Legacy interactions have no reply topology and therefore each remain
       // an independent root. Only explicit server thread ids group replies.
-      const key = interaction.thread_id || `legacy:${interaction.id}`;
+      const key = exchangeKey(interaction);
       const rows = grouped.get(key) ?? [];
       rows.push(interaction);
       grouped.set(key, rows);
@@ -535,7 +592,7 @@ export function ThreadedNarrativeReader({
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||
           a.interactions[0].id - b.interactions[0].id
       );
-  }, [interactions]);
+  }, [interactions, exchangeKey]);
   // #3759 Wave 9 fix-round-1 re-review Minor fold-in: a `legacy:` group is a
   // single un-replied pose (I-5, above), not a "conversation" -- excluded
   // from the toolbar's conversation count, the bulk expand/collapse-all
@@ -804,7 +861,7 @@ export function ThreadedNarrativeReader({
   const anchorRetryPendingRef = useRef(false);
   const widenThreadWindow = (key: string): boolean => {
     const groupLength = interactions.reduce(
-      (count, item) => ((item.thread_id || `legacy:${item.id}`) === key ? count + 1 : count),
+      (count, item) => (exchangeKey(item) === key ? count + 1 : count),
       0
     );
     const existing = threadWindows[key];
@@ -822,7 +879,7 @@ export function ThreadedNarrativeReader({
   const widenThreadWindowToInclude = (poseId: string): boolean => {
     const targetInteraction = interactions.find((item) => String(item.id) === poseId);
     if (!targetInteraction) return false; // genuinely absent from `interactions`
-    const key = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    const key = exchangeKey(targetInteraction);
     let changed = false;
     if (!expandedKeys.has(key)) {
       changed = true;
@@ -1017,7 +1074,7 @@ export function ThreadedNarrativeReader({
     // every pass, including once the thread is already expanded.
     // `expandedKeys` is a dependency below specifically so this effect
     // re-runs once that update actually lands.
-    const targetGroupKey = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    const targetGroupKey = exchangeKey(targetInteraction);
     setExpandedKeys((previous) => {
       if (previous.has(targetGroupKey)) return previous;
       const next = new Set(previous);
@@ -1258,8 +1315,12 @@ export function ThreadedNarrativeReader({
                   // all) is strictly more useful here, and there's no demo
                   // image for this screen (the review's own scope table
                   // marks it `textonly`) to visually contradict.
-                  const groupKey = item.thread_id || `legacy:${item.id}`;
-                  const roleLabel = poseRoleLabel(item, groupByKey.get(groupKey)?.interactions[0]);
+                  const groupKey = exchangeKey(item);
+                  const roleLabel = poseRoleLabel(
+                    item,
+                    groupByKey.get(groupKey)?.interactions[0],
+                    groupKey
+                  );
                   return (
                     <div
                       key={item.id}
@@ -1374,7 +1435,9 @@ export function ThreadedNarrativeReader({
                           not merely "is this the group's root"), never
                           "Opening pose" -- that label asserts a thread that
                           doesn't exist for a genuinely un-replied pose. */}
-                      <p className="text-xs text-muted-foreground">{poseRoleLabel(item, root)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {poseRoleLabel(item, root, group.key)}
+                      </p>
                       {poseCollapsed ? (
                         <article
                           className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1529,7 +1592,7 @@ export function ThreadedNarrativeReader({
                       )}
                       {visiblePoses.map((item) => {
                         const poseCollapsed = collapsedPoses.has(item.id);
-                        const roleLabel = poseRoleLabel(item, root);
+                        const roleLabel = poseRoleLabel(item, root, group.key);
                         return (
                           <PoseReadTarget
                             key={`pose-${item.id}`}

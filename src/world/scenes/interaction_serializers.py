@@ -141,6 +141,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     # Additive narrative-play contract fields. Unthreaded rows deliberately expose
     # no inferred parent; play readers keep their existing holder fallback.
     thread_id = serializers.SerializerMethodField()
+    root_thread_id = serializers.SerializerMethodField()
     reply_to = serializers.SerializerMethodField()
     conversation = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
@@ -151,6 +152,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "thread_id",
+            "root_thread_id",
             "reply_to",
             "conversation",
             "availability",
@@ -191,6 +193,22 @@ class InteractionListSerializer(serializers.ModelSerializer):
         except AttributeError:
             return None
         return None if value is None else str(value)
+
+    def get_root_thread_id(self, obj: Interaction) -> str | None:
+        """The top of the nesting tree this row's exchange belongs to (#3787).
+
+        A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+        nested threads by construction. This is the one key every row of a single
+        exchange shares, so a reader groups the whole of it into one card without
+        walking parents. Null when the row's own thread IS the root, and for a row
+        that answers nothing: the reader falls back to ``thread_id`` there, exactly
+        as ``InteractionThread.root`` is null on a root thread. Costs no query -
+        ``get_queryset`` joins ``thread`` in for the parent chip already.
+        """
+        thread = _anchored_thread(obj)
+        if thread is None or thread.root_id is None:
+            return None
+        return str(thread.root_id)
 
     def get_reply_to(self, obj: Interaction) -> dict[str, Any] | None:
         """The interaction this one answered, when the viewer may also read it.

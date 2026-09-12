@@ -99,6 +99,17 @@ describe('getThreadKey', () => {
     expect(getThreadKey(pose)).toBe('target:42');
   });
 
+  it('keys a nested exchange by its root thread, so one back-and-forth is one tab', () => {
+    // #3787 rework: `thread_id` is what a row ANSWERS, so answering a reply
+    // nests a thread. Without the root preference, each level of one exchange
+    // would open a tab of its own.
+    const nested = makeInteraction({
+      thread_id: 'nested-thread',
+      root_thread_id: 'root-thread',
+    });
+    expect(getThreadKey(nested)).toBe('root-thread');
+  });
+
   it('an explicit reply on a mechanical row still keys by thread_id', () => {
     const reply = makeInteraction({
       mode: 'outcome',

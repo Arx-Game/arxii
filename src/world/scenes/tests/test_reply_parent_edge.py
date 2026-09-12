@@ -249,6 +249,94 @@ class ReplyToSerializationTest(TestCase):
         self.assertEqual(set(data["reply_to"]), {"id", "timestamp"})
 
 
+class RootThreadIdSerializationTest(TestCase):
+    """``root_thread_id`` is the one key every row of a single exchange shares.
+
+    A row's own thread is what it ANSWERS, so a back-and-forth is several nested
+    threads by construction and ``thread_id`` alone would split one exchange into a
+    card per level in the reader. These pin the grouping key the reader actually
+    uses (``ThreadedNarrativeReader``).
+    """
+
+    def _request_for(self, account):
+        request = APIRequestFactory().get("/")
+        request.user = account
+        return request
+
+    def _reply(self, *, persona, scene, account, target, content):
+        with patch(
+            "world.scenes.interaction_services._get_account_for_persona",
+            return_value=account.pk,
+        ):
+            return create_interaction(
+                persona=persona,
+                content=content,
+                mode=InteractionMode.POSE,
+                scene=scene,
+                reply_to=ReplyTarget(interaction_id=target.pk, timestamp=target.timestamp),
+            )
+
+    def setUp(self):
+        self.scene = SceneFactory()
+        self.persona = PersonaFactory()
+        self.author = AccountFactory()
+        self.opening = InteractionFactory(
+            scene=self.scene,
+            persona=self.persona,
+            writer_account=self.author,
+            mode=InteractionMode.POSE,
+        )
+
+    def _serialized(self, interaction):
+        return InteractionListSerializer(
+            interaction, context={"request": self._request_for(self.author)}
+        ).data
+
+    def test_a_pose_that_answers_nothing_has_no_root(self):
+        self.assertIsNone(self._serialized(self.opening)["root_thread_id"])
+
+    def test_a_first_level_reply_is_its_own_root(self):
+        """Null, matching ``InteractionThread.root``; the reader falls back to thread_id."""
+        reply = self._reply(
+            persona=self.persona,
+            scene=self.scene,
+            account=self.author,
+            target=self.opening,
+            content="She parries.",
+        )
+        data = self._serialized(reply)
+        self.assertIsNone(data["root_thread_id"])
+        self.assertEqual(data["thread_id"], str(reply.thread_id))
+
+    def test_a_nested_reply_carries_the_top_of_the_tree(self):
+        reply = self._reply(
+            persona=self.persona,
+            scene=self.scene,
+            account=self.author,
+            target=self.opening,
+            content="She parries.",
+        )
+        nested = self._reply(
+            persona=self.persona,
+            scene=self.scene,
+            account=self.author,
+            target=reply,
+            content="He steps into the opening.",
+        )
+        deeper = self._reply(
+            persona=self.persona,
+            scene=self.scene,
+            account=self.author,
+            target=nested,
+            content="She turns the blade aside.",
+        )
+
+        root_key = str(reply.thread_id)
+        self.assertNotEqual(nested.thread_id, reply.thread_id)
+        self.assertEqual(self._serialized(nested)["root_thread_id"], root_key)
+        self.assertEqual(self._serialized(deeper)["root_thread_id"], root_key)
+
+
 class ReplyToWebSocketPayloadTest(TestCase):
     """The live push carries the parent chip too, on the same shape REST returns.
 
