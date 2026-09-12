@@ -484,13 +484,15 @@ class PlayThreadsViewTests(APITestCase):
         self.assertIn("conversation", response.json()["detail"])
 
     def test_groups_by_exchange_and_counts_the_answered_pose(self) -> None:
-        """Built through the real writer, so the shape is one the writer can produce.
+        """Built through the real writer rather than by hand-setting ``thread=``.
 
-        An earlier version hand-set ``thread=`` on both rows, which modelled the
-        pre-#3787 world where the answered pose was a member of the thread. The
-        writer cannot produce that state any more: a thread holds the ANSWERS to a
-        row and the row itself is the anchor. So the exchange here is the answered
-        pose plus its reply, and the count must be 2 with the anchor leading.
+        Both rows ARE members under the shipped design - the answered pose is the
+        first one, which is what makes it the anchor - so hand-setting both is a
+        perfectly producible state and the fixtures elsewhere in this file do
+        exactly that. Going through ``create_interaction`` here buys something
+        narrower: it proves the writer itself puts the answered pose in the thread
+        and orders it first, instead of only proving the reader groups a shape the
+        test asserted into existence.
         """
         account = AccountFactory()
         self.client.force_authenticate(user=account)

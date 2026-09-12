@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest.mock import MagicMock, Mock, patch
 
 from django.test import TestCase
@@ -591,6 +592,98 @@ class TestInteractionThreadAssignment(TestCase):
 
         assert reused.pk == thread.pk
         assert second_reply.thread_id == thread.pk
+
+    def test_a_stale_cached_thread_does_not_re_root_a_live_exchange(self) -> None:
+        """The identity map can answer ``target.thread`` from a stale cache (#3787).
+
+        Evennia's idmapper metaclass returns the process-cached instance and
+        DISCARDS the freshly loaded column values
+        (``evennia/utils/idmapper/models.py``), so ``select_for_update().get()``
+        takes the row lock but can still hand back an instance whose ``thread_id``
+        is whatever this process last saw. The web worker and the game server are
+        separate processes and neither flushes per request.
+
+        That is not a missed optimisation here. The move decision hangs off this
+        read: a stale ``None`` makes the service conclude the target belongs to no
+        thread, so it opens a NEW one and moves the target out of the real
+        exchange, re-rooting it and re-pointing every chip in it.
+
+        Simulated the way it actually happens - another process writes the
+        membership, so this process's cached instance never learns about it. A
+        queryset ``.update()`` is exactly that: it never touches the instance.
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        target = InteractionFactory(scene=scene, writer_account=account)
+        reply = InteractionFactory(scene=scene, writer_account=account)
+
+        # Another process put the target in a thread. Our cached instance predates
+        # that write and still believes it belongs to none.
+        live_thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=scene.pk,
+            scene_id=scene.pk,
+        )
+        Interaction.objects.filter(pk=target.pk).update(thread=live_thread)
+        assert target.thread_id is None, "the cached instance must still be stale"
+
+        thread = assign_interaction_thread(
+            interaction=reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        # The reply must join the live exchange, not split a second one off it.
+        assert thread.pk == live_thread.pk
+        assert reply.thread_id == live_thread.pk
+        assert InteractionThread.objects.count() == 1
+        assert (
+            Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
+            == live_thread.pk
+        )
+
+    def test_a_target_newer_than_the_reply_is_unavailable(self) -> None:
+        """Strict ordering: nothing may answer a row written after it.
+
+        A reply that predates what it answers is not a real reply, and without this
+        the anchor (min id over the members) could end up being the answer rather
+        than the answered.
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        reply = InteractionFactory(scene=scene, writer_account=account)
+        target = InteractionFactory(
+            scene=scene,
+            writer_account=account,
+            timestamp=reply.timestamp + timedelta(minutes=1),
+        )
+
+        thread_count = InteractionThread.objects.count()
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        assert error.exception.code == "reply_target_unavailable"
+        assert InteractionThread.objects.count() == thread_count
+        reply.refresh_from_db()
+        assert reply.thread_id is None
+
+    def test_a_target_at_the_same_instant_as_the_reply_is_unavailable(self) -> None:
+        """The comparison is `>=`, so an equal timestamp is refused too."""
+        account = AccountFactory()
+        scene = SceneFactory()
+        reply = InteractionFactory(scene=scene, writer_account=account)
+        target = InteractionFactory(scene=scene, writer_account=account, timestamp=reply.timestamp)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
 
     def test_mismatched_scene_is_unavailable(self) -> None:
         account = AccountFactory()

@@ -244,8 +244,14 @@ def thread_anchor_ids(thread_ids: Iterable[object]) -> dict[object, int]:
 
 
 def thread_anchor_id(thread_id: object) -> int | None:
-    """The anchor id for one thread, or ``None`` when it has no members."""
-    return thread_anchor_ids([thread_id]).get(thread_id)
+    """The anchor id for one thread, or ``None`` when it has no members.
+
+    Normalizes the key for the same reason ``thread_roots`` does: a str spelling
+    looked up in a UUID-keyed dict misses silently, and here that ``None`` would
+    read as "not the anchor" and answer with a spurious split and move.
+    """
+    key = _as_thread_uuid(thread_id)
+    return thread_anchor_ids([key]).get(key)
 
 
 def _as_thread_uuid(value: object) -> UUID:
@@ -341,8 +347,23 @@ def _thread_for_target(
 
     No lock of its own is needed: the caller already holds ``select_for_update``
     on ``target``, and every reply to that row contends on it.
+
+    The target's CURRENT membership is read straight out of the column rather than
+    off the instance. Evennia's idmapper metaclass returns the process-cached
+    instance and discards the freshly loaded values
+    (``evennia/utils/idmapper/models.py``), so the caller's
+    ``select_for_update().get()`` takes the row lock but can still hand back a
+    ``thread_id`` this process cached earlier - and the web worker and the game
+    server are separate processes that never flush per request. A stale ``None``
+    would make this open a NEW thread and move the target out of a live exchange,
+    re-rooting it. ``values_list`` returns raw column data and never consults the
+    identity map, which ``refresh_from_db`` cannot promise: it reloads through the
+    same queryset, so the map can hand it the very instance it is refreshing.
     """
-    existing = target.thread
+    existing_id = (
+        Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).first()
+    )
+    existing = None if existing_id is None else InteractionThread.objects.get(pk=existing_id)
     if existing is None:
         thread = InteractionThread.objects.create(**signature.as_thread_kwargs())
         target.thread = thread
