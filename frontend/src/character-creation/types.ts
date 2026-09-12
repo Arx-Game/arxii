@@ -622,28 +622,15 @@ export interface ResonanceAssociation {
 }
 
 /**
- * Facet - hierarchical imagery/symbolism for motifs.
+ * Facet - flat imagery/symbolism vocabulary for motifs (flattened #3776 Task 1;
+ * the prior Category>Subcategory>Specific hierarchy, and the `tree` endpoint
+ * with it, are gone).
  * From /api/magic/facets/
  */
 export interface Facet {
   id: number;
   name: string;
   description: string;
-  parent: number | null;
-  parent_name: string | null;
-  depth: number;
-  full_path: string;
-}
-
-/**
- * Facet tree node with nested children.
- * From /api/magic/facets/tree/
- */
-export interface FacetTreeNode {
-  id: number;
-  name: string;
-  description: string;
-  children: FacetTreeNode[];
 }
 
 /**

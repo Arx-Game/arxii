@@ -1193,6 +1193,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     id,
     name: `Codex Entry ${id}`,
     summary: 'A lore entry.',
+    quote: '',
     is_public: true,
     is_featured: false,
     featured_order: null,

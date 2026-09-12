@@ -19480,20 +19480,8 @@ paths:
   /api/magic/facets/:
     get:
       operationId: magic_facets_list
-      description: |-
-        ViewSet for Facet records.
-
-        Provides read-only access to the facet hierarchy.
-        Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
+      description: Read-only browse of the flat Facet vocabulary.
       parameters:
-      - in: query
-        name: parent
-        schema:
-          type: integer
-      - in: query
-        name: parent__isnull
-        schema:
-          type: boolean
       - name: search
         required: false
         in: query
@@ -19516,11 +19504,7 @@ paths:
   /api/magic/facets/{id}/:
     get:
       operationId: magic_facets_retrieve
-      description: |-
-        ViewSet for Facet records.
-
-        Provides read-only access to the facet hierarchy.
-        Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
+      description: Read-only browse of the flat Facet vocabulary.
       parameters:
       - in: path
         name: id
@@ -19538,21 +19522,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Facet'
-          description: ''
-  /api/magic/facets/tree/:
-    get:
-      operationId: magic_facets_tree_retrieve
-      description: Return facets as nested tree structure.
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FacetTree'
           description: ''
   /api/magic/gift-unlocks/purchase/:
     post:
@@ -45573,6 +45542,11 @@ components:
           type: string
           description: Short summary for tooltips/modals (1-2 sentences).
           maxLength: 300
+        quote:
+          type: string
+          description: An italic intro line shown at the top of this entry's Codex
+            page (e.g. a quote attributed to the subject). Optional; blank hides it.
+          maxLength: 300
         lore_content:
           type: string
           nullable: true
@@ -51414,38 +51388,21 @@ components:
       - sheltered
     Facet:
       type: object
-      description: Serializer for Facet model with hierarchy info.
+      description: Serializer for the flat Facet vocabulary.
       properties:
         id:
           type: integer
           readOnly: true
         name:
           type: string
-          description: Facet name (e.g., 'Wolf', 'Silk', 'Creatures').
+          description: Facet name (e.g., 'Wolf', 'Silk', 'Scythe').
           maxLength: 100
-        parent:
-          type: integer
-          nullable: true
-          description: Parent facet for hierarchy (null = top-level category).
-        parent_name:
-          type: string
-          readOnly: true
-          nullable: true
         description:
           type: string
           description: Description of this facet's thematic meaning.
-        depth:
-          type: integer
-          readOnly: true
-        full_path:
-          type: string
-          readOnly: true
       required:
-      - depth
-      - full_path
       - id
       - name
-      - parent_name
     FacetCraftResult:
       type: object
       description: 'Response for a facet-craft attempt: rolled outcome + resolved
@@ -51484,31 +51441,6 @@ components:
       - outcome_name
       - quality_tier
       - success_level
-    FacetTree:
-      type: object
-      description: Serializer for Facet with nested children for tree display.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          description: Facet name (e.g., 'Wolf', 'Silk', 'Creatures').
-          maxLength: 100
-        description:
-          type: string
-          description: Description of this facet's thematic meaning.
-        children:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
-          description: Recursively serialize children.
-          readOnly: true
-      required:
-      - children
-      - id
-      - name
     Family:
       type: object
       description: Serializer for family selection and display.
@@ -55849,7 +55781,12 @@ components:
       - target
     ItemFacetRead:
       type: object
-      description: Read serializer for ItemFacet (GET list/detail).
+      description: |-
+        Read serializer for ItemFacet (GET list/detail).
+
+        ``is_inherent`` is exposed so the client can suppress the detach affordance:
+        the service refuses to remove an inherent row (``InherentFacetNotRemovable``,
+        #3776), and a button that always errors is worse than no button.
       properties:
         id:
           type: integer
@@ -55860,6 +55797,12 @@ components:
         facet:
           type: integer
           readOnly: true
+        is_inherent:
+          type: boolean
+          readOnly: true
+          description: True when this facet came from the template's inherent_facets
+            at creation time, not a crafter's own attach_facet_to_item call. Does
+            not count against the instance's facet_capacity.
         applied_by_account:
           type: integer
           readOnly: true
@@ -55877,6 +55820,7 @@ components:
       - attachment_quality_tier
       - facet
       - id
+      - is_inherent
       - item_instance
     ItemFacetWriteRequest:
       type: object

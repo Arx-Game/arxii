@@ -1,7 +1,7 @@
 from decimal import Decimal
 
 from django.core.exceptions import ValidationError
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.test import TestCase
 
 from actions.factories import ConsequencePoolFactory
@@ -276,62 +276,36 @@ class CharacterAnimaModelTests(TestCase):
 
 
 class FacetModelTest(TestCase):
-    """Tests for hierarchical Facet model."""
+    """Tests for the flat Facet vocabulary."""
 
-    def test_create_top_level_facet(self):
-        """Test creating a category-level facet."""
-        creatures = Facet.objects.create(
-            name="Creatures",
-            description="Animals and mythical beasts",
-        )
-        self.assertIsNone(creatures.parent)
-        self.assertEqual(creatures.depth, 0)
+    def test_create_facet(self):
+        """Test creating a facet."""
+        wolf = Facet.objects.create(name="Wolf", description="A predator.")
 
-    def test_create_nested_facet(self):
-        """Test creating nested facets with hierarchy."""
-        creatures = Facet.objects.create(name="Creatures")
-        mammals = Facet.objects.create(name="Mammals", parent=creatures)
-        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+        self.assertEqual(wolf.name, "Wolf")
+        self.assertEqual(wolf.description, "A predator.")
 
-        self.assertEqual(mammals.parent, creatures)
-        self.assertEqual(wolf.parent, mammals)
-        self.assertEqual(mammals.depth, 1)
-        self.assertEqual(wolf.depth, 2)
+    def test_str_is_name(self):
+        """Test that string representation is just the facet's name."""
+        wolf = Facet.objects.create(name="Wolf")
 
-    def test_facet_full_path(self):
-        """Test full_path property returns hierarchy."""
-        creatures = Facet.objects.create(name="Creatures")
-        mammals = Facet.objects.create(name="Mammals", parent=creatures)
-        wolf = Facet.objects.create(name="Wolf", parent=mammals)
+        self.assertEqual(str(wolf), "Wolf")
 
-        self.assertEqual(wolf.full_path, "Creatures > Mammals > Wolf")
-        self.assertEqual(mammals.full_path, "Creatures > Mammals")
-        self.assertEqual(creatures.full_path, "Creatures")
 
-    def test_facet_is_category(self):
-        """Test is_category property."""
-        creatures = Facet.objects.create(name="Creatures")
-        wolf = Facet.objects.create(name="Wolf", parent=creatures)
+class FacetFlattenedTests(TestCase):
+    """Facet is a flat vocabulary (2026-09-11 ruling, #3776) — no hierarchy."""
 
-        self.assertTrue(creatures.is_category)
-        self.assertFalse(wolf.is_category)
+    def test_facet_has_no_hierarchy_fields(self) -> None:
+        facet = Facet.objects.create(name="Scythe", description="")
+        self.assertFalse(hasattr(facet, "parent"))
+        self.assertFalse(hasattr(facet, "depth"))
+        self.assertFalse(hasattr(facet, "full_path"))
+        self.assertFalse(hasattr(facet, "is_category"))
 
-    def test_unique_name_within_parent(self):
-        """Test that names must be unique within same parent."""
-        creatures = Facet.objects.create(name="Creatures")
-        Facet.objects.create(name="Wolf", parent=creatures)
-
-        with self.assertRaises(IntegrityError):
-            Facet.objects.create(name="Wolf", parent=creatures)
-
-    def test_same_name_different_parent_allowed(self):
-        """Test that same name under different parents is allowed."""
-        creatures = Facet.objects.create(name="Creatures")
-        symbols = Facet.objects.create(name="Symbols")
-
-        # Both can have a "Wolf" child
-        Facet.objects.create(name="Wolf", parent=creatures)
-        Facet.objects.create(name="Wolf", parent=symbols)  # Should not raise
+    def test_name_is_globally_unique(self) -> None:
+        Facet.objects.create(name="Scythe", description="")
+        with transaction.atomic(), self.assertRaises(IntegrityError):
+            Facet.objects.create(name="Scythe", description="other")
 
 
 # =============================================================================

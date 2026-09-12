@@ -55,6 +55,7 @@ export function EntryDetail({ entry, onNavigateBreadcrumb }: EntryDetailProps) {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {entry.quote && <p className="text-base italic text-muted-foreground">{entry.quote}</p>}
         {entry.known_by.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-sm text-muted-foreground">Known by:</span>

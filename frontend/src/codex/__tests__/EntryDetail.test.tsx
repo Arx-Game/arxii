@@ -19,6 +19,7 @@ function makeEntry(overrides: Partial<CodexEntryDetail> = {}): CodexEntryDetail 
     id: 1,
     name: 'The Shroud',
     summary: 'A grey veil no army and no messenger ever crossed.',
+    quote: '',
     lore_content: 'Full lore content.',
     mechanics_content: null,
     lore_links: [],

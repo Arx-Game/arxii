@@ -8,6 +8,13 @@ _Avoid_: faction, org, culture.
 A specific group within a Society — a noble family, guild, gang, business, or standalone covenant — carrying rank titles and optional principle overrides. It belongs to (or stands apart from) exactly one Society.
 _Avoid_: faction, guild (guild is one OrganizationType, not the general term).
 
+**Patron Nickname** (`Organization.patron_nickname`, #3776):
+The org's own name for its patron deity — a nullable FK to `worship.BeingNickname`,
+never a direct FK to `worship.WorshippedBeing`. The being is reached transitively via
+`patron_nickname.being`, so different organizations can each name the same god
+differently in their own records.
+_Avoid_: patron deity FK (there is no such field), patron being.
+
 **OrganizationType**:
 A template categorizing organizations and supplying their default five-rank title set (e.g. noble_family, guild, secret_society, covenant).
 _Avoid_: org category, kind.

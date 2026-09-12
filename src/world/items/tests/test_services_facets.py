@@ -4,9 +4,19 @@ from django.test import TestCase
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.items.constants import BodyRegion, EquipmentLayer
-from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
-from world.items.models import ItemFacet
-from world.items.services.facets import attach_facet_to_item, remove_facet_from_item
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+    InherentFacetNotRemovable,
+)
+from world.items.models import ItemFacet, QualityTier
+from world.items.services.facets import (
+    attach_facet_to_item,
+    remove_facet_from_item,
+    stamp_inherent_facets,
+)
+from world.magic.models import Facet
 
 
 class AttachFacetToItemTests(TestCase):
@@ -184,6 +194,40 @@ class RemoveFacetFromItemTests(TestCase):
         remove_facet_from_item(item_facet=row)
         self.assertFalse(ItemFacet.objects.filter(pk=row_pk).exists())
 
+    def test_inherent_facet_cannot_be_removed(self) -> None:
+        """An is_inherent row is refused: stamping only runs once, at creation (#3776).
+
+        Without this guard a player detaching the Scythe facet from a Scythe strips
+        the archetype's own identity with no way to restore it — ItemInstance.save()
+        stamps brand-new instances only.
+        """
+        from world.items.factories import ItemFacetFactory
+        from world.magic.factories import FacetFactory
+
+        inherent_row = ItemFacetFactory(
+            item_instance=self.item,
+            facet=FacetFactory(name="InherentScythe"),
+            attachment_quality_tier=self.quality,
+            is_inherent=True,
+        )
+        with self.assertRaises(InherentFacetNotRemovable):
+            remove_facet_from_item(item_facet=inherent_row)
+        self.assertTrue(ItemFacet.objects.filter(pk=inherent_row.pk).exists())
+
+    def test_crafter_attached_facet_still_removable(self) -> None:
+        """The guard is scoped to is_inherent — an ordinary attachment still detaches."""
+        from world.items.factories import ItemFacetFactory
+        from world.magic.factories import FacetFactory
+
+        row = ItemFacetFactory(
+            item_instance=self.item,
+            facet=FacetFactory(name="CrafterAttachedFacet"),
+            attachment_quality_tier=self.quality,
+        )
+        self.assertFalse(row.is_inherent)
+        remove_facet_from_item(item_facet=row)
+        self.assertFalse(ItemFacet.objects.filter(pk=row.pk).exists())
+
     def test_handler_cache_invalidated_for_wearer(self) -> None:
         """After remove, the DB row is gone and a fresh handler sees the updated state.
 
@@ -212,3 +256,100 @@ class RemoveFacetFromItemTests(TestCase):
         fresh_facets = list(fresh_handler.iter_item_facets())
         pk_set = {f.pk for f in fresh_facets}
         self.assertNotIn(row_pk, pk_set)
+
+
+class InherentFacetStampingTests(TestCase):
+    """Tests for ItemTemplate.inherent_facets, auto-stamped onto every new instance.
+
+    #3776 Task 4: an archetype (e.g. "a Scythe" ItemTemplate) can declare facets
+    every instance inherently carries (the "IS the thing" case), stamped at
+    creation via ItemInstance.save() -> stamp_inherent_facets(). These rows must
+    not consume the instance's own crafter-facing facet_capacity.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from evennia_extensions.factories import AccountFactory
+        from world.items.factories import QualityTierFactory
+
+        cls.crafter = AccountFactory(username="InherentFacetCrafter")
+        # stamp_inherent_facets resolves a baseline QualityTier for its
+        # auto-stamped rows (attachment_quality_tier has no null/default option —
+        # see QualityTier.for_score); a real DB row must exist for it to find.
+        cls.quality = QualityTierFactory()
+
+    def test_new_instance_gets_templates_inherent_facets(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        scythe_facet = Facet.objects.create(name="Scythe")
+        template = ItemTemplateFactory(facet_capacity=1)
+        template.inherent_facets.add(scythe_facet)
+        instance = ItemInstanceFactory(template=template)
+        self.assertTrue(instance.item_facets.filter(facet=scythe_facet, is_inherent=True).exists())
+
+    def test_inherent_facets_do_not_consume_capacity(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        scythe_facet = Facet.objects.create(name="Scythe")
+        template = ItemTemplateFactory(facet_capacity=1)
+        template.inherent_facets.add(scythe_facet)
+        instance = ItemInstanceFactory(template=template)
+        red_facet = Facet.objects.create(name="Red")
+        # capacity=1, but the inherent Scythe facet shouldn't count against it —
+        # a crafter can still add one creative facet on top.
+        attach_facet_to_item(
+            crafter=self.crafter,
+            item_instance=instance,
+            facet=red_facet,
+            attachment_quality_tier=self.quality,
+        )
+        self.assertEqual(instance.item_facets.filter(is_inherent=False).count(), 1)
+
+    def test_stamping_is_idempotent(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        scythe_facet = Facet.objects.create(name="Scythe")
+        template = ItemTemplateFactory(facet_capacity=1)
+        template.inherent_facets.add(scythe_facet)
+        instance = ItemInstanceFactory(template=template)
+        stamp_inherent_facets(instance)  # calling again must not duplicate or error
+        self.assertEqual(instance.item_facets.filter(facet=scythe_facet).count(), 1)
+
+    def test_template_without_inherent_facets_short_circuits(self) -> None:
+        """A template carrying no inherent facets costs exactly one query, not three.
+
+        The stamping call sits on ItemInstance.save() and this is the common case
+        (recycle_item mints a salvage instance per returned template in a loop), so
+        the leading exists() must return before the already-carried values_list, the
+        exclusion query and the transaction.
+        """
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        template = ItemTemplateFactory(facet_capacity=1)
+        instance = ItemInstanceFactory(template=template)
+        with self.assertNumQueries(1):
+            stamp_inherent_facets(instance)
+        self.assertFalse(instance.item_facets.exists())
+
+
+class InherentFacetStampingUnconfiguredTests(TestCase):
+    """stamp_inherent_facets raises CraftingNotConfigured when no QualityTier rows exist.
+
+    #3776 Task 4 review finding: QualityTier.for_score(0) returns None (per its own
+    docstring) only when the QualityTier table is empty, and attachment_quality_tier
+    is a required (non-nullable) FK — without a guard, ItemFacet.objects.create would
+    raise a raw IntegrityError from inside ItemInstance.save(). Deliberately a
+    separate TestCase (not InherentFacetStampingTests, whose setUpTestData seeds a
+    QualityTier row) so no tier ever exists in this class's test database.
+    """
+
+    def test_raises_crafting_not_configured_when_no_tiers(self) -> None:
+        from world.items.factories import ItemInstanceFactory, ItemTemplateFactory
+
+        self.assertFalse(QualityTier.objects.exists())
+        scythe_facet = Facet.objects.create(name="ScytheUnconfigured")
+        template = ItemTemplateFactory(facet_capacity=1)
+        template.inherent_facets.add(scythe_facet)
+
+        with self.assertRaises(CraftingNotConfigured):
+            ItemInstanceFactory(template=template)

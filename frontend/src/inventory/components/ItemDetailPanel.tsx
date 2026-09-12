@@ -152,6 +152,8 @@ interface ItemFacetRow {
   id: number;
   item_instance: number;
   facet: number;
+  /** Stamped from the template at creation (#3776); the API refuses to detach it. */
+  is_inherent: boolean;
   attachment_quality_tier: number;
   applied_by_account: number | null;
   applied_at: string;
@@ -160,7 +162,6 @@ interface ItemFacetRow {
 interface FacetRecord {
   id: number;
   name: string;
-  full_path: string;
 }
 
 interface QualityTierRecord {
@@ -317,7 +318,7 @@ function ItemContent({
             <div className="flex flex-wrap gap-1.5">
               {liveFacets.map((row) => {
                 const facetRecord = facetMap.get(row.facet);
-                const facetLabel = facetRecord?.full_path ?? `Facet #${row.facet}`;
+                const facetLabel = facetRecord?.name ?? `Facet #${row.facet}`;
                 const tierRecord = tierMap.get(row.attachment_quality_tier);
                 const dotColor = tierRecord?.color_hex;
                 return (
@@ -333,14 +334,18 @@ function ItemContent({
                       />
                     )}
                     {facetLabel}
-                    <button
-                      type="button"
-                      aria-label={`Remove facet ${row.facet}`}
-                      onClick={() => handleRemoveFacet(row.id)}
-                      className="ml-0.5 opacity-60 hover:opacity-100"
-                    >
-                      <X className="h-3 w-3" />
-                    </button>
+                    {/* Inherent facets are the archetype's own identity (#3776) and the
+                        service refuses to detach them, so no remove affordance. */}
+                    {!row.is_inherent && (
+                      <button
+                        type="button"
+                        aria-label={`Remove facet ${row.facet}`}
+                        onClick={() => handleRemoveFacet(row.id)}
+                        className="ml-0.5 opacity-60 hover:opacity-100"
+                      >
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
                   </span>
                 );
               })}

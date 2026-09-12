@@ -931,16 +931,28 @@ def idempotent_record_interaction(
     nothing recomputed (no re-roll, no duplicate row). Found + any field differs: a
     `payload_conflict` (the caller reused a request id for genuinely different content/target/
     place - a client bug, not a legitimate retry). Not found: run the real work via `record_fn`
-    (default `record_interaction`) and write the `PoseSubmission` row in the same transaction; a
-    concurrent duplicate insert (two near-simultaneous retries) raises `IntegrityError`, which is
-    caught by re-reading and returning the winner's row rather than erroring -
-    this is what makes the check race-safe.
+    (default `record_interaction`) inside a transaction; a concurrent duplicate insert (two
+    near-simultaneous retries) raises `IntegrityError`, which is caught by re-reading and
+    returning the winner's row rather than erroring - this is what makes the check race-safe.
+
+    **The `PoseSubmission` row is written via `record_fn`'s `on_before_push` hook, not after
+    `record_fn` returns (#3783 fix)**: the ledger insert must land BEFORE any real-time push,
+    inside the same transaction, so that a genuine race between two retries is decided by
+    Postgres's unique-index insert ordering -- the loser's `IntegrityError` fires from inside
+    `record_fn`, before it ever reaches its own push call, and unwinds the whole `atomic()`
+    block (including the `Interaction` row `record_fn` may have already created). Writing the
+    ledger row only after `record_fn` returned (the pre-#3783 shape) let both racing retries
+    clear their own push before either's ledger insert could block the other -- the persisted
+    row stayed unique (proven by a Postgres-tagged concurrency test), but a visible duplicate
+    pose could still reach the room in that narrow window.
 
     ``record_fn`` (#3760 Task 5) lets a caller substitute a differently-shaped recorder for
     `record_interaction` -- e.g. `WhisperAction` passes `record_whisper_interaction`, whose
     ephemeral-scene branch scopes the real-time push to the writer + named target
     (`recipients=[character, target]`) instead of `record_interaction`'s room-wide broadcast;
     reusing `record_interaction` there would leak whisper content to the whole ephemeral scene.
+    Any `record_fn` used here must accept `on_before_push` and invoke it immediately before its
+    first delivery push, on every branch (ephemeral and persisted alike).
     """
     record_fn = record_fn or record_interaction
     existing = (
@@ -959,12 +971,16 @@ def idempotent_record_interaction(
             return IdempotentSubmissionResult(interaction=stored, replayed=True, conflict=False)
         return IdempotentSubmissionResult(interaction=None, replayed=False, conflict=True)
 
+    def _write_ledger(interaction_for_ledger: Interaction | None) -> None:
+        PoseSubmission.objects.create(
+            persona=persona,
+            client_request_id=client_request_id,
+            interaction=interaction_for_ledger,
+        )
+
     try:
         with transaction.atomic():
-            interaction = record_fn(**record_kwargs)
-            PoseSubmission.objects.create(
-                persona=persona, client_request_id=client_request_id, interaction=interaction
-            )
+            interaction = record_fn(on_before_push=_write_ledger, **record_kwargs)
     except IntegrityError:
         winner = PoseSubmission.objects.select_related("interaction").get(
             persona=persona, client_request_id=client_request_id
@@ -991,6 +1007,7 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     attributed_companion: Companion | None = None,
     reply_to: ReplyTarget | None = None,
     on_created: Callable[[Interaction], None] | None = None,
+    on_before_push: Callable[[Interaction | None], None] | None = None,
 ) -> Interaction | None:
     """Record an IC interaction to the database.
 
@@ -1021,6 +1038,14 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     room via WebSocket for real-time delivery. Ephemeral scenes never persist —
     they push in real-time and return None; ``on_created`` is never called in that
     branch (there is no row to attach anything to).
+    ``on_before_push`` (#3783), if given, runs immediately before the FIRST real-time
+    push on every branch — including the ephemeral-scene push and the thread-update
+    push, both of which precede ``on_created``. It exists solely for
+    ``idempotent_record_interaction`` to write its `PoseSubmission` ledger row inside
+    this same call, before any content reaches a client: writing the ledger row only
+    after this function returns let two genuinely concurrent retries each clear their
+    own push before either's ledger insert could block the other, so a caller could
+    see a duplicate pose even though the persisted row stayed unique.
     """
     if persona is None:
         from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
@@ -1037,6 +1062,8 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
         if reply_to is not None:
             raise InteractionThreadError
+        if on_before_push is not None:
+            on_before_push(None)
         push_ephemeral_interaction(
             persona=persona,
             content=content,
@@ -1062,6 +1089,9 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
 
     if scene is not None:
         _ensure_scene_participation(scene, character)
+
+    if on_before_push is not None:
+        on_before_push(interaction)
 
     thread_update = pending_thread_update(interaction)
     if thread_update is not None:
@@ -1095,19 +1125,24 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     return interaction
 
 
-def record_whisper_interaction(
+def record_whisper_interaction(  # noqa: PLR0913 - on_before_push is the #3783 ledger seam
     *,
     character: ObjectDB,
     target: ObjectDB,
     content: str,
     language: Language | None = None,
     reply_to: ReplyTarget | None = None,
+    on_before_push: Callable[[Interaction | None], None] | None = None,
 ) -> Interaction | None:
     """Record a whisper interaction with only the target as receiver.
 
     ``language`` (#2993) stamps the spoken language on the persisted row; the
     whisper text itself always stays full for its receiver-scoped audience
     (never garbled -- the speaker chose this listener).
+    ``on_before_push`` (#3783) mirrors ``record_interaction``'s hook of the same name --
+    called immediately before the FIRST real-time push on both branches, so
+    ``idempotent_record_interaction`` can write its `PoseSubmission` ledger row before any
+    content reaches a client. See ``record_interaction``'s docstring for the full rationale.
     """
     try:
         persona = character.sheet_data.primary_persona
@@ -1121,6 +1156,8 @@ def record_whisper_interaction(
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
         if reply_to is not None:
             raise InteractionThreadError
+        if on_before_push is not None:
+            on_before_push(None)
         push_ephemeral_interaction(
             persona=persona,
             content=content,
@@ -1140,6 +1177,8 @@ def record_whisper_interaction(
         language=language,
         reply_to=reply_to,
     )
+    if on_before_push is not None:
+        on_before_push(interaction)
     push_interaction(
         interaction,
         receiver_persona_ids=[target_persona.pk],

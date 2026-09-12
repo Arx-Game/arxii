@@ -1653,6 +1653,11 @@ Lore storage and character knowledge tracking.
 - **Art (#2408):** `CodexEntry.art` — nullable FK → `evennia_extensions.Media`,
   `SET_NULL`; illustration rendered in the codex-modal lore-card (`CodexModal.tsx`).
   No art set falls back to the existing placeholder convention.
+- **Quote (#3776 Task 10):** `CodexEntry.quote` — optional `CharField` (max 300, blank
+  hides it), an italic intro line meant atop any entry's page; general-purpose (not
+  worship-specific) so `worship.WorshippedBeing.codex_entry` (below) can reuse it.
+  Not yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — model
+  and admin only today.
 - **Integrates with:** action_points (teaching costs), consent (visibility), character_creation (starting knowledge), evennia_extensions (`Media`, art)
 - **Source:** `src/world/codex/`
 - **Details:** [codex.md](codex.md)
@@ -6118,7 +6123,10 @@ holder is never notified a claim exists.
     override; see `world.combat.stat_mapping`), `TemplateSlot`, `ItemInstance`,
     `TemplateInteraction`, `EquippedItem`, `OwnershipEvent`, `CurrencyBalance`
   - `ItemFacet` (Spec D §4.2) — through-model linking `ItemInstance` ↔ `Facet` with
-    `attachment_quality_tier`; unique per (item_instance, facet)
+    `attachment_quality_tier`; unique per (item_instance, facet). `is_inherent` (#3776
+    Task 4, default `False`) marks a row auto-stamped from `ItemTemplate.inherent_facets`
+    rather than a crafter's `attach_facet_to_item` call — excluded from
+    `assert_facet_attachable`'s `facet_capacity` count
   - `ItemStyle` — through-model linking `ItemInstance` ↔ `Style` with
     `attachment_quality_tier`; unique per (item_instance, style)
   - `Style.audacity` (#2029) — `StyleAudacity` tier (UNDERSTATED/EXPRESSIVE/BOLD/
@@ -6315,6 +6323,12 @@ holder is never notified a claim exists.
   haul amasses uncollected per ADR-0081; only an active collection delivers it.
 - **New fields on `ItemTemplate` (Spec D PR1):** `facet_capacity` (max attachable facets,
   default 0), `gear_archetype` (CharField, `GearArchetype` enum choices)
+- **New field on `ItemTemplate` (`inherent_facets`, #3776 Task 4):** M2M to `magic.Facet`
+  (`related_name="inherent_on_templates"`) — facets this archetype always carries (a
+  "Scythe" template always carries the Scythe facet). Auto-stamped onto every new
+  `ItemInstance` by `ItemInstance.save()` (`is_new` branch, deferred import to avoid a
+  circular import with `services/facets.py`) via `stamp_inherent_facets`; does not
+  consume the instance's own `facet_capacity`.
 - **New field on `ItemTemplate` (#1024):** `on_use_target_kind` (nullable `TargetKind` CharField)
   — null = self-use only; CHARACTER/ITEM/ROOM = requires an external target of that kind (validated
   by `OnUseTargetPrerequisite` before `use_item` is called); PERSONA and unknown values fail closed
@@ -6367,6 +6381,11 @@ holder is never notified a claim exists.
   - `attach_facet_to_item(*, crafter, item_instance, facet, attachment_quality_tier) -> ItemFacet`
     — raises `FacetAlreadyAttached` / `FacetCapacityExceeded`
   - `remove_facet_from_item(*, item_facet) -> None`
+  - `stamp_inherent_facets(item_instance) -> None` (#3776 Task 4) — idempotent; creates an
+    `ItemFacet(is_inherent=True)` row for every facet on `item_instance.template
+    .inherent_facets` not already attached. Resolves `attachment_quality_tier` (a required
+    FK with no schema default) via `QualityTier.for_score(0)` rather than a crafted value,
+    since inherent facets are never crafted. Called from `ItemInstance.save()` on creation.
   - `use_item(item_instance, user, target=None) -> UseItemResult` — applies on-use pool effects;
     consumables spend a charge and are destroyed at 0 (soft- or hard-delete); non-consumable
     usable items are reusable (no charge spent, `ACTIVATED` event logged). Raises `ItemNotUsable`
@@ -8248,8 +8267,26 @@ Gods as authorable data with worship economies, and ceremonies (funerals first) 
 lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decision ADR-0132.
 
 - **Worship models** (`world/worship`): `WorshipTradition` (name, `rites_specialization` FK →
-  skills.Specialization), `WorshippedBeing` (tradition FK, `resonance_pool` + `lifetime_worship`
-  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`), `WorshipGrant` (audit ledger),
+  skills.Specialization), `WorshippedBeing` (tradition FK, `domains` free-text spheres (#3776, no
+  lookup table — no mechanical matching need confirmed), `resonance_pool` + `lifetime_worship`
+  BigIntegers, nullable OneToOne `avatar_sheet`, `is_active`, `tarot_cards` M2M → `tarot.TarotCard`
+  (#3776 Task 9, blank, no cap, `related_name="represented_beings"`), nullable `codex_entry` FK →
+  `codex.CodexEntry` (#3776 Task 11, `PROTECT`, `related_name="worshipped_beings"` — mirrors
+  `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`; visibility reads
+  entirely through the linked entry's `is_public` tier)), `BeingFacet` (favored
+  aesthetic Facets, #3776), `BeingNickname` (#3776: alternate names worshippers use, unique per
+  being+name; `societies.Organization.patron_nickname` reaches the being transitively through
+  it), `BeingResonance` (#3776: `resonance` FK + `tier` (`BeingResonanceTier`:
+  FAVORED/ASSOCIATED), unique per being+resonance — FAVORED pays double on future worship-rite
+  reward calculation, #3777), `BeingRelationship` (#3776: `being_a`/`being_b` FKs +
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`; NO
+  hidden-truth field, a real hidden truth is a separately-authored `CodexEntry` reached
+  via a `Clue`; `save()` sorts being_a/being_b into pk-ascending order, DB-enforced, so
+  a caller can't record the same undirected pair twice under swapped args),
+  `WorshipFeastDay` (#3776 Task 9: `being` FK + `ic_month`/`ic_day` (no year, mirrors
+  `weather.FeastDay`'s shape) + `name`/`lore`, unique per being+date — worship gets its own
+  model rather than reusing weather's; feeds a future universal worship-rite multiplier, #3777),
+  `WorshipGrant` (audit ledger),
   `DevotionStanding` (unique sheet+being, `favor`/`lifetime_favor`), `WorshipDeclaration`
   (OneToOne sheet; `public_being` + `secret_being` + minted `secret` FK; `public_is_sincere`
   BooleanField default True, #2361 — the heart-vs-lip-service inward truth, private,
@@ -8259,7 +8296,10 @@ lightly-structured freeform RP. Full doc: `docs/systems/worship.md`; model decis
   `mint_worship_secret` (`worship/secrets.py`); `convert_public_worship(sheet, new_being, *,
   is_sincere=True)` (#2361 — the single write path for a post-CG public conversion; get-or-
   creates the declaration, repoints `public_being`, stores `public_is_sincere`; never touches
-  `DevotionStanding` or the secret side). CG: `CharacterDraft.public_worship`/
+  `DevotionStanding` or the secret side); `is_birth_favored_by(sheet, being, *, today=None)`
+  (#3776 Task 9 — pure query: True iff `sheet.tarot_card` is one of `being.tarot_cards` AND
+  `today` is `sheet`'s birthday; `today` defaults to `game_clock.get_ic_now()`, not the wall
+  clock; read by #3777's reward calc, grants nothing itself). CG: `CharacterDraft.public_worship`/
   `secret_worship` → `_create_worship_declaration` at finalization. Seeds: `worship` cluster
   (Rites skill + 4 specs, Ceremony Rites CheckType, Devotion aspect for Path of the Chosen,
   achievements, PLACEHOLDER beings); `secret-investigation` consent category in the consent seed.

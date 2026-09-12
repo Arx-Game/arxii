@@ -51,8 +51,9 @@ class Gift(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "species abilities and in-play powers are delivered as (ADR-0050)."
         ),
     )
-    # on_delete=PROTECT, deliberately unlike Species.parent and Facet.parent,
-    # which both CASCADE (#2891, ADR-0192). A child gift is not a taxonomy leaf
+    # on_delete=PROTECT, deliberately unlike Species.parent, which CASCADEs
+    # (#2891, ADR-0192). Facet.parent used to be the second such precedent; #3776
+    # flattened Facet and removed it. A child gift is not a taxonomy leaf
     # that is meaningless without its parent — it is a self-standing playable
     # gift that characters hold (CharacterGift) and thread (Thread.target_gift).
     # Cascading from the umbrella would delete gifts carrying live character

@@ -13,9 +13,63 @@ issue bodies; the model decision is ADR-0132.
   ceremonies roll with. Seeded (PLACEHOLDER names): Church Liturgy,
   Spiritcalling, Druidry, Occultism.
 - `WorshippedBeing` — the primitive (ADR-0132): name, PLACEHOLDER description,
-  tradition FK, `resonance_pool` (BigInteger, spendable by future miracles
-  #2360), `lifetime_worship` (monotonic audit), nullable OneToOne
-  `avatar_sheet` → CharacterSheet (rare played gods), `is_active`.
+  `domains` (#3776: plain free-text spheres, e.g. "Carnage, wanton bloodshed,
+  feral battle, ferocity" — deliberately no lookup table; overlap across gods
+  is expected and fine, and no mechanical matching need was confirmed), tradition
+  FK, `resonance_pool` (BigInteger, spendable by future miracles #2360),
+  `lifetime_worship` (monotonic audit), nullable OneToOne `avatar_sheet` →
+  CharacterSheet (rare played gods), `is_active`, `tarot_cards` (#3776 Task 9:
+  M2M → `tarot.TarotCard`, `related_name="represented_beings"`, blank, no cap —
+  cards people believe represent this being; pure association, read by
+  `is_birth_favored_by` below), nullable `codex_entry` FK (#3776 Task 11:
+  `codex.CodexEntry`, `on_delete=PROTECT`, `related_name="worshipped_beings"` —
+  mirrors `Gift.codex_entry`/`Technique.codex_entry`/`HouseAspectOption.codex_entry`;
+  visibility (Public/Obscure/Secret) is read entirely through the linked entry's
+  `is_public` tier, no separate visibility field on `WorshippedBeing` itself).
+  Reuses `CodexEntry.quote` (#3776 Task 10, `codex/models.py`) for free: an optional
+  italic intro line shown atop any entry's Codex page (blank hides it) — added as a
+  general `CodexEntry` field (benefits every entry type, not worship-specific) so a
+  being's page could open on an attributed quote without a worship-only field. Not
+  yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer` — reading it
+  today means going through the model or admin, not the API.
+- `BeingFacet` (#3776) — a being's favored aesthetic Facets: `being` FK,
+  `facet` FK → the shared `magic.Facet` pool (same pool Motif draws from),
+  unique per (being, facet).
+- `BeingNickname` (#3776) — an alternate name a being's worshippers use:
+  `being` FK (`related_name="nicknames"`), `name`, unique per (being, name).
+  No reverent/irreverent field — tone is prose, not data. Reached
+  transitively by `Organization.patron_nickname` (see societies.md) so
+  different orgs can name the same god differently in their own records.
+- `BeingResonance` (#3776) — a resonance a being favors or is merely
+  associated with: `being` FK (`related_name="resonances"`), `resonance` FK →
+  `magic.Resonance` (PROTECT, `related_name="favored_by_beings"`), `tier`
+  (`BeingResonanceTier`: FAVORED/ASSOCIATED), unique per (being, resonance). No
+  cap on how many a being holds — models "different kinds of worshippers" for
+  the same being. Read by issue #3777's `WorshipRite` reward calculation
+  (FAVORED pays double, ASSOCIATED the ordinary rate) and by #3776 Task 9's
+  tarot/feast-day mechanic.
+- `BeingRelationship` (#3776) — a public relationship fact between two gods:
+  `being_a`/`being_b` FKs (`related_name`s `relationships_as_a`/`relationships_as_b`),
+  `valence` (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN), `public_story`
+  (freeform prose). Exactly one prose field — deliberately NO hidden-truth field on
+  this model: a real hidden truth (why two beings actually feud) lives entirely as a
+  separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
+  maybe-secret field here, because even a hidden/blank field on a public row would leak
+  presence/absence of a mystery. ALLY/RIVAL/FEUD/UNKNOWN all read as undirected facts,
+  so `being_a`/`being_b` carry no meaning of their own — `save()`/`clean()` sort the
+  pair into pk-ascending order (mirrors `scenes.PersonaDiscovery` and
+  `positioning.PositionEdge`), and `being_relationship_canonical_order` enforces it at
+  the DB level too, so a caller can never record the same pair twice under swapped
+  argument order. Unique per (being_a, being_b) post-normalization;
+  `being_relationship_not_self` blocks a being from relating to itself.
+- `WorshipFeastDay` (#3776 Task 9) — a being's annual feast day: `being` FK
+  (`related_name="feast_days"`), `ic_month`/`ic_day` (no year — recurs every
+  IC year, mirrors `weather.FeastDay`'s shape), `name`, `lore`. Worship gets
+  its own model rather than reusing weather's — a religious concept shouldn't
+  be owned by the weather app. Unique per (being, ic_month, ic_day). Feeds a
+  universal worship-rite reward multiplier for anyone worshipping the being on
+  that date (wired in #3777) — distinct from `is_birth_favored_by` below,
+  which is per-character (tarot match + personal birthday), not per-date.
 - `WorshipGrant` — audit ledger (being, amount, granted_by sheet, reason).
 - `DevotionStanding` — one-way PC→god favor, unique (character_sheet, being).
   Chosen patronage fields (#2550): `valence` (nullable PatronageValence:
@@ -71,6 +125,18 @@ issue bodies; the model decision is ADR-0132.
   being survives untouched) or the secret side (`secret_being`/`secret` — an old
   secret faith's `Secret` row is left standing as history, still discoverable).
   Called from `world.ceremonies.services.finish_ceremony`'s CONVERSION branch.
+- `is_birth_favored_by(character_sheet, being, *, today=None)` → bool (#3776
+  Task 9) — pure query, no side effects: True only when the character's own
+  tarot card (`character_sheet.tarot_card`, a forwarding property onto
+  `character_sheets.Profile.tarot_card` via `true_profile` — there is no
+  separate `character_sheet.profile` accessor) matches one of `being`'s
+  `tarot_cards` AND `today` falls on the character's
+  `birthday_month`/`birthday_day`. `today` defaults to the current IC date
+  (`world.game_clock.services.get_ic_now()`), matching how
+  `world.tidings.services._birthday_items` already reads the same two fields
+  — never the real wall clock; returns False (never raises) with no active
+  `GameClock`. Read by issue #3777's worship-rite reward calculation to double
+  the being-scoped payout; grants nothing itself.
 
 ### Miracles & Divine Intervention (#2360)
 

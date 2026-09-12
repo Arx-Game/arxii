@@ -28,7 +28,6 @@ import {
   getDraftOffers,
   getEffectTypes,
   getFacets,
-  getFacetTree,
   getFamilies,
   getFamiliesWithOpenKinSlots,
   getClaimableTitles,
@@ -139,7 +138,6 @@ export const characterCreationKeys = {
     [...characterCreationKeys.all, 'path-skill-suggestions', pathId] as const,
   // Facet keys
   facets: () => [...characterCreationKeys.all, 'facets'] as const,
-  facetTree: () => [...characterCreationKeys.all, 'facet-tree'] as const,
   // Tradition keys
   traditions: (beginningId: number) =>
     [...characterCreationKeys.all, 'traditions', beginningId] as const,
@@ -655,13 +653,6 @@ export function useFacets() {
   return useQuery({
     queryKey: characterCreationKeys.facets(),
     queryFn: getFacets,
-  });
-}
-
-export function useFacetTree() {
-  return useQuery({
-    queryKey: characterCreationKeys.facetTree(),
-    queryFn: getFacetTree,
   });
 }
 

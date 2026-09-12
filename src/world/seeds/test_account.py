@@ -49,6 +49,7 @@ def seed_test_account(
     """
     from allauth.account.models import EmailAddress
     from evennia.accounts.models import AccountDB
+    from evennia.utils import create
 
     from evennia_extensions.models import PlayerData
 
@@ -58,11 +59,13 @@ def seed_test_account(
         PlayerData.objects.get_or_create(account=existing)
         return TestAccountSeedResult(username=username, email=email, created=False)
 
-    account = AccountDB.objects.create_user(
-        username=username,
-        email=email,
-        password=password,
-    )
+    # AccountDB.objects.create_user() (bare Django manager) instantiates the
+    # base AccountDB class, not its typeclass proxy, so Evennia's post_save
+    # signal (connected per-proxy-class) never fires at_first_save() and the
+    # account is left without a cmdset - it can log in but can't run commands.
+    # create.create_account() instantiates the real typeclass, matching how
+    # production accounts are created (ArxAccountAdapter.new_user).
+    account = create.create_account(username, email, password)
 
     # The ArxAccountAdapter creates PlayerData on signup via the web form,
     # but we're creating the account directly, so do it here too.
