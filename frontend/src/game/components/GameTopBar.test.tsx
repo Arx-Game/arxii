@@ -218,6 +218,23 @@ describe('GameTopBar', () => {
     });
   });
 
+  describe('no-active duplicate render (#3774 review fold-in)', () => {
+    it('renders each character exactly once when there is no active character', () => {
+      renderWithProviders(<GameTopBar characters={[rosterEntry, rosterEntry2]} />);
+
+      for (const entry of [rosterEntry, rosterEntry2]) {
+        const matches = screen
+          .getAllByRole('button')
+          .filter(
+            (btn) =>
+              btn.textContent?.includes(entry.name) ||
+              btn.getAttribute('title')?.includes(entry.name)
+          );
+        expect(matches).toHaveLength(1);
+      }
+    });
+  });
+
   describe('own-sheet link (#3412 S4)', () => {
     it('renders the sheet link for the active entry, pointing at its RosterEntry id in a new tab', () => {
       store.dispatch(startSession('Aria'));

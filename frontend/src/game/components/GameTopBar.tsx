@@ -241,38 +241,39 @@ export function GameTopBar({
           </div>
         ) : null}
 
-        {otherCharacters.map((char) => {
-          const session = sessions[char.name];
-          const attention = characterAttention(char, session);
-          // Ruling B (#3774 demo) -- a character with nothing waiting and no
-          // local session stays in the dimmest tier; anything waiting, or a
-          // live session, steps it up. A badge on a 40%-opacity avatar reads
-          // as decoration, so unread attention alone is enough to promote it.
-          const isDim = !session && attention.direct === 0 && !attention.ambient;
-          return (
-            <button
-              key={char.id}
-              onClick={() => handleSelectCharacter(char.name)}
-              className={
-                isDim
-                  ? 'relative opacity-40 transition-opacity hover:opacity-80'
-                  : 'relative opacity-60 transition-opacity hover:opacity-100'
-              }
-              // Ruling A (#3774 review) -- the two lists this replaces had
-              // different titles for a real reason: one switches to an
-              // already-connected session, the other opens a new connection.
-              title={session ? `Switch to ${char.name}` : `Connect as ${char.name}`}
-            >
-              <Avatar className={isDim ? 'h-6 w-6' : 'h-7 w-7'}>
-                <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
-                <AvatarFallback className={isDim ? 'text-[10px]' : 'text-xs'}>
-                  {getInitials(char.name)}
-                </AvatarFallback>
-              </Avatar>
-              <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
-            </button>
-          );
-        })}
+        {active &&
+          otherCharacters.map((char) => {
+            const session = sessions[char.name];
+            const attention = characterAttention(char, session);
+            // Ruling B (#3774 demo) -- a character with nothing waiting and no
+            // local session stays in the dimmest tier; anything waiting, or a
+            // live session, steps it up. A badge on a 40%-opacity avatar reads
+            // as decoration, so unread attention alone is enough to promote it.
+            const isDim = !session && attention.direct === 0 && !attention.ambient;
+            return (
+              <button
+                key={char.id}
+                onClick={() => handleSelectCharacter(char.name)}
+                className={
+                  isDim
+                    ? 'relative opacity-40 transition-opacity hover:opacity-80'
+                    : 'relative opacity-60 transition-opacity hover:opacity-100'
+                }
+                // Ruling A (#3774 review) -- the two lists this replaces had
+                // different titles for a real reason: one switches to an
+                // already-connected session, the other opens a new connection.
+                title={session ? `Switch to ${char.name}` : `Connect as ${char.name}`}
+              >
+                <Avatar className={isDim ? 'h-6 w-6' : 'h-7 w-7'}>
+                  <AvatarImage src={char.profile_picture_url ?? undefined} alt={char.name} />
+                  <AvatarFallback className={isDim ? 'text-[10px]' : 'text-xs'}>
+                    {getInitials(char.name)}
+                  </AvatarFallback>
+                </Avatar>
+                <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+              </button>
+            );
+          })}
 
         {!active &&
           characters.map((char) => (
