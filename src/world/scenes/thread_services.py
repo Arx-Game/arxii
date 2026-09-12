@@ -82,7 +82,6 @@ class ThreadAssignment:
 
     thread: InteractionThread
     target: Interaction
-    created: bool
 
 
 @dataclass(frozen=True)
@@ -220,24 +219,10 @@ def _same_holder(thread: InteractionThread, signature: HolderSignature) -> bool:
     )
 
 
-def pending_thread_update(interaction: Interaction) -> Interaction | None:
-    """Return the answered row that needs a websocket upsert, if any.
-
-    Set only the first time a row is answered, when the exchange it opens becomes
-    visible to the reader. The row's own payload is unchanged by being answered, so
-    this is an idempotent re-send of a row every recipient already holds.
-    """
-    try:
-        assignment = interaction.thread_assignment
-    except AttributeError:
-        return None
-    return assignment.target if assignment.created else None
-
-
 def _thread_anchored_at(
     target: Interaction,
     signature: HolderSignature,
-) -> tuple[InteractionThread, bool]:
+) -> InteractionThread:
     """Find or create the thread that answers ``target`` (#3787).
 
     One thread per answered row, so two people answering the same blow land in the
@@ -262,19 +247,18 @@ def _thread_anchored_at(
     if thread is not None:
         if not _same_holder(thread, signature):
             raise _unavailable()
-        return thread, False
+        return thread
 
     parent_thread = target.thread
     parent_id = None if parent_thread is None else parent_thread.pk
     root_id = None if parent_thread is None else (parent_thread.root_id or parent_thread.pk)
-    thread = InteractionThread.objects.create(
+    return InteractionThread.objects.create(
         anchor_interaction_id=target.pk,
         anchor_timestamp=target.timestamp,
         parent_id=parent_id,
         root_id=root_id,
         **signature.as_thread_kwargs(),
     )
-    return thread, True
 
 
 def assign_interaction_thread(
@@ -327,7 +311,7 @@ def assign_interaction_thread(
     ):
         raise _unavailable()
 
-    thread, created = _thread_anchored_at(target, target_signature)
+    thread = _thread_anchored_at(target, target_signature)
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
-    return ThreadAssignment(thread=thread, target=target, created=created)
+    return ThreadAssignment(thread=thread, target=target)

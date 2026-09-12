@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, Mock, patch
 
+from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import (
@@ -82,7 +83,10 @@ class TestSerializerNewFields(TestCase):
         assert self.target_persona.pk in data["target_persona_ids"]
 
     def test_thread_id_is_serialized(self) -> None:
+        answered = InteractionFactory(persona=self.writer_persona)
         thread = InteractionThread.objects.create(
+            anchor_interaction_id=answered.pk,
+            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=11,
             scene_id=11,
@@ -93,7 +97,14 @@ class TestSerializerNewFields(TestCase):
         data = InteractionListSerializer(self.interaction).data
 
         assert data["thread_id"] == str(thread.pk)
-        assert data["reply_to"] is None
+        # Since #3787 a thread IS the parent edge, so a row that has one always
+        # names what it answered. (Serialized with no request in context, so the
+        # visibility gate resolves against an anonymous viewer and a public,
+        # room-heard anchor still passes it.)
+        assert data["reply_to"] == {
+            "id": str(answered.pk),
+            "timestamp": answered.timestamp.isoformat(),
+        }
 
     def test_no_place_returns_none(self) -> None:
         interaction = InteractionFactory(persona=self.writer_persona)
@@ -519,11 +530,14 @@ class TestTabletalkCommand(TestCase):
 
 
 class TestInteractionThreadModel(TestCase):
-    """Interaction threads are nullable containers anchored on the row they answer."""
+    """Interaction threads always name the row they answer, and nothing else."""
 
     def test_interaction_thread_membership_and_set_null(self) -> None:
+        answered = InteractionFactory()
         interaction = InteractionFactory()
         thread = InteractionThread.objects.create(
+            anchor_interaction_id=answered.pk,
+            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=7,
             scene_id=7,
@@ -541,13 +555,32 @@ class TestInteractionThreadModel(TestCase):
         assert thread_id is None
 
     def test_thread_parent_is_optional(self) -> None:
+        """A root thread has no parent and no root - but it always has an anchor."""
+        answered = InteractionFactory()
         thread = InteractionThread.objects.create(
+            anchor_interaction_id=answered.pk,
+            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.WHISPER,
             party_key="3,7",
         )
 
         assert thread.parent_id is None
+        assert thread.root_id is None
         assert thread.pk is not None
+
+    def test_a_thread_cannot_exist_without_an_anchor(self) -> None:
+        """The invariant #3787 rests on, asserted by breaking it.
+
+        A thread exists only because someone answered a row. Both anchor columns
+        are NOT NULL, so an anchor-less thread is unrepresentable rather than
+        merely unwritten - which is what stops one from ever grouping rows in the
+        reader behind the parent chip's back.
+        """
+        with self.assertRaises(IntegrityError):
+            InteractionThread.objects.create(
+                holder_kind=InteractionThread.HolderKind.WHISPER,
+                party_key="3,7",
+            )
 
 
 class TestInteractionThreadAssignment(TestCase):

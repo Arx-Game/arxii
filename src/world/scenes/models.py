@@ -6,7 +6,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
-from django.db.models import Q
+from django.db.models import F, Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -965,19 +965,16 @@ class InteractionThread(SharedMemoryModel):
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
     anchor_interaction = models.ForeignKey(
         INTERACTION_MODEL,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         db_constraint=False,
         related_name="anchored_threads",
         help_text=(
-            "The interaction every row in this thread answers. Null only on threads "
-            "written before #3787, when a thread was a flat membership container."
+            "The interaction every row in this thread answers. Required: a thread "
+            "exists only because someone answered a row, so there is no such thing as "
+            "an anchor-less one."
         ),
     )
     anchor_timestamp = models.DateTimeField(
-        null=True,
-        blank=True,
         help_text=(
             "Denormalized from anchor_interaction - arxii_interaction is range-"
             "partitioned on timestamp with a composite primary key, so a single-column "
@@ -1038,22 +1035,26 @@ class InteractionThread(SharedMemoryModel):
                 ),
                 name="interaction_thread_holder_shape",
             ),
-            # The anchor is a pair, never half of one: the timestamp is the other
-            # half of the composite key into the partitioned interaction table, so
-            # an id without it cannot address a row at all.
-            models.CheckConstraint(
-                condition=(
-                    Q(anchor_interaction__isnull=True, anchor_timestamp__isnull=True)
-                    | Q(anchor_interaction__isnull=False, anchor_timestamp__isnull=False)
-                ),
-                name="interaction_thread_anchor_pair",
-            ),
             # One thread per anchored row - this is what makes two people answering
-            # the same blow land in the SAME exchange. Null anchors (pre-#3787 rows)
-            # are distinct to Postgres, so legacy rows do not collide.
+            # the same blow land in the SAME exchange rather than opening parallel
+            # ones. Both anchor columns are NOT NULL, so this admits no null-keyed
+            # escape hatch: every row it governs names a real answered interaction.
             models.UniqueConstraint(
                 fields=["anchor_interaction", "anchor_timestamp"],
                 name="unique_thread_per_anchor",
+            ),
+            # A thread cannot nest inside itself. Cheap, and it cannot be tripped by
+            # the SET_NULL on either field. Deliberately NOT paired with a
+            # "parent set implies root set" constraint: the service writes them
+            # together, but SET_NULL can legitimately clear one alone, and a check
+            # that turned that into an IntegrityError would make deleting a thread
+            # fail instead of degrading.
+            models.CheckConstraint(
+                condition=(
+                    (Q(parent__isnull=True) | ~Q(parent=F("id")))
+                    & (Q(root__isnull=True) | ~Q(root=F("id")))
+                ),
+                name="interaction_thread_no_self_nesting",
             ),
         ]
 

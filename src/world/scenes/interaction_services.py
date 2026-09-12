@@ -30,7 +30,6 @@ from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
     assign_interaction_thread,
-    pending_thread_update,
 )
 from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPayload
 
@@ -363,12 +362,11 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             write_target_personas(interaction, target_personas)
 
         if reply_to is not None:
-            assignment = assign_interaction_thread(
+            assign_interaction_thread(
                 interaction=interaction,
                 reply_target=reply_to,
                 account_id=writer_account_id,
             )
-            interaction.thread_assignment = assignment
 
     return interaction
 
@@ -1377,10 +1375,6 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
 
     if on_before_push is not None:
         on_before_push(interaction)
-
-    thread_update = pending_thread_update(interaction)
-    if thread_update is not None:
-        push_interaction(thread_update)
 
     if on_created is not None:
         on_created(interaction)

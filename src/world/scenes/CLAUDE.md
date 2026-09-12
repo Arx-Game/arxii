@@ -91,9 +91,17 @@ the unified Persona identity system, and non-combat scene rounds.
   writing; combat's own writers (`world.combat.interaction_services`) skip that check
   deliberately - a resolved action's targets are already governed by the encounter's own
   targeting rules, and Battle scenes have no location for presence to test against.
-- **`InteractionReply`** (#3787): the reply parent edge, separate from `InteractionThread`
-  membership - one row per reply, gated on the parent's own `visible_to` when read. See
-  "Scene Interaction Threads" in `docs/systems/scene-interaction-threads.md` and ADR-0293.
+- **`InteractionThread`** (#3787): ANCHORED, not a membership bag. `anchor_interaction`
+  (+ the denormalized `anchor_timestamp` the partitioned interaction table's composite PK
+  forces, both NOT NULL) is the row every member answers; the anchor itself is not a
+  member. So a row's `thread` means "what I am an answer to", not "which pile I am in",
+  and a root pose keeps `thread_id` null. Answering a reply NESTS a thread: `parent` is
+  the enclosing thread, `root` the top of the tree, and readers group by `root`.
+  `unique_thread_per_anchor` is what makes two people answering the same blow share one
+  exchange. The parent chip reads the anchor straight off the thread, gated on the
+  parent's own `visible_to`. There is no `InteractionReply` bridge - a flat container
+  plus an edge table was two mechanisms for one topology. See "Scene Interaction Threads"
+  in `docs/systems/scene-interaction-threads.md` and ADR-0293.
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
 - **`SceneRound`**: Non-combat round/turn structure anchored to a room. Fields: `mode` (`SceneRoundMode`),
   `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`. `mode` and `start_reason` are

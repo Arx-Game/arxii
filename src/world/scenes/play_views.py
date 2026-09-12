@@ -39,7 +39,7 @@ from world.scenes.interaction_filters import InteractionFilter
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
-from world.scenes.models import Interaction, PoseSubmission
+from world.scenes.models import Interaction, InteractionThread, PoseSubmission
 
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
@@ -188,6 +188,43 @@ def _queryset(
     elif conversation == GENERAL_CONVERSATION_KEY:
         queryset = queryset.filter(scene__isnull=True)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
+
+
+def _exchange_keys(
+    rows: list[dict[str, Any]],
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Map each thread on the page to its exchange, and each exchange to its anchor.
+
+    An exchange is a whole nesting tree (#3787). A row's ``thread`` is the row it
+    answers, so answering a reply nests a thread inside the one the answered row
+    lives in; every thread in that tree shares one ``root``, and the root thread's
+    own ``anchor_interaction`` is the pose the whole exchange opened with.
+
+    Returns ``(exchange_of, anchor_of)``: thread id -> exchange key, and exchange
+    key -> the interaction id that opens it. Both keyed by ``str`` so they compare
+    against the serializer's stringified ``thread_id`` without coercion.
+
+    Two flat queries for the whole page regardless of row count. The second is
+    needed because a root thread can be absent from the first: a page may hold a
+    nested reply whose enclosing thread's own members are all invisible to this
+    viewer, and the exchange still has to resolve to the right key.
+    """
+    thread_ids = {str(row["thread_id"]) for row in rows if row.get("thread_id")}
+    if not thread_ids:
+        return {}, {}
+    exchange_of = {
+        str(pk): str(root_id or pk)
+        for pk, root_id in InteractionThread.objects.filter(pk__in=thread_ids).values_list(
+            "pk", "root_id"
+        )
+    }
+    anchor_of = {
+        str(pk): anchor_id
+        for pk, anchor_id in InteractionThread.objects.filter(
+            pk__in=set(exchange_of.values())
+        ).values_list("pk", "anchor_interaction_id")
+    }
+    return exchange_of, anchor_of
 
 
 def _ref(row: dict[str, Any]) -> dict[str, str]:
@@ -477,6 +514,13 @@ class PlayThreadsView(APIView):
                 account=request.user,  # type: ignore[invalid-argument-type]
                 interaction_ids=[row["id"] for row in rows],
             )
+        # An exchange is the whole nesting tree, not one thread (#3787). A row's
+        # thread is what it ANSWERS, so answering a reply nests a new thread and a
+        # single back-and-forth spans several; `root_of` collapses them to the one
+        # key they share. Two flat queries for the page, never one per row.
+        exchange_of, anchor_of = _exchange_keys(rows)
+        rows_by_id = {int(row["id"]): row for row in rows}
+
         grouped: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             # An interaction carries a thread only when it is an explicit reply
@@ -491,9 +535,22 @@ class PlayThreadsView(APIView):
             key = row.get("thread_id")
             if not key:
                 continue
-            grouped.setdefault(str(key), []).append(row)
+            exchange = exchange_of.get(str(key))
+            if exchange is None:
+                continue
+            grouped.setdefault(exchange, []).append(row)
         results = []
-        for key, members in grouped.items():
+        for key, replies in grouped.items():
+            # The answered pose OPENS the exchange but is not a member of it: a
+            # thread holds the answers to a row, and that row is reachable as the
+            # anchor (#3787). Put it back at the head so `root`/`opening` name the
+            # pose that started the exchange and the counts include it. `rows` is
+            # ordered by (timestamp, id) and an answer always postdates what it
+            # answers, so prepending preserves that order. When the viewer cannot
+            # see the anchor it is simply absent from `rows_by_id` and the earliest
+            # visible reply leads, which is what `firstVisible` already means.
+            anchor_row = rows_by_id.get(anchor_of.get(key, -1))
+            members = replies if anchor_row is None else [anchor_row, *replies]
             root, latest = members[0], members[-1]
             unread = sum(1 for m in members if int(m["id"]) not in read_ids)
             results.append(
