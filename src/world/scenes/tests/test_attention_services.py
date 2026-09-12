@@ -9,6 +9,7 @@ from datetime import timedelta
 
 from django.test import TestCase
 from django.utils import timezone
+from evennia import create_object
 
 from evennia_extensions.factories import AccountFactory
 from world.character_sheets.factories import CharacterSheetFactory
@@ -59,8 +60,13 @@ class AccountAttentionTests(TestCase):
         # scene back to a specific character (SceneParticipation is
         # account-scoped, not character-scoped). Neither opening pose counts
         # toward ambient itself, since a character's own poses are always
-        # excluded.
-        cls.scene = SceneFactory()
+        # excluded. The scene has a real room (rather than location=None) so
+        # the presence-derived attribution query (Finding 1, #3774 final
+        # review) always runs, even though neither character's ObjectDB
+        # actually sits in that room - pose attribution alone already covers
+        # both, so the presence path adds a query but no sheets here.
+        cls.room = create_object("typeclasses.rooms.Room", key="Attention Test Room", nohome=True)
+        cls.scene = SceneFactory(location=cls.room)
         SceneParticipationFactory(scene=cls.scene, account=cls.account)
         InteractionFactory(scene=cls.scene, persona=cls.persona_one, mode=InteractionMode.POSE)
         InteractionFactory(scene=cls.scene, persona=cls.persona_two, mode=InteractionMode.POSE)
@@ -249,9 +255,39 @@ class AccountAttentionTests(TestCase):
         )
 
     def test_query_count_is_flat_as_characters_are_added(self) -> None:
+        # Five queries, none per character: (1) directed-unread UNION,
+        # (2) open SceneParticipation rows (+ each scene's location id),
+        # (3) pose-derived scene attribution, (4) presence-derived scene
+        # attribution (Finding 1, #3774 final review - who is standing in an
+        # open scene's room right now, posed or not), (5) room-heard ambient
+        # aggregation. Query 4 is the new one: it always runs once cls.scene
+        # has a location, whether or not it finds anyone there.
         InteractionFactory(scene=self.scene, persona=self.outsider, mode=InteractionMode.POSE)
 
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             account_attention(account=self.account, entries=self.entries[:1])
-        with self.assertNumQueries(4):
+        with self.assertNumQueries(5):
             account_attention(account=self.account, entries=self.entries)
+
+    def test_silent_participant_in_an_open_scene_gets_ambient(self) -> None:
+        # A character can end up an open participant in a scene without ever
+        # posing: `add_present_as_co_owners()` and `ensure_scene_participation()`
+        # (combat-encounter join) both create a `SceneParticipation` row for
+        # everyone physically present, with zero posing required. Pose-only
+        # attribution silently drops exactly this character - the quiet one
+        # most likely to have something unread (Finding 1, #3774 final review).
+        sheet_three = CharacterSheetFactory()
+        entry_three = RosterEntryFactory(character_sheet=sheet_three)
+        RosterTenureFactory(player_data=self.player_data, roster_entry=entry_three)
+        sheet_three.character.move_to(self.room, quiet=True)
+
+        InteractionFactory(
+            scene=self.scene,
+            persona=self.outsider,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+        result = account_attention(account=self.account, entries=[*self.entries, entry_three])
+
+        self.assertTrue(result.by_character[sheet_three.pk].ambient)

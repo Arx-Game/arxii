@@ -486,9 +486,12 @@ creating a duplicate row or silently misdelivering to a different audience.
   session-local, so a character's unread state didn't survive a change of
   device) is closed: `account_attention()` (`world/scenes/attention_services.py`)
   computes each of an account's characters' directed-unread count and
-  ambient-unread flag server-side, in four queries total, deliberately without
+  ambient-unread flag server-side, in five queries total, deliberately without
   `InteractionQuerySet.visible_to` (see `docs/systems/scenes.md`'s "Cross-device
-  attention counting" section). `RosterEntryViewSet.mine` carries the result
+  attention counting" section). An open scene attributes to a character by pose
+  authorship OR physical presence in its room, so a character present but
+  silent still gets the ambient badge (Finding 1, #3774 final review).
+  `RosterEntryViewSet.mine` carries the result
   on `MyRosterEntrySerializer` (`unread_direct`/`has_ambient_unread`/
   `attention_as_of_id`); the frontend's `characterAttention()`
   (`frontend/src/game/attention.ts`) adds each session's own live delta on top

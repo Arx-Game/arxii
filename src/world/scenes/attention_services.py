@@ -8,15 +8,27 @@ which would make a badge meaningless and disclose volume. The count is built
 from rows that are already this account's own instead, which is both correctly
 bounded and cheaper.
 
-Four queries, none per character and none per row:
+Five queries, none per character and none per row:
 1. Directed unread across both directed-message through tables
    (`InteractionReceiver` and `InteractionTargetPersona`), combined with a
    single SQL UNION.
-2. Which scenes the account still participates in (open, active).
-3. Which of the account's own characters actually posed in one of those
-   scenes (attribution - `SceneParticipation` is account-scoped, not
-   character-scoped, so this is the only way to know which character an
-   ambient scene belongs to).
+2. Which scenes the account still participates in (open, active), plus each
+   scene's location id in the same query (needed for attribution query 3b).
+3a. Which of the account's own characters actually posed in one of those
+    scenes (attribution - `SceneParticipation` is account-scoped, not
+    character-scoped, so pose authorship is one way to know which character
+    an ambient scene belongs to).
+3b. Which of the account's own characters are physically standing in one of
+    those scenes' rooms right now, even if they never posed
+    (`CharacterSheet` shares `ObjectDB`'s primary key, so `sheet_ids` are
+    already `ObjectDB` pks - a plain `db_location_id__in` filter finds them
+    with no extra lookup). This is a real gap posing-only attribution misses:
+    a character who is present when a scene opens (or joins a combat
+    encounter) gets a `SceneParticipation` row with zero posing required
+    (`add_present_as_co_owners`, `ensure_scene_participation`), so a silent
+    participant would otherwise never see the ambient badge that scene
+    produces. The two attribution paths are UNIONed in Python; a scene with
+    no location contributes only the pose-derived path.
 4. Room-heard, unread, not-our-own poses in those scenes, one row per scene
    (a boolean plus a watermark, never the whole backlog).
 
@@ -43,6 +55,40 @@ if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
     from world.roster.models import RosterEntry
+
+
+def _presence_derived_attribution(
+    *, open_scene_rows: list[tuple[int, int | None]], sheet_ids: Sequence[int]
+) -> dict[int, set[int]]:
+    """Which of our characters are standing in one of these scenes' rooms.
+
+    Query 3b (Finding 1, #3774 final review): `add_present_as_co_owners()`
+    (`scene_admin_services.py`) and `ensure_scene_participation()`
+    (`interaction_services.py`, also called from combat-encounter join) both
+    create a `SceneParticipation` row for everyone physically present, with
+    zero posing required - so pose-only attribution (query 3a) silently drops
+    the character who never posed, exactly the quiet one most likely to have
+    something unread. `sheet_ids` are `ObjectDB` pks (`CharacterSheet` shares
+    `ObjectDB`'s primary key), so this is a plain location filter, not a
+    separate character lookup. A scene with no location contributes nothing.
+    """
+    from evennia.objects.models import ObjectDB  # noqa: PLC0415
+
+    location_to_scenes: defaultdict[int, set[int]] = defaultdict(set)
+    for scene_id, location_id in open_scene_rows:
+        if location_id is not None:
+            location_to_scenes[location_id].add(scene_id)
+    if not location_to_scenes:
+        return {}
+
+    scene_to_sheets: defaultdict[int, set[int]] = defaultdict(set)
+    present_rows = ObjectDB.objects.filter(
+        id__in=sheet_ids, db_location_id__in=location_to_scenes.keys()
+    ).values_list("id", "db_location_id")
+    for sheet_id, location_id in present_rows:
+        for scene_id in location_to_scenes[location_id]:
+            scene_to_sheets[scene_id].add(sheet_id)
+    return scene_to_sheets
 
 
 def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> AccountAttention:
@@ -104,20 +150,21 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
     for sheet_id, interaction_id in receiver_rows.union(target_rows):
         direct_ids[sheet_id].add(interaction_id)
 
-    # 2. Scenes this account is still party to.
-    open_scene_ids = list(
+    # 2. Scenes this account is still party to, with each scene's location id
+    # carried along in the same query so query 3b needs no separate lookup.
+    open_scene_rows = list(
         SceneParticipation.objects.filter(
             account=account, left_at__isnull=True, scene__is_active=True
-        ).values_list("scene_id", flat=True)
+        ).values_list("scene_id", "scene__location_id")
     )
+    open_scene_ids = [scene_id for scene_id, _location_id in open_scene_rows]
 
     ambient_sheets: set[int] = set()
     as_of_id = 0
     if open_scene_ids:
-        # 3. Which of our characters actually posed in one of those scenes.
+        # 3a. Which of our characters actually posed in one of those scenes.
         # `SceneParticipation` is account-scoped, not character-scoped, so
-        # this is the only way to attribute an open scene to a specific
-        # character.
+        # this is one way to attribute an open scene to a specific character.
         scene_to_sheets: defaultdict[int, set[int]] = defaultdict(set)
         for scene_id, sheet_id in (
             Interaction.objects.filter(
@@ -127,6 +174,15 @@ def account_attention(*, account: AccountDB, entries: Sequence[RosterEntry]) -> 
             .distinct()
         ):
             scene_to_sheets[scene_id].add(sheet_id)
+
+        # 3b. Which of our characters are standing in one of those scenes'
+        # rooms right now, even if they never posed (Finding 1, #3774 final
+        # review). UNIONed into the same pose-derived map.
+        presence_attribution = _presence_derived_attribution(
+            open_scene_rows=open_scene_rows, sheet_ids=sheet_ids
+        )
+        for scene_id, present_sheet_ids in presence_attribution.items():
+            scene_to_sheets[scene_id].update(present_sheet_ids)
 
         # 4. Room-heard, unread, not-our-own poses in those scenes - one row
         # per scene rather than one per pose (Ruling 1, #3774 task-2 brief):
