@@ -186,17 +186,32 @@ def reassign_persona_interactions(
 def write_target_personas(interaction: Interaction, target_personas: Iterable[Persona]) -> None:
     """Bulk-write the ``InteractionTargetPersona`` rows naming who this row was about.
 
-    Shared by ``create_interaction`` (which validates reachability via
-    ``persona_can_receive`` before calling this, #3787 Task 4) and combat's own
-    action-interaction writers (``create_action_interaction_core``,
-    ``create_npc_action_interaction`` in ``world.combat.interaction_services``,
-    #3787 Task 5), which call this directly and deliberately skip that
-    validation -- a combat target's presence is already governed by the
-    encounter's own targeting rules (a resolved action's target must already be
-    a live participant/opponent in that encounter), not the narrative "is this
+    ADR-0291 decision 3 draws the line this function sits on: a SYSTEM-authored row
+    records what happened and is not governed by reachability; a PLAYER-authored row
+    addresses someone and is. ``create_interaction``'s own ``target_personas`` kwarg
+    is the player-authored side and validates with ``persona_can_receive`` (#3787
+    Task 4) before calling this. Every system-authored writer calls this directly and
+    deliberately skips that validation:
+
+    - ``create_action_interaction_core`` (this module) and
+      ``create_npc_action_interaction`` / ``broadcast_action_outcome``
+      (``world.combat.interaction_services``) -- combat's resolved actions.
+    - ``create_cast_outcome_pose`` (``world.scenes.cast_services``) -- the Narrator
+      OUTCOME pose(s) for a resolved standalone cast.
+    - ``narrate_privately`` (this module) -- a Narrator line addressed to one player.
+    - the resolved-action-request outcome writers in ``world.scenes.action_services``.
+
+    Their shared justification: the target is already governed by the mechanic's own
+    targeting rules (a resolved action's target must already be a live participant, a
+    cast's target was validated by ``validate_cast_target``, an action request's target
+    was fixed and accepted when the request was created), not by the narrative "is this
     persona standing somewhere this pose actually reaches" question
-    ``persona_can_receive`` answers. Does no reachability check of its own;
-    callers that need one run it before calling this.
+    ``persona_can_receive`` answers -- which several of them could not satisfy in any
+    case, since the Narrator's character is never physically placed and a Battle-backed
+    scene has ``location=None`` by construction. "System-authored" is about who composed
+    the text, not which persona is credited: several of these credit a player's persona
+    for machine-rendered content. Does no reachability check of its own; callers that
+    need one run it before calling this.
     """
     InteractionTargetPersona.objects.bulk_create(
         [
@@ -1398,8 +1413,14 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
         mode=InteractionMode.WHISPER,
         scene=scene,
         receivers=[persona],
-        target_personas=[persona],
     )
+    # ADR-0291 decision 3: this is a Narrator-authored system record, so its target
+    # row goes through `write_target_personas` rather than `create_interaction`'s
+    # validated kwarg. The whisper branch of `persona_can_receive` would happen to
+    # accept (the recipient is their own receiver), but only by coincidence of shape:
+    # the check anchors on the WRITER's location and the Narrator's character is
+    # never physically placed, so no other shape here would survive it.
+    write_target_personas(interaction, [persona])
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=narrator,

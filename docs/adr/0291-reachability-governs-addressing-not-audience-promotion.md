@@ -39,9 +39,20 @@ group per victim, destroying the "one exchange" reading a scene log depends on.
 someone.** Only the latter is governed by reachability. `write_target_personas`
 (`world/scenes/interaction_services.py`) is the shared writer, and it does no reachability
 check of its own; `create_interaction` runs `persona_can_receive` before calling it for a
-player's own tagging, while combat's writers
-(`create_action_interaction_core`, `create_npc_action_interaction` in
-`world/combat/interaction_services.py`) call it directly and skip that check.
+player's own tagging, while every system-authored writer calls it directly and skips that
+check: `create_action_interaction_core` (`world/scenes/interaction_services.py`),
+`create_npc_action_interaction` and `broadcast_action_outcome`
+(`world/combat/interaction_services.py`), `create_cast_outcome_pose`
+(`world/scenes/cast_services.py`), `narrate_privately`
+(`world/scenes/interaction_services.py`), and the two resolved-action-request outcome
+writers in `world/scenes/action_services.py`.
+
+"System-authored" is about who composed the text, not which persona is credited:
+`create_action_interaction_core` and the action-request outcome writers all credit a
+PLAYER's persona while the content itself is machine-rendered from a resolved mechanic.
+The test is whether the row records what happened (not governed by reachability) or
+carries something a player wrote at somebody (governed). Adding a new caller of
+`create_interaction`'s `target_personas` kwarg means asserting the row is the latter.
 
 *The concrete forcing case:* Battle scenes are created with `location=None`
 (`world/battles/models.py:165`), and the Narrator persona that authors ACTION/OUTCOME rows

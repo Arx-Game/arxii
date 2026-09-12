@@ -31,7 +31,7 @@ from world.scenes.action_models import (
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.boon_services import BOON_ACTION_KEYS
 from world.scenes.constants import InteractionMode
-from world.scenes.interaction_services import create_interaction
+from world.scenes.interaction_services import create_interaction, write_target_personas
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -128,8 +128,18 @@ def _resolve_treatment_request(
         content=content,
         mode=InteractionMode.POSE,
         scene=action_request.scene,
-        target_personas=[action_request.target_persona],
     )
+    # ADR-0291 decision 3: system-authored rows record what happened; only a
+    # player-authored row that addresses someone is governed by reachability. This
+    # content is machine-rendered from a resolved SceneActionRequest, and its target
+    # is the request's own already-validated `target_persona`, so the target row goes
+    # through `write_target_personas` rather than `create_interaction`'s validated
+    # kwarg -- the same routing combat's `create_action_interaction_core` uses for a
+    # mechanical row written under a player's persona. `respond_to_action_request` has
+    # no `UnreachableError` handler (only `Action.run` and `submit_pose` do), so a
+    # target who merely walked out of the room between request and resolution would
+    # otherwise 500 the REST resolution of an action they already consented to.
+    write_target_personas(interaction, [action_request.target_persona])
 
     action_request.status = ActionRequestStatus.RESOLVED
     action_request.resolved_at = timezone.now()
@@ -1550,10 +1560,17 @@ def _create_result_interaction(
         scene=action_request.scene,
         place=place,
         receivers=interaction_receivers,
-        target_personas=target_personas,
         strain_committed=strain_committed,
         fury_committed=fury_committed,
     )
+    if target_personas:
+        # ADR-0291 decision 3, same routing as the treatment outcome above: a
+        # machine-rendered record of a resolved action request, whose target the
+        # request already validated. TABLE_TALK routes this row to a Place whose
+        # presence set is resolved at RESOLUTION time, so the validated kwarg would
+        # refuse (and 500 an unhandled `UnreachableError` out of the REST resolver)
+        # for a target who simply stood up from the table mid-action.
+        write_target_personas(interaction, target_personas)
     if mode == InteractionMode.MUTTER:
         # #905: the room heard a fragment — and the fragment is public
         # BECAUSE it is what the room heard (#900 invariant).
