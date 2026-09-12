@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Reject ``str(exc)`` on a caught exception inside a view or serializer.
 
 django_notes.md's ViewSet standards say never put ``str(exc)`` in a response,
