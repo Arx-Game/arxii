@@ -26,6 +26,21 @@ class SecureWebSocketClient(WebSocketClient):
     to remain HttpOnly for better XSS protection.
     """
 
+    # Keepalive (#3745, ADR-0277). These are autobahn protocol options, and a
+    # class attribute is the hook we have: Evennia constructs the
+    # WebSocketServerFactory itself (evennia/server/portal/service.py) and never
+    # calls setProtocolOptions, so the factory default of 0 - auto-ping off -
+    # is what every session would otherwise get. Autobahn's _connectionMade
+    # copies factory options onto each instance but skips any attribute the
+    # instance already has, so the values below win. Setting them any later
+    # than the handshake is too late: succeedHandshake schedules the first ping
+    # before onOpen runs.
+    # The N815 suppressions below stand because the camelCase is autobahn's and
+    # the name IS the mechanism: `_connectionMade` looks these up by these exact
+    # spellings, so renaming them to snake_case turns the keepalive off.
+    autoPingInterval = settings.WEBSOCKET_AUTOPING_INTERVAL  # noqa: N815
+    autoPingTimeout = settings.WEBSOCKET_AUTOPING_TIMEOUT  # noqa: N815
+
     def get_client_session(self):
         """
         Override to get the session from cookies instead of URL parameters.
