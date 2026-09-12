@@ -471,11 +471,12 @@ creating a duplicate row or silently misdelivering to a different audience.
   result switches the reader into reference mode via `GamePage`'s
   `displaySceneFeed` swap. Dwell-tracked (`IntersectionObserver`) read receipts
   feed per-thread unread counts in the reader. `GET /api/play/threads/` (paginated
-  `ThreadSummary` per conversation, with real unread counts) is **built and
-  tested but not yet consumed by any frontend surface** — see
-  `docs/systems/scenes.md`'s Play API section; wiring it into a
-  conversation-thread-drill-down view in `HistoryNavigator` is follow-up work,
-  since no screen for it was in the approved demo. See `docs/systems/scenes.md`
+  `ThreadSummary` per conversation, with real unread counts) is consumed by the History
+  navigator's conversation drill-down (#3772): each readable conversation row carries a
+  `Threads` disclosure that lists the conversation's reply threads (opening line, visible
+  pose count, unread pill), and opening one switches the reader into reference mode
+  anchored at that thread's first visible pose. The endpoint returns reply threads only;
+  poses belonging to no thread are not emitted (#3772). See `docs/systems/scenes.md`
   for the endpoint list and `frontend/src/game/CLAUDE.md` for the component
   breakdown. Explicitly out of scope (kept for future work, not silently
   dropped): per-persona thumbnails in messages, richer history search/filter
