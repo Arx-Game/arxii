@@ -13,6 +13,7 @@ import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
 import { sessionAttention } from '@/game/attention';
+import { AttentionBadge } from '@/game/components/AttentionBadge';
 // #3412 S4 — reused from the Hall (frontend/src/home/hall/queries.ts), not
 // duplicated: no import-boundary lint rule exists between home/ and game/
 // (checked eslint.config.js — no `boundaries`/`no-restricted-imports` rule
@@ -74,28 +75,6 @@ interface GameTopBarProps {
   hasActiveEncounter?: boolean;
   encounterId?: number;
   onJumpToCombat?: () => void;
-}
-
-/**
- * Two-tier attention indicator (#2166 Decision 4a) — direct (unseen
- * whisper/@-target aimed at this character) badges a small red numeric
- * count, mirroring `ConversationTabStrip`'s `UnreadBadge`; ambient (any
- * other unread) shows a muted dot; neither renders nothing.
- */
-function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
-  if (direct > 0) {
-    return (
-      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-        {direct}
-      </span>
-    );
-  }
-  if (ambient) {
-    return (
-      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
-    );
-  }
-  return null;
 }
 
 function getInitials(name: string): string {

@@ -20,29 +20,8 @@ import { Link } from 'react-router-dom';
 import { actingPersonaId } from '@/roster/persona';
 import type { MyRosterEntry } from '@/roster/types';
 import { sessionAttention } from '@/game/attention';
+import { AttentionBadge } from '@/game/components/AttentionBadge';
 import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
-
-/**
- * Two-tier attention indicator (#2166 Decision 4a) on a puppet session tab —
- * direct (unseen whisper/@-target aimed at that character) badges a small
- * red numeric count, mirroring `ConversationTabStrip`'s `UnreadBadge`;
- * ambient (any other unread) shows a muted dot; neither renders nothing.
- */
-function AttentionBadge({ direct, ambient }: { direct: number; ambient: boolean }) {
-  if (direct > 0) {
-    return (
-      <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
-        {direct}
-      </span>
-    );
-  }
-  if (ambient) {
-    return (
-      <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-muted-foreground/60" />
-    );
-  }
-  return null;
-}
 
 /** The active scene's live feed, composed once by `GamePage` (#2156). */
 export interface GameWindowSceneFeed {
