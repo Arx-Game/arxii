@@ -465,13 +465,13 @@ class InteractionViewSet(
             )
         except InteractionThreadError as exc:
             return _refusal_response(
-                code=exc.code, field="reply_to", detail=str(exc), hint=exc.venue_hint
+                code=exc.code, field="reply_to", detail=exc.detail, hint=exc.venue_hint
             )
         except UnreachableError as exc:
             # #3787 Task 4 - refuse tagging a persona who cannot receive the row.
             # Nothing was written: create_interaction raises before any bulk_create.
             return _refusal_response(
-                code=exc.code, field="target_names", detail=str(exc), hint=exc.venue_hint
+                code=exc.code, field="target_names", detail=exc.detail, hint=exc.venue_hint
             )
 
         if result.conflict:

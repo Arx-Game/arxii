@@ -238,4 +238,6 @@ class UnreachableError(Exception):
     ) -> None:
         self.personas = personas
         self.venue_hint = venue_hint
-        super().__init__(message if message is not None else venue_hint)
+        # See InteractionThreadError.detail: the view reads this, never str(exc).
+        self.detail = message if message is not None else venue_hint
+        super().__init__(self.detail)

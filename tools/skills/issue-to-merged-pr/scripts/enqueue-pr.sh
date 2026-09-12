@@ -82,6 +82,52 @@ else
   echo "review evidence not required for issue #${LINKED_ISSUE:-unknown}"
 fi
 
+# GitHub Advanced Security posts its findings as PR REVIEW-THREAD comments, not
+# as a failing check and not (with our PAT's scope) in the code-scanning alerts
+# API. So a PR can be all-green, fully reviewed, and still carry an open
+# security finding nobody looked at. #3787 shipped to the point of enqueue with
+# an unresolved CodeQL "information exposure through an exception" finding that
+# only a human noticed. This refuses to arm the merge while one is open.
+#
+# Outdated threads are ignored: pushing a fix moves the line, GitHub marks the
+# thread outdated, and CodeQL re-runs against the new head.
+# shellcheck disable=SC2016  # $owner/$repo/$pr are GraphQL variables bound by
+# the -f flags below, not shell expansions; single quotes are required.
+SECURITY_THREADS=$(gh api graphql -f query='
+query($owner:String!,$repo:String!,$pr:Int!){
+  repository(owner:$owner,name:$repo){
+    pullRequest(number:$pr){
+      reviewThreads(first:100){
+        nodes{ isResolved isOutdated path line comments(first:1){ nodes{ author{ login } body } } }
+      }
+    }
+  }
+}' -f owner="${GITHUB_OWNER:-$(gh repo view --json owner --jq .owner.login)}" \
+   -f repo="${GITHUB_REPO_NAME:-$(gh repo view --json name --jq .name)}" \
+   -F pr="$PR" \
+   --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+         | select(.isResolved == false and .isOutdated == false)
+         | select(.comments.nodes[0].author.login | test("advanced-security|security-bot"; "i"))
+         | "  \(.path):\(.line // "?")  \(.comments.nodes[0].body | split("\n")[0])"' 2>/dev/null || true)
+
+if [[ -n "$SECURITY_THREADS" ]]; then
+  echo "ERROR: PR #$PR has unresolved GitHub Advanced Security findings:" >&2
+  echo "$SECURITY_THREADS" >&2
+  cat >&2 <<'MSG'
+
+These are review-thread comments from the security bot, not a failing check, so
+every other gate can be green while they stand. Do one of:
+
+  - Fix the finding and push. CodeQL re-runs and the thread goes outdated.
+  - If it is a false positive or an accepted risk, resolve the thread
+    deliberately and say why in the PR, so the next reader sees the reasoning.
+
+Read them with:
+  gh api repos/<owner>/<repo>/pulls/PR/comments --jq '.[] | select(.user.login|test("advanced-security")) | "\(.path):\(.line)\n\(.body)"'
+MSG
+  exit 1
+fi
+
 if [[ "$DRY_RUN" == "1" ]]; then
   echo "[dry-run] gh pr merge $PR --auto --squash"
   exit 0

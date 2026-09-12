@@ -33,6 +33,12 @@ class InteractionThreadError(ValueError):
         venue_hint: str | None = None,
     ) -> None:
         super().__init__(message)
+        # The player-facing sentence, held explicitly so a view never has to
+        # serialise the exception itself. `str(exc)` on an exception is how a
+        # stack trace or a database message reaches a response body by
+        # accident (CodeQL py/stack-trace-exposure, and the "never str(exc) in
+        # responses" standard in django_notes.md).
+        self.detail = message
         self.venue_hint = venue_hint
 
 
