@@ -295,6 +295,73 @@ class TestPersonaCanReceiveDirectedReceivers(TestCase):
         )
 
 
+class TestEmptyReceiversMeansNoExplicitReceivers(TestCase):
+    """An explicit ``receivers=[]`` reads as broadcast, not as "nobody".
+
+    ``create_interaction`` treats ``[]`` as falsy and writes no
+    ``InteractionReceiver`` rows, so the row it persists IS room-heard. Normalizing
+    ``[]`` to an empty frozenset instead made this predicate refuse every persona for
+    exactly that row, so the two disagreed about one value.
+    """
+
+    def test_room_heard_persona_is_reachable_with_an_empty_receiver_list(self) -> None:
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        persona = _persona_at(room)
+
+        assert persona_can_receive(
+            persona,
+            scene=scene,
+            place=None,
+            receivers=[],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_empty_receiver_list_still_refuses_a_persona_who_is_elsewhere(self) -> None:
+        """The normalization widens nothing: room-heard presence still decides."""
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        cellar = ObjectDBFactory(db_key="Cellar", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        persona = _persona_at(cellar)
+
+        assert not persona_can_receive(
+            persona,
+            scene=scene,
+            place=None,
+            receivers=[],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_place_scoped_row_with_an_empty_receiver_list_needs_only_presence(self) -> None:
+        place = PlaceFactory()
+        persona = PersonaFactory()
+        PlacePresenceFactory(place=place, persona=persona)
+
+        assert persona_can_receive(
+            persona,
+            scene=None,
+            place=place,
+            receivers=[],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_whisper_with_an_empty_receiver_list_is_still_reachable_by_nobody(self) -> None:
+        """A whisper is directed by construction, so an empty party reaches no one."""
+        persona = PersonaFactory()
+
+        assert not persona_can_receive(
+            persona,
+            scene=None,
+            place=None,
+            receivers=[],
+            mode=InteractionMode.WHISPER,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+
 class TestUnreachableError(TestCase):
     def test_carries_personas_and_venue_hint(self) -> None:
         persona = PersonaFactory()

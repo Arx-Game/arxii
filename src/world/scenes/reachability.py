@@ -80,13 +80,25 @@ if TYPE_CHECKING:
 
 
 def _receiver_ids(receivers: Iterable[Persona] | Iterable[int] | None) -> frozenset[int] | None:
-    """Normalize a receivers argument (personas or ids) to a set of persona ids."""
+    """Normalize a receivers argument (personas or ids) to a set of persona ids.
+
+    An EMPTY receivers argument normalizes to ``None``, exactly like ``None`` itself:
+    both mean "this content names no explicit receivers", which is what the
+    directed-vs-broadcast branches below test for. Returning an empty frozenset
+    instead made an explicit ``receivers=[]`` refuse EVERYONE, while
+    ``create_interaction`` reads the same ``[]`` as falsy and writes no
+    ``InteractionReceiver`` rows at all -- two code paths disagreeing about one
+    value, with the shape that actually gets persisted being the broadcast one.
+    ``visible_to``'s ``room_heard`` clause agrees with the persisted shape too (it
+    keys on the absence of receiver rows), so ``None`` is the reading that keeps all
+    three in step.
+    """
     if receivers is None:
         return None
     ids: set[int] = set()
     for item in receivers:
         ids.add(item if isinstance(item, int) else item.pk)
-    return frozenset(ids)
+    return frozenset(ids) if ids else None
 
 
 def _room_has_character(location: ObjectDB | None, character_sheet_id: int) -> bool:
