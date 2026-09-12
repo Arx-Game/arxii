@@ -2,6 +2,8 @@ import type { Session } from '@/store/gameSlice';
 import type { Interaction } from '@/scenes/types';
 import { getThreadKey, countUnread } from '@/scenes/hooks/useThreading';
 import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
+import type { MyRosterEntry } from '@/roster/types';
+import { actingPersonaId } from '@/roster/persona';
 
 export interface SessionAttention {
   /** Total unread across whisper threads + target threads aimed at `personaId`. */
@@ -38,7 +40,10 @@ export interface SessionAttention {
  * without the watermark a whisper that arrived over the WebSocket and was then
  * included in the next roster refetch would badge twice. Omitted or null means
  * count everything, which is the pre-#3774 behavior and what a caller with no
- * server baseline wants.
+ * server baseline wants. A `sinceId` of `0` is effect-equivalent to that, since
+ * interaction ids start at 1 and every real id is `> 0` -- but it is not
+ * structurally the same branch: it fails `sinceId == null` and is kept by the
+ * `Number(id) > sinceId` comparison instead (review fold-in).
  */
 export function sessionAttention(
   session: Session,
@@ -93,4 +98,30 @@ function targetIncludes(threadKey: string, personaId: number | null): boolean {
   if (personaId == null) return false;
   const ids = threadKey.slice('target:'.length).split(',').map(Number);
   return ids.includes(personaId);
+}
+
+/**
+ * The badge for one character (#3774): the server's account-wide baseline
+ * (`MyRosterEntry.unread_direct`/`has_ambient_unread`) plus whatever this tab
+ * has seen arrive since, with the server's own `attention_as_of_id` watermark
+ * keeping the two from counting the same pose twice (see `sessionAttention`'s
+ * `sinceId`). A character with no local session in this tab has no delta at
+ * all -- the server value stands alone, which is the fresh-device case #3774
+ * exists for.
+ *
+ * Canonical shared version: GameTopBar's avatar row and GameWindow's
+ * puppet-tab row both call this rather than each computing their own
+ * combination, so the two can never drift apart.
+ */
+export function characterAttention(
+  char: MyRosterEntry | undefined,
+  session: Session | undefined
+): SessionAttention {
+  const serverDirect = char?.unread_direct ?? 0;
+  const serverAmbient = char?.has_ambient_unread ?? false;
+  if (!session) {
+    return { direct: serverDirect, ambient: serverAmbient };
+  }
+  const delta = sessionAttention(session, actingPersonaId(char), char?.attention_as_of_id ?? 0);
+  return { direct: serverDirect + delta.direct, ambient: serverAmbient || delta.ambient };
 }

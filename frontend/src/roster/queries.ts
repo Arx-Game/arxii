@@ -29,13 +29,28 @@ export function useRosterEntryQuery(id: RosterEntryData['id']) {
   });
 }
 
-export function useMyRosterEntriesQuery(enabled = true) {
+type MyRosterEntriesOptions = {
+  enabled?: boolean;
+  refetchInterval?: number;
+  refetchIntervalInBackground?: boolean;
+  refetchOnWindowFocus?: boolean;
+};
+
+/**
+ * The account's own characters. Options are per observer in TanStack Query, so
+ * the game screen can poll for #3774's attention counts without every other
+ * consumer of this query key (useActiveCharacterId, useWorldBuilderActor,
+ * Header) starting to poll too.
+ */
+export function useMyRosterEntriesQuery(options: boolean | MyRosterEntriesOptions = true) {
   const account = useAccount();
+  const opts = typeof options === 'boolean' ? { enabled: options } : options;
   return useQuery({
     queryKey: ['my-roster-entries'],
     queryFn: fetchMyRosterEntries,
-    enabled: !!account && enabled,
     throwOnError: true,
+    ...opts,
+    enabled: !!account && (opts.enabled ?? true),
   });
 }
 

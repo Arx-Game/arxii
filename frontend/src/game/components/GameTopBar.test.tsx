@@ -169,6 +169,55 @@ describe('GameTopBar', () => {
     });
   });
 
+  describe('server attention baseline (#3774)', () => {
+    it('badges a character with no local session from the server value alone', () => {
+      store.dispatch(startSession('Aria'));
+
+      renderWithProviders(
+        <GameTopBar characters={[rosterEntry, { ...rosterEntry2, unread_direct: 2 }]} />
+      );
+
+      // Bianca has no session at all (not started above), so this is the
+      // fresh-device case #3774 exists for: the server count must render on
+      // its own, not fall through a `sessions[name]` lookup to zero.
+      const biancaButton = screen.getByTitle('Connect as Bianca');
+      expect(within(biancaButton).getByText('2')).toBeInTheDocument();
+    });
+
+    it('adds the live session delta to the server count without double-counting', () => {
+      store.dispatch(startSession('Bianca'));
+      store.dispatch(startSession('Aria'));
+      store.dispatch(setSceneBaseline({ character: 'Bianca', baselineId: 0 }));
+      // Below the watermark (attention_as_of_id: 5) -- the server already
+      // counted this one, so it must not add to the delta.
+      store.dispatch(
+        addSceneInteraction({ character: 'Bianca', interaction: makeWhisperInteraction({ id: 3 }) })
+      );
+      // Above the watermark -- arrived after the server's count, so it's a
+      // genuine delta.
+      store.dispatch(
+        addSceneInteraction({ character: 'Bianca', interaction: makeWhisperInteraction({ id: 9 }) })
+      );
+
+      renderWithProviders(
+        <GameTopBar
+          characters={[rosterEntry, { ...rosterEntry2, unread_direct: 2, attention_as_of_id: 5 }]}
+        />
+      );
+
+      const biancaButton = screen.getByTitle('Switch to Bianca');
+      expect(within(biancaButton).getByText('3')).toBeInTheDocument();
+    });
+
+    it('never badges the active character, even when its own server count is nonzero', () => {
+      store.dispatch(startSession('Aria'));
+
+      renderWithProviders(<GameTopBar characters={[{ ...rosterEntry, unread_direct: 4 }]} />);
+
+      expect(screen.queryByText('4')).not.toBeInTheDocument();
+    });
+  });
+
   describe('own-sheet link (#3412 S4)', () => {
     it('renders the sheet link for the active entry, pointing at its RosterEntry id in a new tab', () => {
       store.dispatch(startSession('Aria'));
