@@ -1,6 +1,5 @@
 """The room-heard predicate is shared by read visibility and attention counting."""
 
-from django.db.models import Q
 from django.test import TestCase
 
 from world.scenes.constants import InteractionMode, InteractionVisibility
@@ -51,6 +50,4 @@ class RoomHeardPredicateTests(TestCase):
         self.assertNotIn(self.private_pose.id, matched)
 
     def test_each_call_returns_an_independent_q(self) -> None:
-        first = room_heard_q()
-        first & Q(scene__isnull=False)
-        self.assertEqual(repr(first), repr(room_heard_q()))
+        self.assertIsNot(room_heard_q(), room_heard_q())
