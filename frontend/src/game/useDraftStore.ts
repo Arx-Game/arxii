@@ -226,10 +226,15 @@ export function useDraftStore(key: DraftKey) {
     setStorageUnavailable(false);
   }, [key]);
 
+  // The patch may be a function of the PREVIOUS draft (#3784) so a caller
+  // whose new value depends on the current content -- `CommandInput`'s
+  // `@target` append effect -- can express that without reading a stale
+  // render closure, exactly as it would with a `setState` updater. A plain
+  // object patch stays the common case.
   const update = useCallback(
-    (patch: Partial<Draft>) => {
+    (patch: Partial<Draft> | ((previous: Draft) => Partial<Draft>)) => {
       setDraft((prev) => {
-        const next = { ...prev, ...patch };
+        const next = { ...prev, ...(typeof patch === 'function' ? patch(prev) : patch) };
         setStorageUnavailable(!persist(key, next));
         return next;
       });
@@ -238,7 +243,7 @@ export function useDraftStore(key: DraftKey) {
   );
 
   const setContent = useCallback(
-    (content: string) =>
+    (content: string | ((previous: string) => string)) =>
       // Editing invalidates whatever attempt is in flight: the outstanding
       // clientRequestId no longer names the current content, so a stale
       // ack/reject/unknown for it must not touch this newer, unsent edit.
@@ -246,13 +251,13 @@ export function useDraftStore(key: DraftKey) {
       // edit is a genuinely NEW attempt, free to pick up whatever mode is
       // live right now; only an UNCHANGED resend must keep the mode it was
       // originally composed under (#3760 Task 11 critical fix).
-      update({
-        content,
+      update((previous) => ({
+        content: typeof content === 'function' ? content(previous.content) : content,
         clientRequestId: null,
         status: 'clean',
         rejectionReason: null,
         mode: null,
-      }),
+      })),
     [update]
   );
 

@@ -3397,7 +3397,9 @@ action consent flow, and a three-mode non-combat round framework.
   communication.py`) requires a genuine `PlacePresence` before trusting a
   client-asserted place id for tabletalk sends. Frontend: `useDraftStore`
   (`frontend/src/game/useDraftStore.ts`) persists one draft per account/persona/
-  conversation to `sessionStorage`, preserving the original send `mode` across an
+  conversation to `sessionStorage` — the composer's single source of truth for its own
+  text since #3784 (`draft.content` is the textarea's value; no parallel local string) —
+  preserving the original send `mode` across an
   unmodified retry (never re-derived from whatever mode is live at retry time — closes
   a real privacy leak where a stranded whisper draft could redispatch as a public
   say/pose) and re-capturing it fresh only on a genuine content edit;

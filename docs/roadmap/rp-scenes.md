@@ -368,12 +368,16 @@ creating a duplicate row or silently misdelivering to a different audience.
 - **Frontend draft store:** `useDraftStore` (`frontend/src/game/useDraftStore.ts`) —
   per-account/persona/conversation draft state (`clean`/`pending`/`rejected`/`unknown`),
   persisted to `sessionStorage` so a stranded draft survives a reload/reopened tab.
-  `CommandInput.tsx`'s composer renders exactly one delivery-state banner at a time
-  (pending "Sending…", rejected with reason, unknown "Check status"/Retry, or stranded
-  "Unsent draft from … / Discard / Resume & retry") and ack-gates every clear-on-success
-  path (`if (commandRef.current === trimmed)`) so a newer edit typed while a request is
-  in flight is never clobbered — REST pose, the WS say/whisper ack handler, and the
-  companion-emote branch all guard identically.
+  It is the composer's **single** source of truth: `draft.content` is the textarea's
+  value, so there is no second local string to keep in step (#3784 retired the
+  `arx:play-draft:v1:<scope>` copy that used to hydrate the textarea while this store
+  held everything else). `CommandInput.tsx`'s composer renders exactly one
+  delivery-state banner at a time (pending "Sending…", rejected with reason, unknown
+  "Check status"/Retry, or stranded "Unsent draft from … / Discard / Resume & retry"),
+  and a newer edit typed while a request is in flight is never clobbered because
+  `setContent` nulls the dispatched `clientRequestId` and `acknowledge(id)` then no-ops
+  — one invariant in the store, rather than a `commandRef.current === trimmed` guard
+  repeated at the REST-pose, WS-ack and companion-emote call sites.
   - `say`/`whisper`/`tt` dispatch via `executeAction` (structured ack); REST `submit_pose`
     carries the same `client_request_id`; a whisper/tt whose target/place can't currently
     be resolved (or an explicit command override) falls through to the legacy raw-WS

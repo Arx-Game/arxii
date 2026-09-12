@@ -24,6 +24,32 @@ describe('useDraftStore', () => {
     expect(secondId).toBe(firstId);
   });
 
+  // #3784 — the composer is the single source of truth for its own text, so
+  // a caller appending to the current draft (`CommandInput`'s @target append)
+  // needs an updater form; reading `draft.content` from a render closure
+  // instead would append to whatever was current one render ago.
+  it('setContent accepts an updater over the current content, and still resets the attempt', () => {
+    const { result } = renderHook(() => useDraftStore(key));
+    act(() => result.current.setContent('Silas nods'));
+    let sentId = '';
+    act(() => {
+      sentId = result.current.beginSend({ command: 'whisper', targets: ['Bob'] });
+    });
+    expect(result.current.draft.clientRequestId).toBe(sentId);
+
+    act(() => result.current.setContent((previous) => `${previous} at @Bob`));
+
+    expect(result.current.draft.content).toBe('Silas nods at @Bob');
+    // An append is an edit like any other: the in-flight attempt and the mode
+    // it was composed under are invalidated, not carried over.
+    expect(result.current.draft.clientRequestId).toBeNull();
+    expect(result.current.draft.status).toBe('clean');
+    expect(result.current.draft.mode).toBeNull();
+    expect(JSON.parse(sessionStorage.getItem(draftStorageKey(key)) as string).content).toBe(
+      'Silas nods at @Bob'
+    );
+  });
+
   it('mints a new id after the content changes', () => {
     const { result } = renderHook(() => useDraftStore(key));
     act(() => result.current.setContent('Silas nods.'));
