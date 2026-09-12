@@ -2221,17 +2221,18 @@ describe('ThreadedNarrativeReader', () => {
   });
 
   describe('nested exchanges (#3787 rework)', () => {
-    // A row's `thread_id` is what it ANSWERS, not which pile it sits in, so this
-    // one back-and-forth is THREE threads: the opening pose answers nothing and
-    // carries no thread at all, `root-thread` is anchored at it, and answering
-    // the reply nests `nested-thread` inside `root-thread`. Grouping on
-    // `thread_id` draws three cards -- `legacy:1`, `root-thread`,
-    // `nested-thread` -- with the opening pose stranded in a "Standalone" card
-    // of its own directly above the exchange it started. `root_thread_id` plus
-    // the anchor-adoption pass is what collapses all three into one card.
-    const opening = interaction(1, 'She lunges through his guard.', null);
+    // Exactly what the server produces for one back-and-forth (#3787). Answering
+    // a row that is not already its thread's first member MOVES it into a child
+    // thread, so this is TWO threads: `root-thread` keeps the opening pose, and
+    // answering the reply split `nested-thread` off and moved the reply into it.
+    // Every row is a member of the thread it sits in - the opening pose included,
+    // which is why it needs no special handling to render inside the exchange it
+    // began. Grouping on `thread_id` draws two cards, splitting the exchange in
+    // half; `root_thread_id` is what collapses them into one.
+    const opening = interaction(1, 'She lunges through his guard.', 'root-thread');
     const reply: Interaction = {
-      ...interaction(2, 'He turns the blade aside.', 'root-thread'),
+      ...interaction(2, 'He turns the blade aside.', 'nested-thread'),
+      root_thread_id: 'root-thread',
       reply_to: { id: '1', timestamp: opening.timestamp },
     };
     const nested: Interaction = {
@@ -2257,8 +2258,8 @@ describe('ThreadedNarrativeReader', () => {
       const cards = [...container.querySelectorAll('[data-thread-id]')].map((card) =>
         card.getAttribute('data-thread-id')
       );
-      // Exactly one, and not `legacy:1` or `nested-thread`: this is the
-      // assertion that fails the moment grouping falls back to `thread_id`.
+      // Exactly one, and not `nested-thread`: this is the assertion that fails
+      // the moment grouping falls back to `thread_id`.
       expect(cards).toEqual(['root-thread']);
       expect(screen.getByRole('button', { name: /3 poses/ })).toBeInTheDocument();
     });

@@ -35,11 +35,12 @@ const THREAD_PAGE_SIZE = 20;
  * shares, which is what lets a nested exchange render as ONE card. It is null on a
  * root thread, where `thread_id` already IS the top.
  *
- * This is a row's key BEFORE anchor adoption: the row a root thread is anchored at
- * answers nothing, so it carries no thread and keys `legacy:` here. `exchangeKeyById`
- * (inside the component, where the whole loaded list is in scope) then pulls it into
- * the exchange its replies are in, so the card opens with the pose being answered
- * instead of leaving it stranded as a separate standalone card above.
+ * The answered pose needs no special handling: it is an ordinary MEMBER of the
+ * thread it opens, so it keys the same exchange its replies do and the card opens
+ * with it. (An earlier design kept it outside its thread, which stranded it in a
+ * standalone card above and needed an adoption pass here to pull it back in. That
+ * design was removed, and so was the pass.) `legacy:` is left for a genuinely
+ * unthreaded pose: one nobody has answered.
  */
 function ownExchangeKey(item: Interaction): string {
   return item.root_thread_id || item.thread_id || `legacy:${item.id}`;
@@ -59,11 +60,10 @@ function ownExchangeKey(item: Interaction): string {
  * trivially its own group's root by construction, but "Opening pose" asserts
  * a THREAD that doesn't exist for it. "Standalone" (matching Chronological's
  * own pre-existing phrasing for this exact case) is correct for both views.
- * M-1 read that off `item.thread_id`, which said the same thing until #3787's
- * rework: the row a thread is ANCHORED at carries no thread of its own now,
- * yet it is a real thread's real opening pose and is rendered as this card's
- * first row. So the gate is the group's own key -- a `legacy:` key is the
- * un-replied pose M-1 is about, and any other key is a genuine exchange.
+ * M-1 read that off `item.thread_id`. The GROUP's key is used instead because
+ * it is the one thing that stays right across both views: a `legacy:` key is
+ * exactly the un-replied pose M-1 is about, and any other key is a genuine
+ * exchange, whose first row is a real thread's real opening pose.
  *
  * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
  * in a real thread -- used to return `Reply in <title>` as a stand-in for
@@ -532,35 +532,18 @@ export function ThreadedNarrativeReader({
     // conditions -- keep this assignment idempotent.
     targetSeekDoneRef.current = null;
   }
-  // #3787 rework: every one of the reader's grouping sites reads this map rather
-  // than a row's own thread id. It is `ownExchangeKey` (a row's `root_thread_id`,
-  // else its `thread_id`, else `legacy:`) plus ONE adoption pass: the row a root
-  // thread is anchored at answers nothing, so it carries no thread and would key
-  // `legacy:` and render as a separate standalone card sitting directly above the
-  // replies to it. Each reply names it (`reply_to.id`), so the pass pulls it into
-  // its replies' exchange and the card opens with the pose being answered. Only an
-  // UNTHREADED parent is adopted; a parent that is itself a reply already shares
-  // this row's root. The server's own `unique_thread_per_anchor` constraint makes
-  // that deterministic: every reply to one row lives in one thread, so no row can
-  // be claimed by two exchanges.
-  const exchangeKeyById = useMemo(() => {
-    const byId = new Map(interactions.map((item) => [item.id, item]));
-    const keys = new Map<number, string>(
-      interactions.map((item) => [item.id, ownExchangeKey(item)])
-    );
-    for (const interaction of interactions) {
-      if (!interaction.reply_to) continue;
-      const parent = byId.get(Number(interaction.reply_to.id));
-      if (!parent || parent.thread_id) continue;
-      const key = keys.get(interaction.id);
-      if (key) keys.set(parent.id, key);
-    }
-    return keys;
-  }, [interactions]);
-  const exchangeKey = useCallback(
-    (item: Interaction): string => exchangeKeyById.get(item.id) ?? ownExchangeKey(item),
-    [exchangeKeyById]
-  );
+  // #3787: every one of the reader's grouping sites keys off this, so they cannot
+  // drift apart. A row's own key is enough now - `root_thread_id`, else `thread_id`,
+  // else `legacy:` - because the answered pose is a MEMBER of the thread it opens
+  // and so already shares its replies' key.
+  //
+  // This used to carry an adoption pass that pulled an unthreaded parent into its
+  // replies' exchange. It is gone with the design that needed it: the server derives
+  // `reply_to` from thread membership, so every parent it can name is itself a thread
+  // member and the pass could never fire again. Should a parent ever legitimately
+  // arrive without a thread, it would key `legacy:` and render as its own card, which
+  // is the correct reading of "answers nothing" rather than a defect.
+  const exchangeKey = useCallback((item: Interaction): string => ownExchangeKey(item), []);
   // #3759 Wave 9 (F1): grouped from the FULL `interactions` array, not a
   // windowed slice -- every thread with at least one pose gets a header row,
   // always, matching the demo (the review's F1 finding: the old flat
