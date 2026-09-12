@@ -1,12 +1,15 @@
 # Review evidence
 
-Re-stamped from `f21195597382cd8f8ac07433c222d2b91fe5d037` (the actual code
-this report tested) to the tip below after an unrelated trailing commit
-(`open-pr.sh`'s own double-backtick evidence-line fix, `tools/skills/`
-tooling only — no application code) landed on top of it; nothing in the
-Tested interactions/ledger below changed as a result.
+Re-stamped again: the PR body's double-backtick Report line was patched via
+the REST API (not a push), so the `review-evidence` CI check's first run
+validated against the stale pre-patch body captured at the last
+`synchronize` event. This commit both re-triggers CI (a new push, since the
+PAT has no `Actions:write` to rerun the job directly) and re-points the
+reviewed revision at its own new parent, matching CI's
+`git rev-parse "${head_sha}^1"` check. No application code changed since the
+original `f21195597...` revision this report tested.
 
-- Reviewed revision: `bb9dbc48e6643154d05752741eb80f4d98696bc2`
+- Reviewed revision: `d763c49fd8b3e226345213fd46ed9ef4882f022a`
 - Reviewer: Claude Sonnet 5 (self-review; bug fix, no demo/spec — `demo-fidelity-reviewer` does not apply)
 - Reviewer verdict: PASS
 - Application/build identity: `pnpm build` production bundle served via `vite preview` (Playwright's configured web server); backend via `just test-fast web` (SQLite fast tier)
