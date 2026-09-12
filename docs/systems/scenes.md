@@ -611,6 +611,20 @@ rather than offset pagination.
     button (`playQueries.markConversationRead`), which sends the latest visible pose's timestamp as
     `before` and optimistically clears local unread badges pending the next natural refetch.
 
+### Cross-device attention counting (#3774)
+
+`account_attention(*, account, entries) -> AccountAttention` (`world/scenes/attention_services.py`)
+answers what is waiting for each of an account's characters (`CharacterAttention.direct`/`.ambient`,
+keyed by `character_sheet_id`) in four queries total, none per character and none per row. It
+deliberately never calls `InteractionQuerySet.visible_to` - that queryset's staff/player branches
+return far more than one account's own waiting attention, which would make a badge meaningless and
+disclose volume - and instead builds the count from rows already scoped to the account (directed
+receipts/targets, and room-heard poses in scenes the account still participates in). Consumed by
+`RosterEntryViewSet.mine`, which populates `MyRosterEntrySerializer`'s `unread_direct`/
+`has_ambient_unread`/`attention_as_of_id` once per request via serializer context - the frontend's
+`characterAttention()` (`frontend/src/game/attention.ts`) then adds each session's own live delta on
+top of that server baseline.
+
 ---
 
 ## Scene Administration (#1445)

@@ -44,12 +44,14 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   too and would otherwise corrupt the live room position under the same key.
   The multi-puppet
   session tab bar carries the same direct/ambient `AttentionBadge` as
-  `GameTopBar` (#2166), keyed per session name via each character's
-  `primary_persona_id` — with one guard `GameTopBar` doesn't need: the
-  **active** puppet's own tab never badges (`name !== active`), since its
-  attention already surfaces via `ConversationTabStrip`; badging it too would
-  double-count the active character's own unseen activity on its own
-  already-highlighted tab.
+  `GameTopBar` (#2166); since #3774, both call the same `characterAttention`
+  helper (`attention.ts`) rather than deriving the count from session data
+  alone, so a puppet tab badges correctly even before this tab has seen
+  anything new arrive for that character, with one guard `GameTopBar`
+  doesn't need: the **active** puppet's own tab never badges (`name !==
+  active`), since its attention already surfaces via `ConversationTabStrip`;
+  badging it too would double-count the active character's own unseen
+  activity on its own already-highlighted tab.
 - **`threadTabsStorage.ts`**: `loadThreadTabs`/`saveThreadTabs` (#2165) —
   client-local persistence of the open-tab layout (thread **keys** only, never
   message content) in `localStorage`, keyed per character+scene
@@ -57,17 +59,31 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   scene's entry, older entries for the same character are pruned on save.
   Best-effort: any storage error (unavailable, unparsable) is swallowed and
   treated as "nothing stored."
-- **`attention.ts`**: `sessionAttention(session, personaId)` (#2166) — pure,
-  selector-side two-tier attention derivation for one character's session, no
-  new Redux write path. Reuses `getThreadKey`/`countUnread` (exported from
-  `useThreading.ts`) against `threadLastSeen`/`sceneBaselineId`, the same
-  grouping #2165's tab strip badges use. `direct` = unread on `whisper:*`
-  threads plus `target:*` threads that include `personaId` (an @-target,
-  duel challenge, or consent request aimed at that persona specifically);
-  `ambient` = any other thread unread, or the legacy `session.unread` scalar.
-  Requires a resolved `personaId` to route to `direct` at all — before the
-  roster loads, whisper/target unread routes to `ambient` instead, so a
-  session's own echoed whisper never misreads as direct pre-roster-load.
+- **`attention.ts`**: `sessionAttention(session, personaId, sinceId?)` (#2166,
+  extended #3774): pure, selector-side two-tier attention derivation for one
+  character's session, no new Redux write path. Reuses `getThreadKey`/
+  `countUnread` (exported from `useThreading.ts`) against
+  `threadLastSeen`/`sceneBaselineId`, the same grouping #2165's tab strip
+  badges use. `direct` = unread on `whisper:*` threads plus `target:*` threads
+  that include `personaId` (an @-target, duel challenge, or consent request
+  aimed at that persona specifically); `ambient` = any other thread unread, or
+  the legacy `session.unread` scalar. Requires a resolved `personaId` to route
+  to `direct` at all: before the roster loads, whisper/target unread routes
+  to `ambient` instead, so a session's own echoed whisper never misreads as
+  direct pre-roster-load. Since #3774, `sessionAttention`'s result is no
+  longer the whole picture on its own: it is the local-tab DELTA on top of a
+  server-computed baseline. `sinceId` is that server's watermark
+  (`MyRosterEntry.attention_as_of_id`): anything at or below it is dropped, so
+  the caller can add the delta to the server count without double-counting a
+  pose the server already saw. `characterAttention(char, session)` is the
+  combination (server baseline `unread_direct`/`has_ambient_unread` plus
+  this delta), and it is the one callers should reach for; `GameTopBar` and
+  `GameWindow`'s puppet-tab row both call it, so the two can never diverge. A
+  character with no local session in this tab renders the server value alone,
+  which is the fresh-device case #3774 exists for. `AttentionBadge` (the
+  render, capped at `99+` since a server-side count can run to three digits)
+  now lives in its own module, `components/AttentionBadge.tsx`, extracted from
+  byte-identical copies that used to live in `GameTopBar`/`GameWindow`.
 
 ### Layout (`components/`)
 
@@ -85,13 +101,20 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
   internal state) — a future caller must supply both.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
-  switching. Each alt character's avatar carries a two-tier attention
-  indicator (#2166, `sessionAttention` from `attention.ts`): a red numeric
-  badge for _direct_ attention (an unseen whisper or @-target aimed at that
-  character), else a muted dot for _ambient_ (any other unseen activity in
-  that session), else nothing. The active character is structurally excluded
-  (this bar only ever renders alts) — its own attention lives in
-  `ConversationTabStrip`'s per-tab badges, not here. Also renders (#3412 S4,
+  switching. Every non-active character's avatar carries a two-tier attention
+  indicator (#2166, `characterAttention` from `attention.ts` since #3774):
+  a red numeric badge for _direct_ attention (an unseen whisper or @-target
+  aimed at that character), else a muted dot for _ambient_ (any other unseen
+  activity), else nothing; since #3774 this badges every non-active
+  character, not just ones with a local session in this browser tab (a
+  character with no session renders the server's baseline count alone). The
+  active character's own badge row is gated on `active` (a #3774 review
+  fold-in fix: without the gate, with no active character every character's
+  avatar rendered twice, once from this row and once from the named-button
+  row below); its attention lives in `ConversationTabStrip`'s per-tab badges
+  instead, which is the only reason it stays excluded now: the old
+  "this bar only ever renders alts" framing no longer holds, since the bar
+  can render every character when nobody is active. Also renders (#3412 S4,
   ADR-0247), for the active character: an own-sheet link (`/characters/:id`,
   `RosterEntry.id`-keyed, opens in a new tab so the live session is never
   disturbed) and a compact `ClockReadout` (season + paused indicator only,
