@@ -121,4 +121,34 @@ describe('ConversationThreadList', () => {
     );
     await waitFor(() => expect(onCountLoaded).toHaveBeenCalledWith(2));
   });
+
+  it('reports the count again on a cache-served remount, without refetching', async () => {
+    const onCountLoaded = vi.fn();
+    const fetchThreads = vi
+      .spyOn(playQueries, 'fetchPlayThreads')
+      .mockResolvedValue(page([thread(), thread({ id: 'thread-2' })]));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const renderRow = () =>
+      render(
+        <QueryClientProvider client={client}>
+          <ConversationThreadList
+            conversationKey="scene:412"
+            onOpenThread={() => {}}
+            onCountLoaded={onCountLoaded}
+          />
+        </QueryClientProvider>
+      );
+
+    const { unmount } = renderRow();
+    await waitFor(() => expect(onCountLoaded).toHaveBeenCalledWith(2));
+    expect(fetchThreads).toHaveBeenCalledTimes(1);
+    unmount();
+
+    // Same QueryClient, so `staleTime` is still fresh and this remount is served
+    // entirely from cache: `queryFn` must not run again, yet the count still
+    // needs to reach the caller.
+    renderRow();
+    await waitFor(() => expect(onCountLoaded).toHaveBeenCalledTimes(2));
+    expect(fetchThreads).toHaveBeenCalledTimes(1);
+  });
 });
