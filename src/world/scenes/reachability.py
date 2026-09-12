@@ -101,6 +101,20 @@ def _receiver_ids(receivers: Iterable[Persona] | Iterable[int] | None) -> frozen
     return frozenset(ids) if ids else None
 
 
+# Why both signatures in this module keep an `ObjectDB`-typed `location`
+# (CLAUDE.md: "a keeper without a stated reason is indistinguishable from an
+# oversight"): an Evennia room genuinely IS an ObjectDB here. `Scene.location`
+# is itself an ObjectDB FK, `get_active_scene` takes one, and the callers hand
+# this straight through from `character.location`, so narrowing the annotation
+# to `RoomProfile` would mean converting at every call site to test presence
+# against a `.contents` cache that lives on the ObjectDB anyway. This is the
+# "could this be a vase of flowers" question answered NO by the room's own
+# nature, not by convenience. `world/scenes/*` is outside the `objectdb-param`
+# hook's `files:` scope (`.pre-commit-config.yaml`), so no OBJECTDB_PARAM
+# suppression token is needed; the rationale is what CLAUDE.md asks for either
+# way, suppression or not. Revisit when
+# `Scene.location` is retargeted off ObjectDB, which that config already names
+# as the trigger for pulling `scenes/models.py` into scope.
 def _room_has_character(location: ObjectDB | None, character_sheet_id: int) -> bool:
     """Return whether ``character_sheet_id`` is physically present at ``location``.
 
@@ -116,6 +130,7 @@ def _room_has_character(location: ObjectDB | None, character_sheet_id: int) -> b
     return character_sheet_id in present_ids
 
 
+# `location: ObjectDB | None` below: see the rationale above `_room_has_character`.
 def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field being tested
     persona: Persona,
     *,
