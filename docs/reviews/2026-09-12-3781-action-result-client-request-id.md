@@ -1,6 +1,12 @@
 # Review evidence
 
-- Reviewed revision: `f21195597382cd8f8ac07433c222d2b91fe5d037`
+Re-stamped from `f21195597382cd8f8ac07433c222d2b91fe5d037` (the actual code
+this report tested) to the tip below after an unrelated trailing commit
+(`open-pr.sh`'s own double-backtick evidence-line fix, `tools/skills/`
+tooling only — no application code) landed on top of it; nothing in the
+Tested interactions/ledger below changed as a result.
+
+- Reviewed revision: `bb9dbc48e6643154d05752741eb80f4d98696bc2`
 - Reviewer: Claude Sonnet 5 (self-review; bug fix, no demo/spec — `demo-fidelity-reviewer` does not apply)
 - Reviewer verdict: PASS
 - Application/build identity: `pnpm build` production bundle served via `vite preview` (Playwright's configured web server); backend via `just test-fast web` (SQLite fast tier)
