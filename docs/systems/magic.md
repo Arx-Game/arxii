@@ -68,7 +68,7 @@ and the 5-axis Thread model no longer exist.
 | `StyleCapabilityRequirement` | A capability the **caster** needs to work magic in this style (#2700) — e.g. Incantation requires `speech >= 1`. Caster-scoped sibling of `TechniqueCapabilityRequirement`; both are evaluated by `technique_performable` against `get_effective_capability_value`. | `style` FK, `capability` FK (`conditions.CapabilityType`), `minimum_value`. Natural key `(style, capability)` |
 | `IntensityTier` | Power effect thresholds | `name`, `threshold`, `control_modifier`, `description` |
 | `Restriction` | Limitations that grant power bonuses | `name`, `description`, `power_bonus` |
-| `Facet` | Hierarchical imagery/symbolism (Category > Subcategory > Specific) | `name`, `parent` (self-FK), `description` |
+| `Facet` | Flat imagery/symbolism vocabulary — every facet is a peer (Wolf, Silk, Scythe, Red). The Category > Subcategory > Specific hierarchy and its `parent` self-FK were removed by #3776 (ADR-0289): depth made a node's mechanical reach uneven, so a facet's reach is now the same whichever one you pick. Owner-agnostic — characters bind facets via `Motif`, a `WorshippedBeing` via `worship.BeingFacet`, an `ItemTemplate` via `inherent_facets`, all from this one shared pool. | `name` (unique), `description` |
 | `Gift` | Thematic collections of techniques | `name`, `description`, `resonances` (M2M to `Resonance` — the **supported set**: a weave constraint, not the cast-time value; the cast reads the character's GIFT-thread resonance via `gift_resonances_for`, ADR-0052), `creator` (FK to CharacterSheet), `kind` (`GiftKind`: `MAJOR` = the one CG-chosen gift, `MINOR` = shared/acquirable; ADR-0050), `parent` (self-FK, PROTECT, `related_name="children"` — the umbrella gift this one hangs beneath; see "Gift lineage" below, #2891, ADR-0192) |
 | `Affinity` | CELESTIAL / PRIMAL / ABYSSAL | `name`, optional OneToOne `modifier_target` |
 | `Resonance` | Identity resonance tags | `name`, `affinity` FK, `opposite` self-OneToOne, optional `modifier_target` OneToOne |
@@ -989,11 +989,15 @@ magic checks at all is an open design question (#1363).
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `Motif` | Character-level magical aesthetic | `character`, `name`, `description` |
-| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to ModifierTarget) |
-| `MotifResonanceAssociation` | Links resonances to facets in a motif | `motif_resonance`, `facet` |
+| `Motif` | Character-level magical aesthetic; one per character, shared across all Gifts | `character` (O2O CharacterSheet), `description` |
+| `MotifResonance` | Resonances in a motif | `motif`, `resonance` (FK to `Resonance`), `is_from_gift` |
+| `MotifResonanceAssociation` | Links resonances to facets in a motif (cap 5 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `facet` |
 | `MotifResonanceStyle` | Player binding of a `Style` to one of the character's motif resonances (cap 3 per resonance, `MotifResonanceLink.clean()`-enforced) | `motif_resonance`, `style` (FK to `items.Style`) |
-| `CharacterFacet` | Links characters to facets | `character`, `facet`, `resonance` |
+
+`CharacterFacet` **[ABSENT]** — this table used to list it as "links characters to facets".
+No such model or table exists; it was dropped in favour of Thread-on-Facet (see
+`docs/architecture/items-fashion-mantles.md`), and a character's facets are reached through
+`Motif → MotifResonance → MotifResonanceAssociation`. Verified against code 2026-09-11.
 
 **Player-facing style binding (#2030) [BUILT & WIRED]:** binding a `Style` to a
 claimed resonance is a normal player action, not admin-only. Service
@@ -3243,7 +3247,7 @@ All endpoints require authentication. Base URL: `/api/magic/`
 | `/styles/` | GET | List technique styles (the catalog a `Path` points at) |
 | `/effect-types/` | GET | List effect types |
 | `/restrictions/` | GET | List restrictions |
-| `/facets/` | GET | List facets (hierarchical) |
+| `/facets/` | GET | List facets (flat vocabulary, #3776) |
 | `/gifts/` | GET | List all gifts |
 | `/gifts/{id}/` | GET | Gift detail with nested techniques |
 

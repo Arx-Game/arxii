@@ -888,7 +888,6 @@ class FacetFactory(factory.django.DjangoModelFactory):
 
     name = factory.Sequence(lambda n: f"Facet{n}")
     description = factory.LazyAttribute(lambda o: f"The {o.name} facet.")
-    parent = None
 
 
 class MotifResonanceAssociationFactory(factory.django.DjangoModelFactory):

@@ -290,7 +290,7 @@ class ItemFacet(SharedMemoryModel):
         "magic.Facet",
         on_delete=models.PROTECT,
         related_name="item_attachments",
-        help_text="Which facet (in the global Facet hierarchy).",
+        help_text="Which facet (from the global flat Facet vocabulary).",
     )
     applied_by_account = models.ForeignKey(
         "accounts.AccountDB",

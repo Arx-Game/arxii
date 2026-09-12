@@ -130,10 +130,10 @@ function makeQueryResult<T>(data: T | undefined, loading = false): QueryResult<T
   return { data, isLoading: loading, isError: false, error: null };
 }
 
-// Default facet API response
+// Default facet API response — flat vocabulary, no hierarchy (#3776 Task 1).
 const FACET_RESPONSE = [
-  { id: 1, full_path: 'Animals / Wolf', name: 'Wolf' },
-  { id: 2, full_path: 'Elements / Fire', name: 'Fire' },
+  { id: 1, name: 'Wolf', description: 'A wild canine.' },
+  { id: 2, name: 'Fire', description: '' },
 ];
 
 // Default covenant role API response
@@ -303,9 +303,62 @@ describe('WeaveThreadWizard', () => {
       fireEvent.click(screen.getByTestId('kind-button-FACET'));
       await waitFor(() => {
         expect(screen.getByTestId('anchor-list')).toBeInTheDocument();
-        expect(screen.getByText('Animals / Wolf')).toBeInTheDocument();
-        expect(screen.getByText('Elements / Fire')).toBeInTheDocument();
+        expect(screen.getByText('Wolf')).toBeInTheDocument();
+        expect(screen.getByText('Fire')).toBeInTheDocument();
       });
+    });
+
+    it('shows a facet description as a sublabel when present', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => {
+        expect(screen.getByText('A wild canine.')).toBeInTheDocument();
+      });
+    });
+
+    it('filters the facet list by the search box', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      const searchInput = screen.getByTestId('facet-search-input');
+      fireEvent.change(searchInput, { target: { value: 'fire' } });
+
+      expect(screen.queryByText('Wolf')).not.toBeInTheDocument();
+      expect(screen.getByText('Fire')).toBeInTheDocument();
+    });
+
+    it('shows a no-match message when the facet search matches nothing', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      fireEvent.change(screen.getByTestId('facet-search-input'), {
+        target: { value: 'nonexistent' },
+      });
+
+      expect(screen.getByTestId('anchor-search-empty')).toBeInTheDocument();
+      expect(screen.queryByTestId('anchor-list')).not.toBeInTheDocument();
+    });
+
+    it('does not show a search box for non-FACET anchor kinds', async () => {
+      const summary = makeSummary({ weaving_eligibility: { COVENANT_ROLE: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-COVENANT_ROLE'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      expect(screen.queryByTestId('facet-search-input')).not.toBeInTheDocument();
     });
 
     it('loads covenant role options after selecting COVENANT_ROLE kind', async () => {
@@ -600,7 +653,7 @@ describe('WeaveThreadWizard', () => {
       expect(summary).toBeInTheDocument();
       // KIND_META maps FACET → "Facet" (human label)
       expect(summary.textContent).toContain('Facet');
-      expect(summary.textContent).toContain('Animals / Wolf');
+      expect(summary.textContent).toContain('Wolf');
       expect(summary.textContent).toContain('Bene');
       expect(summary.textContent).toContain('My Test Thread');
     });

@@ -2142,6 +2142,7 @@
   - progression_milestones <- magic.MagicProgressionMilestone
   - species <- species.Species
   - mantle_level_gates <- items.MantleLevelDefinition
+  - worshipped_beings <- worship.WorshippedBeing
 
 ### CodexEntryFiling
 **Foreign Keys:**
@@ -4558,6 +4559,7 @@
   - weapon_damage_type -> conditions.DamageType [FK] (nullable)
   - polish_category -> buildings.PolishCategory [FK] (nullable)
   - interactions -> items.InteractionType [M2M]
+  - inherent_facets -> magic.Facet [M2M]
 **Pointed to by:**
   - lore_effects <- buildings.MaterialLoreEffect
   - building_uses <- buildings.BuildingMaterial
@@ -5330,15 +5332,15 @@
 **Foreign Keys:**
   - written_by -> contributors.ContentContributor [FK] (nullable)
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
-  - parent -> magic.Facet [FK] (nullable)
 **Pointed to by:**
-  - children <- magic.Facet
   - motif_usages <- magic.MotifResonanceAssociation
   - signature_bonuses <- magic.SignatureMotifBonus
   - anchored_threads <- magic.Thread
+  - inherent_on_templates <- items.ItemTemplate
   - item_attachments <- items.ItemFacet
   - vogue_momentum <- items.FacetVogueMomentum
   - fashion_styles <- items.FashionStyle
+  - favored_by_beings <- worship.BeingFacet
 
 ### FallRedemptionConfig
 
@@ -5623,6 +5625,7 @@
   - cascade_modifiers <- locations.LocationValueModifier
   - mission_route_rewards <- missions.MissionOptionRouteReward
   - projects <- projects.Project
+  - favored_by_beings <- worship.BeingResonance
 
 ### ResonanceAlignmentBoonTier
 **Foreign Keys:**
@@ -9173,6 +9176,7 @@
   - default_succession_law -> societies.SuccessionLaw [FK] (nullable)
   - society -> societies.Society [FK] (nullable)
   - org_type -> societies.OrganizationType [FK]
+  - patron_nickname -> worship.BeingNickname [FK] (nullable)
 **Pointed to by:**
   - held_assets <- assets.NPCAsset
   - capture_consequence_effects <- checks.ConsequenceEffect
@@ -9979,6 +9983,7 @@
   - reviewed_by -> contributors.ContentContributor [FK] (nullable)
 **Pointed to by:**
   - profiles <- character_sheets.Profile
+  - represented_beings <- worship.WorshippedBeing
 
 
 ## world.tasking
@@ -10372,6 +10377,27 @@
 
 ## world.worship
 
+### BeingFacet
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - facet -> magic.Facet [FK]
+
+### BeingNickname
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+**Pointed to by:**
+  - patron_organizations <- societies.Organization
+
+### BeingRelationship
+**Foreign Keys:**
+  - being_a -> worship.WorshippedBeing [FK]
+  - being_b -> worship.WorshippedBeing [FK]
+
+### BeingResonance
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+  - resonance -> magic.Resonance [FK]
+
 ### ChosenFavorConfig
 
 ### DevotionStanding
@@ -10413,6 +10439,10 @@
   - secret_being -> worship.WorshippedBeing [FK] (nullable)
   - secret -> secrets.Secret [FK] (nullable)
 
+### WorshipFeastDay
+**Foreign Keys:**
+  - being -> worship.WorshippedBeing [FK]
+
 ### WorshipGrant
 **Foreign Keys:**
   - being -> worship.WorshippedBeing [FK]
@@ -10428,9 +10458,17 @@
 **Foreign Keys:**
   - tradition -> worship.WorshipTradition [FK]
   - avatar_sheet -> character_sheets.CharacterSheet [OneToOne] (nullable)
+  - codex_entry -> codex.CodexEntry [FK] (nullable)
+  - tarot_cards -> tarot.TarotCard [M2M]
 **Pointed to by:**
   - ceremonies <- ceremonies.Ceremony
   - audere_majora_faith_variants <- magic.AudereMajoraFaithVariant
+  - feast_days <- worship.WorshipFeastDay
+  - being_facets <- worship.BeingFacet
+  - resonances <- worship.BeingResonance
+  - nicknames <- worship.BeingNickname
+  - relationships_as_a <- worship.BeingRelationship
+  - relationships_as_b <- worship.BeingRelationship
   - grants <- worship.WorshipGrant
   - devotion_standings <- worship.DevotionStanding
   - public_worshippers <- worship.WorshipDeclaration
@@ -10449,6 +10487,7 @@
 - `gods_favorite_achievement_for(character_sheet: 'CharacterSheet') -> 'Achievement | None' - Resolve the gender-matched God's Favorite achievement row (Decision 6).`
 - `grant_worship(being: world.worship.models.WorshippedBeing, amount: int, *, granted_by: 'CharacterSheet | None' = None, reason: str = '') -> world.worship.models.WorshipGrant - Add worship to a being's pool and record the audit ledger row.`
 - `install_divine_intervention_trigger(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing) -> None - Install the divine intervention Trigger on the character's ObjectDB.`
+- `is_birth_favored_by(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, *, today: 'date | None' = None) -> bool - Whether character_sheet is birth-favored by being today (#3776).`
 - `maybe_fire_divine_intervention(character, payload=None) -> None - Trigger handler: fire a divine miracle when a high-devotion PC is incapacitated.`
 - `perform_divine_intervention(character_sheet: 'CharacterSheet', being: world.worship.models.WorshippedBeing, miracle: 'Miracle', *, scene=None) -> 'MiraclePerformance' - Commit seam for a divine intervention: spend pool, apply conditions, audit.`
 - `release_patronage(standing: world.worship.models.DevotionStanding) -> None - Mark a patronage as released (dormant).`

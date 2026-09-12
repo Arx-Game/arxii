@@ -350,6 +350,18 @@ class Organization(NaturalKeyMixin, SharedMemoryModel):
         related_name="organizations",
         help_text="The type of organization, which determines default rank titles",
     )
+    patron_nickname = models.ForeignKey(
+        "arxii.BeingNickname",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="patron_organizations",
+        help_text=(
+            "This org's own name for its patron deity (#3776) — reached transitively via "
+            "patron_nickname.being. FK direction is Org -> Nickname -> Being, never a "
+            "direct FK to WorshippedBeing, and never nickname -> many orgs."
+        ),
+    )
 
     # Principle overrides - if null, inherit from society
     mercy_override = models.IntegerField(

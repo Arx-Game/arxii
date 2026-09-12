@@ -14,6 +14,34 @@
   CharacterResonance for beings.
 - **Devotion standing** — the one-way PC→god favor record (`DevotionStanding`).
   _Avoid_: CharacterRelationship for sheetless gods.
+- **Domains** — `WorshippedBeing.domains`, plain prose naming the spheres a being holds
+  ("Carnage, wanton bloodshed, feral battle"). Deliberately NOT a lookup table (#3776):
+  overlap between gods is expected and nothing matches on it mechanically, so a
+  vocabulary would only add an authoring gate. _Avoid_: portfolio, sphere table.
+- **Being facet** — a favored aesthetic facet of a being (`BeingFacet`, #3776), drawn from
+  the SAME flat `magic.Facet` pool characters bind through `Motif` — there is no separate
+  divine vocabulary (ADR-0289). Double-dipping is the point: a character's own bound facet
+  and their patron's favored facet being the same row is what the Chosen overlap bonus
+  reads. No cap, no policing. _Avoid_: divine facet, god motif.
+- **Being resonance** — a resonance a being favors or is merely associated with
+  (`BeingResonance`, #3776): `resonance` + `tier` (`BeingResonanceTier`
+  FAVORED/ASSOCIATED). FAVORED acts pay double, ASSOCIATED the ordinary rate — the model
+  for "different kinds of worshipper" serving one god. No cap. _Avoid_: `CharacterResonance`
+  for beings (that's the per-character currency).
+- **Tarot cards** — `WorshippedBeing.tarot_cards`, the cards people BELIEVE represent a
+  being (#3776). Pure association, no cap, no claim of canon. Read by birth favor (below);
+  distinct from a character's own single `tarot_card`. _Avoid_: the being's card (there may
+  be several, and belief is not fact).
+- **Being codex entry** — `WorshippedBeing.codex_entry`, the being's own Codex page,
+  following the `Gift`/`Technique`/`HouseAspectOption` precedent (#3776). Visibility
+  (public / known-to-some / researchable) is read ENTIRELY through the linked entry's
+  `is_public` tier — `WorshippedBeing` deliberately carries no visibility field of its own.
+  PROTECT, so deleting a page that a god points at is refused rather than silent.
+- **Being nickname** — an alternate name a being's worshippers use (`BeingNickname`,
+  #3776); a being may carry several. No reverent/irreverent field — tone is prose, not
+  data. `societies.Organization.patron_nickname` points at one of these, never
+  directly at the `WorshippedBeing`, so different organizations can name the same god
+  differently in their own records.
 - **Worship declaration** — a character's public being + optional secret being
   (`WorshipDeclaration`); the secret side mints a Secret at CG finalization.
 - **Heart vs lip service** — `WorshipDeclaration.public_is_sincere` (#2361): whether a
@@ -27,6 +55,27 @@
   Conversion ceremony (`world.ceremonies` glossary). Old `DevotionStanding` favor and
   the old secret faith's `Secret` row are left standing as history — conversion never
   deletes or mutates either.
+- **Being relationship** — a public relationship fact between two gods
+  (`BeingRelationship`, #3776): `being_a`/`being_b` + `valence`
+  (`BeingRelationshipValence`: ALLY/RIVAL/FEUD/UNKNOWN) + `public_story`. Deliberately
+  NO hidden-truth field — a real hidden truth (why two beings actually feud) is a
+  separately-authored, separately-gated `CodexEntry` reached through a `Clue`, never a
+  maybe-secret field here, because even a hidden/blank field on a public row would leak
+  presence/absence of a mystery. `being_a`/`being_b` are undirected (ALLY of X reads the
+  same as ALLY of Y) and get sorted into canonical pk order automatically, so the same
+  pair can never be recorded twice with the sides swapped.
+- **Feast day** — a being's annually-recurring worship holiday (`WorshipFeastDay`,
+  #3776): `ic_month`/`ic_day`, no year, unique per being+date. Its own model rather
+  than reusing `weather.FeastDay` — a religious concept shouldn't be owned by the
+  weather app. Feeds a future universal worship-rite reward multiplier (#3777) for
+  anyone worshipping the being that day — distinct from birth favor below, which is
+  per-character, not per-date.
+- **Birth favor** — `is_birth_favored_by(sheet, being, *, today)` (#3776): True only
+  when the character's own `tarot_card` matches one of the being's `tarot_cards` AND
+  `today` is the character's `birthday_month`/`birthday_day`. Doubles a worship-rite
+  payout for that being (#3777); it does not itself grant anything. `today` defaults
+  to the current IC date (`game_clock.get_ic_now()`), matching how the Town Crier
+  birthday feed already reads the same two fields — never the real wall clock.
 - **God's Favorite** — the achievement for reaching (or tying) a being's top devotion;
   three gendered rows (Princess/Prince/Chosen); never names the being.
 - **Miracle** — an authored effect a WorshippedBeing can perform by spending its

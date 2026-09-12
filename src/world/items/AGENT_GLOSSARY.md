@@ -1,8 +1,12 @@
 # Items glossary
 
 **Facet**:
-A node of hierarchical imagery or symbolism (Creatures > Mammals > Wolf; Materials > Textiles > Silk) that players assign to resonances to define personal magical meaning. An item carries facets (via ItemFacet rows) so that a wearer's matching Threads on those facets boost their magic — the symbolic axis.
+A single piece of imagery or symbolism (Wolf, Silk, Scythe, Red) that players assign to resonances to define personal magical meaning. A flat vocabulary — every facet is a peer, with no Category > Subcategory > Specific tree, so a facet's mechanical reach never depends on how specific it is (#3776, ADR-0289). An item carries facets (via ItemFacet rows) so that a wearer's matching Threads on those facets boost their magic — the symbolic axis.
 _Avoid_: tag, theme, symbol
+
+**Inherent facet**:
+A facet an `ItemTemplate` always carries (`ItemTemplate.inherent_facets`) — the "IS the thing" case, a Scythe archetype carrying the Scythe facet. Auto-stamped onto every new instance as an `ItemFacet` with `is_inherent=True` (`stamp_inherent_facets`, off `ItemInstance.save()`), never counts against that instance's `facet_capacity`, and cannot be detached (`InherentFacetNotRemovable`) — stamping runs once, at creation. Contrast a crafter-attached facet (`attach_facet_to_item`), the freeform "decorated BY the thing" case, which is removable. (#3776.)
+_Avoid_: default facet, template facet
 
 **Style**:
 A cultural/historical fashion register an item can carry (Arxian Court, Old-Regime — re-ruled #2907; intent adjectives like "Seductive" are Accent-redundant and rejected at authoring). A Style says where a piece's fashion LANGUAGE comes from — a regional culture, an era, an aesthetic school — never what the piece is trying to do (that's an Accent). Carries `origin`, `era` (current/ancient — ancient registers are investigation-rediscoverable), and a `founder` persona FK for icon-founded styles. Distinct from a Facet (fixed symbolic imagery); characters still bind Styles to resonances for coherence bonuses.

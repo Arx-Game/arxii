@@ -70,6 +70,7 @@ PROSE_FIELD_NAMES = frozenset(
         "position_description",
         "prompt",
         "prose",
+        "quote",
         "selection_criteria",
         "styleable_adjective",
         "summary",

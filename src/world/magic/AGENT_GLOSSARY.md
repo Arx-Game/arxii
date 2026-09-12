@@ -152,7 +152,9 @@ different resonances. Capped at 3 bindings per resonance. Authored via
 `bind_motif_style`/`unbind_motif_style` (`services/motif_style.py`), telnet
 `CmdMotif`, or the web `MotifStyleViewSet`; consumed by the coherence walker and the
 peer style-presentation endorsement. (#2030.)
-_Avoid_: facet binding (a Facet is a different, hierarchical imagery axis).
+_Avoid_: facet binding (a Facet is a different axis — a flat, shared imagery
+vocabulary since #3776/ADR-0289 — bound through `MotifResonanceAssociation`, not
+through `Style`).
 
 **Mantle**:
 A specific, storied, attunable ItemInstance in the world (a particular sword, amulet, banner) with authored progression levels. A character attunes by weaving a MANTLE-kind Thread anchored on the Mantle, gated on having cleared at least its first level; the Thread's level cannot exceed the character's max-cleared mantle level.
