@@ -24,6 +24,8 @@ from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.models import Interaction
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from evennia.objects.models import ObjectDB
 
     from world.combat.models import (
@@ -42,13 +44,59 @@ if TYPE_CHECKING:
     from world.scenes.types import InteractionPayload
 
 
-def create_action_interaction(
+def personas_for_participants(participants: Iterable[CombatParticipant]) -> list[Persona]:
+    """Batch-resolve the PRIMARY personas for these participants' character sheets (#3787).
+
+    One query total regardless of how many participants are passed (no queries
+    in a loop) -- used when a single NPC action's hit can land on several PC
+    participants at once, so the shared ACTION/OUTCOME rows for that action can
+    record every one of them as a target. A participant whose sheet has no
+    PRIMARY persona (legacy fixture content) is silently skipped, same as
+    ``create_action_interaction``'s own single-participant resolution.
+    """
+    from world.scenes.constants import PersonaType  # noqa: PLC0415
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    sheet_ids = [p.character_sheet_id for p in participants]
+    if not sheet_ids:
+        return []
+    return list(
+        Persona.objects.filter(
+            character_sheet_id__in=sheet_ids,
+            persona_type=PersonaType.PRIMARY,
+        )
+    )
+
+
+def target_persona_for_round_action(action: CombatRoundAction) -> Persona | None:
+    """The PC persona a resolved ``CombatRoundAction`` targeted, or None (#3787).
+
+    Exactly one of ``focused_opponent_target``/``focused_ally_target`` is ever
+    populated. An opponent target is an NPC with no Persona -- that records no
+    target, which is correct (there is no player behind an NPC), not a gap. An
+    ally target's Persona.DoesNotExist (legacy fixture content missing the
+    PRIMARY-persona invariant) is swallowed the same way
+    ``create_action_interaction`` already treats it for the actor's own persona.
+    """
+    if action.focused_ally_target_id is None:
+        return None
+
+    from world.scenes.models import Persona  # noqa: PLC0415
+
+    try:
+        return action.focused_ally_target.character_sheet.primary_persona
+    except Persona.DoesNotExist:
+        return None
+
+
+def create_action_interaction(  # noqa: PLR0913 - one arg per resolved-action field recorded
     *,
     participant: CombatParticipant,
     round_number: int,
     summary_label: str,
     strain_committed: int = 0,
     fury_committed: FuryTier | None = None,
+    target_personas: list[Persona] | None = None,
 ) -> Interaction | None:
     """Create one ACTION-mode Interaction for a resolved action.
 
@@ -64,6 +112,9 @@ def create_action_interaction(
             action. Recorded on the resulting Interaction's canonical
             ``strain_committed`` audit column. Defaults to 0 for non-clash
             actions that do not commit strain.
+        target_personas: Who this action was about (#3787 Task 5) - PC personas
+            only. An action with no PC target (an NPC opponent target, or no
+            target at all, e.g. a flee or a clash contribution) passes None.
 
     Returns:
         The newly-created Interaction row, or ``None`` if the participant's
@@ -98,6 +149,7 @@ def create_action_interaction(
         summary_label=summary_label,
         strain_committed=strain_committed,
         fury_committed=fury_committed,
+        target_personas=target_personas,
     )
 
 
@@ -105,6 +157,7 @@ def create_npc_action_interaction(
     *,
     opponent_action: CombatOpponentAction,
     target_label: str | None = None,
+    target_personas: list[Persona] | None = None,
 ) -> Interaction:
     """Create one ACTION-mode Interaction for a resolving NPC action.
 
@@ -116,19 +169,29 @@ def create_npc_action_interaction(
 
     The encounter's scene is always set since #1236; it is passed through to
     Interaction.scene (which remains nullable for non-combat interactions).
+
+    ``target_personas`` (#3787 Task 5) records which PC(s) this NPC action struck
+    -- one shared row may need several, since an NPC action can hit multiple PC
+    participants at once (see ``_resolve_npc_action``'s lazy, memoised factory).
+    Written unvalidated via ``write_target_personas`` -- see that function's
+    docstring for why combat's own targets skip the narrative reachability check.
     """
     from world.combat.narrator import get_or_create_narrator_persona  # noqa: PLC0415
+    from world.scenes.interaction_services import write_target_personas  # noqa: PLC0415
 
     threat = opponent_action.threat_entry
     content = f"{threat.name} at {target_label}" if target_label else threat.name
     narrator = get_or_create_narrator_persona()
     scene = opponent_action.opponent.encounter.scene
-    return Interaction.objects.create(
+    interaction = Interaction.objects.create(
         persona=narrator,
         scene=scene,
         content=content,
         mode=InteractionMode.ACTION,
     )
+    if target_personas:
+        write_target_personas(interaction, target_personas)
+    return interaction
 
 
 def render_action_declaration_label(action: CombatRoundAction) -> str:
@@ -511,6 +574,7 @@ def broadcast_action_outcome(
     narration: str,
     audience: CastAudience | None = None,
     unattributed_narration: str = "",
+    target_personas: list[Persona] | None = None,
 ) -> Interaction | None:
     """Persist a Narrator-authored OUTCOME interaction and broadcast it.
 
@@ -534,6 +598,24 @@ def broadcast_action_outcome(
             attribution, not the event, so this is what the lower two tiers read.
             Empty means the working left nothing to perceive, and those tiers get
             no pose at all.
+        target_personas: Who this outcome was about (#3787 Task 5) - PC personas
+            only, recorded on the top-tier row only (see the "Concealed" branch
+            below for why the lower tiers never get one). Attached with
+            ``write_target_personas`` directly, NOT via ``create_interaction``'s
+            own validated ``target_personas`` kwarg: that kwarg runs
+            ``persona_can_receive``, which answers a live-presence "is this
+            persona standing somewhere this pose reaches" question anchored on
+            the WRITER's own location (the Narrator persona here, whose
+            character is never physically placed in any encounter room) with a
+            room-heard fallback to ``scene.location`` -- and a Battle-backed
+            encounter's scene is created with ``location=None`` by construction
+            (``Battle.save()``, ``world/battles/models.py``), so that check
+            would raise ``UnreachableError`` for every targeted action in every
+            Battle-scale fight, not merely an occasional edge case. Combat's own
+            targets are already governed by the encounter's own targeting rules
+            (see ``write_target_personas``'s docstring), so this call skips that
+            check entirely rather than let a purely cosmetic attribution feature
+            crash round resolution.
     """
     if not narration:
         return None
@@ -543,6 +625,7 @@ def broadcast_action_outcome(
         _broadcast_to_location,
         _build_interaction_payload,
         create_interaction,
+        write_target_personas,
     )
 
     narrator = get_or_create_narrator_persona()
@@ -557,6 +640,15 @@ def broadcast_action_outcome(
             InteractionVisibility.PERCEIVED_ONLY if concealed else InteractionVisibility.DEFAULT
         ),
     )
+    if target_personas and not concealed:
+        # Non-concealed only (#3787 Task 5 + ADR-0170): the concealed tiers below
+        # (_emit_tier's vague/effect_only poses) deliberately record no target at
+        # all, and the top-tier concealed row here is skipped too -- audience.full
+        # is who could pin the CASTER's identity, which is a different question
+        # from who the blow landed on, so a struck PC is not guaranteed to be a
+        # member of it and naming them here would be no more principled than
+        # naming them on the lower tiers.
+        write_target_personas(interaction, target_personas)
 
     room = encounter.room
     if room is None:

@@ -178,6 +178,33 @@ def reassign_persona_interactions(
     return count
 
 
+def write_target_personas(interaction: Interaction, target_personas: Iterable[Persona]) -> None:
+    """Bulk-write the ``InteractionTargetPersona`` rows naming who this row was about.
+
+    Shared by ``create_interaction`` (which validates reachability via
+    ``persona_can_receive`` before calling this, #3787 Task 4) and combat's own
+    action-interaction writers (``create_action_interaction_core``,
+    ``create_npc_action_interaction`` in ``world.combat.interaction_services``,
+    #3787 Task 5), which call this directly and deliberately skip that
+    validation -- a combat target's presence is already governed by the
+    encounter's own targeting rules (a resolved action's target must already be
+    a live participant/opponent in that encounter), not the narrative "is this
+    persona standing somewhere this pose actually reaches" question
+    ``persona_can_receive`` answers. Does no reachability check of its own;
+    callers that need one run it before calling this.
+    """
+    InteractionTargetPersona.objects.bulk_create(
+        [
+            InteractionTargetPersona(
+                interaction=interaction,
+                timestamp=interaction.timestamp,
+                persona=p,
+            )
+            for p in target_personas
+        ]
+    )
+
+
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
     *,
     persona: Persona,
@@ -313,16 +340,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
                     _TARGET_UNREACHABLE_HINT,
                     message=_describe_unreachable_targets(unreachable),
                 )
-            InteractionTargetPersona.objects.bulk_create(
-                [
-                    InteractionTargetPersona(
-                        interaction=interaction,
-                        timestamp=interaction.timestamp,
-                        persona=p,
-                    )
-                    for p in target_personas
-                ]
-            )
+            write_target_personas(interaction, target_personas)
 
         if reply_to is not None:
             assignment = assign_interaction_thread(
@@ -335,20 +353,28 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
     return interaction
 
 
-def create_action_interaction_core(
+def create_action_interaction_core(  # noqa: PLR0913 - one arg per resolved-action field recorded
     *,
     persona: Persona,
     scene: Scene | None,
     summary_label: str,
     strain_committed: int = 0,
     fury_committed: FuryTier | None = None,
+    target_personas: list[Persona] | None = None,
 ) -> Interaction:
     """Create one ACTION-mode Interaction for a resolved action/cast.
 
     The shared core behind combat's create_action_interaction and the scene
     cast path. Keyed on persona + (nullable) scene.
+
+    ``target_personas`` (#3787 Task 5) records whom this resolved action was
+    about -- PC personas only (an NPC opponent has no Persona, so a blow that
+    lands on one records no target; that is correct, not a gap). Written via
+    ``write_target_personas`` with no reachability check -- see that
+    function's docstring for why combat's own targets skip
+    ``persona_can_receive``.
     """
-    return Interaction.objects.create(
+    interaction = Interaction.objects.create(
         persona=persona,
         scene=scene,
         content=summary_label,
@@ -356,6 +382,9 @@ def create_action_interaction_core(
         strain_committed=strain_committed,
         fury_committed=fury_committed,
     )
+    if target_personas:
+        write_target_personas(interaction, target_personas)
+    return interaction
 
 
 def _send_to_objects(
