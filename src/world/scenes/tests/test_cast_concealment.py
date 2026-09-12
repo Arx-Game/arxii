@@ -500,6 +500,35 @@ class ConcealedCastRequestLeakTests(APITestCase, ConcealedCastJourneyTests):
         self.assertFalse(any(self.caster.name in c for c in contents))
         self.assertFalse(any(self.technique.name in c for c in contents))
 
+    def test_concealed_cast_records_a_target_outside_the_attribution_audience(self) -> None:
+        """ADR-0293 decision 3: a Narrator OUTCOME row is not gated on reachability.
+
+        ``audience.full`` is who could pin the CASTER, so a hostile target who failed
+        the detection roll lands in ``effect_only`` instead. Routing this row through
+        ``create_interaction``'s validated ``target_personas`` kwarg refused it every
+        time concealment worked as designed, which 500ed REST cast resolution.
+        """
+        request = self._cast_at_target(
+            self._concealed_audience(full=[self.caster], vague=[], effect_only=[self.target])
+        )
+        pose = request.result_interaction
+        self.assertIsNotNone(pose)
+        self.assertEqual([p.pk for p in pose.target_personas.all()], [self.target.pk])
+
+    def test_unconcealed_cast_records_its_target_despite_the_unplaced_narrator(self) -> None:
+        """The room-heard branch: the writer is the Narrator, never physically placed.
+
+        ``persona_can_receive``'s room-heard fallback anchors on the WRITER's own
+        location, so this row could never satisfy it. It is a system-authored record
+        of what happened, so it does not have to.
+        """
+        request = self._cast_at_target(
+            CastAudience(concealed=False, full=[], vague=[], effect_only=[])
+        )
+        pose = request.result_interaction
+        self.assertIsNotNone(pose)
+        self.assertEqual([p.pk for p in pose.target_personas.all()], [self.target.pk])
+
 
 class CastOpenlyTests(CastScenarioMixin):
     """The one-way waiver, exercised without stubbing the audience.

@@ -54710,11 +54710,31 @@ components:
           nullable: true
           description: Return only explicit topology; unthreaded rows remain standalone.
           readOnly: true
+        root_thread_id:
+          type: string
+          nullable: true
+          description: |-
+            The top of the nesting tree this row's exchange belongs to (#3787).
+
+            A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+            nested threads by construction. This is the one key every row of a single
+            exchange shares, so a reader groups the whole of it into one card without
+            walking parents. Null when the row's own thread IS the root, and for a row
+            that answers nothing: the reader falls back to ``thread_id`` there, exactly
+            as ``InteractionThread.root`` is null on a root thread. Costs no query -
+            ``get_queryset`` joins ``thread`` in for the parent chip already.
+          readOnly: true
         reply_to:
           type: object
           additionalProperties: {}
           nullable: true
-          description: Do not infer a parent from neighboring interactions.
+          description: |-
+            The interaction this one answered, when the viewer may also read it.
+
+            Gated on the PARENT's own visibility, not on this row's membership: a reply
+            stays readable to everyone who can see it, but its chip appears only for a
+            viewer who could already read what it answered. Never infers a parent from
+            neighboring interactions.
           readOnly: true
         conversation:
           type: object
@@ -55006,6 +55026,7 @@ components:
       - receiver_persona_ids
       - receivers
       - reply_to
+      - root_thread_id
       - target_persona_ids
       - thread_id
       - timestamp
@@ -55045,11 +55066,31 @@ components:
           nullable: true
           description: Return only explicit topology; unthreaded rows remain standalone.
           readOnly: true
+        root_thread_id:
+          type: string
+          nullable: true
+          description: |-
+            The top of the nesting tree this row's exchange belongs to (#3787).
+
+            A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+            nested threads by construction. This is the one key every row of a single
+            exchange shares, so a reader groups the whole of it into one card without
+            walking parents. Null when the row's own thread IS the root, and for a row
+            that answers nothing: the reader falls back to ``thread_id`` there, exactly
+            as ``InteractionThread.root`` is null on a root thread. Costs no query -
+            ``get_queryset`` joins ``thread`` in for the parent chip already.
+          readOnly: true
         reply_to:
           type: object
           additionalProperties: {}
           nullable: true
-          description: Do not infer a parent from neighboring interactions.
+          description: |-
+            The interaction this one answered, when the viewer may also read it.
+
+            Gated on the PARENT's own visibility, not on this row's membership: a reply
+            stays readable to everyone who can see it, but its chip appears only for a
+            viewer who could already read what it answered. Never infers a parent from
+            neighboring interactions.
           readOnly: true
         conversation:
           type: object
@@ -55334,6 +55375,7 @@ components:
       - reactions
       - receiver_persona_ids
       - reply_to
+      - root_thread_id
       - target_persona_ids
       - thread_id
       - timestamp

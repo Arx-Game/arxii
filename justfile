@@ -388,7 +388,7 @@ fe-lint *args:
 #   just fe-test
 #   just fe-test src/rituals/__tests__/fields.test.tsx
 fe-test *args:
-    cd frontend && pnpm test --run {{args}}
+    cd frontend && pnpm test {{args}}
 
 # Run Playwright e2e tests against the Django-served frontend (production
 # build). Requires the Evennia server to be running on :4001 (just start).

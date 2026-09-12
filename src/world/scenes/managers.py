@@ -57,12 +57,15 @@ def room_heard_q() -> models.Q:
     whisper). Whispers, table-talk and receiver-scoped mutters are DIRECTED: they
     reach only their parties, so they are never room-heard.
 
-    Shared by `InteractionQuerySet.visible_to` (read visibility) and
-    `world.scenes.attention_services` (#3774), which counts ambient unread inside
-    a scene. Both must agree on this definition: an attention count built on a
-    looser predicate would disclose that a private aside took place, as an
-    increment the viewer is not a party to. Returns a fresh Q each call, since
-    combining a Q with `&`/`|` is not safe to do to a shared instance.
+    Shared by `InteractionQuerySet.visible_to` (read visibility),
+    `world.scenes.attention_services` (#3774), which counts ambient unread
+    inside a scene, and the live WebSocket push's reply-parent gate
+    (`interaction_services._reply_parent_payload`, #3787). All three must agree
+    on this definition: an attention count built on a looser predicate would
+    disclose that a private aside took place, as an increment the viewer is not
+    a party to, and a looser reply-parent gate would do the same for a reply.
+    Returns a fresh Q each call, since combining a Q with `&`/`|` is not safe to
+    do to a shared instance.
     """
     return models.Q(
         visibility=InteractionVisibility.DEFAULT,
@@ -73,6 +76,10 @@ def room_heard_q() -> models.Q:
 
 class InteractionQuerySet(models.QuerySet):
     """Queryset helpers for Interaction read-visibility."""
+
+    def room_heard(self) -> InteractionQuerySet:
+        """Narrow to broadcast rows: see ``room_heard_q``."""
+        return self.filter(room_heard_q())
 
     def visible_to(
         self,

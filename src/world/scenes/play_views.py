@@ -40,6 +40,7 @@ from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
 from world.scenes.models import Interaction, PoseSubmission
+from world.scenes.thread_services import thread_roots
 
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
@@ -190,6 +191,28 @@ def _queryset(
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
 
+def _exchange_keys(rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Map each thread on the page to the exchange it belongs to (#3787).
+
+    An exchange is a whole nesting tree. Answering an unanswered reply moves that
+    reply into a child thread, so one back-and-forth spans several threads; every
+    thread in the tree shares one ``root``, which is the key they collapse onto.
+
+    That collapse is also what satisfies the render rule for a single thread -
+    "its own members plus the first member of each child thread". Grouping by root
+    takes the union of every thread in the tree, so a row that moved into a child
+    is still in the same group and nothing goes short. A caller that grouped by
+    ``thread_id`` alone would lose one pose per answered child.
+
+    ``root`` is derived, not stored - one query per nesting LEVEL for the whole
+    page, never one per row (see ``thread_services.thread_roots``).
+    """
+    thread_ids = {str(row["thread_id"]) for row in rows if row.get("thread_id")}
+    if not thread_ids:
+        return {}
+    return {str(pk): str(root) for pk, root in thread_roots(thread_ids).items()}
+
+
 def _ref(row: dict[str, Any]) -> dict[str, str]:
     return {"id": str(row["id"]), "timestamp": row["timestamp"]}
 
@@ -254,10 +277,22 @@ def _is_recognized_conversation_ref(ref: str) -> bool:
 
 def _rows(
     request: Request, params: Mapping[str, str] | None = None
-) -> tuple[list[dict[str, Any]], QuerySet[Interaction]]:
+) -> tuple[list[dict[str, Any]], list[Interaction]]:
+    """Return serialized rows, and the same materialized interactions.
+
+    Realizes the queryset exactly once (`list(queryset)`), then serializes that list -
+    never the original queryset, which would otherwise evaluate the DB query a second
+    time. Every caller here (PlayConversationsView, PlayPosesView, PlayContextView,
+    PlaySearchView, PlayThreadsView, PlayReadView) goes through this one function.
+
+    The reply parent chip needs nothing extra here: a row's thread IS its parent edge
+    (#3787), and `InteractionViewSet.get_queryset` already joins `thread` in, so
+    `get_reply_to` reads the anchor straight off each row.
+    """
     queryset, context = _queryset(request, params)
-    serialized = InteractionListSerializer(queryset, many=True, context=context).data
-    return list(serialized), queryset
+    interactions = list(queryset)
+    serialized = InteractionListSerializer(interactions, many=True, context=context).data
+    return list(serialized), interactions
 
 
 class PlayConversationsView(APIView):
@@ -465,6 +500,12 @@ class PlayThreadsView(APIView):
                 account=request.user,  # type: ignore[invalid-argument-type]
                 interaction_ids=[row["id"] for row in rows],
             )
+        # An exchange is the whole nesting tree, not one thread (#3787): answering an
+        # unanswered reply moves it into a child thread, so one back-and-forth spans
+        # several threads that share a root. Grouping by that root is also what keeps
+        # a thread's display whole - see `_exchange_keys`.
+        exchange_of = _exchange_keys(rows)
+
         grouped: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
             # An interaction carries a thread only when it is an explicit reply
@@ -479,9 +520,18 @@ class PlayThreadsView(APIView):
             key = row.get("thread_id")
             if not key:
                 continue
-            grouped.setdefault(str(key), []).append(row)
+            exchange = exchange_of.get(str(key))
+            if exchange is None:
+                continue
+            grouped.setdefault(exchange, []).append(row)
         results = []
         for key, members in grouped.items():
+            # The answered pose is a real MEMBER of its thread now (#3787), so it is
+            # already in `members` and opens the exchange on its own - no row has to
+            # be fetched from outside the group and spliced in, which is what used to
+            # risk counting one pose in two groups. `rows` is ordered by (timestamp,
+            # id), so `members[0]` is the earliest pose of the exchange the viewer
+            # can see, which is exactly what `root`/`firstVisible` mean.
             root, latest = members[0], members[-1]
             unread = sum(1 for m in members if int(m["id"]) not in read_ids)
             results.append(

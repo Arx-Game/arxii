@@ -58,13 +58,29 @@ export function getThreadKey(interaction: Interaction): string {
   // New play payloads carry explicit topology. Legacy rows continue through
   // the audience-based fallback below; proximity and names are never used to
   // infer a reply relationship.
-  if (interaction.thread_id) return interaction.thread_id;
+  //
+  // #3787 rework: a row's `thread_id` is what it ANSWERS, so answering a reply
+  // nests a thread and one back-and-forth spans several of them. `root_thread_id`
+  // is the top of that tree, so preferring it keeps a nested exchange in ONE tab
+  // rather than opening a fresh one per level. It is null on a root thread (and
+  // on an unthreaded row), which is exactly when `thread_id` is already the top.
+  // Both stay AHEAD of the audience fallbacks and BEHIND nothing: an explicit
+  // server topology always wins, as it did before.
+  const explicitTopology = interaction.root_thread_id || interaction.thread_id;
+  if (explicitTopology) return explicitTopology;
   if (interaction.mode === 'whisper' && interaction.receiver_persona_ids.length > 0) {
     const ids = [interaction.persona.id, ...interaction.receiver_persona_ids].sort((a, b) => a - b);
     return `whisper:${ids.join(',')}`;
   }
   if (interaction.place != null) {
     return `place:${interaction.place}`;
+  }
+  // #3787 decision 5: targeting drives the involvement mark and the direct badge
+  // tier, never the grouping. Without this, giving combat rows targets (which they
+  // gained so a player can be told a blow was theirs) would split one fight into a
+  // separate group per victim.
+  if (interaction.mode === 'action' || interaction.mode === 'outcome') {
+    return interaction.scene != null ? `scene:${interaction.scene}` : 'room';
   }
   if (interaction.target_persona_ids.length > 0) {
     const ids = [...interaction.target_persona_ids].sort((a, b) => a - b);

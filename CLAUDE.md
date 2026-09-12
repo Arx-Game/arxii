@@ -92,9 +92,11 @@ back from the creating command's own stdout.
   (#2906), any two migration-bearing PRs always collide** (one number
   sequence, one `max_migration.txt`) — check main's tip migration BEFORE
   enqueueing, and fix a collision with `arx manage rebase_migration arxii`
-  (resolve `max_migration.txt` to main's tip first), push, re-enqueue; see
-  the `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the
-  full recipe. Never hand-renumber. A chain-regeneration PR (ADR-0276) collides
+  (leave `max_migration.txt`'s conflict markers IN - the tool reads them, and it
+  renames whichever side sits after `=======`, which must be yours; a merge
+  reverses that orientation, a rebase does not), push, re-enqueue; see the
+  `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the full
+  recipe. Never hand-renumber. A chain-regeneration PR (ADR-0276) collides
   with every migration-bearing PR by construction: rerun `just
   regenerate-migrations` in a fresh worktree from the tip of `main` and
   force-push; never rebase it. **Cut it only from a commit production has

@@ -941,7 +941,29 @@ class BlockContactFlag(SharedMemoryModel):
 
 
 class InteractionThread(SharedMemoryModel):
-    """A flat conversation membership container for narrative interactions."""
+    """One exchange, nested the way a mailing list nests (#3787).
+
+    The answered row is a MEMBER of the thread, and the ANCHOR is simply its
+    first member - the pose everything else here is answering. There is no
+    anchor column: ``id`` comes from a single sequence
+    (``arxii_interaction_id_seq``, owned by the partitioned table, with every
+    partition defaulting from it), so it is globally unique and monotonic across
+    partitions. That is one unambiguous total order, and ``min(id)`` over the
+    members is the anchor, needing no tiebreak and no denormalized copy.
+
+    Answering a row that is NOT already its thread's anchor NESTS a thread: the
+    answered row MOVES into the new thread, whose ``parent`` is the thread it came
+    from. So provenance survives the move - the parent thread is what the row's old
+    membership is replaced by. ``parent`` is the only structural link stored, and
+    the only one not derivable from anything else. The top of the tree is a walk up
+    it, and the approved spec keeps nesting shallow, so it is derived per page
+    rather than copied onto every row where the copy could drift.
+
+    Rendering ONE thread therefore means its own members PLUS the first member of
+    each child thread, since that first member is the row that sat here until it
+    was answered. A reader grouping a whole exchange by its derived root gets this
+    for free, because every thread in the tree shares that root.
+    """
 
     class HolderKind(models.TextChoices):
         SCENE = "scene", "Scene"

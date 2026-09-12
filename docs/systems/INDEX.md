@@ -685,11 +685,36 @@ Powers, affinities, auras, resonances, threads-as-currency, rituals, and Mage Sc
   penetration contest: [power-derivation.md](../architecture/power-derivation.md)
 
 ### Scene Interaction Threads
-Explicit flat thread membership for scene, place, and fixed-party whisper interactions.
+Anchored, nestable reply threads for scene, place, and fixed-party whisper interactions,
+plus the reachability rule (#3787).
 
-- **Models:** `scenes.InteractionThread`; nullable `scenes.Interaction.thread`.
+- **Models:** `scenes.InteractionThread`, anchored at the row it answers
+  (`anchor_interaction` + `anchor_timestamp`, both required, `db_constraint=False` plus a
+  denormalized timestamp because `arxii_interaction` is range-partitioned on a composite
+  key - `InteractionReceiver` is the precedent, see ADR-0293 for why `InteractionAction` is
+  not), with `parent` naming the thread its anchor belongs to and `root` denormalizing the
+  top of the nesting tree; nullable `scenes.Interaction.thread`, which now means "what I am
+  an answer to", not "which pile I am in". The anchor is NOT a member of its own thread,
+  and `unique_thread_per_anchor` makes two answers to the same row one exchange. There is
+  no `InteractionReply` bridge: an edge table was built and removed at review (ADR-0293,
+  decision 4).
 - **Write target:** serializer-only `reply_to` (`id` + RFC3339 `timestamp`).
-- **Read payload:** `thread_id`; existing visibility and delivery rules remain canonical.
+- **Read payload:** `thread_id`, `root_thread_id` (the exchange key a nested back-and-forth
+  groups by; null when the row's own thread is the root), `reply_to` (derived from the
+  thread's anchor, gated on the parent's own `visible_to`); existing visibility and
+  delivery rules remain canonical.
+- **Reachability (#3787):** `world.scenes.reachability.persona_can_receive` is the shared
+  predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
+  the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
+  venue's reply target is refused, never widened, and both refusals preserve the writer's
+  draft. See ADR-0293.
+- **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
+  `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
+  keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round
+  stays one reader group. Combat's ACTION/OUTCOME writers now pass `target_personas`
+  through the shared `write_target_personas` helper, unvalidated by reachability (a
+  resolved action's targets are already governed by the encounter's own targeting rules;
+  Battle scenes have no location for `persona_can_receive` to test against). See ADR-0293.
 - **Source:** [`scene-interaction-threads.md`](scene-interaction-threads.md).
 
 ### Traits

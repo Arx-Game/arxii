@@ -9,14 +9,13 @@
  * Phase 9, Task 9.2.
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useAppSelector } from '@/store/hooks';
-import { actingPersonaId } from '@/roster/persona';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useViewerPersonaId } from '@/roster/persona';
+import { excerptOf } from '@/lib/formatParser';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
@@ -200,6 +199,58 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Parent-reply chip (#3787 demo Screen 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Answering "<excerpt>"" -- the parent chip. Replaces the placeholder
+ * `Replying to pose {id}` now that `interaction.reply_to` carries real data
+ * (#3787 Tasks 1-2). Clicking it reveals the parent's content in place,
+ * matching the demo's "reveal-in-place" affordance.
+ *
+ * The chip NEVER re-derives an actor: both the quoted excerpt and the
+ * revealed block below show only `parent.content` (already the exact,
+ * per-viewer-rendered text the reader elsewhere shows for that row), never
+ * `parent.persona.name`. That is what keeps it safe on a concealed working --
+ * the line stays exactly as unattributed as it already was.
+ */
+function ParentChip({
+  replyTo,
+  parent,
+}: {
+  replyTo: { id: string; timestamp: string };
+  parent: Interaction | undefined;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <div className="mt-1" data-testid="parent-reference">
+      <button
+        type="button"
+        className="block w-full rounded-r border-l-2 border-primary/50 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-primary"
+        onClick={() => setRevealed((v) => !v)}
+        aria-expanded={revealed}
+        data-testid={`parent-chip-${replyTo.id}`}
+      >
+        Answering{' '}
+        {parent ? (
+          <span className="italic text-foreground">&ldquo;{excerptOf(parent.content)}&rdquo;</span>
+        ) : (
+          <span className="italic">a pose not currently loaded</span>
+        )}
+      </button>
+      {revealed && parent && (
+        <div
+          className="ml-2 mt-1 rounded border border-dashed px-2 py-1 text-xs"
+          data-testid={`parent-reveal-${replyTo.id}`}
+        >
+          <FormattedContent content={parent.content} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // PoseUnit
 // ---------------------------------------------------------------------------
 
@@ -226,6 +277,16 @@ export interface PoseUnitProps {
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
   /** Historical readers must not mount mutation controls. */
   readOnly?: boolean;
+  /**
+   * Lookup for resolving `interaction.reply_to` to its parent Interaction
+   * (#3787) -- `reply_to` itself carries only `{id, timestamp}` (a thread
+   * selector, not the parent's content), so the parent chip's quoted
+   * excerpt needs the full row. Built once by the caller that already holds
+   * every loaded interaction (`ThreadedNarrativeReader.tsx`) rather than
+   * fetched per-pose. Absent/a miss (the parent isn't in the currently
+   * loaded window) degrades to a chip with no quote, never a fetch.
+   */
+  interactionsById?: ReadonlyMap<number, Interaction>;
 }
 
 /** Why a reaction chip nudges your regard, shown on hover. */
@@ -243,6 +304,7 @@ export function PoseUnit({
   canGm = false,
   onAvatarClick,
   readOnly = false,
+  interactionsById,
 }: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
@@ -261,13 +323,10 @@ export function PoseUnit({
   // EndorsementControl's self-endorsement guard (same signal, same source).
   // NominateButton has no self-guard of its own (the backend refuses your own
   // characters; this gate is UX only), so PoseUnit computes it and decides
-  // whether to mount (#3738).
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const viewerPersonaId = useMemo(
-    () => actingPersonaId(myRosterEntries.find((e) => e.name === activeCharacterName)),
-    [myRosterEntries, activeCharacterName]
-  );
+  // whether to mount (#3738). #3787: this is now `useViewerPersonaId()`, the
+  // single extracted source of truth also used by `ThreadedNarrativeReader`'s
+  // involvement mark -- do not add a second inline computation here.
+  const viewerPersonaId = useViewerPersonaId();
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
   const canNominate = Boolean(sceneId) && !isSelfPose;
 
@@ -391,12 +450,10 @@ export function PoseUnit({
       )}
 
       {interaction.reply_to && (
-        <div
-          className="mt-1 rounded border-l-2 border-primary/40 px-2 text-xs text-muted-foreground"
-          data-testid="parent-reference"
-        >
-          Replying to pose {interaction.reply_to.id}
-        </div>
+        <ParentChip
+          replyTo={interaction.reply_to}
+          parent={interactionsById?.get(Number(interaction.reply_to.id))}
+        />
       )}
 
       {/* Prose body */}

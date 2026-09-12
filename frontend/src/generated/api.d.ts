@@ -31414,7 +31414,26 @@ export interface components {
       readonly id: number;
       /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
-      /** @description Do not infer a parent from neighboring interactions. */
+      /**
+       * @description The top of the nesting tree this row's exchange belongs to (#3787).
+       *
+       *     A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+       *     nested threads by construction. This is the one key every row of a single
+       *     exchange shares, so a reader groups the whole of it into one card without
+       *     walking parents. Null when the row's own thread IS the root, and for a row
+       *     that answers nothing: the reader falls back to ``thread_id`` there, exactly
+       *     as ``InteractionThread.root`` is null on a root thread. Costs no query -
+       *     ``get_queryset`` joins ``thread`` in for the parent chip already.
+       */
+      readonly root_thread_id: string | null;
+      /**
+       * @description The interaction this one answered, when the viewer may also read it.
+       *
+       *     Gated on the PARENT's own visibility, not on this row's membership: a reply
+       *     stays readable to everyone who can see it, but its chip appears only for a
+       *     viewer who could already read what it answered. Never infers a parent from
+       *     neighboring interactions.
+       */
       readonly reply_to: {
         [key: string]: unknown;
       } | null;
@@ -31612,7 +31631,26 @@ export interface components {
       readonly id: number;
       /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
-      /** @description Do not infer a parent from neighboring interactions. */
+      /**
+       * @description The top of the nesting tree this row's exchange belongs to (#3787).
+       *
+       *     A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+       *     nested threads by construction. This is the one key every row of a single
+       *     exchange shares, so a reader groups the whole of it into one card without
+       *     walking parents. Null when the row's own thread IS the root, and for a row
+       *     that answers nothing: the reader falls back to ``thread_id`` there, exactly
+       *     as ``InteractionThread.root`` is null on a root thread. Costs no query -
+       *     ``get_queryset`` joins ``thread`` in for the parent chip already.
+       */
+      readonly root_thread_id: string | null;
+      /**
+       * @description The interaction this one answered, when the viewer may also read it.
+       *
+       *     Gated on the PARENT's own visibility, not on this row's membership: a reply
+       *     stays readable to everyone who can see it, but its chip appears only for a
+       *     viewer who could already read what it answered. Never infers a parent from
+       *     neighboring interactions.
+       */
       readonly reply_to: {
         [key: string]: unknown;
       } | null;

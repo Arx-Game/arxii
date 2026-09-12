@@ -24,14 +24,16 @@ from world.scenes.models import (
     PoseSubmission,
     Scene,
 )
-from world.scenes.place_models import InteractionReceiver, Place
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
+from world.scenes.reachability import UnreachableError, persona_can_receive
 from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
     assign_interaction_thread,
-    pending_thread_update,
+    thread_anchor_ids,
+    thread_root_id,
 )
-from world.scenes.types import InteractionPayload, PersonaPayload
+from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPayload
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -45,6 +47,31 @@ if TYPE_CHECKING:
 
 DELETION_WINDOW_DAYS = 30
 _ephemeral_counter = itertools.count()
+
+# #3787 Task 4 - approved demo copy (Screen 3). Fixed regardless of WHY a target
+# is unreachable (place-scoped, receiver-scoped, or whisper): both routes it
+# names (address the room, or whisper) are always available to the writer.
+_TARGET_UNREACHABLE_HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
+
+# #3787 Task 8 - telnet parity for the web reader's InvolvementFlag ("This happened
+# to you"). One phrasing for every row kind that carries target_personas (spec
+# decision 8) - see _send_to_objects.
+_INVOLVEMENT_MARK_TEXT = "This happened to you."
+
+
+def _describe_unreachable_targets(personas: list[Persona]) -> str:
+    """Player-facing detail naming the unreachable persona(s) (#3787 demo copy).
+
+    Names only personas the caller already resolved via
+    ``resolve_characters_by_name(..., character.location)`` -- that function only
+    ever returns characters in the writer's own location, so naming them back
+    confirms nothing the writer could not already observe (the leak guard).
+    """
+    names = [p.name for p in personas]
+    if len(names) == 1:
+        return f"{names[0]} is across the room and will not see table talk."
+    joined = ", ".join(names[:-1]) + f" and {names[-1]}"
+    return f"{joined} are across the room and will not see table talk."
 
 
 def get_active_scene(location: ObjectDB | None) -> Scene | None:
@@ -157,6 +184,48 @@ def reassign_persona_interactions(
     return count
 
 
+def write_target_personas(interaction: Interaction, target_personas: Iterable[Persona]) -> None:
+    """Bulk-write the ``InteractionTargetPersona`` rows naming who this row was about.
+
+    ADR-0293 decision 3 draws the line this function sits on: a SYSTEM-authored row
+    records what happened and is not governed by reachability; a PLAYER-authored row
+    addresses someone and is. ``create_interaction``'s own ``target_personas`` kwarg
+    is the player-authored side and validates with ``persona_can_receive`` (#3787
+    Task 4) before calling this. Every system-authored writer calls this directly and
+    deliberately skips that validation:
+
+    - ``create_action_interaction_core`` (this module) and
+      ``create_npc_action_interaction`` / ``broadcast_action_outcome``
+      (``world.combat.interaction_services``) -- combat's resolved actions.
+    - ``create_cast_outcome_pose`` (``world.scenes.cast_services``) -- the Narrator
+      OUTCOME pose(s) for a resolved standalone cast.
+    - ``narrate_privately`` (this module) -- a Narrator line addressed to one player.
+    - the resolved-action-request outcome writers in ``world.scenes.action_services``.
+
+    Their shared justification: the target is already governed by the mechanic's own
+    targeting rules (a resolved action's target must already be a live participant, a
+    cast's target was validated by ``validate_cast_target``, an action request's target
+    was fixed and accepted when the request was created), not by the narrative "is this
+    persona standing somewhere this pose actually reaches" question
+    ``persona_can_receive`` answers -- which several of them could not satisfy in any
+    case, since the Narrator's character is never physically placed and a Battle-backed
+    scene has ``location=None`` by construction. "System-authored" is about who composed
+    the text, not which persona is credited: several of these credit a player's persona
+    for machine-rendered content. Does no reachability check of its own; callers that
+    need one run it before calling this.
+    """
+    InteractionTargetPersona.objects.bulk_create(
+        [
+            InteractionTargetPersona(
+                interaction=interaction,
+                timestamp=interaction.timestamp,
+                persona=p,
+            )
+            for p in target_personas
+        ]
+    )
+
+
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
     *,
     persona: Persona,
@@ -250,42 +319,82 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             )
 
         if target_personas:
-            InteractionTargetPersona.objects.bulk_create(
-                [
-                    InteractionTargetPersona(
-                        interaction=interaction,
-                        timestamp=interaction.timestamp,
-                        persona=p,
-                    )
-                    for p in target_personas
-                ]
-            )
+            # #3787 Task 4 - the live defect: target_personas appeared nowhere in
+            # visible_to, so a Place-scoped pose (which auto-populates receivers
+            # from PlacePresence above, making this a DIRECTED row) could name a
+            # persona sitting at a different table -- the row was written and
+            # never delivered. Validate with the shared `persona_can_receive`
+            # predicate (Task 3) before writing anything, for every shape --
+            # no shape-based exemption here (fix round 1 finding): the room-heard
+            # branch answers correctly on its own now, given the writer's own
+            # `location` as a fallback for when there is no `Scene` to anchor it.
+            #
+            # Batch the Place-presence lookup once for every target instead of
+            # letting `persona_can_receive` issue one `PlacePresence` query per
+            # call (fix round 1 finding 2, "no queries in loop").
+            place_presence_ids = None
+            if place is not None:
+                place_presence_ids = frozenset(
+                    PlacePresence.objects.filter(
+                        place_id=place.pk,
+                        persona_id__in=[p.pk for p in target_personas],
+                    ).values_list("persona_id", flat=True)
+                )
+            writer_location = persona.character_sheet.character.location
+            unreachable = [
+                target
+                for target in target_personas
+                if not persona_can_receive(
+                    target,
+                    scene=scene,
+                    place=place,
+                    receivers=effective_receivers,
+                    mode=mode,
+                    visibility=visibility,
+                    location=writer_location,
+                    place_presence_persona_ids=place_presence_ids,
+                )
+            ]
+            if unreachable:
+                raise UnreachableError(
+                    unreachable,
+                    _TARGET_UNREACHABLE_HINT,
+                    message=_describe_unreachable_targets(unreachable),
+                )
+            write_target_personas(interaction, target_personas)
 
         if reply_to is not None:
-            assignment = assign_interaction_thread(
+            assign_interaction_thread(
                 interaction=interaction,
                 reply_target=reply_to,
                 account_id=writer_account_id,
             )
-            interaction.thread_assignment = assignment
 
     return interaction
 
 
-def create_action_interaction_core(
+def create_action_interaction_core(  # noqa: PLR0913 - one arg per resolved-action field recorded
     *,
     persona: Persona,
     scene: Scene | None,
     summary_label: str,
     strain_committed: int = 0,
     fury_committed: FuryTier | None = None,
+    target_personas: list[Persona] | None = None,
 ) -> Interaction:
     """Create one ACTION-mode Interaction for a resolved action/cast.
 
     The shared core behind combat's create_action_interaction and the scene
     cast path. Keyed on persona + (nullable) scene.
+
+    ``target_personas`` (#3787 Task 5) records whom this resolved action was
+    about -- PC personas only (an NPC opponent has no Persona, so a blow that
+    lands on one records no target; that is correct, not a gap). Written via
+    ``write_target_personas`` with no reachability check -- see that
+    function's docstring for why combat's own targets skip
+    ``persona_can_receive``.
     """
-    return Interaction.objects.create(
+    interaction = Interaction.objects.create(
         persona=persona,
         scene=scene,
         content=summary_label,
@@ -293,6 +402,64 @@ def create_action_interaction_core(
         strain_committed=strain_committed,
         fury_committed=fury_committed,
     )
+    if target_personas:
+        write_target_personas(interaction, target_personas)
+    return interaction
+
+
+def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int]:
+    """Resolve targeted persona ids to their character (ObjectDB) ids, once per call.
+
+    ``CharacterSheet`` is a ``primary_key=True`` O2O onto ``ObjectDB`` (see
+    ``django_notes.md``), so ``Persona.character_sheet_id`` already IS the
+    character's own pk -- no join needed. Returns an empty set (no query) when
+    there are no targets, which is the overwhelmingly common broadcast.
+    """
+    if not target_persona_ids:
+        return frozenset()
+    return frozenset(
+        Persona.objects.filter(pk__in=target_persona_ids).values_list(
+            "character_sheet_id", flat=True
+        )
+    )
+
+
+def _non_web_sessions(obj: ObjectDB) -> list[Any]:
+    """Sessions on ``obj`` that do NOT already receive the structured payload.
+
+    Evennia's webclient protocols stamp ``session.protocol_key`` as
+    ``"webclient/websocket"`` or ``"webclient/ajax"`` (see
+    ``evennia/server/portal/webclient*.py``); telnet, telnet/ssl and ssh use
+    ``"telnet"``/``"telnet/ssl"``/``"ssh"``. This mirrors the existing
+    telnet-vs-web discriminator in ``server/conf/inputfuncs.py``'s ``text()``
+    (``protocol_key.startswith("telnet")``), inverted and widened to "not
+    webclient" so ssh sessions -- which also never receive the ``interaction=``
+    outputfunc -- get the mark too.
+    """
+    return [
+        session
+        for session in obj.sessions.all()
+        if not str(session.protocol_key or "").startswith("webclient")
+    ]
+
+
+def _send_involvement_mark(obj: ObjectDB) -> None:
+    """Send the plain-text involvement mark to ``obj``'s non-web sessions only.
+
+    ``obj.msg(text)`` with no ``session=`` is protocol-agnostic -- it would
+    reach EVERY session ``obj`` has, web included. The web client already
+    renders its own ``InvolvementFlag`` chip off ``target_persona_ids``
+    (#3787 Task 7), so sending the plain-text line there too would double the
+    signal (Task 8 fix round 2, Finding 1). Scoping to ``session=`` a specific
+    list is how Evennia targets delivery (``DefaultObject.msg``); passing an
+    EMPTY list here would fall back to "all sessions" (Evennia's own
+    ``session or self.sessions.all()`` default), so a webclient-only
+    character (no non-web session) gets skipped entirely rather than sent
+    with an empty list.
+    """
+    non_web = _non_web_sessions(obj)
+    if non_web:
+        obj.msg(_INVOLVEMENT_MARK_TEXT, session=non_web)
 
 
 def _send_to_objects(
@@ -307,13 +474,32 @@ def _send_to_objects(
     each object gets its own copy of the payload with ``content`` rebuilt via
     ``render_for(obj)``. ``InteractionPayload`` is a TypedDict, so the per-object
     payload is rebuilt via dict-spread rather than ``dataclasses.replace``.
+
+    Telnet involvement mark (#3787 Task 8, spec decisions 7+8): the
+    ``interaction=`` kwarg above is a WebSocket-only message type -- a bare
+    telnet session never receives it (no ``interaction`` outputfunc is
+    registered for that protocol), so it gives telnet no equivalent of the
+    web reader's ``InvolvementFlag`` ("This happened to you"). Every recipient
+    named in ``payload["target_persona_ids"]`` additionally gets one plain-text
+    line, ``_send_involvement_mark``, scoped to their non-web sessions only
+    (see that function's docstring -- a webclient session already got the
+    structured signal above and must not also get the raw line). This is the
+    one shared seam every targeted row already passes through (pose tagging,
+    whisper, mutter, and combat's unconcealed action outcome all build their
+    payload via ``_build_interaction_payload`` and reach clients only through
+    this function or ``_broadcast_to_location``), so one rule here covers
+    every row kind with no per-mode copy (decision 8) and no duplicated
+    targeting logic in a command class.
     """
+    target_character_ids = _target_character_ids(payload.get("target_persona_ids"))
     for obj in objects:
         try:
             obj_payload = payload
             if render_for is not None:
                 obj_payload = cast(InteractionPayload, {**payload, "content": render_for(obj)})
             obj.msg(interaction=((), obj_payload))
+            if obj.pk in target_character_ids:
+                _send_involvement_mark(obj)
         except AttributeError:
             continue
 
@@ -337,6 +523,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     timestamp: str,
     scene_id: int | None,
     thread_id: str | None = None,
+    root_thread_id: str | None = None,
     place_id: int | None = None,
     place_name: str | None = None,
     receiver_persona_ids: list[int] | None = None,
@@ -345,8 +532,17 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     language_name: str | None = None,
     attributed_companion_id: int | None = None,
     attributed_companion_name: str | None = None,
+    reply_to: ReplyParentPayload | None = None,
 ) -> InteractionPayload:
-    """Build a structured interaction payload for WebSocket delivery."""
+    """Build a structured interaction payload for WebSocket delivery.
+
+    ``reply_to`` (#3787) mirrors ``InteractionSerializer.get_reply_to``'s REST shape so
+    the parent chip appears for every viewer the moment the reply lands, instead of only
+    after a refetch. It defaults to ``None`` for every payload built for a row that
+    cannot have a parent (combat outcomes, companion emotes, tavern games, GM
+    adjudications, ephemeral pushes); ``push_interaction`` is the one builder that
+    resolves it. See ``_reply_parent_payload`` for the privacy gate.
+    """
     return InteractionPayload(
         id=interaction_id,
         persona=PersonaPayload(
@@ -358,6 +554,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         mode=mode,
         timestamp=timestamp,
         thread_id=thread_id,
+        root_thread_id=root_thread_id,
         scene_id=scene_id,
         place_id=place_id,
         place_name=place_name,
@@ -367,7 +564,100 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         language_name=language_name,
         attributed_companion_id=attributed_companion_id,
         attributed_companion_name=attributed_companion_name,
+        reply_to=reply_to,
     )
+
+
+def _root_thread_id(interaction: Interaction) -> str | None:
+    """The top of the nesting tree this row's exchange belongs to (#3787).
+
+    A row's thread is what it ANSWERS, so answering a reply nests a thread inside
+    the one the answered row lives in and a single back-and-forth spans several
+    threads. This is the one key every row of that exchange shares, so a reader
+    renders the whole of it as one card. Null when the row's own thread IS the
+    root, and for a row that answers nothing, mirroring
+    ``InteractionSerializer.get_root_thread_id`` so the live push and the refetch
+    group a row identically. No extra query: ``_reply_parent_payload`` fetches the
+    same thread row on this same push, and a row that answers nothing never
+    touches the database here.
+    """
+    if interaction.thread_id is None:
+        return None
+    root_id = thread_root_id(interaction.thread_id)
+    return None if root_id is None else str(root_id)
+
+
+def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None:
+    """The parent chip for a LIVE push, or ``None`` when it cannot be sent safely.
+
+    The REST serializer gates this per viewer, against
+    ``Interaction.objects.visible_to(user)`` for the request's own account. A WebSocket
+    push has no single viewer -- one payload goes to every object in the room -- and
+    re-running that queryset once per recipient account would put a query per player in
+    the room on every reply. So this gate is structural and evaluated once per push: the
+    parent goes on the wire only when it is ROOM-HEARD IN THIS SAME SCENE (the shared
+    ``managers.room_heard_q`` classification, not a second copy of it).
+
+    **What this gate guarantees, stated exactly.** It discloses strictly less than the
+    live push it rides on already delivers to that same audience. It does NOT match
+    per-recipient REST visibility, and two known cases send a parent ``visible_to``
+    would withhold from that recipient:
+
+    1. A room-heard parent in a PRIVATE scene, to a bystander standing in the room who
+       is neither a participant, nor its GM, nor a prior writer or receiver in it.
+       ``visible_to``'s ``present_scene_ids`` clause (``managers.py``) keys on having
+       AUTHORED or RECEIVED something in the scene, not on standing there.
+    2. A parent older than ``visible_to``'s 90-day ``time_bound``, which the room-heard
+       predicate does not carry.
+
+    Both are accepted rather than fixed. The disclosure is an opaque id and an ISO
+    timestamp with no path to content: ``ParentChip`` (``scenes/components/PoseUnit.tsx``)
+    renders "a pose not currently loaded" on a lookup miss and never fetches. And both
+    recipients are, in the same breath, receiving the REPLY's full text over the same
+    ``_broadcast_to_location`` call. So the parent id tells them strictly less than the
+    push already has. Do not restate this as "can never over-disclose".
+
+    Every narrower parent -- a whisper, a table-scoped aside, a row escalated to
+    PERCEIVED_ONLY or VERY_PRIVATE, or a parent in another scene -- sends ``None``
+    rather than guess, and those readers still get the chip from the REST serializer's
+    own per-viewer gate on their next fetch.
+
+    **Cost.** A couple of small queries per reply push, and none at all for the
+    overwhelmingly common row that answers nothing: ``thread_id`` is a plain column
+    already on the row, so the ``None`` branch below never touches the database.
+    """
+    # A row answers something only if it belongs to a thread (#3787), and
+    # ``assign_interaction_thread`` (``world/scenes/thread_services.py``) is the only
+    # writer of ``interaction.thread``. So a null ``thread_id`` means "answers
+    # nothing" without a lookup. Pinned by ``test_a_reply_always_carries_a_thread_id``.
+    if interaction.thread_id is None:
+        return None
+    thread = interaction.thread
+    if thread is None:
+        return None
+    # The thread's anchor is its first member; the anchor itself answers whatever its
+    # thread was split off from. Both come from the same batched resolver the REST
+    # serializer uses, so the two channels cannot drift apart.
+    anchors = thread_anchor_ids(
+        [thread.pk] if thread.parent_id is None else [thread.pk, thread.parent_id]
+    )
+    anchor_id = anchors.get(thread.pk)
+    if anchor_id is None:
+        return None
+    parent_id = anchor_id if interaction.pk != anchor_id else anchors.get(thread.parent_id)
+    if parent_id is None:
+        return None
+    if interaction.scene_id is None:
+        return None
+    parent_timestamp = (
+        Interaction.objects.room_heard()
+        .filter(pk=parent_id, scene_id=interaction.scene_id)
+        .values_list("timestamp", flat=True)
+        .first()
+    )
+    if parent_timestamp is None:
+        return None
+    return ReplyParentPayload(id=str(parent_id), timestamp=parent_timestamp.isoformat())
 
 
 def _language_render_for(
@@ -476,6 +766,7 @@ def push_interaction(
         mode=interaction.mode,
         timestamp=interaction.timestamp.isoformat(),
         thread_id=str(interaction.thread_id) if interaction.thread_id else None,
+        root_thread_id=_root_thread_id(interaction),
         scene_id=interaction.scene_id,
         place_id=interaction.place_id,
         place_name=interaction.place.name if interaction.place_id else None,
@@ -487,6 +778,7 @@ def push_interaction(
         attributed_companion_name=(
             interaction.attributed_companion.name if interaction.attributed_companion_id else None
         ),
+        reply_to=_reply_parent_payload(interaction),
     )
 
     # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
@@ -1093,10 +1385,6 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     if on_before_push is not None:
         on_before_push(interaction)
 
-    thread_update = pending_thread_update(interaction)
-    if thread_update is not None:
-        push_interaction(thread_update)
-
     if on_created is not None:
         on_created(interaction)
 
@@ -1227,8 +1515,14 @@ def narrate_privately(character: ObjectDB, text: str) -> None:  # noqa: OBJECTDB
         mode=InteractionMode.WHISPER,
         scene=scene,
         receivers=[persona],
-        target_personas=[persona],
     )
+    # ADR-0293 decision 3: this is a Narrator-authored system record, so its target
+    # row goes through `write_target_personas` rather than `create_interaction`'s
+    # validated kwarg. The whisper branch of `persona_can_receive` would happen to
+    # accept (the recipient is their own receiver), but only by coincidence of shape:
+    # the check anchors on the WRITER's location and the Narrator's character is
+    # never physically placed, so no other shape here would survive it.
+    write_target_personas(interaction, [persona])
     payload = _build_interaction_payload(
         interaction_id=interaction.pk,
         persona=narrator,

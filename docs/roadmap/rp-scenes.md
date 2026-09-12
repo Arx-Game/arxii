@@ -397,6 +397,53 @@ creating a duplicate row or silently misdelivering to a different audience.
   counter so a stale connection's late message handler can never process a frame
   addressed to a newer one after a reconnect race.
 
+### Weave Mechanical Actions Into Prose - DONE (#3787)
+
+A pose can now answer a mechanical row (a combat OUTCOME, a failed check, an NPC's
+ACTION) through the same reply mechanism it answers another pose with, and a resolved
+combat action records whom it targeted.
+
+- **Targets on mechanical rows.** `world.combat.interaction_services`'
+  `create_action_interaction_core` and `create_npc_action_interaction` now pass the
+  resolvers' own targets through the shared `write_target_personas` helper
+  (`world/scenes/interaction_services.py`), populated from `focused_opponent_target` /
+  `focused_ally_target` / the check's subject. Concealed tiers still record none
+  (ADR-0170, unchanged).
+- **The involvement mark.** Derived per viewer from `InteractionTargetPersona` rows, no
+  stored flag, one phrasing across all five row kinds. Web renders it as a reader chip;
+  telnet gets the equivalent plain-text line scoped to sessions that don't already get
+  the structured payload (`interaction_services._send_involvement_mark`/
+  `_non_web_sessions`).
+- **Grouping stays whole.** `getThreadKey` (`frontend/src/scenes/hooks/useThreading.ts`)
+  keys `action`/`outcome` rows by scene, never by target, so a multi-target round stays
+  one reader group instead of fragmenting per victim.
+- **The parent edge is the thread's anchor.** `InteractionThread` gained
+  `anchor_interaction` + `anchor_timestamp` (the row every member answers, both required),
+  a written `parent` (the thread the anchor itself belongs to, so answering a reply nests)
+  and a denormalized `root` (the top of the tree). A row's `thread` now means "what I am an
+  answer to"; the answered row is reachable as the anchor and is not a member. So
+  `get_reply_to()` reads the chip's `{id, timestamp}` straight off the joined thread row
+  with no join to the partitioned table and no per-row handler, and the list query budgets
+  went DOWN. Rendered as the reader's parent chip (web only - telnet can only quote). See
+  [`scene-interaction-threads.md`](../systems/scene-interaction-threads.md) and ADR-0293,
+  decision 4, which records the per-reply edge table (`InteractionReply`) that was built
+  and then rejected at review.
+- **Nested exchanges read as one card.** `root_thread_id` is serialized beside `thread_id`,
+  and `ThreadedNarrativeReader` groups by it, pulling the root thread's anchor in as the
+  opening pose so a three-level back-and-forth is one card rather than a standalone pose
+  above a chain of fragments. `useThreading.getThreadKey` prefers it over `thread_id` for
+  the same reason; mechanical rows still key by scene ahead of that branch, so the
+  multi-target combat round stays whole. Server-side, `PlayThreadsView` groups by exchange
+  (`play_views._exchange_keys`, two flat queries per page) and puts the anchor back at the
+  head of its members when the viewer can see it.
+- **Reachability.** `world.scenes.reachability.persona_can_receive` is the one shared
+  predicate behind two refusals: tagging a persona outside the audience
+  (`UnreachableError`) and replying from a venue that cannot reach its target
+  (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
+  shape and a stated venue hint instead of an opaque string). Both refuse rather than
+  widen the audience, both preserve the writer's draft, and both are telnet-parity
+  (the parent chip alone is web only). See ADR-0293.
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 

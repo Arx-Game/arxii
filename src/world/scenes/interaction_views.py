@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from http import HTTPMethod
 from typing import Any
 
@@ -61,6 +62,7 @@ from world.scenes.models import (
     SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.reachability import UnreachableError
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
 from world.scenes.reaction_services import open_reaction_window
 from world.scenes.reaction_toggle_services import (
@@ -69,6 +71,21 @@ from world.scenes.reaction_toggle_services import (
 )
 from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
+
+
+def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
+    """Shared 400 body shape for a typed submit-pose refusal.
+
+    Both ``InteractionThreadError`` (reply refusal) and ``UnreachableError``
+    (#3787 Task 4 tagging refusal) translate through this one shape --
+    ``hint`` is omitted rather than sent as ``null`` when the refusal carries
+    none (``InteractionThreadError`` only sets it for the Place-to-Scene reply
+    mismatch; every ``UnreachableError`` carries one).
+    """
+    body: dict[str, str] = {"code": code, "field": field, "detail": detail}
+    if hint is not None:
+        body["hint"] = hint
+    return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -169,6 +186,10 @@ class InteractionViewSet(
             "place",
             "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
             "attributed_companion",  # #3294: N+1-safe companion-attribution rendering
+            # #3787: the thread IS the reply parent edge (it is anchored on the row it
+            # answers), so joining it here serves get_reply_to for the whole page with
+            # no extra query and no per-row handler.
+            "thread",
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",
@@ -273,7 +294,10 @@ class InteractionViewSet(
             return InteractionDetailSerializer
         return InteractionListSerializer
 
-    def get_permissions(self) -> list[BasePermission]:
+    def get_permissions(self) -> Sequence[BasePermission]:
+        # Sequence, not list: this class also defines a `list()` action method
+        # (below), and a bare `list[...]` annotation elsewhere in the same class
+        # body resolves against that method rather than the builtin.
         if self.action == "list":
             # Public shop-window read (#3305): landing-page scene excerpt.
             # Scoping lives in InteractionQuerySet.visible_to's anonymous
@@ -442,14 +466,15 @@ class InteractionViewSet(
                 reply_to=reply_target,
                 on_created=_on_created,
             )
-        except InteractionThreadError:
-            return Response(
-                {
-                    "code": "reply_target_unavailable",
-                    "field": "reply_to",
-                    "detail": "Cannot reply to that interaction.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
+        except InteractionThreadError as exc:
+            return _refusal_response(
+                code=exc.code, field="reply_to", detail=exc.detail, hint=exc.venue_hint
+            )
+        except UnreachableError as exc:
+            # #3787 Task 4 - refuse tagging a persona who cannot receive the row.
+            # Nothing was written: create_interaction raises before any bulk_create.
+            return _refusal_response(
+                code=exc.code, field="target_names", detail=exc.detail, hint=exc.venue_hint
             )
 
         if result.conflict:
