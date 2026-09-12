@@ -1431,12 +1431,22 @@ describe('CommandInput', () => {
     // this is the component-level guard for the prop that fixes it.
     it('carries the draft into the real room when a provisional scope settles', () => {
       const { rerender } = render(
-        <CommandInput character="Alice" draftScope="room:unknown" draftScopeProvisional />
+        <CommandInput
+          character="Alice"
+          draftScope="room:unknown"
+          draftScopeSettling={{ provisional: true, conversation: 'room-anchor' }}
+        />
       );
       const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
       fireEvent.change(textarea, { target: { value: 'A quiet beginning.' } });
 
-      rerender(<CommandInput character="Alice" draftScope="room:2" />);
+      rerender(
+        <CommandInput
+          character="Alice"
+          draftScope="room:2"
+          draftScopeSettling={{ conversation: 'room-anchor' }}
+        />
+      );
 
       expect(textarea.value).toBe('A quiet beginning.');
       expect(storedDraft('room:2').content).toBe('A quiet beginning.');
@@ -1445,6 +1455,36 @@ describe('CommandInput', () => {
           draftStorageKey({ accountId: 0, personaId: 0, conversationKey: 'room:unknown' })
         )
       ).toBeNull();
+    });
+
+    // A conversation tab opening before `room_state` arrives is a different
+    // audience, not the same one being named — the room pose must not follow
+    // it into the whisper composer.
+    it('does not carry a provisional draft into a conversation tab that opens first', () => {
+      seedDraft(
+        { content: 'meant only for Bob', status: 'clean', clientRequestId: null },
+        'whisper:9'
+      );
+      const { rerender } = render(
+        <CommandInput
+          character="Alice"
+          draftScope="room:unknown"
+          draftScopeSettling={{ provisional: true, conversation: 'room-anchor' }}
+        />
+      );
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'a pose for the whole room' } });
+
+      rerender(
+        <CommandInput
+          character="Alice"
+          draftScope="whisper:9"
+          draftScopeSettling={{ conversation: 'whisper:9' }}
+        />
+      );
+
+      expect(textarea.value).toBe('meant only for Bob');
+      expect(storedDraft('whisper:9').content).toBe('meant only for Bob');
     });
 
     it('appends a @target onto the existing draft and persists the result', () => {

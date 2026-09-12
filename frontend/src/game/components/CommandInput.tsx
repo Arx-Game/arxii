@@ -6,7 +6,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload } from '@/hooks/types';
 import { useDraftStore, readStoredDraft } from '@/game/useDraftStore';
-import type { DraftKey, DraftMode } from '@/game/useDraftStore';
+import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftStore';
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
@@ -136,16 +136,15 @@ interface CommandInputProps {
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
   /**
-   * True while `draftScope` still carries a placeholder for something the
-   * caller cannot name yet — `GameWindow`'s room-anchor scope during
-   * "Entering world", before the first `room_state` broadcast identifies the
-   * room (#3784). The next `draftScope` change then carries this draft with
-   * it instead of stranding it under the placeholder; see
-   * `DraftStoreOptions.provisional`. Defaults to `false`: a caller whose
-   * scope is settled from the first render (a conversation tab, a scene
-   * composer) needs nothing here.
+   * Whether `draftScope` is still settling, and which conversation it names
+   * while it does (#3784) — `GameWindow`'s room-anchor scope carries a
+   * `room:unknown` placeholder during "Entering world", before the first
+   * `room_state` identifies the room. Declaring it lets the draft move with
+   * the scope when it settles instead of being stranded under the
+   * placeholder; see `DraftScopeSettling`. Omit it entirely when the scope is
+   * settled from the first render (a conversation tab, a scene composer).
    */
-  draftScopeProvisional?: boolean;
+  draftScopeSettling?: DraftScopeSettling;
   /**
    * Human-readable current place name (#3760 demo-fidelity review), e.g.
    * "the Gilded Hart" — used only for the stranded-draft banner's copy. Never
@@ -178,7 +177,7 @@ export function CommandInput({
   speakingAs,
   submitOnEnter = true,
   draftScope,
-  draftScopeProvisional,
+  draftScopeSettling,
   roomName,
   replyTarget,
   onCancelReply,
@@ -249,7 +248,7 @@ export function CommandInput({
     markUnknown,
     discard,
     storageUnavailable,
-  } = useDraftStore(draftKey, { provisional: draftScopeProvisional });
+  } = useDraftStore(draftKey, draftScopeSettling);
   // The most recently dispatched say/whisper/tt send awaiting its
   // ACTION_RESULT. `ActionResultPayload.client_request_id` (#3781) echoes
   // back the id this component minted for the dispatch, so

@@ -171,9 +171,10 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   it. Clearing on a successful send is `acknowledge(clientRequestId)` alone;
   it already no-ops when a newer edit has nulled that id, so no extra
   "is the textarea still showing what was sent" check is needed.
-  `draftScopeProvisional` says the scope still carries a placeholder for
-  something unnamed (`GameWindow`'s `room:unknown` during entry) so the
-  draft moves with the scope when it settles rather than being stranded. Optional `speakingAs?: { name, thumbnailUrl }`
+  `draftScopeSettling` names the conversation a draft belongs to and whether
+  its scope can address that conversation yet (`GameWindow`'s `room:unknown`
+  during entry), so the draft moves with the scope when it settles rather
+  than being stranded — and never moves to a different audience. Optional `speakingAs?: { name, thumbnailUrl }`
   prop (#2166) renders a compact `PersonaAvatar` + name chip at the start of
   `leftSlot`, before `ModeSelector` — a standing "who am I talking as right
   now" identity marker on the composer, shown even for single-character

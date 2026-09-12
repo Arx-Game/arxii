@@ -161,6 +161,14 @@ interface GameWindowProps {
   onRetryReference?: () => void;
 }
 
+/**
+ * Identity of the room-anchor conversation (#3784) — the composer's draft
+ * audience when no conversation tab is open. Only ever compared against
+ * itself across renders, to tell "the same conversation's key settled" from
+ * "a different conversation was selected"; it is never a lookup value.
+ */
+const ROOM_ANCHOR_CONVERSATION = 'room-anchor';
+
 export function GameWindow({
   characters,
   sceneFeed,
@@ -206,6 +214,11 @@ export function GameWindow({
   referenceRetryable = false,
   onRetryReference,
 }: GameWindowProps) {
+  // #3784 — which conversation the composer's draft belongs to, held stable
+  // while that conversation's storage key settles. The room-anchor composer
+  // keeps one identity whether or not the room id has arrived yet; a
+  // conversation tab is its own audience and is identified by its own key.
+  const draftConversation = conversationTabs?.activeKey ?? ROOM_ANCHOR_CONVERSATION;
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
@@ -567,9 +580,19 @@ export function GameWindow({
           // client has no `room_state` yet. Saying so lets the draft move with
           // the scope when the id lands, instead of being stranded under the
           // placeholder while the composer re-hydrates an empty row
-          // (`e2e/game-entry.spec.ts`). A conversation tab names its own
-          // audience, so a tab-anchored scope is never provisional.
-          draftScopeProvisional={conversationTabs?.activeKey == null && roomId == null}
+          // (`e2e/game-entry.spec.ts`). Naming the conversation alongside it is
+          // what keeps the move within one audience: a tab opening before
+          // `room_state` arrives changes the conversation, so the room pose
+          // stays put instead of following into the whisper composer. (It does
+          // then stay stranded under the placeholder for as long as that tab is
+          // the active one -- no composer is mounted on the room anchor to carry
+          // it -- which is the same outcome as before #3784 for that narrow
+          // path, not a new loss.)
+          draftScopeSettling={
+            conversationTabs?.activeKey == null && roomId == null
+              ? { provisional: true, conversation: draftConversation }
+              : { conversation: draftConversation }
+          }
           roomName={roomName}
           ready={playReady}
         />

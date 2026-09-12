@@ -1615,16 +1615,22 @@ closed-then-reopened tab. Key points:
   repeated at each dispatch branch. `setContent` also takes an updater
   (`(previous) => string`) for callers appending to the current draft, such as the
   composer's `@target` append.
-- **Provisional keys (#3784).** `useDraftStore(key, { provisional })` marks a key the
-  caller cannot fully name yet — `GameWindow`'s room-anchor scope carries a
-  `room:unknown` placeholder during "Entering world", before the first `room_state`
-  broadcast identifies the room. A key change AWAY from a provisional key carries the
-  live draft over and deletes the placeholder row (same conversation, finally named);
-  a change away from a settled key hydrates normally (an ordinary conversation switch
-  — walking through an exit, opening a tab — which is what keying on the room is
-  *for*). Without it, a draft typed during entry was stranded under the placeholder
-  while the composer re-hydrated an empty row; `e2e/game-entry.spec.ts` is the
-  regression guard.
+- **Settling scopes (#3784).** `useDraftStore(key, settling)` takes a
+  `DraftScopeSettling`: a `conversation` identity that stays stable while that
+  conversation's key settles, plus `provisional` for a key that cannot name it yet —
+  `GameWindow`'s room-anchor scope carries a `room:unknown` placeholder during
+  "Entering world", before the first `room_state` identifies the room. A key change
+  carries the live draft across only when BOTH hold: the key left behind was
+  provisional AND it named the same conversation. Every other change hydrates
+  normally — walking through an exit, or a conversation tab becoming active, is a
+  different audience and keeps its own draft, which is what keying on the room is
+  *for*. The two conditions are a union type rather than two optional fields because
+  carrying on `provisional` alone would move a room pose into a whisper composer when
+  a tab opens mid-entry: text reaching the wrong people, not a lost draft. Where the
+  carry does apply, the carried text wins over an older stored draft for that same
+  conversation (it is what the player is looking at). Without any of this, a draft
+  typed during entry was stranded under the placeholder while the composer
+  re-hydrated an empty row; `e2e/game-entry.spec.ts` is the regression guard.
 - **`reconcileStoredDrafts(lookup)`** (exported, non-hook) is the reconnect-time
   reconciliation entry point called from `useGameSocket.ts`'s socket `open` handler,
   outside React entirely (module scope, no live composer to resend through). It

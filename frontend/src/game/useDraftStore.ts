@@ -208,30 +208,35 @@ export async function reconcileStoredDrafts(
   );
 }
 
-export interface DraftStoreOptions {
-  /**
-   * True while `key` is PROVISIONAL: this is a real conversation the caller
-   * cannot fully name yet (#3784). `GameWindow`'s room-anchor composer is
-   * the case — during "Entering world" the player is standing in a room the
-   * client has not been told the id of, so the scope carries a
-   * `room:unknown` placeholder until the first `room_state` broadcast.
-   *
-   * A key change AWAY from a provisional key is the same conversation
-   * finally getting its name, so the draft moves with it instead of being
-   * left stranded under the placeholder while the composer re-hydrates an
-   * empty row. A key change away from a SETTLED key is an ordinary
-   * conversation switch (walking through an exit, opening a tab) and
-   * hydrates as usual — that separation is the whole point of keying the
-   * draft on the room in the first place (#3760 Task 14).
-   *
-   * Without this, a draft typed during entry vanished the moment presence
-   * arrived (`e2e/game-entry.spec.ts`).
-   */
-  provisional?: boolean;
-}
+/**
+ * How a caller declares that a draft key is still settling (#3784).
+ *
+ * `conversation` is the STABLE identity of what the draft belongs to — it
+ * does not change while that conversation's key settles. `provisional` says
+ * the current `key` cannot fully name that conversation yet: `GameWindow`'s
+ * room-anchor composer is the case, since during "Entering world" the player
+ * is standing in a room the client has not been told the id of, so the scope
+ * carries a `room:unknown` placeholder until the first `room_state`.
+ *
+ * A key change carries the live draft across only when BOTH hold: the key
+ * being left behind was provisional, AND it named the same conversation as
+ * the new one. That is the same conversation finally getting its name, so
+ * the draft moves with it instead of being stranded under the placeholder
+ * while the composer re-hydrates an empty row (`e2e/game-entry.spec.ts`).
+ * Every other key change hydrates normally — walking through an exit, or
+ * switching to a conversation tab, is a different audience and must keep its
+ * own draft, which is the whole point of keying on the room (#3760 Task 14).
+ *
+ * The union makes the pair inseparable: declaring a key provisional without
+ * naming its conversation would silently carry drafts across audiences,
+ * which is a text-to-the-wrong-people bug, not a lost-draft one.
+ */
+export type DraftScopeSettling =
+  | { provisional: true; conversation: string }
+  | { provisional?: false; conversation?: string };
 
-export function useDraftStore(key: DraftKey, options: DraftStoreOptions = {}) {
-  const { provisional = false } = options;
+export function useDraftStore(key: DraftKey, settling: DraftScopeSettling = {}) {
+  const { provisional = false, conversation } = settling;
   const [draft, setDraft] = useState<Draft>(() => readStoredDraft(key));
   // Whether the MOST RECENT write attempt failed (e.g. private-browsing
   // sessionStorage quota) -- reflects the latest `persist()` call, not a
@@ -250,25 +255,43 @@ export function useDraftStore(key: DraftKey, options: DraftStoreOptions = {}) {
   // object identity, so a caller re-creating the key object every render
   // (a plain object literal) doesn't spuriously re-hydrate.
   const currentStorageKeyRef = useRef<string>(draftStorageKey(key));
-  // `provisional` as of the PREVIOUS render — the question this effect asks
-  // is about the key being left behind, not the one being adopted.
+  // Both as of the PREVIOUS render — the question this effect asks is about
+  // the key being left behind, not the one being adopted.
   const wasProvisionalRef = useRef(provisional);
+  const previousConversationRef = useRef(conversation);
   useEffect(() => {
     const previousStorageKey = currentStorageKeyRef.current;
     const leavingProvisionalKey = wasProvisionalRef.current;
+    const previousConversation = previousConversationRef.current;
     wasProvisionalRef.current = provisional;
+    previousConversationRef.current = conversation;
     const nextStorageKey = draftStorageKey(key);
     if (previousStorageKey === nextStorageKey) return;
     currentStorageKeyRef.current = nextStorageKey;
+    // Both halves required. `provisional` alone would also fire when the
+    // caller moves from an unsettled key to a DIFFERENT conversation — a
+    // whisper tab opening before `room_state` arrives — and carry a room
+    // pose into the whisper composer, which is text reaching the wrong
+    // audience, not merely a lost draft.
+    const sameConversationSettling = leavingProvisionalKey && previousConversation === conversation;
     // Read through the updater rather than the render closure so this effect
     // need not depend on `draft` and re-run on every keystroke.
     setDraft((previousDraft) => {
-      if (leavingProvisionalKey && !isBlankDraft(previousDraft)) {
-        // The same conversation, now identified: carry the live draft over
-        // and drop the placeholder row, so nothing is left behind to
-        // resurface later as a phantom stranded draft. The carried draft
-        // wins over anything already stored under the new key — it is what
-        // the player is looking at and about to send.
+      if (sameConversationSettling && !isBlankDraft(previousDraft)) {
+        // The same conversation, now named: carry the live draft over and
+        // drop the placeholder row, so nothing is left behind to resurface
+        // later as a phantom stranded draft. `lastSentContentRef` is
+        // deliberately NOT reseeded — the draft object is unchanged, so an
+        // in-flight attempt's retry guarantees (id reuse, original mode)
+        // must carry over with it.
+        //
+        // The carried draft wins over anything already stored under the new
+        // key. That is a deliberate ordering, not an oversight: the carried
+        // text is what the player is looking at and about to send, and text
+        // being replaced under the cursor by an older stored draft is a
+        // worse failure than an older draft being dropped. It needs a
+        // reload mid-room to happen at all (type during entry into a room
+        // that already had a stored draft from before the reload).
         setStorageUnavailable(!persist(key, previousDraft));
         removeAtStorageKey(previousStorageKey);
         return previousDraft;
@@ -280,7 +303,7 @@ export function useDraftStore(key: DraftKey, options: DraftStoreOptions = {}) {
       setStorageUnavailable(false);
       return nextDraft;
     });
-  }, [key, provisional]);
+  }, [key, provisional, conversation]);
 
   // The patch may be a function of the PREVIOUS draft (#3784) so a caller
   // whose new value depends on the current content -- `CommandInput`'s

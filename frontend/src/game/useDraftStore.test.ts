@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftStore, draftStorageKey } from './useDraftStore';
-import type { DraftKey } from './useDraftStore';
+import type { DraftKey, DraftScopeSettling } from './useDraftStore';
 
 const key = { accountId: 1, personaId: 7, conversationKey: 'room:42' };
 
@@ -51,25 +51,34 @@ describe('useDraftStore', () => {
     );
   });
 
-  // #3784 — `provisional` marks a key the caller cannot fully name yet
-  // (`GameWindow`'s `room:unknown` during entry). Leaving one carries the
-  // draft; leaving a settled key does not.
-  describe('provisional keys', () => {
+  // #3784 — a provisional key is one the caller cannot fully name yet
+  // (`GameWindow`'s `room:unknown` during entry). A draft moves with the key
+  // only when the SAME conversation settles; every other change hydrates.
+  describe('settling draft scopes', () => {
     const provisionalKey: DraftKey = {
       accountId: 1,
       personaId: 7,
       conversationKey: 'room:unknown',
     };
     const settledKey: DraftKey = { accountId: 1, personaId: 7, conversationKey: 'room:42' };
+    const whisperKey: DraftKey = { accountId: 1, personaId: 7, conversationKey: 'whisper:9' };
+
+    function renderSettling(initialProps: { draftKey: DraftKey; settling: DraftScopeSettling }) {
+      return renderHook(
+        ({ draftKey, settling }: { draftKey: DraftKey; settling: DraftScopeSettling }) =>
+          useDraftStore(draftKey, settling),
+        { initialProps }
+      );
+    }
 
     it('carries the draft into the settling key and drops the placeholder row', () => {
-      const { result, rerender } = renderHook(
-        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
-        { initialProps: { draftKey: provisionalKey, provisional: true } }
-      );
+      const { result, rerender } = renderSettling({
+        draftKey: provisionalKey,
+        settling: { provisional: true, conversation: 'room-anchor' },
+      });
       act(() => result.current.setContent('A quiet beginning.'));
 
-      rerender({ draftKey: settledKey, provisional: false });
+      rerender({ draftKey: settledKey, settling: { conversation: 'room-anchor' } });
 
       expect(result.current.draft.content).toBe('A quiet beginning.');
       expect(
@@ -79,31 +88,79 @@ describe('useDraftStore', () => {
       expect(sessionStorage.getItem(draftStorageKey(provisionalKey))).toBeNull();
     });
 
+    // The carried draft deliberately wins over an older stored one: it is
+    // what the player is looking at. Pinned here so the ordering stays a
+    // decision rather than an accident.
+    it('carried text replaces an older stored draft for the same conversation', () => {
+      sessionStorage.setItem(
+        draftStorageKey(settledKey),
+        JSON.stringify({ content: 'from before the reload', status: 'clean' })
+      );
+      const { result, rerender } = renderSettling({
+        draftKey: provisionalKey,
+        settling: { provisional: true, conversation: 'room-anchor' },
+      });
+      act(() => result.current.setContent('typed during entry'));
+
+      rerender({ draftKey: settledKey, settling: { conversation: 'room-anchor' } });
+
+      expect(result.current.draft.content).toBe('typed during entry');
+    });
+
     it('leaves the settling key alone when nothing was composed under the placeholder', () => {
       sessionStorage.setItem(
         draftStorageKey(settledKey),
         JSON.stringify({ content: 'written here earlier', status: 'clean' })
       );
-      const { result, rerender } = renderHook(
-        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
-        { initialProps: { draftKey: provisionalKey, provisional: true } }
-      );
+      const { result, rerender } = renderSettling({
+        draftKey: provisionalKey,
+        settling: { provisional: true, conversation: 'room-anchor' },
+      });
 
-      rerender({ draftKey: settledKey, provisional: false });
+      rerender({ draftKey: settledKey, settling: { conversation: 'room-anchor' } });
 
       expect(result.current.draft.content).toBe('written here earlier');
     });
 
-    it('does not carry a draft across an ordinary conversation switch', () => {
-      const { result, rerender } = renderHook(
-        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
-        { initialProps: { draftKey: settledKey, provisional: false } }
+    // The dangerous case: leaving a provisional key for a DIFFERENT audience
+    // (a whisper tab opening before `room_state` arrives). Carrying here would
+    // put a room pose in the whisper composer and destroy that whisper's own
+    // draft — text reaching the wrong people, not merely a lost draft.
+    it('never carries a provisional draft into a different conversation', () => {
+      sessionStorage.setItem(
+        draftStorageKey(whisperKey),
+        JSON.stringify({
+          content: 'meant only for Bob',
+          status: 'rejected',
+          rejectionReason: 'Bob stepped away.',
+          clientRequestId: 'req-whisper',
+        })
       );
+      const { result, rerender } = renderSettling({
+        draftKey: provisionalKey,
+        settling: { provisional: true, conversation: 'room-anchor' },
+      });
+      act(() => result.current.setContent('a pose for the whole room'));
+
+      rerender({ draftKey: whisperKey, settling: { conversation: 'whisper:9' } });
+
+      expect(result.current.draft.content).toBe('meant only for Bob');
+      expect(result.current.draft.status).toBe('rejected');
+      expect(
+        JSON.parse(sessionStorage.getItem(draftStorageKey(whisperKey)) as string).content
+      ).toBe('meant only for Bob');
+    });
+
+    it('does not carry a draft across an ordinary conversation switch', () => {
+      const { result, rerender } = renderSettling({
+        draftKey: settledKey,
+        settling: { conversation: 'room-anchor' },
+      });
       act(() => result.current.setContent('meant for room 42'));
 
       rerender({
         draftKey: { accountId: 1, personaId: 7, conversationKey: 'room:43' },
-        provisional: false,
+        settling: { conversation: 'room-anchor' },
       });
 
       // Travel keeps each room's draft where it was composed (#3760 Task 14).
