@@ -12,7 +12,12 @@ from rest_framework.test import APIRequestFactory, APITestCase, force_authentica
 
 from evennia_extensions.factories import AccountFactory
 from world.scenes.constants import InteractionVisibility
-from world.scenes.factories import InteractionFactory, PlaceFactory, SceneFactory
+from world.scenes.factories import (
+    InteractionFactory,
+    InteractionReplyFactory,
+    PlaceFactory,
+    SceneFactory,
+)
 from world.scenes.models import Interaction, InteractionReadReceipt
 from world.scenes.play_views import _queryset
 
@@ -670,3 +675,58 @@ class PlaySearchMaskingTests(APITestCase):
         self.client.force_authenticate(user=account)
         response = self.client.get("/api/play/search/?q=pose&until=2030-01-01")
         self.assertEqual(response.status_code, 200)
+
+
+class PlayPosesQueryBudgetTests(APITestCase):
+    """GET /api/play/poses/ must serve the reply chip in a flat, page-wide query.
+
+    Regression guard for #3787 fix round 1 Finding 1: before this fix,
+    ``play_views._rows()`` serialized the raw queryset without priming
+    ``InteractionReplyHandler``, so ``get_reply_to``'s parent lookup fell back
+    to one live query per row - and per row again inside
+    ``_visible_parent_ids``, since neither call site had been primed. `/game`
+    is the primary surface where the parent chip actually renders, so this
+    endpoint's own budget is pinned directly rather than only inheriting
+    ``InteractionViewSet``'s budget test in ``test_interaction_views.py``.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+    def _build_page(self, scene: object, *, reply_count: int) -> None:
+        """Always 6 total poses (3 targets + 3 repliers) - only `reply_count`
+        of the 3 repliers actually carry an InteractionReply edge. Holding the
+        total row count constant isolates the reply-handling cost: every
+        OTHER cached_* field's per-row fallback cost (favorites, reactions,
+        receivers, target personas, action links) stays identical between
+        scenarios, so any difference in query count comes only from
+        `_visible_parent_ids`/`InteractionReplyHandler`.
+        """
+        targets = [InteractionFactory(scene=scene) for _ in range(3)]
+        repliers = [InteractionFactory(scene=scene) for _ in range(3)]
+        for i in range(reply_count):
+            InteractionReplyFactory(interaction=repliers[i], parent=targets[i])
+
+    def test_query_budget_with_one_reply(self) -> None:
+        """Baseline: 6 total poses, 1 of them a reply."""
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=1)
+        with self.assertNumQueries(75):
+            response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 6
+
+    def test_query_budget_does_not_scale_with_reply_count(self) -> None:
+        """Same 6 total poses, all 3 are replies: the count must not grow -
+        `InteractionReplyHandler.prime()` and `_visible_parent_ids` are each
+        one flat query for the whole page, never one per reply."""
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=3)
+        with self.assertNumQueries(75):
+            response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 6

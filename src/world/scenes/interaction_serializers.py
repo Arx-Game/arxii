@@ -215,9 +215,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
                 rows = [self.instance]
             else:
                 rows = []
-            parent_ids = {
-                _reply_link(row).parent_id for row in rows if _reply_link(row) is not None
-            }
+            parent_ids = {link.parent_id for row in rows if (link := _reply_link(row)) is not None}
             if parent_ids:
                 self.context[cache_key] = set(
                     Interaction.objects.visible_to(user)

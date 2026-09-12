@@ -13,10 +13,10 @@ from collections.abc import Mapping
 from datetime import date, datetime, timedelta
 import json
 import re
-from typing import Any
+from typing import Any, cast
 import uuid
 
-from django.db.models import QuerySet
+from django.db.models import Model, QuerySet
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from rest_framework.permissions import IsAuthenticated
@@ -40,6 +40,7 @@ from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
 from world.scenes.models import Interaction, PoseSubmission
+from world.scenes.reply_link_handler import InteractionReplyHandler
 
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
@@ -254,10 +255,29 @@ def _is_recognized_conversation_ref(ref: str) -> bool:
 
 def _rows(
     request: Request, params: Mapping[str, str] | None = None
-) -> tuple[list[dict[str, Any]], QuerySet[Interaction]]:
+) -> tuple[list[dict[str, Any]], list[Interaction]]:
+    """Return serialized rows, and the same materialized interactions.
+
+    Realizes the queryset exactly once (`list(queryset)`), primes
+    InteractionReplyHandler on that same list, then serializes it - never the
+    original queryset, which would otherwise evaluate the DB query a second
+    time. Every caller here (PlayConversationsView, PlayPosesView,
+    PlayContextView, PlaySearchView, PlayThreadsView, PlayReadView) goes
+    through this one function, so priming here covers every list-shaped play
+    reader endpoint (#3787 fix round 1, Finding 1). Reuses the same
+    InteractionReplyHandler InteractionViewSet.list() primes - not a second
+    priming path.
+    """
     queryset, context = _queryset(request, params)
-    serialized = InteractionListSerializer(queryset, many=True, context=context).data
-    return list(serialized), queryset
+    interactions = list(queryset)
+    # list[T] is invariant, so a concretely-typed list[Interaction] is not a
+    # list[Model] for the type checker even though every element is one;
+    # CachedRowsHandler.prime's shared signature stays list[Model] since
+    # widening it would also require widening every subclass's own rows_for
+    # override (a much bigger, unrelated change).
+    InteractionReplyHandler.prime(cast(list[Model], interactions))
+    serialized = InteractionListSerializer(interactions, many=True, context=context).data
+    return list(serialized), interactions
 
 
 class PlayConversationsView(APIView):
