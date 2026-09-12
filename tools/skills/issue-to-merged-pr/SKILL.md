@@ -419,14 +419,22 @@ commits (so hooks never ran), scope the catch-up to just the branch's diff —
 > ad-hoc poll you author.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. **It now also refuses to arm the merge while GitHub Advanced Security has an unresolved review thread on the PR.** Those findings are review-thread comments from the `github-advanced-security` bot, not a failing check, and with our PAT's scope they do not appear in the code-scanning alerts API either - so every other gate can be green while one stands. Read them with `gh api "repos/<owner>/<repo>/code-scanning/alerts?ref=refs/pull/<pr>/head"`. **That ref matters:** `refs/pull/<pr>/merge` returns nothing, and filtering on `state=open` misses alerts whose state is `null` on a PR ref - both read as clean, which is how #3787 missed one. If the token cannot read code scanning, the gate falls back to the bot's own review threads, which need no security permission. Fix and push (CodeQL re-runs, the thread goes outdated), or resolve the thread deliberately and say why in the PR. It revalidates the
-  committed report against the reviewed code revision before arming squash auto-merge.
-  Then post a brief status comment and exit the
-  session. **Do NOT re-sync with main or merge by hand.** The merge queue
-  re-tests the PR on top of the latest main and merges it in order once a human
-  approves — that human approval is the only remaining gate. If main moves while
-  the PR waits for approval, the queue handles the re-integration; the agent
-  does nothing further.
+- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
+  report against the reviewed code revision, refuses while an open code-scanning
+  alert sits on the PR head ref, and only then arms squash auto-merge. Then post a
+  brief status comment and exit the session. **Do NOT re-sync with main or merge by
+  hand.** The merge queue re-tests the PR on top of the latest main and merges it in
+  order once a human approves - that human approval is the only remaining gate. If
+  main moves while the PR waits for approval, the queue handles the re-integration;
+  the agent does nothing further.
+
+  **Before judging any PR "ready", read
+  [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
+  It covers what a green rollup does not: a DIRTY PR silently skips `ci.yml` while
+  analysis-only checks stay green; cancelled runs from superseded pushes read as
+  failures; GitHub Advanced Security findings fail no check at all and need the right
+  ref and state filter or they come back empty; and which comments are blocking
+  feedback versus untrusted data on a public repo.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 
