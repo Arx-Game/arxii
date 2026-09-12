@@ -98,10 +98,7 @@ export const mockStartingAreaStaffOnly: StartingArea = {
 
 // Every area a player is served is one they may pick — a staff-only area is
 // filtered out server-side rather than served with a closed flag (#3726).
-export const mockStartingAreas: StartingArea[] = [
-  mockStartingArea,
-  mockStartingAreaNoHeritages,
-];
+export const mockStartingAreas: StartingArea[] = [mockStartingArea, mockStartingAreaNoHeritages];
 
 // =============================================================================
 // Species
