@@ -29,6 +29,7 @@ from evennia.utils.utils import make_iter
 
 from commands.utils import serialize_cmdset
 from core.descriptors import ReverseOneToOneOrNone
+from evennia_extensions.account_setup import heal_account_setup
 
 TELNET_BLOCKED_BY_2FA_MESSAGE = (
     "This account refuses telnet sign-in while two-factor authentication is on. "
@@ -94,13 +95,16 @@ class Account(DefaultAccount):
     ArxII Account implementation that uses PlayerData model instead of attributes.
 
     This Account represents one real player who can control multiple characters
-    simultaneously through different sessions. Each session can puppet a different
-    character from the player's available roster.
+    simultaneously through different sessions, and whose sessions share a
+    character: two windows on the same character are two views of one object,
+    and it does not matter which one the player types in (``MULTISESSION_MODE
+    = 3``, #3812).
 
     Key differences from ArxI:
     - One account per real player (not per character)
-    - Multisession support - multiple sessions can puppet different characters
-    - All data stored in PlayerData model (no self.db usage)
+    - Multisession support - sessions may puppet different characters, or the same one
+    - All data stored in PlayerData model (no self.db usage of our own; Evennia's
+      ``_last_puppet`` attribute is read at login as a fallback)
     - Player anonymity maintained across characters
     """
 
@@ -345,7 +349,12 @@ class Account(DefaultAccount):
         return [session for session in self.sessions.all() if not session.puppet]
 
     def can_puppet_character(self, character):
-        """Check if this account can puppet the given character."""
+        """Check if this account can puppet the given character.
+
+        Sessions share a character (#3812): another of this account's sessions
+        already puppeting it is the phone-and-laptop case, not a refusal. Only
+        the retired gate and availability say no.
+        """
         # #2287 — a retired (released) dead character can never be puppeted
         # again. Checked before availability for the specific, gentler message.
         from django.core.exceptions import ObjectDoesNotExist
@@ -362,13 +371,6 @@ class Account(DefaultAccount):
         # Must be one of their available characters
         if character not in self.get_available_characters():
             return False, "You don't have access to that character."
-
-        # Character can't already be puppeted by this account
-        if character in self.get_puppeted_characters():
-            return (
-                False,
-                "You are already controlling that character in another session.",
-            )
 
         return True, ""
 
@@ -438,16 +440,52 @@ class Account(DefaultAccount):
         super().puppet_object(session, obj)
         if session.puppet is obj:
             self._broadcast_puppet_changed(session, obj)
+            self._record_selection(obj)
+
+    def _record_selection(self, character) -> None:
+        """Puppeting records the durable selection (#3812; amends ADR-0241).
+
+        Selecting never puppets — that guarantee is untouched — but taking a
+        character up IS the most explicit choice a player makes, so it becomes
+        the ``selected_entry`` the website shows and the next login resolves.
+        Goes through ``set_selected_entry``, the field's sole mutator. An
+        object with no roster entry (a prop a staff member puppets) records
+        nothing; a character that is not one of this account's own entries is
+        refused by the service and likewise records nothing.
+        """
+        from django.core.exceptions import ObjectDoesNotExist
+
+        from world.roster.services.selection import SelectionError, set_selected_entry
+
+        try:
+            entry = character.sheet_data.roster_entry
+        except (AttributeError, ObjectDoesNotExist):
+            return
+        if entry is None:
+            return
+        player_data = self.player_data
+        if player_data.selected_entry_id == entry.pk:
+            return
+        try:
+            set_selected_entry(player_data, entry)
+        except SelectionError:
+            return
 
     def puppet_character_in_session(self, character, session):
-        """Puppet a character in a specific session."""
+        """Puppet ``character`` in ``session``; ``@ic`` and login both come through here.
+
+        Idempotent for the session's own puppet: the web client sends
+        ``@ic <name>`` on every socket open, after login has usually puppeted
+        that character already, and a repeat must be a no-op rather than a
+        refusal (#3812).
+        """
+        if session.puppet is character:
+            return True, f"Already controlling {character.name}."
         can_puppet, reason = self.can_puppet_character(character)
         if not can_puppet:
             can_puppet, reason = self.can_puppet_for_seance(character)
             if not can_puppet:
                 return False, reason
-            if character in self.get_puppeted_characters():
-                return False, "You are already controlling that character in another session."
 
         # If session is already puppeting something, unpuppet first
         if session.puppet:
@@ -483,47 +521,93 @@ class Account(DefaultAccount):
         super().at_account_creation()
         # PlayerData will be created automatically via the property
 
-    def at_post_login(self, session=None):
-        """Called after successful login.
+    def at_pre_login(self, **kwargs):
+        """Heal a row that skipped first-save setup before its cmdsets matter (#3812).
+
+        ``createsuperuser`` and pre-adapter signup made accounts with no cmdset
+        storage, which log in and can run no command. The server-start sweep
+        fixes those in bulk; this guard catches any that appear later.
+        ``basetype_setup`` rebuilds the live cmdset as it writes the storage, so
+        the login in progress gets it.
+        """
+        heal_account_setup(self)
+        super().at_pre_login(**kwargs)
+
+    def resolve_login_character(self, available):
+        """The character a fresh session should puppet, or ``None`` (#3812).
+
+        In order: the durable selection (``PlayerData.selected_entry``, which
+        puppeting also records), Evennia's ``_last_puppet`` (written by
+        ``DefaultCharacter.at_post_puppet`` on every puppet; covers accounts
+        from before selection followed puppeting), then a sole character.
+        Several characters and nothing recorded is ``None`` — never a silent
+        first pick.
+        """
+        by_pk = {character.pk: character for character in available}
+        entry = self.player_data.selected_entry
+        if entry is not None and (chosen := by_pk.get(entry.character_sheet_id)) is not None:
+            return chosen
+        # Evennia's own attribute (DefaultCharacter.at_post_puppet writes it);
+        # read through the handler rather than `self.db._last_puppet` so the
+        # private-name access is explicit about whose name it is.
+        last = self.attributes.get("_last_puppet")
+        if last is not None and (chosen := by_pk.get(last.pk)) is not None:
+            return chosen
+        if len(available) == 1:
+            return available[0]
+        return None
+
+    def at_post_login(self, session=None, **kwargs):
+        """Finish login by puppeting the account's character (#3812, ADR-0293).
+
+        Evennia's hook does three things this keeps — restore saved protocol
+        flags, send the ``logged_in`` OOB, announce on the connect channel — and
+        then, with ``AUTO_PUPPET_ON_LOGIN`` off, renders its stock OOC screen
+        (``charcreate``, ``ic <name>`` ...) and waits for ``@ic``. Nobody should
+        see that step: who a player is playing is decided before they connect,
+        so this resolves it (``resolve_login_character``) and puppets. ``@ic``
+        remains for switching. The three side effects are reproduced here rather
+        than reached through ``super()`` because the base hook renders the OOC
+        screen unconditionally on this path.
 
         Deliberately does NOT touch the webclient's autologin state. It used to
         (``session.uid = self.id; session.at_login()``), which raised TypeError on
-        every single login and took the rest of this method down with it: no cmdset
-        payload, no character list (the 2026-09-09 Sentry quota incident; digest #3736).
-
-        The call was aimed at the *Portal*-side ``SecureWebSocketClient.at_login()``
-        (``server/portal/secure_websocket.py``), which takes no arguments and stores
-        the autologin uid + nonce in the Django session. But ``at_post_login`` runs on
-        the **Server**, where ``session`` is an Evennia ``ServerSession`` whose
-        signature is ``at_login(self, account)``. The ``hasattr(session, "at_login")``
-        guard could never catch that: both sides define the name, with different
-        arities. Two processes, one attribute name.
-
-        Nothing needs to replace it. ``sessionhandler.login()`` already sends the
-        ``SLOGIN`` AMP op *before* calling this hook, and the Portal's
-        ``server_logged_in()`` answers it with ``load_sync_data(data)`` (carrying the
-        uid) followed by the real, Portal-side ``session.at_login()``. Autologin was
-        always Evennia's job; this block was a duplicate that only ever raised.
+        every login and took the rest of this method down with it (the 2026-09-09
+        Sentry quota incident; digest #3736): ``at_post_login`` runs on the Server,
+        where ``session`` is a ``ServerSession`` whose ``at_login(self, account)``
+        takes an argument, while the no-argument Portal-side
+        ``SecureWebSocketClient.at_login()`` the call was aimed at is already
+        invoked by the Portal after the ``SLOGIN`` AMP op. Autologin is Evennia's job.
         """
-        super().at_post_login(session)
+        del kwargs  # Evennia passes none today; the base signature accepts them.
+        protocol_flags = self.attributes.get("_saved_protocol_flags", {})
+        if session and protocol_flags:
+            session.update_flags(**protocol_flags)
+        if session:
+            session.msg(logged_in={})
+        self._send_to_connect_channel(f"|G{self.key} connected|n")
 
         payload = serialize_cmdset(self)
         for sess in self.sessions.all():
             sess.msg(commands=(payload, {}))
+        if session is None:
+            return
 
-        # Don't auto-puppet anything - let player choose via @ic command
-        # Show available characters if they have any
-        available_chars = self.get_available_characters()
-        if available_chars:
-            char_list = ", ".join([char.name for char in available_chars])
-            session.msg(f"Available characters: {char_list}")
-            session.msg("Use '@ic <character>' to control a character.")
-        else:
+        available = self.get_available_characters()
+        if not available:
             session.msg(
                 "You have no available characters. Visit "
                 f"{settings.FRONTEND_URL} to browse the roster and apply for a "
                 "character, or contact staff for access.",
             )
+            return
+        character = self.resolve_login_character(available)
+        if character is None:
+            names = ", ".join(char.name for char in available)
+            session.msg(f"Which character? {names}. Type @ic <name> to play.")
+            return
+        _ok, message = self.puppet_character_in_session(character, session)
+        session.msg(message)
 
     def at_post_create_character(self, character, **kwargs):
         """

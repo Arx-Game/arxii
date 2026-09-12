@@ -183,9 +183,12 @@ browsing as (state 2.5 in the four-state model: logged out / logged in-no-select
 / selected / puppeting) — `PlayerData.selected_entry`, mutated only through
 `world.roster.services.selection.set_selected_entry`, mirrored client-side by
 `gameSlice` (#3412). Selection is a fact, not an action: it carries zero
-lifecycle, session, or puppeting side effects — see ADR-0241. Player-facing
-state label ratified by Apostate (refined 2026-08-28): **Playing: Currently
-Offscreen** (see below).
+lifecycle, session, or puppeting side effects — see ADR-0241. The relation runs
+the other way too (#3812, ADR-0293): puppeting a character *records* it as the
+selection through `set_selected_entry`, and login puppets the selection — it is
+the presence step, so no protocol shows a "now pick a character" screen.
+Player-facing state label ratified by Apostate (refined 2026-08-28):
+**Playing: Currently Offscreen** (see below).
 _Avoid_: active character (ambiguous with puppeting/session state); current
 character (same ambiguity); taken up (retired working label); Playing: Not In
 World (first-pass label, refined same session — "offscreen" is the established

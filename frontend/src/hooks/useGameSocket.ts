@@ -315,6 +315,10 @@ export function useGameSocket() {
 
         // Step 1: reauthorize. Re-puppet immediately — everything downstream
         // (room state, the ability to send) depends on this landing first.
+        // Since #3812 the server already puppets the durable selection when the
+        // socket authenticates, so for the selected character this `@ic` is an
+        // idempotent safety net ("Already controlling X."); it still does the
+        // work when this socket's character differs from the selection.
         // `setSessionConnectionStatus` (connected=true) is intentionally NOT
         // dispatched here — see Step 3 below, which fires it only after
         // reconciliation, not on the raw socket 'open' event.

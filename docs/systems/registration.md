@@ -101,11 +101,19 @@ Evennia pins `db_typeclass_path` to the class an instance was built as, so the r
 loads as that on every later load, and lacks the whole `Account` typeclass
 (`puppet`, `get_available_characters`, the persona cache). That was Sentry ARX2-8
 (2026-09-02): the first outside player's account, made by signup, 500'd on every
-events list. The signup journey test proves the row shape end to end. Rows from
-before the fix, and
-any Django `createsuperuser` makes, are repointed by hand; the ops dashboard's
-required-content panel names them (`typeclassed-accounts`). No data migration: a
-handful of pre-launch rows is a shell one-liner, not schema history. See ADR-0260.
+events list. The signup journey test proves the row shape end to end.
+
+Rows that skipped first-save setup **heal themselves** (#3812). Repointing
+`db_typeclass_path` by hand — what this section used to prescribe — fixed the typeclass
+and nothing else: a plain `.update()` runs no hook, so `db_cmdset_storage` stayed empty
+and the row logged in with zero commands (`Command '@ic Apostate' is not available.`
+was the production staff account, made by the deploy's own `createsuperuser --noinput`).
+`evennia_extensions.account_setup.heal_account_setup` replays Evennia's first-save setup
+(`swap_typeclass(..., run_start_hooks="all")`); the server runs it over every such row
+on start, `Account.at_pre_login` runs it as a guard, and `core_management`'s
+`createsuperuser` override runs it on the row it just made. The ops dashboard's
+`typeclassed-accounts` probe flags both symptoms. No data migration (ADR-0260) —
+a deploy is the repair.
 
 `ArxAccountAdapter.is_open_for_signup(request)` (`src/evennia_extensions/adapters.py`)
 is the allauth hook this gate hangs on. It was previously unoverridden — the

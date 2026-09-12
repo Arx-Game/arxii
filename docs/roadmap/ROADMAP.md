@@ -206,7 +206,13 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   `SelectedCharacterChip` in `Header` (portrait, reused `PersonaSwitcher`, "Enter the
   world" link, "step away" clear); `GamePage`'s mount-path effect auto-starts the
   session on arrival when a selection exists but nothing is puppeting yet — the one
-  deliberate selection→presence crossing. Degradation sweep + hygiene fold-ins done in
+  deliberate selection→presence crossing. **#3812 (ADR-0293) made login itself the
+  presence step:** `Account.at_post_login` puppets the selection (then Evennia's last
+  puppet, then a sole character) on every protocol instead of rendering Evennia's OOC
+  screen; puppeting records the selection back (ADR-0241 amended); sessions share a
+  character (`MULTISESSION_MODE = 3`, unlimited simultaneous puppets); and accounts
+  that skipped first-save setup (`createsuperuser`, pre-adapter signup) heal on server
+  start, at login, and at creation. Degradation sweep + hygiene fold-ins done in
   the same slice (fold in, don't file): tidings/wardrobe loading states, a mute-settings
   link, three message-tab fixes, notification badge routing, nine feed-kind labels,
   consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character

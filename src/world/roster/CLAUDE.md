@@ -82,8 +82,14 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 ## Key Implementation Notes
 
 ### Character Switching
-- Players use `@ic <character>` to switch between their available characters
-- System updates PlayerData.current_character field
+- Login puppets the account's character (#3812, ADR-0293): the durable
+  `PlayerData.selected_entry`, else Evennia's `_last_puppet`, else a sole
+  character. Nobody sees an OOC "now pick a character" step on any protocol.
+- `@ic <character>` switches between available characters; puppeting records
+  the new one as the durable selection through `set_selected_entry`
+  (ADR-0241 as amended — selecting still never puppets)
+- Sessions share a character: a second window on the same character joins it
+  (`MULTISESSION_MODE = 3`); it is never refused and never kicks the first
 - Must verify character is available via active RosterTenure
 
 ### Mail System (OOC player-to-player)

@@ -97,7 +97,9 @@ class CommandUpdateTests(TestCase):
                 char.at_post_puppet()
         session1.msg.assert_called_with(commands=(["cmd"], {}))
         session2.msg.assert_called_with(commands=(["cmd"], {}))
-        char.send_room_state.assert_called_once_with()
+        # The newest session (last in sessions.all()) is the one that just
+        # joined; only it gets the room state (#3812).
+        char.send_room_state.assert_called_once_with(session=session2)
 
     def test_at_post_unpuppet_clears_commands(self):
         session = MagicMock()
