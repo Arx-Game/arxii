@@ -1487,11 +1487,25 @@ Looks up an existing `PoseSubmission` for `(persona, client_request_id)` first:
   the caller reused a request id for genuinely different content/target/place, a
   client bug rather than a legitimate retry. Callers surface this as a failure
   `ActionResult` ("This request id was already used for different text.").
-- **Not found** — runs the real work via `record_fn` and writes the `PoseSubmission`
-  row in the same transaction. A concurrent duplicate insert (two near-simultaneous
-  retries) raises `IntegrityError`, caught by re-reading and returning the winner's
-  row (`replayed=True`) rather than erroring — this is what makes the check
+- **Not found** — runs the real work via `record_fn` inside a transaction. A
+  concurrent duplicate insert (two near-simultaneous retries) raises
+  `IntegrityError`, caught by re-reading and returning the winner's row
+  (`replayed=True`) rather than erroring — this is what makes the check
   race-safe.
+
+**The `PoseSubmission` row is written from inside `record_fn`, before its first
+delivery push, not after `record_fn` returns (#3783 fix).** `record_interaction`
+and `record_whisper_interaction` accept an `on_before_push` callback and invoke it
+immediately before their first real-time push on every branch (ephemeral and
+persisted); `idempotent_record_interaction` passes a closure that writes the
+ledger row. This makes the race decided by Postgres's unique-index insert
+ordering: the losing retry's `IntegrityError` fires from inside `record_fn`,
+before it ever reaches its own push call. Writing the ledger row only after
+`record_fn` returned (the pre-#3783 shape) let both racing retries clear their
+own push before either's ledger insert could block the other — the persisted row
+stayed unique, but a visible duplicate pose could still reach the room in that
+narrow window. Any `record_fn` substituted here must accept `on_before_push` and
+invoke it the same way.
 
 **Callers gate the broadcast on `not result.replayed`** — a retry must never
 double-broadcast even though the DB side is already deduped. `PoseAction`, `SayAction`
