@@ -579,9 +579,13 @@ rather than offset pagination.
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.
-- `GET /api/play/threads/` (#3759) - Server-grouped, cursor-paginated (20/page) thread summaries
-  for one `conversation`, each carrying a per-account unread count via
-  `read_state_services.has_read`.
+- `GET /api/play/threads/` (#3759, #3772) - Server-grouped, cursor-paginated (20/page)
+  thread summaries for one `conversation`, each carrying a per-account unread count via
+  `read_state_services.has_read`. Returns **reply threads only**: an interaction carries
+  a thread only when it is an explicit reply, so poses that belong to no thread are not
+  emitted as single-pose groups (#3772; before that fix a 47-pose scene with 3 reply
+  chains reported 47 threads across 3 pages). Consumed by `ConversationThreadList` in
+  the History navigator's conversation drill-down.
 - `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
   (`InteractionListSerializer`), cursor-paginated 100/page.
 - `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose

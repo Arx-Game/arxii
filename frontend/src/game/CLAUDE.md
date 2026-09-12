@@ -126,6 +126,18 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   no ooc/system/tt value until #3299 lands) — see `interaction_filters.py`.
   Opening a search result or conversation switches the reader into reference
   mode via `onOpenReference` (#3759).
+  **Conversation drill-down (#3772):** each readable conversation row also carries a
+  `Threads` disclosure; at most one is open at a time, and nothing is fetched until it is
+  opened (a count on every collapsed row would mean querying all thirty visible rows up
+  front). A row the viewer cannot read gets no disclosure.
+- **`ConversationThreadList.tsx`**: One conversation's reply threads, from
+  `GET /api/play/threads/` (#3772). Owns its own cursor, so collapsing a conversation
+  discards it. A row is labelled by the thread's opening line, matching how the reader
+  titles a thread, and falls back to `N poses from <date>` when that line is blanked for
+  a muted persona (#2087) or not comprehended (#2993). The unread pill is
+  `ThreadSidebar`'s, so one badge means one thing in live and historical surfaces.
+  Pressing a row calls `onOpenThread`, which `HistoryNavigator` turns into an
+  `onOpenReference` anchored at the thread's `firstVisible` pose.
 - **`ConversationTabStrip.tsx`**: The open-conversations tab strip rendered
   above the feed in `GameWindow` (#2165) — the room feed as a permanent,
   unclosable anchor tab plus one closable tab per broken-out thread
