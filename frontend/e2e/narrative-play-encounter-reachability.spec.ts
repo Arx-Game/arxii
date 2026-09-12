@@ -56,7 +56,7 @@ test.describe('#3761 encounter reachability', () => {
 
     // Both Task 1-3/5 surfaces reach the SAME active encounter while the
     // sidebar is showing an unrelated mode (Conversations, not Here).
-    const banner = page.getByText(/in combat/i).first();
+    const banner = page.getByTestId('combat-banner');
     await expect(banner).toBeVisible();
     const sidebarNav = page.getByRole('navigation', { name: 'Sidebar modes' });
     const combatNavButton = sidebarNav.getByRole('button', { name: 'Combat', exact: true });
@@ -93,10 +93,7 @@ test.describe('#3761 encounter reachability', () => {
 
   test('ordinary conversation keeps flowing while the rail is open', async ({ page }) => {
     const connections = await bootWithActiveEncounter(page);
-    await page
-      .getByText(/in combat/i)
-      .first()
-      .click();
+    await page.getByTestId('combat-banner').click();
     await expect(page.getByRole('tab', { name: /your turn/i })).toBeVisible();
 
     // A foreign persona's pose arrives over the WS while the rail is open in
@@ -117,7 +114,7 @@ test.describe('#3761 encounter reachability', () => {
     page,
   }) => {
     const connections = await bootWithActiveEncounter(page);
-    await expect(page.getByText(/in combat/i).first()).toBeVisible();
+    await expect(page.getByTestId('combat-banner')).toBeVisible();
 
     // The room composer (no conversation tab open) submits a plain pose via
     // REST `POST /api/interactions/submit-pose/` (CommandInput.tsx) — mock

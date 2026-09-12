@@ -105,7 +105,7 @@ export function PlaySidebar({
           <button
             type="button"
             onClick={onJumpToCombat}
-            className="flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs text-destructive"
+            className="flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs text-destructive hover:bg-accent/60"
           >
             <Swords className="h-3.5 w-3.5" />
             Combat

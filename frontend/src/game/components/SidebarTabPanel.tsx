@@ -55,6 +55,12 @@ export function SidebarTabPanel({
   activeTab,
   onTabChange,
 }: SidebarTabPanelProps) {
+  // Seeded once from the mount-time `activeTab` — safe today because
+  // `GamePage`'s `jumpToCombat` (#3761) only ever sets `activeTab` to 'room'
+  // (this component's own mount default), so it's already activated. A
+  // future caller that drives `activeTab` externally to some OTHER,
+  // never-clicked tab would need to update `activatedTabs` too, or that
+  // tab's panel would never mount.
   const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set([activeTab]));
 
   const handleTabChange = useCallback(
