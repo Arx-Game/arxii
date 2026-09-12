@@ -498,7 +498,6 @@ def _seed_roster() -> None:
         ensure_family_kinds,
         ensure_rosters,
         ensure_starter_npc_presets,
-        seed_invite_trust_category,
     )
 
     # ensure_rosters() is idempotent (#2728) — seed it here too so the roster cluster
@@ -508,7 +507,6 @@ def _seed_roster() -> None:
     # Canonical FamilyKind rows (#3617): idempotent get_or_create, matching
     # migration 0219's backfill data, so a clone-bootstrap/E2E DB gets them too.
     ensure_family_kinds()
-    seed_invite_trust_category()
     # Starter Story-NPC statline presets (#3427). Runs last in this cluster,
     # after "character_creation" (stat Traits) and the check-family clusters
     # (skill Traits/Skills) have already seeded the rows these presets
@@ -766,8 +764,8 @@ CLUSTER_SEEDERS: dict[str, Callable[[], None]] = {
     # PROJECT_CONTRIBUTION GainSource (#2038 — "projects to add gifts to
     # organizations"). No dependencies on any other cluster.
     "project_resonance": _seed_project_resonance,
-    # Roster: the INVITE TrustCategory for game-invite eligibility (#2483).
-    # No dependencies on any other cluster.
+    # Roster: the seven shelves, the canonical FamilyKind rows and the starter
+    # Story-NPC statline presets. No dependencies on any other cluster.
     "roster": _seed_roster,
     # Traits: no-op — see _seed_traits docstring. Registered so the Game Setup
     # inventory can show a Trait row count for the #944 content-pipeline domain,
@@ -1091,8 +1089,8 @@ def seeded_models_by_cluster() -> dict[str, list[type[Model]]]:
         # Project-kind resonance payout: the ORGANIZATION_CAPABILITY opt-in row
         # (#2038).
         "project_resonance": [ProjectKindResonanceAward],
-        # Roster: the INVITE TrustCategory for game-invite eligibility (#2483) +
-        # the starter Story-NPC statline preset catalog (#3427).
+        # Roster: the game-invite rows (#2483) + the starter Story-NPC
+        # statline preset catalog (#3427).
         "roster": [GameInvite, NPCStatlinePreset],
         # Agriculture: Field + Granary RoomFeatureKinds + starter CropTypes (#1864).
         "agriculture": [CropType, RoomFeatureKind],

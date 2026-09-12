@@ -30,7 +30,7 @@ class VacancyListTest(TestCase):
         cls.thug = VacancyFactory(
             organization=cls.org, name="Low thug", cg_point_cost=1, cost_per_influence=1
         )
-        VacancyFactory(organization=cls.org, name="Hidden", trust_required=99)
+        VacancyFactory(organization=cls.org, name="Hidden", is_active=False)
         cls.draft = CharacterDraftFactory(
             account=cls.account,
             selected_area=cls.beginning.starting_area,

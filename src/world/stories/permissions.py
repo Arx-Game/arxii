@@ -176,47 +176,6 @@ class IsParticipationOwnerOrStoryOwnerOrStaff(permissions.BasePermission):
         return obj.story.owners.filter(id=request.user.id).exists()
 
 
-class IsPlayerTrustOwnerOrStaff(permissions.BasePermission):
-    """
-    Permission class for PlayerTrust model.
-    - Users can view their own trust profile
-    - Staff can view and modify all trust profiles
-    - Story owners can view trust profiles of their participants
-    """
-
-    def has_permission(self, request: Request, view: APIView) -> bool:
-        """Check basic permission"""
-        return request.user.is_authenticated
-
-    def has_object_permission(self, request: Request, view: APIView, obj: Model) -> bool:
-        """Check if user has permission to access specific trust profile"""
-        if not request.user.is_authenticated:
-            return False
-
-        # Staff can do anything
-        if request.user.is_staff:
-            return True
-
-        # Users can view their own trust profile
-        if request.method in permissions.SAFE_METHODS and obj.account == request.user:
-            return True
-
-        # Story owners can view trust profiles of their participants
-        if request.method in permissions.SAFE_METHODS:
-            # Check if the requesting user owns any stories
-            # where this account participates
-            user_owned_stories = cast(Any, Story).objects.filter(owners=request.user)
-            participant_stories = cast(Any, Story).objects.filter(
-                participants__character__character__db_account=obj.account,
-                participants__is_active=True,
-            )
-            if user_owned_stories.filter(id__in=participant_stories).exists():
-                return True
-
-        # Only staff can modify trust profiles
-        return False
-
-
 class IsReviewerOrStoryOwnerOrStaff(permissions.BasePermission):
     """
     Permission class for StoryFeedback model.
@@ -281,7 +240,6 @@ class IsGMOrStaff(permissions.BasePermission):
 class CanParticipateInStory(permissions.BasePermission):
     """
     Permission class for checking if a user can participate in a story.
-    Checks trust levels and story requirements.
     """
 
     def has_permission(self, request: Request, view: APIView) -> bool:
@@ -302,8 +260,6 @@ class CanParticipateInStory(permissions.BasePermission):
         if not obj.can_player_apply(user):
             return False
 
-        # TODO: Implement trust level checking once PlayerTrust is fully integrated
-        # For now, allow participation if basic checks pass
         return True
 
 

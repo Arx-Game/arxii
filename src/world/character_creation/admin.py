@@ -43,7 +43,7 @@ class StartingAreaAdmin(admin.ModelAdmin):
         (None, {"fields": ["realm", "name", "description", "crest_art"]}),
         (
             "Access Control",
-            {"fields": ["is_active", "access_level", "minimum_trust", "sort_order"]},
+            {"fields": ["is_active", "access_level", "sort_order"]},
         ),
         (
             "Game Integration",
@@ -95,7 +95,6 @@ class BeginningsAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "starting_area",
-        "trust_required",
         "is_active",
         "grants_species_languages",
         "species_count",
@@ -117,7 +116,7 @@ class BeginningsAdmin(admin.ModelAdmin):
         (None, {"fields": ["name", "description", "art", "starting_area"]}),
         (
             "Access Control",
-            {"fields": ["trust_required", "is_active", "sort_order"]},
+            {"fields": ["is_active", "sort_order"]},
         ),
         (
             "Species Selection",

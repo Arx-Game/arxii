@@ -34,6 +34,7 @@ from world.character_creation.constants import (
     FamilyPath,
     OriginStoryState,
     QuestionKind,
+    StartingAreaAccessLevel,
 )
 from world.character_creation.models import (
     CharacterDraft,
@@ -2054,10 +2055,7 @@ def get_accessible_starting_areas(account: AbstractBaseUser | AnonymousUser) -> 
     if account.is_staff:
         return areas
 
-    # Filter by access level
-    accessible_ids = [area.id for area in areas if area.is_accessible_by(account)]
-
-    return areas.filter(id__in=accessible_ids)
+    return areas.exclude(access_level=StartingAreaAccessLevel.STAFF_ONLY)
 
 
 def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[bool, str]:
@@ -2083,12 +2081,6 @@ def can_create_character(account: AbstractBaseUser | AnonymousUser) -> tuple[boo
     # existed on the serializer, never on AccountDB, so this gate was dead).
     if not account.player_data.can_apply_for_characters():
         return False, "Verify your email address to create a character."
-
-    # Check trust level
-    # TODO: Implement trust system - default to 0 (trusted) until then
-    trust: int = account.trust if hasattr(account, "trust") else 0  # type: ignore[assignment]
-    if trust < 0:
-        return False, "Account trust level too low"
 
     # Check character limit
     max_characters = settings.CG_MAX_CHARACTERS
@@ -3387,7 +3379,7 @@ def select_origin_template(draft: CharacterDraft, template: OriginTemplate) -> N
     if wrong_beginning:
         msg = "Your upbringing does not belong to your beginning"
         raise serializers.ValidationError(msg)
-    if not template.is_accessible_by(draft.account):
+    if not template.is_active:
         msg = "That upbringing is not available to you"
         raise serializers.ValidationError(msg)
     if draft.selected_origin_template_id == template.pk:

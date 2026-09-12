@@ -937,9 +937,6 @@ class Vacancy(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         blank=True,
         help_text="Openings left; blank = a standing vacancy that is always open.",
     )
-    trust_required = models.IntegerField(
-        default=0, help_text="Minimum trust to see and take this opening."
-    )
     allowed_upbringings = models.ManyToManyField(
         "arxii.OriginTemplate",
         blank=True,

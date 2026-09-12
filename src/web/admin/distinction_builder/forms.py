@@ -54,8 +54,6 @@ class DistinctionForm(forms.ModelForm):
             "default_secret_level",
             "parent_distinction",
             "allow_other",
-            "trust_value",
-            "trust_category",
             "is_automatic",
             "requires_slot_filled",
             # Distinctive physical features (#3739). Authored here because the
@@ -84,10 +82,6 @@ class DistinctionForm(forms.ModelForm):
                 Distinction._meta.get_field("parent_distinction"),  # noqa: SLF001
                 admin.site,
             ),
-            "trust_category": AutocompleteSelect(
-                Distinction._meta.get_field("trust_category"),  # noqa: SLF001
-                admin.site,
-            ),
             "mutually_exclusive_with": FilteredSelectMultiple("distinctions", is_stacked=False),
         }
 
@@ -106,8 +100,6 @@ DISTINCTION_MORE_FIELDS = (
     "default_secret_level",
     "parent_distinction",
     "allow_other",
-    "trust_value",
-    "trust_category",
     "is_automatic",
     "requires_slot_filled",
     # Distinctive physical features (#3739): rarely touched, since only the four

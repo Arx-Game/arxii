@@ -113,7 +113,6 @@ class CastUsesPerCharacterCheckTests(TestCase):
             name="CastPC Beginnings",
             description="Test",
             starting_area=cls.area,
-            trust_required=0,
             is_active=True,
         )
         cls.beginnings.allowed_species.add(cls.species)

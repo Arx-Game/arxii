@@ -24,13 +24,12 @@ class PublicCGReadsTest(TestCase):
             name="The Caretaker",
             description="PLACEHOLDER hook",
             starting_area=cls.area,
-            trust_required=0,
         )
-        cls.gated_beginning = BeginningsFactory(
+        cls.inactive_beginning = BeginningsFactory(
             name="The Hidden One",
             description="secret",
             starting_area=cls.area,
-            trust_required=50,
+            is_active=False,
         )
 
     def setUp(self) -> None:
@@ -44,7 +43,7 @@ class PublicCGReadsTest(TestCase):
         row = next(r for r in resp.json() if r["name"] == "The City of Arx")
         self.assertEqual(row["realm_theme"], "arx")
 
-    def test_anonymous_lists_open_beginnings_only(self) -> None:
+    def test_anonymous_lists_active_beginnings_only(self) -> None:
         resp = self.client.get(f"/api/character-creation/beginnings/?starting_area={self.area.pk}")
         self.assertEqual(resp.status_code, 200)
         names = [row["name"] for row in resp.json()]

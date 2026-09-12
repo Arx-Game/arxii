@@ -121,12 +121,11 @@ class ConnectionSlotSchemaTest(TestCase):
 
 
 class ConnectionChoiceSchemaTest(TestCase):
-    def test_choice_carries_seed_and_trust(self):
+    def test_choice_carries_seed(self):
         slot = OriginTemplateSlotFactory(kind=QuestionKind.GROUP, anchor_source=AnchorSource.LISTED)
         choice = OriginTemplateSlotChoiceFactory(
             slot=slot,
             reputation_seed=300,
-            trust_required=0,
         )
         choice.full_clean()
         assert choice.reputation_seed == 300

@@ -23,8 +23,6 @@ from world.character_creation.constants import (
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
-    from evennia.accounts.models import AccountDB
-
     from world.character_creation.models import (
         CharacterDraft,
         OriginTemplate,
@@ -174,7 +172,7 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     if wrong_beginning:
         errors.append("Your upbringing does not belong to your beginning")
         return errors
-    if not template.is_accessible_by(draft.account):
+    if not template.is_active:
         errors.append("That upbringing is not available to you")
     path = draft.resolve_family_path()
     if not path:
@@ -243,20 +241,6 @@ def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
     return errors
 
 
-def _account_trust(account: AccountDB) -> int:
-    """The trust an unstaffed account reads against a trust-gated answer (#3660).
-
-    Mirrors ``CGOriginTemplateViewSet.get_queryset``: staff bypass entirely, and a
-    missing ``trust`` attribute (an account type that doesn't carry one) reads as 0.
-    """
-    if account.is_staff:
-        return 0
-    try:
-        return account.trust
-    except AttributeError:
-        return 0
-
-
 def _slot_prompt_error(
     slot: OriginTemplateSlot,
     draft: CharacterDraft,
@@ -270,14 +254,9 @@ def _slot_prompt_error(
         resolve_groups,
     )
 
-    account = draft.account
     picked_id = answers.picks.get(slot.id)
-    if picked_id is not None:
-        picked = choices_by_slot.get(slot.id, {}).get(picked_id)
-        if picked is None:
-            return f"Invalid choice for {slot.name}"
-        if not account.is_staff and picked.trust_required > _account_trust(account):
-            return f"That answer is not available to you for {slot.name}"
+    if picked_id is not None and choices_by_slot.get(slot.id, {}).get(picked_id) is None:
+        return f"Invalid choice for {slot.name}"
     offered_sources = (AnchorSource.POOL, AnchorSource.LISTED, AnchorSource.SAME_AS)
     if (
         slot.kind == QuestionKind.GROUP
