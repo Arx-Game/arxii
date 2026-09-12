@@ -592,12 +592,11 @@ class TestInteractionThreadAssignment(TestCase):
         target = InteractionFactory(scene=scene, writer_account=account)
         first_reply = InteractionFactory(scene=scene, writer_account=account)
 
-        assignment = assign_interaction_thread(
+        thread = assign_interaction_thread(
             interaction=first_reply,
             reply_target=ReplyTarget(target.pk, target.timestamp),
             account_id=account.pk,
         )
-        thread = assignment.thread
 
         # The answered row is the ANCHOR, not a member (#3787): it keeps its own
         # thread, which for a root pose is none at all.
@@ -615,7 +614,7 @@ class TestInteractionThreadAssignment(TestCase):
             account_id=account.pk,
         )
 
-        assert reused.thread.pk == thread.pk
+        assert reused.pk == thread.pk
         assert second_reply.thread_id == thread.pk
 
     def test_mismatched_scene_is_unavailable(self) -> None:

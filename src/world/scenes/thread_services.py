@@ -77,14 +77,6 @@ def coerce_reply_target(value: object) -> ReplyTarget | None:
 
 
 @dataclass(frozen=True)
-class ThreadAssignment:
-    """Result of assigning a new interaction to a target-selected thread."""
-
-    thread: InteractionThread
-    target: Interaction
-
-
-@dataclass(frozen=True)
 class HolderSignature:
     """Persisted holder identity used to keep a thread in one context."""
 
@@ -266,7 +258,7 @@ def assign_interaction_thread(
     interaction: Interaction,
     reply_target: ReplyTarget,
     account_id: int | None,
-) -> ThreadAssignment:
+) -> InteractionThread:
     """Put an interaction in the thread anchored at its reply target (#3787).
 
     The caller must invoke this while the interaction write is atomic. The target is
@@ -275,6 +267,10 @@ def assign_interaction_thread(
     The target itself is NOT moved into the thread: a thread now holds the answers to
     one row, and that row is reachable as ``anchor_interaction``. So a reply's
     ``thread`` says what it answered, and a root pose keeps a null one.
+
+    Returns the thread it assigned. ``create_interaction`` discards it - the thread is
+    already on ``interaction`` by then - but the telnet and test callers that drive
+    this service directly assert on it, so it is the return value rather than None.
     """
     if account_id is None or not timezone.is_aware(reply_target.timestamp):
         raise _unavailable()
@@ -314,4 +310,4 @@ def assign_interaction_thread(
     thread = _thread_anchored_at(target, target_signature)
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
-    return ThreadAssignment(thread=thread, target=target)
+    return thread

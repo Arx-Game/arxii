@@ -549,7 +549,18 @@ class PlayThreadsView(APIView):
             # answers, so prepending preserves that order. When the viewer cannot
             # see the anchor it is simply absent from `rows_by_id` and the earliest
             # visible reply leads, which is what `firstVisible` already means.
+            #
+            # Only a pose that answers NOTHING may open an exchange. A root thread's
+            # anchor is always such a pose by construction, so in the healthy case
+            # this rejects nothing. It matters after a deletion: deleting an
+            # interaction CASCADEs its anchored thread away (the writer can do this
+            # through InteractionViewSet.destroy), which SET_NULLs `root` on every
+            # thread below it. A nested thread then resolves as its own exchange,
+            # and its anchor - itself a reply, still a member of its own group -
+            # would be prepended here too, counting one pose in two groups.
             anchor_row = rows_by_id.get(anchor_of.get(key, -1))
+            if anchor_row is not None and anchor_row.get("thread_id"):
+                anchor_row = None
             members = replies if anchor_row is None else [anchor_row, *replies]
             root, latest = members[0], members[-1]
             unread = sum(1 for m in members if int(m["id"]) not in read_ids)

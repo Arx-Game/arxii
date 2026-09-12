@@ -744,6 +744,44 @@ class PlayThreadsViewTests(APITestCase):
         # count their answered pose - 2 poses per exchange, not 1.
         self.assertEqual([row["visiblePoseCount"] for row in results], [2, 2])
 
+    def test_no_pose_is_counted_in_two_exchanges_after_its_thread_is_deleted(self) -> None:
+        """Deleting an answered pose must not make a reply count twice.
+
+        Reachable today, not theoretical: ``InteractionViewSet`` carries
+        ``DestroyModelMixin``, so a writer can delete their own pose, and
+        ``InteractionThread.anchor_interaction`` is ``on_delete=CASCADE`` - deleting
+        the answered interaction takes its thread with it and SET_NULLs ``root`` on
+        every thread below. A three-deep chain then leaves the deepest thread
+        resolving as its own exchange while its anchor is still a member of the
+        middle one, so that pose would be prepended to one group and counted in
+        another. Verified by doing the deletion, not by reasoning about it.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        target, first = _reply_exchange(scene, account, "he swings", "she gives ground")
+        second = _reply_to(scene, account, first, "he presses in")
+        third = _reply_to(scene, account, second, "she turns the blade aside")
+
+        target.delete()
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+
+        # Every surviving pose appears in at most one exchange.
+        counted = [row["root"]["id"] for row in results]
+        self.assertEqual(len(counted), len(set(counted)))
+        total = sum(row["visiblePoseCount"] for row in results)
+        self.assertLessEqual(total, Interaction.objects.filter(scene=scene).count())
+        # `second` is a member of the group its own thread anchors; it must not also
+        # open the orphaned group below it.
+        self.assertNotIn(str(second.pk), {row["root"]["id"] for row in results[1:]})
+        self.assertTrue(all(row["visiblePoseCount"] >= 1 for row in results))
+        # The deleted pose is gone from every group.
+        self.assertNotIn(str(target.pk), counted)
+        self.assertTrue(third.pk)
+
     def test_conversation_with_no_replies_returns_an_empty_page(self) -> None:
         """The common case: nobody used reply, so there is nothing to drill into.
 

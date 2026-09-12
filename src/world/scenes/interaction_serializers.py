@@ -32,13 +32,10 @@ def _anchored_thread(obj: Interaction) -> "InteractionThread | None":
 
     A row's thread IS its parent edge: the thread is anchored at the row it answers,
     so the chip's whole payload (``anchor_interaction_id``, ``anchor_timestamp``) is
-    already on the thread row. ``None`` for a root pose, and for a pre-#3787 thread
-    that carries no anchor.
+    already on the thread row, and a thread always has both (they are NOT NULL).
+    ``None`` means exactly one thing: this row answers nothing.
     """
-    thread = obj.thread
-    if thread is None or thread.anchor_interaction_id is None:
-        return None
-    return thread
+    return obj.thread
 
 
 _DANGEROUS_LINK_RE = _re.compile(
