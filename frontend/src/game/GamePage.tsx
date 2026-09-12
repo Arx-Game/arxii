@@ -930,6 +930,7 @@ export function GamePage() {
               roomName={roomName}
               isAtPlace={isAtPlace}
               currentPlaceId={currentPlace?.id ?? null}
+              currentPlaceName={currentPlace?.name ?? null}
               conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}

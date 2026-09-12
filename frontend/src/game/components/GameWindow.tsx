@@ -128,6 +128,12 @@ interface GameWindowProps {
    * WebSocket `send()` path in that case.
    */
   currentPlaceId?: number | null;
+  /**
+   * Human-readable name of the Place `currentPlaceId` refers to, if any
+   * (#3787 Screen 3) — used only for the pre-emptive reply refusal's hint
+   * text ("Leave <name> to answer this."), threaded to `ThreadedNarrativeReader`.
+   */
+  currentPlaceName?: string | null;
   /** `PlaceBar`, rendered directly above the composer (#2156). */
   placeBar?: ReactNode;
   /** `TavernGameWidget`, rendered alongside PlaceBar (#3292). */
@@ -200,6 +206,7 @@ export function GameWindow({
   roomName,
   isAtPlace,
   currentPlaceId,
+  currentPlaceName,
   placeBar,
   tavernGameWidget,
   speakerQueueBar,
@@ -528,6 +535,9 @@ export function GameWindow({
                 readOnly={Boolean(reference)}
                 persistAnchor={activeConvKey === 'room'}
                 targetPoseId={targetPoseId}
+                isAtPlace={isAtPlace}
+                currentPlaceId={currentPlaceId}
+                currentPlaceName={currentPlaceName}
               />
             )}
           </div>
@@ -570,6 +580,7 @@ export function GameWindow({
           onPoseSubmitted={onPoseSubmitted}
           isAtPlace={isAtPlace}
           currentPlaceId={currentPlaceId}
+          currentPlaceName={currentPlaceName}
           speakingAs={speakingAs}
           replyTarget={replyTarget}
           onCancelReply={onCancelReply}

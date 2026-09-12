@@ -28,6 +28,7 @@ import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { createActionRequest } from '@/scenes/actionQueries';
 import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
+import { replyReachability } from '@/scenes/replyReachability';
 
 export interface ComposerMode {
   command: string; // "pose" | "say" | "tt" | "whisper"
@@ -123,6 +124,12 @@ interface CommandInputProps {
    */
   currentPlaceId?: number | null;
   /**
+   * Human-readable name of the Place `currentPlaceId` refers to, if any
+   * (#3787 Screen 3) — used only for the pre-emptive reply refusal's hint
+   * text ("Leave <name> to answer this. Your draft is kept.").
+   */
+  currentPlaceName?: string | null;
+  /**
    * The "speaking as" identity chip (#2166 Decision 3) — the character whose
    * voice this composer speaks in. Rendered at the START of `leftSlot`,
    * before `ModeSelector`, whenever provided; absent for legacy callers that
@@ -174,6 +181,7 @@ export function CommandInput({
   onPoseSubmitted,
   isAtPlace,
   currentPlaceId,
+  currentPlaceName,
   speakingAs,
   submitOnEnter = true,
   draftScope,
@@ -446,8 +454,28 @@ export function CommandInput({
     handleCheckStatus();
   }, [ready, acknowledge, markUnknown, draftKey, handleCheckStatus]);
 
+  // #3787 Screen 3 — the pre-emptive reply refusal: reachability is checked
+  // against `replyTarget` as soon as Reply is clicked, before the player
+  // types a single character, rather than waiting for the server's own
+  // refusal on submit. `null` when there's nothing to reply to, or when the
+  // one ratified holder-mismatch rule (`replyReachability`'s own doc
+  // comment) doesn't apply — every other case stays permissive here and
+  // still gets caught by the server's own typed refusal on submit.
+  const replyRefusal = useMemo(
+    () =>
+      replyTarget
+        ? replyReachability(replyTarget, {
+            isAtPlace: isAtPlace ?? false,
+            currentPlaceId,
+            currentPlaceName,
+          })
+        : null,
+    [replyTarget, isAtPlace, currentPlaceId, currentPlaceName]
+  );
+
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
+    if (replyRefusal && !replyRefusal.reachable) return;
     const trimmed = draft.content.trim();
     if (!trimmed) return;
     if (draft.content.length > MAX_POSE_LENGTH) {
@@ -667,6 +695,14 @@ export function CommandInput({
               action_link_ids: (pendingActionIds ?? []).filter((id) => !detachedSet.has(id)),
             }
           : {}),
+        // #3787 — `PoseSubmitSerializer.reply_to` already accepted this
+        // write-only field before this task; nothing on the web composer
+        // ever actually sent it, so a "Reply" click never created the
+        // `InteractionReply` edge the reader's parent chip renders. Carries
+        // the replied-to row's own id/timestamp verbatim (never re-derived).
+        ...(replyTarget
+          ? { reply_to: { id: replyTarget.id, timestamp: replyTarget.timestamp } }
+          : {}),
       })
         .then((response) => {
           // A newer edit made after the request went out survives this ack:
@@ -674,6 +710,14 @@ export function CommandInput({
           // draft's, and `setContent` nulled it on that edit (#3784).
           acknowledge(clientRequestId);
           onPoseSubmitted?.();
+          // The reply is now recorded - clear the composer's reply context
+          // the same way "Cancel reply" does, so a second Enter doesn't
+          // re-attach the same parent to an unrelated next pose.
+          if (replyTarget) onCancelReply?.();
+          // #3784's draft store now owns the stale-edit guard this branch
+          // used to spell out here: `acknowledge` clears only while the
+          // dispatched id is still the draft's, so a newer edit survives the
+          // ack without a `commandRef` comparison of our own.
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
           setIsEntrance(false);
@@ -757,6 +801,9 @@ export function CommandInput({
     isEntrance,
     entranceTechnique,
     ready,
+    replyTarget,
+    onCancelReply,
+    replyRefusal,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -937,12 +984,32 @@ export function CommandInput({
           data-testid="reply-context"
         >
           <span className="min-w-0 flex-1 truncate">
-            Replying to <strong>{replyTarget.persona.name}</strong>:{' '}
-            {replyTarget.content.slice(0, 140)}
+            {/* #3787 — for an `action`/`outcome` row, `replyTarget.persona`
+                is the Narrator (the bookkeeping author), not the event that
+                happened; naming it here is the same leak the reader's
+                involvement mark had to avoid. Name the event, not the
+                author: show the excerpt alone for those two modes. */}
+            {replyTarget.mode === 'action' || replyTarget.mode === 'outcome' ? (
+              <>Replying to: {replyTarget.content.slice(0, 140)}</>
+            ) : (
+              <>
+                Replying to <strong>{replyTarget.persona.name}</strong>:{' '}
+                {replyTarget.content.slice(0, 140)}
+              </>
+            )}
           </span>
           <button type="button" className="min-h-8 underline" onClick={onCancelReply}>
             Cancel reply
           </button>
+        </div>
+      )}
+      {replyRefusal && !replyRefusal.reachable && (
+        <div
+          className="flex flex-col gap-0.5 border-l-2 border-destructive bg-destructive/10 px-3 py-1.5 text-xs"
+          data-testid="reply-refusal"
+        >
+          <strong className="text-destructive">{replyRefusal.reason}</strong>
+          {replyRefusal.hint && <span className="text-muted-foreground">{replyRefusal.hint}</span>}
         </div>
       )}
       <RichTextInput
@@ -952,7 +1019,7 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={5}
         submitOnEnter={submitOnEnter}
-        submitDisabled={!ready}
+        submitDisabled={!ready || Boolean(replyRefusal && !replyRefusal.reachable)}
         disabled={draft.status === 'pending'}
         leftSlot={
           <div className="flex items-center gap-1">

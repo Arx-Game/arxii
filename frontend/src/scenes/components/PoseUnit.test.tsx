@@ -773,4 +773,73 @@ describe('PoseUnit — GM dramatic-moment suggestion chip', () => {
 
     expect(screen.queryByTestId('dramatic-moment-suggestion-chip')).toBeNull();
   });
+
+  // #3787 Task 7 — the parent-reply chip (demo Screen 2), replacing the
+  // placeholder "Replying to pose {id}".
+  describe('parent-reply chip', () => {
+    it('renders nothing when the pose has no reply_to', () => {
+      const interaction = makeInteraction({ reply_to: null });
+      render(
+        <Wrapper>
+          <PoseUnit interaction={interaction} sceneId="1" />
+        </Wrapper>
+      );
+      expect(screen.queryByTestId('parent-reference')).toBeNull();
+    });
+
+    it('shows "Answering" plus the resolved parent\'s quoted excerpt, and reveals the parent content on click', () => {
+      const parent = makeInteraction({
+        id: 5,
+        content: "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered.",
+        timestamp: '2026-01-01T00:00:05Z',
+      });
+      const interaction = makeInteraction({
+        id: 6,
+        reply_to: { id: '5', timestamp: '2026-01-01T00:00:05Z' },
+      });
+      const interactionsById = new Map([[parent.id, parent]]);
+
+      render(
+        <Wrapper>
+          <PoseUnit interaction={interaction} sceneId="1" interactionsById={interactionsById} />
+        </Wrapper>
+      );
+
+      const chip = screen.getByTestId('parent-chip-5');
+      expect(chip).toHaveTextContent('Answering');
+      expect(chip).toHaveTextContent(
+        "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
+      );
+      // The chip never re-derives an actor -- the parent's persona name must
+      // not appear anywhere near it.
+      expect(chip).not.toHaveTextContent(parent.persona.name);
+      expect(screen.queryByTestId('parent-reveal-5')).toBeNull();
+
+      fireEvent.click(chip);
+      const revealed = screen.getByTestId('parent-reveal-5');
+      expect(revealed).toHaveTextContent(
+        "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
+      );
+      expect(revealed).not.toHaveTextContent(parent.persona.name);
+    });
+
+    it('degrades to a plain chip with no quote when the parent is not in the loaded window', () => {
+      const interaction = makeInteraction({
+        id: 6,
+        reply_to: { id: '999', timestamp: '2026-01-01T00:00:05Z' },
+      });
+
+      render(
+        <Wrapper>
+          <PoseUnit interaction={interaction} sceneId="1" />
+        </Wrapper>
+      );
+
+      const chip = screen.getByTestId('parent-chip-999');
+      expect(chip).toHaveTextContent('Answering');
+      // Nothing to reveal -- clicking does not throw and nothing appears.
+      fireEvent.click(chip);
+      expect(screen.queryByTestId('parent-reveal-999')).toBeNull();
+    });
+  });
 });

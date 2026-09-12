@@ -258,6 +258,15 @@ export interface SubmitPoseBody {
    * `useDraftStore.beginSend`); a content change mints a fresh one.
    */
   client_request_id: string;
+  /**
+   * The pose being answered (#3787) — `PoseSubmitSerializer.reply_to`
+   * (`world/scenes/interaction_serializers.py`'s `ReplyTargetSerializer`)
+   * already accepted this write-only field before this task; nothing on the
+   * web composer ever actually sent it. `id`/`timestamp` mirror
+   * `Interaction.reply_to`'s own shape (`scenes/types.ts`) so a row read
+   * straight off the reader can be forwarded here verbatim.
+   */
+  reply_to?: { id: number; timestamp: string };
 }
 
 /**
@@ -281,8 +290,18 @@ export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail || 'Failed to submit pose');
+    // #3787 Screen 3 — a reply-venue mismatch (`reply_to`) or an unreachable
+    // named target (`target_names`) 400s with the typed `{code, field,
+    // detail, hint}` body `interaction_views.py`'s `_refusal_response` builds
+    // (both `InteractionThreadError` and `UnreachableError` route through
+    // it). Use the server's own `hint` verbatim rather than inventing
+    // wording — it names the venue the player would actually need to reach.
+    const data = (await res.json().catch(() => null)) as {
+      detail?: string;
+      hint?: string;
+    } | null;
+    const detail = data?.detail || 'Failed to submit pose';
+    throw new Error(data?.hint ? `${detail} ${data.hint}` : detail);
   }
   return res.json();
 }

@@ -11,10 +11,20 @@ import {
   savePlayPreferences,
 } from '../playPreferences';
 import { markConversationRead } from '../playQueries';
+import { useViewerPersonaId } from '@/roster/persona';
 import type { Interaction } from '@/scenes/types';
 
 vi.mock('../playQueries', () => ({
   markConversationRead: vi.fn().mockResolvedValue({ marked: 0 }),
+}));
+
+// #3787 — `useViewerPersonaId` (the involvement mark's "who am I" source)
+// pulls from a real Redux store + React Query, neither of which this file's
+// bare `render()` calls provide (unlike `PoseUnit.test.tsx`, which wraps
+// both). Mocked to a stable default so every pre-existing test here is
+// unaffected; the involvement-mark tests below override it per-case.
+vi.mock('@/roster/persona', () => ({
+  useViewerPersonaId: vi.fn(() => null),
 }));
 
 // jsdom has no Element.prototype.scrollTo -- @tanstack/react-virtual's
@@ -431,11 +441,12 @@ describe('ThreadedNarrativeReader', () => {
     );
     await user.click(screen.getByRole('button', { name: /chronological/i }));
     // Anchored (^...$) rather than a bare substring match: #3759 Wave 9 added
-    // a per-pose "Opening pose"/"Reply in <title>" role label (F4) whose
-    // title is an excerpt of the root pose's OWN content -- for thread-a's
-    // reply ("second"), that label literally reads "Reply in first" (the
-    // root pose's content is "first"), which a bare /first|second|third/
-    // substring match would also catch as a false "first".
+    // a per-pose "Opening pose"/"Standalone" role label (F4; #3787 Task 7
+    // deleted the third "Reply in <title>" case this comment used to warn
+    // about) whose title (when present) is an excerpt of the root pose's OWN
+    // content -- a bare /first|second|third/ substring match could still
+    // catch a false positive inside some other rendered label, so this stays
+    // anchored defensively.
     const texts = screen.getAllByText(/^(first|second|third)$/).map((el) => el.textContent);
     expect(texts).toEqual(['first', 'second', 'third']);
   });
@@ -1891,7 +1902,14 @@ describe('ThreadedNarrativeReader', () => {
       ).toBeInTheDocument();
     });
 
-    it('labels each pose "Opening pose" or "Reply in <title>" (#3759 review finding F4)', () => {
+    it('labels the thread\'s root pose "Opening pose" and leaves an ordinary reply unlabeled (#3759 review finding F4, #3787 Task 7)', () => {
+      // #3787 Task 7 — the "Reply in <title>" branch this test used to cover
+      // is deleted: its own doc comment said it was a stand-in for per-pose
+      // parent data that didn't exist yet. That data exists now
+      // (`Interaction.reply_to`) and `PoseUnit`'s parent chip ("Answering
+      // ...") renders it directly on the reply pose itself, so the label
+      // goes empty here rather than duplicating weaker information beside
+      // the chip.
       render(
         <ThreadedNarrativeReader
           sceneId="1"
@@ -1905,7 +1923,8 @@ describe('ThreadedNarrativeReader', () => {
         />
       );
       expect(screen.getByText('Opening pose')).toBeInTheDocument();
-      expect(screen.getByText('Reply in root content')).toBeInTheDocument();
+      expect(screen.queryByText('Reply in root content')).not.toBeInTheDocument();
+      expect(screen.queryByText(/^Reply in /)).not.toBeInTheDocument();
     });
 
     it('strips MU*-style color codes and markdown from the header excerpt and role label instead of leaking raw markup (#3759 Wave 9 fix round 1 finding I-1)', () => {
@@ -1926,15 +1945,12 @@ describe('ThreadedNarrativeReader', () => {
           fetchNextPage={vi.fn()}
         />
       );
-      // Both the thread header's own excerpt AND the reply's "Reply in
-      // <title>" label derive from the same root content, so the stripped
-      // phrase appears twice: once in the header (excerpt + timestamp),
-      // once in the role label.
+      // The thread header's own excerpt derives from the root content, so
+      // the stripped phrase appears there (excerpt + timestamp). #3787 Task
+      // 7 deleted the reply's own "Reply in <title>" role label (see the
+      // test above), so it no longer appears a second time here.
       expect(
-        screen.getAllByText('Something happened at the broken seal', { exact: false })
-      ).toHaveLength(2);
-      expect(
-        screen.getByText('Reply in Something happened at the broken seal')
+        screen.getByText('Something happened at the broken seal', { exact: false })
       ).toBeInTheDocument();
       // The mocked `SceneMessages` below (this file's own mock, standing in
       // for the REAL component -- which parses markup via
@@ -2035,6 +2051,130 @@ describe('ThreadedNarrativeReader', () => {
       // NEW thread from an ordinary, un-replied pose, the single most
       // common shape a scene starts in.
       expect(screen.getAllByRole('button', { name: /^reply$/i })).toHaveLength(4); // 2 legacy + 2 real
+    });
+  });
+
+  // #3787 Task 7, Screen 1/3 — the involvement mark and the pre-emptive
+  // reply refusal.
+  describe('involvement mark and reachable-reply affordance (#3787)', () => {
+    afterEach(() => {
+      vi.mocked(useViewerPersonaId).mockReturnValue(null);
+    });
+
+    it('gives a row naming the viewer a highlighted "This happened to you" box with a prominent Answer this control, and leaves other rows with the ordinary quiet Reply link', () => {
+      vi.mocked(useViewerPersonaId).mockReturnValue(42);
+      const onReply = vi.fn();
+      const legacyPose = (id: number, content: string, target_persona_ids: number[]) => ({
+        ...interaction(id, content, 'unused'),
+        thread_id: null,
+        target_persona_ids,
+      });
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[
+            legacyPose(1, "Kira's Frost Bolt strikes Corvin for 24 damage.", [42]),
+            legacyPose(2, 'Someone drops a glass.', []),
+          ]}
+          fetchNextPage={vi.fn()}
+          onReply={onReply}
+        />
+      );
+      // The involved row gets the highlighted box, restating the content,
+      // with a primary "Answer this" control -- not the quiet Reply link.
+      const mark = screen.getByTestId('involvement-mark-1');
+      expect(mark).toHaveTextContent('This happened to you');
+      expect(mark).toHaveTextContent("Kira's Frost Bolt strikes Corvin for 24 damage.");
+      const answerThis = screen.getByTestId('answer-this-1');
+      expect(answerThis).toHaveTextContent('Answer this');
+      fireEvent.click(answerThis);
+      expect(onReply).toHaveBeenCalledWith(expect.objectContaining({ id: 1 }));
+
+      // The other, uninvolved row keeps the ordinary quiet Reply link and
+      // gets no involvement box at all.
+      expect(screen.queryByTestId('involvement-mark-2')).toBeNull();
+      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+    });
+
+    it('applies the SAME involvement treatment regardless of interaction mode (one phrasing for all row kinds)', () => {
+      vi.mocked(useViewerPersonaId).mockReturnValue(42);
+      const row = {
+        ...interaction(1, 'A whisper reaches you.', 'unused'),
+        thread_id: null,
+        mode: 'whisper',
+        target_persona_ids: [42],
+      };
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[row]}
+          fetchNextPage={vi.fn()}
+          onReply={vi.fn()}
+        />
+      );
+      expect(screen.getByTestId('involvement-mark-1')).toHaveTextContent('This happened to you');
+    });
+
+    it("renders the Answer this control disabled with the refusal shown, before any click, when the viewer's current Place cannot reach a room-held row (Screen 3)", () => {
+      vi.mocked(useViewerPersonaId).mockReturnValue(42);
+      const onReply = vi.fn();
+      const legacyPose = (id: number, content: string) => ({
+        ...interaction(id, content, 'unused'),
+        thread_id: null,
+        mode: 'outcome',
+        place: null,
+        target_persona_ids: [42],
+      });
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[legacyPose(1, "Kira's Frost Bolt strikes Corvin for 24 damage.")]}
+          fetchNextPage={vi.fn()}
+          onReply={onReply}
+          isAtPlace
+          currentPlaceId={7}
+          currentPlaceName="the corner table"
+        />
+      );
+      const refusal = screen.getByTestId('reply-refusal-1');
+      expect(refusal).toHaveTextContent('Answering the fight means speaking to the room.');
+      expect(refusal).toHaveTextContent(
+        'Leave the corner table to answer this. Your draft is kept.'
+      );
+      const disabledButton = screen.getByRole('button', { name: /answer this/i });
+      expect(disabledButton).toBeDisabled();
+      fireEvent.click(disabledButton);
+      expect(onReply).not.toHaveBeenCalled();
+    });
+
+    it('leaves an ordinary reply reachable when the viewer is not at a Place', () => {
+      vi.mocked(useViewerPersonaId).mockReturnValue(42);
+      const legacyPose = {
+        ...interaction(1, 'An ordinary room outcome.', 'unused'),
+        thread_id: null,
+        mode: 'outcome',
+        place: null,
+        target_persona_ids: [42],
+      };
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[legacyPose]}
+          fetchNextPage={vi.fn()}
+          onReply={vi.fn()}
+          isAtPlace={false}
+        />
+      );
+      expect(screen.queryByTestId('reply-refusal-1')).toBeNull();
+      expect(screen.getByRole('button', { name: /answer this/i })).not.toBeDisabled();
     });
   });
 });

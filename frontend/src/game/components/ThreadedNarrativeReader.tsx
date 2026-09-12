@@ -14,7 +14,9 @@ import {
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
 import { markConversationRead } from '../playQueries';
-import { parseFormattedContent } from '@/lib/formatParser';
+import { excerptOf } from '@/lib/formatParser';
+import { useViewerPersonaId } from '@/roster/persona';
+import { replyReachability, type ViewerVenue } from '@/scenes/replyReachability';
 
 // #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
 // whole-list tail-slice size -- repurposed as the default number of a single
@@ -24,44 +26,11 @@ import { parseFormattedContent } from '@/lib/formatParser';
 const THREAD_PAGE_SIZE = 20;
 
 /**
- * A short, truncated, PLAIN-TEXT preview of pose prose -- used for the
- * thread header's opening-pose excerpt (#3759 Wave 9 review finding F3) and
- * the per-pose "Reply in <title>" role label (F4) below. No shared
- * truncation helper exists elsewhere in this codebase for this (checked:
- * every other call site -- e.g. `StaffBugReportsPage.tsx`, `HubBrowser.tsx`
- * -- inlines its own `.slice(n) + '...'`), so this stays a small, local
- * helper rather than a new shared module for what only this file needs.
- *
- * #3759 Wave 9 fix round 1 finding I-1: `content` carries MU*-style color
- * codes and markdown (`|w`, `**bold**`, etc. -- `formatParser.ts`'s whole
- * reason for existing), which every OTHER render path in this codebase
- * parses via `<FormattedContent>` before display (`PoseUnit.tsx:354,405`).
- * This is plain text, not JSX, so it can't render `<FormattedContent>`
- * itself -- instead it strips markup by joining `parseFormattedContent`'s
- * segments' plain `.content` fields BEFORE truncating, so a pose starting
- * `|wMirelle turned...` (or `**The broken seal**`) never leaks raw markup
- * into a header/label.
- */
-function excerptOf(content: string, maxLength = 84): string {
-  const plain = parseFormattedContent(content)
-    .map((segment) => segment.content)
-    .join('');
-  const trimmed = plain.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength).trimEnd()}…`;
-}
-
-/**
  * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
  * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
  * parent-chip persistence -- "Opening pose" for a REAL thread's own root
- * pose, "Reply in <title>" for everything else in it. `Interaction`/the
- * server's reply topology has no persisted thread-title field (`thread_id`
- * is the only concept that exists), so `<title>` is derived the same way
- * the approved demo derives one for a thread it creates on the fly
- * (`title: p.paras[0].slice(0, 60)`, `arx-wide-reader.html`'s own `send()`):
- * an excerpt of the thread's own root pose. Shared between Threads view
- * (where `rootPose` is already in scope as `group.interactions[0]`) and
+ * pose, "Standalone" for an ordinary un-replied pose. Shared between Threads
+ * view (where `rootPose` is already in scope as `group.interactions[0]`) and
  * Chronological view (where it's looked up via `groupByKey`, below) so both
  * views render identical labels for the identical pose.
  *
@@ -71,11 +40,125 @@ function excerptOf(content: string, maxLength = 84): string {
  * its own group's root by construction, but "Opening pose" asserts a THREAD
  * that doesn't exist for it. "Standalone" (matching Chronological's own
  * pre-existing phrasing for this exact case) is correct for both views.
+ *
+ * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
+ * in a real thread -- used to return `Reply in <title>` as a stand-in for
+ * per-pose parent data that didn't exist yet (that branch's own doc comment
+ * said so). It does now (`Interaction.reply_to`, #3787 Tasks 1-2), and
+ * `PoseUnit.tsx`'s parent chip ("Answering “...”") renders it
+ * directly on the pose itself -- a real quote of what was actually answered,
+ * not a derived thread title -- so this label goes empty for that case
+ * rather than duplicating weaker information beside the chip.
  */
 function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): string {
   if (!item.thread_id) return 'Standalone';
   if (!rootPose || rootPose.id === item.id) return 'Opening pose';
-  return `Reply in ${excerptOf(rootPose.content, 60)}`;
+  return '';
+}
+
+/**
+ * The involved-viewer treatment (#3787 demo Screen 1): a row whose
+ * `target_persona_ids` names the viewer's own active persona gets a distinct,
+ * highlighted restatement of the SAME (already per-viewer-rendered) content
+ * plus a prominent "Answer this" control, instead of the ordinary quiet
+ * Reply link every other row keeps. One phrasing for all five row kinds the
+ * spec names (combat outcome, NPC action, social check, prose tag, whisper)
+ * — this is gated purely on `target_persona_ids`, never on `item.mode`, so
+ * it needs no per-mode copy to maintain.
+ */
+function isInvolvingViewer(item: Interaction, viewerPersonaId: number | null): boolean {
+  return viewerPersonaId != null && item.target_persona_ids.includes(viewerPersonaId);
+}
+
+/**
+ * The reply/answer control for one pose, covering both demo Screen 1/2 (an
+ * ordinary or prominent control that opens the composer on this row) and
+ * Screen 3 (the SAME control rendered disabled, with the refusal shown
+ * before the click, when `replyReachability` finds the viewer's current
+ * venue cannot reach this row). Shared between the legacy-standalone and
+ * real-thread render branches below so the two never drift.
+ */
+function ReplyControl({
+  item,
+  onReply,
+  involved,
+  venue,
+}: {
+  item: Interaction;
+  onReply: (interaction: Interaction) => void;
+  involved: boolean;
+  venue: ViewerVenue;
+}) {
+  const refusal = replyReachability(item, venue);
+  const label = involved ? 'Answer this' : 'Reply';
+  if (!refusal.reachable) {
+    return (
+      <div className="flex flex-col items-end gap-1" data-testid={`reply-refusal-${item.id}`}>
+        <button
+          type="button"
+          disabled
+          className="inline-flex min-h-9 cursor-not-allowed items-center gap-1 text-muted-foreground line-through opacity-70"
+        >
+          {!involved && <Reply className="h-3 w-3" />} {label}
+        </button>
+        <p className="max-w-xs text-right text-xs">
+          <strong className="text-destructive">{refusal.reason}</strong>{' '}
+          {refusal.hint && <span className="text-muted-foreground">{refusal.hint}</span>}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={
+        involved
+          ? 'inline-flex min-h-9 items-center gap-1 rounded bg-primary px-2 py-1 font-semibold text-primary-foreground'
+          : 'inline-flex min-h-9 items-center gap-1 underline'
+      }
+      data-testid={involved ? `answer-this-${item.id}` : undefined}
+      onClick={() => onReply(item)}
+    >
+      {!involved && <Reply className="h-3 w-3" />} {label}
+    </button>
+  );
+}
+
+/**
+ * The highlighted restatement box itself (demo Screen 1's `.involves`):
+ * rendered only when `isInvolvingViewer` is true, right after the pose's own
+ * ordinary rendering (which stays unchanged — the room's own reading of the
+ * row). Never re-derives an actor or a different sentence: it repeats
+ * `item.content`, the exact already-per-viewer-rendered text the viewer's
+ * own `<SceneMessages>` render just showed above it.
+ */
+function InvolvementFlag({
+  item,
+  onReply,
+  readOnly,
+  venue,
+}: {
+  item: Interaction;
+  onReply?: (interaction: Interaction) => void;
+  readOnly: boolean;
+  venue: ViewerVenue;
+}) {
+  return (
+    <div
+      className="mt-1 max-w-[90%] rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2"
+      data-testid={`involvement-mark-${item.id}`}
+    >
+      <span className="block text-xs font-semibold uppercase tracking-wide text-amber-600">
+        This happened to you
+      </span>
+      <p className="mt-0.5 text-sm italic">{item.content}</p>
+      {onReply && !readOnly && (
+        <div className="mt-1 flex justify-end">
+          <ReplyControl item={item} onReply={onReply} involved venue={venue} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -257,6 +340,19 @@ interface ThreadedNarrativeReaderProps {
    * per-thread default is unaffected.
    */
   targetPoseId?: string;
+  /**
+   * The viewer's current drafting venue (#3787 Screen 3, the pre-emptive
+   * reply refusal) — the same values `GamePage.tsx` already computes and
+   * threads to `CommandInput` (`isAtPlace`/`currentPlaceId`), passed one hop
+   * further by `GameWindow.tsx` rather than re-derived here. Omitted
+   * (standalone/test/reference callers) defaults to "in the room", so every
+   * row reads reachable — the permissive default `replyReachability` itself
+   * uses when `isAtPlace` is false.
+   */
+  isAtPlace?: boolean;
+  currentPlaceId?: number | null;
+  /** Human-readable current place name, for the refusal's hint text only. */
+  currentPlaceName?: string | null;
 }
 
 interface Group {
@@ -295,7 +391,27 @@ export function ThreadedNarrativeReader({
   readOnly = false,
   persistAnchor = true,
   targetPoseId,
+  isAtPlace = false,
+  currentPlaceId = null,
+  currentPlaceName = null,
 }: ThreadedNarrativeReaderProps) {
+  // #3787 — resolved the SAME way PoseUnit.tsx resolves its own self-pose
+  // guard (no second source of truth): drives the involvement mark (Screen
+  // 1) below.
+  const viewerPersonaId = useViewerPersonaId();
+  const viewerVenue: ViewerVenue = useMemo(
+    () => ({ isAtPlace, currentPlaceId, currentPlaceName }),
+    [isAtPlace, currentPlaceId, currentPlaceName]
+  );
+  // #3787 — resolves `interaction.reply_to` (an `{id, timestamp}` thread
+  // selector, not the parent's content) to the parent Interaction for
+  // PoseUnit's parent chip. Built once from the full loaded `interactions`
+  // array (not a windowed/filtered slice), so a thread's own reply can quote
+  // a parent sitting outside its currently-shown window.
+  const interactionsById = useMemo(
+    () => new Map(interactions.map((item) => [item.id, item])),
+    [interactions]
+  );
   // #3759 Wave 9 (F1/F2): replaces the old flat, whole-list
   // `historyStartOverride` -- one window per THREAD (keyed by `group.key`)
   // instead of one for the whole list. See `ThreadWindow`'s own doc comment
@@ -1138,7 +1254,7 @@ export function ThreadedNarrativeReader({
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
                       >
-                        <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                        {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
                         {poseCollapsed ? (
                           <article
                             className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1164,6 +1280,7 @@ export function ThreadedNarrativeReader({
                             onAddTarget={onAddTarget}
                             onAttachAction={onAttachAction}
                             readOnly={readOnly}
+                            interactionsById={interactionsById}
                           />
                         )}
                       </PoseReadTarget>
@@ -1260,7 +1377,16 @@ export function ThreadedNarrativeReader({
                             onAddTarget={onAddTarget}
                             onAttachAction={onAttachAction}
                             readOnly={readOnly}
+                            interactionsById={interactionsById}
                           />
+                          {isInvolvingViewer(item, viewerPersonaId) && onReply && (
+                            <InvolvementFlag
+                              item={item}
+                              onReply={onReply}
+                              readOnly={readOnly}
+                              venue={viewerVenue}
+                            />
+                          )}
                           <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                             <button
                               type="button"
@@ -1269,14 +1395,13 @@ export function ThreadedNarrativeReader({
                             >
                               Show less
                             </button>
-                            {onReply && !readOnly && (
-                              <button
-                                type="button"
-                                className="inline-flex min-h-9 items-center gap-1 underline"
-                                onClick={() => onReply(item)}
-                              >
-                                <Reply className="h-3 w-3" /> Reply
-                              </button>
+                            {onReply && !readOnly && !isInvolvingViewer(item, viewerPersonaId) && (
+                              <ReplyControl
+                                item={item}
+                                onReply={onReply}
+                                involved={false}
+                                venue={viewerVenue}
+                              />
                             )}
                           </div>
                         </>
@@ -1375,7 +1500,9 @@ export function ThreadedNarrativeReader({
                             highlighted={String(item.id) === highlightedPoseId}
                           >
                             {/* #3759 Wave 9 review finding F4. */}
-                            <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                            {roleLabel && (
+                              <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                            )}
                             {poseCollapsed ? (
                               <article
                                 className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1402,7 +1529,16 @@ export function ThreadedNarrativeReader({
                                   onAddTarget={onAddTarget}
                                   onAttachAction={onAttachAction}
                                   readOnly={readOnly}
+                                  interactionsById={interactionsById}
                                 />
+                                {isInvolvingViewer(item, viewerPersonaId) && onReply && (
+                                  <InvolvementFlag
+                                    item={item}
+                                    onReply={onReply}
+                                    readOnly={readOnly}
+                                    venue={viewerVenue}
+                                  />
+                                )}
                                 <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                                   <button
                                     type="button"
@@ -1411,15 +1547,16 @@ export function ThreadedNarrativeReader({
                                   >
                                     Show less
                                   </button>
-                                  {onReply && !readOnly && (
-                                    <button
-                                      type="button"
-                                      className="inline-flex min-h-9 items-center gap-1 underline"
-                                      onClick={() => onReply(item)}
-                                    >
-                                      <Reply className="h-3 w-3" /> Reply
-                                    </button>
-                                  )}
+                                  {onReply &&
+                                    !readOnly &&
+                                    !isInvolvingViewer(item, viewerPersonaId) && (
+                                      <ReplyControl
+                                        item={item}
+                                        onReply={onReply}
+                                        involved={false}
+                                        venue={viewerVenue}
+                                      />
+                                    )}
                                 </div>
                               </>
                             )}
