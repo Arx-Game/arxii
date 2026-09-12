@@ -130,27 +130,40 @@ function ReplyControl({
 }
 
 /**
- * The highlighted restatement box itself (demo Screen 1's `.involves`):
- * rendered only when `isInvolvingViewer` is true, right after the pose's own
- * ordinary rendering (which stays unchanged -- the room's own reading of the
- * row). Never re-derives an actor or a different sentence: it repeats
- * `item.content`, the exact already-per-viewer-rendered text the viewer's
- * own `<SceneMessages>` render just showed above it.
+ * The marked treatment for a row that names the viewer (demo Screen 1's
+ * `.involves`): the amber-railed box the involved viewer reads the row IN,
+ * wrapping the pose's own ordinary rendering rather than following it.
+ *
+ * #3787 final review D1: this used to render `item.content` itself, directly
+ * after the same pose's own `<SceneMessages>` render, so the involved viewer
+ * read the identical sentence twice in a row. The demo showed that line twice
+ * as a SIDE-BY-SIDE device explaining what two different viewers see, never as
+ * one viewer reading it twice. So the involved viewer gets the amber treatment
+ * INSTEAD of the plain bubble: `children` is the pose's own per-viewer content
+ * rendering, unchanged and rendered exactly once, with the label above it and
+ * the prominent "Answer this" control below. Everyone else is untouched.
+ *
+ * Wrapping rather than restating is also what keeps the row whole: the pose's
+ * own rendering carries the persona name, the parent chip, reactions and the
+ * action-link affordances, none of which a restatement of `item.content` ever
+ * had. Nothing here re-derives an actor or a different sentence.
  */
 function InvolvementFlag({
   item,
   onReply,
   readOnly,
   venue,
+  children,
 }: {
   item: Interaction;
   onReply?: (interaction: Interaction) => void;
   readOnly: boolean;
   venue: ViewerVenue;
+  children: ReactNode;
 }) {
   return (
     <div
-      className="mt-1 max-w-[90%] rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2"
+      className="mt-1 rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2"
       data-testid={`involvement-mark-${item.id}`}
       role="status"
       aria-live="polite"
@@ -158,7 +171,7 @@ function InvolvementFlag({
       <span className="block text-xs font-semibold uppercase tracking-wide text-amber-600">
         This happened to you
       </span>
-      <p className="mt-0.5 text-sm italic">{item.content}</p>
+      {children}
       {onReply && !readOnly && (
         <div className="mt-1 flex justify-end">
           <ReplyControl item={item} onReply={onReply} involved venue={venue} />
@@ -1377,23 +1390,37 @@ export function ThreadedNarrativeReader({
                         </article>
                       ) : (
                         <>
-                          <SceneMessages
-                            sceneId={sceneId}
-                            filteredInteractions={[item]}
-                            onAvatarClick={onAvatarClick}
-                            onAddTarget={onAddTarget}
-                            onAttachAction={onAttachAction}
-                            readOnly={readOnly}
-                            interactionsById={interactionsById}
-                          />
-                          {isInvolvingViewer(item, viewerPersonaId) && onReply && (
-                            <InvolvementFlag
-                              item={item}
-                              onReply={onReply}
-                              readOnly={readOnly}
-                              venue={viewerVenue}
-                            />
-                          )}
+                          {/* #3787 D1: the involved viewer reads the row ONCE,
+                              inside the marked treatment, instead of reading the
+                              plain bubble and then a restatement of the same
+                              sentence. `poseBody` is the identical per-viewer
+                              rendering either way. */}
+                          {(() => {
+                            const poseBody = (
+                              <SceneMessages
+                                sceneId={sceneId}
+                                filteredInteractions={[item]}
+                                onAvatarClick={onAvatarClick}
+                                onAddTarget={onAddTarget}
+                                onAttachAction={onAttachAction}
+                                readOnly={readOnly}
+                                interactionsById={interactionsById}
+                              />
+                            );
+                            if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
+                              return poseBody;
+                            }
+                            return (
+                              <InvolvementFlag
+                                item={item}
+                                onReply={onReply}
+                                readOnly={readOnly}
+                                venue={viewerVenue}
+                              >
+                                {poseBody}
+                              </InvolvementFlag>
+                            );
+                          })()}
                           <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                             <button
                               type="button"
@@ -1529,23 +1556,33 @@ export function ThreadedNarrativeReader({
                               </article>
                             ) : (
                               <>
-                                <SceneMessages
-                                  sceneId={sceneId}
-                                  filteredInteractions={[item]}
-                                  onAvatarClick={onAvatarClick}
-                                  onAddTarget={onAddTarget}
-                                  onAttachAction={onAttachAction}
-                                  readOnly={readOnly}
-                                  interactionsById={interactionsById}
-                                />
-                                {isInvolvingViewer(item, viewerPersonaId) && onReply && (
-                                  <InvolvementFlag
-                                    item={item}
-                                    onReply={onReply}
-                                    readOnly={readOnly}
-                                    venue={viewerVenue}
-                                  />
-                                )}
+                                {/* #3787 D1 -- see the Chronological branch. */}
+                                {(() => {
+                                  const poseBody = (
+                                    <SceneMessages
+                                      sceneId={sceneId}
+                                      filteredInteractions={[item]}
+                                      onAvatarClick={onAvatarClick}
+                                      onAddTarget={onAddTarget}
+                                      onAttachAction={onAttachAction}
+                                      readOnly={readOnly}
+                                      interactionsById={interactionsById}
+                                    />
+                                  );
+                                  if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
+                                    return poseBody;
+                                  }
+                                  return (
+                                    <InvolvementFlag
+                                      item={item}
+                                      onReply={onReply}
+                                      readOnly={readOnly}
+                                      venue={viewerVenue}
+                                    >
+                                      {poseBody}
+                                    </InvolvementFlag>
+                                  );
+                                })()}
                                 <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                                   <button
                                     type="button"

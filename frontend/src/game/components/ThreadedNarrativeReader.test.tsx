@@ -2102,6 +2102,37 @@ describe('ThreadedNarrativeReader', () => {
       expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
     });
 
+    it('renders the involved row ONCE, inside the marked treatment, not twice (D1)', () => {
+      // The demo showed the line twice as a side-by-side device explaining what
+      // two DIFFERENT viewers see. It was never one viewer reading it twice.
+      vi.mocked(useViewerPersonaId).mockReturnValue(42);
+      const line = "Kira's Frost Bolt strikes Corvin for 24 damage.";
+      const row = {
+        ...interaction(1, line, 'unused'),
+        thread_id: null,
+        target_persona_ids: [42],
+      };
+      render(
+        <ThreadedNarrativeReader
+          sceneId="1"
+          conversationKey="scene:1"
+          conversationRef="scene:1"
+          interactions={[row]}
+          fetchNextPage={vi.fn()}
+          onReply={vi.fn()}
+        />
+      );
+
+      expect(screen.getAllByText(line)).toHaveLength(1);
+      // And the one rendering is the pose's own, inside the amber box -- the
+      // marked treatment replaces the plain bubble rather than following it, so
+      // the row keeps its author and every affordance the pose itself carries.
+      const mark = screen.getByTestId('involvement-mark-1');
+      expect(mark).toContainElement(screen.getByText(line));
+      expect(mark).toHaveTextContent('This happened to you');
+      expect(mark).toHaveTextContent('Answer this');
+    });
+
     it('applies the SAME involvement treatment regardless of interaction mode (one phrasing for all row kinds)', () => {
       vi.mocked(useViewerPersonaId).mockReturnValue(42);
       const row = {
