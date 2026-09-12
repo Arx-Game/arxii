@@ -1826,6 +1826,9 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
     expect(refusal).toHaveTextContent('Leave the corner table to answer this. Your draft is kept.');
     expect(refusal).toHaveAttribute('role', 'status');
     expect(refusal).toHaveAttribute('aria-live', 'polite');
+    // #3787 D2: the reader-side refusal (ThreadedNarrativeReader's ReplyControl)
+    // is pinned to this same rail and tint. Change one and change both.
+    expect(refusal).toHaveClass('border-l-2', 'border-destructive', 'bg-destructive/10');
 
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'answers anyway' } });

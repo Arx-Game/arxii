@@ -93,8 +93,12 @@ function ReplyControl({
   const label = involved ? 'Answer this' : 'Reply';
   if (!refusal.reachable) {
     return (
+      // #3787 final review D2: the same alarm-coloured left rail and tint the
+      // composer's own refusal carries (`CommandInput.tsx`'s `reply-refusal`).
+      // The two boxes say the same thing about the same venue mismatch and are
+      // reached seconds apart, so they read as one kind of thing rather than two.
       <div
-        className="flex flex-col items-end gap-1"
+        className="flex flex-col items-start gap-1 border-l-2 border-destructive bg-destructive/10 px-3 py-1.5"
         data-testid={`reply-refusal-${item.id}`}
         role="status"
         aria-live="polite"
@@ -106,7 +110,7 @@ function ReplyControl({
         >
           {!involved && <Reply className="h-3 w-3" />} {label}
         </button>
-        <p className="max-w-xs text-right text-xs">
+        <p className="max-w-xs text-xs">
           <strong className="text-destructive">{refusal.reason}</strong>{' '}
           {refusal.hint && <span className="text-muted-foreground">{refusal.hint}</span>}
         </p>

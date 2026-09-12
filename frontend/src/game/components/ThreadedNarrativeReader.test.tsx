@@ -2184,6 +2184,11 @@ describe('ThreadedNarrativeReader', () => {
       );
       expect(refusal).toHaveAttribute('role', 'status');
       expect(refusal).toHaveAttribute('aria-live', 'polite');
+      // #3787 D2: the same alarm-coloured left rail and tint the composer's own
+      // refusal carries, so the two refusals read as one kind of thing. Tailwind
+      // compiles its rules FROM these class names, so the class list is what
+      // decides whether the rule reaches the page at all.
+      expect(refusal).toHaveClass('border-l-2', 'border-destructive', 'bg-destructive/10');
       const disabledButton = screen.getByRole('button', { name: /answer this/i });
       expect(disabledButton).toBeDisabled();
       fireEvent.click(disabledButton);
