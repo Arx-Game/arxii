@@ -19079,7 +19079,10 @@ export interface paths {
      *
      *     Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
      *     ``NarrativeMessageDelivery`` rows per character, via a single aggregated
-     *     JOIN/GROUP BY rather than a per-row query.
+     *     JOIN/GROUP BY rather than a per-row query. Also attaches cross-device
+     *     attention (#3774) — ``unread_direct``, ``has_ambient_unread``, and
+     *     ``attention_as_of_id`` — computed once for the whole list via
+     *     ``account_attention()`` and handed to the serializer through context.
      */
     get: operations['roster_entries_mine_retrieve'];
     put?: never;
@@ -33835,6 +33838,22 @@ export interface components {
        *     a single extra query on that single-object path only.
        */
       readonly unread_narrative_count: number;
+      /** @description Poses aimed at this character's personas and not yet read. */
+      readonly unread_direct: number;
+      /** @description Whether a scene this character is still in has moved without them. */
+      readonly has_ambient_unread: boolean;
+      /**
+       * @description The newest pose the counts above already include.
+       *
+       *     The same for every row in a `mine()` response (one `AccountAttention`
+       *     per request), so the entry itself is unused; kept for the
+       *     `SerializerMethodField` signature.
+       *
+       *     The client drops session interactions at or below this id before
+       *     adding its own live WebSocket delta, so the same pose is never
+       *     counted twice.
+       */
+      readonly attention_as_of_id: number;
       readonly lifecycle_state: string;
       readonly roster_type: string;
       readonly character_type: string;

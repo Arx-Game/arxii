@@ -30800,7 +30800,10 @@ paths:
 
         Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
         ``NarrativeMessageDelivery`` rows per character, via a single aggregated
-        JOIN/GROUP BY rather than a per-row query.
+        JOIN/GROUP BY rather than a per-row query. Also attaches cross-device
+        attention (#3774) — ``unread_direct``, ``has_ambient_unread``, and
+        ``attention_as_of_id`` — computed once for the whole list via
+        ``account_attention()`` and handed to the serializer through context.
       tags:
       - roster
       security:
@@ -59377,6 +59380,28 @@ components:
             plain, unannotated ``RosterEntry`` — fall back to a direct count there,
             a single extra query on that single-object path only.
           readOnly: true
+        unread_direct:
+          type: integer
+          description: Poses aimed at this character's personas and not yet read.
+          readOnly: true
+        has_ambient_unread:
+          type: boolean
+          description: Whether a scene this character is still in has moved without
+            them.
+          readOnly: true
+        attention_as_of_id:
+          type: integer
+          description: |-
+            The newest pose the counts above already include.
+
+            The same for every row in a `mine()` response (one `AccountAttention`
+            per request), so the entry itself is unused; kept for the
+            `SerializerMethodField` signature.
+
+            The client drops session interactions at or below this id before
+            adding its own live WebSocket delta, so the same pose is never
+            counted twice.
+          readOnly: true
         lifecycle_state:
           type: string
           readOnly: true
@@ -59388,14 +59413,17 @@ components:
           readOnly: true
       required:
       - active_persona_id
+      - attention_as_of_id
       - character_id
       - character_type
+      - has_ambient_unread
       - id
       - lifecycle_state
       - name
       - primary_persona_id
       - profile_picture_url
       - roster_type
+      - unread_direct
       - unread_narrative_count
     MyStoryGrant:
       type: object

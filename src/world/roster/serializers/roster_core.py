@@ -97,6 +97,23 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
     primary_persona_id = serializers.SerializerMethodField()
     active_persona_id = serializers.SerializerMethodField()
     unread_narrative_count = serializers.SerializerMethodField()
+    # #3774 -- cross-device attention. The three fields below are one
+    # `AccountAttention` computed once per request by `mine()` and handed in
+    # through serializer context, never a per-row query and never a memo on
+    # the serializer (ADR-0260). Other callers of this same serializer never
+    # populate that context, so the guard in each getter answers 0/False
+    # rather than raising: `web/api/serializers.py`'s
+    # `AccountSerializer.get_selected_entry` (the `/api/user/` payload, hit
+    # on effectively every page load) and `SelectedEntryResultSerializer
+    # .selected_entry` (returned by `RosterEntryViewSet.select`) both
+    # serialize a single `RosterEntry` with no context at all, and neither
+    # has a reason to pay for an account-wide attention query just to
+    # display one already-known character. Zero is the honest answer there,
+    # not a paper-over: the true count is a different question this
+    # serializer isn't being asked at those call sites.
+    unread_direct = serializers.SerializerMethodField()
+    has_ambient_unread = serializers.SerializerMethodField()
+    attention_as_of_id = serializers.SerializerMethodField()
     # #3412 slice 3 task 5 — display-only lifecycle state, the seam T4 left
     # open ("the exposure seam ... is left for a follow-up task"). A plain
     # CharField source, not an annotation — ``lifecycle_state`` is already a
@@ -129,6 +146,9 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             "primary_persona_id",
             "active_persona_id",
             "unread_narrative_count",
+            "unread_direct",
+            "has_ambient_unread",
+            "attention_as_of_id",
             "lifecycle_state",
             "roster_type",
             "character_type",
@@ -185,6 +205,36 @@ class MyRosterEntrySerializer(serializers.ModelSerializer):
             recipient_character_sheet_id=obj.character_sheet_id,
             acknowledged_at__isnull=True,
         ).count()
+
+    def get_unread_direct(self, obj: RosterEntry) -> int:
+        """Poses aimed at this character's personas and not yet read."""
+        attention = self.context.get("character_attention")
+        if attention is None:
+            return 0
+        entry = attention.by_character.get(obj.character_sheet_id)
+        return entry.direct if entry else 0
+
+    def get_has_ambient_unread(self, obj: RosterEntry) -> bool:
+        """Whether a scene this character is still in has moved without them."""
+        attention = self.context.get("character_attention")
+        if attention is None:
+            return False
+        entry = attention.by_character.get(obj.character_sheet_id)
+        return bool(entry and entry.ambient)
+
+    def get_attention_as_of_id(self, _obj: RosterEntry) -> int:
+        """The newest pose the counts above already include.
+
+        The same for every row in a `mine()` response (one `AccountAttention`
+        per request), so the entry itself is unused; kept for the
+        `SerializerMethodField` signature.
+
+        The client drops session interactions at or below this id before
+        adding its own live WebSocket delta, so the same pose is never
+        counted twice.
+        """
+        attention = self.context.get("character_attention")
+        return attention.as_of_id if attention else 0
 
 
 class SelectEntryRequestSerializer(serializers.Serializer):
