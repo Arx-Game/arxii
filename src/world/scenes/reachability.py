@@ -32,11 +32,14 @@ shape:
   log afterward, not who was ever the live audience.
 - otherwise (room-heard: no place, no receivers, not a whisper) -> reachable
   if ``visibility`` is ``DEFAULT`` AND the persona's character is physically
-  present in the scene's room. A receiver-less broadcast pose can be escalated
-  after the fact (``mark_very_private``) to ``VERY_PRIVATE`` or
-  ``PERCEIVED_ONLY`` with no shape change at all (same ``place``/``receivers``
-  fields) - ``visible_to``'s ``room_heard`` clause requires
-  ``visibility=DEFAULT`` explicitly, so an escalated row stops being
+  present in the room -- the scene's room when a ``Scene`` is attached, or the
+  caller-supplied ``location`` when it is not (``Interaction.scene`` is
+  nullable; a room-heard pose need not belong to one). Neither available ->
+  refuses; there is no room to test presence against. A receiver-less
+  broadcast pose can be escalated after the fact (``mark_very_private``) to
+  ``VERY_PRIVATE`` or ``PERCEIVED_ONLY`` with no shape change at all (same
+  ``place``/``receivers`` fields) - ``visible_to``'s ``room_heard`` clause
+  requires ``visibility=DEFAULT`` explicitly, so an escalated row stops being
   broadcast-readable to anyone but its writer's own account. Presence alone
   cannot answer reachability here without checking ``visibility`` too, or it
   would call someone "reachable" for a row that has since gone private.
@@ -71,6 +74,8 @@ from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.place_models import Place, PlacePresence
 
 if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
+
     from world.scenes.models import Persona, Scene
 
 
@@ -84,6 +89,21 @@ def _receiver_ids(receivers: Iterable[Persona] | Iterable[int] | None) -> frozen
     return frozenset(ids)
 
 
+def _room_has_character(location: ObjectDB | None, character_sheet_id: int) -> bool:
+    """Return whether ``character_sheet_id`` is physically present at ``location``.
+
+    Mirrors ``Scene.has_character_present`` (``world/scenes/models.py``) for a
+    room that has no ``Scene`` wrapper at all -- both read the room's Evennia
+    contents cache (no DB hit when the room is already loaded), and both key
+    on the ObjectDB pk, which ``CharacterSheet`` shares with its character
+    (see CLAUDE.md's "RoomProfile and CharacterSheet share ObjectDB's pk").
+    """
+    if location is None:
+        return False
+    present_ids = {ob.pk for ob in location.contents}
+    return character_sheet_id in present_ids
+
+
 def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field being tested
     persona: Persona,
     *,
@@ -92,6 +112,8 @@ def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field 
     receivers: Iterable[Persona] | Iterable[int] | None,
     mode: str,
     visibility: str,
+    location: ObjectDB | None = None,
+    place_presence_persona_ids: Iterable[int] | None = None,
 ) -> bool:
     """Return whether ``persona`` can receive content with this audience shape.
 
@@ -102,6 +124,21 @@ def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field 
     for the room-heard branch (see the module docstring) - the directed
     branches (whisper, receivers, place) already encode their own audience via
     the recorded rows, which escalating ``visibility`` never rewrites.
+
+    ``location`` is the room this content actually occurs in -- required to
+    answer the room-heard branch when there is no ``Scene`` (``Interaction.scene``
+    is nullable; "Scenes are optional containers", ``world/scenes/models.py``).
+    Without it, a scene-less room-heard shape refuses outright (there is no room
+    to test presence against); with it, presence is read straight off the room's
+    contents, same as the scene-backed case. Passing ``location`` never widens
+    who counts as room-heard on its own -- ``visibility`` still gates it first.
+
+    ``place_presence_persona_ids``, if given, is a prefetched set of persona ids
+    present at ``place`` (e.g. ``PlacePresence.objects.filter(place=place,
+    persona_id__in=[...]).values_list("persona_id", flat=True)``) -- a caller
+    checking several personas against the same place batches one query instead
+    of this function issuing its own per call. Omitted, this function queries
+    ``PlacePresence`` itself (unchanged single-check behavior).
     """
     receiver_ids = _receiver_ids(receivers)
 
@@ -110,9 +147,12 @@ def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field 
         return receiver_ids is not None and persona.pk in receiver_ids
 
     if place is not None:
-        present_at_place = PlacePresence.objects.filter(
-            place_id=place.pk, persona_id=persona.pk
-        ).exists()
+        if place_presence_persona_ids is not None:
+            present_at_place = persona.pk in place_presence_persona_ids
+        else:
+            present_at_place = PlacePresence.objects.filter(
+                place_id=place.pk, persona_id=persona.pk
+            ).exists()
         if not present_at_place:
             return False
         # A Place row may ALSO narrow to explicit receivers (a private aside at
@@ -124,19 +164,23 @@ def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field 
         return persona.pk in receiver_ids
 
     # Room-heard: no place, no explicit receivers, not a whisper - broadcast to
-    # whoever is physically present in the scene's room right now, but ONLY
-    # while visibility is still DEFAULT. `visible_to`'s `room_heard` clause
-    # requires `visibility=DEFAULT` explicitly, so a receiver-less broadcast
-    # escalated after the fact (`mark_very_private`, PERCEIVED_ONLY or
-    # VERY_PRIVATE) stops being broadcast-reachable to anyone - not staff, not
-    # the scene's GM, regardless of who is standing in the room. There is no
-    # recorded audience to fall back on for an escalated broadcast, so the
-    # honest answer is nobody, full stop.
+    # whoever is physically present in the room right now, but ONLY while
+    # visibility is still DEFAULT. `visible_to`'s `room_heard` clause requires
+    # `visibility=DEFAULT` explicitly, so a receiver-less broadcast escalated
+    # after the fact (`mark_very_private`, PERCEIVED_ONLY or VERY_PRIVATE) stops
+    # being broadcast-reachable to anyone - not staff, not the scene's GM,
+    # regardless of who is standing in the room. There is no recorded audience
+    # to fall back on for an escalated broadcast, so the honest answer is
+    # nobody, full stop -- checked BEFORE presence, so an escalated row is
+    # refused whether or not a room/scene is even available to test against.
     if visibility != InteractionVisibility.DEFAULT:
         return False
-    if scene is None or scene.location is None:
-        return False
-    return scene.has_character_present({persona.character_sheet_id})
+    if scene is not None and scene.location is not None:
+        return scene.has_character_present({persona.character_sheet_id})
+    # No scene (or a locationless one): fall back to the room the content
+    # actually occurred in, if the caller supplied one. Still refuses (rather
+    # than guessing) when neither is available.
+    return _room_has_character(location, persona.character_sheet_id)
 
 
 class UnreachableError(Exception):

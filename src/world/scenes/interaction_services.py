@@ -24,7 +24,7 @@ from world.scenes.models import (
     PoseSubmission,
     Scene,
 )
-from world.scenes.place_models import InteractionReceiver, Place
+from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
 from world.scenes.reachability import UnreachableError, persona_can_receive
 from world.scenes.thread_services import (
     InteractionThreadError,
@@ -276,45 +276,43 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             # from PlacePresence above, making this a DIRECTED row) could name a
             # persona sitting at a different table -- the row was written and
             # never delivered. Validate with the shared `persona_can_receive`
-            # predicate (Task 3) before writing anything.
+            # predicate (Task 3) before writing anything, for every shape --
+            # no shape-based exemption here (fix round 1 finding): the room-heard
+            # branch answers correctly on its own now, given the writer's own
+            # `location` as a fallback for when there is no `Scene` to anchor it.
             #
-            # Skipped for the plain room-heard shape (no place, no explicit
-            # receivers, not a whisper): `persona_can_receive`'s room-heard branch
-            # refuses outright when `scene` is None (deliberately -- it has no
-            # room to test presence against, see its `test_no_scene_is_not_
-            # reachable`), but every target reaching this function was already
-            # resolved via `resolve_characters_by_name(target_names, character.
-            # location)` upstream, which only ever returns characters AT THE
-            # WRITER'S OWN LOCATION -- so a room-heard target is guaranteed
-            # co-located regardless of whether a Scene row exists. Running the
-            # predicate on this shape would refuse routine scene-less room
-            # tagging (an existing, tested REST path), not close the defect --
-            # the defect is specifically about Place/receiver-scoped shapes,
-            # where `persona_can_receive` needs no scene to answer.
-            check_applies = (
-                place is not None
-                or effective_receivers is not None
-                or mode == InteractionMode.WHISPER
-            )
-            if check_applies:
-                unreachable = [
-                    target
-                    for target in target_personas
-                    if not persona_can_receive(
-                        target,
-                        scene=scene,
-                        place=place,
-                        receivers=effective_receivers,
-                        mode=mode,
-                        visibility=visibility,
-                    )
-                ]
-                if unreachable:
-                    raise UnreachableError(
-                        unreachable,
-                        _TARGET_UNREACHABLE_HINT,
-                        message=_describe_unreachable_targets(unreachable),
-                    )
+            # Batch the Place-presence lookup once for every target instead of
+            # letting `persona_can_receive` issue one `PlacePresence` query per
+            # call (fix round 1 finding 2, "no queries in loop").
+            place_presence_ids = None
+            if place is not None:
+                place_presence_ids = frozenset(
+                    PlacePresence.objects.filter(
+                        place_id=place.pk,
+                        persona_id__in=[p.pk for p in target_personas],
+                    ).values_list("persona_id", flat=True)
+                )
+            writer_location = persona.character_sheet.character.location
+            unreachable = [
+                target
+                for target in target_personas
+                if not persona_can_receive(
+                    target,
+                    scene=scene,
+                    place=place,
+                    receivers=effective_receivers,
+                    mode=mode,
+                    visibility=visibility,
+                    location=writer_location,
+                    place_presence_persona_ids=place_presence_ids,
+                )
+            ]
+            if unreachable:
+                raise UnreachableError(
+                    unreachable,
+                    _TARGET_UNREACHABLE_HINT,
+                    message=_describe_unreachable_targets(unreachable),
+                )
             InteractionTargetPersona.objects.bulk_create(
                 [
                     InteractionTargetPersona(

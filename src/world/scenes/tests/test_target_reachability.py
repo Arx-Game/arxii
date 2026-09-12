@@ -19,7 +19,9 @@ from __future__ import annotations
 from unittest.mock import patch
 import uuid
 
+from django.db import connection
 from django.test import TestCase
+from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
@@ -34,7 +36,7 @@ from evennia_extensions.factories import (
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
-from world.scenes.constants import InteractionMode
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
 from world.scenes.interaction_services import create_interaction
 from world.scenes.models import Interaction, InteractionTargetPersona
@@ -48,6 +50,13 @@ def _persona_at_place(place) -> object:
     persona = PersonaFactory()
     PlacePresenceFactory(place=place, persona=persona)
     return persona
+
+
+def _persona_in_room(room) -> object:
+    """Build a Persona whose character is physically located in ``room`` (no Place)."""
+    character = CharacterFactory(location=room)
+    sheet = CharacterSheetFactory(character=character)
+    return sheet.primary_persona
 
 
 class TestCreateInteractionRefusesUnreachableTargets(TestCase):
@@ -129,6 +138,39 @@ class TestCreateInteractionRefusesUnreachableTargets(TestCase):
             interaction=interaction, persona=target
         ).exists()
 
+    def test_place_presence_lookup_is_batched_not_per_target(self) -> None:
+        """Fix round 1 finding 2: one query for N targets, not N queries.
+
+        Before the fix, ``persona_can_receive``'s place branch issued its own
+        ``PlacePresence`` query per call, so validating 3 tagged targets meant 3
+        queries. ``create_interaction`` now prefetches the whole set once.
+        """
+        place_a, _place_b = self._two_places_in_one_room()
+        writer = _persona_at_place(place_a)
+        targets = [_persona_at_place(place_a) for _ in range(3)]
+
+        with CaptureQueriesContext(connection) as ctx:
+            create_interaction(
+                persona=writer,
+                content="murmurs to the table.",
+                mode=InteractionMode.POSE,
+                place=place_a,
+                target_personas=targets,
+            )
+
+        # Distinct from the pre-existing (single, unrelated) auto-populate-receivers
+        # query at the top of create_interaction, which ALSO touches PlacePresence
+        # (a persona_id = placepresence.persona_id join condition matches too
+        # loose a filter) but selects straight off "arxii_persona" -- match
+        # narrowly on the validation query's own shape, a bare values_list
+        # persona_id SELECT with placepresence itself as the FROM table.
+        reachability_queries = [
+            q
+            for q in ctx.captured_queries
+            if 'from "arxii_placepresence" where' in q["sql"].lower()
+        ]
+        assert len(reachability_queries) == 1, ctx.captured_queries
+
     def test_tagging_persona_outside_explicit_receivers_is_refused(self) -> None:
         """Directed-without-place shape: explicit receivers narrow the audience too."""
         writer = PersonaFactory()
@@ -166,24 +208,26 @@ class TestCreateInteractionRefusesUnreachableTargets(TestCase):
         ).exists()
 
     def test_tagging_persona_in_open_room_without_scene_still_succeeds(self) -> None:
-        """Regression guard for the adaptation this task made to the call site.
+        """Regression guard: the room-heard shape must not need a Scene.
 
-        The plain room-heard shape (no place, no explicit receivers, not a
-        whisper) is deliberately EXEMPTED from the ``persona_can_receive`` check
-        here: that predicate's room-heard branch refuses outright whenever
-        ``scene`` is None (it has no room to test presence against -- a
-        documented, ratified Task 3 decision, not a bug). But every target
-        reaching this function was already resolved via
-        ``resolve_characters_by_name(target_names, character.location)``
-        upstream, which only ever returns characters at the WRITER'S OWN
-        location -- so a room-heard target is guaranteed co-located regardless
-        of whether a Scene row exists. Applying the predicate here anyway would
-        refuse ordinary scene-less room tagging (an existing, tested REST path
-        -- see ``test_submit_pose_with_target_names_creates_target_rows``),
-        which is not the defect this task closes.
+        Fix round 1 finding 1: this task originally exempted the plain
+        room-heard shape (no place, no explicit receivers, not a whisper) from
+        the ``persona_can_receive`` check entirely, because that predicate's
+        room-heard branch refused outright whenever ``scene`` was None. That
+        exemption lived in the shared ``create_interaction`` (~15 callers),
+        while the invariant that made it safe (target resolution already
+        bound to the writer's own location) belonged to exactly one of them --
+        any other caller passing a room-heard shape with escalated visibility
+        would have bypassed the guard silently. The real fix is in
+        ``persona_can_receive`` itself: it now takes ``location`` as a fallback
+        room to test presence against when there is no ``Scene``. This test
+        proves the SAME scene-less tagging case still succeeds -- now because
+        the predicate answers it correctly, not because the caller skipped
+        asking.
         """
-        writer = PersonaFactory()
-        target = PersonaFactory()
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        writer = _persona_in_room(room)
+        target = _persona_in_room(room)
 
         interaction = create_interaction(
             persona=writer,
@@ -197,6 +241,62 @@ class TestCreateInteractionRefusesUnreachableTargets(TestCase):
         assert InteractionTargetPersona.objects.filter(
             interaction=interaction, persona=target
         ).exists()
+
+    def test_tagging_persona_elsewhere_without_scene_is_refused(self) -> None:
+        """Breaks the invariant the old exemption could never have caught.
+
+        With no ``Scene`` and a target genuinely NOT in the writer's room, the
+        old shape-only exemption skipped the check entirely and this would have
+        been (wrongly) accepted. The adapted predicate refuses it correctly.
+        """
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        other_room = ObjectDBFactory(db_key="Cellar", db_typeclass_path="typeclasses.rooms.Room")
+        writer = _persona_in_room(room)
+        target = _persona_in_room(other_room)
+
+        interaction_count = Interaction.objects.count()
+
+        with self.assertRaises(UnreachableError) as error:
+            create_interaction(
+                persona=writer,
+                content="waves.",
+                mode=InteractionMode.POSE,
+                scene=None,
+                place=None,
+                target_personas=[target],
+            )
+
+        assert error.exception.personas == [target]
+        assert Interaction.objects.count() == interaction_count
+
+    def test_room_heard_target_with_escalated_visibility_is_refused(self) -> None:
+        """The exact case fix round 1 finding 1 named: visibility must still gate
+
+        the room-heard branch even with the new no-scene location fallback. If the
+        ``visibility != DEFAULT`` check were ever removed or short-circuited by the
+        location fallback, this would wrongly succeed -- the target IS standing in
+        the room, but a PERCEIVED_ONLY/VERY_PRIVATE room-heard row still isn't
+        reachable to anyone (see ``persona_can_receive``'s module docstring).
+        """
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        writer = _persona_in_room(room)
+        target = _persona_in_room(room)
+
+        interaction_count = Interaction.objects.count()
+
+        with self.assertRaises(UnreachableError) as error:
+            create_interaction(
+                persona=writer,
+                content="declares to the room.",
+                mode=InteractionMode.POSE,
+                scene=None,
+                place=None,
+                target_personas=[target],
+                visibility=InteractionVisibility.VERY_PRIVATE,
+            )
+
+        assert error.exception.personas == [target]
+        assert Interaction.objects.count() == interaction_count
 
 
 class TestPoseActionRefusesUnreachableTargets(TestCase):
