@@ -291,7 +291,6 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     is_available = serializers.SerializerMethodField()
-    trust_evaluation = serializers.SerializerMethodField()
     # Provenance / quality signal (#1506): staff-vetted vs a player-GM's table character.
     creation_provenance_display = serializers.CharField(
         source="get_creation_provenance_display", read_only=True
@@ -309,7 +308,6 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
             "roster_name",
             "roster_description",
             "is_available",
-            "trust_evaluation",
             "joined_roster",
             "creation_provenance",
             "creation_provenance_display",
@@ -319,24 +317,6 @@ class RosterEntryListSerializer(serializers.ModelSerializer):
     def get_is_available(self, obj):
         """Check if character is available for application."""
         return obj.accepts_applications
-
-    def get_trust_evaluation(self, _obj):
-        """Get trust evaluation for this player/character combination."""
-        request = self.context.get("request")
-        if not request:
-            return
-        try:
-            player_data = request.user.player_data
-        except AttributeError:
-            return
-        if not player_data:
-            return
-
-        # TODO: Implement trust evaluation when trust system is ready
-        # return TrustEvaluator.evaluate_player_for_character(
-        #     request.user.player_data, obj.character
-        # )
-        return
 
 
 class RosterListSerializer(serializers.ModelSerializer):
@@ -371,9 +351,6 @@ class RosterListSerializer(serializers.ModelSerializer):
         if not player_data:
             return 0
 
-        # TODO: Filter based on player trust when trust system is implemented
-        # For now, return count of all characters in active roster
-        # This is a placeholder until trust system is implemented
         if not obj.is_active or not obj.allow_applications:
             return 0
         return obj.entries.exclude(tenures__end_date__isnull=True).count()

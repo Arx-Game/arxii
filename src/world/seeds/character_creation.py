@@ -1208,7 +1208,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "is_active": True,
             "sort_order": 0,
             "access_level": StartingArea.AccessLevel.ALL,
-            "minimum_trust": 0,
         },
     )
     area_luxen, _ = StartingArea.objects.get_or_create(
@@ -1219,7 +1218,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
             "is_active": True,
             "sort_order": 1,
             "access_level": StartingArea.AccessLevel.ALL,
-            "minimum_trust": 0,
         },
     )
     # #2121 — every seeded StartingArea must resolve to a real room (never a
@@ -1235,7 +1233,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
         defaults={
             "description": "A common beginning.",
             "starting_area": area,
-            "trust_required": 0,
             "is_active": True,
             "sort_order": 0,
         },
@@ -1245,7 +1242,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
         defaults={
             "description": "A noble upbringing with known family and standing.",
             "starting_area": area,
-            "trust_required": 0,
             "is_active": True,
             "sort_order": 1,
         },
@@ -1255,7 +1251,6 @@ def _seed_sample_cg_world(species: Species, species_khati: Species) -> None:
         defaults={
             "description": "A common beginning in the sunlit port of Luxen.",
             "starting_area": area_luxen,
-            "trust_required": 0,
             "is_active": True,
             "sort_order": 2,
         },

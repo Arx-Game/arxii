@@ -31,7 +31,6 @@ class UpbringingForm(forms.ModelForm):
             "name",
             "frame_narrative",
             "cg_point_cost",
-            "trust_required",
             "allows_claim_family",
             "allows_name_family",
             "allows_no_family",
@@ -138,7 +137,6 @@ class AnswerForm(forms.ModelForm):
             "cg_point_cost",
             "cost_per_influence",
             "reputation_seed",
-            "trust_required",
             "is_active",
             "sort_order",
         ]
@@ -148,7 +146,6 @@ class AnswerForm(forms.ModelForm):
             "cg_point_cost": "Cost",
             "cost_per_influence": "Per point of influence",
             "reputation_seed": "Group's opinion",
-            "trust_required": "Trust",
         }
 
 
@@ -161,7 +158,7 @@ class AnswerForm(forms.ModelForm):
 #: every editable field of their form.
 UPBRINGING_FIELDSETS = (
     (None, {"fields": ("beginning", "name", "frame_narrative")}),
-    ("Cost", {"fields": (("cg_point_cost", "trust_required"),)}),
+    ("Cost", {"fields": ("cg_point_cost",)}),
     (
         "Family paths",
         {

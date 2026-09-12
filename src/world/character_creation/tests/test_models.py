@@ -385,34 +385,6 @@ class CharacterDraftStatsValidationTests(TestCase):
             assert final[name] == STAT_DEFAULT_VALUE
 
 
-class StartingAreaTrustRequiredAccessTests(TestCase):
-    """TRUST_REQUIRED areas must fail closed, not raise (#3046).
-
-    The trust system isn't implemented yet, so a non-staff account has no
-    ``.trust`` attribute. Before #3046 this raised ``NotImplementedError``
-    from ``is_accessible_by`` (a latent 500 the moment any area was flipped to
-    TRUST_REQUIRED); it must now simply be inaccessible.
-    """
-
-    def test_trust_required_area_denies_non_staff_without_raising(self):
-        """A non-staff account without .trust is denied, not a 500."""
-        area = StartingAreaFactory(
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
-        )
-        account = AccountFactory()
-        assert area.is_accessible_by(account) is False
-
-    def test_trust_required_area_allows_staff(self):
-        """Staff bypass the trust gate entirely, matching existing staff behavior."""
-        area = StartingAreaFactory(
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
-        )
-        account = AccountFactory(is_staff=True)
-        assert area.is_accessible_by(account) is True
-
-
 class BeginningsModelTests(TestCase):
     """Test Beginnings model."""
 
@@ -430,7 +402,6 @@ class BeginningsModelTests(TestCase):
         )
         assert beginnings.name == "Normal Upbringing"
         assert beginnings.starting_area == self.area
-        assert beginnings.trust_required == 0
         assert beginnings.is_active is True
         assert beginnings.grants_species_languages is True
         assert beginnings.social_rank == 0
@@ -449,45 +420,6 @@ class BeginningsModelTests(TestCase):
             grants_species_languages=False,
         )
         assert beginnings.grants_species_languages is False
-
-    def test_is_accessible_by_inactive_returns_false(self):
-        """Inactive beginnings are not accessible to anyone."""
-        beginnings = BeginningsFactory(starting_area=self.area, is_active=False)
-        account = AccountFactory()
-        assert beginnings.is_accessible_by(account) is False
-
-    def test_is_accessible_by_staff_always_true(self):
-        """Staff can access all active beginnings."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
-        account = AccountFactory(is_staff=True)
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_no_trust_required(self):
-        """Anyone can access beginnings with trust_required=0."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=0)
-        account = AccountFactory()
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_trust_required_no_trust_attr(self):
-        """Account without trust attribute cannot access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
-        account = AccountFactory()
-        # Account has no .trust attribute, so should be denied
-        assert beginnings.is_accessible_by(account) is False
-
-    def test_is_accessible_by_sufficient_trust(self):
-        """Account with sufficient trust can access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
-        account = AccountFactory()
-        account.trust = 10  # Mock trust attribute
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_insufficient_trust(self):
-        """Account with insufficient trust cannot access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
-        account = AccountFactory()
-        account.trust = 5  # Mock trust attribute (below required)
-        assert beginnings.is_accessible_by(account) is False
 
     def test_str_representation(self):
         """Test __str__ returns name and area."""

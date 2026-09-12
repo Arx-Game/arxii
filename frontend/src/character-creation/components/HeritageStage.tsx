@@ -248,28 +248,24 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       <EntryList label="Beginnings">
         {beginnings?.map((b) => {
           const isChosen = draft.selected_beginnings?.id === b.id;
-          const closed = !b.is_accessible;
           return (
             <Entry
               key={b.id}
               name={b.name}
-              tag={closed ? 'Not available to your account' : costTag(b.cg_point_cost)}
+              tag={costTag(b.cg_point_cost)}
               chosen={isChosen}
-              closed={closed}
               open={isChosen}
             >
               {/* Decorative: the entry name beside it is the text. */}
               {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
               <Paragraphs text={b.description} />
               <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
-              {!closed && (
-                <EntryDoors
-                  chooseLabel={`Choose ${b.name}`}
-                  onChoose={() => chooseBeginning(b)}
-                  chosen={isChosen}
-                  onSetAside={clearBeginning}
-                />
-              )}
+              <EntryDoors
+                chooseLabel={`Choose ${b.name}`}
+                onChoose={() => chooseBeginning(b)}
+                chosen={isChosen}
+                onSetAside={clearBeginning}
+              />
             </Entry>
           );
         })}

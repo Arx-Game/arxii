@@ -21,7 +21,6 @@ from world.stories.views import (
     GroupStoryRequestViewSet,
     MyActiveStoriesView,
     PlayerPendingTreasuredSignoffsView,
-    PlayerTrustViewSet,
     RiskCalibrationViewSet,
     SessionRequestViewSet,
     StaffWorkloadView,
@@ -51,7 +50,6 @@ router.register(r"chapters", ChapterViewSet)
 router.register(r"episodes", EpisodeViewSet)
 router.register(r"episode-scenes", EpisodeSceneViewSet)
 router.register(r"story-participations", StoryParticipationViewSet)
-router.register(r"player-trust", PlayerTrustViewSet)
 router.register(r"story-feedback", StoryFeedbackViewSet)
 # Phase 2 ViewSets
 router.register(r"group-story-progress", GroupStoryProgressViewSet)

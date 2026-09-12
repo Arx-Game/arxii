@@ -51,7 +51,6 @@ const mockStory: Story = {
   primary_table: 7,
   active_gms: [],
   owners: [],
-  trust_requirements: '',
   chapters_count: 0,
   completed_at: null,
   created_at: '2026-01-01T00:00:00Z',

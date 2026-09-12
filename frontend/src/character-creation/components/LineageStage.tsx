@@ -2,7 +2,7 @@
  * Stage 3: Lineage - Upbringing + Family Selection (#3617)
  *
  * Rebuilt around Upbringings (`OriginTemplate`): a per-beginning catalog row
- * with its own CG cost, trust gate, typed prompts, and choice of family paths
+ * with its own CG cost, typed prompts, and choice of family paths
  * (claim a staff-authored family, name a new one, or none - the tarot naming
  * ritual). See docs/systems/character_creation.md's Lineage step section.
  */

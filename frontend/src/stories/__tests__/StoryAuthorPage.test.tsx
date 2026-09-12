@@ -117,7 +117,6 @@ const storyDetail: Story = {
   privacy: 'public',
   owners: ['player1'],
   active_gms: [],
-  trust_requirements: '',
   character_sheet: 1,
   tenure_id: null,
   chapters_count: 0,

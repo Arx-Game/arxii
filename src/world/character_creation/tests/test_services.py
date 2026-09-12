@@ -2417,24 +2417,22 @@ class CanCreateCharacterMaxCharactersTests(TestCase):
         assert settings.CG_MAX_CHARACTERS == 3
 
 
-class GetAccessibleStartingAreasTrustRequiredTests(TestCase):
-    """get_accessible_starting_areas must not 500 on a TRUST_REQUIRED area (#3046).
+class GetAccessibleStartingAreasStaffOnlyTests(TestCase):
+    """STAFF_ONLY areas are listed to staff and to nobody else (#3726).
 
-    Before the fix, StartingArea.is_accessible_by raised NotImplementedError for
-    any non-staff account on a TRUST_REQUIRED area, and this function did not
-    catch it - one admin flipping an area's access level broke the origin stage
-    for everyone.
+    ``access_level`` is the whole gate now that TRUST_REQUIRED is gone, and it
+    is applied as a queryset filter rather than a per-row predicate, so the
+    same filtered queryset backs both the list read and draft validation.
     """
 
-    def test_trust_required_area_excluded_for_normal_account(self):
+    def test_staff_only_area_excluded_for_normal_account(self):
         from evennia_extensions.factories import AccountFactory
         from world.character_creation.factories import StartingAreaFactory
 
         open_area = StartingAreaFactory(name="Open Area", access_level=StartingArea.AccessLevel.ALL)
         gated_area = StartingAreaFactory(
             name="Gated Area",
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
+            access_level=StartingArea.AccessLevel.STAFF_ONLY,
         )
         account = AccountFactory()
 
@@ -2443,17 +2441,25 @@ class GetAccessibleStartingAreasTrustRequiredTests(TestCase):
         assert open_area in areas
         assert gated_area not in areas
 
-    def test_trust_required_area_included_for_staff(self):
+    def test_staff_only_area_included_for_staff(self):
         from evennia_extensions.factories import AccountFactory
         from world.character_creation.factories import StartingAreaFactory
 
         gated_area = StartingAreaFactory(
             name="Gated Area Staff",
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
+            access_level=StartingArea.AccessLevel.STAFF_ONLY,
         )
         account = AccountFactory(is_staff=True)
 
         areas = get_accessible_starting_areas(account)
 
         assert gated_area in areas
+
+    def test_inactive_area_excluded_for_staff(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import StartingAreaFactory
+
+        inactive = StartingAreaFactory(name="Retired Area", is_active=False)
+        account = AccountFactory(is_staff=True)
+
+        assert inactive not in get_accessible_starting_areas(account)

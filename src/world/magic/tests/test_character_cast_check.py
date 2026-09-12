@@ -152,7 +152,6 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
             name="ProvisionCheck Beginnings",
             description="Test",
             starting_area=area,
-            trust_required=0,
             is_active=True,
         )
         beginnings.allowed_species.add(species)
@@ -299,7 +298,6 @@ class GetCharacterCastCheckTests(TestCase):
             name="CastCheck Beginnings",
             description="Test",
             starting_area=area,
-            trust_required=0,
             is_active=True,
         )
         beginnings.allowed_species.add(species)

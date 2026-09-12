@@ -2422,7 +2422,6 @@ export interface paths {
      * @description ViewSet for listing Beginnings options.
      *
      *     Filter by starting_area to get options available for a specific starting area.
-     *     Results are filtered by user trust level.
      */
     get: operations['character_creation_beginnings_list'];
     put?: never;
@@ -2444,7 +2443,6 @@ export interface paths {
      * @description ViewSet for listing Beginnings options.
      *
      *     Filter by starting_area to get options available for a specific starting area.
-     *     Results are filtered by user trust level.
      */
     get: operations['character_creation_beginnings_retrieve'];
     put?: never;
@@ -3254,8 +3252,6 @@ export interface paths {
      * @description List active origin-story templates for the CG guided flow (#2478, #3617).
      *
      *     Filter by ``beginning`` to get templates available for a specific beginning.
-     *     Trust-gated: staff see every active row, everyone else only rows whose
-     *     ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
      */
     get: operations['character_creation_origin_templates_retrieve'];
     put?: never;
@@ -17594,79 +17590,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  '/api/player-trust/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    get: operations['player_trust_list'];
-    put?: never;
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    post: operations['player_trust_create'];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  '/api/player-trust/{id}/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    get: operations['player_trust_retrieve'];
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    put: operations['player_trust_update'];
-    post?: never;
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    delete: operations['player_trust_destroy'];
-    options?: never;
-    head?: never;
-    /**
-     * @description ViewSet for PlayerTrust model.
-     *     Manages player trust levels for content and GM activities.
-     */
-    patch: operations['player_trust_partial_update'];
-    trace?: never;
-  };
-  '/api/player-trust/my_trust/': {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** @description Get the current user's trust profile */
-    get: operations['player_trust_my_trust_retrieve'];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   '/api/precapture-consent-requests/': {
     parameters: {
       query?: never;
@@ -19234,7 +19157,7 @@ export interface paths {
     /**
      * @description Viewset for game invites.
      *
-     *     - Create: auth + trust-gated (service validates trust)
+     *     - Create: auth; the service refuses while registration is closed
      *     - List: auth, returns only the inviter's own invites
      *     - Resolve: AllowAny, returns display-safe context for registration page
      *     - Claim: auth, links invite to the authenticated account
@@ -19260,7 +19183,7 @@ export interface paths {
     /**
      * @description Viewset for game invites.
      *
-     *     - Create: auth + trust-gated (service validates trust)
+     *     - Create: auth; the service refuses while registration is closed
      *     - List: auth, returns only the inviter's own invites
      *     - Resolve: AllowAny, returns display-safe context for registration page
      *     - Claim: auth, links invite to the authenticated account
@@ -25328,8 +25251,6 @@ export interface components {
       grants_species_languages?: boolean;
       /** @description CG point cost for this beginning; summed with species gift grant costs into the character-creation points budget. */
       cg_point_cost?: number;
-      /** @description Check if the requesting user can access this option. */
-      readonly is_accessible: boolean;
       /** @description Get codex entry IDs granted by this beginnings choice. */
       readonly codex_entry_ids: number[];
       readonly heritage: components['schemas']['HeritageAnchor'] | null;
@@ -25815,8 +25736,6 @@ export interface components {
       readonly sort_order: number;
       /** @description Flat CG cost of this Upbringing (#3617). Negative refunds, like a drawback. */
       readonly cg_point_cost: number;
-      /** @description Minimum trust to see/select this Upbringing (#3617). */
-      readonly trust_required: number;
       /** @description Player may claim a staff-authored family (#3617). */
       readonly allows_claim_family: boolean;
       /** @description Player may name a new family with no authority (#3617). */
@@ -35120,8 +35039,6 @@ export interface components {
       readonly cg_point_cost: number;
       /** @description CG cost per point of the claimed family's influence. */
       readonly cost_per_influence: number;
-      /** @description Minimum trust to see this answer; staff always see it (#3660). */
-      readonly trust_required: number;
       readonly offers: components['schemas']['OriginChoiceOffer'][];
       readonly sort_order: number;
     };
@@ -37232,21 +37149,6 @@ export interface components {
        */
       previous?: string | null;
       results: components['schemas']['PlayerReportDetail'][];
-    };
-    PaginatedPlayerTrustList: {
-      /** @example 123 */
-      count: number;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=4
-       */
-      next?: string | null;
-      /**
-       * Format: uri
-       * @example http://api.example.org/accounts/?page=2
-       */
-      previous?: string | null;
-      results: components['schemas']['PlayerTrust'][];
     };
     PaginatedPortalDestinationList: {
       /** @example 123 */
@@ -41157,19 +41059,6 @@ export interface components {
       location?: number | null;
       status?: components['schemas']['StatusD66Enum'];
     };
-    /** @description Serializer for player trust profiles */
-    PlayerTrust: {
-      readonly id: number;
-      readonly account: string;
-      /** @description Aggregate positive feedback count from all trust levels */
-      readonly total_positive_feedback: number;
-      /** @description Aggregate negative feedback count from all trust levels */
-      readonly total_negative_feedback: number;
-      /** Format: date-time */
-      readonly created_at: string;
-      /** Format: date-time */
-      readonly updated_at: string;
-    };
     /** @description Per-category polish a decoration template grants on completion. */
     PolishIncrement: {
       category: string;
@@ -44360,7 +44249,12 @@ export interface components {
      * @enum {string}
      */
     StandingEnum: 'core' | 'minor';
-    /** @description Serializer for starting areas with accessibility check. */
+    /**
+     * @description Serializer for starting areas.
+     *
+     *     No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+     *     and it never lists an area the reader may not pick (#3726).
+     */
     StartingArea: {
       readonly id: number;
       /** @description Display name of the starting area (e.g., 'Arx') */
@@ -44369,14 +44263,17 @@ export interface components {
       description: string;
       /** @description Cloudinary URL sourced from crest_art (#2408); key name kept for frontend compat. */
       readonly crest_image: string | null;
-      /** @description Check if the requesting user can access this area. */
-      readonly is_accessible: boolean;
       /** @default default */
       readonly realm_theme: string;
       readonly realm_slug: string | null;
       readonly realm_name: string | null;
     };
-    /** @description Serializer for starting areas with accessibility check. */
+    /**
+     * @description Serializer for starting areas.
+     *
+     *     No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+     *     and it never lists an area the reader may not pick (#3726).
+     */
     StartingAreaRequest: {
       /** @description Display name of the starting area (e.g., 'Arx') */
       name: string;
@@ -44563,7 +44460,6 @@ export interface components {
       impact_tier?: components['schemas']['ImpactTierEnum'];
       readonly owners: string[];
       readonly active_gms: components['schemas']['GMProfile'][];
-      readonly trust_requirements: string;
       /** @description The character this sheet belongs to */
       readonly character_sheet: number;
       /**
@@ -71653,161 +71549,6 @@ export interface operations {
       };
     };
   };
-  player_trust_list: {
-    parameters: {
-      query?: {
-        /** @description Account Username */
-        account?: string;
-        has_negative_feedback?: boolean;
-        has_positive_feedback?: boolean;
-        /** @description Which field to use when ordering the results. */
-        ordering?: string;
-        /** @description A page number within the paginated result set. */
-        page?: number;
-        /** @description Number of results to return per page. */
-        page_size?: number;
-      };
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PaginatedPlayerTrustList'];
-        };
-      };
-    };
-  };
-  player_trust_create: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      201: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PlayerTrust'];
-        };
-      };
-    };
-  };
-  player_trust_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this player trust. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PlayerTrust'];
-        };
-      };
-    };
-  };
-  player_trust_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this player trust. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PlayerTrust'];
-        };
-      };
-    };
-  };
-  player_trust_destroy: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this player trust. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description No response body */
-      204: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content?: never;
-      };
-    };
-  };
-  player_trust_partial_update: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        /** @description A unique integer value identifying this player trust. */
-        id: number;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PlayerTrust'];
-        };
-      };
-    };
-  };
-  player_trust_my_trust_retrieve: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          'application/json': components['schemas']['PlayerTrust'];
-        };
-      };
-    };
-  };
   precapture_consent_requests_list: {
     parameters: {
       query?: never;
@@ -77487,8 +77228,6 @@ export interface operations {
         page_size?: number;
         primary_table?: number;
         privacy?: string;
-        /** @description Requires Trust Category */
-        requires_trust_category?: string;
         /**
          * @description Whether this story belongs to one character (CHARACTER), a covenant/group (GROUP), or the whole metaplot (GLOBAL).
          *

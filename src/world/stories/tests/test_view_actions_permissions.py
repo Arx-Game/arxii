@@ -10,7 +10,6 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
-    PlayerTrustFactory,
     StoryFactory,
     StoryFeedbackFactory,
     StoryParticipationFactory,
@@ -439,64 +438,6 @@ class StoryParticipationViewPermissionsTestCase(APITestCase):
         self.client.force_authenticate(user=self.other_account)
         url = reverse("storyparticipation-detail", kwargs={"pk": self.participation.pk})
         data = {"participation_level": ParticipationLevel.CRITICAL}
-        response = self.client.patch(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-
-class PlayerTrustViewPermissionsTestCase(APITestCase):
-    """Test player trust view permissions"""
-
-    @classmethod
-    def setUpTestData(cls):
-        cls.account = AccountFactory()
-        cls.other_account = AccountFactory()
-        cls.staff_account = AccountFactory(is_staff=True)
-
-        cls.trust_profile = PlayerTrustFactory(account=cls.account)
-
-    def test_my_trust_action(self):
-        """Test getting own trust profile"""
-        self.client.force_authenticate(user=self.account)
-        url = reverse("playertrust-my-trust")
-        response = self.client.get(url)
-
-        assert response.status_code == status.HTTP_200_OK
-        assert response.data["id"] == self.trust_profile.id
-
-    def test_my_trust_action_not_found(self):
-        """Test my_trust returns 404 when no trust profile exists"""
-        self.client.force_authenticate(user=self.other_account)
-        url = reverse("playertrust-my-trust")
-        response = self.client.get(url)
-
-        assert response.status_code == status.HTTP_404_NOT_FOUND
-        assert "Trust profile not found" in response.data["error"]
-
-    @suppress_permission_errors
-    def test_trust_update_owner_denied(self):
-        """Test user cannot update their own trust profile (permissions restrictive)"""
-        self.client.force_authenticate(user=self.account)
-        url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
-        data = {}
-        response = self.client.patch(
-            url,
-            json.dumps(data),
-            content_type="application/json",
-        )
-
-        assert response.status_code == status.HTTP_403_FORBIDDEN
-
-    @suppress_permission_errors
-    def test_trust_update_other_denied(self):
-        """Test other users cannot update trust profiles"""
-        self.client.force_authenticate(user=self.other_account)
-        url = reverse("playertrust-detail", kwargs={"pk": self.trust_profile.pk})
-        data = {}
         response = self.client.patch(
             url,
             json.dumps(data),

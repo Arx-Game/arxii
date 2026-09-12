@@ -95,8 +95,8 @@ kinship graph). Root terms live in `AGENT_GLOSSARY_MAP.md`.
   Stature, #3091, is a live computed org-level deterrence score; influence
   is a staff-set, CG-pricing-only number on the family itself).
 - **Upbringing** (#3617): `OriginTemplate`, the authored card a player picks
-  in the Lineage stage within a Beginning: a CG point cost, a trust gate,
-  and which Family Paths it allows. The code keeps the `OriginTemplate*`
+  in the Lineage stage within a Beginning: a CG point cost and which Family
+  Paths it allows. The code keeps the `OriginTemplate*`
   class names (Decision 4 on #3617); "Upbringing" is the player- and
   staff-facing word. _Avoid:_ origin option, household.
 - **Family Path** (#3617, #3648): `FamilyPath`, the shape an Upbringing gives a

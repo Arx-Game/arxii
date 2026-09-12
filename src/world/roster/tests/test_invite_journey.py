@@ -19,9 +19,6 @@ from world.roster.services.invite_services import (
     create_game_invite,
     resolve_invite,
 )
-from world.stories.factories import PlayerTrustFactory, TrustCategoryFactory
-from world.stories.models import PlayerTrustLevel
-from world.stories.types import TrustLevel
 
 
 class InvitedPlayerFullJourneyTests(TestCase):
@@ -36,13 +33,6 @@ class InvitedPlayerFullJourneyTests(TestCase):
 
         # 1. Inviter creates invite
         inviter_pd = PlayerDataFactory()
-        invite_category = TrustCategoryFactory(name="INVITE")
-        trust = PlayerTrustFactory(account=inviter_pd.account)
-        PlayerTrustLevel.objects.create(
-            player_trust=trust,
-            trust_category=invite_category,
-            trust_level=TrustLevel.BASIC,
-        )
         invite = create_game_invite(
             inviter=inviter_pd,
             message="We need a healer for our group!",

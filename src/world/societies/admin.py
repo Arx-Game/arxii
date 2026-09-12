@@ -339,7 +339,6 @@ class VacancyAdmin(admin.ModelAdmin):
                     "cg_point_cost",
                     "cost_per_influence",
                     "count_remaining",
-                    "trust_required",
                     "allowed_upbringings",
                 )
             },

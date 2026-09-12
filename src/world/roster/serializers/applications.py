@@ -305,16 +305,10 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
 
             attrs["eligible"] = True
             attrs["policy_issues"] = policy_issues
-            # TODO: Implement trust evaluation when trust system is ready
-            # attrs["trust_evaluation"] = TrustEvaluator.evaluate_player_for_character(
-            #     player_data, character
-            # )
-            attrs["trust_evaluation"] = None
         except serializers.ValidationError as e:
             attrs["eligible"] = False
             attrs["error"] = e.detail
             attrs["policy_issues"] = []
-            attrs["trust_evaluation"] = None
 
         return attrs
 
@@ -326,9 +320,4 @@ class RosterApplicationEligibilitySerializer(serializers.Serializer):
             "eligible": instance["eligible"],
             "error": instance.get("error"),
             "policy_issues": instance["policy_issues"],
-            "trust_evaluation": instance["trust_evaluation"],
-            "can_auto_approve": instance.get("trust_evaluation", {}).get(
-                "auto_approvable",
-                False,
-            ),
         }

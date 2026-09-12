@@ -61,7 +61,6 @@ class StartingAreaFactory(factory_django.DjangoModelFactory):
     realm = factory.SubFactory(RealmFactory)
     is_active = True
     access_level = StartingArea.AccessLevel.ALL
-    minimum_trust = 0
 
 
 class BeginningsFactory(factory_django.DjangoModelFactory):
@@ -74,7 +73,6 @@ class BeginningsFactory(factory_django.DjangoModelFactory):
     description = factory.LazyAttribute(lambda obj: f"Description of {obj.name}")
     starting_area = factory.SubFactory(StartingAreaFactory)
     is_active = True
-    trust_required = 0
     grants_species_languages = True
     sort_order = 0
     cg_point_cost = 0
