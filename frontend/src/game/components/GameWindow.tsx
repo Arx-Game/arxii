@@ -562,6 +562,14 @@ export function GameWindow({
           onCancelReply={onCancelReply}
           submitOnEnter={false}
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
+          // #3784 — the `room:unknown` placeholder above is not a room, it is
+          // "the room we're standing in, not yet named": during entry the
+          // client has no `room_state` yet. Saying so lets the draft move with
+          // the scope when the id lands, instead of being stranded under the
+          // placeholder while the composer re-hydrates an empty row
+          // (`e2e/game-entry.spec.ts`). A conversation tab names its own
+          // audience, so a tab-anchored scope is never provisional.
+          draftScopeProvisional={conversationTabs?.activeKey == null && roomId == null}
           roomName={roomName}
           ready={playReady}
         />

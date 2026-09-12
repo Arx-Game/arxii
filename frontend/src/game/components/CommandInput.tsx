@@ -136,6 +136,17 @@ interface CommandInputProps {
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
   /**
+   * True while `draftScope` still carries a placeholder for something the
+   * caller cannot name yet — `GameWindow`'s room-anchor scope during
+   * "Entering world", before the first `room_state` broadcast identifies the
+   * room (#3784). The next `draftScope` change then carries this draft with
+   * it instead of stranding it under the placeholder; see
+   * `DraftStoreOptions.provisional`. Defaults to `false`: a caller whose
+   * scope is settled from the first render (a conversation tab, a scene
+   * composer) needs nothing here.
+   */
+  draftScopeProvisional?: boolean;
+  /**
    * Human-readable current place name (#3760 demo-fidelity review), e.g.
    * "the Gilded Hart" — used only for the stranded-draft banner's copy. Never
    * falls back to `draftScope` itself, which is an internal cache key, not
@@ -167,6 +178,7 @@ export function CommandInput({
   speakingAs,
   submitOnEnter = true,
   draftScope,
+  draftScopeProvisional,
   roomName,
   replyTarget,
   onCancelReply,
@@ -237,7 +249,7 @@ export function CommandInput({
     markUnknown,
     discard,
     storageUnavailable,
-  } = useDraftStore(draftKey);
+  } = useDraftStore(draftKey, { provisional: draftScopeProvisional });
   // The most recently dispatched say/whisper/tt send awaiting its
   // ACTION_RESULT. `ActionResultPayload.client_request_id` (#3781) echoes
   // back the id this component minted for the dispatch, so

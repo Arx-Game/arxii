@@ -137,6 +137,19 @@ function listReconcilableDraftEntries(): StoredDraftEntry[] {
   return entries;
 }
 
+function removeAtStorageKey(storageKey: string): void {
+  try {
+    sessionStorage.removeItem(storageKey);
+  } catch {
+    // Storage unavailable — there is nothing stored to clean up either.
+  }
+}
+
+/** Nothing composed and nothing in flight: safe to replace wholesale. */
+function isBlankDraft(draft: Draft): boolean {
+  return draft.content === '' && draft.status === 'clean' && draft.clientRequestId === null;
+}
+
 function persistAtStorageKey(storageKey: string, draft: Draft): boolean {
   try {
     sessionStorage.setItem(storageKey, JSON.stringify(draft));
@@ -195,7 +208,30 @@ export async function reconcileStoredDrafts(
   );
 }
 
-export function useDraftStore(key: DraftKey) {
+export interface DraftStoreOptions {
+  /**
+   * True while `key` is PROVISIONAL: this is a real conversation the caller
+   * cannot fully name yet (#3784). `GameWindow`'s room-anchor composer is
+   * the case — during "Entering world" the player is standing in a room the
+   * client has not been told the id of, so the scope carries a
+   * `room:unknown` placeholder until the first `room_state` broadcast.
+   *
+   * A key change AWAY from a provisional key is the same conversation
+   * finally getting its name, so the draft moves with it instead of being
+   * left stranded under the placeholder while the composer re-hydrates an
+   * empty row. A key change away from a SETTLED key is an ordinary
+   * conversation switch (walking through an exit, opening a tab) and
+   * hydrates as usual — that separation is the whole point of keying the
+   * draft on the room in the first place (#3760 Task 14).
+   *
+   * Without this, a draft typed during entry vanished the moment presence
+   * arrived (`e2e/game-entry.spec.ts`).
+   */
+  provisional?: boolean;
+}
+
+export function useDraftStore(key: DraftKey, options: DraftStoreOptions = {}) {
+  const { provisional = false } = options;
   const [draft, setDraft] = useState<Draft>(() => readStoredDraft(key));
   // Whether the MOST RECENT write attempt failed (e.g. private-browsing
   // sessionStorage quota) -- reflects the latest `persist()` call, not a
@@ -214,17 +250,37 @@ export function useDraftStore(key: DraftKey) {
   // object identity, so a caller re-creating the key object every render
   // (a plain object literal) doesn't spuriously re-hydrate.
   const currentStorageKeyRef = useRef<string>(draftStorageKey(key));
+  // `provisional` as of the PREVIOUS render — the question this effect asks
+  // is about the key being left behind, not the one being adopted.
+  const wasProvisionalRef = useRef(provisional);
   useEffect(() => {
+    const previousStorageKey = currentStorageKeyRef.current;
+    const leavingProvisionalKey = wasProvisionalRef.current;
+    wasProvisionalRef.current = provisional;
     const nextStorageKey = draftStorageKey(key);
-    if (currentStorageKeyRef.current === nextStorageKey) return;
+    if (previousStorageKey === nextStorageKey) return;
     currentStorageKeyRef.current = nextStorageKey;
-    const nextDraft = readStoredDraft(key);
-    lastSentContentRef.current = initialLastSentContent(nextDraft);
-    setDraft(nextDraft);
-    // A fresh conversation gets a fresh read, not the last conversation's
-    // write-failure verdict.
-    setStorageUnavailable(false);
-  }, [key]);
+    // Read through the updater rather than the render closure so this effect
+    // need not depend on `draft` and re-run on every keystroke.
+    setDraft((previousDraft) => {
+      if (leavingProvisionalKey && !isBlankDraft(previousDraft)) {
+        // The same conversation, now identified: carry the live draft over
+        // and drop the placeholder row, so nothing is left behind to
+        // resurface later as a phantom stranded draft. The carried draft
+        // wins over anything already stored under the new key — it is what
+        // the player is looking at and about to send.
+        setStorageUnavailable(!persist(key, previousDraft));
+        removeAtStorageKey(previousStorageKey);
+        return previousDraft;
+      }
+      const nextDraft = readStoredDraft(key);
+      lastSentContentRef.current = initialLastSentContent(nextDraft);
+      // A fresh conversation gets a fresh read, not the last conversation's
+      // write-failure verdict.
+      setStorageUnavailable(false);
+      return nextDraft;
+    });
+  }, [key, provisional]);
 
   // The patch may be a function of the PREVIOUS draft (#3784) so a caller
   // whose new value depends on the current content -- `CommandInput`'s

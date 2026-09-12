@@ -1,6 +1,7 @@
 import { act, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useDraftStore, draftStorageKey } from './useDraftStore';
+import type { DraftKey } from './useDraftStore';
 
 const key = { accountId: 1, personaId: 7, conversationKey: 'room:42' };
 
@@ -48,6 +49,69 @@ describe('useDraftStore', () => {
     expect(JSON.parse(sessionStorage.getItem(draftStorageKey(key)) as string).content).toBe(
       'Silas nods at @Bob'
     );
+  });
+
+  // #3784 — `provisional` marks a key the caller cannot fully name yet
+  // (`GameWindow`'s `room:unknown` during entry). Leaving one carries the
+  // draft; leaving a settled key does not.
+  describe('provisional keys', () => {
+    const provisionalKey: DraftKey = {
+      accountId: 1,
+      personaId: 7,
+      conversationKey: 'room:unknown',
+    };
+    const settledKey: DraftKey = { accountId: 1, personaId: 7, conversationKey: 'room:42' };
+
+    it('carries the draft into the settling key and drops the placeholder row', () => {
+      const { result, rerender } = renderHook(
+        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
+        { initialProps: { draftKey: provisionalKey, provisional: true } }
+      );
+      act(() => result.current.setContent('A quiet beginning.'));
+
+      rerender({ draftKey: settledKey, provisional: false });
+
+      expect(result.current.draft.content).toBe('A quiet beginning.');
+      expect(
+        JSON.parse(sessionStorage.getItem(draftStorageKey(settledKey)) as string).content
+      ).toBe('A quiet beginning.');
+      // Nothing left behind to resurface later as a phantom stranded draft.
+      expect(sessionStorage.getItem(draftStorageKey(provisionalKey))).toBeNull();
+    });
+
+    it('leaves the settling key alone when nothing was composed under the placeholder', () => {
+      sessionStorage.setItem(
+        draftStorageKey(settledKey),
+        JSON.stringify({ content: 'written here earlier', status: 'clean' })
+      );
+      const { result, rerender } = renderHook(
+        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
+        { initialProps: { draftKey: provisionalKey, provisional: true } }
+      );
+
+      rerender({ draftKey: settledKey, provisional: false });
+
+      expect(result.current.draft.content).toBe('written here earlier');
+    });
+
+    it('does not carry a draft across an ordinary conversation switch', () => {
+      const { result, rerender } = renderHook(
+        ({ draftKey, provisional }) => useDraftStore(draftKey, { provisional }),
+        { initialProps: { draftKey: settledKey, provisional: false } }
+      );
+      act(() => result.current.setContent('meant for room 42'));
+
+      rerender({
+        draftKey: { accountId: 1, personaId: 7, conversationKey: 'room:43' },
+        provisional: false,
+      });
+
+      // Travel keeps each room's draft where it was composed (#3760 Task 14).
+      expect(result.current.draft.content).toBe('');
+      expect(
+        JSON.parse(sessionStorage.getItem(draftStorageKey(settledKey)) as string).content
+      ).toBe('meant for room 42');
+    });
   });
 
   it('mints a new id after the content changes', () => {

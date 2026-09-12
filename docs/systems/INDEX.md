@@ -3408,7 +3408,10 @@ action consent flow, and a three-mode non-combat round framework.
   counter discards belated frames/callbacks from a superseded connection; and the
   room-anchor composer's `draftScope` is keyed on the character's actual physical room
   id (`GamePage`'s `roomData?.id`), not a constant string, so walking through an exit no
-  longer carries unsent text into the wrong room's composer. See
+  longer carries unsent text into the wrong room's composer — with the entry-time
+  placeholder (`room:unknown`, before the first `room_state`) declared provisional
+  (#3784) so a draft typed during "Entering world" moves into the room once it is
+  identified instead of being stranded under the placeholder. See
   [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
   Drafts" for the full contract.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),

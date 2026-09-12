@@ -1423,6 +1423,30 @@ describe('CommandInput', () => {
       expect(storedDraft('room:2').content).toBe('composed upstairs');
     });
 
+    // #3784 — a draft typed during "Entering world" used to vanish the moment
+    // presence arrived: `GameWindow` scopes the room-anchor draft as
+    // `room:${roomId ?? 'unknown'}` (#3760 Task 14), so the text persisted
+    // under the placeholder while the composer re-keyed to the real room and
+    // hydrated an empty row. Covered end to end by `e2e/game-entry.spec.ts`;
+    // this is the component-level guard for the prop that fixes it.
+    it('carries the draft into the real room when a provisional scope settles', () => {
+      const { rerender } = render(
+        <CommandInput character="Alice" draftScope="room:unknown" draftScopeProvisional />
+      );
+      const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'A quiet beginning.' } });
+
+      rerender(<CommandInput character="Alice" draftScope="room:2" />);
+
+      expect(textarea.value).toBe('A quiet beginning.');
+      expect(storedDraft('room:2').content).toBe('A quiet beginning.');
+      expect(
+        sessionStorage.getItem(
+          draftStorageKey({ accountId: 0, personaId: 0, conversationKey: 'room:unknown' })
+        )
+      ).toBeNull();
+    });
+
     it('appends a @target onto the existing draft and persists the result', () => {
       const onTargetConsumed = vi.fn();
       const { rerender } = render(
