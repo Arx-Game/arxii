@@ -1390,7 +1390,7 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 (below) + #3759
+        with self.assertNumQueries(53):  # 47 + #1278 block/mute-gate loads + #2183 + #3759 + #3787
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
@@ -1409,6 +1409,15 @@ class InteractionListQueryBudgetTests(APITestCase):
             # _read_interaction_ids batch-resolves the page's read receipts in one
             # InteractionReadReceipt query, mirroring _muted_persona_ids/#2183 —
             # bounded by "one query per request", never by row count.
+            # #3787 adds exactly 1 flat (not per-row) query: InteractionViewSet.list()
+            # primes InteractionReplyHandler for the whole page (one
+            # InteractionReply query bucketed by interaction id) rather than reading
+            # it through a Prefetch(to_attr=...) in get_queryset - that spelling
+            # would silently stop running the second time an instance is warm under
+            # the identity map (ADR-0263, #3673), which is exactly the trap this
+            # field is new enough to avoid (unlike cached_favorites/cached_receivers/
+            # cached_reactions/cached_action_links above, which predate that ADR and
+            # still pay a per-row fallback query in this exact test).
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1488,7 +1497,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 (below) + #3759
+        with self.assertNumQueries(53):  # 47 + #1278 block/mute-gate loads + #2183 + #3759 + #3787
             # #2183 adds exactly 2 flat (not per-row) queries: the
             # dramatic_moment_suggestions Prefetch itself, and the one
             # SceneParticipation.exists() query that resolves viewer_can_gm for
@@ -1502,6 +1511,10 @@ class InteractionListQueryBudgetTests(APITestCase):
             # #3759 adds exactly 1 flat (not per-row) query (see the sibling test
             # above): get_is_unread's _read_interaction_ids batch-resolves the
             # page's read receipts in one query regardless of endorser count.
+            # #3787 adds exactly 1 flat (not per-row) query (see the sibling test
+            # above for the full explanation): InteractionViewSet.list() primes
+            # InteractionReplyHandler for the whole page in one query, bounded by
+            # page size, never by endorser count.
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
+    from world.scenes.reply_link_handler import InteractionReplyHandler
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -1225,6 +1226,22 @@ class Interaction(SharedMemoryModel):
         """Allow Prefetch(to_attr='cached_action_links') to set this."""
         self._cached_action_links = value
 
+    @cached_property
+    def reply_link_handler(self) -> InteractionReplyHandler:
+        """The parent edge for this interaction, if it is a reply (#3787).
+
+        Read through ``InteractionReplyHandler`` rather than a bare ``Prefetch`` with
+        a `to_attr` kwarg: that spelling silently stops running the second time an
+        instance is warm (ADR-0263, #3673) - the trap ``cached_action_links`` and its
+        siblings above still carry, predating that ADR.
+        ``InteractionReplyHandler.prime()`` batches this for a whole page (see
+        ``InteractionViewSet.list()``); cleared by any ``InteractionReply`` save or
+        delete through its ``related_cache_fields``.
+        """
+        from world.scenes.reply_link_handler import InteractionReplyHandler  # noqa: PLC0415
+
+        return InteractionReplyHandler(self)
+
 
 class InteractionFavorite(SharedMemoryModel):
     """Private bookmark for a cherished RP moment.
@@ -1466,7 +1483,7 @@ class InteractionAction(SharedMemoryModel):
             )
 
 
-class InteractionReply(SharedMemoryModel):
+class InteractionReply(RelatedCacheClearingMixin, SharedMemoryModel):
     """Records which interaction a reply was answering.
 
     The parent half of the narrative-play spec's thread topology. `Interaction.thread`
@@ -1501,6 +1518,11 @@ class InteractionReply(SharedMemoryModel):
         help_text="Denormalized from parent - required for composite FK with the "
         "partitioned table.",
     )
+
+    # Clears Interaction.reply_link_handler on the reply side whenever this row is
+    # saved or deleted (#3787), so a freshly-written edge is visible on the next read
+    # of the same in-process instance.
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     class Meta:
         constraints = [

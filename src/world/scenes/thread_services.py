@@ -10,7 +10,7 @@ from django.utils.dateparse import parse_datetime
 from evennia.accounts.models import AccountDB
 
 from world.scenes.constants import InteractionMode
-from world.scenes.models import Interaction, InteractionThread
+from world.scenes.models import Interaction, InteractionReply, InteractionThread
 from world.scenes.place_models import InteractionReceiver, Place
 
 
@@ -237,4 +237,14 @@ def assign_interaction_thread(
 
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
+    # The parent edge (#3787). Membership and parenthood are different facts: the
+    # thread says which exchange this belongs to, this says which row it answered,
+    # which is what the reader's parent chip shows. Written inside the caller's
+    # atomic block so a reply can never exist without its edge.
+    InteractionReply.objects.create(
+        interaction=interaction,
+        timestamp=interaction.timestamp,
+        parent=target,
+        parent_timestamp=target.timestamp,
+    )
     return ThreadAssignment(thread=thread, target=target, created=created)

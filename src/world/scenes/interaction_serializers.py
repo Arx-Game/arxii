@@ -21,9 +21,17 @@ from world.scenes.types import PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
     from evennia_extensions.models import PlayerData
+    from world.scenes.models import InteractionReply
     from world.species.models import Language
 
 _MAX_POSE_LENGTH = 10_000
+
+
+def _reply_link(obj: Interaction) -> "InteractionReply | None":
+    """The parent edge for ``obj``, if any - via its (possibly primed) handler."""
+    rows = obj.reply_link_handler.rows
+    return rows[0] if rows else None
+
 
 _DANGEROUS_LINK_RE = _re.compile(
     r"\[[^\]]*\]\((?!https?://)",
@@ -177,14 +185,48 @@ class InteractionListSerializer(serializers.ModelSerializer):
         return None if value is None else str(value)
 
     def get_reply_to(self, obj: Interaction) -> dict[str, Any] | None:
-        """Do not infer a parent from neighboring interactions."""
-        try:
-            parent = obj.reply_to
-        except AttributeError:
+        """The interaction this one answered, when the viewer may also read it.
+
+        Gated on the PARENT's own visibility, not on the edge row's existence: a reply
+        stays readable to everyone who can see it, but its chip appears only for a
+        viewer who could already read what it answered. Never infers a parent from
+        neighboring interactions.
+        """
+        link = _reply_link(obj)
+        if link is None:
             return None
-        if parent is None:
+        if link.parent_id not in self._visible_parent_ids():
             return None
-        return {"id": str(parent.id), "timestamp": parent.timestamp.isoformat()}
+        return {"id": str(link.parent_id), "timestamp": link.parent_timestamp.isoformat()}
+
+    def _visible_parent_ids(self) -> set[int]:
+        """Batch-resolve which reply-parent ids this request's viewer may read.
+
+        Cached on the shared serializer context (one query per page, not per row),
+        mirroring ``_read_interaction_ids``'s lazy cache-on-context pattern below.
+        """
+        cache_key = "_visible_parent_ids_cache"
+        if cache_key not in self.context:
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            if self.parent is not None:
+                rows = list(self.parent.instance or [])
+            elif self.instance is not None:
+                rows = [self.instance]
+            else:
+                rows = []
+            parent_ids = {
+                _reply_link(row).parent_id for row in rows if _reply_link(row) is not None
+            }
+            if parent_ids:
+                self.context[cache_key] = set(
+                    Interaction.objects.visible_to(user)
+                    .filter(pk__in=parent_ids)
+                    .values_list("pk", flat=True)
+                )
+            else:
+                self.context[cache_key] = set()
+        return self.context[cache_key]
 
     def get_conversation(self, obj: Interaction) -> dict[str, str]:
         """Expose a non-authorizing context identity for reader grouping."""

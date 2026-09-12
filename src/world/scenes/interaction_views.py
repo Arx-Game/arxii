@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from http import HTTPMethod
 from typing import Any
 
@@ -67,6 +68,7 @@ from world.scenes.reaction_toggle_services import (
     toggle_interaction_favorite,
     toggle_interaction_reaction,
 )
+from world.scenes.reply_link_handler import InteractionReplyHandler
 from world.scenes.services import active_persona_for_sheet
 from world.scenes.thread_services import InteractionThreadError, ReplyTarget
 
@@ -273,7 +275,10 @@ class InteractionViewSet(
             return InteractionDetailSerializer
         return InteractionListSerializer
 
-    def get_permissions(self) -> list[BasePermission]:
+    def get_permissions(self) -> Sequence[BasePermission]:
+        # Sequence, not list: this class also defines a `list()` action method
+        # (below), and a bare `list[...]` annotation elsewhere in the same class
+        # body resolves against that method rather than the builtin.
         if self.action == "list":
             # Public shop-window read (#3305): landing-page scene excerpt.
             # Scoping lives in InteractionQuerySet.visible_to's anonymous
@@ -511,6 +516,27 @@ class InteractionViewSet(
         return Response(
             {**out_serializer.data, "replayed": result.replayed}, status=response_status
         )
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Paginate as usual, then prime the reply-link handler for the whole page.
+
+        Read through InteractionReplyHandler (Interaction.reply_link_handler) rather
+        than a bare Prefetch with a `to_attr` kwarg in get_queryset above: that
+        spelling silently stops running the second time an instance is warm under the
+        identity map (ADR-0263, #3673) - the trap the other cached_* fields there
+        still carry, predating that ADR. Otherwise identical to
+        ListModelMixin.list(). Defined last in the class body so an earlier
+        `list[...]` annotation above (get_permissions) resolves to the builtin, not
+        this method.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            InteractionReplyHandler.prime(list(page))
+            serializer = self.get_serializer(page, many=True)
+            return self.get_paginated_response(serializer.data)
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)
 
 
 class InteractionFavoritePagination(PageNumberPagination):
