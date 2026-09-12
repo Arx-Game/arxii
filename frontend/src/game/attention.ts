@@ -31,9 +31,23 @@ export interface SessionAttention {
  * `ambient` = true when any other thread (room/place scroll, or a `target:*`
  * thread NOT aimed at this persona) has unread, or the legacy `session.unread`
  * scalar (pre-#2156 sessions / non-interaction game messages) is nonzero.
+ *
+ * `sinceId` (#3774) is the newest interaction the SERVER already counted for
+ * this character (`MyRosterEntry.attention_as_of_id`). Anything at or below it
+ * is dropped here, because the caller adds this result to the server's count:
+ * without the watermark a whisper that arrived over the WebSocket and was then
+ * included in the next roster refetch would badge twice. Omitted or null means
+ * count everything, which is the pre-#3774 behavior and what a caller with no
+ * server baseline wants.
  */
-export function sessionAttention(session: Session, personaId: number | null): SessionAttention {
-  const interactions: Interaction[] = session.sceneInteractions.map(wsPayloadToInteraction);
+export function sessionAttention(
+  session: Session,
+  personaId: number | null,
+  sinceId?: number | null
+): SessionAttention {
+  const interactions: Interaction[] = session.sceneInteractions
+    .map(wsPayloadToInteraction)
+    .filter((interaction) => sinceId == null || Number(interaction.id) > sinceId);
   const byThread = new Map<string, Interaction[]>();
   for (const interaction of interactions) {
     const key = getThreadKey(interaction);
