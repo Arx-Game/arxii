@@ -39,7 +39,8 @@ from world.scenes.interaction_filters import InteractionFilter
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
 from world.scenes.interaction_views import InteractionViewSet
-from world.scenes.models import Interaction, InteractionThread, PoseSubmission
+from world.scenes.models import Interaction, PoseSubmission
+from world.scenes.thread_services import thread_roots
 
 SEARCH_MIN_LENGTH = 2
 SEARCH_MAX_LENGTH = 200
@@ -190,41 +191,26 @@ def _queryset(
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
 
-def _exchange_keys(
-    rows: list[dict[str, Any]],
-) -> tuple[dict[str, str], dict[str, int]]:
-    """Map each thread on the page to its exchange, and each exchange to its anchor.
+def _exchange_keys(rows: list[dict[str, Any]]) -> dict[str, str]:
+    """Map each thread on the page to the exchange it belongs to (#3787).
 
-    An exchange is a whole nesting tree (#3787). A row's ``thread`` is the row it
-    answers, so answering a reply nests a thread inside the one the answered row
-    lives in; every thread in that tree shares one ``root``, and the root thread's
-    own ``anchor_interaction`` is the pose the whole exchange opened with.
+    An exchange is a whole nesting tree. Answering an unanswered reply moves that
+    reply into a child thread, so one back-and-forth spans several threads; every
+    thread in the tree shares one ``root``, which is the key they collapse onto.
 
-    Returns ``(exchange_of, anchor_of)``: thread id -> exchange key, and exchange
-    key -> the interaction id that opens it. Both keyed by ``str`` so they compare
-    against the serializer's stringified ``thread_id`` without coercion.
+    That collapse is also what satisfies the render rule for a single thread -
+    "its own members plus the first member of each child thread". Grouping by root
+    takes the union of every thread in the tree, so a row that moved into a child
+    is still in the same group and nothing goes short. A caller that grouped by
+    ``thread_id`` alone would lose one pose per answered child.
 
-    Two flat queries for the whole page regardless of row count. The second is
-    needed because a root thread can be absent from the first: a page may hold a
-    nested reply whose enclosing thread's own members are all invisible to this
-    viewer, and the exchange still has to resolve to the right key.
+    ``root`` is derived, not stored - one query per nesting LEVEL for the whole
+    page, never one per row (see ``thread_services.thread_roots``).
     """
     thread_ids = {str(row["thread_id"]) for row in rows if row.get("thread_id")}
     if not thread_ids:
-        return {}, {}
-    exchange_of = {
-        str(pk): str(root_id or pk)
-        for pk, root_id in InteractionThread.objects.filter(pk__in=thread_ids).values_list(
-            "pk", "root_id"
-        )
-    }
-    anchor_of = {
-        str(pk): anchor_id
-        for pk, anchor_id in InteractionThread.objects.filter(
-            pk__in=set(exchange_of.values())
-        ).values_list("pk", "anchor_interaction_id")
-    }
-    return exchange_of, anchor_of
+        return {}
+    return {str(pk): str(root) for pk, root in thread_roots(thread_ids).items()}
 
 
 def _ref(row: dict[str, Any]) -> dict[str, str]:
@@ -514,12 +500,11 @@ class PlayThreadsView(APIView):
                 account=request.user,  # type: ignore[invalid-argument-type]
                 interaction_ids=[row["id"] for row in rows],
             )
-        # An exchange is the whole nesting tree, not one thread (#3787). A row's
-        # thread is what it ANSWERS, so answering a reply nests a new thread and a
-        # single back-and-forth spans several; `root_of` collapses them to the one
-        # key they share. Two flat queries for the page, never one per row.
-        exchange_of, anchor_of = _exchange_keys(rows)
-        rows_by_id = {int(row["id"]): row for row in rows}
+        # An exchange is the whole nesting tree, not one thread (#3787): answering an
+        # unanswered reply moves it into a child thread, so one back-and-forth spans
+        # several threads that share a root. Grouping by that root is also what keeps
+        # a thread's display whole - see `_exchange_keys`.
+        exchange_of = _exchange_keys(rows)
 
         grouped: dict[str, list[dict[str, Any]]] = {}
         for row in rows:
@@ -540,28 +525,13 @@ class PlayThreadsView(APIView):
                 continue
             grouped.setdefault(exchange, []).append(row)
         results = []
-        for key, replies in grouped.items():
-            # The answered pose OPENS the exchange but is not a member of it: a
-            # thread holds the answers to a row, and that row is reachable as the
-            # anchor (#3787). Put it back at the head so `root`/`opening` name the
-            # pose that started the exchange and the counts include it. `rows` is
-            # ordered by (timestamp, id) and an answer always postdates what it
-            # answers, so prepending preserves that order. When the viewer cannot
-            # see the anchor it is simply absent from `rows_by_id` and the earliest
-            # visible reply leads, which is what `firstVisible` already means.
-            #
-            # Only a pose that answers NOTHING may open an exchange. A root thread's
-            # anchor is always such a pose by construction, so in the healthy case
-            # this rejects nothing. It matters after a deletion: deleting an
-            # interaction CASCADEs its anchored thread away (the writer can do this
-            # through InteractionViewSet.destroy), which SET_NULLs `root` on every
-            # thread below it. A nested thread then resolves as its own exchange,
-            # and its anchor - itself a reply, still a member of its own group -
-            # would be prepended here too, counting one pose in two groups.
-            anchor_row = rows_by_id.get(anchor_of.get(key, -1))
-            if anchor_row is not None and anchor_row.get("thread_id"):
-                anchor_row = None
-            members = replies if anchor_row is None else [anchor_row, *replies]
+        for key, members in grouped.items():
+            # The answered pose is a real MEMBER of its thread now (#3787), so it is
+            # already in `members` and opens the exchange on its own - no row has to
+            # be fetched from outside the group and spliced in, which is what used to
+            # risk counting one pose in two groups. `rows` is ordered by (timestamp,
+            # id), so `members[0]` is the earliest pose of the exchange the viewer
+            # can see, which is exactly what `root`/`firstVisible` mean.
             root, latest = members[0], members[-1]
             unread = sum(1 for m in members if int(m["id"]) not in read_ids)
             results.append(

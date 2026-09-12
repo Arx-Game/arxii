@@ -23,7 +23,11 @@ from world.scenes.interaction_services import (
     push_interaction,
 )
 from world.scenes.models import InteractionThread
-from world.scenes.thread_services import ReplyTarget
+from world.scenes.thread_services import (
+    ReplyTarget,
+    thread_anchor_id,
+    thread_root_id,
+)
 
 
 class ReplyParentEdgeTest(TestCase):
@@ -58,36 +62,38 @@ class ReplyParentEdgeTest(TestCase):
     def _thread_of(self, reply) -> InteractionThread:
         return InteractionThread.objects.get(pk=reply.thread_id)
 
-    def test_replying_anchors_the_thread_at_the_target(self):
+    def _anchor_of(self, thread) -> int | None:
+        return thread_anchor_id(thread.pk)
+
+    def test_replying_puts_both_rows_in_one_thread_with_the_target_first(self):
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
         reply = self._reply_to(target)
         thread = self._thread_of(reply)
-        self.assertEqual(thread.anchor_interaction_id, target.pk)
-        self.assertEqual(thread.anchor_timestamp, target.timestamp)
-
-    def test_the_answered_row_is_not_moved_into_the_thread(self):
-        """The #3787 semantic change, stated as an assertion.
-
-        A thread holds the ANSWERS to one row; the row itself is reachable as the
-        anchor. If the target were also made a member, the "which pile am I in"
-        reading would creep back and nesting would stop meaning anything.
-        """
-        target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
-        self._reply_to(target)
         target.refresh_from_db()
-        self.assertIsNone(target.thread_id)
+        # The answered row is a MEMBER, and being the first member makes it the anchor.
+        self.assertEqual(target.thread_id, thread.pk)
+        self.assertEqual(self._anchor_of(thread), target.pk)
+
+    def test_the_anchor_is_the_first_member_by_id(self):
+        """`id` is a single sequence, so min(id) is the anchor with no tiebreak."""
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
+        first = self._reply_to(target, content="one")
+        second = self._reply_to(target, content="two")
+        thread = self._thread_of(first)
+        self.assertEqual(self._anchor_of(thread), min(target.pk, first.pk, second.pk))
+        self.assertEqual(self._anchor_of(thread), target.pk)
 
     def test_replying_to_a_combat_outcome_anchors_the_thread(self):
         """The case #3787 was filed for. OUTCOME rows are Narrator-authored."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.OUTCOME)
         reply = self._reply_to(target)
-        self.assertEqual(self._thread_of(reply).anchor_interaction_id, target.pk)
+        self.assertEqual(self._anchor_of(self._thread_of(reply)), target.pk)
 
     def test_replying_to_a_combat_action_anchors_the_thread(self):
         """ACTION rows take a direct objects.create path, not the full wrapper."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.ACTION)
         reply = self._reply_to(target)
-        self.assertEqual(self._thread_of(reply).anchor_interaction_id, target.pk)
+        self.assertEqual(self._anchor_of(self._thread_of(reply)), target.pk)
 
     def test_two_people_answering_the_same_blow_share_one_thread(self):
         """What the per-reply edge table could not express (#3787 rework).
@@ -101,9 +107,9 @@ class ReplyParentEdgeTest(TestCase):
         second = self._reply_to(target, content="He laughs at the blood.")
 
         self.assertEqual(first.thread_id, second.thread_id)
-        self.assertEqual(
-            InteractionThread.objects.filter(anchor_interaction_id=target.pk).count(), 1
-        )
+        target.refresh_from_db()
+        self.assertEqual(target.thread_id, first.thread_id)
+        self.assertEqual(InteractionThread.objects.count(), 1)
 
     def test_answering_a_reply_nests_a_thread(self):
         """A reply to a reply is a nested thread, the way an old mailing list nests."""
@@ -111,15 +117,20 @@ class ReplyParentEdgeTest(TestCase):
         reply = self._reply_to(target, content="She swears and drops her guard.")
         nested = self._reply_to(reply, content="He steps into the opening.")
 
-        outer = self._thread_of(reply)
+        target.refresh_from_db()
+        reply.refresh_from_db()
+        outer = InteractionThread.objects.get(pk=target.thread_id)
         inner = self._thread_of(nested)
 
         self.assertNotEqual(inner.pk, outer.pk)
-        self.assertEqual(inner.anchor_interaction_id, reply.pk)
+        # Answering an unanswered reply MOVED it out of the outer thread.
+        self.assertEqual(reply.thread_id, inner.pk)
+        self.assertEqual(self._anchor_of(inner), reply.pk)
+        self.assertEqual(self._anchor_of(outer), target.pk)
         self.assertEqual(inner.parent_id, outer.pk)
-        self.assertEqual(inner.root_id, outer.pk)
+        self.assertEqual(thread_root_id(inner.pk), outer.pk)
         self.assertIsNone(outer.parent_id)
-        self.assertIsNone(outer.root_id)
+        self.assertIsNone(thread_root_id(outer.pk))
 
     def test_a_third_level_keeps_the_root_at_the_top_of_the_tree(self):
         """``root`` is the top of the tree, not the immediate parent."""
@@ -128,12 +139,19 @@ class ReplyParentEdgeTest(TestCase):
         nested = self._reply_to(reply, content="He steps into the opening.")
         deeper = self._reply_to(nested, content="She turns the blade aside.")
 
-        outer = self._thread_of(reply)
-        inner = self._thread_of(nested)
-        deepest = self._thread_of(deeper)
+        # Each answer moved its target down a level, so read the threads back from
+        # the rows rather than from where they started.
+        target.refresh_from_db()
+        reply.refresh_from_db()
+        top = InteractionThread.objects.get(pk=target.thread_id)
+        middle = InteractionThread.objects.get(pk=reply.thread_id)
+        bottom = self._thread_of(deeper)
 
-        self.assertEqual(deepest.parent_id, inner.pk)
-        self.assertEqual(deepest.root_id, outer.pk)
+        self.assertEqual(bottom.parent_id, middle.pk)
+        self.assertEqual(middle.parent_id, top.pk)
+        self.assertIsNone(top.parent_id)
+        # The derived root is the TOP of the tree, not the immediate parent.
+        self.assertEqual(thread_root_id(bottom.pk), top.pk)
 
     def test_answering_the_original_parent_again_joins_the_original_thread(self):
         """Nesting never captures later answers to the row that started it."""
@@ -142,7 +160,10 @@ class ReplyParentEdgeTest(TestCase):
         nested = self._reply_to(reply, content="He steps into the opening.")
         latecomer = self._reply_to(target, content="The crowd surges back from the rail.")
 
-        self.assertEqual(latecomer.thread_id, reply.thread_id)
+        target.refresh_from_db()
+        # The target is still its own thread's anchor, so a later answer joins it
+        # rather than following the reply that was split off.
+        self.assertEqual(latecomer.thread_id, target.thread_id)
         self.assertNotEqual(latecomer.thread_id, nested.thread_id)
 
     def test_a_reply_always_carries_a_thread_id(self):
@@ -157,7 +178,7 @@ class ReplyParentEdgeTest(TestCase):
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
         reply = self._reply_to(target)
         self.assertIsNotNone(reply.thread_id)
-        self.assertIsNotNone(self._thread_of(reply).anchor_interaction_id)
+        self.assertIsNotNone(self._anchor_of(self._thread_of(reply)))
 
     def test_an_unthreaded_pose_has_no_parent(self):
         pose = create_interaction(
@@ -331,8 +352,11 @@ class RootThreadIdSerializationTest(TestCase):
             content="She turns the blade aside.",
         )
 
-        root_key = str(reply.thread_id)
-        self.assertNotEqual(nested.thread_id, reply.thread_id)
+        # The root is the thread the OPENING pose sits in. `reply` was moved out of
+        # it when it was answered, so its own thread is no longer the top.
+        self.opening.refresh_from_db()
+        root_key = str(self.opening.thread_id)
+        self.assertNotEqual(nested.thread_id, self.opening.thread_id)
         self.assertEqual(self._serialized(nested)["root_thread_id"], root_key)
         self.assertEqual(self._serialized(deeper)["root_thread_id"], root_key)
 
@@ -438,13 +462,16 @@ class ReplyToWebSocketPayloadTest(TestCase):
             mode=InteractionMode.POSE,
             scene=self.scene,
         )
-        reply.thread = InteractionThread.objects.create(
-            anchor_interaction_id=target.pk,
-            anchor_timestamp=target.timestamp,
+        thread = InteractionThread.objects.create(
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=self.scene.pk,
             scene_id=self.scene.pk,
         )
+        # The target is the FIRST member, so it is the thread's anchor; the reply
+        # joins behind it. Built exactly as the real writer builds it.
+        target.thread = thread
+        target.save(update_fields=["thread"])
+        reply.thread = thread
         reply.save(update_fields=["thread"])
         return reply
 

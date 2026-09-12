@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
+from uuid import UUID
 
+from django.db.models import Min
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from evennia.accounts.models import AccountDB
@@ -211,46 +214,154 @@ def _same_holder(thread: InteractionThread, signature: HolderSignature) -> bool:
     )
 
 
-def _thread_anchored_at(
+def thread_anchor_ids(thread_ids: Iterable[object]) -> dict[object, int]:
+    """Map each thread id to its ANCHOR: the id of its first member (#3787).
+
+    ``Interaction.id`` comes from a single sequence (``arxii_interaction_id_seq``,
+    owned by the partitioned table, every partition defaulting from it), so it is
+    globally unique and monotonic across partitions. That is one unambiguous total
+    order, so ``Min("id")`` is the anchor with no tiebreak needed and no
+    denormalized copy of it on the thread row.
+
+    Negative ids cannot reach this ordering. They exist only inside
+    ``push_ephemeral_interaction``'s payload, which never writes a row, and
+    ``coerce_reply_target`` refuses an ``interaction_id`` below 1 outright, so no
+    ephemeral id can be a thread member or even be named as a reply target.
+
+    ONE query for the whole set, and deliberately not ``DISTINCT ON``: that is
+    Postgres-only and would pass CI's parity tier while failing every local
+    ``--sqlite`` run.
+    """
+    ids = [_as_thread_uuid(thread_id) for thread_id in thread_ids if thread_id is not None]
+    if not ids:
+        return {}
+    rows = (
+        Interaction.objects.filter(thread_id__in=ids)
+        .values("thread_id")
+        .annotate(anchor_id=Min("id"))
+    )
+    return {row["thread_id"]: row["anchor_id"] for row in rows}
+
+
+def thread_anchor_id(thread_id: object) -> int | None:
+    """The anchor id for one thread, or ``None`` when it has no members."""
+    return thread_anchor_ids([thread_id]).get(thread_id)
+
+
+def _as_thread_uuid(value: object) -> UUID:
+    """Coerce a thread id to ``UUID`` so str and UUID spellings compare equal."""
+    return value if isinstance(value, UUID) else UUID(str(value))
+
+
+def thread_roots(thread_ids: Iterable[object]) -> dict[object, object]:
+    """Map each thread id to the top of its nesting tree (#3787).
+
+    ``root`` is not stored. It is a walk up ``parent``, which is the only
+    structural link there is, and the approved spec keeps nesting shallow
+    ("shallow thread presentation", acceptance case A05), so the walk is short.
+    Storing it instead cost a real bug on this branch: as a ``SET_NULL`` column it
+    could be cleared while ``parent`` survived, and the two copies of one fact
+    drifted. A derived root cannot.
+
+    Iterative rather than a recursive CTE: at these depths a level-at-a-time walk
+    is simpler, and it is plain ORM, so it behaves identically on the SQLite fast
+    tier and on Postgres. ``DISTINCT ON`` and friends would pass CI's parity tier
+    and fail every local ``--sqlite`` run.
+
+    Query count is one per LEVEL of nesting, not one per row or one per row per
+    level: each pass resolves every thread still unaccounted for across the whole
+    page at once. A flat page costs one query.
+    """
+    # Normalize to UUID first. Callers reach this from both sides of the
+    # serializer boundary - model attributes hand over UUIDs, serialized rows hand
+    # over their string spelling - and a dict keyed by one will silently miss every
+    # lookup made with the other, resolving every thread to itself.
+    ids = {_as_thread_uuid(thread_id) for thread_id in thread_ids if thread_id is not None}
+    if not ids:
+        return {}
+
+    parent_of: dict[object, object | None] = {}
+    pending = set(ids)
+    while pending:
+        rows = InteractionThread.objects.filter(pk__in=pending).values_list("pk", "parent_id")
+        resolved = False
+        for pk, parent_id in rows:
+            parent_of[pk] = parent_id
+            resolved = True
+        if not resolved:
+            break
+        pending = {
+            parent_id
+            for parent_id in parent_of.values()
+            if parent_id is not None and parent_id not in parent_of
+        }
+
+    roots: dict[object, object] = {}
+    for thread_id in ids:
+        current = thread_id
+        # `seen` bounds the walk. A cycle is unreachable by construction (a thread
+        # is created pointing at one that already exists), so this is loop
+        # termination, not a guard against a state the writer can produce.
+        seen = {current}
+        while (parent_id := parent_of.get(current)) is not None and parent_id not in seen:
+            seen.add(parent_id)
+            current = parent_id
+        roots[thread_id] = current
+    return roots
+
+
+def thread_root_id(thread_id: object) -> object | None:
+    """The top of one thread's tree, or ``None`` when the thread IS the root."""
+    key = _as_thread_uuid(thread_id)
+    root = thread_roots([key]).get(key)
+    return None if root == key else root
+
+
+def _thread_for_target(
     target: Interaction,
     signature: HolderSignature,
 ) -> InteractionThread:
-    """Find or create the thread that answers ``target`` (#3787).
+    """Return the thread *target* should be answered in, moving it when it must.
 
-    One thread per answered row, so two people answering the same blow land in the
-    same exchange rather than each carrying their own copy of "I answered that".
-    The anchor is the (id, timestamp) pair the partitioned interaction table needs;
-    the holder fields come from the target, so a pre-existing thread's holder always
-    matches - the check stays as a guard against a thread built for another venue.
+    Three cases, and the move is the whole point of the shape (#3787):
 
-    Nesting: when the target is ITSELF a reply it already belongs to a thread, which
-    becomes this one's ``parent``; ``root`` is that thread's own root, or the parent
-    when the parent is the top. Written as ids so neither hop costs a query.
+    - The target belongs to no thread yet. Open one and move the target into it,
+      as its first member and therefore its anchor.
+    - The target is already its thread's anchor, so it has been answered before.
+      The new reply simply joins that thread, which is what makes two people
+      answering the same blow share one exchange.
+    - The target is in a thread but is NOT its anchor, so it is an unanswered
+      reply. Split a child thread off, whose ``parent`` is the thread the target
+      came from, and MOVE the target into it. Its old membership is replaced by
+      the parent link, so provenance survives.
 
-    The find-or-create takes no lock of its own and does not need one: the caller
-    already holds ``select_for_update`` on ``target``, and every reply to that row
-    contends on it, so two answers to the same blow cannot both miss here and race to
-    create. ``unique_thread_per_anchor`` is the backstop if that ever stops holding.
+    The holder kwargs always derive from the target's own signature, so a moved
+    row keeps the venue it was written in; a pre-existing thread still has to
+    match that signature before anything is written to it.
+
+    No lock of its own is needed: the caller already holds ``select_for_update``
+    on ``target``, and every reply to that row contends on it.
     """
-    thread = InteractionThread.objects.filter(
-        anchor_interaction_id=target.pk,
-        anchor_timestamp=target.timestamp,
-    ).first()
-    if thread is not None:
-        if not _same_holder(thread, signature):
-            raise _unavailable()
+    existing = target.thread
+    if existing is None:
+        thread = InteractionThread.objects.create(**signature.as_thread_kwargs())
+        target.thread = thread
+        target.save(update_fields=["thread"])
         return thread
 
-    parent_thread = target.thread
-    parent_id = None if parent_thread is None else parent_thread.pk
-    root_id = None if parent_thread is None else (parent_thread.root_id or parent_thread.pk)
-    return InteractionThread.objects.create(
-        anchor_interaction_id=target.pk,
-        anchor_timestamp=target.timestamp,
-        parent_id=parent_id,
-        root_id=root_id,
+    if not _same_holder(existing, signature):
+        raise _unavailable()
+
+    if thread_anchor_id(existing.pk) == target.pk:
+        return existing
+
+    thread = InteractionThread.objects.create(
+        parent_id=existing.pk,
         **signature.as_thread_kwargs(),
     )
+    target.thread = thread
+    target.save(update_fields=["thread"])
+    return thread
 
 
 def assign_interaction_thread(
@@ -264,9 +375,9 @@ def assign_interaction_thread(
     The caller must invoke this while the interaction write is atomic. The target is
     locked before its visibility, holder, and existing thread are used.
 
-    The target itself is NOT moved into the thread: a thread now holds the answers to
-    one row, and that row is reachable as ``anchor_interaction``. So a reply's
-    ``thread`` says what it answered, and a root pose keeps a null one.
+    The target is a MEMBER of the thread, not an edge pointed at from outside it, and
+    answering an unanswered reply MOVES that reply into a new child thread (see
+    ``_thread_for_target``). A pose nobody has answered keeps a null ``thread``.
 
     Returns the thread it assigned. ``create_interaction`` discards it - the thread is
     already on ``interaction`` by then - but the telnet and test callers that drive
@@ -307,7 +418,7 @@ def assign_interaction_thread(
     ):
         raise _unavailable()
 
-    thread = _thread_anchored_at(target, target_signature)
+    thread = _thread_for_target(target, target_signature)
     interaction.thread = thread
     interaction.save(update_fields=["thread"])
     return thread

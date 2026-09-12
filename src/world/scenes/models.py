@@ -6,7 +6,7 @@ from uuid import uuid4
 from django.conf import settings
 from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.db import models
-from django.db.models import F, Q
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
@@ -941,20 +941,28 @@ class BlockContactFlag(SharedMemoryModel):
 
 
 class InteractionThread(SharedMemoryModel):
-    """Every answer to one interaction, nested the way a mailing list nests.
+    """One exchange, nested the way a mailing list nests (#3787).
 
-    A thread is ANCHORED: ``anchor_interaction`` is the row it answers, and its
-    members are the replies to that row. The anchor itself is not a member - it
-    is reachable as the anchor, so N people answering the same blow share one
-    thread carrying the fact once, instead of N rows each repeating it (#3787).
+    The answered row is a MEMBER of the thread, and the ANCHOR is simply its
+    first member - the pose everything else here is answering. There is no
+    anchor column: ``id`` comes from a single sequence
+    (``arxii_interaction_id_seq``, owned by the partitioned table, with every
+    partition defaulting from it), so it is globally unique and monotonic across
+    partitions. That is one unambiguous total order, and ``min(id)`` over the
+    members is the anchor, needing no tiebreak and no denormalized copy.
 
-    Answering a row that is itself a reply makes a NESTED thread: ``parent`` is
-    the thread the anchor lives in and ``root`` is the top of the tree. A reader
-    flattens a single-branch chain for display, which is a rendering concern and
-    never a reason for a second storage shape.
+    Answering a row that is NOT already its thread's anchor NESTS a thread: the
+    answered row MOVES into the new thread, whose ``parent`` is the thread it came
+    from. So provenance survives the move - the parent thread is what the row's old
+    membership is replaced by. ``parent`` is the only structural link stored, and
+    the only one not derivable from anything else. The top of the tree is a walk up
+    it, and the approved spec keeps nesting shallow, so it is derived per page
+    rather than copied onto every row where the copy could drift.
 
-    A row's own ``thread`` therefore means "what I am an answer to", not "which
-    pile I am in". Root poses keep ``thread_id`` null.
+    Rendering ONE thread therefore means its own members PLUS the first member of
+    each child thread, since that first member is the row that sat here until it
+    was answered. A reader grouping a whole exchange by its derived root gets this
+    for free, because every thread in the tree shares that root.
     """
 
     class HolderKind(models.TextChoices):
@@ -963,45 +971,12 @@ class InteractionThread(SharedMemoryModel):
         WHISPER = "whisper", "Whisper"
 
     id = models.UUIDField(primary_key=True, default=uuid4, editable=False)
-    anchor_interaction = models.ForeignKey(
-        INTERACTION_MODEL,
-        on_delete=models.CASCADE,
-        db_constraint=False,
-        related_name="anchored_threads",
-        help_text=(
-            "The interaction every row in this thread answers. Required: a thread "
-            "exists only because someone answered a row, so there is no such thing as "
-            "an anchor-less one."
-        ),
-    )
-    anchor_timestamp = models.DateTimeField(
-        help_text=(
-            "Denormalized from anchor_interaction - arxii_interaction is range-"
-            "partitioned on timestamp with a composite primary key, so a single-column "
-            "FK to its id cannot exist (the InteractionReceiver precedent)."
-        ),
-    )
     parent = models.ForeignKey(
         "self",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
         related_name="child_threads",
-        help_text=(
-            "The thread the anchor row itself belongs to, when the anchor is a reply. "
-            "Null when the anchor is not a reply, which makes this thread a root."
-        ),
-    )
-    root = models.ForeignKey(
-        "self",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        related_name="descendant_threads",
-        help_text=(
-            "Denormalized top of the nesting tree, so a reader groups an exchange "
-            "without walking parents. Null when this thread IS the root."
-        ),
     )
     holder_kind = models.CharField(max_length=20, choices=HolderKind.choices)
     holder_id = models.PositiveBigIntegerField(null=True, blank=True)
@@ -1034,28 +1009,7 @@ class InteractionThread(SharedMemoryModel):
                     & Q(party_key__isnull=False)
                 ),
                 name="interaction_thread_holder_shape",
-            ),
-            # One thread per anchored row - this is what makes two people answering
-            # the same blow land in the SAME exchange rather than opening parallel
-            # ones. Both anchor columns are NOT NULL, so this admits no null-keyed
-            # escape hatch: every row it governs names a real answered interaction.
-            models.UniqueConstraint(
-                fields=["anchor_interaction", "anchor_timestamp"],
-                name="unique_thread_per_anchor",
-            ),
-            # A thread cannot nest inside itself. Cheap, and it cannot be tripped by
-            # the SET_NULL on either field. Deliberately NOT paired with a
-            # "parent set implies root set" constraint: the service writes them
-            # together, but SET_NULL can legitimately clear one alone, and a check
-            # that turned that into an IntegrityError would make deleting a thread
-            # fail instead of degrading.
-            models.CheckConstraint(
-                condition=(
-                    (Q(parent__isnull=True) | ~Q(parent=F("id")))
-                    & (Q(root__isnull=True) | ~Q(root=F("id")))
-                ),
-                name="interaction_thread_no_self_nesting",
-            ),
+            )
         ]
 
 

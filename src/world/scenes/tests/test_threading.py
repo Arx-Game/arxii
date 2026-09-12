@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, Mock, patch
 
-from django.db import IntegrityError
 from django.test import TestCase
 
 from evennia_extensions.factories import (
@@ -36,6 +35,8 @@ from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
     assign_interaction_thread,
+    thread_anchor_id,
+    thread_root_id,
 )
 
 
@@ -83,10 +84,7 @@ class TestSerializerNewFields(TestCase):
         assert self.target_persona.pk in data["target_persona_ids"]
 
     def test_thread_id_is_serialized(self) -> None:
-        answered = InteractionFactory(persona=self.writer_persona)
         thread = InteractionThread.objects.create(
-            anchor_interaction_id=answered.pk,
-            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=11,
             scene_id=11,
@@ -97,14 +95,9 @@ class TestSerializerNewFields(TestCase):
         data = InteractionListSerializer(self.interaction).data
 
         assert data["thread_id"] == str(thread.pk)
-        # Since #3787 a thread IS the parent edge, so a row that has one always
-        # names what it answered. (Serialized with no request in context, so the
-        # visibility gate resolves against an anonymous viewer and a public,
-        # room-heard anchor still passes it.)
-        assert data["reply_to"] == {
-            "id": str(answered.pk),
-            "timestamp": answered.timestamp.isoformat(),
-        }
+        # This row is its thread's only member, so it IS the anchor: the opening
+        # pose of a root thread, which answers nothing.
+        assert data["reply_to"] is None
 
     def test_no_place_returns_none(self) -> None:
         interaction = InteractionFactory(persona=self.writer_persona)
@@ -533,11 +526,8 @@ class TestInteractionThreadModel(TestCase):
     """Interaction threads always name the row they answer, and nothing else."""
 
     def test_interaction_thread_membership_and_set_null(self) -> None:
-        answered = InteractionFactory()
         interaction = InteractionFactory()
         thread = InteractionThread.objects.create(
-            anchor_interaction_id=answered.pk,
-            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=7,
             scene_id=7,
@@ -555,32 +545,17 @@ class TestInteractionThreadModel(TestCase):
         assert thread_id is None
 
     def test_thread_parent_is_optional(self) -> None:
-        """A root thread has no parent and no root - but it always has an anchor."""
-        answered = InteractionFactory()
+        """A root thread has no parent and no root."""
         thread = InteractionThread.objects.create(
-            anchor_interaction_id=answered.pk,
-            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.WHISPER,
             party_key="3,7",
         )
 
         assert thread.parent_id is None
-        assert thread.root_id is None
         assert thread.pk is not None
-
-    def test_a_thread_cannot_exist_without_an_anchor(self) -> None:
-        """The invariant #3787 rests on, asserted by breaking it.
-
-        A thread exists only because someone answered a row. Both anchor columns
-        are NOT NULL, so an anchor-less thread is unrepresentable rather than
-        merely unwritten - which is what stops one from ever grouping rows in the
-        reader behind the parent chip's back.
-        """
-        with self.assertRaises(IntegrityError):
-            InteractionThread.objects.create(
-                holder_kind=InteractionThread.HolderKind.WHISPER,
-                party_key="3,7",
-            )
+        # The top of the tree is derived, not stored: a parentless thread is its
+        # own root, so `thread_root_id` reports none above it.
+        assert thread_root_id(thread.pk) is None
 
 
 class TestInteractionThreadAssignment(TestCase):
@@ -598,14 +573,14 @@ class TestInteractionThreadAssignment(TestCase):
             account_id=account.pk,
         )
 
-        # The answered row is the ANCHOR, not a member (#3787): it keeps its own
-        # thread, which for a root pose is none at all.
-        assert thread.anchor_interaction_id == target.pk
-        assert thread.anchor_timestamp == target.timestamp
-        assert target.thread_id is None
+        # The answered row is a MEMBER, and being the first member makes it the
+        # thread's anchor (#3787).
+        target.refresh_from_db()
+        assert thread_anchor_id(thread.pk) == target.pk
+        assert target.thread_id == thread.pk
         assert first_reply.thread_id == thread.pk
         assert thread.parent_id is None
-        assert thread.root_id is None
+        assert thread_root_id(thread.pk) is None
 
         second_reply = InteractionFactory(scene=scene, writer_account=account)
         reused = assign_interaction_thread(
@@ -694,7 +669,6 @@ class TestInteractionThreadAssignment(TestCase):
         # Nothing was written by the refused attempt.
         assert Interaction.objects.count() == interaction_count
         assert InteractionThread.objects.count() == thread_count
-        assert not InteractionThread.objects.filter(anchor_interaction_id=target.pk).exists()
         reply.refresh_from_db()
         target.refresh_from_db()
         assert reply.thread_id is None
@@ -724,16 +698,11 @@ class TestInteractionThreadAssignment(TestCase):
             )
 
         assert reply.thread_id is not None
-        assert (
-            InteractionThread.objects.filter(pk=reply.thread_id)
-            .values_list("anchor_interaction_id", flat=True)
-            .get()
-            == target.pk
-        )
-        # The target is reachable as the anchor, so it is never moved into the thread.
+        assert thread_anchor_id(reply.thread_id) == target.pk
+        # The target joined the thread it is the anchor of.
         assert (
             Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).get()
-            is None
+            == reply.thread_id
         )
 
 

@@ -37,6 +37,7 @@ from world.scenes.models import (
     InteractionThread,
     SceneParticipation,
 )
+from world.scenes.thread_services import thread_anchor_id
 
 
 class InteractionViewSetTestCase(APITestCase):
@@ -1023,11 +1024,11 @@ class PoseSubmitViewTests(APITestCase):
         )
 
         assert response.status_code == status.HTTP_201_CREATED, response.data
-        # The reply carries the thread; the target is its ANCHOR, not a member (#3787).
+        # Both rows are members; the target is first, so it is the anchor (#3787).
         target.refresh_from_db()
-        assert target.thread_id is None
         thread = InteractionThread.objects.get(pk=response.data["thread_id"])
-        assert thread.anchor_interaction_id == target.pk
+        assert target.thread_id == thread.pk
+        assert thread_anchor_id(thread.pk) == target.pk
         assert response.data["reply_to"] == {
             "id": str(target.pk),
             "timestamp": target.timestamp.isoformat(),

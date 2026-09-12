@@ -38,10 +38,7 @@ def _root_threads(count):
     scene = SceneFactory()
     ids = []
     for _ in range(count):
-        answered = InteractionFactory(scene=scene)
         thread = InteractionThread.objects.create(
-            anchor_interaction_id=answered.pk,
-            anchor_timestamp=answered.timestamp,
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=scene.pk,
             scene_id=scene.pk,
@@ -531,8 +528,9 @@ class PlayThreadsViewTests(APITestCase):
         results = response.json()["results"]
         self.assertEqual(len(results), 1)
         row = results[0]
-        self.assertEqual(row["id"], str(reply.thread_id))
-        self.assertNotEqual(reply.thread_id, nested.thread_id)
+        target.refresh_from_db()
+        self.assertEqual(row["id"], str(target.thread_id))
+        self.assertNotEqual(target.thread_id, nested.thread_id)
         self.assertEqual(row["visiblePoseCount"], 3)
         self.assertEqual(row["root"]["id"], str(target.pk))
         self.assertEqual(row["opening"], "he swings")
@@ -744,43 +742,35 @@ class PlayThreadsViewTests(APITestCase):
         # count their answered pose - 2 poses per exchange, not 1.
         self.assertEqual([row["visiblePoseCount"] for row in results], [2, 2])
 
-    def test_no_pose_is_counted_in_two_exchanges_after_its_thread_is_deleted(self) -> None:
-        """Deleting an answered pose must not make a reply count twice.
+    def test_a_thread_whose_reply_was_answered_still_shows_that_reply(self) -> None:
+        """The render rule for a thread: its members PLUS its children's first members.
 
-        Reachable today, not theoretical: ``InteractionViewSet`` carries
-        ``DestroyModelMixin``, so a writer can delete their own pose, and
-        ``InteractionThread.anchor_interaction`` is ``on_delete=CASCADE`` - deleting
-        the answered interaction takes its thread with it and SET_NULLs ``root`` on
-        every thread below. A three-deep chain then leaves the deepest thread
-        resolving as its own exchange while its anchor is still a member of the
-        middle one, so that pose would be prepended to one group and counted in
-        another. Verified by doing the deletion, not by reasoning about it.
+        Answering an unanswered reply MOVES that reply into a child thread, so a
+        consumer that grouped by ``thread_id`` alone would lose it and go one short
+        per answered child. Grouping by ``root`` takes the union of the whole tree,
+        so the exchange stays whole. Asserted on the pose that moved.
         """
         account = AccountFactory()
         self.client.force_authenticate(user=account)
         scene = SceneFactory()
         target, first = _reply_exchange(scene, account, "he swings", "she gives ground")
         second = _reply_to(scene, account, first, "he presses in")
-        third = _reply_to(scene, account, second, "she turns the blade aside")
 
-        target.delete()
+        # `first` was moved out of the thread it was written into.
+        moved = Interaction.objects.get(pk=first.pk)
+        self.assertNotEqual(moved.thread_id, target.thread_id)
+        self.assertEqual(moved.thread_id, second.thread_id)
 
         response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
         self.assertEqual(response.status_code, 200)
         results = response.json()["results"]
 
-        # Every surviving pose appears in at most one exchange.
-        counted = [row["root"]["id"] for row in results]
-        self.assertEqual(len(counted), len(set(counted)))
-        total = sum(row["visiblePoseCount"] for row in results)
-        self.assertLessEqual(total, Interaction.objects.filter(scene=scene).count())
-        # `second` is a member of the group its own thread anchors; it must not also
-        # open the orphaned group below it.
-        self.assertNotIn(str(second.pk), {row["root"]["id"] for row in results[1:]})
-        self.assertTrue(all(row["visiblePoseCount"] >= 1 for row in results))
-        # The deleted pose is gone from every group.
-        self.assertNotIn(str(target.pk), counted)
-        self.assertTrue(third.pk)
+        self.assertEqual(len(results), 1)
+        row = results[0]
+        # All three poses, with the answered one opening: nothing went short.
+        self.assertEqual(row["visiblePoseCount"], 3)
+        self.assertEqual(row["root"]["id"], str(target.pk))
+        self.assertEqual(row["latestVisible"]["id"], str(second.pk))
 
     def test_conversation_with_no_replies_returns_an_empty_page(self) -> None:
         """The common case: nobody used reply, so there is nothing to drill into.
@@ -894,13 +884,23 @@ class PlaySearchMaskingTests(APITestCase):
 class PlayPosesQueryBudgetTests(APITestCase):
     """GET /api/play/poses/ must serve the reply chip without a per-row query.
 
-    Regression guard for #3787: ``get_reply_to`` reads the anchor off each row's
-    thread, which ``InteractionViewSet.get_queryset`` joins in with
-    ``select_related`` - so the only reply-shaped query on the page is
-    ``_visible_parent_ids``'s single batched visibility check. `/game` is the
-    primary surface where the parent chip actually renders, so this endpoint's own
-    budget is pinned directly rather than only inheriting ``InteractionViewSet``'s
-    budget test in ``test_interaction_views.py``.
+    Regression guard for #3787. Three page-wide batches serve the chip and the
+    grouping key, and none of them scales with the number of replies:
+
+    - ``_thread_anchors`` - one ``Min(id)`` aggregate resolving every thread's
+      anchor (and its parent thread's) in a single query.
+    - ``_thread_roots`` - the derived top of each nesting tree, one query per
+      nesting LEVEL for the whole page. A flat page, like this one, costs one.
+    - ``_visible_parents`` - one batched ``visible_to`` check that returns the
+      parents' timestamps too, so the chip needs no second lookup.
+
+    That is 76 rather than the 74 of the stored-anchor shape: the anchor used to
+    be a column joined in by ``select_related`` and the root another, so both were
+    free to read and neither could be wrong. Deriving them costs two flat queries
+    and removes two denormalized copies that could drift (a stored ``root`` did
+    drift, and cost a real bug on this branch). `/game` is the primary surface
+    where the parent chip renders, so this endpoint's own budget is pinned here
+    rather than only inheriting ``InteractionViewSet``'s.
     """
 
     def setUp(self) -> None:
@@ -921,32 +921,33 @@ class PlayPosesQueryBudgetTests(APITestCase):
         targets = [InteractionFactory(scene=scene) for _ in range(3)]
         repliers = [InteractionFactory(scene=scene) for _ in range(3)]
         for i in range(reply_count):
-            repliers[i].thread = InteractionThread.objects.create(
-                anchor_interaction_id=targets[i].pk,
-                anchor_timestamp=targets[i].timestamp,
+            thread = InteractionThread.objects.create(
                 holder_kind=InteractionThread.HolderKind.SCENE,
                 holder_id=scene.pk,
                 scene_id=scene.pk,
             )
+            # The answered row is the first member, so it is the anchor (#3787).
+            targets[i].thread = thread
+            targets[i].save(update_fields=["thread"])
+            repliers[i].thread = thread
             repliers[i].save(update_fields=["thread"])
 
     def test_query_budget_with_one_reply(self) -> None:
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(74):
+        with self.assertNumQueries(76):
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
 
     def test_query_budget_does_not_scale_with_reply_count(self) -> None:
-        """Same 6 total poses, all 3 are replies: the count must not grow - the
-        anchor rides in on the row's own `select_related("thread")` join, and
-        `_visible_parent_ids` is one flat query for the whole page, never one per
-        reply."""
+        """Same 6 total poses, all 3 are replies: the count must not grow. Each of
+        the three batches above resolves the whole page at once, so tripling the
+        replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(74):
+        with self.assertNumQueries(76):
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6

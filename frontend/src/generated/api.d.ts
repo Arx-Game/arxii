@@ -31429,7 +31429,7 @@ export interface components {
       /**
        * @description The interaction this one answered, when the viewer may also read it.
        *
-       *     Gated on the PARENT's own visibility, not on the edge row's existence: a reply
+       *     Gated on the PARENT's own visibility, not on this row's membership: a reply
        *     stays readable to everyone who can see it, but its chip appears only for a
        *     viewer who could already read what it answered. Never infers a parent from
        *     neighboring interactions.
@@ -31646,7 +31646,7 @@ export interface components {
       /**
        * @description The interaction this one answered, when the viewer may also read it.
        *
-       *     Gated on the PARENT's own visibility, not on the edge row's existence: a reply
+       *     Gated on the PARENT's own visibility, not on this row's membership: a reply
        *     stays readable to everyone who can see it, but its chip appears only for a
        *     viewer who could already read what it answered. Never infers a parent from
        *     neighboring interactions.

@@ -30,6 +30,8 @@ from world.scenes.thread_services import (
     InteractionThreadError,
     ReplyTarget,
     assign_interaction_thread,
+    thread_anchor_ids,
+    thread_root_id,
 )
 from world.scenes.types import InteractionPayload, PersonaPayload, ReplyParentPayload
 
@@ -581,10 +583,8 @@ def _root_thread_id(interaction: Interaction) -> str | None:
     """
     if interaction.thread_id is None:
         return None
-    thread = interaction.thread
-    if thread is None or thread.root_id is None:
-        return None
-    return str(thread.root_id)
+    root_id = thread_root_id(interaction.thread_id)
+    return None if root_id is None else str(root_id)
 
 
 def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None:
@@ -622,33 +622,42 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
     rather than guess, and those readers still get the chip from the REST serializer's
     own per-viewer gate on their next fetch.
 
-    **Cost.** One room-heard query per reply push, and none at all for the
+    **Cost.** A couple of small queries per reply push, and none at all for the
     overwhelmingly common row that answers nothing: ``thread_id`` is a plain column
     already on the row, so the ``None`` branch below never touches the database.
     """
-    # The parent edge IS the thread (#3787): ``assign_interaction_thread``
-    # (``world/scenes/thread_services.py``) is the only writer of ``interaction.thread``
-    # and it always points at a thread anchored on the answered row. So a null
-    # ``thread_id`` means "answers nothing" without a lookup, and a set one carries the
-    # whole chip payload on the thread row itself. Pinned by
-    # ``test_a_reply_always_carries_a_thread_id``.
+    # A row answers something only if it belongs to a thread (#3787), and
+    # ``assign_interaction_thread`` (``world/scenes/thread_services.py``) is the only
+    # writer of ``interaction.thread``. So a null ``thread_id`` means "answers
+    # nothing" without a lookup. Pinned by ``test_a_reply_always_carries_a_thread_id``.
     if interaction.thread_id is None:
         return None
     thread = interaction.thread
-    if thread is None or thread.anchor_interaction_id is None:
+    if thread is None:
+        return None
+    # The thread's anchor is its first member; the anchor itself answers whatever its
+    # thread was split off from. Both come from the same batched resolver the REST
+    # serializer uses, so the two channels cannot drift apart.
+    anchors = thread_anchor_ids(
+        [thread.pk] if thread.parent_id is None else [thread.pk, thread.parent_id]
+    )
+    anchor_id = anchors.get(thread.pk)
+    if anchor_id is None:
+        return None
+    parent_id = anchor_id if interaction.pk != anchor_id else anchors.get(thread.parent_id)
+    if parent_id is None:
         return None
     if interaction.scene_id is None:
         return None
-    if not (
+    parent_timestamp = (
         Interaction.objects.room_heard()
-        .filter(pk=thread.anchor_interaction_id, scene_id=interaction.scene_id)
-        .exists()
-    ):
-        return None
-    return ReplyParentPayload(
-        id=str(thread.anchor_interaction_id),
-        timestamp=thread.anchor_timestamp.isoformat(),
+        .filter(pk=parent_id, scene_id=interaction.scene_id)
+        .values_list("timestamp", flat=True)
+        .first()
     )
+    if parent_timestamp is None:
+        return None
+    return ReplyParentPayload(id=str(parent_id), timestamp=parent_timestamp.isoformat())
 
 
 def _language_render_for(
