@@ -9,10 +9,22 @@ from __future__ import annotations
 
 from django.test import TestCase
 
-from evennia_extensions.factories import CharacterFactory, ObjectDBFactory, RoomProfileFactory
+from evennia_extensions.factories import (
+    AccountFactory,
+    CharacterFactory,
+    ObjectDBFactory,
+    RoomProfileFactory,
+)
 from world.character_sheets.factories import CharacterSheetFactory
-from world.scenes.constants import InteractionMode
-from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory, SceneFactory
+from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.factories import (
+    InteractionFactory,
+    PersonaFactory,
+    PlaceFactory,
+    PlacePresenceFactory,
+    SceneFactory,
+)
+from world.scenes.models import Interaction
 from world.scenes.reachability import UnreachableError, persona_can_receive
 
 
@@ -32,7 +44,12 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
         persona = _persona_at(room)
 
         assert persona_can_receive(
-            persona, scene=scene, place=None, receivers=None, mode=InteractionMode.POSE
+            persona,
+            scene=scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_persona_elsewhere_is_not_reachable(self) -> None:
@@ -42,7 +59,12 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
         persona = _persona_at(other_room)
 
         assert not persona_can_receive(
-            persona, scene=scene, place=None, receivers=None, mode=InteractionMode.POSE
+            persona,
+            scene=scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_no_scene_is_not_reachable(self) -> None:
@@ -52,7 +74,55 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
         persona = _persona_at(room)
 
         assert not persona_can_receive(
-            persona, scene=None, place=None, receivers=None, mode=InteractionMode.POSE
+            persona,
+            scene=None,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_escalated_to_very_private_is_not_reachable_even_when_present(self) -> None:
+        """Breaks the invariant: a persona standing right in the room, refused.
+
+        Mirrors ``mark_very_private`` escalating a plain receiver-less broadcast
+        pose (same shape: place=None, receivers=None, not a whisper) to
+        VERY_PRIVATE with no change to place/receivers. ``visible_to`` then
+        refuses this row to EVERYONE, staff included (#1219) - reachability
+        must agree, not just presence-check the shape.
+        """
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        persona = _persona_at(room)
+
+        assert not persona_can_receive(
+            persona,
+            scene=scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.VERY_PRIVATE,
+        )
+
+    def test_escalated_to_perceived_only_is_not_reachable_even_when_present(self) -> None:
+        """Same break as VERY_PRIVATE: PERCEIVED_ONLY also fails ``visibility=DEFAULT``,
+
+        so ``visible_to`` never treats a receiver-less PERCEIVED_ONLY row as
+        room-heard either - it reaches only the writer's own account, staff, and
+        the scene's GM (a log-read exception this predicate deliberately does
+        not mirror; see the module docstring).
+        """
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        persona = _persona_at(room)
+
+        assert not persona_can_receive(
+            persona,
+            scene=scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
 
 
@@ -67,7 +137,12 @@ class TestPersonaCanReceivePlaceScoped(TestCase):
         PlacePresenceFactory(place=other_place, persona=persona)
 
         assert not persona_can_receive(
-            persona, scene=None, place=place, receivers=None, mode=InteractionMode.POSE
+            persona,
+            scene=None,
+            place=place,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_persona_at_same_place_is_reachable(self) -> None:
@@ -77,7 +152,12 @@ class TestPersonaCanReceivePlaceScoped(TestCase):
         PlacePresenceFactory(place=place, persona=persona)
 
         assert persona_can_receive(
-            persona, scene=None, place=place, receivers=None, mode=InteractionMode.POSE
+            persona,
+            scene=None,
+            place=place,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_persona_at_place_but_not_an_explicit_receiver_is_not_reachable(self) -> None:
@@ -95,6 +175,26 @@ class TestPersonaCanReceivePlaceScoped(TestCase):
             place=place,
             receivers=[other_persona.pk],
             mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_place_scoped_reachability_is_unaffected_by_escalated_visibility(self) -> None:
+        # A Place-scoped row is never room_heard in visible_to regardless of
+        # visibility (place__isnull=True is required either way), so escalating
+        # it changes only who may read the log afterward, not who was ever the
+        # live audience - PlacePresence keeps deciding this branch.
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the bar")
+        persona = PersonaFactory()
+        PlacePresenceFactory(place=place, persona=persona)
+
+        assert persona_can_receive(
+            persona,
+            scene=None,
+            place=place,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.VERY_PRIVATE,
         )
 
 
@@ -111,6 +211,7 @@ class TestPersonaCanReceiveWhisper(TestCase):
             place=None,
             receivers=[party_persona.pk],
             mode=InteractionMode.WHISPER,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_persona_in_whisper_party_is_reachable(self) -> None:
@@ -122,13 +223,19 @@ class TestPersonaCanReceiveWhisper(TestCase):
             place=None,
             receivers=[party_persona.pk],
             mode=InteractionMode.WHISPER,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_whisper_with_no_receivers_is_not_reachable(self) -> None:
         persona = PersonaFactory()
 
         assert not persona_can_receive(
-            persona, scene=None, place=None, receivers=None, mode=InteractionMode.WHISPER
+            persona,
+            scene=None,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.WHISPER,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
 
@@ -140,14 +247,24 @@ class TestPersonaCanReceiveDirectedReceivers(TestCase):
         outsider = PersonaFactory()
 
         assert not persona_can_receive(
-            outsider, scene=None, place=None, receivers=[receiver.pk], mode=InteractionMode.POSE
+            outsider,
+            scene=None,
+            place=None,
+            receivers=[receiver.pk],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_persona_in_receiver_list_is_reachable(self) -> None:
         receiver = PersonaFactory()
 
         assert persona_can_receive(
-            receiver, scene=None, place=None, receivers=[receiver.pk], mode=InteractionMode.POSE
+            receiver,
+            scene=None,
+            place=None,
+            receivers=[receiver.pk],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
     def test_receivers_accepts_persona_instances_not_just_ids(self) -> None:
@@ -159,6 +276,22 @@ class TestPersonaCanReceiveDirectedReceivers(TestCase):
             place=None,
             receivers=[receiver],
             mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_directed_receivers_reachability_is_unaffected_by_escalated_visibility(self) -> None:
+        # Same reasoning as the Place case: receivers__isnull=False already
+        # excludes this shape from room_heard in visible_to, so the recorded
+        # receiver row keeps deciding this branch regardless of visibility.
+        receiver = PersonaFactory()
+
+        assert persona_can_receive(
+            receiver,
+            scene=None,
+            place=None,
+            receivers=[receiver.pk],
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.VERY_PRIVATE,
         )
 
 
@@ -171,3 +304,118 @@ class TestUnreachableError(TestCase):
         assert error.personas == [persona]
         assert error.venue_hint == "Leave the bar to answer this."
         assert str(error) == "Leave the bar to answer this."
+
+
+class TestAgreesWithVisibleTo(TestCase):
+    """Pins agreement between ``persona_can_receive`` and ``visible_to`` for a
+    non-staff, non-participant, physically-present viewer - the case where a
+    live-presence answer and a log-read-access answer should land the same way.
+
+    This is the drift guard the room-heard visibility bug slipped through: both
+    predicates are exercised against the SAME persisted ``Interaction`` row for
+    each shape, including an escalated-visibility case.
+    """
+
+    def _present_persona_and_scene(self):
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        persona = _persona_at(room)
+        return persona, scene
+
+    def test_default_room_heard_pose_agrees(self) -> None:
+        persona, scene = self._present_persona_and_scene()
+        writer_account = AccountFactory()
+        interaction = InteractionFactory(
+            scene=scene,
+            writer_account=writer_account,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+        viewer_account = AccountFactory()
+
+        reachable = persona_can_receive(
+            persona,
+            scene=scene,
+            place=interaction.place,
+            receivers=None,
+            mode=interaction.mode,
+            visibility=interaction.visibility,
+        )
+        readable = (
+            Interaction.objects.visible_to(viewer_account, persona_ids=[persona.pk])
+            .filter(pk=interaction.pk, timestamp=interaction.timestamp)
+            .exists()
+        )
+
+        assert reachable is True
+        assert readable is True
+        assert reachable == readable
+
+    def test_escalated_very_private_pose_agrees(self) -> None:
+        """The exact shape the fix round 1 finding described.
+
+        A receiver-less broadcast pose escalated to VERY_PRIVATE: ``visible_to``
+        refuses it to a present-but-uninvolved viewer (not staff, not the
+        writer's own account, no GM row) - reachability must refuse it too,
+        even though the persona is standing right in the room.
+        """
+        persona, scene = self._present_persona_and_scene()
+        writer_account = AccountFactory()
+        interaction = InteractionFactory(
+            scene=scene,
+            writer_account=writer_account,
+            visibility=InteractionVisibility.VERY_PRIVATE,
+        )
+        viewer_account = AccountFactory()
+
+        reachable = persona_can_receive(
+            persona,
+            scene=scene,
+            place=interaction.place,
+            receivers=None,
+            mode=interaction.mode,
+            visibility=interaction.visibility,
+        )
+        readable = (
+            Interaction.objects.visible_to(viewer_account, persona_ids=[persona.pk])
+            .filter(pk=interaction.pk, timestamp=interaction.timestamp)
+            .exists()
+        )
+
+        assert reachable is False
+        assert readable is False
+        assert reachable == readable
+
+    def test_staff_read_exception_is_a_deliberate_divergence_not_a_bug(self) -> None:
+        """The one intended difference: staff reads escalated PERCEIVED_ONLY;
+
+        reachability refuses everyone. Documented, not silently omitted (see
+        the module docstring's "Deliberate divergence" section) - staff/GM read
+        access is an administrative permission, not a claim about where anyone
+        is standing.
+        """
+        persona, scene = self._present_persona_and_scene()
+        writer_account = AccountFactory()
+        interaction = InteractionFactory(
+            scene=scene,
+            writer_account=writer_account,
+            visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+        staff_account = AccountFactory(is_staff=True)
+
+        reachable = persona_can_receive(
+            persona,
+            scene=scene,
+            place=interaction.place,
+            receivers=None,
+            mode=interaction.mode,
+            visibility=interaction.visibility,
+        )
+        staff_can_read = (
+            Interaction.objects.visible_to(staff_account, persona_ids=[persona.pk])
+            .filter(pk=interaction.pk, timestamp=interaction.timestamp)
+            .exists()
+        )
+
+        assert reachable is False
+        assert staff_can_read is True
+        assert reachable != staff_can_read
