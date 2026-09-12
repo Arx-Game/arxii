@@ -39,6 +39,21 @@ The correct path is `evennia.utils.create.create_account` /
 particular helper function was called — that is the distinction to check for,
 not a name to grep for.
 
+**The repair shape is the same bug wearing a fix (#3812).** A row that was
+created bare cannot be mended by writing the typeclass path into it:
+`AccountDB.objects.filter(username=...).update(db_typeclass_path=...)` — which
+the ops probe used to prescribe — runs no hook, so `db_cmdset_storage` stays
+empty and the row now *loads* as the typeclass and still can't run a single
+command (`Command '@ic Apostate' is not available.` was the production
+staff account, made by the deploy's own `python -m django createsuperuser
+--noinput`). The only repair that is creation's equal is Evennia's replay of
+first-save setup, `row.swap_typeclass(settings.BASE_ACCOUNT_TYPECLASS,
+run_start_hooks="all")`, which `evennia_extensions.account_setup
+.heal_account_setup` wraps and the server runs on start. A diff, a runbook, a
+migration or a shell recipe that repoints `db_typeclass_path` by hand — or
+creates a superuser through Django's command without going through
+`core_management`'s override — is a finding.
+
 ## What to read first
 
 1. **Every `.objects.create(`, `.objects.create_user(`, `.objects.get_or_create(`

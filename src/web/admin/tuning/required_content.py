@@ -240,33 +240,32 @@ def build_registry(dependencies: Iterable[ContentDependency]) -> tuple[ContentDe
 
 
 def _probe_typeclassed_accounts() -> ProbeResult:
-    """No account row has ``db_typeclass_path`` = the base ``AccountDB`` model.
+    """No account row skipped Evennia's first-save setup (#3596, #3812).
 
-    Consumer: every view that reads typeclass state off ``request.user``
-    (``get_available_characters`` behind the ``X-Character-ID`` header,
-    ``played_character_sheet_ids`` in checks and combat, ``puppet``). Django's
-    ``ArxAccountAdapter.new_user`` stops signup making such rows; Django's
-    ``create_superuser`` still does, and rows from before the adapter fix stay
-    on ``AccountDB`` until repointed by hand (ADR-0260: no data migration for a handful of
-    pre-launch rows). A hit here is one of those.
+    Two symptoms, both disqualifying: ``db_typeclass_path`` names the base
+    ``AccountDB`` model (the row loads without the ``Account`` typeclass and
+    every persona-aware view 500s - Sentry ARX2-8), or ``db_cmdset_storage``
+    is empty (the row logs in and can run no command, not even ``help``). The
+    second is what the old hand repair left behind: repointing the path with
+    ``.update()`` runs no hook, so this probe used to pass a row that was still
+    unusable. ``ArxAccountAdapter.new_user`` stops signup making such rows and
+    the ``createsuperuser`` override heals the one it makes; the server heals
+    every remaining row on start (``at_server_start``), so a hit here after a
+    deploy is a row created bare since.
     """
-    from evennia.accounts.models import AccountDB  # noqa: PLC0415
+    from evennia_extensions.account_setup import bare_account_rows  # noqa: PLC0415
 
-    base_model_rows = tuple(
-        AccountDB.objects.filter(
-            db_typeclass_path__in=("", "evennia.accounts.models.AccountDB")
-        ).values_list("username", flat=True)
-    )
+    rows = tuple(bare_account_rows().values_list("username", flat=True))
     detail = (
-        f"Account(s) whose typeclass path is the base AccountDB model, not "
-        f"typeclasses.accounts.Account: {', '.join(base_model_rows)}. "
-        "Set db_typeclass_path to settings.BASE_ACCOUNT_TYPECLASS by hand: "
-        "AccountDB.objects.filter(username=...).update(db_typeclass_path=...) in "
-        "`arx manage shell`."
-        if base_model_rows
+        f"Account(s) that skipped first-save setup (typeclass path on the base "
+        f"AccountDB model, or empty cmdset storage - the row can log in and run no "
+        f"command): {', '.join(rows)}. The server heals these on start; to fix one "
+        "now, run heal_account_setup(AccountDB.objects.get(username=...)) from "
+        "evennia_extensions.account_setup in `arx manage shell`."
+        if rows
         else ""
     )
-    return ProbeResult(present=not base_model_rows, missing=base_model_rows, detail=detail)
+    return ProbeResult(present=not rows, missing=rows, detail=detail)
 
 
 def _probe_mfa_secrets_key() -> ProbeResult:
@@ -1483,8 +1482,9 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "An account whose typeclass path is the base AccountDB model has no typeclass "
                 "attributes, so every persona-aware endpoint answers 500 for that "
                 "player or staff member (Sentry ARX2-8: the first outside player's "
-                "signup account). createsuperuser still makes such rows, and "
-                "pre-adapter signup rows stay on AccountDB until fixed by hand."
+                "signup account); one with no cmdset storage logs in and can run no "
+                "command at all (#3812: the staff account on production). Both heal "
+                "on the next server start."
             ),
             probe=CustomProbe(fn=_probe_typeclassed_accounts),
         ),

@@ -47,18 +47,22 @@ DATABASES = {
     "default": env.db(),
 }
 
+# ORDER IS LOAD-BEARING (#2885, #3812). Django's get_commands() walks
+# `reversed(apps.get_app_configs())` calling dict.update(), so for a command
+# several apps ship, the app listed EARLIEST in INSTALLED_APPS wins. Three of
+# ours ride on that: `makemigrations` (the phantom-Evennia-migration filter,
+# over django_linear_migrations'), `migrate` (the generation guard), and
+# `createsuperuser` (heals the row Django's version leaves without first-save
+# setup — #3812; Django's own lives in django.contrib.auth, which Evennia's
+# defaults list first, so core_management has to go in front of the whole
+# list, not merely ahead of django_linear_migrations). Every generated
+# migration depended on a phantom Evennia migration for months while our
+# makemigrations silently lost this race. `core_management.tests
+# .test_command_resolution` and `.test_createsuperuser` pin it — don't reorder
+# without reading them.
+INSTALLED_APPS = ["core_management", *INSTALLED_APPS]
+
 INSTALLED_APPS += [
-    # ORDER IS LOAD-BEARING between these two (#2885). Both apps ship a
-    # `makemigrations` command, and Django's get_commands() walks
-    # `reversed(apps.get_app_configs())` calling dict.update() — so the app
-    # listed EARLIEST here wins, not the latest. core_management must therefore
-    # come first for its phantom-Evennia-migration filter to run at all; it
-    # subclasses django_linear_migrations' command, so the #991 sentinel below
-    # still applies. Listed the other way round, the filter is silently inert
-    # and every generated migration depends on a phantom Evennia migration that
-    # exists only in the venv that made it. `core_management.tests
-    # .test_command_resolution` pins this — don't reorder without reading it.
-    "core_management",  # Add our management app for custom commands
     # Enforces one migration leaf per app via a per-app max_migration.txt
     # sentinel (#991). Two parallel branches that each add a migration both
     # bump that file, so the second surfaces as a git conflict at PR time
@@ -91,8 +95,18 @@ INSTALLED_APPS += [
 # This is the name of your game. Make it catchy!
 SERVERNAME = "Arx"
 EVENNIA_ADMIN = False
-MULTISESSION_MODE = 2
+# Sessions share a character (#3812, ADR-0293): a phone and a laptop on the same
+# character are two windows onto one object, and it does not matter which one
+# you type in. Mode 2 kicked the older session; mode 3 fans output to all of
+# them. Simultaneous puppets are unlimited because the web client already opens
+# one socket per character, and `who` blurs idle so alts cannot be correlated.
+MULTISESSION_MODE = 3
+MAX_NR_SIMULTANEOUS_PUPPETS = None
 AUTO_CREATE_CHARACTER_WITH_ACCOUNT = False
+# Login puppets the account's own character (durable selection, then last
+# puppet, then a sole character) in Account.at_post_login. Evennia's flag
+# stays off because its version puppets `_last_puppet` blindly and raises
+# "The Character does not exist." when there is none.
 AUTO_PUPPET_ON_LOGIN = False
 IN_GAME_ERRORS = DEBUG
 

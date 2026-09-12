@@ -341,4 +341,5 @@ treat those names as hints to confirm, not gospel.
 - [0290 - Combat narration shares the pose Interaction model and reply-threading](0290-combat-narration-shares-the-pose-interaction-model.md) (#3761 brainstorming; extends ADR-0127; related ADR-0274, #3757, #3787)
 - [0291 - Websocket liveness is a server-side auto-ping, not a client heartbeat](0291-websocket-liveness-is-a-server-side-auto-ping.md) (#3745; related #3742, #3743)
 - [0292 - There is no player-trust axis; per-thing permissions if we ever want one](0292-no-trust-axis-permissions-if-anything.md) (#3726; amends ADR-0097; related ADR-0237, ADR-0141)
+- [0293 - Login is the presence step, sessions share a character, and puppeting records the selection](0293-login-is-the-presence-step-and-sessions-share-a-character.md) (#3812; amends ADR-0241; related #3412, #3752, #3596)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

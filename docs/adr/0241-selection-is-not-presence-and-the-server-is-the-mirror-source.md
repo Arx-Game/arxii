@@ -9,7 +9,14 @@ ADR-0235/0236, resolving the in-flight collision this branch was warned about.
 re-verify at enqueue in case another PR claimed it in the meantime.
 -->
 
-**Status:** Accepted (2026-08-27, #3412 slice 1)
+**Status:** Accepted (2026-08-27, #3412 slice 1); amended by ADR-0293 (#3812).
+
+**Amendment (#3812, ADR-0293):** the guarantee below runs one way. Setting or clearing the
+selection still triggers zero puppeting side effects. But *puppeting* now records the
+selection — ``Account.puppet_object`` calls ``set_selected_entry`` on success — so ``@ic Y`` on
+telnet means the website shows Y next time, and login on any protocol resolves to the last
+character the player explicitly took up. ``set_selected_entry`` stays the sole mutator; the
+"selection is not presence" rule stands, and login became the presence step that reads it.
 
 **Decision.** The account's chosen character ("who am I browsing as") is a durable
 server-side fact — `PlayerData.selected_entry` (state 2.5 in the ruled four-state

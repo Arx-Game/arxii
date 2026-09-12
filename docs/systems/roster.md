@@ -286,6 +286,16 @@ The telnet front door itself (connection screen + the characterless post-login m
 `settings.FRONTEND_URL` so a telnet-only player has a path to the web roster/application/chargen
 flow in the first place.
 
+**Login puppets the account's character (#3812, ADR-0293).** `Account.at_post_login` no
+longer renders Evennia's OOC screen and waits for `@ic`; it resolves the durable selection
+(`PlayerData.selected_entry`), else Evennia's `_last_puppet`, else a sole character, and
+puppets it — on telnet and on the web socket alike. Several characters with nothing recorded
+get a one-line list, never a silent first pick. `@ic <name>` remains for switching and is a
+no-op for the session's own puppet (the web client sends it on every socket open). Sessions
+share a character (`MULTISESSION_MODE = 3`, unlimited simultaneous puppets): a second window
+on the same character joins it rather than being refused or kicking the first, and the
+"came online"/"went offline" hooks fire on the first/last session only.
+
 ### FamilyMember
 
 ```python
@@ -362,7 +372,9 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   set-active endpoint's shape: the entry must be one of `mine`'s own-current-entries
   population, a foreign/unknown id is rejected uniformly, and `entry_id: null` always
   clears. **Selection is NOT presence** — no lifecycle/session/puppeting side effects
-  fire. Sole mutator: `world.roster.services.selection.set_selected_entry`. Response
+  fire. Sole mutator: `world.roster.services.selection.set_selected_entry` — which
+  `Account.puppet_object` also calls, so puppeting records the selection and login
+  puppets it (#3812, ADR-0293; the guarantee runs one way). Response
   mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
 
 **Filters:** `RosterEntryFilterSet` via DjangoFilterBackend — `gender`, `char_class`, `name`,
