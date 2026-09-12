@@ -10135,7 +10135,18 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description ViewSet for browsing interactions with destroy and mark_private actions. */
+    /**
+     * @description Paginate as usual, then prime the reply-link handler for the whole page.
+     *
+     *     Read through InteractionReplyHandler (Interaction.reply_link_handler) rather
+     *     than a bare Prefetch with a `to_attr` kwarg in get_queryset above: that
+     *     spelling silently stops running the second time an instance is warm under the
+     *     identity map (ADR-0263, #3673) - the trap the other cached_* fields there
+     *     still carry, predating that ADR. Otherwise identical to
+     *     ListModelMixin.list(). Defined last in the class body so an earlier
+     *     `list[...]` annotation above (get_permissions) resolves to the builtin, not
+     *     this method.
+     */
     get: operations['interactions_list'];
     put?: never;
     post?: never;
@@ -31495,7 +31506,14 @@ export interface components {
       readonly id: number;
       /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
-      /** @description Do not infer a parent from neighboring interactions. */
+      /**
+       * @description The interaction this one answered, when the viewer may also read it.
+       *
+       *     Gated on the PARENT's own visibility, not on the edge row's existence: a reply
+       *     stays readable to everyone who can see it, but its chip appears only for a
+       *     viewer who could already read what it answered. Never infers a parent from
+       *     neighboring interactions.
+       */
       readonly reply_to: {
         [key: string]: unknown;
       } | null;
@@ -31693,7 +31711,14 @@ export interface components {
       readonly id: number;
       /** @description Return only explicit topology; unthreaded rows remain standalone. */
       readonly thread_id: string | null;
-      /** @description Do not infer a parent from neighboring interactions. */
+      /**
+       * @description The interaction this one answered, when the viewer may also read it.
+       *
+       *     Gated on the PARENT's own visibility, not on the edge row's existence: a reply
+       *     stays readable to everyone who can see it, but its chip appears only for a
+       *     viewer who could already read what it answered. Never infers a parent from
+       *     neighboring interactions.
+       */
       readonly reply_to: {
         [key: string]: unknown;
       } | null;
