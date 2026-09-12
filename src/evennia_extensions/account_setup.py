@@ -17,7 +17,13 @@ The heal here is Evennia's own answer to "replay first-save setup on an
 existing row": ``swap_typeclass(..., run_start_hooks="all")``. It runs from
 three places — the server-start sweep (every affected account is fixed by the
 first deploy, no shell needed), ``Account.at_pre_login`` as a guard, and the
-``createsuperuser`` override that heals the row it just made.
+``createsuperuser`` override that heals the row it just made. Only the sweep
+and the override reach a row whose typeclass path is still the base model:
+such a row loads as plain ``AccountDB``, which has no ``at_pre_login`` (nor the
+``at_init`` that ``sessionhandler.login`` calls first), so it cannot log in at
+all until the next server start heals it. The login guard closes the other
+symptom only — a typeclassed row with empty cmdset storage, which is the shape
+the old hand repair left behind.
 """
 
 from __future__ import annotations

@@ -528,7 +528,10 @@ class Account(DefaultAccount):
         storage, which log in and can run no command. The server-start sweep
         fixes those in bulk; this guard catches any that appear later.
         ``basetype_setup`` rebuilds the live cmdset as it writes the storage, so
-        the login in progress gets it.
+        the login in progress gets it. This hook only ever sees the
+        missing-cmdset shape: a row whose typeclass path is still the base
+        model loads as plain ``AccountDB``, on which this method does not
+        exist, so that shape is the sweep's alone.
         """
         heal_account_setup(self)
         super().at_pre_login(**kwargs)
