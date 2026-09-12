@@ -326,6 +326,12 @@ red, so do not treat it as cleanup to get to later:
 3. **Point the PR body's `- Report:` line at that comment URL.** The
    `review-evidence` job reads that line; a stale path there fails it.
 4. **Delete `docs/reviews/` and push again.**
+5. **Before EVERY later push, run
+   `scripts/sync-evidence-revision.sh <pr>`.** It restates the report's
+   `Reviewed revision` to the current `HEAD^1`, prints what changed between the
+   old revision and the new one so you can judge whether the review still
+   stands, and re-validates the comment exactly as CI will. Skipping it is the
+   single most common way this job goes red after a green one.
 
 **The revision gotcha, which bites every time.** Both the gate and
 `open-pr.sh` validate the report against `git rev-parse HEAD^1`, so the report's
@@ -576,6 +582,7 @@ where it stopped, what the human should decide.
 | Open the PR | `scripts/open-pr.sh <branch> <issue> [followups...]` |
 | File a follow-up issue | `scripts/file-followup.sh <title> <body-path> [labels...]` |
 | Comment on an issue | `scripts/comment-on-issue.sh <issue> <body-path>` |
+| Re-point evidence at the checked revision | `scripts/sync-evidence-revision.sh <pr>` |
 | Watch CI | `scripts/watch-ci.sh <pr>` |
 | Enqueue for the merge queue | `scripts/enqueue-pr.sh <pr>` |
 | Read failing log | `scripts/get-ci-failure.sh <pr> <check-name>` |
