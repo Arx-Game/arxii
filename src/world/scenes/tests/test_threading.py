@@ -13,6 +13,7 @@ from evennia_extensions.factories import (
     RoomProfileFactory,
 )
 from world.character_sheets.factories import CharacterSheetFactory
+from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import InteractionMode, ScenePrivacyMode
 from world.scenes.factories import (
     InteractionFactory,
@@ -215,6 +216,67 @@ class TestPoseActionWithTargets(TestCase):
         interaction = Interaction.objects.order_by("-pk").first()
         assert interaction is not None
         assert interaction.place_id == place.pk
+
+
+class TestPoseActionReplyRefusalTelnetParity(TestCase):
+    """Telnet parity (#3787 Task 8): the reply-to-scene-target refusal.
+
+    Telnet reaches ``assign_interaction_thread`` through ``record_interaction``
+    without ever passing through the DRF view (`interaction_views.submit_pose`),
+    so both the refusal AND its venue hint must be enforced and phrased at the
+    shared service seam and translated by ``Action.run()`` -- the single
+    telnet+web chokepoint (`actions/base.py`) -- the same way the REST view
+    gets a structured ``hint`` field.
+    """
+
+    def setUp(self) -> None:
+        patcher = patch("world.scenes.interaction_services.push_interaction")
+        self.mock_push = patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_pose_replying_from_a_place_to_a_scene_target_carries_the_hint(self) -> None:
+        from actions.definitions.communication import PoseAction
+        from world.scenes.thread_services import ReplyTarget
+
+        room = ObjectDBFactory(db_key="War Room", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile = RoomProfileFactory(objectdb=room)
+        place = PlaceFactory(room=room_profile, name="the war room table")
+        scene = SceneFactory(location=room)
+
+        char = CharacterFactory(db_key="Alice", location=room)
+        roster_entry = RosterEntryFactory(character_sheet__character=char)
+        player_data = PlayerDataFactory()
+        RosterTenureFactory(player_data=player_data, roster_entry=roster_entry)
+        identity = CharacterSheetFactory(character=char)
+        PlacePresenceFactory(place=place, persona=identity.primary_persona)
+
+        # The pre-existing row this pose answers -- Scene-held (a room-wide
+        # pose, or a combat OUTCOME), same account so it's visible to the
+        # reply's own writer.
+        target = InteractionFactory(scene=scene, writer_account=player_data.account)
+
+        action = PoseAction()
+        with patch("actions.definitions.communication.message_location"):
+            result = action.run(
+                actor=char,
+                text="glances at the map.",
+                place=place,
+                reply_to=ReplyTarget(target.pk, target.timestamp),
+            )
+
+        assert result.success is False
+        # Both halves reach the telnet client: the refusal sentence AND the
+        # actionable venue hint (spec decision 4) -- previously the hint was
+        # dropped by Action.run()'s except clause (the known #3787 Task 8 gap).
+        assert result.message == (
+            "Answering the fight means speaking to the room. "
+            "Leave the war room table to answer this. Your draft is kept."
+        )
+
+        # Nothing was written by the refused attempt.
+        assert not Interaction.objects.filter(
+            content="glances at the map.",
+        ).exists()
 
 
 class TestTabletalkCommand(TestCase):

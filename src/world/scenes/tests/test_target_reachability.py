@@ -336,9 +336,77 @@ class TestPoseActionRefusesUnreachableTargets(TestCase):
 
         assert isinstance(result, ActionResult)
         assert result.success is False
-        assert result.message == "Bob is across the room and will not see table talk."
+        # #3787 Task 8: the venue hint is the actionable half of the refusal
+        # (spec decision 4) -- Action.run()'s except clause appends it so a
+        # telnet player is told where Bob IS reachable, not just that he isn't
+        # here.
+        assert result.message == ("Bob is across the room and will not see table talk. " + _HINT)
         assert Interaction.objects.count() == interaction_count
         assert InteractionTargetPersona.objects.count() == target_row_count
+
+    def test_pose_command_targeting_unreachable_persona_tells_telnet_the_hint(self) -> None:
+        """Genuine telnet-path proof (#3787 Task 8): drives ``CmdPose`` itself,
+        not just ``PoseAction.run()`` -- the same seam ``ArxCommand._execute()``
+        uses in production, capturing exactly what the player's client receives.
+        """
+        from commands.evennia_overrides.communication import CmdPose
+
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        room_profile = RoomProfileFactory(objectdb=room)
+        place_a = PlaceFactory(room=room_profile, name="the bar")
+        place_b = PlaceFactory(room=room_profile, name="the hearth")
+
+        char_a = CharacterFactory(db_key="Alice", location=room)
+        sheet_a = CharacterSheetFactory(character=char_a)
+        PlacePresenceFactory(place=place_a, persona=sheet_a.primary_persona)
+
+        char_b = CharacterFactory(db_key="Bob", location=room)
+        sheet_b = CharacterSheetFactory(character=char_b)
+        PlacePresenceFactory(place=place_b, persona=sheet_b.primary_persona)
+
+        messages: list[object] = []
+        char_a.msg = lambda *args, **kwargs: messages.append((args, kwargs))
+
+        cmd = CmdPose()
+        cmd.caller = char_a
+        cmd.action = PoseAction()
+        # PoseAction's `place` kwarg (the writer's own venue) isn't parsed from
+        # telnet text by CmdPose -- it's resolved in `execute()` via
+        # `_resolve_pose_place`. Set the caller's PlacePresence-derived venue
+        # the way that resolver does, by patching `resolve_action_args` to add
+        # it, mirroring `CmdTabletalk` (the actual telnet surface for a
+        # Place-scoped pose) without duplicating its whole grammar here.
+        cmd.args = " @Bob murmurs across the room."
+        cmd.raw_string = "pose @Bob murmurs across the room."
+        cmd.cmdset = None
+        cmd.cmdset_providers = {}
+        cmd.session = None
+        cmd.account = None
+        cmd.obj = None
+
+        original_resolve = cmd.resolve_action_args
+
+        def _resolve_with_place() -> dict[str, object]:
+            kwargs = original_resolve()
+            kwargs["place"] = place_a
+            return kwargs
+
+        cmd.resolve_action_args = _resolve_with_place
+        cmd.func()
+
+        # Alice is in the room, so the pose's own room-wide broadcast
+        # (message_location's msg_contents) also lands one entry in
+        # `messages` -- filter for the refusal text specifically rather
+        # than assuming it's the first call the caller receives.
+        refusal_calls = [
+            args[0]
+            for args, kwargs in messages
+            if args and "Bob is across the room" in str(args[0])
+        ]
+        assert refusal_calls, f"CmdPose never sent the refusal to the caller: {messages}"
+        sent_text = str(refusal_calls[0])
+        assert "Bob is across the room and will not see table talk." in sent_text
+        assert _HINT in sent_text
 
     def test_pose_at_place_targeting_persona_at_same_place_succeeds(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")

@@ -427,10 +427,17 @@ class Action:
             # UnreachableError (#3787 Task 4) is the telnet sibling of the REST
             # submit_pose 400: create_interaction/record_interaction refuse a
             # tagged persona who cannot receive the row before anything is
-            # written. str(error) is the player-facing detail; the venue_hint
-            # (only on UnreachableError) has no telnet surface today, same as
-            # InteractionThreadError.venue_hint above.
-            context.result = ActionResult(success=False, message=str(error))
+            # written. str(error) is the player-facing detail; venue_hint is
+            # the actionable half (spec decision 4) -- the REST refusal ships
+            # it as a separate `hint` field, so append it here to give telnet
+            # the same direction (#3787 Task 8). Guarded against duplication:
+            # a caller that omits `message` gets venue_hint back as str(error)
+            # too, so only append when the two actually differ.
+            message = str(error)
+            hint = error.venue_hint
+            if hint and hint != message:
+                message = f"{message} {hint}"
+            context.result = ActionResult(success=False, message=message)
 
         # Run post-effects
         for effect in context.post_effects:
