@@ -40,12 +40,32 @@ recipe.
 django-linear-migrations (the thing that makes `max_migration.txt` conflict
 loudly on purpose) ships the automation:
 
+**Leave the conflict markers IN `max_migration.txt`.** `rebase_migration` reads
+them to learn both sides; resolving the file first (with `git checkout --theirs`,
+or by hand) makes it exit with *"arxii's max_migration.txt does not seem to
+contain a merge conflict."*
+
+**It renames whichever migration is written AFTER the `=======` line.** That has
+to be YOURS, and which side that is depends on how you synced:
+
+| sync | `<<<<<<< HEAD` side | after `=======` | orientation |
+|---|---|---|---|
+| `git rebase origin/main` | main's tip | your commit | correct as-is |
+| `git merge origin/main` (what `sync-with-main.sh` does once the branch is pushed) | YOURS | main's tip | **reversed - swap before running** |
+
+Get that backwards and the tool renames *main's* migration to itself and
+rewrites *main's* dependency to point at yours, which is a dependency cycle.
+The `check-migrations` hook catches it (Django's `MigrationLoader` raises
+`CircularDependencyError`), so it cannot reach main - but you will be debugging
+a cycle you did not write, in a file you did not touch.
+
 ```bash
 git fetch origin main && git rebase origin/main    # conflict lands in max_migration.txt
-git checkout --theirs src/world/migrations/max_migration.txt   # keep MAIN's tip...
-# (direction depends on rebase orientation — the file must name MAIN's latest migration)
+# Do NOT resolve the file. If you merged rather than rebased, swap the two sides
+# first so YOUR migration sits after the ======= line.
 uv run arx manage rebase_migration arxii           # renumbers YOUR migration after main's tip,
                                                    # rewrites its dependencies + max_migration.txt
+git diff origin/main -- src/world/migrations       # confirm ONLY your migration moved
 uv run pre-commit run check-migrations --all-files # verify the graph before continuing
 git add src/world/migrations && git rebase --continue
 git push --force-with-lease
