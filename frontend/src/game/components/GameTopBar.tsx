@@ -118,14 +118,17 @@ function CombatBanner({ onJumpToCombat }: { onJumpToCombat?: () => void }) {
   const [dismissed, setDismissed] = useState(false);
   if (dismissed) return null;
   return (
-    <div className="flex items-center gap-2 bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground sm:px-4">
+    <div
+      data-testid="combat-banner"
+      className="flex items-center gap-2 bg-destructive px-3 py-1.5 text-xs font-semibold text-destructive-foreground sm:px-4"
+    >
       <Swords className="h-3.5 w-3.5" />
       <button
         type="button"
         onClick={onJumpToCombat}
         className="min-h-6 text-left underline-offset-2 hover:underline"
       >
-        In combat: your turn
+        In combat
       </button>
       <button
         type="button"

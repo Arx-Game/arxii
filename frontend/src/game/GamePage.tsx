@@ -198,7 +198,8 @@ interface GameRightSidebarProps {
   sceneData: ComponentProps<typeof FocusPanel>['sceneData'];
   hasActiveEncounter: boolean;
   hasActiveBattle: boolean;
-  activeEncounter?: { id: number } | null;
+  showCombatRail: boolean;
+  railEncounterId: number;
   combatSceneDetail?: SceneDetail;
   onDismissOutcome: () => void;
   activeTab: string;
@@ -216,7 +217,8 @@ function GameRightSidebar({
   sceneData,
   hasActiveEncounter,
   hasActiveBattle,
-  activeEncounter,
+  showCombatRail,
+  railEncounterId,
   combatSceneDetail,
   onDismissOutcome,
   activeTab,
@@ -240,10 +242,10 @@ function GameRightSidebar({
               hasActiveEncounter={hasActiveEncounter}
               hasActiveBattle={hasActiveBattle}
             />
-            {sceneData && activeEncounter && (
+            {sceneData && showCombatRail && (
               <CombatRail
                 sceneId={sceneData.id}
-                encounterId={activeEncounter.id}
+                encounterId={railEncounterId}
                 viewerCanGm={combatSceneDetail?.viewer_can_gm ?? false}
                 scene={combatSceneDetail}
                 onDismissOutcome={onDismissOutcome}
@@ -396,6 +398,35 @@ export function GamePage() {
   const { data: activeBattle } = useBattleForSceneQuery(sceneData?.id ?? null);
   const hasActiveEncounter = activeEncounter != null;
   const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
+
+  // Final-review Finding I1 — ported from SceneDetailPage.tsx (#3551): the
+  // scene's active-encounter poll (useEncounterForScene, 15s interval) drops
+  // a completed encounter from its result, which would otherwise unmount
+  // CombatRail (and its outcome banner) before the player can see/dismiss
+  // it. lingeringEncounterId remembers the last real encounter id and keeps
+  // the rail mounted on it until CombatRail's onDismissOutcome fires;
+  // dismissedEncounterId hides the rail immediately on dismiss rather than
+  // waiting up to 15s for the next poll. Deliberately does NOT feed
+  // `hasActiveEncounter` (the banner/nav-icon signal stays the raw "an
+  // encounter genuinely exists" boolean) — only the rail itself lingers.
+  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  const encounterId = activeEncounter?.id ?? 0;
+  const prevSceneIdForEncounterRef = useRef(sceneData?.id ?? 0);
+  useEffect(() => {
+    const currentSceneId = sceneData?.id ?? 0;
+    if (prevSceneIdForEncounterRef.current !== currentSceneId) {
+      prevSceneIdForEncounterRef.current = currentSceneId;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
+    if (encounterId > 0) {
+      setLingeringEncounterId(encounterId);
+    }
+  }, [sceneData?.id, encounterId]);
+  const railEncounterId = encounterId || lingeringEncounterId;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
 
   // GamePage is the composition root (#2156): it calls the scene-feed +
   // threading hooks once for the active session's scene and feeds both the
@@ -779,7 +810,12 @@ export function GamePage() {
     if (sceneData?.id != null) {
       queryClient.invalidateQueries({ queryKey: combatKeys.encountersForScene(sceneData.id) });
     }
-  }, [queryClient, sceneData?.id]);
+    // Final-review Finding I1: hide the rail immediately (mirrors
+    // SceneDetailPage.tsx's handleDismissOutcome) rather than waiting on the
+    // next 15s poll to drop it.
+    setDismissedEncounterId(railEncounterId);
+    setLingeringEncounterId(0);
+  }, [queryClient, sceneData?.id, railEncounterId]);
 
   const submitAction = useMutation({
     mutationFn: (action: ActionAttachmentInfo) =>
@@ -937,7 +973,8 @@ export function GamePage() {
                 sceneData={sceneData}
                 hasActiveEncounter={hasActiveEncounter}
                 hasActiveBattle={hasActiveBattle}
-                activeEncounter={activeEncounter}
+                showCombatRail={showCombatRail}
+                railEncounterId={railEncounterId}
                 combatSceneDetail={combatSceneDetail}
                 onDismissOutcome={handleDismissOutcome}
                 activeTab={hereActiveTab}
