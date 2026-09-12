@@ -81,6 +81,24 @@ timestamp-aware bridge shape. Keeping the edge in its own sparse table (one row 
 reply, never one per Interaction) also keeps a web/narrative concern off the app's largest
 table, consistent with #3760's ruling to keep `client_request_id` off it too.
 
+**The two channels gate the parent edge differently, and the WS gate is the weaker
+one.** REST gates it per viewer on `visible_to(request.user)`
+(`InteractionSerializer.get_reply_to`). The live WebSocket push has no single viewer, so
+it uses a structural gate evaluated once (`interaction_services._reply_parent_payload`):
+the parent goes on the wire only when it is room-heard in the same scene, using the
+shared `managers.ROOM_HEARD` classification. State that gate's guarantee exactly: **it
+discloses strictly less than the live push it rides on already delivers to that same
+audience.** It does NOT match per-recipient REST visibility, and two cases send a parent
+`visible_to` would withhold: a room-heard parent in a PRIVATE scene reaching a bystander
+standing in the room who never authored or received anything in it (`visible_to`'s
+`present_scene_ids` keys on authorship/receipt, not presence), and a parent older than
+`visible_to`'s 90-day `time_bound`, which the room-heard predicate does not carry. Both
+are accepted: the disclosure is an opaque id and an ISO timestamp with no path to content
+(`ParentChip` renders "a pose not currently loaded" on a miss and never fetches), and
+both recipients are receiving the reply's own full text over that same broadcast. Do not
+restate this as "the WS gate can never over-disclose"; it can, in those two cases, and it
+is fine because it still says less than the push already did.
+
 **A correction worth recording:** `InteractionAction` (the POSE-to-ACTION-Interaction
 bridge, `world/scenes/models.py`) is not a precedent for the denormalized-timestamp half of
 this pattern. It carries `db_constraint=False` on both its FKs but no timestamp column on

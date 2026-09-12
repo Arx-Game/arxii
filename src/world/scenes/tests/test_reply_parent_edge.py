@@ -22,7 +22,7 @@ from world.scenes.interaction_services import (
     create_interaction,
     push_interaction,
 )
-from world.scenes.models import InteractionReply
+from world.scenes.models import InteractionReply, InteractionThread
 from world.scenes.thread_services import ReplyTarget
 
 
@@ -72,6 +72,20 @@ class ReplyParentEdgeTest(TestCase):
         """ACTION rows take a direct objects.create path, not the full wrapper."""
         target = InteractionFactory(scene=self.scene, mode=InteractionMode.ACTION)
         reply = self._reply_to(target)
+        self.assertTrue(InteractionReply.objects.filter(interaction=reply).exists())
+
+    def test_a_reply_always_carries_a_thread_id(self):
+        """The invariant ``_reply_parent_payload``'s early return depends on.
+
+        ``assign_interaction_thread`` is the only writer of ``InteractionReply``, and it
+        sets the thread and writes the edge in one atomic block. That is what lets the
+        live push skip the parent lookup for every row with no ``thread_id`` instead of
+        paying a SELECT on every single push. If this ever fails, remove that early
+        return before doing anything else -- it would be silently dropping parent chips.
+        """
+        target = InteractionFactory(scene=self.scene, mode=InteractionMode.POSE)
+        reply = self._reply_to(target)
+        self.assertIsNotNone(reply.thread_id)
         self.assertTrue(InteractionReply.objects.filter(interaction=reply).exists())
 
     def test_an_unthreaded_pose_has_no_parent(self):
@@ -193,6 +207,27 @@ class ReplyToWebSocketPayloadTest(TestCase):
             {"id": str(target.pk), "timestamp": target.timestamp.isoformat()},
         )
 
+    def test_a_pose_that_answers_nothing_costs_no_parent_lookup(self):
+        """The saving the docstring claims, pinned so it cannot silently regress.
+
+        ``reply_link_handler.load()`` runs a ``SELECT ... LIMIT 1`` on every cold
+        instance, so without the ``thread_id`` pre-check EVERY push would pay for the
+        parent lookup, not just replies. Asserted as an exact count rather than a
+        budget: the point is that the lookup is absent, and a budget that happened to
+        have a spare slot would not notice it coming back.
+        """
+        pose = create_interaction(
+            persona=self.persona,
+            content="Someone drops a glass.",
+            mode=InteractionMode.POSE,
+            scene=self.scene,
+        )
+        pose.refresh_from_db()
+
+        with patch("world.scenes.interaction_services._broadcast_to_location"):
+            with self.assertNumQueries(0):
+                self.assertIsNone(_reply_parent_payload(pose))
+
     def test_a_pose_that_answers_nothing_sends_a_null_parent(self):
         pose = create_interaction(
             persona=self.persona,
@@ -214,6 +249,11 @@ class ReplyToWebSocketPayloadTest(TestCase):
         written against: a room-heard parent can be escalated afterwards with
         ``mark_very_private``. The wire gate has to hold on the shape the parent has
         NOW, so these cases assert it against an edge that exists.
+
+        The thread is set alongside the edge deliberately, exactly as the real writer
+        does. ``_reply_parent_payload`` skips the handler lookup entirely for a row with
+        no ``thread_id``, so an edge written without one would make every case below
+        pass for the wrong reason -- never reaching the shape gate they exist to test.
         """
         reply = create_interaction(
             persona=self.persona,
@@ -221,6 +261,12 @@ class ReplyToWebSocketPayloadTest(TestCase):
             mode=InteractionMode.POSE,
             scene=self.scene,
         )
+        reply.thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=self.scene.pk,
+            scene_id=self.scene.pk,
+        )
+        reply.save(update_fields=["thread"])
         InteractionReply.objects.create(
             interaction=reply,
             timestamp=reply.timestamp,

@@ -577,16 +577,48 @@ def _reply_parent_payload(interaction: Interaction) -> ReplyParentPayload | None
     parent goes on the wire only when it is ROOM-HEARD IN THIS SAME SCENE (the shared
     ``managers.ROOM_HEARD`` classification, not a second copy of it).
 
-    That is strictly narrower than per-recipient visibility for this audience rather
-    than an approximation of it: everyone receiving this push is present in the scene's
-    room right now and is receiving the reply itself on exactly those terms, so a
-    room-heard parent in the same scene is never something a recipient could not already
-    perceive. Every narrower parent -- a whisper, a table-scoped aside, a row escalated
-    to PERCEIVED_ONLY or VERY_PRIVATE, or a parent in another scene -- sends ``None``
+    **What this gate guarantees, stated exactly.** It discloses strictly less than the
+    live push it rides on already delivers to that same audience. It does NOT match
+    per-recipient REST visibility, and two known cases send a parent ``visible_to``
+    would withhold from that recipient:
+
+    1. A room-heard parent in a PRIVATE scene, to a bystander standing in the room who
+       is neither a participant, nor its GM, nor a prior writer or receiver in it.
+       ``visible_to``'s ``present_scene_ids`` clause (``managers.py``) keys on having
+       AUTHORED or RECEIVED something in the scene, not on standing there.
+    2. A parent older than ``visible_to``'s 90-day ``time_bound``, which the room-heard
+       predicate does not carry.
+
+    Both are accepted rather than fixed. The disclosure is an opaque id and an ISO
+    timestamp with no path to content: ``ParentChip`` (``scenes/components/PoseUnit.tsx``)
+    renders "a pose not currently loaded" on a lookup miss and never fetches. And both
+    recipients are, in the same breath, receiving the REPLY's full text over the same
+    ``_broadcast_to_location`` call. So the parent id tells them strictly less than the
+    push already has. Do not restate this as "can never over-disclose".
+
+    Every narrower parent -- a whisper, a table-scoped aside, a row escalated to
+    PERCEIVED_ONLY or VERY_PRIVATE, or a parent in another scene -- sends ``None``
     rather than guess, and those readers still get the chip from the REST serializer's
-    own per-viewer gate on their next fetch. One query per reply push; no query at all
-    for the overwhelmingly common row that answers nothing.
+    own per-viewer gate on their next fetch.
+
+    **Cost.** One query per reply push, and none at all for the overwhelmingly common
+    row that answers nothing -- which is true only because of the ``thread_id``
+    pre-check below. Without it, ``reply_link_handler.load()`` fires a ``SELECT ...
+    LIMIT 1`` on every cold instance, so EVERY ``push_interaction`` would pay for the
+    lookup, not just replies.
     """
+    # A reply always has a thread: ``assign_interaction_thread``
+    # (``world/scenes/thread_services.py``) sets ``interaction.thread`` and writes the
+    # ``InteractionReply`` edge in the same atomic block, and it is the ONLY writer of
+    # that edge anywhere in the codebase. Nothing deletes an ``InteractionThread``
+    # either (it is created there and nowhere else, and neither model is registered in
+    # the admin), so the ``on_delete=SET_NULL`` on ``Interaction.thread`` cannot strand
+    # an edge behind a null ``thread_id`` in practice. So no ``thread_id`` provably
+    # means no parent edge, and the handler never has to be touched. Pinned by
+    # ``test_a_reply_always_carries_a_thread_id`` -- if that invariant ever breaks, this
+    # early return starts silently dropping parent chips from the live push.
+    if interaction.thread_id is None:
+        return None
     rows = interaction.reply_link_handler.rows
     link = rows[0] if rows else None
     if link is None:
