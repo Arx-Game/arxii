@@ -279,6 +279,52 @@ class TestPoseActionReplyRefusalTelnetParity(TestCase):
         ).exists()
 
 
+class TestInvolvementMarkTelnetParity(TestCase):
+    """Telnet parity for the involvement mark (#3787 Task 8, fix round 1).
+
+    Spec decision 7 puts the mark on the parity side (only the parent chip is
+    web-only): a telnet client must get an explicit signal that a targeted row
+    was about them. Drives the real ``CmdPose`` grammar (``@Name`` targeting,
+    ``commands/parsing.py``'s ``parse_targets_from_text``) so this proves a
+    scenario an actual player command produces, not a synthetic kwarg shape.
+    """
+
+    def test_targeted_player_gets_the_mark_and_a_bystander_does_not(self) -> None:
+        from actions.definitions.communication import PoseAction
+        from commands.evennia_overrides.communication import CmdPose
+
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        alice = CharacterFactory(db_key="Alice", location=room)
+        bob = CharacterFactory(db_key="Bob", location=room)
+        carol = CharacterFactory(db_key="Carol", location=room)
+        CharacterSheetFactory(character=alice)
+        CharacterSheetFactory(character=bob)
+        CharacterSheetFactory(character=carol)
+
+        bob_messages: list[object] = []
+        carol_messages: list[object] = []
+        bob.msg = lambda *args, **kwargs: bob_messages.append((args, kwargs))
+        carol.msg = lambda *args, **kwargs: carol_messages.append((args, kwargs))
+
+        cmd = CmdPose()
+        cmd.caller = alice
+        cmd.action = PoseAction()
+        cmd.args = " @Bob waves warmly."
+        cmd.raw_string = "pose @Bob waves warmly."
+        cmd.cmdset = None
+        cmd.cmdset_providers = {}
+        cmd.session = None
+        cmd.account = None
+        cmd.obj = None
+        cmd.func()
+
+        bob_texts = [str(args[0]) for args, kwargs in bob_messages if args]
+        carol_texts = [str(args[0]) for args, kwargs in carol_messages if args]
+
+        assert any("This happened to you." in text for text in bob_texts), bob_messages
+        assert not any("This happened to you." in text for text in carol_texts), carol_messages
+
+
 class TestTabletalkCommand(TestCase):
     """Tests for CmdTabletalk (tt) command."""
 

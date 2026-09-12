@@ -52,6 +52,11 @@ _ephemeral_counter = itertools.count()
 # names (address the room, or whisper) are always available to the writer.
 _TARGET_UNREACHABLE_HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
 
+# #3787 Task 8 - telnet parity for the web reader's InvolvementFlag ("This happened
+# to you"). One phrasing for every row kind that carries target_personas (spec
+# decision 8) - see _send_to_objects.
+_INVOLVEMENT_MARK_TEXT = "This happened to you."
+
 
 def _describe_unreachable_targets(personas: list[Persona]) -> str:
     """Player-facing detail naming the unreachable persona(s) (#3787 demo copy).
@@ -387,6 +392,23 @@ def create_action_interaction_core(  # noqa: PLR0913 - one arg per resolved-acti
     return interaction
 
 
+def _target_character_ids(target_persona_ids: list[int] | None) -> frozenset[int]:
+    """Resolve targeted persona ids to their character (ObjectDB) ids, once per call.
+
+    ``CharacterSheet`` is a ``primary_key=True`` O2O onto ``ObjectDB`` (see
+    ``django_notes.md``), so ``Persona.character_sheet_id`` already IS the
+    character's own pk -- no join needed. Returns an empty set (no query) when
+    there are no targets, which is the overwhelmingly common broadcast.
+    """
+    if not target_persona_ids:
+        return frozenset()
+    return frozenset(
+        Persona.objects.filter(pk__in=target_persona_ids).values_list(
+            "character_sheet_id", flat=True
+        )
+    )
+
+
 def _send_to_objects(
     objects: Iterable[ObjectDB],
     payload: InteractionPayload,
@@ -399,13 +421,30 @@ def _send_to_objects(
     each object gets its own copy of the payload with ``content`` rebuilt via
     ``render_for(obj)``. ``InteractionPayload`` is a TypedDict, so the per-object
     payload is rebuilt via dict-spread rather than ``dataclasses.replace``.
+
+    Telnet involvement mark (#3787 Task 8, spec decisions 7+8): the
+    ``interaction=`` kwarg above is a WebSocket-only message type -- a bare
+    telnet session never receives it (no ``interaction`` outputfunc is
+    registered for that protocol), so it gives telnet no equivalent of the
+    web reader's ``InvolvementFlag`` ("This happened to you"). Every recipient
+    named in ``payload["target_persona_ids"]`` additionally gets one plain-text
+    line via ``obj.msg(_INVOLVEMENT_MARK_TEXT)``, which telnet DOES render.
+    This is the one shared seam every targeted row already passes through
+    (pose tagging, whisper, mutter, and combat's unconcealed action outcome
+    all build their payload via ``_build_interaction_payload`` and reach
+    clients only through this function or ``_broadcast_to_location``), so one
+    rule here covers every row kind with no per-mode copy (decision 8) and no
+    duplicated logic in a command class.
     """
+    target_character_ids = _target_character_ids(payload.get("target_persona_ids"))
     for obj in objects:
         try:
             obj_payload = payload
             if render_for is not None:
                 obj_payload = cast(InteractionPayload, {**payload, "content": render_for(obj)})
             obj.msg(interaction=((), obj_payload))
+            if obj.pk in target_character_ids:
+                obj.msg(_INVOLVEMENT_MARK_TEXT)
         except AttributeError:
             continue
 

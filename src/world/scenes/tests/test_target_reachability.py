@@ -345,9 +345,23 @@ class TestPoseActionRefusesUnreachableTargets(TestCase):
         assert InteractionTargetPersona.objects.count() == target_row_count
 
     def test_pose_command_targeting_unreachable_persona_tells_telnet_the_hint(self) -> None:
-        """Genuine telnet-path proof (#3787 Task 8): drives ``CmdPose`` itself,
-        not just ``PoseAction.run()`` -- the same seam ``ArxCommand._execute()``
-        uses in production, capturing exactly what the player's client receives.
+        """Drives ``CmdPose`` itself (the same seam ``ArxCommand._execute()``
+        uses in production) through the ``self.msg()`` call, proving the fix
+        reaches that far down the stack.
+
+        CAVEAT (#3787 Task 8 fix round 1, Finding 2): no single existing telnet
+        command grammar produces BOTH `targets` (CmdPose's `@Name` parsing) AND
+        a Place-scoped `place` kwarg (CmdTabletalk's grammar, which never
+        parses `@Name` targets) in one call -- `_resolve_pose_place` accepts
+        `place` regardless of caller, but only `CmdTabletalk` ever supplies it
+        from real player input. This test monkeypatches `resolve_action_args`
+        to inject `place` after CmdPose's own target parsing, so it exercises
+        the MESSAGE-CONSTRUCTION path (does `ArxCommand._execute()` forward the
+        hint-bearing `result.message` verbatim) rather than a scenario any real
+        player command can currently reach. The reachable-scenario proof is
+        `TestPoseActionRefusesUnreachableTargets.
+        test_pose_at_place_targeting_persona_at_another_place_is_refused`
+        above, via `PoseAction.run()` directly with both kwargs supplied.
         """
         from commands.evennia_overrides.communication import CmdPose
 
@@ -370,12 +384,6 @@ class TestPoseActionRefusesUnreachableTargets(TestCase):
         cmd = CmdPose()
         cmd.caller = char_a
         cmd.action = PoseAction()
-        # PoseAction's `place` kwarg (the writer's own venue) isn't parsed from
-        # telnet text by CmdPose -- it's resolved in `execute()` via
-        # `_resolve_pose_place`. Set the caller's PlacePresence-derived venue
-        # the way that resolver does, by patching `resolve_action_args` to add
-        # it, mirroring `CmdTabletalk` (the actual telnet surface for a
-        # Place-scoped pose) without duplicating its whole grammar here.
         cmd.args = " @Bob murmurs across the room."
         cmd.raw_string = "pose @Bob murmurs across the room."
         cmd.cmdset = None
