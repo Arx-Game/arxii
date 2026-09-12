@@ -18,7 +18,13 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   render — the composer's audience is never stored, only derived, which is the
   mis-send guard. It also hydrates/persists the open-tab layout from
   `threadTabsStorage.ts` and resets tabs on scene change (see `gameSlice.ts`'s
-  `setSessionScene`).
+  `setSessionScene`). It also owns `sidebarMode`/`hereActiveTab` and
+  `jumpToCombat()` (#3761) — the whole cross-mode encounter-reachability
+  mechanism that routes both the top-bar banner and the sidebar's Combat nav
+  button to the same Here-mode Room-tab destination where `CombatRail`
+  renders — and, per Finding I1, `lingeringEncounterId`/`dismissedEncounterId`,
+  which keep `CombatRail` mounted after `useEncounterForScene`'s poll drops a
+  completed encounter, until the player dismisses the outcome banner.
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured chat-bubble feed
@@ -73,7 +79,11 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`PlaySidebar.tsx`**: The single contextual sidebar — Here / Conversations /
   History mode tabs sharing one scroll container. All three mode bodies stay
   mounted (`hidden` attribute, not conditional unmount) so switching modes
-  preserves each one's scroll position and in-flight state (#3759).
+  preserves each one's scroll position and in-flight state (#3759). A 4th
+  "Combat" nav button (#3761) appears only while `hasActiveEncounter` is true
+  and jumps to Here mode's Room tab, where `CombatRail` renders. `mode`/
+  `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
+  internal state) — a future caller must supply both.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching. Each alt character's avatar carries a two-tier attention
   indicator (#2166, `sessionAttention` from `attention.ts`): a red numeric
@@ -88,7 +98,10 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   full date/time/phase in the title tooltip) reusing the Hall's
   `useClockQuery` directly — deliberately NOT `hh:mm`, since `WeatherWidget`
   (also rendered here) already surfaces `phase + hh:mm` from the same
-  `game_clock` backend and a second hh:mm would just duplicate it.
+  `game_clock` backend and a second hh:mm would just duplicate it. Also
+  renders `CombatBanner` (#3761), a second full-width strip below the main
+  bar shown while `hasActiveEncounter` is true, that jumps the sidebar to the
+  combat rail on click.
 - **`ConversationSidebar.tsx`**: The Conversations mode body inside
   `PlaySidebar` (not its own column). Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
@@ -101,7 +114,8 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   room row, or the "All" button, re-anchors the tab strip back to the room and
   resets the composer; `onShowAll` is `GamePage`'s override of
   `threading.showAll` for exactly that reason (the bare `showAll` only resets
-  the filter/mute state, not the active tab).
+  the filter/mute state, not the active tab). States 'OOC channels unavailable,
+  pending #3299' explicitly (#3761) rather than leaving the gap silent.
 - **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
   Whispers — and date range) plus browse authorized retained conversations
   (filtered by date range only; type does not scope the browse list, only the
@@ -144,7 +158,7 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `true`) must be `false` whenever a non-room conversation tab is the one
   actually on screen, since `conversationKey` is always scoped to the scene
   regardless of tab — GameWindow passes `activeConvKey === 'room'`.
-- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `NarrativeMessageReader` —
+- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error
@@ -194,9 +208,10 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ## Key Features
 
-- **Single contextual sidebar**: `PlaySidebar` (Here / Conversations / History
-  modes) plus one wide reader/composer column — not the legacy three-column
-  layout. Full layout/resize ownership: #3758.
+- **Single contextual sidebar**: `PlaySidebar` (Here / Conversations / History,
+  plus a 4th Combat mode shown only during an active encounter, #3761) plus
+  one wide reader/composer column — not the legacy three-column layout. Full
+  layout/resize ownership: #3758.
 - **Responsive**: Below the `lg` breakpoint (1024px) the layout shows one pane
   at a time — Story or Sidebar — via an explicit toggle, not a hidden sidebar;
   both panes render side by side at `lg` and up.

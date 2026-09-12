@@ -5,7 +5,7 @@ import { GameLayout } from './components/GameLayout';
 import { GameTopBar } from './components/GameTopBar';
 import { GameWindow } from './components/GameWindow';
 import { CharacterCardDrawer } from './components/CharacterCardDrawer';
-import { PlaySidebar } from './components/PlaySidebar';
+import { PlaySidebar, type SidebarMode } from './components/PlaySidebar';
 import { fetchPlayContext, fetchPlayPoses, PlayFetchError } from './playQueries';
 import type { PlayPage } from './playTypes';
 import { FocusPanel } from './components/FocusPanel';
@@ -17,7 +17,7 @@ import type { ActionResultPayload } from '@/hooks/types';
 import { PresencePanel } from './components/PresencePanel';
 import { CeremonyRoomCard } from '@/ceremonies/CeremonyRoomCard';
 import { EventsSidebarPanel } from '@/events/components/EventsSidebarPanel';
-import { useEncounterForScene } from '@/combat/queries';
+import { useEncounterForScene, combatKeys } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { StoryTray } from '@/missions/components/StoryTray';
@@ -54,8 +54,9 @@ import { SpeakerQueueBar } from '@/scenes/components/SpeakerQueueBar';
 import { ActionPanel } from '@/scenes/components/ActionPanel';
 import { PendingActionAttachments } from '@/scenes/components/PendingActionAttachments';
 import { createActionRequest, fetchPlaces } from '@/scenes/actionQueries';
+import { fetchScene } from '@/scenes/queries';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
-import type { Interaction } from '@/scenes/types';
+import type { Interaction, SceneDetail } from '@/scenes/types';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { ComposerMode } from './components/CommandInput';
 import type { ConversationTabStripProps } from './components/ConversationTabStrip';
@@ -197,7 +198,12 @@ interface GameRightSidebarProps {
   sceneData: ComponentProps<typeof FocusPanel>['sceneData'];
   hasActiveEncounter: boolean;
   hasActiveBattle: boolean;
-  activeEncounter?: { id: number } | null;
+  showCombatRail: boolean;
+  railEncounterId: number;
+  combatSceneDetail?: SceneDetail;
+  onDismissOutcome: () => void;
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 /** The right-hand tab rail: room/focus, stories, events, presence, sheet panels. */
@@ -211,10 +217,17 @@ function GameRightSidebar({
   sceneData,
   hasActiveEncounter,
   hasActiveBattle,
-  activeEncounter,
+  showCombatRail,
+  railEncounterId,
+  combatSceneDetail,
+  onDismissOutcome,
+  activeTab,
+  onTabChange,
 }: GameRightSidebarProps) {
   return (
     <SidebarTabPanel
+      activeTab={activeTab}
+      onTabChange={onTabChange}
       roomTabLabel={roomTabLabel}
       roomPanel={
         isDreaming && activeCharacterId && active ? (
@@ -229,8 +242,14 @@ function GameRightSidebar({
               hasActiveEncounter={hasActiveEncounter}
               hasActiveBattle={hasActiveBattle}
             />
-            {sceneData && activeEncounter && (
-              <CombatRail sceneId={sceneData.id} encounterId={activeEncounter.id} />
+            {sceneData && showCombatRail && (
+              <CombatRail
+                sceneId={sceneData.id}
+                encounterId={railEncounterId}
+                viewerCanGm={combatSceneDetail?.viewer_can_gm ?? false}
+                scene={combatSceneDetail}
+                onDismissOutcome={onDismissOutcome}
+              />
             )}
           </>
         )
@@ -365,9 +384,49 @@ export function GamePage() {
   // so it calls both hooks once here and threads the derived booleans down
   // through FocusPanel -> RoomPanel -> RoomHeader.
   const { data: activeEncounter } = useEncounterForScene(sceneData?.id ?? 0);
+
+  // #3761 — CombatRail's GM tab and outcome-dismiss need the full SceneDetail
+  // (viewer_can_gm specifically), which the websocket-derived `sceneData`
+  // (a lighter SceneSummary) doesn't carry. Only fetched once an encounter
+  // actually exists, mirroring SceneDetailPage.tsx's own plain useQuery shape.
+  const { data: combatSceneDetail } = useQuery<SceneDetail>({
+    queryKey: ['scene', String(sceneData?.id ?? '')],
+    queryFn: () => fetchScene(String(sceneData?.id)),
+    enabled: activeEncounter != null && sceneData?.id != null,
+  });
+
   const { data: activeBattle } = useBattleForSceneQuery(sceneData?.id ?? null);
   const hasActiveEncounter = activeEncounter != null;
   const hasActiveBattle = activeBattle != null && activeBattle.outcome === 'unresolved';
+
+  // Final-review Finding I1 — ported from SceneDetailPage.tsx (#3551): the
+  // scene's active-encounter poll (useEncounterForScene, 15s interval) drops
+  // a completed encounter from its result, which would otherwise unmount
+  // CombatRail (and its outcome banner) before the player can see/dismiss
+  // it. lingeringEncounterId remembers the last real encounter id and keeps
+  // the rail mounted on it until CombatRail's onDismissOutcome fires;
+  // dismissedEncounterId hides the rail immediately on dismiss rather than
+  // waiting up to 15s for the next poll. Deliberately does NOT feed
+  // `hasActiveEncounter` (the banner/nav-icon signal stays the raw "an
+  // encounter genuinely exists" boolean) — only the rail itself lingers.
+  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  const encounterId = activeEncounter?.id ?? 0;
+  const prevSceneIdForEncounterRef = useRef(sceneData?.id ?? 0);
+  useEffect(() => {
+    const currentSceneId = sceneData?.id ?? 0;
+    if (prevSceneIdForEncounterRef.current !== currentSceneId) {
+      prevSceneIdForEncounterRef.current = currentSceneId;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
+    if (encounterId > 0) {
+      setLingeringEncounterId(encounterId);
+    }
+  }, [sceneData?.id, encounterId]);
+  const railEncounterId = encounterId || lingeringEncounterId;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
 
   // GamePage is the composition root (#2156): it calls the scene-feed +
   // threading hooks once for the active session's scene and feeds both the
@@ -394,6 +453,19 @@ export function GamePage() {
       : null;
 
   useThreadTabPersistence(active, sceneId, openThreadTabs, activeThreadTabRaw);
+
+  // #3761 Task 1: lifted from PlaySidebar/SidebarTabPanel so a later top-bar
+  // combat banner (Task 3) can also drive the sidebar into view.
+  // `jumpToCombat` (Task 2) is the first real caller of this state — it jumps
+  // to Here mode + the Room tab, where `CombatRail` already renders.
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(
+    sceneId && threading ? 'conversations' : 'here'
+  );
+  const [hereActiveTab, setHereActiveTab] = useState('room');
+  const jumpToCombat = useCallback(() => {
+    setSidebarMode('here');
+    setHereActiveTab('room');
+  }, []);
 
   const [composerMode, setComposerMode] = useState<ComposerMode | undefined>();
 
@@ -734,6 +806,17 @@ export function GamePage() {
   const [actionAttachment, setActionAttachment] = useState<ActionAttachmentInfo | null>(null);
   const queryClient = useQueryClient();
 
+  const handleDismissOutcome = useCallback(() => {
+    if (sceneData?.id != null) {
+      queryClient.invalidateQueries({ queryKey: combatKeys.encountersForScene(sceneData.id) });
+    }
+    // Final-review Finding I1: hide the rail immediately (mirrors
+    // SceneDetailPage.tsx's handleDismissOutcome) rather than waiting on the
+    // next 15s poll to drop it.
+    setDismissedEncounterId(railEncounterId);
+    setLingeringEncounterId(0);
+  }, [queryClient, sceneData?.id, railEncounterId]);
+
   const submitAction = useMutation({
     mutationFn: (action: ActionAttachmentInfo) =>
       createActionRequest(sceneId ?? '', {
@@ -801,7 +884,14 @@ export function GamePage() {
     <>
       <GameLayout
         accountId={account?.id}
-        topBar={<GameTopBar characters={characters} />}
+        topBar={
+          <GameTopBar
+            characters={characters}
+            hasActiveEncounter={hasActiveEncounter}
+            encounterId={activeEncounter?.id}
+            onJumpToCombat={jumpToCombat}
+          />
+        }
         center={
           <>
             {/* Scene toolset (#2156 Task 6) — mirrors SceneDetailPage.tsx:120-178's
@@ -868,6 +958,10 @@ export function GamePage() {
         sidebar={
           <PlaySidebar
             accountId={account?.id}
+            mode={sidebarMode}
+            onModeChange={setSidebarMode}
+            hasActiveEncounter={hasActiveEncounter}
+            onJumpToCombat={jumpToCombat}
             here={
               <GameRightSidebar
                 roomTabLabel={roomTabLabel}
@@ -879,7 +973,12 @@ export function GamePage() {
                 sceneData={sceneData}
                 hasActiveEncounter={hasActiveEncounter}
                 hasActiveBattle={hasActiveBattle}
-                activeEncounter={activeEncounter}
+                showCombatRail={showCombatRail}
+                railEncounterId={railEncounterId}
+                combatSceneDetail={combatSceneDetail}
+                onDismissOutcome={handleDismissOutcome}
+                activeTab={hereActiveTab}
+                onTabChange={setHereActiveTab}
               />
             }
             threading={sceneId ? threading : undefined}

@@ -338,4 +338,5 @@ treat those names as hints to confirm, not gospel.
 - [0287 - One CG point makes a physical feature distinctive, and a distinction can be held per feature](0287-one-cg-point-makes-a-physical-feature-distinctive.md) (#3739; extends ADR-0010 and the #2632 normalized-appearance decision; related #2886, #2985)
 - [0288 - XP stays account-scoped, and every movement of it is attributed to a character](0288-xp-is-account-scoped-and-character-attributed.md) (#3748; extends ADR-0053, makes ADR-0131's cap real; related ADR-0010)
 - [0289 - Facet is a flat vocabulary, not a Category > Subcategory > Specific hierarchy](0289-facet-is-a-flat-vocabulary-not-a-hierarchy.md) (#3776; amends ADR-0192's PROTECT precedent argument; related ADR-0010)
+- [0290 - Combat narration shares the pose Interaction model and reply-threading](0290-combat-narration-shares-the-pose-interaction-model.md) (#3761 brainstorming; extends ADR-0127; related ADR-0274, #3757, #3787)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

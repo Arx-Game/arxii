@@ -1,11 +1,11 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { Compass, History, MessageSquare } from 'lucide-react';
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { Compass, History, MessageSquare, Swords } from 'lucide-react';
 import { ConversationSidebar } from './ConversationSidebar';
 import { HistoryNavigator } from './HistoryNavigator';
 import { DisplaySettings } from './DisplaySettings';
 import type { ThreadingState } from '@/scenes/hooks/useThreading';
 
-type SidebarMode = 'here' | 'conversations' | 'history';
+export type SidebarMode = 'here' | 'conversations' | 'history';
 
 interface PlaySidebarProps {
   here: ReactNode;
@@ -21,6 +21,13 @@ interface PlaySidebarProps {
     poseId?: string;
     timestamp?: string;
   }) => void;
+  /** Controlled by `GamePage` (#3761) so a top-bar banner can also drive it. */
+  mode: SidebarMode;
+  onModeChange: (mode: SidebarMode) => void;
+  /** Drives the 4th "Combat" nav button (#3761) — omitted or false hides it entirely. */
+  hasActiveEncounter?: boolean;
+  /** Required when `hasActiveEncounter` is true; the Combat button's click handler. */
+  onJumpToCombat?: () => void;
 }
 
 /** The one contextual sidebar for the narrative play workspace. */
@@ -32,9 +39,11 @@ export function PlaySidebar({
   onShowAll,
   selectedThreadKey,
   onOpenReference,
+  mode,
+  onModeChange,
+  hasActiveEncounter,
+  onJumpToCombat,
 }: PlaySidebarProps) {
-  const [mode, setMode] = useState<SidebarMode>(threading ? 'conversations' : 'here');
-
   // #3759 review fix: the three modes share ONE scroll container
   // (`play-sidebar-scroll`), so each mode needs its own remembered scroll
   // position, restored on switch — mirrors GameWindow.tsx's per-tab
@@ -61,11 +70,14 @@ export function PlaySidebar({
 
   return (
     <aside className="flex h-full min-h-0 flex-col" aria-label="Play sidebar">
-      <nav className="grid shrink-0 grid-cols-3 gap-1 border-b p-2" aria-label="Sidebar modes">
+      <nav
+        className={`grid shrink-0 gap-1 border-b p-2 ${hasActiveEncounter ? 'grid-cols-4' : 'grid-cols-3'}`}
+        aria-label="Sidebar modes"
+      >
         <button
           type="button"
           aria-current={mode === 'here' ? 'page' : undefined}
-          onClick={() => setMode('here')}
+          onClick={() => onModeChange('here')}
           className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'here' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <Compass className="h-3.5 w-3.5" />
@@ -74,7 +86,7 @@ export function PlaySidebar({
         <button
           type="button"
           aria-current={mode === 'conversations' ? 'page' : undefined}
-          onClick={() => setMode('conversations')}
+          onClick={() => onModeChange('conversations')}
           className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'conversations' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <MessageSquare className="h-3.5 w-3.5" />
@@ -83,12 +95,22 @@ export function PlaySidebar({
         <button
           type="button"
           aria-current={mode === 'history' ? 'page' : undefined}
-          onClick={() => setMode('history')}
+          onClick={() => onModeChange('history')}
           className={`flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs ${mode === 'history' ? 'bg-accent font-medium' : 'text-muted-foreground hover:bg-accent/60'}`}
         >
           <History className="h-3.5 w-3.5" />
           History
         </button>
+        {hasActiveEncounter && (
+          <button
+            type="button"
+            onClick={onJumpToCombat}
+            className="flex min-h-11 items-center justify-center gap-1 rounded px-2 text-xs text-destructive hover:bg-accent/60"
+          >
+            <Swords className="h-3.5 w-3.5" />
+            Combat
+          </button>
+        )}
       </nav>
       <div className="shrink-0 px-2 pb-1">
         <DisplaySettings accountId={accountId} />

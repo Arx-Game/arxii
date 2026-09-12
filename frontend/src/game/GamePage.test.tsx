@@ -31,6 +31,7 @@ import { emitActionResult } from '@/hooks/actionResultBus';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fetchPlayContext } from './playQueries';
 import * as playQueries from './playQueries';
+import type { EncounterDetail } from '@/combat/types';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -115,6 +116,7 @@ vi.mock('@/scenes/queries', async (importOriginal) => {
     postInteractionReaction: vi.fn().mockResolvedValue(null),
     fetchReactionEmojiCatalog: vi.fn().mockResolvedValue([]),
     fetchPendingUnlinkedActions: vi.fn(() => Promise.resolve([])),
+    fetchScene: vi.fn(() => Promise.reject(new Error('fetchScene not mocked for this test'))),
   };
 });
 
@@ -221,7 +223,10 @@ vi.mock('@/combat/queries', () => ({
     .mockReturnValue({ data: undefined, isLoading: false, isError: false }),
   useJoinMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
   useLeaveMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
-  combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
+  combatKeys: {
+    duelChallengesAll: () => ['combat', 'duel-challenges'],
+    encountersForScene: (id: number) => ['combat', 'encounters-for-scene', id],
+  },
 }));
 
 vi.mock('@/battles/queries', () => ({
@@ -1131,6 +1136,124 @@ describe('GamePage', () => {
       );
       expect(draftKeysAfter).toEqual(draftKeysBefore);
       expect(sessionStorage.getItem(draftKey)).toBe(storedBefore);
+    });
+
+    it('passes viewerCanGm and scene to CombatRail once the scene detail resolves (#3761)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 5, scene: 42 },
+        isLoading: false,
+        isError: false,
+      });
+      const scenesQueries = await import('@/scenes/queries');
+      vi.mocked(scenesQueries.fetchScene).mockResolvedValue({
+        id: 42,
+        name: 'Test Scene',
+        description: '',
+        date_started: '2026-09-01T00:00:00Z',
+        location: null,
+        participants: [],
+        is_active: true,
+        is_owner: false,
+        viewer_can_gm: true,
+        positions: [],
+        position_adjacency: [],
+        persona_positions: [],
+        active_round: null,
+        position_nodes: [],
+        position_edges: [],
+        running_beat: null,
+        declared_risk: null,
+        clock: null,
+        art_url: null,
+      });
+
+      renderWithProviders(<GamePage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Outcome banner lingering (final-review Finding I1, ported from
+  // SceneDetailPage.tsx's own #3551 pattern): the scene's active-encounter
+  // poll (useEncounterForScene, 15s interval) drops a completed encounter
+  // from its result — without lingeringEncounterId, that would unmount
+  // CombatRail (and its outcome banner) before the player has a chance to
+  // see/dismiss it. This proves the rail survives the drop and only
+  // disappears once the player actually clicks Dismiss.
+  // ---------------------------------------------------------------------------
+
+  describe('outcome banner lingering (final-review Finding I1)', () => {
+    it('keeps CombatRail mounted after the poll drops the encounter, until the player dismisses it', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      // The encounter itself has already completed by the time the player
+      // sees it — CombatTurnPanel renders the outcome banner (with a real
+      // Dismiss button) for a `status: 'completed'` encounter.
+      const combatQueries = await import('@/combat/queries');
+      vi.mocked(combatQueries.useCombatEncounter).mockReturnValue({
+        data: {
+          id: 7,
+          scene: 100,
+          round_number: 3,
+          is_participant: true,
+          is_gm: false,
+          status: 'completed',
+          outcome: 'attacker_decisive',
+          participants: [],
+        } as unknown as EncounterDetail,
+        isLoading: false,
+        isError: false,
+      } as ReturnType<typeof combatQueries.useCombatEncounter>);
+
+      // One stable provider tree across both render calls (mirrors the
+      // #3760 Task 13 boundary test above) — `renderWithProviders` on a
+      // second call would remount the whole tree and mask the question.
+      const queryClient = new QueryClient();
+      function wrap(ui: ReactNode) {
+        return (
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <MemoryRouter>{ui}</MemoryRouter>
+            </QueryClientProvider>
+          </Provider>
+        );
+      }
+
+      const { rerender } = render(wrap(<GamePage />));
+
+      expect(await screen.findByTestId('combat-rail')).toBeInTheDocument();
+      expect(await screen.findByTestId('aftermath-dismiss')).toBeInTheDocument();
+
+      // The scene's active-encounter list poll drops the completed encounter
+      // (as it does 15s after completion) WITHOUT the player having clicked
+      // dismiss yet.
+      mockUseEncounterForScene.mockReturnValue({
+        data: null,
+        isLoading: false,
+        isError: false,
+      });
+      rerender(wrap(<GamePage />));
+
+      // The rail (and its outcome banner) must still be mounted — this is
+      // the lingering behavior the fix adds.
+      expect(screen.getByTestId('combat-rail')).toBeInTheDocument();
+      expect(screen.getByTestId('aftermath-dismiss')).toBeInTheDocument();
+
+      // Now the player actually dismisses the outcome.
+      fireEvent.click(screen.getByTestId('aftermath-dismiss'));
+
+      expect(screen.queryByTestId('combat-rail')).not.toBeInTheDocument();
     });
   });
 

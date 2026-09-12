@@ -36,6 +36,9 @@ interface SidebarTabPanelProps {
    * tab's ``title`` tooltip.
    */
   roomTabLabel?: string;
+  /** Controlled by `GamePage` (#3761) so a top-bar banner can jump straight to the room tab. */
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
 export function SidebarTabPanel({
@@ -49,19 +52,29 @@ export function SidebarTabPanel({
   journalPanel,
   travelPanel,
   roomTabLabel,
+  activeTab,
+  onTabChange,
 }: SidebarTabPanelProps) {
-  const [activeTab, setActiveTab] = useState('room');
-  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set(['room']));
+  // Seeded once from the mount-time `activeTab` — safe today because
+  // `GamePage`'s `jumpToCombat` (#3761) only ever sets `activeTab` to 'room'
+  // (this component's own mount default), so it's already activated. A
+  // future caller that drives `activeTab` externally to some OTHER,
+  // never-clicked tab would need to update `activatedTabs` too, or that
+  // tab's panel would never mount.
+  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set([activeTab]));
 
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-    setActivatedTabs((prev) => {
-      if (prev.has(value)) return prev;
-      const next = new Set(prev);
-      next.add(value);
-      return next;
-    });
-  }, []);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      onTabChange(value);
+      setActivatedTabs((prev) => {
+        if (prev.has(value)) return prev;
+        const next = new Set(prev);
+        next.add(value);
+        return next;
+      });
+    },
+    [onTabChange]
+  );
 
   const label = roomTabLabel ?? 'Room';
 

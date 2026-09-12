@@ -1,5 +1,10 @@
-import { screen, within } from '@testing-library/react';
+import { screen, within, fireEvent, render } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest';
+import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { MemoryRouter } from 'react-router-dom';
 
 import { GameTopBar } from './GameTopBar';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
@@ -233,6 +238,77 @@ describe('GameTopBar', () => {
       renderWithProviders(<GameTopBar characters={[]} />);
 
       expect(screen.queryByLabelText('The world clock')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('combat banner (#3761)', () => {
+    it('shows a dismissable combat banner when hasActiveEncounter is true', async () => {
+      const user = userEvent.setup();
+      const onJumpToCombat = vi.fn();
+      renderWithProviders(
+        <GameTopBar
+          characters={[]}
+          hasActiveEncounter={true}
+          encounterId={5}
+          onJumpToCombat={onJumpToCombat}
+        />
+      );
+      const banner = screen.getByText(/in combat/i);
+      expect(banner).toBeInTheDocument();
+
+      await user.click(banner);
+      expect(onJumpToCombat).toHaveBeenCalledTimes(1);
+
+      await user.click(screen.getByRole('button', { name: /dismiss/i }));
+      expect(screen.queryByText(/in combat/i)).not.toBeInTheDocument();
+    });
+
+    it('shows no banner when hasActiveEncounter is false', () => {
+      renderWithProviders(<GameTopBar characters={[]} hasActiveEncounter={false} />);
+      expect(screen.queryByText(/in combat/i)).not.toBeInTheDocument();
+    });
+
+    it('resets its dismissed state when the encounter id changes', () => {
+      // A single stable provider tree across both render calls:
+      // `renderWithProviders`'s own `rerender` re-renders a bare element with
+      // no Provider/QueryClientProvider/Router and would remount the whole
+      // tree, masking the dismissed-state question this test asks (same
+      // pattern as GamePage.test.tsx's #3760 Task 13 coverage).
+      const queryClient = new QueryClient();
+      function wrap(ui: ReactNode) {
+        return (
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <MemoryRouter>{ui}</MemoryRouter>
+            </QueryClientProvider>
+          </Provider>
+        );
+      }
+
+      const { rerender } = render(
+        wrap(
+          <GameTopBar
+            characters={[]}
+            hasActiveEncounter={true}
+            encounterId={5}
+            onJumpToCombat={vi.fn()}
+          />
+        )
+      );
+      fireEvent.click(screen.getByRole('button', { name: /dismiss/i }));
+      expect(screen.queryByText(/in combat/i)).not.toBeInTheDocument();
+
+      rerender(
+        wrap(
+          <GameTopBar
+            characters={[]}
+            hasActiveEncounter={true}
+            encounterId={9}
+            onJumpToCombat={vi.fn()}
+          />
+        )
+      );
+      expect(screen.getByText(/in combat/i)).toBeInTheDocument();
     });
   });
 });
