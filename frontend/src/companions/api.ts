@@ -20,10 +20,14 @@ export async function fetchMyCompanions(): Promise<CompanionSummary[]> {
 /** Pose as a bonded, present companion (#3294) — `POST
  * /api/companions/companions/{id}/emote/`. Wraps `CompanionEmoteAction`; the server
  * re-validates ownership + room presence (`CompanionPresentPrerequisite`). */
-export async function companionEmote(companionId: number, text: string): Promise<void> {
+export async function companionEmote(
+  companionId: number,
+  text: string,
+  clientRequestId?: string
+): Promise<void> {
   const res = await apiFetch(`${BASE_URL}/${companionId}/emote/`, {
     method: 'POST',
-    body: JSON.stringify({ text }),
+    body: JSON.stringify(clientRequestId ? { text, client_request_id: clientRequestId } : { text }),
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => null)) as { detail?: string } | null;

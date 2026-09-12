@@ -72,3 +72,11 @@ class EmoteActionSerializer(serializers.Serializer):
     """Body serializer for ``POST /api/companions/companions/{id}/emote/`` (#3294)."""
 
     text = serializers.CharField()
+    client_request_id = serializers.UUIDField(
+        required=False,
+        help_text=(
+            "Client-minted id for this send attempt (#3760/#3782). Reused verbatim on "
+            "retry of the same content; a content change gets a new id. Optional for "
+            "backward compatibility with callers that predate the idempotency contract."
+        ),
+    )

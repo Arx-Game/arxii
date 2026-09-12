@@ -548,9 +548,19 @@ export function CommandInput({
     // pose). The server re-validates ownership + room presence on every call
     // (CompanionPresentPrerequisite), so a stale toggle (companion left the
     // room mid-composition) fails loud via toast rather than ghost-posing.
+    //
+    // #3782 — ack-gated exactly like the REST-pose branch below: `beginSend`
+    // mints/reuses a `client_request_id` so a dropped-connection retry is
+    // idempotent server-side (`idempotent_record_interaction`) instead of
+    // double-posting, and the draft is only cleared on a matching success —
+    // a rejected request (e.g. a 409 payload conflict on id reuse) keeps the
+    // player's text so a retry doesn't mean retyping the whole emote.
     if (asCompanion) {
-      companionEmote(asCompanion.id, trimmed)
+      const clientRequestId = draftStore.beginSend(liveSpeechMode);
+      pendingSpeechRef.current = { clientRequestId, text: trimmed };
+      companionEmote(asCompanion.id, trimmed, clientRequestId)
         .then(() => {
+          draftStore.acknowledge(clientRequestId);
           // Finding 5 fix (#3760 final review) — mirrors the REST-pose
           // branch's and the WS ack handler's own guard: only clear what's
           // on screen if it still matches what was actually sent, so a
@@ -564,9 +574,13 @@ export function CommandInput({
         })
         .catch((error: unknown) => {
           const message = error instanceof Error ? error.message : 'Failed to emote as companion.';
+          draftStore.reject(clientRequestId, message);
           toast.error(message);
         })
         .finally(() => {
+          if (pendingSpeechRef.current?.clientRequestId === clientRequestId) {
+            pendingSpeechRef.current = null;
+          }
           submittingRef.current = false;
         });
       return;

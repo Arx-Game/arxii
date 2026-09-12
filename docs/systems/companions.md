@@ -108,6 +108,16 @@ pattern-mirrors `LanguageSelector.tsx`) shown only when `CompanionSerializer
 .is_present` is true for at least one bonded companion — never offered for
 an absent one.
 
+**Idempotency (#3782):** an optional `client_request_id` in the request body
+routes `CompanionEmoteAction.execute()` through
+`world.scenes.interaction_services.idempotent_record_interaction` — the same
+wrapper `PoseAction`/`SayAction`/`WhisperAction` use (#3760) — so a retried
+request (dropped connection) replays the stored `Interaction` instead of
+double-posting, and a reused id against different text or a different
+companion is a 400 conflict rather than a silent misattribution. Omitting the
+field falls back to the plain `record_interaction` call unchanged (backward
+compatible with any caller that predates the idempotency contract).
+
 ## Bond with the owner (#3575, ADR-0272)
 
 A companion has no `CharacterSheet`, so the owner's bond toward it is a
@@ -189,7 +199,7 @@ router routes). Read endpoints are read-only; write endpoints converge on
 | `/api/companions/companions/{id}/release/` | POST | — | `{}` (200) / `{detail}` (400) |
 | `/api/companions/companions/{id}/fight/` | POST | — | `{opponent_id}` (200) / `{detail}` (400) |
 | `/api/companions/companions/{id}/deploy/` | POST | — | `{vehicle_id}` (200) / `{detail}` (400) |
-| `/api/companions/companions/{id}/emote/` | POST | `{text}` | `{}` (200) / `{detail}` (400) |
+| `/api/companions/companions/{id}/emote/` | POST | `{text, client_request_id?}` | `{}` (200) / `{detail}` (400) |
 
 Detail-level endpoints (`release`/`fight`/`deploy`) scope the companion via
 `get_queryset` (the caller's active companions); a foreign companion returns

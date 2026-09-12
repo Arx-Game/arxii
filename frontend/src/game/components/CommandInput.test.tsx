@@ -137,7 +137,8 @@ vi.mock('@/scenes/actionQueries', () => ({
 // overrides it to a single present companion.
 const mockUseMyCompanions = vi.fn((): { data: CompanionSummary[] } => ({ data: [] }));
 const companionEmoteMock = vi.fn(
-  (_companionId: number, _text: string): Promise<void> => Promise.resolve()
+  (_companionId: number, _text: string, _clientRequestId?: string): Promise<void> =>
+    Promise.resolve()
 );
 
 vi.mock('@/companions/queries', () => ({
@@ -145,7 +146,7 @@ vi.mock('@/companions/queries', () => ({
 }));
 
 vi.mock('@/companions/api', () => ({
-  companionEmote: (...args: [number, string]) => companionEmoteMock(...args),
+  companionEmote: (...args: [number, string, string?]) => companionEmoteMock(...args),
 }));
 
 describe('CommandInput', () => {
@@ -1335,7 +1336,9 @@ describe('companion emote branch (#3294, Finding 5)', () => {
     fireEvent.change(textarea, { target: { value: 'grooms itself.' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    await waitFor(() => expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.'));
+    await waitFor(() =>
+      expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.', expect.any(String))
+    );
     await waitFor(() => expect(textarea.value).toBe(''));
   });
 
@@ -1355,7 +1358,7 @@ describe('companion emote branch (#3294, Finding 5)', () => {
     fireEvent.change(textarea, { target: { value: 'grooms itself.' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
 
-    expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.');
+    expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.', expect.any(String));
 
     // A newer, unsent edit happens while the original request is still in
     // flight — it must survive the eventual success response for the OLDER
@@ -1366,6 +1369,35 @@ describe('companion emote branch (#3294, Finding 5)', () => {
     await waitFor(() => expect(companionEmoteMock).toHaveBeenCalledTimes(1));
 
     expect(textarea.value).toBe('grooms itself, then yawns.');
+  });
+
+  it('threads a client_request_id and reuses it on retry of unmodified content (#3782)', async () => {
+    companionEmoteMock.mockImplementationOnce(() => Promise.reject(new Error('Fenwick left.')));
+
+    render(<CommandInput character="Alice" />);
+    await selectCompanion();
+
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    fireEvent.change(textarea, { target: { value: 'grooms itself.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(companionEmoteMock).toHaveBeenCalledWith(42, 'grooms itself.', expect.any(String))
+    );
+    const [, , firstRequestId] = companionEmoteMock.mock.calls[0];
+    expect(typeof firstRequestId).toBe('string');
+    // Rejected, not acknowledged -- the text must survive for a retry.
+    await waitFor(() => expect(textarea.value).toBe('grooms itself.'));
+
+    // A retry (server rejected, or a dropped connection) of the SAME
+    // unmodified content must reuse the same id, not mint a fresh one --
+    // that's what makes the server's idempotency check
+    // (`idempotent_record_interaction`) actually dedupe the retry.
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    await waitFor(() => expect(companionEmoteMock).toHaveBeenCalledTimes(2));
+    const [, , secondRequestId] = companionEmoteMock.mock.calls[1];
+    expect(secondRequestId).toBe(firstRequestId);
   });
 });
 
