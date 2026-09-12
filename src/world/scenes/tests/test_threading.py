@@ -600,25 +600,26 @@ class TestInteractionThreadAssignment(TestCase):
         DISCARDS the freshly loaded column values
         (``evennia/utils/idmapper/models.py``), so ``select_for_update().get()``
         takes the row lock but can still hand back an instance whose ``thread_id``
-        is whatever this process last saw. The web worker and the game server are
-        separate processes and neither flushes per request.
+        is whatever this process last saw.
+
+        The hazard is same-process and needs no second process to reach: a
+        queryset-level write (``.update()``, ``bulk_update``) changes the row in
+        the database without touching any cached instance, so an instance already
+        held in this process keeps the old value indefinitely. That is what the
+        ``.update()`` below does, and it is a path this codebase uses today.
 
         That is not a missed optimisation here. The move decision hangs off this
         read: a stale ``None`` makes the service conclude the target belongs to no
         thread, so it opens a NEW one and moves the target out of the real
         exchange, re-rooting it and re-pointing every chip in it.
-
-        Simulated the way it actually happens - another process writes the
-        membership, so this process's cached instance never learns about it. A
-        queryset ``.update()`` is exactly that: it never touches the instance.
         """
         account = AccountFactory()
         scene = SceneFactory()
         target = InteractionFactory(scene=scene, writer_account=account)
         reply = InteractionFactory(scene=scene, writer_account=account)
 
-        # Another process put the target in a thread. Our cached instance predates
-        # that write and still believes it belongs to none.
+        # A queryset-level write puts the target in a thread. It never touches the
+        # cached instance, which still believes it belongs to none.
         live_thread = InteractionThread.objects.create(
             holder_kind=InteractionThread.HolderKind.SCENE,
             holder_id=scene.pk,

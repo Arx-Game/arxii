@@ -353,12 +353,16 @@ def _thread_for_target(
     instance and discards the freshly loaded values
     (``evennia/utils/idmapper/models.py``), so the caller's
     ``select_for_update().get()`` takes the row lock but can still hand back a
-    ``thread_id`` this process cached earlier - and the web worker and the game
-    server are separate processes that never flush per request. A stale ``None``
-    would make this open a NEW thread and move the target out of a live exchange,
-    re-rooting it. ``values_list`` returns raw column data and never consults the
-    identity map, which ``refresh_from_db`` cannot promise: it reloads through the
-    same queryset, so the map can hand it the very instance it is refreshing.
+    ``thread_id`` this process cached earlier. A queryset-level write
+    (``.update()``, ``bulk_update``) changes the row in the database without
+    touching any cached instance, so an instance already held in this process keeps
+    the old value indefinitely, until something reloads it by a route that does not
+    consult the map. A stale ``None`` would make this open a NEW thread and move
+    the target out of a live exchange, re-rooting it.
+
+    ``values_list`` returns raw column data and never consults the identity map,
+    which ``refresh_from_db`` cannot promise: it reloads through the same queryset,
+    so the map can hand it the very instance it is refreshing.
     """
     existing_id = (
         Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).first()
