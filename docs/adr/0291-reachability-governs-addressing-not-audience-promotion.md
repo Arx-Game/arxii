@@ -30,6 +30,12 @@ two things and only two: the per-viewer involvement mark
 `outcome` mode rows to key by scene (or `room`) before it ever reaches the `target:`
 fallback that ordinary tagged poses still use.
 
+The `direct` tier therefore reads `target_persona_ids` per row, not the thread key
+(`game/attention.ts`). Those were the same answer while `target:` was the only key a
+named row could land in; once mechanical rows key by scene, a key-based tier would
+demote a blow aimed at you to `ambient` and leave user story 8 undelivered. Grouping
+goes by scene, direct counts by targeting, and both halves of this decision hold.
+
 *Rejected alternative:* let the existing `target:` fallback apply uniformly, including to
 mechanical rows. Rejected because a resolved combat action can name several targets at
 once (a cleave, an area effect); keying by target would fragment one fight into one reader
