@@ -28,7 +28,7 @@ from world.scenes.interaction_serializers import (
     ReplyTargetSerializer,
 )
 from world.scenes.interaction_services import create_interaction, push_interaction
-from world.scenes.models import Interaction, InteractionThread
+from world.scenes.models import Interaction, InteractionReply, InteractionThread
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.thread_services import (
     InteractionThreadError,
@@ -411,6 +411,47 @@ class TestInteractionThreadAssignment(TestCase):
             )
 
         assert error.exception.code == "reply_target_unavailable"
+
+    def test_place_reply_to_scene_target_refused_with_hint_and_writes_nothing(self) -> None:
+        """#3787 decision 3: a Place-held draft cannot answer a Scene-held target.
+
+        Answering a room-wide pose (or a combat OUTCOME, always Scene-held) from a
+        Place requires leaving the Place first - reachability is never widened to
+        fit (decision 2 rejects audience promotion). Breaks the invariant: builds
+        the unreachable case and asserts BOTH the typed refusal AND that nothing
+        was written as a side effect of the attempt.
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=scene, writer_account=account)
+        reply = InteractionFactory(scene=scene, place=place, writer_account=account)
+
+        interaction_count = Interaction.objects.count()
+        reply_row_count = InteractionReply.objects.count()
+        thread_count = InteractionThread.objects.count()
+
+        with self.assertRaises(InteractionThreadError) as error:
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+        exc = error.exception
+        assert exc.code == "reply_target_unavailable"
+        assert str(exc) == "Answering the fight means speaking to the room."
+        assert exc.venue_hint == ("Leave the war room table to answer this. Your draft is kept.")
+
+        # Nothing was written by the refused attempt.
+        assert Interaction.objects.count() == interaction_count
+        assert InteractionReply.objects.count() == reply_row_count
+        assert InteractionThread.objects.count() == thread_count
+        reply.refresh_from_db()
+        target.refresh_from_db()
+        assert reply.thread_id is None
+        assert target.thread_id is None
 
     def test_create_interaction_assigns_thread_atomically(self) -> None:
         account = AccountFactory()

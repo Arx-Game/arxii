@@ -447,15 +447,15 @@ class InteractionViewSet(
                 reply_to=reply_target,
                 on_created=_on_created,
             )
-        except InteractionThreadError:
-            return Response(
-                {
-                    "code": "reply_target_unavailable",
-                    "field": "reply_to",
-                    "detail": "Cannot reply to that interaction.",
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        except InteractionThreadError as exc:
+            body: dict[str, str] = {
+                "code": exc.code,
+                "field": "reply_to",
+                "detail": str(exc),
+            }
+            if exc.venue_hint is not None:
+                body["hint"] = exc.venue_hint
+            return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
         if result.conflict:
             return Response(

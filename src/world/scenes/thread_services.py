@@ -15,12 +15,25 @@ from world.scenes.place_models import InteractionReceiver, Place
 
 
 class InteractionThreadError(ValueError):
-    """A reply target cannot be used without exposing why to the caller."""
+    """A reply target cannot be used without exposing why to the caller.
+
+    ``venue_hint`` is set only when the refusal is specifically the reachability
+    rule (#3787 decision 3, "you can only answer someone in a venue where they
+    are available") - a holder mismatch between the reply's own draft context
+    and the target's. Other refusals (a missing or invisible target, a bad
+    timestamp) leave it ``None``; there is nowhere to send the player.
+    """
 
     code = "reply_target_unavailable"
 
-    def __init__(self, message: str = "Cannot reply to that interaction.") -> None:
+    def __init__(
+        self,
+        message: str = "Cannot reply to that interaction.",
+        *,
+        venue_hint: str | None = None,
+    ) -> None:
         super().__init__(message)
+        self.venue_hint = venue_hint
 
 
 @dataclass(frozen=True)
@@ -87,8 +100,38 @@ class HolderSignature:
         }
 
 
-def _unavailable() -> InteractionThreadError:
-    return InteractionThreadError("Cannot reply to that interaction.")
+def _unavailable(
+    message: str = "Cannot reply to that interaction.",
+    *,
+    venue_hint: str | None = None,
+) -> InteractionThreadError:
+    return InteractionThreadError(message, venue_hint=venue_hint)
+
+
+def _holder_mismatch(
+    interaction: Interaction,
+    interaction_signature: HolderSignature,
+    target_signature: HolderSignature,
+) -> InteractionThreadError:
+    """Refuse a reply whose own venue cannot reach the target's (#3787 decision 3).
+
+    Reachability is never widened to fit (decision 2 rejects audience
+    promotion) - the caller must physically leave the venue that scopes their
+    draft. The only wording specified by the approved demo (Screen 3) is this
+    concrete direction: a Place-held draft (a table-talk aside) answering a
+    Scene-held target (a room-wide pose, or a combat OUTCOME). Other holder
+    mismatches keep the generic refusal - there is no ratified copy for them yet.
+    """
+    if (
+        interaction_signature.kind == InteractionThread.HolderKind.PLACE
+        and target_signature.kind == InteractionThread.HolderKind.SCENE
+    ):
+        place_name = interaction.place.name if interaction.place_id is not None else "this place"
+        return _unavailable(
+            "Answering the fight means speaking to the room.",
+            venue_hint=f"Leave {place_name} to answer this. Your draft is kept.",
+        )
+    return _unavailable()
 
 
 def _account_party(interaction: Interaction) -> tuple[int, ...]:
@@ -215,7 +258,7 @@ def assign_interaction_thread(
     target_signature = holder_signature(target)
     interaction_signature = holder_signature(interaction)
     if target_signature != interaction_signature:
-        raise _unavailable()
+        raise _holder_mismatch(interaction, interaction_signature, target_signature)
 
     if target.place_id is not None and _receiver_accounts(target) != _receiver_accounts(
         interaction
