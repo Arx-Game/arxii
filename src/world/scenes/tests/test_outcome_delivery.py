@@ -73,6 +73,7 @@ def _pending_resolution_partial_success() -> PendingActionResolution:
     check_result = MagicMock()
     check_result.success_level = 0
     check_result.outcome_name = "Partial Success"
+    check_result.chart = None
     main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
     return PendingActionResolution(
         template_id=1,
@@ -138,7 +139,10 @@ class _ScenePipelineTestCase(TestCase):
     def _accept(self, *, delivery: str = "", mock_resolve: MagicMock) -> None:
         from world.scenes.tests.test_action_services import _make_pending_resolution
 
-        mock_resolve.return_value = _make_pending_resolution(success=True)
+        pending = _make_pending_resolution(success=True)
+        # A mocked check has no roll chart, so the resolution wheel has nothing to spin.
+        pending.main_result.check_result.chart = None
+        mock_resolve.return_value = pending
         template = ActionTemplateFactory()
         request = create_action_request(
             scene=self.scene,

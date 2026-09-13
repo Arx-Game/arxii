@@ -39,7 +39,6 @@ from world.scenes.interaction_services import (
 )
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
-from world.traits.models import ResultChart
 
 CustomActionResolver = Callable[["SceneActionRequest"], "EnhancedSceneActionResult | None"]
 CUSTOM_ACTION_RESOLVERS: dict[str, CustomActionResolver] = {}
@@ -1529,14 +1528,10 @@ def _schedule_check_outcome_theater(
     Faces come from ``check_outcome_faces`` (chart bands only — see its HARD RULE
     docstring; never rollmod or outcome-guarantee logic). Fires for the initiator
     always, and for the effective target when there is one; bystanders never get
-    it. Skips silently when there is no real check result to build faces from —
-    an area action's forced result, or a test double whose ``.chart`` isn't a
-    real ``ResultChart`` (e.g. a bare ``MagicMock``).
+    it. Faces are built inside the commit callback, so a rolled-back resolution
+    never reads the chart, and a check with no chart or outcome spins nothing.
     """
-    if check_result is None or not isinstance(check_result.chart, ResultChart):
-        return
-    faces, selected = check_outcome_faces(check_result)
-    if not faces or selected is None:
+    if check_result is None:
         return
 
     if action_request.action_template_id is not None:
@@ -1545,6 +1540,9 @@ def _schedule_check_outcome_theater(
         title = action_request.action_key
 
     def _emit() -> None:
+        faces, selected = check_outcome_faces(check_result)
+        if not faces or selected is None:
+            return
         maybe_emit_resolution_theater(
             character=initiator_character,
             title=title,
