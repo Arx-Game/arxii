@@ -467,6 +467,7 @@ class _QueueNav:
     position: int | None = None
     next_url: str | None = None
     next_identity: str = ""
+    next_position: int | None = None
     exhausted_text: str = ""
     widen_url: str | None = None
 
@@ -525,6 +526,7 @@ def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) ->
         successor = filtered[next_pos]
         nav.next_url = _editor_url(successor.model_label, successor.pk, filters, next_pos)
         nav.next_identity = successor.identity
+        nav.next_position = next_pos + 1
         return nav
 
     text = _EXHAUSTED_TEXT.get(filters.status, "Nothing left")

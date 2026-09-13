@@ -76,19 +76,41 @@ so the dashboard's script can shade it in the queue.
   #authoring-editor .editor-details table.tuning-table {
     margin-top: 0.5rem;
   }
+  /* Django admin styles .errornote but has no success counterpart; this fragment
+     has always emitted .successnote and nothing ever styled it (#3828 review). */
+  #authoring-editor .successnote {
+    background: var(--message-success-bg);
+    color: var(--body-fg);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 1rem;
+  }
 </style>
 
 <div data-current="{{ model_label }}:{{ pk }}">
 <div class="editor-head">
   <h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
   {% if nav %}
+  {% comment %}
+  Three states (#3828): the row is still in the list ("Row 2 of 212 to write in
+  magic"); a stamp just removed it and a successor exists ("Credited · next is
+  row 2 of 211 to write in magic"); or the row is out of the list with nothing
+  after it, which leaves the bare count.
+  {% endcomment %}
   <span class="editor-pos">
+    {% if credited %}{% translate "Credited" %} &middot;
+    {% elif reviewed %}{% translate "Reviewed" %} &middot;
+    {% endif %}
     {% if nav.position %}
     {% blocktranslate with position=nav.position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
-    Row {{ position }} of {{ total }} {{ noun }} &middot; {{ scope }}
+    Row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
+    {% endblocktranslate %}
+    {% elif nav.next_position %}
+    {% blocktranslate with position=nav.next_position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
+    next is row {{ position }} of {{ total }} {{ noun }} in {{ scope }}
     {% endblocktranslate %}
     {% else %}
-    {{ nav.total }} {{ nav.count_noun }} &middot; {{ nav.scope_label }}
+    {{ nav.total }} {{ nav.count_noun }} in {{ nav.scope_label }}
     {% endif %}
   </span>
   {% endif %}

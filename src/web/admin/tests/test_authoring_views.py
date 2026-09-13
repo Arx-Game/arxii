@@ -406,8 +406,10 @@ class TestAuthoringStyling(AuthoringViewsTestCase):
     """
 
     #: Classes Django admin's own stylesheets define; everything else the two
-    #: fragments emit is ours and needs a rule below.
-    ADMIN_PROVIDED_CLASSES = frozenset({"errornote", "successnote", "help", "button", "default"})
+    #: fragments emit is ours and needs a rule below. `successnote` is NOT one
+    #: of them - admin has `.errornote` and no success counterpart - so the
+    #: editor fragment styles it itself (#3828 demo-fidelity review).
+    ADMIN_PROVIDED_CLASSES = frozenset({"errornote", "help", "button", "default"})
 
     #: Applied by the dashboard's script, never emitted in markup - so it is
     #: checked by name rather than collected from a body.

@@ -293,7 +293,7 @@ class TestAuthoringEditorNext(AuthoringEditorTestCase):
         self.assertIn(f"pk={second.pk}", link)
         self.assertIn("pos=0", link)
         self.assertNotIn("Row 1 of", body)
-        self.assertIn("1 to write", body)
+        self.assertRegex(body, r"Credited\s*&middot;\s*next is row 1 of 1 to write in all domains")
 
     def test_next_from_a_deep_link_uses_the_head_of_the_default_queue(self) -> None:
         """A change-form link carries no queue context: Next still points somewhere useful."""
