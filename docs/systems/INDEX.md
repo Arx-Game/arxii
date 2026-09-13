@@ -9086,7 +9086,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `core.app_domains.credited_content_models()` model, a prose-only row editor
   with a guided first-run contributor setup gate, a related-entries/prose-
   mentions pane, and reference search over the database plus opt-in staff-
-  docs/Arx I file corpora. See the "Authoring Workbench" section in
+  docs/Arx I file corpora. #3828 made it a writing pass: the queue opens on
+  To write (`DEFAULT_BACKLOG_STATUS`) with a headline count of the filtered
+  list, To review means written-and-not-reviewed, filters survive a credit
+  (the form re-submits itself) and a reload (`HX-Replace-Url`), the editor
+  sits above the queue with prose first and a position-based Next control
+  (`_queue_nav`, `?queue=&pos=`). See the "Authoring Workbench" section in
   `src/web/admin/CLAUDE.md`.
 - **Stock-admin credit complement (#3020):** every registered credited-model admin
   gets a `credit_status` changelist filter and linked column
