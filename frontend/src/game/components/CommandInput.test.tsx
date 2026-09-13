@@ -66,7 +66,7 @@ vi.mock('@/scenes/queries', () => ({
 // carries no dbref, only a Persona id, the wrong id space for a whisper
 // target).
 //
-// #3810 — `mockRoomCharacters` is mutable (mirrors `mockUseMyCompanions`
+// #3810 -- `mockRoomCharacters` is mutable (mirrors `mockUseMyCompanions`
 // below) so the tag-reachability tests can vary a character's `place_id`
 // per test without touching every other test in this file that relies on
 // Bob's resolvable dbref (#501) for the whisper-target-resolution tests
