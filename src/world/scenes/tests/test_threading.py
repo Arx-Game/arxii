@@ -223,15 +223,14 @@ class TestPoseActionWithTargets(TestCase):
         assert interaction.place_id == place.pk
 
 
-class TestPoseActionReplyRefusalTelnetParity(TestCase):
-    """Telnet parity (#3787 Task 8): the reply-to-scene-target refusal.
+class TestPoseActionReplyFromPlaceTelnetParity(TestCase):
+    """Telnet parity (#3787 Task 8; behavior corrected #3811/ADR-0293): a
+    Place-held draft answering a Scene-held target in the same scene.
 
     Telnet reaches ``assign_interaction_thread`` through ``record_interaction``
     without ever passing through the DRF view (`interaction_views.submit_pose`),
-    so both the refusal AND its venue hint must be enforced and phrased at the
-    shared service seam and translated by ``Action.run()`` -- the single
-    telnet+web chokepoint (`actions/base.py`) -- the same way the REST view
-    gets a structured ``hint`` field.
+    so the reachability rule must be enforced identically at the shared
+    service seam whichever channel a reply arrives through.
     """
 
     def setUp(self) -> None:
@@ -239,7 +238,13 @@ class TestPoseActionReplyRefusalTelnetParity(TestCase):
         self.mock_push = patcher.start()
         self.addCleanup(patcher.stop)
 
-    def test_pose_replying_from_a_place_to_a_scene_target_carries_the_hint(self) -> None:
+    def test_pose_replying_from_a_place_to_a_scene_target_in_the_same_scene_succeeds(
+        self,
+    ) -> None:
+        """#3811: a player at a Place can still answer a room-wide (or combat
+        OUTCOME) row -- a Place declutters, it does not isolate. The reply
+        threads under the target's own Scene holder, never the writer's Place.
+        """
         from actions.definitions.communication import PoseAction
         from world.scenes.thread_services import ReplyTarget
 
@@ -269,19 +274,21 @@ class TestPoseActionReplyRefusalTelnetParity(TestCase):
                 reply_to=ReplyTarget(target.pk, target.timestamp),
             )
 
-        assert result.success is False
-        # Both halves reach the telnet client: the refusal sentence AND the
-        # actionable venue hint (spec decision 4) -- previously the hint was
-        # dropped by Action.run()'s except clause (the known #3787 Task 8 gap).
-        assert result.message == (
-            "Answering the fight means speaking to the room. "
-            "Leave the war room table to answer this. Your draft is kept."
-        )
+        assert result.success is True
 
-        # Nothing was written by the refused attempt.
-        assert not Interaction.objects.filter(
-            content="glances at the map.",
-        ).exists()
+        reply = Interaction.objects.get(content="glances at the map.")
+        # The reply keeps the venue the writer actually chose (still a table
+        # aside, visible only there) -- reachability doesn't promote it.
+        assert reply.place_id == place.pk
+        # But it threads under the TARGET's own Scene holder, not the writer's
+        # Place, matching every other reply (`_thread_for_target` always
+        # derives holder kwargs from the target's signature).
+        target.refresh_from_db()
+        assert reply.thread_id is not None
+        assert reply.thread_id == target.thread_id
+        thread = InteractionThread.objects.get(pk=reply.thread_id)
+        assert thread.holder_kind == InteractionThread.HolderKind.SCENE
+        assert thread.scene_id == scene.pk
 
 
 class TestInvolvementMarkTelnetParity(TestCase):
@@ -729,14 +736,15 @@ class TestInteractionThreadAssignment(TestCase):
 
         assert error.exception.code == "reply_target_unavailable"
 
-    def test_place_reply_to_scene_target_refused_with_hint_and_writes_nothing(self) -> None:
-        """#3787 decision 3: a Place-held draft cannot answer a Scene-held target.
+    def test_place_reply_to_scene_target_in_same_scene_is_allowed(self) -> None:
+        """#3811 / ADR-0293 decision 1 correction: a Place-held draft CAN answer a
+        Scene-held target in the same scene.
 
-        Answering a room-wide pose (or a combat OUTCOME, always Scene-held) from a
-        Place requires leaving the Place first - reachability is never widened to
-        fit (decision 2 rejects audience promotion). Breaks the invariant: builds
-        the unreachable case and asserts BOTH the typed refusal AND that nothing
-        was written as a side effect of the attempt.
+        A Place declutters room chat, it does not isolate its occupants from it -
+        a player seated at a table already saw the room-wide pose (or combat
+        OUTCOME) they're answering, so replying to it is not an audience widening.
+        The reply threads under the target's Scene holder (`_thread_for_target`
+        always derives holder kwargs from the target's own signature).
         """
         account = AccountFactory()
         scene = SceneFactory()
@@ -745,8 +753,48 @@ class TestInteractionThreadAssignment(TestCase):
         target = InteractionFactory(scene=scene, writer_account=account)
         reply = InteractionFactory(scene=scene, place=place, writer_account=account)
 
-        interaction_count = Interaction.objects.count()
-        thread_count = InteractionThread.objects.count()
+        thread = assign_interaction_thread(
+            interaction=reply,
+            reply_target=ReplyTarget(target.pk, target.timestamp),
+            account_id=account.pk,
+        )
+
+        assert thread.holder_kind == InteractionThread.HolderKind.SCENE
+        assert thread.scene_id == scene.pk
+        reply.refresh_from_db()
+        target.refresh_from_db()
+        assert reply.thread_id == thread.pk
+        assert target.thread_id == thread.pk
+
+    def test_place_reply_to_scene_target_in_a_different_scene_is_unavailable(self) -> None:
+        """The Place-to-Scene allowance requires the SAME scene - the writer must
+        actually be present where the target's row was posed, not merely at any
+        Place anywhere.
+        """
+        account = AccountFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=SceneFactory(), writer_account=account)
+        reply = InteractionFactory(scene=SceneFactory(), place=place, writer_account=account)
+
+        with self.assertRaises(InteractionThreadError):
+            assign_interaction_thread(
+                interaction=reply,
+                reply_target=ReplyTarget(target.pk, target.timestamp),
+                account_id=account.pk,
+            )
+
+    def test_scene_reply_to_place_target_stays_refused(self) -> None:
+        """The reverse direction stays refused: a room-drafted reply cannot answer
+        table talk it was never able to see outside the table (#3811 keeps this
+        half of decision 1 unchanged).
+        """
+        account = AccountFactory()
+        scene = SceneFactory()
+        room = RoomProfileFactory()
+        place = PlaceFactory(room=room, name="the war room table")
+        target = InteractionFactory(scene=scene, place=place, writer_account=account)
+        reply = InteractionFactory(scene=scene, writer_account=account)
 
         with self.assertRaises(InteractionThreadError) as error:
             assign_interaction_thread(
@@ -755,18 +803,7 @@ class TestInteractionThreadAssignment(TestCase):
                 account_id=account.pk,
             )
 
-        exc = error.exception
-        assert exc.code == "reply_target_unavailable"
-        assert str(exc) == "Answering the fight means speaking to the room."
-        assert exc.venue_hint == ("Leave the war room table to answer this. Your draft is kept.")
-
-        # Nothing was written by the refused attempt.
-        assert Interaction.objects.count() == interaction_count
-        assert InteractionThread.objects.count() == thread_count
-        reply.refresh_from_db()
-        target.refresh_from_db()
-        assert reply.thread_id is None
-        assert target.thread_id is None
+        assert error.exception.code == "reply_target_unavailable"
 
     def test_create_interaction_assigns_thread_atomically(self) -> None:
         account = AccountFactory()

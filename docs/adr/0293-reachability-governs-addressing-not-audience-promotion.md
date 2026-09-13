@@ -1,9 +1,9 @@
 # ADR-0293: Reachability governs who can be addressed; the reply parent is the thread's anchor
 
-**Status:** Accepted (#3787, 2026-09-12). Related: ADR-0170 (concealed casts record no
-target rows), ADR-0260 (per-request memo policy, unrelated mechanism but the same
-"denormalize deliberately" instinct), #3757 (thread membership), #3760 (client_request_id
-kept off the largest table).
+**Status:** Accepted (#3787, 2026-09-12); decision 1 corrected (#3811, 2026-09-13).
+Related: ADR-0170 (concealed casts record no target rows), ADR-0260 (per-request memo
+policy, unrelated mechanism but the same "denormalize deliberately" instinct), #3757
+(thread membership), #3760 (client_request_id kept off the largest table).
 
 **Context.** #3787 lets a player answer a mechanical event (a combat outcome, a failed
 check, an NPC's swing) the same way they answer a pose: the row gets an involvement mark,
@@ -21,6 +21,24 @@ notice explaining the widening. Rejected because it disrupts the thread the read
 building (the reply lands somewhere the writer did not choose) and mutates the pose's
 audience on the player's behalf without their consent at the moment of writing. A refusal
 the player can act on is safer than a promotion they have to notice happened.
+
+**Correction (#3811, 2026-09-13):** the refusal above was directionally too broad. A
+Place declutters room chat - it hides table talk from the room so the room doesn't drown
+in it - it does not isolate the table's occupants from the room. A player seated there
+already sees every room-wide (or combat OUTCOME) row as it happens; answering one is not
+an audience widening, since nothing about its audience changes and the writer already
+had it. The refusal now applies to only ONE direction: a Place-held draft answering a
+Scene-held target in the SAME scene is reachable (the reply keeps whatever venue the
+writer actually chose - the thread it joins still anchors on the target's own Scene
+holder, per decision 4's "holder kwargs always derive from the target's own signature").
+The reverse direction is unaffected and stays refused: a Scene-drafted reply cannot reach
+a Place-held target, because table talk was never visible outside the table in the first
+place, and answering it from the room would be a genuine, un-consented widening of an
+actually-private exchange. `world.scenes.thread_services._reachable_from_place` is the
+narrowed check; `frontend/src/scenes/replyReachability.ts`'s pre-emptive mirror was
+simplified to match (no ratified pre-emptive refusal remains on the composer side - the
+one case it used to catch is now allowed, and the still-refused reverse direction has no
+ratified copy to show in advance either, same as every other holder mismatch).
 
 **Decision 2: Targeting and grouping are separate concerns.** `target_persona_ids` drives
 two things and only two: the per-viewer involvement mark

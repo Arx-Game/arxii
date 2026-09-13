@@ -2154,7 +2154,7 @@ describe('ThreadedNarrativeReader', () => {
       expect(screen.getByTestId('involvement-mark-1')).toHaveTextContent('This happened to you');
     });
 
-    it("renders the Answer this control disabled with the refusal shown, before any click, when the viewer's current Place cannot reach a room-held row (Screen 3)", () => {
+    it('leaves the Answer this control enabled, no refusal shown, when the viewer is at a Place and the row is room-held (#3811 -- a Place declutters, it does not isolate)', () => {
       vi.mocked(useViewerPersonaId).mockReturnValue(42);
       const onReply = vi.fn();
       const legacyPose = (id: number, content: string) => ({
@@ -2177,22 +2177,11 @@ describe('ThreadedNarrativeReader', () => {
           currentPlaceName="the corner table"
         />
       );
-      const refusal = screen.getByTestId('reply-refusal-1');
-      expect(refusal).toHaveTextContent('Answering the fight means speaking to the room.');
-      expect(refusal).toHaveTextContent(
-        'Leave the corner table to answer this. Your draft is kept.'
-      );
-      expect(refusal).toHaveAttribute('role', 'status');
-      expect(refusal).toHaveAttribute('aria-live', 'polite');
-      // #3787 D2: the same alarm-coloured left rail and tint the composer's own
-      // refusal carries, so the two refusals read as one kind of thing. Tailwind
-      // compiles its rules FROM these class names, so the class list is what
-      // decides whether the rule reaches the page at all.
-      expect(refusal).toHaveClass('border-l-2', 'border-destructive', 'bg-destructive/10');
-      const disabledButton = screen.getByRole('button', { name: /answer this/i });
-      expect(disabledButton).toBeDisabled();
-      fireEvent.click(disabledButton);
-      expect(onReply).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('reply-refusal-1')).toBeNull();
+      const enabledButton = screen.getByRole('button', { name: /answer this/i });
+      expect(enabledButton).not.toBeDisabled();
+      fireEvent.click(enabledButton);
+      expect(onReply).toHaveBeenCalled();
     });
 
     it('leaves an ordinary reply reachable when the viewer is not at a Place', () => {

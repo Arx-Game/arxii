@@ -1809,7 +1809,7 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
     });
   });
 
-  it('shows the refusal and disables submission, before any click, when the reply target is room-held and the viewer is at a Place (Screen 3)', () => {
+  it('allows a reply to a room-held target while the viewer is at a Place (#3811 -- a Place declutters, it does not isolate)', () => {
     render(
       <CommandInput
         character="Alice"
@@ -1821,19 +1821,18 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
         currentPlaceName="the corner table"
       />
     );
-    const refusal = screen.getByTestId('reply-refusal');
-    expect(refusal).toHaveTextContent('Answering the fight means speaking to the room.');
-    expect(refusal).toHaveTextContent('Leave the corner table to answer this. Your draft is kept.');
-    expect(refusal).toHaveAttribute('role', 'status');
-    expect(refusal).toHaveAttribute('aria-live', 'polite');
-    // #3787 D2: the reader-side refusal (ThreadedNarrativeReader's ReplyControl)
-    // is pinned to this same rail and tint. Change one and change both.
-    expect(refusal).toHaveClass('border-l-2', 'border-destructive', 'bg-destructive/10');
+    expect(screen.queryByTestId('reply-refusal')).not.toBeInTheDocument();
 
     const textarea = screen.getByRole('textbox');
     fireEvent.change(textarea, { target: { value: 'answers anyway' } });
     fireEvent.keyDown(textarea, { key: 'Enter' });
-    expect(submitPoseMock).not.toHaveBeenCalled();
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'answers anyway',
+      client_request_id: expect.any(String),
+      reply_to: { id: 5, timestamp: '2026-01-01T00:00:05Z' },
+    });
   });
 
   it('renders no refusal when the reply target is reachable', () => {

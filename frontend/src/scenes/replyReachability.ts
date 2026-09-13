@@ -25,32 +25,21 @@ export interface ReplyRefusal {
 const REACHABLE: ReplyRefusal = { reachable: true };
 
 /**
- * Mirrors the ONE ratified holder-mismatch copy in
- * `world.scenes.thread_services._holder_mismatch` (#3787 decision 3, "you can
- * only name or answer someone in a venue where they are available"): a
- * Place-held draft (a table-talk aside) answering a Scene-held target (a
- * room-wide pose, or a combat OUTCOME) is refused, in advance, with the same
- * wording the backend uses for the same mismatch on submit.
- *
- * Every OTHER holder combination (a differing Place, a whisper party
- * mismatch, a room-heard target answered from the room, ...) has no ratified
- * copy server-side either (`thread_services.py`'s own comment: "there is no
- * ratified copy for them yet") -- this stays permissive (`reachable: true`)
- * for those rather than inventing wording, and the existing submit-time
- * refusal (the rejected-draft banner, carrying the server's own `hint`)
- * still catches them.
+ * Mirrors `world.scenes.thread_services`' holder-mismatch rule (#3787
+ * decision 3, corrected #3811 / ADR-0293): a Place declutters room chat, it
+ * does not isolate its occupants from it, so a player seated at a table can
+ * still answer a Scene-held target (a room-wide pose, or a combat OUTCOME) --
+ * they already saw it. There is currently no ratified pre-emptive refusal
+ * case at all: every holder combination stays permissive here
+ * (`reachable: true`), and the one direction the backend still refuses (a
+ * room-drafted reply reaching table talk it was never able to see) has no
+ * ratified copy either, so the existing submit-time refusal path (the
+ * rejected-draft banner, carrying the server's own `hint`) is what catches
+ * it.
  */
 export function replyReachability(
-  target: Pick<Interaction, 'place' | 'mode'>,
-  venue: ViewerVenue
+  _target: Pick<Interaction, 'place' | 'mode'>,
+  _venue: ViewerVenue
 ): ReplyRefusal {
-  if (venue.isAtPlace && target.place == null && target.mode !== 'whisper') {
-    const placeName = venue.currentPlaceName || 'this place';
-    return {
-      reachable: false,
-      reason: 'Answering the fight means speaking to the room.',
-      hint: `Leave ${placeName} to answer this. Your draft is kept.`,
-    };
-  }
   return REACHABLE;
 }
