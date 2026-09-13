@@ -65,6 +65,19 @@ vi.mock('@/scenes/queries', () => ({
 // to the `target_id` the WS wire actually needs; `sceneDetail.participants`
 // carries no dbref, only a Persona id, the wrong id space for a whisper
 // target).
+//
+// #3810 — `mockRoomCharacters` is mutable (mirrors `mockUseMyCompanions`
+// below) so the tag-reachability tests can vary a character's `place_id`
+// per test without touching every other test in this file that relies on
+// Bob's resolvable dbref (#501) for the whisper-target-resolution tests
+// above. Reset to the default in `beforeEach`.
+let mockRoomCharacters: Array<{
+  name: string;
+  thumbnail_url: string | null;
+  dbref: string;
+  place_id?: number | null;
+}> = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
+
 vi.mock('@/store/hooks', () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
     selector({
@@ -72,7 +85,7 @@ vi.mock('@/store/hooks', () => ({
         active: 'Alice',
         sessions: {
           Alice: {
-            room: { characters: [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }] },
+            room: { characters: mockRoomCharacters },
           },
         },
       },
@@ -175,6 +188,7 @@ describe('CommandInput', () => {
     mockUseMyCompanions.mockReturnValue({ data: [] });
     companionEmoteMock.mockClear();
     companionEmoteMock.mockImplementation(() => Promise.resolve());
+    mockRoomCharacters = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
     queryClient.clear();
     // useDraftStore (#3760 Task 10) persists to sessionStorage under a key
     // derived from account/persona/conversation — several tests in this file
@@ -281,6 +295,13 @@ describe('CommandInput', () => {
   });
 
   it('prepends targets with @ syntax for non-whisper commands', () => {
+    // #3810 -- both targets must be physically in the room for the new
+    // pre-emptive tag-reachability check to let this submit through; Carol
+    // isn't in the default `mockRoomCharacters` roster, so she's added here.
+    mockRoomCharacters = [
+      { name: 'Bob', thumbnail_url: null, dbref: '#501' },
+      { name: 'Carol', thumbnail_url: null, dbref: '#502' },
+    ];
     const mode: ComposerMode = {
       command: 'pose',
       targets: ['Bob', 'Carol'],
@@ -1846,5 +1867,47 @@ describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
       />
     );
     expect(screen.queryByTestId('reply-refusal')).not.toBeInTheDocument();
+  });
+});
+
+describe('tag reachability (#3810)', () => {
+  it('shows the tag-refusal banner and disables Send when a mode switch carries a stale target', () => {
+    // Vayne is physically in the room but not at the actor's own current
+    // Place (place_id null vs. currentPlaceId 5) -- the same mismatch a
+    // Tabletalk mode switch would carry forward from a stale whisper target.
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: null }];
+    const mode: ComposerMode = { command: 'tt', targets: ['Vayne'], label: 'Tabletalk' };
+    render(<CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />);
+
+    const refusal = screen.getByTestId('tag-refusal');
+    expect(refusal).toHaveTextContent('Vayne is across the room and will not see table talk.');
+    expect(refusal).toHaveTextContent(
+      'Address the room to reach them, or send a whisper. Your draft is kept.'
+    );
+    expect(refusal).toHaveAttribute('role', 'status');
+    expect(refusal).toHaveAttribute('aria-live', 'polite');
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('does not show the tag-refusal banner when the target shares the current place', () => {
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: 5 }];
+    const mode: ComposerMode = { command: 'tt', targets: ['Vayne'], label: 'Tabletalk' };
+    render(<CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />);
+
+    expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+  });
+
+  it('does not show the tag-refusal banner in whisper mode regardless of location', () => {
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: null }];
+    const mode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Vayne'],
+      label: 'Whisper → Vayne',
+    };
+    render(<CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />);
+
+    expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   });
 });
