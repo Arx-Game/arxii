@@ -1910,4 +1910,55 @@ describe('tag reachability (#3810)', () => {
     expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
   });
+
+  // The three tests above all mount the component already in the refused or
+  // reachable state via props -- they never prove the LIVE recompute this
+  // feature's headline claim depends on. These two force a real rerender
+  // after mount, without unmounting, so the useMemo actually has to fire on a
+  // changed dependency rather than just render correctly given inputs it was
+  // handed from the start.
+
+  it('recomputes live on a mode switch that carries a stale target across, without unmounting', () => {
+    // Vayne is physically in the room but not at the actor's current Place
+    // (place_id null vs. currentPlaceId 5) -- the same mismatch a live
+    // whisper-to-Tabletalk mode switch carries forward with no new
+    // room_state push at all.
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: null }];
+    const whisperMode: ComposerMode = {
+      command: 'whisper',
+      targets: ['Vayne'],
+      label: 'Whisper → Vayne',
+    };
+    const { rerender } = render(
+      <CommandInput character="Alice" composerMode={whisperMode} isAtPlace currentPlaceId={5} />
+    );
+
+    expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+
+    const ttMode: ComposerMode = { command: 'tt', targets: ['Vayne'], label: 'Tabletalk' };
+    rerender(<CommandInput character="Alice" composerMode={ttMode} isAtPlace currentPlaceId={5} />);
+
+    expect(screen.getByTestId('tag-refusal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
+
+  it('recomputes live when a fresh room_state push moves an already-tagged target to a different place, with composerMode unchanged', () => {
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: 5 }];
+    const mode: ComposerMode = { command: 'tt', targets: ['Vayne'], label: 'Tabletalk' };
+    const { rerender } = render(
+      <CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />
+    );
+
+    expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+
+    // A fresh room_state push moves Vayne to a different place -- composerMode
+    // itself never changes, only the room roster the selector returns.
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: 9 }];
+    rerender(<CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />);
+
+    expect(screen.getByTestId('tag-refusal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
 });
