@@ -3,7 +3,7 @@ import { RouletteResult } from '../RouletteResult';
 import type { ConsequenceDisplay } from '../types';
 
 describe('RouletteResult', () => {
-  it('hides the eyebrow when tier_name matches the label', () => {
+  it('shows the "Outcome" caption when tier_name matches the label', () => {
     const consequence: ConsequenceDisplay = {
       label: 'Partial Success',
       tier_name: 'Partial Success',
@@ -13,12 +13,11 @@ describe('RouletteResult', () => {
 
     render(<RouletteResult consequence={consequence} />);
 
+    expect(screen.getByText('Outcome')).toBeInTheDocument();
     expect(screen.getByText('Partial Success')).toBeInTheDocument();
-    // Only one node should render the outcome name - the eyebrow is suppressed.
-    expect(screen.getAllByText('Partial Success')).toHaveLength(1);
   });
 
-  it('shows the eyebrow when tier_name differs from the label', () => {
+  it('shows the tier name as the caption when it differs from the label', () => {
     const consequence: ConsequenceDisplay = {
       label: 'Lose 10 gold',
       tier_name: 'Mixed',
