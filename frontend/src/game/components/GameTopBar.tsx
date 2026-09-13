@@ -147,22 +147,30 @@ export function GameTopBar({
     connectionColor = 'bg-green-500';
   }
 
-  const handleSelectCharacter = (name: MyRosterEntry['name']) => {
-    // #3412 — persist the selection server-side ALONGSIDE the existing
-    // puppeting behavior below, never replacing it. Fire-and-forget: the
-    // local session switch below is immediate regardless of this call's
-    // outcome (see useSelectCharacterMutation's doc comment).
+  const handleSelectCharacter = async (name: MyRosterEntry['name']) => {
+    // #3412 — persist the selection server-side ALONGSIDE the puppeting
+    // below. #3812 — and BEFORE it: login now puppets the server's durable
+    // selection the moment the socket authenticates, so the select has to
+    // land first or the new socket briefly puppets the previous character
+    // before its own `@ic` corrects it. The local session switch stays
+    // immediate; only the connect waits. A failed select is not blocking:
+    // the socket still opens and its `@ic <name>` still names the character
+    // (see useSelectCharacterMutation's doc comment on the degraded case).
     const entryId = characters.find((c) => c.name === name)?.id;
-    if (entryId !== undefined) {
-      selectCharacter.mutate(entryId);
-    }
+    const alreadyConnected = Boolean(sessions[name]?.isConnected);
     if (sessions[name]) {
       dispatch(setActiveSession(name));
-      if (!sessions[name].isConnected) {
-        connect(name);
-      }
     } else {
       dispatch(startSession(name));
+    }
+    if (entryId !== undefined) {
+      try {
+        await selectCharacter.mutateAsync(entryId);
+      } catch {
+        // onError already toasted; the connect below still carries the intent.
+      }
+    }
+    if (!alreadyConnected) {
       connect(name);
     }
     // #3774 -- switching is the moment the player expects the badge they just

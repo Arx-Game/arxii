@@ -2,11 +2,13 @@
  * Tests the #3412 wiring in GameTopBar's character-select handler: clicking
  * an avatar (alt, unplayed, or the currently-active one) fires the durable
  * server-side selection mutation ALONGSIDE the existing puppeting/session
- * dispatches — never replacing them. `useGameSocket` and
+ * dispatches — never replacing them. As of #3812 the select lands BEFORE the
+ * connect (login puppets the server's selection), so the connect assertions
+ * wait for the awaited mutation to settle. `useGameSocket` and
  * `useSelectCharacterMutation` are mocked so this stays a fast unit test
  * (real `connect()` opens a WebSocket and hits the network).
  */
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const connectMock = vi.fn();
@@ -21,7 +23,12 @@ vi.mock('@/hooks/useGameSocket', () => ({
 
 const mutateMock = vi.fn();
 vi.mock('@/roster/queries', () => ({
-  useSelectCharacterMutation: () => ({ mutate: mutateMock }),
+  useSelectCharacterMutation: () => ({
+    mutate: mutateMock,
+    mutateAsync: vi.fn(async (entryId: number) => {
+      mutateMock(entryId);
+    }),
+  }),
 }));
 
 import { GameTopBar } from './GameTopBar';
@@ -71,13 +78,13 @@ describe('GameTopBar selection wiring (#3412)', () => {
     store.dispatch(resetGame());
   });
 
-  it('fires the select mutation with the roster entry id when clicking an unplayed character', () => {
+  it('fires the select mutation with the roster entry id when clicking an unplayed character', async () => {
     renderWithProviders(<GameTopBar characters={[aria]} />);
 
     fireEvent.click(screen.getByText('Aria'));
 
     expect(mutateMock).toHaveBeenCalledWith(1);
-    expect(connectMock).toHaveBeenCalledWith('Aria');
+    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Aria'));
     expect(store.getState().game.active).toBe('Aria');
   });
 
@@ -93,7 +100,7 @@ describe('GameTopBar selection wiring (#3412)', () => {
     expect(store.getState().game.active).toBe('Bianca');
   });
 
-  it('the hydrated-but-disconnected active avatar is clickable and (re)selects/connects', () => {
+  it('the hydrated-but-disconnected active avatar is clickable and (re)selects/connects', async () => {
     // Simulates reload hydration: `active` set with no live session yet.
     store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
 
@@ -102,6 +109,6 @@ describe('GameTopBar selection wiring (#3412)', () => {
     fireEvent.click(screen.getByTitle('Connect as Aria'));
 
     expect(mutateMock).toHaveBeenCalledWith(1);
-    expect(connectMock).toHaveBeenCalledWith('Aria');
+    await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Aria'));
   });
 });

@@ -251,6 +251,27 @@ class TestRealDeclarations(TestCase):
         self.assertFalse(result.present)
         self.assertIn("rc_base_root", result.detail)
 
+    def test_a_repointed_row_with_no_cmdset_is_still_reported(self) -> None:
+        """The old hand repair (#3596) fixed the typeclass path and nothing else: the row
+        passed this probe while having zero commands (#3812). Both symptoms are flagged,
+        and the detail names the heal rather than the ``.update()`` that caused it."""
+        from django.conf import settings
+        from evennia.accounts.models import AccountDB
+
+        dep = next(d for d in rc._declarations() if d.key == "typeclassed-accounts")
+        AccountDB.objects.create_superuser("rc_repointed", "rcrep@example.com", "pw-123456")
+        AccountDB.objects.filter(username="rc_repointed").update(
+            db_typeclass_path=settings.BASE_ACCOUNT_TYPECLASS
+        )
+        AccountDB.flush_instance_cache()
+
+        result = dep.probe.resolve(None)
+
+        self.assertFalse(result.present)
+        self.assertIn("rc_repointed", result.detail)
+        self.assertIn("heal_account_setup", result.detail)
+        self.assertNotIn(".update(", result.detail)
+
     def test_mfa_secrets_key_probe_reports_a_key_that_cannot_decrypt(self) -> None:
         """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0267)."""
         from allauth.mfa.models import Authenticator

@@ -423,12 +423,22 @@ class Character(ObjectParent, DefaultCharacter):
     def at_post_puppet(self, **kwargs):
         """Handle actions after a session puppets this character.
 
-        Updates the roster entry with the time this character entered the game.
+        Sessions share a character (#3812): a second window opening is not the
+        character coming online. The roster stamp and the cmdset payload go
+        out on every puppet; the friends alert and the offline story catch-up
+        fire only when the FIRST session arrives; the joining window gets its
+        own ``look`` and room state rather than every window getting them again.
+        Evennia adds the session before calling this hook, so the newest one is
+        last in ``sessions.all()`` (a session-less call, as in tests, counts as
+        the first).
 
         Args:
             **kwargs: Arbitrary, optional arguments passed by Evennia.
         """
         super().at_post_puppet(**kwargs)
+        sessions = list(self.sessions.all())
+        first_session = len(sessions) <= 1
+        joining = sessions[-1] if sessions else None
         try:
             entry = self.sheet_data.roster_entry
         except (RosterEntry.DoesNotExist, ObjectDoesNotExist):
@@ -443,24 +453,25 @@ class Character(ObjectParent, DefaultCharacter):
 
             mark_character_active(self.sheet_data)
         payload = serialize_cmdset(self)
-        for session in self.sessions.all():
+        for session in sessions:
             session.msg(commands=(payload, {}))
 
-        # Stories login catch-up: re-evaluate active stories and deliver
-        # any queued narrative messages that accumulated while offline.
-        from world.stories.services.login import catch_up_character_stories
+        if first_session:
+            # Stories login catch-up: re-evaluate active stories and deliver
+            # any queued narrative messages that accumulated while offline.
+            from world.stories.services.login import catch_up_character_stories
 
-        catch_up_character_stories(self)
+            catch_up_character_stories(self)
 
-        # Friends watch list (#1727): alert online players who friended this character.
-        from world.scenes.friend_services import notify_friends_of_status
+            # Friends watch list (#1727): alert online players who friended this character.
+            from world.scenes.friend_services import notify_friends_of_status
 
-        notify_friends_of_status(self, online=True)
+            notify_friends_of_status(self, online=True)
 
         # Look now returns prose only. Confirm structured presence independently
         # so web entry does not depend on moving rooms or having an active scene.
-        self.send_room_state()
-        self.execute_cmd("look")
+        self.send_room_state(session=joining)
+        self.execute_cmd("look", session=joining)
 
     def announce_move_from(self, destination, msg=None, mapping=None, **kwargs):
         """Departure broadcast — suppressed entirely while sneaking (#3288).
@@ -496,8 +507,12 @@ class Character(ObjectParent, DefaultCharacter):
             return
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
-    def send_room_state(self):
+    def send_room_state(self, session=None):
         """Send current room state to this character's frontend.
+
+        ``session`` narrows the send to one window (the one that just joined,
+        #3812); ``None`` fans out to every session on the character, which is
+        what a move wants.
 
         Uses the scene_state properties to get current state information.
         Falls back to executing 'look' command if state retrieval fails.
@@ -523,7 +538,7 @@ class Character(ObjectParent, DefaultCharacter):
         room_state = room.scene_state
         if caller_state and room_state:
             payload = build_room_state_payload(caller_state, room_state)
-            self.msg(room_state=((), payload))
+            self.msg(room_state=((), payload), session=session)
 
     def at_post_move(self, source_location, move_type="move", **kwargs):
         """Handle actions after moving to a new location.
@@ -832,6 +847,12 @@ class Character(ObjectParent, DefaultCharacter):
         target = [session] if session else self.sessions.all()
         for sess in target:
             sess.msg(commands=([], {}))
+
+        if self.sessions.all():
+            # Another window still has this character (#3812): closing one of
+            # two tabs is not going offline. Evennia's own hook applies the same
+            # rule to leaving the grid.
+            return
 
         # Clear presence-tied resonance buff on logout; character is no longer present.
         with contextlib.suppress(RosterEntry.DoesNotExist, ObjectDoesNotExist):
