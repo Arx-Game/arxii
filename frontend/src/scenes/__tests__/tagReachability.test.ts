@@ -96,4 +96,13 @@ describe('tagReachability', () => {
     });
     expect(result.reachable).toBe(true);
   });
+
+  it('is reachable in pose mode even while the actor is seated at a place', () => {
+    const result = tagReachability(['Vayne'], room, 'pose', {
+      isAtPlace: true,
+      currentPlaceId: 5,
+      currentPlaceName: 'The Long Table',
+    });
+    expect(result.reachable).toBe(true);
+  });
 });

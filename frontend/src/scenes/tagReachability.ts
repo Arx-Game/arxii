@@ -35,8 +35,8 @@ function describeUnreachableTargets(names: string[]): string {
  * `composerMode.command`: whisper is always reachable for its own named
  * targets (receiver-based, never location-based, mirroring
  * `persona_can_receive`'s whisper branch); every other mode checks physical
- * presence, and a Place-scoped mode additionally requires the target share
- * the actor's own current Place.
+ * presence only (room-heard), except `tt` (Tabletalk), which is Place-scoped
+ * and additionally requires the target share the actor's own current Place.
  */
 export function tagReachability(
   targetNames: string[],
@@ -58,11 +58,12 @@ export function tagReachability(
       // Not physically in the room at all: unreachable regardless of mode.
       return true;
     }
-    if (venue.isAtPlace) {
+    if (mode === 'tt' && venue.isAtPlace) {
       return character.place_id !== venue.currentPlaceId;
     }
-    // Room-wide: being found in roomCharacters already satisfies room-heard's
-    // physical-presence requirement.
+    // Room-heard (pose, say, emit, ...): being found in roomCharacters already
+    // satisfies the physical-presence requirement, regardless of the actor's
+    // own seating.
     return false;
   });
 
