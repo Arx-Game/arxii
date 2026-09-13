@@ -1,8 +1,11 @@
 """Tests for place services."""
 
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
+from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import ScenePrivacyMode
 from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
 from world.scenes.place_models import PlacePresence
@@ -134,3 +137,32 @@ class TestLeavePlace(TestCase):
 
         result = leave_place(place=place, persona=persona)
         assert result is False
+
+
+class PlaceJoinLeaveBroadcastsRoomStateTests(TestCase):
+    """#3810: joining or leaving a Place must push a fresh room_state."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(
+            db_key="tavern",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.character = ObjectDBFactory(
+            db_key="elyn",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        sheet = CharacterSheetFactory(character=self.character)
+        self.persona = PersonaFactory(character_sheet=sheet)
+        self.place = PlaceFactory()
+
+    def test_join_place_broadcasts_room_state(self) -> None:
+        with patch.object(self.room, "_broadcast_room_state") as broadcast:
+            join_place(place=self.place, persona=self.persona)
+        broadcast.assert_called_once_with()
+
+    def test_leave_place_broadcasts_room_state(self) -> None:
+        join_place(place=self.place, persona=self.persona)
+        with patch.object(self.room, "_broadcast_room_state") as broadcast:
+            leave_place(place=self.place, persona=self.persona)
+        broadcast.assert_called_once_with()
