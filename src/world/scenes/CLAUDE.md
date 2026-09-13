@@ -223,6 +223,21 @@ the unified Persona identity system, and non-combat scene rounds.
   with no table entry raises `ValueError` loudly; the original if/elif chains had an implicit DEED
   fallthrough on an unrecognized kind.
 
+### `interaction_services.py` -- outcome delivery (#3807)
+- **`deliver_outcome_interaction(interaction, *, location)`**: the shared delivery seam for a
+  persisted, system-authored outcome row (a resolved social-check result, a treatment outcome,
+  a cast outcome pose). Registers a `transaction.on_commit` callback that pushes the WebSocket
+  payload via `push_interaction(interaction, location=location)` and sends the same
+  `interaction.content` as plain text to the non-web sessions of exactly the objects the push
+  reached (telnet parity). Every production `create_interaction` call must reach a delivery
+  seam in the same or an enclosing function -- enforced by `tools/lint_undelivered_interaction.py`
+  (the `undelivered-interaction` pre-commit hook) and the `outcome-delivery-reviewer` agent. See
+  "Result delivery" in `docs/systems/scenes.md` and ADR-0296.
+- **`push_interaction(..., *, location=None)`**: gained an optional `location` kwarg (#3807).
+  Omitted, it resolves from the writer persona's own character location, byte-identical to
+  before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's
+  character is never physically placed anywhere.
+
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /
   VAULT_ITEM / DEED / MATERIAL).

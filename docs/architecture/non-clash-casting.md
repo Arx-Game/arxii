@@ -359,6 +359,16 @@ def _create_result_interaction(
     )
 ```
 
+**As built (2026-09-13, #3807):** the real function writes through the `create_interaction`
+service (not a bare `Interaction.objects.create()`), returns `Interaction | None`, and content
+is `_targeted_outcome_content`/`_area_outcome_content` (plain rendered narrative text, e.g.
+"Kira attempts to intimidate Rowan: Success", the old "{Success/Failure} ({outcome_name})"
+polarity-word prefix was dropped in #3807 Part B, since a Partial Success carries
+success_level 0 and read as "Failure (Partial Success)"). Every write now also calls
+`deliver_outcome_interaction(interaction, location=...)` before returning, so the row reaches a
+live audience on commit instead of sitting persisted with nobody delivered to. See "Result
+delivery" in `docs/systems/scenes.md` and ADR-0296.
+
 ### `commit_to_clash` — one new arg on Interaction creation
 
 Already reads `declaration.strain_commitment` and passes to `use_technique`. Add: when creating the result Interaction, pass `strain_committed=declaration.strain_commitment`.

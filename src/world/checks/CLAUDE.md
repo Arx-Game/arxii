@@ -27,6 +27,17 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
 - **`select_consequence(character, check_type, target_difficulty, consequences)`**: Generic consequence selection. Performs check, selects weighted consequence from pool, applies character loss filtering. Returns `PendingResolution` (not yet applied). Any system can call this.
 - **`apply_resolution(pending, context)`**: Apply effects from a selected consequence using `ResolutionContext` for target resolution. Returns list of `AppliedEffect`.
 
+### `theater.py` (#924, extended #3807 Part B)
+- **Resolution theater**: `check_outcome_faces(check_result)` builds a success-level roulette
+  wheel straight off `check_result.chart`'s authored `ResultChartOutcome` bands, one face per
+  band weighted by its roll-range width, selecting the face matching the check's actual
+  resolved outcome. `maybe_emit_resolution_theater` pushes the wheel to a client and never
+  raises. HARD RULE: faces are read only from the chart, never from `get_rollmod()` or any
+  outcome-guarantee logic (`perform_check` step 6/8 below) -- the wheel always shows the raw
+  chart and lands on whatever actually resolved (ADR-0296). `world.scenes.action_services
+  ._schedule_check_outcome_theater` schedules this for every resolved social check, on commit,
+  to the roller and (when present) the target.
+
 ### `types.py`
 - **`CheckResult`**: Dataclass returned by perform_check. Contains outcome, chart, ranks, and point breakdowns. No roll numbers exposed.
 - **`ResolutionContext`**: Carries typed optional refs to whatever triggered a consequence resolution (challenge_instance, action_context, future fields). Handlers use `context.character` and `context.location`.
