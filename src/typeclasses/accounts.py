@@ -561,7 +561,7 @@ class Account(DefaultAccount):
         return None
 
     def at_post_login(self, session=None, **kwargs):
-        """Finish login by puppeting the account's character (#3812, ADR-0293).
+        """Finish login by puppeting the account's character (#3812, ADR-0294).
 
         Evennia's hook does three things this keeps — restore saved protocol
         flags, send the ``logged_in`` OOB, announce on the connect channel — and

@@ -82,7 +82,7 @@ When implementing commands like `@ic`, `@characters`, `@apply`:
 ## Key Implementation Notes
 
 ### Character Switching
-- Login puppets the account's character (#3812, ADR-0293): the durable
+- Login puppets the account's character (#3812, ADR-0294): the durable
   `PlayerData.selected_entry`, else Evennia's `_last_puppet`, else a sole
   character. Nobody sees an OOC "now pick a character" step on any protocol.
 - `@ic <character>` switches between available characters; puppeting records

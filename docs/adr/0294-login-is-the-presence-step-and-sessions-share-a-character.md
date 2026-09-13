@@ -1,4 +1,4 @@
-# ADR-0293: Login is the presence step, sessions share a character, and puppeting records the selection
+# ADR-0294: Login is the presence step, sessions share a character, and puppeting records the selection
 
 Logging in used to land every player on Evennia's stock OOC screen (``charcreate``, ``ic <name>``
 ...) and wait for ``@ic``: ``AUTO_PUPPET_ON_LOGIN`` was off and ``Account.at_post_login`` said, in

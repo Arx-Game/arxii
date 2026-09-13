@@ -95,7 +95,7 @@ INSTALLED_APPS += [
 # This is the name of your game. Make it catchy!
 SERVERNAME = "Arx"
 EVENNIA_ADMIN = False
-# Sessions share a character (#3812, ADR-0293): a phone and a laptop on the same
+# Sessions share a character (#3812, ADR-0294): a phone and a laptop on the same
 # character are two windows onto one object, and it does not matter which one
 # you type in. Mode 2 kicked the older session; mode 3 fans output to all of
 # them. Simultaneous puppets are unlimited because the web client already opens

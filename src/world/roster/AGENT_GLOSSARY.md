@@ -184,7 +184,7 @@ browsing as (state 2.5 in the four-state model: logged out / logged in-no-select
 `world.roster.services.selection.set_selected_entry`, mirrored client-side by
 `gameSlice` (#3412). Selection is a fact, not an action: it carries zero
 lifecycle, session, or puppeting side effects — see ADR-0241. The relation runs
-the other way too (#3812, ADR-0293): puppeting a character *records* it as the
+the other way too (#3812, ADR-0294): puppeting a character *records* it as the
 selection through `set_selected_entry`, and login puppets the selection — it is
 the presence step, so no protocol shows a "now pick a character" screen.
 Player-facing state label ratified by Apostate (refined 2026-08-28):

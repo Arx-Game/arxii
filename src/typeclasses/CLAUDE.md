@@ -24,7 +24,7 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 - **`Account`**: Extends `DefaultAccount`
 - Integration with roster system and character management
 - **Login puppets the account's character; there is no OOC screen** (#3812,
-  ADR-0293). `at_post_login` reproduces Evennia's three login side effects
+  ADR-0294). `at_post_login` reproduces Evennia's three login side effects
   (protocol flags, the `logged_in` OOB, the connect-channel line) and then
   puppets `resolve_login_character()`'s pick: the durable selection, then
   Evennia's `_last_puppet`, then a sole character — several with nothing
