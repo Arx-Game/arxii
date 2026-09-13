@@ -823,6 +823,12 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, level_points, specialization_points, capability_points)
 - **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
 - **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
+- **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
+  `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
+  player's client. A social check schedules one for roller + target via
+  `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); faces come only from
+  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0297). See
+  "Resolution theater" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -3439,6 +3445,11 @@ action consent flow, and a three-mode non-combat round framework.
   identified instead of being stranded under the placeholder. See
   [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
   Drafts" for the full contract.
+- **Outcome delivery (#3807):** a resolved social-check result, treatment outcome, or cast
+  outcome pose is delivered live, on commit, via `deliver_outcome_interaction`
+  (`interaction_services.py`): no persisted row goes undelivered. `push_interaction` gained
+  an optional `location` kwarg for Narrator-authored rows (the Narrator's character is never
+  physically placed). See "Result delivery" in [scenes.md](scenes.md) and ADR-0297.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
