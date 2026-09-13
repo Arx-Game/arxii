@@ -128,8 +128,8 @@ When skipping, go straight to Implementation (claim `status:implementing`).
 
 Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
 invoke the **ported `brainstorming` skill** (`tools/skills/brainstorming/`). It
-handles the full design dialogue and writes the spec into the issue body. Two
-points it already bakes in (from the port):
+handles the full design dialogue and writes the spec into the issue body.
+Points it already bakes in (from the port):
 - **Spec destination:** the issue body, between `<!-- spec:start -->` and
   `<!-- spec:end -->` markers (`gh issue edit <N> --body-file`), using
   `docs/spec-template.md`'s section layout. No committed spec file.
