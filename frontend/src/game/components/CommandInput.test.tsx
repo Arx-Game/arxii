@@ -1961,4 +1961,28 @@ describe('tag reachability (#3810)', () => {
     expect(screen.getByTestId('tag-refusal')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
   });
+
+  it('recomputes live when the actor moves to a different place, with the target and composerMode unchanged', () => {
+    // Vayne stays put at place 5 the whole time. This is the symmetric case
+    // to the test above: there it was the TARGET's place_id that moved out
+    // from under a fixed currentPlaceId, here it is the actor's own
+    // currentPlaceId that moves out from under a fixed target place_id. Both
+    // go through the same `character.place_id !== venue.currentPlaceId`
+    // check in tagReachability.ts, so both must recompute live the same way.
+    mockRoomCharacters = [{ name: 'Vayne', thumbnail_url: null, dbref: '#700', place_id: 5 }];
+    const mode: ComposerMode = { command: 'tt', targets: ['Vayne'], label: 'Tabletalk' };
+    const { rerender } = render(
+      <CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={5} />
+    );
+
+    expect(screen.queryByTestId('tag-refusal')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeEnabled();
+
+    // The actor moves to a different table. Vayne's own place_id never
+    // changes, and neither does composerMode.
+    rerender(<CommandInput character="Alice" composerMode={mode} isAtPlace currentPlaceId={9} />);
+
+    expect(screen.getByTestId('tag-refusal')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send' })).toBeDisabled();
+  });
 });
