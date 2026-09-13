@@ -220,6 +220,20 @@ class NoClearingHookTests(unittest.TestCase):
         self.assertEqual(self.read("b.txt"), "base\nB-early\n")
         self.assertEqual(self.head_files(), ["a.txt"])
 
+    def test_tracked_hook_runs_without_its_executable_bit(self) -> None:
+        """core.fileMode=false can check the script out without +x; the shim must not fall back."""
+        (self.repo / "tools/githooks/pre-commit").chmod(0o644)
+        self.write("b.txt", "base\nB-early\n")
+        self.write("a.txt", "base\nA\n")
+        self.git("add", "a.txt")
+
+        process = self.start_gated_commit()
+        self.assertIn("B-early", self.read("b.txt"))
+        returncode, output = self.release(process)
+
+        self.assertEqual(returncode, 0, output)
+        self.assertEqual(self.head_files(), ["a.txt"])
+
     def test_sibling_write_during_hooks_is_not_a_failure(self) -> None:
         self.write("b.txt", "base\nB-early\n")
         self.write("a.txt", "base\nA\n")

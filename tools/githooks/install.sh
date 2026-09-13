@@ -26,8 +26,8 @@ rm -f "$hook"
 export PRE_COMMIT_PYTHON
 here="$(cd "$(dirname "$0")" && pwd)"
 tracked="$(git rev-parse --show-toplevel)/tools/githooks/pre-commit"
-if [ -x "$tracked" ]; then
-  exec "$tracked" "$@"
+if [ -f "$tracked" ]; then
+  exec bash "$tracked" "$@"
 fi
 # A branch cut before #3814 has no tracked hook: run pre-commit's own hook, as before.
 args=(hook-impl --config=.pre-commit-config.yaml --hook-type=pre-commit --hook-dir "$here" -- "$@")
