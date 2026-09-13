@@ -9,6 +9,35 @@ permissions:
   issues: read
 
 jobs:
+  review-evidence-not-committed:
+    name: review-evidence-not-committed
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Reject review evidence committed to the repository
+        run: |
+          set -euo pipefail
+          tracked="$(git ls-files docs/reviews)"
+          if [ -n "$tracked" ]; then
+            echo "::error::Review evidence must not be committed. Found under docs/reviews/:"
+            echo "$tracked" | sed 's/^/::error::  /'
+            cat <<'MSG'
+          Review evidence reports and their screenshots do not belong in main's
+          permanent history. The report is a PR comment; the screenshots are served
+          from the pushed blob so they keep rendering after the files come out.
+
+          To fix, in this order:
+            1. Push once with the files still present, so their blobs exist.
+            2. Post the report as a PR comment, with every image linked as
+               https://raw.githubusercontent.com/<owner>/<repo>/<pushed-sha>/<path>
+            3. Point the PR body's "- Report:" line at that comment URL.
+            4. Delete docs/reviews/ and push again.
+
+          Deleting the files without doing steps 2 and 3 does not pass: the
+          review-evidence job then has no report to validate and fails instead.
+          MSG
+            exit 1
+          fi
   review-evidence:
     name: review-evidence
     runs-on: ubuntu-latest

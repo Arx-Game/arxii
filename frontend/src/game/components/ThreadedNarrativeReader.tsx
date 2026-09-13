@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ChevronDown, ChevronRight, MessageCircle, Reply } from 'lucide-react';
@@ -14,7 +14,9 @@ import {
 } from '../playPreferences';
 import { usePoseReadTracking } from '../hooks/usePoseReadTracking';
 import { markConversationRead } from '../playQueries';
-import { parseFormattedContent } from '@/lib/formatParser';
+import { excerptOf } from '@/lib/formatParser';
+import { useViewerPersonaId } from '@/roster/persona';
+import { replyReachability, type ViewerVenue } from '@/scenes/replyReachability';
 
 // #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
 // whole-list tail-slice size -- repurposed as the default number of a single
@@ -24,58 +26,191 @@ import { parseFormattedContent } from '@/lib/formatParser';
 const THREAD_PAGE_SIZE = 20;
 
 /**
- * A short, truncated, PLAIN-TEXT preview of pose prose -- used for the
- * thread header's opening-pose excerpt (#3759 Wave 9 review finding F3) and
- * the per-pose "Reply in <title>" role label (F4) below. No shared
- * truncation helper exists elsewhere in this codebase for this (checked:
- * every other call site -- e.g. `StaffBugReportsPage.tsx`, `HubBrowser.tsx`
- * -- inlines its own `.slice(n) + '...'`), so this stays a small, local
- * helper rather than a new shared module for what only this file needs.
+ * The key one EXCHANGE renders under (#3787 rework).
  *
- * #3759 Wave 9 fix round 1 finding I-1: `content` carries MU*-style color
- * codes and markdown (`|w`, `**bold**`, etc. -- `formatParser.ts`'s whole
- * reason for existing), which every OTHER render path in this codebase
- * parses via `<FormattedContent>` before display (`PoseUnit.tsx:354,405`).
- * This is plain text, not JSX, so it can't render `<FormattedContent>`
- * itself -- instead it strips markup by joining `parseFormattedContent`'s
- * segments' plain `.content` fields BEFORE truncating, so a pose starting
- * `|wMirelle turned...` (or `**The broken seal**`) never leaks raw markup
- * into a header/label.
+ * A row's `thread_id` is what it ANSWERS, not which pile it sits in, so a
+ * back-and-forth A to B to C is three threads by construction: answering a reply
+ * nests a thread inside the one the answered row lives in. `root_thread_id` is the
+ * top of that tree and is therefore the one key every row of a single exchange
+ * shares, which is what lets a nested exchange render as ONE card. It is null on a
+ * root thread, where `thread_id` already IS the top.
+ *
+ * The answered pose needs no special handling: it is an ordinary MEMBER of the
+ * thread it opens, so it keys the same exchange its replies do and the card opens
+ * with it. (An earlier design kept it outside its thread, which stranded it in a
+ * standalone card above and needed an adoption pass here to pull it back in. That
+ * design was removed, and so was the pass.) `legacy:` is left for a genuinely
+ * unthreaded pose: one nobody has answered.
  */
-function excerptOf(content: string, maxLength = 84): string {
-  const plain = parseFormattedContent(content)
-    .map((segment) => segment.content)
-    .join('');
-  const trimmed = plain.trim();
-  if (trimmed.length <= maxLength) return trimmed;
-  return `${trimmed.slice(0, maxLength).trimEnd()}…`;
+function ownExchangeKey(item: Interaction): string {
+  return item.root_thread_id || item.thread_id || `legacy:${item.id}`;
 }
 
 /**
  * #3759 Wave 9 review finding F4: the flat, non-chip pose-context label the
  * spec's anti-reinvention ledger says to KEEP, not replace with per-pose
  * parent-chip persistence -- "Opening pose" for a REAL thread's own root
- * pose, "Reply in <title>" for everything else in it. `Interaction`/the
- * server's reply topology has no persisted thread-title field (`thread_id`
- * is the only concept that exists), so `<title>` is derived the same way
- * the approved demo derives one for a thread it creates on the fly
- * (`title: p.paras[0].slice(0, 60)`, `arx-wide-reader.html`'s own `send()`):
- * an excerpt of the thread's own root pose. Shared between Threads view
- * (where `rootPose` is already in scope as `group.interactions[0]`) and
+ * pose, "Standalone" for an ordinary un-replied pose. Shared between Threads
+ * view (where `rootPose` is already in scope as `group.interactions[0]`) and
  * Chronological view (where it's looked up via `groupByKey`, below) so both
  * views render identical labels for the identical pose.
  *
- * #3759 Wave 9 fix round 1 Minor M-1: `item.thread_id` (not merely "is this
- * the group's own root") gates "Opening pose" -- an ordinary, un-replied
- * pose (`thread_id === null`, keyed `legacy:${id}` in `groups`) is trivially
- * its own group's root by construction, but "Opening pose" asserts a THREAD
- * that doesn't exist for it. "Standalone" (matching Chronological's own
- * pre-existing phrasing for this exact case) is correct for both views.
+ * #3759 Wave 9 fix round 1 Minor M-1: the GROUP (not merely "is this the
+ * group's own root") gates "Opening pose" -- an ordinary, un-replied pose is
+ * trivially its own group's root by construction, but "Opening pose" asserts
+ * a THREAD that doesn't exist for it. "Standalone" (matching Chronological's
+ * own pre-existing phrasing for this exact case) is correct for both views.
+ * M-1 read that off `item.thread_id`. The GROUP's key is used instead because
+ * it is the one thing that stays right across both views: a `legacy:` key is
+ * exactly the un-replied pose M-1 is about, and any other key is a genuine
+ * exchange, whose first row is a real thread's real opening pose.
+ *
+ * #3787 Task 7: the third case this used to cover -- an ordinary reply deep
+ * in a real thread -- used to return `Reply in <title>` as a stand-in for
+ * per-pose parent data that didn't exist yet (that branch's own doc comment
+ * said so). It does now (`Interaction.reply_to`, #3787 Tasks 1-2), and
+ * `PoseUnit.tsx`'s parent chip ("Answering “...”") renders it
+ * directly on the pose itself -- a real quote of what was actually answered,
+ * not a derived thread title -- so this label goes empty for that case
+ * rather than duplicating weaker information beside the chip.
  */
-function poseRoleLabel(item: Interaction, rootPose: Interaction | undefined): string {
-  if (!item.thread_id) return 'Standalone';
+function poseRoleLabel(
+  item: Interaction,
+  rootPose: Interaction | undefined,
+  groupKey: string
+): string {
+  if (groupKey.startsWith('legacy:')) return 'Standalone';
   if (!rootPose || rootPose.id === item.id) return 'Opening pose';
-  return `Reply in ${excerptOf(rootPose.content, 60)}`;
+  return '';
+}
+
+/**
+ * The involved-viewer treatment (#3787 demo Screen 1): a row whose
+ * `target_persona_ids` names the viewer's own active persona gets a distinct,
+ * highlighted restatement of the SAME (already per-viewer-rendered) content
+ * plus a prominent "Answer this" control, instead of the ordinary quiet
+ * Reply link every other row keeps. One phrasing for all five row kinds the
+ * spec names (combat outcome, NPC action, social check, prose tag, whisper)
+ * -- this is gated purely on `target_persona_ids`, never on `item.mode`, so
+ * it needs no per-mode copy to maintain.
+ */
+function isInvolvingViewer(item: Interaction, viewerPersonaId: number | null): boolean {
+  return viewerPersonaId != null && item.target_persona_ids.includes(viewerPersonaId);
+}
+
+/**
+ * The reply/answer control for one pose, covering both demo Screen 1/2 (an
+ * ordinary or prominent control that opens the composer on this row) and
+ * Screen 3 (the SAME control rendered disabled, with the refusal shown
+ * before the click, when `replyReachability` finds the viewer's current
+ * venue cannot reach this row). Shared between the legacy-standalone and
+ * real-thread render branches below so the two never drift.
+ */
+function ReplyControl({
+  item,
+  onReply,
+  involved,
+  venue,
+}: {
+  item: Interaction;
+  onReply: (interaction: Interaction) => void;
+  involved: boolean;
+  venue: ViewerVenue;
+}) {
+  const refusal = replyReachability(item, venue);
+  const label = involved ? 'Answer this' : 'Reply';
+  if (!refusal.reachable) {
+    return (
+      // #3787 final review D2: the same alarm-coloured left rail and tint the
+      // composer's own refusal carries (`CommandInput.tsx`'s `reply-refusal`).
+      // The two boxes say the same thing about the same venue mismatch and are
+      // reached seconds apart, so they read as one kind of thing rather than two.
+      <div
+        className="flex flex-col items-start gap-1 border-l-2 border-destructive bg-destructive/10 px-3 py-1.5"
+        data-testid={`reply-refusal-${item.id}`}
+        role="status"
+        aria-live="polite"
+      >
+        <button
+          type="button"
+          disabled
+          className="inline-flex min-h-9 cursor-not-allowed items-center gap-1 text-muted-foreground line-through opacity-70"
+        >
+          {!involved && <Reply className="h-3 w-3" />} {label}
+        </button>
+        <p className="max-w-xs text-xs">
+          <strong className="text-destructive">{refusal.reason}</strong>{' '}
+          {refusal.hint && <span className="text-muted-foreground">{refusal.hint}</span>}
+        </p>
+      </div>
+    );
+  }
+  return (
+    <button
+      type="button"
+      className={
+        involved
+          ? 'inline-flex min-h-9 items-center gap-1 rounded bg-primary px-2 py-1 font-semibold text-primary-foreground'
+          : 'inline-flex min-h-9 items-center gap-1 underline'
+      }
+      data-testid={involved ? `answer-this-${item.id}` : undefined}
+      onClick={() => onReply(item)}
+    >
+      {!involved && <Reply className="h-3 w-3" />} {label}
+    </button>
+  );
+}
+
+/**
+ * The marked treatment for a row that names the viewer (demo Screen 1's
+ * `.involves`): the amber-railed box the involved viewer reads the row IN,
+ * wrapping the pose's own ordinary rendering rather than following it.
+ *
+ * #3787 final review D1: this used to render `item.content` itself, directly
+ * after the same pose's own `<SceneMessages>` render, so the involved viewer
+ * read the identical sentence twice in a row. The demo showed that line twice
+ * as a SIDE-BY-SIDE device explaining what two different viewers see, never as
+ * one viewer reading it twice. So the involved viewer gets the amber treatment
+ * INSTEAD of the plain bubble: `children` is the pose's own per-viewer content
+ * rendering, unchanged and rendered exactly once, with the label above it and
+ * the prominent "Answer this" control below. Everyone else is untouched.
+ *
+ * Wrapping rather than restating is also what keeps the row whole: the pose's
+ * own rendering carries the persona name, the parent chip, reactions and the
+ * action-link affordances, none of which a restatement of `item.content` ever
+ * had. Nothing here re-derives an actor or a different sentence.
+ */
+function InvolvementFlag({
+  item,
+  onReply,
+  readOnly,
+  venue,
+  children,
+}: {
+  item: Interaction;
+  onReply?: (interaction: Interaction) => void;
+  readOnly: boolean;
+  venue: ViewerVenue;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="mt-1 rounded-r-lg border-l-4 border-amber-500 bg-amber-500/10 px-3 py-2"
+      data-testid={`involvement-mark-${item.id}`}
+      role="status"
+      aria-live="polite"
+    >
+      <span className="block text-xs font-semibold uppercase tracking-wide text-amber-600">
+        This happened to you
+      </span>
+      {children}
+      {onReply && !readOnly && (
+        <div className="mt-1 flex justify-end">
+          <ReplyControl item={item} onReply={onReply} involved venue={venue} />
+        </div>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -257,6 +392,19 @@ interface ThreadedNarrativeReaderProps {
    * per-thread default is unaffected.
    */
   targetPoseId?: string;
+  /**
+   * The viewer's current drafting venue (#3787 Screen 3, the pre-emptive
+   * reply refusal) -- the same values `GamePage.tsx` already computes and
+   * threads to `CommandInput` (`isAtPlace`/`currentPlaceId`), passed one hop
+   * further by `GameWindow.tsx` rather than re-derived here. Omitted
+   * (standalone/test/reference callers) defaults to "in the room", so every
+   * row reads reachable -- the permissive default `replyReachability` itself
+   * uses when `isAtPlace` is false.
+   */
+  isAtPlace?: boolean;
+  currentPlaceId?: number | null;
+  /** Human-readable current place name, for the refusal's hint text only. */
+  currentPlaceName?: string | null;
 }
 
 interface Group {
@@ -295,7 +443,27 @@ export function ThreadedNarrativeReader({
   readOnly = false,
   persistAnchor = true,
   targetPoseId,
+  isAtPlace = false,
+  currentPlaceId = null,
+  currentPlaceName = null,
 }: ThreadedNarrativeReaderProps) {
+  // #3787 -- resolved the SAME way PoseUnit.tsx resolves its own self-pose
+  // guard (no second source of truth): drives the involvement mark (Screen
+  // 1) below.
+  const viewerPersonaId = useViewerPersonaId();
+  const viewerVenue: ViewerVenue = useMemo(
+    () => ({ isAtPlace, currentPlaceId, currentPlaceName }),
+    [isAtPlace, currentPlaceId, currentPlaceName]
+  );
+  // #3787 -- resolves `interaction.reply_to` (an `{id, timestamp}` thread
+  // selector, not the parent's content) to the parent Interaction for
+  // PoseUnit's parent chip. Built once from the full loaded `interactions`
+  // array (not a windowed/filtered slice), so a thread's own reply can quote
+  // a parent sitting outside its currently-shown window.
+  const interactionsById = useMemo(
+    () => new Map(interactions.map((item) => [item.id, item])),
+    [interactions]
+  );
   // #3759 Wave 9 (F1/F2): replaces the old flat, whole-list
   // `historyStartOverride` -- one window per THREAD (keyed by `group.key`)
   // instead of one for the whole list. See `ThreadWindow`'s own doc comment
@@ -364,6 +532,18 @@ export function ThreadedNarrativeReader({
     // conditions -- keep this assignment idempotent.
     targetSeekDoneRef.current = null;
   }
+  // #3787: every one of the reader's grouping sites keys off this, so they cannot
+  // drift apart. A row's own key is enough now - `root_thread_id`, else `thread_id`,
+  // else `legacy:` - because the answered pose is a MEMBER of the thread it opens
+  // and so already shares its replies' key.
+  //
+  // This used to carry an adoption pass that pulled an unthreaded parent into its
+  // replies' exchange. It is gone with the design that needed it: the server derives
+  // `reply_to` from thread membership, so every parent it can name is itself a thread
+  // member and the pass could never fire again. Should a parent ever legitimately
+  // arrive without a thread, it would key `legacy:` and render as its own card, which
+  // is the correct reading of "answers nothing" rather than a defect.
+  const exchangeKey = useCallback((item: Interaction): string => ownExchangeKey(item), []);
   // #3759 Wave 9 (F1): grouped from the FULL `interactions` array, not a
   // windowed slice -- every thread with at least one pose gets a header row,
   // always, matching the demo (the review's F1 finding: the old flat
@@ -376,7 +556,7 @@ export function ThreadedNarrativeReader({
     for (const interaction of interactions) {
       // Legacy interactions have no reply topology and therefore each remain
       // an independent root. Only explicit server thread ids group replies.
-      const key = interaction.thread_id || `legacy:${interaction.id}`;
+      const key = exchangeKey(interaction);
       const rows = grouped.get(key) ?? [];
       rows.push(interaction);
       grouped.set(key, rows);
@@ -395,7 +575,7 @@ export function ThreadedNarrativeReader({
           a.interactions[0].timestamp.localeCompare(b.interactions[0].timestamp) ||
           a.interactions[0].id - b.interactions[0].id
       );
-  }, [interactions]);
+  }, [interactions, exchangeKey]);
   // #3759 Wave 9 fix-round-1 re-review Minor fold-in: a `legacy:` group is a
   // single un-replied pose (I-5, above), not a "conversation" -- excluded
   // from the toolbar's conversation count, the bulk expand/collapse-all
@@ -664,7 +844,7 @@ export function ThreadedNarrativeReader({
   const anchorRetryPendingRef = useRef(false);
   const widenThreadWindow = (key: string): boolean => {
     const groupLength = interactions.reduce(
-      (count, item) => ((item.thread_id || `legacy:${item.id}`) === key ? count + 1 : count),
+      (count, item) => (exchangeKey(item) === key ? count + 1 : count),
       0
     );
     const existing = threadWindows[key];
@@ -682,7 +862,7 @@ export function ThreadedNarrativeReader({
   const widenThreadWindowToInclude = (poseId: string): boolean => {
     const targetInteraction = interactions.find((item) => String(item.id) === poseId);
     if (!targetInteraction) return false; // genuinely absent from `interactions`
-    const key = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    const key = exchangeKey(targetInteraction);
     let changed = false;
     if (!expandedKeys.has(key)) {
       changed = true;
@@ -877,7 +1057,7 @@ export function ThreadedNarrativeReader({
     // every pass, including once the thread is already expanded.
     // `expandedKeys` is a dependency below specifically so this effect
     // re-runs once that update actually lands.
-    const targetGroupKey = targetInteraction.thread_id || `legacy:${targetInteraction.id}`;
+    const targetGroupKey = exchangeKey(targetInteraction);
     setExpandedKeys((previous) => {
       if (previous.has(targetGroupKey)) return previous;
       const next = new Set(previous);
@@ -1118,8 +1298,12 @@ export function ThreadedNarrativeReader({
                   // all) is strictly more useful here, and there's no demo
                   // image for this screen (the review's own scope table
                   // marks it `textonly`) to visually contradict.
-                  const groupKey = item.thread_id || `legacy:${item.id}`;
-                  const roleLabel = poseRoleLabel(item, groupByKey.get(groupKey)?.interactions[0]);
+                  const groupKey = exchangeKey(item);
+                  const roleLabel = poseRoleLabel(
+                    item,
+                    groupByKey.get(groupKey)?.interactions[0],
+                    groupKey
+                  );
                   return (
                     <div
                       key={item.id}
@@ -1138,7 +1322,7 @@ export function ThreadedNarrativeReader({
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
                       >
-                        <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                        {roleLabel && <p className="text-xs text-muted-foreground">{roleLabel}</p>}
                         {poseCollapsed ? (
                           <article
                             className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1164,6 +1348,7 @@ export function ThreadedNarrativeReader({
                             onAddTarget={onAddTarget}
                             onAttachAction={onAttachAction}
                             readOnly={readOnly}
+                            interactionsById={interactionsById}
                           />
                         )}
                       </PoseReadTarget>
@@ -1233,7 +1418,9 @@ export function ThreadedNarrativeReader({
                           not merely "is this the group's root"), never
                           "Opening pose" -- that label asserts a thread that
                           doesn't exist for a genuinely un-replied pose. */}
-                      <p className="text-xs text-muted-foreground">{poseRoleLabel(item, root)}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {poseRoleLabel(item, root, group.key)}
+                      </p>
                       {poseCollapsed ? (
                         <article
                           className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1253,14 +1440,37 @@ export function ThreadedNarrativeReader({
                         </article>
                       ) : (
                         <>
-                          <SceneMessages
-                            sceneId={sceneId}
-                            filteredInteractions={[item]}
-                            onAvatarClick={onAvatarClick}
-                            onAddTarget={onAddTarget}
-                            onAttachAction={onAttachAction}
-                            readOnly={readOnly}
-                          />
+                          {/* #3787 D1: the involved viewer reads the row ONCE,
+                              inside the marked treatment, instead of reading the
+                              plain bubble and then a restatement of the same
+                              sentence. `poseBody` is the identical per-viewer
+                              rendering either way. */}
+                          {(() => {
+                            const poseBody = (
+                              <SceneMessages
+                                sceneId={sceneId}
+                                filteredInteractions={[item]}
+                                onAvatarClick={onAvatarClick}
+                                onAddTarget={onAddTarget}
+                                onAttachAction={onAttachAction}
+                                readOnly={readOnly}
+                                interactionsById={interactionsById}
+                              />
+                            );
+                            if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
+                              return poseBody;
+                            }
+                            return (
+                              <InvolvementFlag
+                                item={item}
+                                onReply={onReply}
+                                readOnly={readOnly}
+                                venue={viewerVenue}
+                              >
+                                {poseBody}
+                              </InvolvementFlag>
+                            );
+                          })()}
                           <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                             <button
                               type="button"
@@ -1269,14 +1479,13 @@ export function ThreadedNarrativeReader({
                             >
                               Show less
                             </button>
-                            {onReply && !readOnly && (
-                              <button
-                                type="button"
-                                className="inline-flex min-h-9 items-center gap-1 underline"
-                                onClick={() => onReply(item)}
-                              >
-                                <Reply className="h-3 w-3" /> Reply
-                              </button>
+                            {onReply && !readOnly && !isInvolvingViewer(item, viewerPersonaId) && (
+                              <ReplyControl
+                                item={item}
+                                onReply={onReply}
+                                involved={false}
+                                venue={viewerVenue}
+                              />
                             )}
                           </div>
                         </>
@@ -1366,7 +1575,7 @@ export function ThreadedNarrativeReader({
                       )}
                       {visiblePoses.map((item) => {
                         const poseCollapsed = collapsedPoses.has(item.id);
-                        const roleLabel = poseRoleLabel(item, root);
+                        const roleLabel = poseRoleLabel(item, root, group.key);
                         return (
                           <PoseReadTarget
                             key={`pose-${item.id}`}
@@ -1375,7 +1584,9 @@ export function ThreadedNarrativeReader({
                             highlighted={String(item.id) === highlightedPoseId}
                           >
                             {/* #3759 Wave 9 review finding F4. */}
-                            <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                            {roleLabel && (
+                              <p className="text-xs text-muted-foreground">{roleLabel}</p>
+                            )}
                             {poseCollapsed ? (
                               <article
                                 className="mx-2 rounded border border-dashed px-3 py-2 text-sm"
@@ -1395,14 +1606,33 @@ export function ThreadedNarrativeReader({
                               </article>
                             ) : (
                               <>
-                                <SceneMessages
-                                  sceneId={sceneId}
-                                  filteredInteractions={[item]}
-                                  onAvatarClick={onAvatarClick}
-                                  onAddTarget={onAddTarget}
-                                  onAttachAction={onAttachAction}
-                                  readOnly={readOnly}
-                                />
+                                {/* #3787 D1 -- see the Chronological branch. */}
+                                {(() => {
+                                  const poseBody = (
+                                    <SceneMessages
+                                      sceneId={sceneId}
+                                      filteredInteractions={[item]}
+                                      onAvatarClick={onAvatarClick}
+                                      onAddTarget={onAddTarget}
+                                      onAttachAction={onAttachAction}
+                                      readOnly={readOnly}
+                                      interactionsById={interactionsById}
+                                    />
+                                  );
+                                  if (!isInvolvingViewer(item, viewerPersonaId) || !onReply) {
+                                    return poseBody;
+                                  }
+                                  return (
+                                    <InvolvementFlag
+                                      item={item}
+                                      onReply={onReply}
+                                      readOnly={readOnly}
+                                      venue={viewerVenue}
+                                    >
+                                      {poseBody}
+                                    </InvolvementFlag>
+                                  );
+                                })()}
                                 <div className="flex items-center justify-end gap-2 px-2 text-xs text-muted-foreground">
                                   <button
                                     type="button"
@@ -1411,15 +1641,16 @@ export function ThreadedNarrativeReader({
                                   >
                                     Show less
                                   </button>
-                                  {onReply && !readOnly && (
-                                    <button
-                                      type="button"
-                                      className="inline-flex min-h-9 items-center gap-1 underline"
-                                      onClick={() => onReply(item)}
-                                    >
-                                      <Reply className="h-3 w-3" /> Reply
-                                    </button>
-                                  )}
+                                  {onReply &&
+                                    !readOnly &&
+                                    !isInvolvingViewer(item, viewerPersonaId) && (
+                                      <ReplyControl
+                                        item={item}
+                                        onReply={onReply}
+                                        involved={false}
+                                        venue={viewerVenue}
+                                      />
+                                    )}
                                 </div>
                               </>
                             )}

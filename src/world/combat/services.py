@@ -8366,10 +8366,17 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         render_action_declaration_label,
         render_action_outcome_narration,
         render_unattributed_action_narration,
+        target_persona_for_round_action,
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
     audience = _resolve_combat_cast_audience(participant, technique)
+
+    # #3787 Task 5 - who this action was about. focused_ally_target's persona
+    # when the declared target was an ally; None for an NPC opponent target (no
+    # Persona behind an NPC - correct, not a gap) or no target at all.
+    target_persona = target_persona_for_round_action(action)
+    target_personas = [target_persona] if target_persona is not None else None
 
     # Only the attack path returns a CombatTechniqueResult (which carries fury);
     # the non-attack path returns a CombatTechniqueResolution with no fury field.
@@ -8381,6 +8388,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
         fury_committed=fury_committed,
+        target_personas=target_personas,
     )
     if interaction is not None:
         action.interaction = interaction
@@ -8431,6 +8439,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         narration=narration,
         audience=audience,
         unattributed_narration=unattributed_narration,
+        target_personas=target_personas,
     )
 
 
@@ -8966,7 +8975,14 @@ def _resolve_npc_action(
 
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
+        personas_for_participants,
     )
+
+    # #3787 Task 5 - who this NPC action struck. Batched once (no queries in a
+    # loop): `targets` may hold several PC participants hit by one NPC action.
+    # `opponent_targets` (the ALLY-summon-vs-NPC path) are NPCs with no Persona,
+    # so they never contribute a target.
+    npc_target_personas = personas_for_participants(targets)
 
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
@@ -8980,6 +8996,7 @@ def _resolve_npc_action(
                 create_npc_action_interaction(
                     opponent_action=npc_action,
                     target_label=npc_action_label,
+                    target_personas=npc_target_personas,
                 )
             )
         return _npc_interaction_cache[0]
@@ -9034,7 +9051,11 @@ def _resolve_npc_action(
         hit_text=npc_action.threat_entry.hit_narration,
         miss_text=npc_action.threat_entry.miss_narration,
     )
-    broadcast_action_outcome(encounter=opponent.encounter, narration=npc_narration)
+    broadcast_action_outcome(
+        encounter=opponent.encounter,
+        narration=npc_narration,
+        target_personas=npc_target_personas,
+    )
 
     return outcome
 

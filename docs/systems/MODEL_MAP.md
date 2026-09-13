@@ -8179,6 +8179,7 @@
   - clash_contributions <- combat.ClashContribution
   - referencing_updates <- relationships.RelationshipUpdate
   - relationship_bumps <- relationships.RelationshipBump
+  - anchored_threads <- scenes.InteractionThread
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
   - read_receipts <- scenes.InteractionReadReceipt
@@ -8229,9 +8230,12 @@
 
 ### InteractionThread
 **Foreign Keys:**
+  - anchor_interaction -> scenes.Interaction [FK]
   - parent -> scenes.InteractionThread [FK] (nullable)
+  - root -> scenes.InteractionThread [FK] (nullable)
 **Pointed to by:**
   - child_threads <- scenes.InteractionThread
+  - descendant_threads <- scenes.InteractionThread
   - interactions <- scenes.Interaction
 
 ### Mute

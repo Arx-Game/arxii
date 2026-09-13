@@ -17,6 +17,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.thread_services import thread_anchor_ids, thread_roots
 from world.scenes.types import PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
@@ -24,6 +25,7 @@ if TYPE_CHECKING:
     from world.species.models import Language
 
 _MAX_POSE_LENGTH = 10_000
+
 
 _DANGEROUS_LINK_RE = _re.compile(
     r"\[[^\]]*\]\((?!https?://)",
@@ -125,6 +127,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
     # Additive narrative-play contract fields. Unthreaded rows deliberately expose
     # no inferred parent; play readers keep their existing holder fallback.
     thread_id = serializers.SerializerMethodField()
+    root_thread_id = serializers.SerializerMethodField()
     reply_to = serializers.SerializerMethodField()
     conversation = serializers.SerializerMethodField()
     availability = serializers.SerializerMethodField()
@@ -135,6 +138,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "thread_id",
+            "root_thread_id",
             "reply_to",
             "conversation",
             "availability",
@@ -176,15 +180,133 @@ class InteractionListSerializer(serializers.ModelSerializer):
             return None
         return None if value is None else str(value)
 
+    def get_root_thread_id(self, obj: Interaction) -> str | None:
+        """The top of the nesting tree this row's exchange belongs to (#3787).
+
+        A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+        nested threads by construction. This is the one key every row of a single
+        exchange shares, so a reader groups the whole of it into one card without
+        walking parents. Null when the row's own thread IS the root, and for a row
+        that answers nothing: the reader falls back to ``thread_id`` there, exactly
+        as ``InteractionThread.root`` is null on a root thread. Costs no query -
+        ``get_queryset`` joins ``thread`` in for the parent chip already.
+        """
+        thread = obj.thread
+        if thread is None:
+            return None
+        root_id = self._thread_roots().get(thread.pk)
+        if root_id is None or root_id == thread.pk:
+            return None
+        return str(root_id)
+
     def get_reply_to(self, obj: Interaction) -> dict[str, Any] | None:
-        """Do not infer a parent from neighboring interactions."""
-        try:
-            parent = obj.reply_to
-        except AttributeError:
+        """The interaction this one answered, when the viewer may also read it.
+
+        Gated on the PARENT's own visibility, not on this row's membership: a reply
+        stays readable to everyone who can see it, but its chip appears only for a
+        viewer who could already read what it answered. Never infers a parent from
+        neighboring interactions.
+        """
+        parent_id = self._parent_id_for(obj)
+        if parent_id is None:
             return None
-        if parent is None:
+        timestamp = self._visible_parents().get(parent_id)
+        if timestamp is None:
             return None
-        return {"id": str(parent.id), "timestamp": parent.timestamp.isoformat()}
+        return {"id": str(parent_id), "timestamp": timestamp.isoformat()}
+
+    def _parent_id_for(self, obj: Interaction) -> int | None:
+        """Which interaction ``obj`` answered, before any visibility gate (#3787).
+
+        A thread's ANCHOR is its first member, and every later member answers it.
+        The anchor itself answers whatever the thread was split off from, which is
+        the anchor of ``thread.parent`` - null on a root thread, whose anchor is an
+        opening pose that answers nothing.
+        """
+        thread = obj.thread
+        if thread is None:
+            return None
+        anchors = self._thread_anchors()
+        anchor_id = anchors.get(thread.pk)
+        if anchor_id is None:
+            return None
+        if obj.pk != anchor_id:
+            return anchor_id
+        if thread.parent_id is None:
+            return None
+        return anchors.get(thread.parent_id)
+
+    def _page_rows(self) -> list[Interaction]:
+        """The rows this serializer is rendering, list or single instance alike."""
+        if self.parent is not None:
+            return list(self.parent.instance or [])
+        if self.instance is not None:
+            return [self.instance]
+        return []
+
+    def _thread_anchors(self) -> dict[object, int]:
+        """Anchor id per thread on this page, plus each thread's parent (#3787).
+
+        One query for the whole page, cached on the shared serializer context the
+        way ``_read_interaction_ids`` below caches its own batch. The parent threads
+        are resolved in the same pass because a row that IS its thread's anchor
+        needs its parent thread's anchor to name what it answered.
+
+        ``thread`` itself costs nothing to read: ``InteractionViewSet.get_queryset``
+        joins it in with ``select_related``.
+        """
+        cache_key = "_thread_anchors_cache"
+        if cache_key not in self.context:
+            thread_ids: set[object] = set()
+            for row in self._page_rows():
+                thread = row.thread
+                if thread is None:
+                    continue
+                thread_ids.add(thread.pk)
+                if thread.parent_id is not None:
+                    thread_ids.add(thread.parent_id)
+            self.context[cache_key] = thread_anchor_ids(thread_ids)
+        return self.context[cache_key]
+
+    def _thread_roots(self) -> dict[object, object]:
+        """Top-of-tree per thread on this page, derived and cached once (#3787).
+
+        ``root`` is not a column; it is a walk up ``parent``. Resolved for the whole
+        page in one pass per nesting level (see ``thread_services.thread_roots``),
+        cached on the shared serializer context the way the batches around it are.
+        """
+        cache_key = "_thread_roots_cache"
+        if cache_key not in self.context:
+            thread_ids = {row.thread_id for row in self._page_rows() if row.thread_id}
+            self.context[cache_key] = thread_roots(thread_ids)
+        return self.context[cache_key]
+
+    def _visible_parents(self) -> dict[int, Any]:
+        """Reply-parent id -> timestamp, for the parents this viewer may read.
+
+        One query per page, not per row. Fails closed: a parent the viewer cannot
+        read is simply absent, so its chip is withheld while the reply itself still
+        serializes. Returns the timestamp too, so the chip's ``{id, timestamp}``
+        payload needs no second lookup.
+        """
+        cache_key = "_visible_parents_cache"
+        if cache_key not in self.context:
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            parent_ids = {
+                parent_id
+                for row in self._page_rows()
+                if (parent_id := self._parent_id_for(row)) is not None
+            }
+            if parent_ids:
+                self.context[cache_key] = dict(
+                    Interaction.objects.visible_to(user)
+                    .filter(pk__in=parent_ids)
+                    .values_list("pk", "timestamp")
+                )
+            else:
+                self.context[cache_key] = {}
+        return self.context[cache_key]
 
     def get_conversation(self, obj: Interaction) -> dict[str, str]:
         """Expose a non-authorizing context identity for reader grouping."""

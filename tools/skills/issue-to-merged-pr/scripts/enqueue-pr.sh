@@ -28,6 +28,9 @@ PR="$1"
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/_wt-helpers.sh"
+REPO_FULL=$(gh repo view --json nameWithOwner --jq .nameWithOwner)
+REPO_OWNER=${REPO_FULL%%/*}
+REPO_NAME=${REPO_FULL##*/}
 HEAD_REF=$(gh pr view "$PR" --json headRefName --jq .headRefName)
 PR_BODY=$(gh pr view "$PR" --json body --jq .body)
 LINKED_ISSUE=$(grep -oE '^(Refs|Closes) #[0-9]+' <<<"$PR_BODY" | grep -oE '[0-9]+' | head -1 || true)
@@ -80,6 +83,60 @@ if grep -qx "review:evidence-required" <<<"$ISSUE_LABELS"; then
 
 else
   echo "review evidence not required for issue #${LINKED_ISSUE:-unknown}"
+fi
+
+# GitHub Advanced Security findings do not fail a check, so a PR can be
+# all-green and still carry one. #3787 reached the point of enqueue with an
+# unresolved CodeQL "information exposure through an exception" finding that
+# only a human noticed.
+#
+# Primary signal is the code-scanning API scoped to the PR HEAD ref. Note the
+# ref: refs/pull/N/merge returns nothing, and filtering on state=open misses
+# alerts whose state is null on a PR ref - both of which read as "clean" and
+# are how this was missed the first time.
+PR_HEAD_REF="refs/pull/$PR/head"
+OPEN_ALERTS=$(gh api "repos/$REPO_FULL/code-scanning/alerts?ref=$PR_HEAD_REF&per_page=100" \
+  --jq '.[] | select(.state != "fixed" and .state != "dismissed")
+        | "  [\(.rule.security_severity_level // .rule.severity)] \(.rule.id) at \(.most_recent_instance.location.path):\(.most_recent_instance.location.start_line)"' \
+  2>/dev/null || echo "__UNREADABLE__")
+
+if [[ "$OPEN_ALERTS" == "__UNREADABLE__" ]]; then
+  # The token cannot read code-scanning for this repo. Fall back to the bot's
+  # own review threads, which need no security permission at all.
+  # shellcheck disable=SC2016  # $owner/$repo/$pr are GraphQL variables bound by
+  # the -f flags below, not shell expansions; single quotes are required.
+  OPEN_ALERTS=$(gh api graphql -f query='
+  query($owner:String!,$repo:String!,$pr:Int!){
+    repository(owner:$owner,name:$repo){
+      pullRequest(number:$pr){
+        reviewThreads(first:100){
+          nodes{ isResolved isOutdated path line comments(first:1){ nodes{ author{ login } body } } }
+        }
+      }
+    }
+  }' -f owner="$REPO_OWNER" -f repo="$REPO_NAME" -F pr="$PR" \
+     --jq '.data.repository.pullRequest.reviewThreads.nodes[]
+           | select(.isResolved == false and .isOutdated == false)
+           | select(.comments.nodes[0].author.login | test("advanced-security|security-bot"; "i"))
+           | "  \(.path):\(.line // "?")  \(.comments.nodes[0].body | split("\n")[0])"' 2>/dev/null || true)
+fi
+
+if [[ -n "$OPEN_ALERTS" ]]; then
+  echo "ERROR: PR #$PR has unresolved GitHub Advanced Security findings:" >&2
+  echo "$OPEN_ALERTS" >&2
+  cat >&2 <<'MSG'
+
+These do not fail a check, so every other gate can be green while they stand.
+Do one of:
+
+  - Fix the finding and push. CodeQL re-runs and the alert goes to "fixed".
+  - If it is a false positive or an accepted risk, dismiss the alert (or resolve
+    the bot's review thread) and say why in the PR, so the next reader sees it.
+
+Read them with:
+  gh api "repos/<owner>/<repo>/code-scanning/alerts?ref=refs/pull/PR/head"
+MSG
+  exit 1
 fi
 
 if [[ "$DRY_RUN" == "1" ]]; then

@@ -56,7 +56,7 @@ from world.scenes.action_constants import (
 )
 from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
 from world.scenes.constants import InteractionMode, InteractionVisibility
-from world.scenes.interaction_services import create_interaction
+from world.scenes.interaction_services import create_interaction, write_target_personas
 from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
 
@@ -296,6 +296,20 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     about you" surfacing, and naming the target alongside an unattributed line re-opens
     the attribution the lower tiers exist to withhold.
 
+    Those target rows are attached with ``write_target_personas`` AFTER the pose is
+    created, never through ``create_interaction``'s own validated ``target_personas``
+    kwarg. ADR-0293 decision 3: a system-authored row records what happened, and only a
+    player-authored row that addresses someone is governed by reachability. This is a
+    Narrator-authored OUTCOME record of a resolved cast, the exact sibling of combat's
+    ``broadcast_action_outcome`` (``world/combat/interaction_services.py``), which routes
+    its own targets the same way and for the same reason. Concretely, the validated kwarg
+    would refuse on both branches here: the unconcealed pose is room-heard and anchored on
+    the WRITER's location, and the Narrator's character is never physically placed, so
+    there is no room to test presence against; and the concealed pose's ``receivers`` are
+    ``audience.full``, which is who could attribute the CASTER -- a hostile target who
+    failed the detection roll lands in ``effect_only`` instead and would be refused every
+    time concealment works as designed.
+
     Args:
         audience: Who perceived this cast, from ``resolve_cast_audience``. When
             ``audience.concealed`` is False, behavior is byte-identical to before
@@ -331,13 +345,15 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     )
 
     if not audience.concealed:
-        return create_interaction(
+        unconcealed_pose = create_interaction(
             persona=get_or_create_narrator_persona(),
             content=narration,
             mode=InteractionMode.OUTCOME,
             scene=scene,
-            target_personas=[target_persona] if target_persona is not None else None,
         )
+        if target_persona is not None:
+            write_target_personas(unconcealed_pose, [target_persona])
+        return unconcealed_pose
 
     from world.magic.narration import (  # noqa: PLC0415
         render_unattributed_cast_narration,
@@ -350,9 +366,10 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         mode=InteractionMode.OUTCOME,
         scene=scene,
         receivers=audience.full,
-        target_personas=[target_persona] if target_persona is not None else None,
         visibility=InteractionVisibility.PERCEIVED_ONLY,
     )
+    if target_persona is not None:
+        write_target_personas(pose, [target_persona])
 
     # Empty when the technique has no perceptible effect, which is also exactly when
     # resolve_cast_audience leaves effect_only empty — the two agree by construction.

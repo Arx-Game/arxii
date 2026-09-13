@@ -136,6 +136,68 @@ describe('sessionAttention', () => {
     expect(result).toEqual({ direct: 0, ambient: true });
   });
 
+  it('counts a mechanical row aimed at me as direct even though it groups by scene', () => {
+    // #3787 I1: decision 5 keys action/outcome rows to `scene:N` so one fight
+    // stays one reader group; decision 6 reuses this `direct` tier for them. A
+    // key-based direct tier silently demoted "a blow landed on you" to ambient.
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'outcome',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 1, ambient: false });
+  });
+
+  it('a mechanical row aimed at someone else stays ambient', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'outcome',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [42],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 0, ambient: true });
+  });
+
+  it('splits one scene thread into the blows aimed at me and the rest', () => {
+    // Both rows land in the same `scene:1` group. Direct counts only the one
+    // naming this persona; the sibling still raises ambient.
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'action',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+        makeInteraction({
+          id: 6,
+          mode: 'action',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [42],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 1, ambient: true });
+  });
+
   it('falls back to the legacy unread scalar for ambient', () => {
     const session = makeSession({ unread: 3 });
 

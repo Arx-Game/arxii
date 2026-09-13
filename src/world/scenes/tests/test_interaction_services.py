@@ -39,6 +39,7 @@ from world.scenes.models import (
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, PlacePresence
+from world.scenes.tests.test_target_reachability import _persona_in_room
 
 
 class TestCreateInteraction(TestCase):
@@ -122,16 +123,28 @@ class TestCreateInteraction(TestCase):
         assert Interaction.objects.count() == 1
 
     def test_creation_with_target_personas(self) -> None:
-        scene = SceneFactory()
+        """A room-heard target must be reachable (#3787 Task 4): co-locate writer
+
+        and target in the scene's room, not bare factory personas with no
+        location -- real tagging only ever resolves a target already co-located
+        with the writer (``resolve_characters_by_name(..., character.location)``),
+        so a target with no location at all is an artificial arrangement that
+        cannot occur in production, and ``persona_can_receive`` correctly refuses it.
+        """
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        writer = _persona_in_room(room)
+        target = _persona_in_room(room)
+
         interaction = create_interaction(
-            persona=self.writer_persona,
+            persona=writer,
             content="looks at someone.",
             mode=InteractionMode.POSE,
             scene=scene,
-            target_personas=[self.receiver_persona_1],
+            target_personas=[target],
         )
         assert interaction is not None
-        assert self.receiver_persona_1 in interaction.target_personas.all()
+        assert target in interaction.target_personas.all()
 
 
 class TestCanViewInteraction(TestCase):
@@ -652,6 +665,7 @@ class TestPushInteraction(TestCase):
             "mode": InteractionMode.POSE,
             "timestamp": interaction.timestamp.isoformat(),
             "thread_id": None,
+            "root_thread_id": None,
             "scene_id": interaction.scene_id,
             "place_id": None,
             "place_name": None,
@@ -661,6 +675,7 @@ class TestPushInteraction(TestCase):
             "language_name": None,
             "attributed_companion_id": None,
             "attributed_companion_name": None,
+            "reply_to": None,
         }
         mock_a.assert_called_once_with(interaction=((), expected_payload))
         mock_b.assert_called_once_with(interaction=((), expected_payload))

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseFormattedContent } from '../formatParser';
+import { excerptOf, parseFormattedContent } from '../formatParser';
 
 describe('parseFormattedContent', () => {
   it('returns empty array for empty string', () => {
@@ -193,5 +193,27 @@ describe('parseFormattedContent', () => {
     });
     expect(result[1]).toEqual({ type: 'text', content: ' and ' });
     expect(result[2]).toEqual({ type: 'link', content: 'label', url: 'https://md.com' });
+  });
+});
+
+describe('excerptOf', () => {
+  // #3787 Task 7 -- moved here from `ThreadedNarrativeReader.tsx` so
+  // `PoseUnit.tsx`'s parent-reply chip can share it instead of writing a
+  // second truncation helper.
+  it('returns short content unchanged', () => {
+    expect(excerptOf('hello world')).toBe('hello world');
+  });
+
+  it('truncates content past the default length with an ellipsis', () => {
+    const long = 'x'.repeat(100);
+    expect(excerptOf(long)).toBe(`${'x'.repeat(84)}…`);
+  });
+
+  it('strips MU*-style color codes and markdown before truncating', () => {
+    expect(excerptOf('|wMirelle turned|n and **left**')).toBe('Mirelle turned and left');
+  });
+
+  it('respects a custom maxLength', () => {
+    expect(excerptOf('one two three four', 7)).toBe('one two…');
   });
 });

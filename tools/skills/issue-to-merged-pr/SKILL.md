@@ -308,14 +308,43 @@ full). Genuinely separable remaining scope gets its own issue via
 original issue open too.
 
 **The evidence report and its screenshots never belong in `main`'s permanent
-history** — commit them to the branch while iterating (the easiest way to let
-CI validate a local `PR_EVIDENCE_FILE` path), but once the report is final,
-move it to a comment **on the PR itself** (`PR_EVIDENCE_URL`) and remove the
-local copies before the PR merges. See
-`references/evidence-screenshots-not-in-main.md` for the exact technique
-(screenshot links survive as `raw.githubusercontent.com/.../<commit-sha>/...`
-even after the branch's tip no longer has the file) and the sequencing gotcha
-with the evidence gate's own revision check.
+history, and this is enforced.** The `review-evidence-not-committed` CI job
+fails any PR with a tracked file under `docs/reviews/`. Deleting the files
+without doing the rest does not pass either: the `review-evidence` job then has
+no report to validate and fails instead. The two gates only both go green when
+the evidence actually lives in a PR comment.
+
+Do it in this order. It is four steps and skipping any of them turns the build
+red, so do not treat it as cleanup to get to later:
+
+1. **Push once with the report and screenshots still committed**, so their blobs
+   exist on the remote. Note the pushed SHA.
+2. **Post the report as a PR comment**, rewriting every image link to
+   `https://raw.githubusercontent.com/<owner>/<repo>/<pushed-sha>/<path>`. Those
+   URLs keep rendering after the files leave the branch tip, which is the whole
+   trick.
+3. **Point the PR body's `- Report:` line at that comment URL.** The
+   `review-evidence` job reads that line; a stale path there fails it.
+4. **Delete `docs/reviews/` and push again.**
+5. **Before EVERY later push, run
+   `scripts/sync-evidence-revision.sh <pr>`.** It restates the report's
+   `Reviewed revision` to the current `HEAD^1`, prints what changed between the
+   old revision and the new one so you can judge whether the review still
+   stands, and re-validates the comment exactly as CI will. Skipping it is the
+   single most common way this job goes red after a green one.
+
+**The revision gotcha, which bites every time.** Both the gate and
+`open-pr.sh` validate the report against `git rev-parse HEAD^1`, so the report's
+`Reviewed revision` field must name the commit that ends up as the FIRST PARENT
+of the branch tip - not the commit you happened to review. Any push after the
+report is written (a merge from main, the deletion commit itself) moves that
+target, so re-read `HEAD^1` and update the comment before the final push. When
+the intervening commits changed code the review covered, say so in the report
+and state what you re-verified; when they did not, prove it with a diff of the
+reviewed files rather than asserting it.
+
+See `references/evidence-screenshots-not-in-main.md` for the underlying
+technique.
 
 Compose the PR body's substitution values (summary, follow-ups, sync
 summary, evidence file).
@@ -390,14 +419,22 @@ commits (so hooks never ran), scope the catch-up to just the branch's diff —
 > ad-hoc poll you author.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the
-  committed report against the reviewed code revision before arming squash auto-merge.
-  Then post a brief status comment and exit the
-  session. **Do NOT re-sync with main or merge by hand.** The merge queue
-  re-tests the PR on top of the latest main and merges it in order once a human
-  approves — that human approval is the only remaining gate. If main moves while
-  the PR waits for approval, the queue handles the re-integration; the agent
-  does nothing further.
+- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
+  report against the reviewed code revision, refuses while an open code-scanning
+  alert sits on the PR head ref, and only then arms squash auto-merge. Then post a
+  brief status comment and exit the session. **Do NOT re-sync with main or merge by
+  hand.** The merge queue re-tests the PR on top of the latest main and merges it in
+  order once a human approves - that human approval is the only remaining gate. If
+  main moves while the PR waits for approval, the queue handles the re-integration;
+  the agent does nothing further.
+
+  **Before judging any PR "ready", read
+  [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
+  It covers what a green rollup does not: a DIRTY PR silently skips `ci.yml` while
+  analysis-only checks stay green; cancelled runs from superseded pushes read as
+  failures; GitHub Advanced Security findings fail no check at all and need the right
+  ref and state filter or they come back empty; and which comments are blocking
+  feedback versus untrusted data on a public repo.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 
@@ -553,6 +590,7 @@ where it stopped, what the human should decide.
 | Open the PR | `scripts/open-pr.sh <branch> <issue> [followups...]` |
 | File a follow-up issue | `scripts/file-followup.sh <title> <body-path> [labels...]` |
 | Comment on an issue | `scripts/comment-on-issue.sh <issue> <body-path>` |
+| Re-point evidence at the checked revision | `scripts/sync-evidence-revision.sh <pr>` |
 | Watch CI | `scripts/watch-ci.sh <pr>` |
 | Enqueue for the merge queue | `scripts/enqueue-pr.sh <pr>` |
 | Read failing log | `scripts/get-ci-failure.sh <pr> <check-name>` |

@@ -10,6 +10,7 @@ import { emitActionResult } from '@/hooks/actionResultBus';
 import { draftStorageKey } from '@/game/useDraftStore';
 import type { Draft } from '@/game/useDraftStore';
 import type { CompanionSummary } from '@/companions/types';
+import type { Interaction } from '@/scenes/types';
 
 // Wrap every render call in a QueryClientProvider so useQuery hooks work in tests.
 const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1703,5 +1704,148 @@ describe('mention autocomplete source', () => {
 
     await screen.findByText('ScenePersona');
     expect(screen.queryByText('Bob')).not.toBeInTheDocument();
+  });
+});
+
+// #3787 Task 7 -- the reply chip's Narrator leak, wiring `reply_to` into
+// `submitPose`, and the pre-emptive reachable-reply refusal (Screen 3).
+function makeReplyTarget(overrides: Partial<Interaction> = {}): Interaction {
+  return {
+    id: 5,
+    persona: { id: 1, name: 'Narrator' },
+    content: "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered.",
+    mode: 'outcome',
+    visibility: 'default',
+    timestamp: '2026-01-01T00:00:05Z',
+    scene: 1,
+    reactions: [],
+    is_favorited: false,
+    place: null,
+    place_name: null,
+    receiver_persona_ids: [],
+    target_persona_ids: [],
+    pose_kind: 'standard',
+    endorsee_sheet_id: null,
+    endorsable_resonances: [],
+    pose_endorsers: [],
+    my_pose_endorsement: null,
+    entry_endorsers: [],
+    entry_endorsed_by_me: false,
+    ...overrides,
+  };
+}
+
+describe('reply chip, reply_to wiring, and pre-emptive refusal (#3787)', () => {
+  beforeEach(() => {
+    submitPoseMock.mockClear();
+    submitPoseMock.mockImplementation(() => Promise.resolve());
+  });
+
+  it('shows the excerpt alone for an outcome/action reply target -- never the Narrator bookkeeping author', () => {
+    render(
+      <CommandInput
+        character="Alice"
+        sceneId="5"
+        personaId={9}
+        replyTarget={makeReplyTarget({ mode: 'outcome' })}
+      />
+    );
+    const context = screen.getByTestId('reply-context');
+    expect(context).toHaveTextContent(
+      "Kira's Frost Bolt strikes Corvin for 24 damage, leaving them Staggered."
+    );
+    expect(context).not.toHaveTextContent('Narrator');
+  });
+
+  it('still names the writer for an ordinary pose/say reply target', () => {
+    render(
+      <CommandInput
+        character="Alice"
+        sceneId="5"
+        personaId={9}
+        replyTarget={makeReplyTarget({ mode: 'pose', persona: { id: 2, name: 'Mirelle' } })}
+      />
+    );
+    const context = screen.getByTestId('reply-context');
+    expect(context).toHaveTextContent('Mirelle');
+  });
+
+  it('sends reply_to on the REST submit-pose call when replying, and clears the reply context on success', async () => {
+    const onCancelReply = vi.fn();
+    render(
+      <CommandInput
+        character="Alice"
+        sceneId="5"
+        personaId={9}
+        replyTarget={makeReplyTarget({ mode: 'pose' })}
+        onCancelReply={onCancelReply}
+      />
+    );
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'answers' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'answers',
+      client_request_id: expect.any(String),
+      reply_to: { id: 5, timestamp: '2026-01-01T00:00:05Z' },
+    });
+    await waitFor(() => expect(onCancelReply).toHaveBeenCalled());
+  });
+
+  it('omits reply_to entirely when there is no reply target (unchanged shape for an ordinary pose)', () => {
+    render(<CommandInput character="Alice" sceneId="5" personaId={9} />);
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'looks around' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+
+    expect(submitPoseMock).toHaveBeenCalledWith({
+      persona_id: 9,
+      scene_id: 5,
+      content: 'looks around',
+      client_request_id: expect.any(String),
+    });
+  });
+
+  it('shows the refusal and disables submission, before any click, when the reply target is room-held and the viewer is at a Place (Screen 3)', () => {
+    render(
+      <CommandInput
+        character="Alice"
+        sceneId="5"
+        personaId={9}
+        replyTarget={makeReplyTarget({ mode: 'outcome', place: null })}
+        isAtPlace
+        currentPlaceId={7}
+        currentPlaceName="the corner table"
+      />
+    );
+    const refusal = screen.getByTestId('reply-refusal');
+    expect(refusal).toHaveTextContent('Answering the fight means speaking to the room.');
+    expect(refusal).toHaveTextContent('Leave the corner table to answer this. Your draft is kept.');
+    expect(refusal).toHaveAttribute('role', 'status');
+    expect(refusal).toHaveAttribute('aria-live', 'polite');
+    // #3787 D2: the reader-side refusal (ThreadedNarrativeReader's ReplyControl)
+    // is pinned to this same rail and tint. Change one and change both.
+    expect(refusal).toHaveClass('border-l-2', 'border-destructive', 'bg-destructive/10');
+
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'answers anyway' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(submitPoseMock).not.toHaveBeenCalled();
+  });
+
+  it('renders no refusal when the reply target is reachable', () => {
+    render(
+      <CommandInput
+        character="Alice"
+        sceneId="5"
+        personaId={9}
+        replyTarget={makeReplyTarget({ mode: 'outcome', place: null })}
+        isAtPlace={false}
+      />
+    );
+    expect(screen.queryByTestId('reply-refusal')).not.toBeInTheDocument();
   });
 });

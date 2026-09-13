@@ -24,6 +24,7 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     receiver_persona_ids: payload.receiver_persona_ids ?? [],
     target_persona_ids: payload.target_persona_ids ?? [],
     thread_id: payload.thread_id ?? null,
+    root_thread_id: payload.root_thread_id ?? null,
     reply_to: payload.reply_to ?? null,
     attributed_companion:
       payload.attributed_companion_id != null

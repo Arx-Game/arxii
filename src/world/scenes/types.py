@@ -25,6 +25,19 @@ class PersonaPayload(TypedDict):
     thumbnail_url: str
 
 
+class ReplyParentPayload(TypedDict):
+    """The row a reply answered, as the parent chip needs it.
+
+    Exactly the shape ``InteractionSerializer.get_reply_to`` returns over REST (a
+    stringified id and an ISO timestamp), so the frontend reads one type on both
+    channels: the id plus the parent's timestamp is a thread selector, never the
+    parent's content or author.
+    """
+
+    id: str
+    timestamp: str
+
+
 class InteractionPayload(TypedDict):
     """Structured interaction payload for WebSocket delivery."""
 
@@ -34,6 +47,7 @@ class InteractionPayload(TypedDict):
     mode: str
     timestamp: str
     thread_id: str | None
+    root_thread_id: str | None
     scene_id: int | None
     place_id: int | None
     place_name: str | None
@@ -43,6 +57,7 @@ class InteractionPayload(TypedDict):
     language_name: str | None
     attributed_companion_id: int | None
     attributed_companion_name: str | None
+    reply_to: ReplyParentPayload | None
 
 
 class ReactionAggregation(TypedDict):

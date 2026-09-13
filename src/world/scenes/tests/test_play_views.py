@@ -11,10 +11,71 @@ from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory, APITestCase, force_authenticate
 
 from evennia_extensions.factories import AccountFactory
-from world.scenes.constants import InteractionVisibility
-from world.scenes.factories import InteractionFactory, PlaceFactory, SceneFactory
-from world.scenes.models import Interaction, InteractionReadReceipt
+from world.scenes.constants import InteractionMode, InteractionVisibility
+from world.scenes.factories import (
+    InteractionFactory,
+    PersonaFactory,
+    PlaceFactory,
+    SceneFactory,
+)
+from world.scenes.interaction_services import create_interaction
+from world.scenes.models import Interaction, InteractionReadReceipt, InteractionThread
 from world.scenes.play_views import _queryset
+from world.scenes.thread_services import ReplyTarget
+
+
+def _root_threads(count):
+    """Mint *count* real root threads, returning their ids as strings.
+
+    The mocked-``_rows`` pagination tests below need opaque, deterministic group
+    keys. They used bare strings like ``"t1"``, but since #3787 the view resolves
+    each thread to its exchange in the database (a row's thread is what it ANSWERS,
+    so a nested reply has to collapse onto its root), and a made-up key is not a
+    thread id. These are real rows, so the keys are real - while the POSE ids those
+    tests actually assert on stay synthetic and exact, which is the whole reason
+    they mock ``_rows`` in the first place.
+    """
+    scene = SceneFactory()
+    ids = []
+    for _ in range(count):
+        thread = InteractionThread.objects.create(
+            holder_kind=InteractionThread.HolderKind.SCENE,
+            holder_id=scene.pk,
+            scene_id=scene.pk,
+        )
+        ids.append(str(thread.pk))
+    return ids
+
+
+def _reply_to(scene, account, target, content):
+    """Write a real reply to *target* through the production writer.
+
+    Tests that build an exchange by hand-setting ``thread=`` model a state
+    ``assign_interaction_thread`` cannot produce any more: since #3787 a thread
+    holds the ANSWERS to a row and the answered row is its anchor, never a member.
+    Going through ``create_interaction`` is what keeps these tests honest.
+
+    ``PersonaFactory()`` has no roster tenure, so ``_get_account_for_persona``
+    returns ``None`` and the reply is refused; patching it to a real account is the
+    established pattern (see ``test_threading.py``).
+    """
+    with patch(
+        "world.scenes.interaction_services._get_account_for_persona",
+        return_value=account.pk,
+    ):
+        return create_interaction(
+            persona=PersonaFactory(),
+            content=content,
+            mode=InteractionMode.POSE,
+            scene=scene,
+            reply_to=ReplyTarget(interaction_id=target.pk, timestamp=target.timestamp),
+        )
+
+
+def _reply_exchange(scene, account, target_content, reply_content):
+    """An answered pose plus one real reply to it. Returns ``(target, reply)``."""
+    target = InteractionFactory(scene=scene, content=target_content)
+    return target, _reply_to(scene, account, target, reply_content)
 
 
 class PlayReaderContractTests(APITestCase):
@@ -422,26 +483,60 @@ class PlayThreadsViewTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("conversation", response.json()["detail"])
 
-    def test_groups_by_thread_and_paginates(self) -> None:
-        from world.scenes.models import InteractionThread
+    def test_groups_by_exchange_and_counts_the_answered_pose(self) -> None:
+        """Built through the real writer rather than by hand-setting ``thread=``.
 
+        Both rows ARE members under the shipped design - the answered pose is the
+        first one, which is what makes it the anchor - so hand-setting both is a
+        perfectly producible state and the fixtures elsewhere in this file do
+        exactly that. Going through ``create_interaction`` here buys something
+        narrower: it proves the writer itself puts the answered pose in the thread
+        and orders it first, instead of only proving the reader groups a shape the
+        test asserted into existence.
+        """
         account = AccountFactory()
         self.client.force_authenticate(user=account)
         scene = SceneFactory()
-        thread = InteractionThread.objects.create(
-            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
-        )
-        InteractionFactory(scene=scene, thread=thread, content="root pose")
-        InteractionFactory(scene=scene, thread=thread, content="a reply")
+        target, reply = _reply_exchange(scene, account, "root pose", "a reply")
         InteractionFactory(scene=scene, content="unthreaded standalone")
 
         response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
         self.assertEqual(response.status_code, 200)
         data = response.json()
         thread_ids = {row["id"] for row in data["results"]}
-        self.assertIn(str(thread.pk), thread_ids)
-        threaded_row = next(r for r in data["results"] if r["id"] == str(thread.pk))
+        self.assertIn(str(reply.thread_id), thread_ids)
+        threaded_row = next(r for r in data["results"] if r["id"] == str(reply.thread_id))
+        # The anchor opens the exchange and is counted in it.
         self.assertEqual(threaded_row["visiblePoseCount"], 2)
+        self.assertEqual(threaded_row["root"]["id"], str(target.pk))
+        self.assertEqual(threaded_row["firstVisible"]["id"], str(target.pk))
+        self.assertEqual(threaded_row["opening"], "root pose")
+        self.assertEqual(threaded_row["latestVisible"]["id"], str(reply.pk))
+
+    def test_a_nested_exchange_is_one_group_keyed_by_its_root(self) -> None:
+        """Answering a reply nests a thread; the reader must still see ONE exchange.
+
+        Without the root collapse this reports two groups for one back-and-forth,
+        each opening on the wrong pose.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        target, reply = _reply_exchange(scene, account, "he swings", "she gives ground")
+        nested = _reply_to(scene, account, reply, "he presses in")
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+
+        results = response.json()["results"]
+        self.assertEqual(len(results), 1)
+        row = results[0]
+        target.refresh_from_db()
+        self.assertEqual(row["id"], str(target.thread_id))
+        self.assertNotEqual(target.thread_id, nested.thread_id)
+        self.assertEqual(row["visiblePoseCount"], 3)
+        self.assertEqual(row["root"]["id"], str(target.pk))
+        self.assertEqual(row["opening"], "he swings")
+        self.assertEqual(row["latestVisible"]["id"], str(nested.pk))
 
     def test_threads_respect_visibility(self) -> None:
         from world.scenes.constants import InteractionVisibility
@@ -470,13 +565,14 @@ class PlayThreadsViewTests(APITestCase):
         # 90..112 straddles the 99 -> 100 digit-length boundary, where a STRING
         # sort ("100" < "99") disagrees with an INT sort.
         synthetic_ids = list(range(90, 113))
+        thread_of = dict(zip(synthetic_ids, _root_threads(len(synthetic_ids)), strict=True))
         rows = []
         for pose_id in synthetic_ids:
             rows.append(
                 {
                     "id": pose_id,
                     "timestamp": shared_timestamp,
-                    "thread_id": f"t{pose_id}",
+                    "thread_id": thread_of[pose_id],
                     "content": f"pose {pose_id}",
                     "mode": "pose",
                     "place": None,
@@ -492,7 +588,7 @@ class PlayThreadsViewTests(APITestCase):
                 {
                     "id": pose_id + 1000,
                     "timestamp": shared_timestamp,
-                    "thread_id": f"t{pose_id}",
+                    "thread_id": thread_of[pose_id],
                     "content": f"reply to {pose_id}",
                     "mode": "pose",
                     "place": None,
@@ -585,13 +681,17 @@ class PlayThreadsViewTests(APITestCase):
                 _row(pose_id + 5000, "2026-02-01T00:00:00Z", thread_id),
             ]
 
+        # One real thread per group key: t[1..6], then "A", then t[8..26].
+        minted = _root_threads(26)
+        thread_of = dict(zip([*range(1, 7), "A", *range(8, 27)], minted, strict=True))
+
         rows = []
         for i in range(1, 7):
-            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", f"t{i}"))
-        rows.append(_row(1000, "2026-01-01T00:07:00Z", "A"))  # thread A's root
-        rows.append(_row(2000, "2026-01-10T00:00:00Z", "A"))  # A's reply, 9 days later
+            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", thread_of[i]))
+        rows.append(_row(1000, "2026-01-01T00:07:00Z", thread_of["A"]))  # thread A's root
+        rows.append(_row(2000, "2026-01-10T00:00:00Z", thread_of["A"]))  # A's reply, 9 days on
         for i in range(8, 27):
-            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", f"t{i}"))
+            rows.extend(_thread(i, f"2026-01-01T00:{i:02d}:00Z", thread_of[i]))
 
         # Build the "after" cursor for legacy pose 9 the same way `_cursor()` does,
         # without importing that private helper: base64(json([timestamp, id])).
@@ -605,10 +705,10 @@ class PlayThreadsViewTests(APITestCase):
         result_ids = [row["id"] for row in response.json()["results"]]
         # Thread "A" (root at minute 07) and legacy 8/9 all sort BEFORE the
         # minute-09 boundary and must never reappear once we've paged past it.
-        self.assertNotIn("A", result_ids)
-        self.assertNotIn("t8", result_ids)
-        self.assertNotIn("t9", result_ids)
-        self.assertEqual(result_ids[0], "t10")
+        self.assertNotIn(thread_of["A"], result_ids)
+        self.assertNotIn(thread_of[8], result_ids)
+        self.assertNotIn(thread_of[9], result_ids)
+        self.assertEqual(result_ids[0], thread_of[10])
 
     def test_omits_poses_that_are_not_part_of_a_thread(self) -> None:
         """The endpoint is an index of reply threads, not a second pose feed.
@@ -619,21 +719,15 @@ class PlayThreadsViewTests(APITestCase):
         and paged them 20 at a time, which no caller can filter client side because
         the paging happens on the server.
         """
-        from world.scenes.models import InteractionThread
-
         account = AccountFactory()
         self.client.force_authenticate(user=account)
         scene = SceneFactory()
-        first = InteractionThread.objects.create(
-            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
+        _, first_reply = _reply_exchange(
+            scene, account, "you came anyway", "you left the gate open"
         )
-        second = InteractionThread.objects.create(
-            holder_kind="scene", holder_id=scene.pk, scene_id=scene.pk
+        _, second_reply = _reply_exchange(
+            scene, account, "keep your voice down", "the steward is at the door"
         )
-        InteractionFactory(scene=scene, thread=first, content="you came anyway")
-        InteractionFactory(scene=scene, thread=first, content="you left the gate open")
-        InteractionFactory(scene=scene, thread=second, content="keep your voice down")
-        InteractionFactory(scene=scene, thread=second, content="the steward is at the door")
         for index in range(15):
             InteractionFactory(scene=scene, content=f"ordinary narration {index}")
 
@@ -641,8 +735,44 @@ class PlayThreadsViewTests(APITestCase):
 
         self.assertEqual(response.status_code, 200)
         results = response.json()["results"]
-        self.assertEqual({row["id"] for row in results}, {str(first.pk), str(second.pk)})
+        self.assertEqual(
+            {row["id"] for row in results},
+            {str(first_reply.thread_id), str(second_reply.thread_id)},
+        )
         self.assertTrue(all(row["root"] is not None for row in results))
+        # The 15 ordinary poses contribute no group, and the two exchanges each
+        # count their answered pose - 2 poses per exchange, not 1.
+        self.assertEqual([row["visiblePoseCount"] for row in results], [2, 2])
+
+    def test_a_thread_whose_reply_was_answered_still_shows_that_reply(self) -> None:
+        """The render rule for a thread: its members PLUS its children's first members.
+
+        Answering an unanswered reply MOVES that reply into a child thread, so a
+        consumer that grouped by ``thread_id`` alone would lose it and go one short
+        per answered child. Grouping by ``root`` takes the union of the whole tree,
+        so the exchange stays whole. Asserted on the pose that moved.
+        """
+        account = AccountFactory()
+        self.client.force_authenticate(user=account)
+        scene = SceneFactory()
+        target, first = _reply_exchange(scene, account, "he swings", "she gives ground")
+        second = _reply_to(scene, account, first, "he presses in")
+
+        # `first` was moved out of the thread it was written into.
+        moved = Interaction.objects.get(pk=first.pk)
+        self.assertNotEqual(moved.thread_id, target.thread_id)
+        self.assertEqual(moved.thread_id, second.thread_id)
+
+        response = self.client.get(f"/api/play/threads/?conversation=scene:{scene.pk}")
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+
+        self.assertEqual(len(results), 1)
+        row = results[0]
+        # All three poses, with the answered one opening: nothing went short.
+        self.assertEqual(row["visiblePoseCount"], 3)
+        self.assertEqual(row["root"]["id"], str(target.pk))
+        self.assertEqual(row["latestVisible"]["id"], str(second.pk))
 
     def test_conversation_with_no_replies_returns_an_empty_page(self) -> None:
         """The common case: nobody used reply, so there is nothing to drill into.
@@ -751,3 +881,75 @@ class PlaySearchMaskingTests(APITestCase):
         self.client.force_authenticate(user=account)
         response = self.client.get("/api/play/search/?q=pose&until=2030-01-01")
         self.assertEqual(response.status_code, 200)
+
+
+class PlayPosesQueryBudgetTests(APITestCase):
+    """GET /api/play/poses/ must serve the reply chip without a per-row query.
+
+    Regression guard for #3787. Three page-wide batches serve the chip and the
+    grouping key, and none of them scales with the number of replies:
+
+    - ``_thread_anchors`` - one ``Min(id)`` aggregate resolving every thread's
+      anchor (and its parent thread's) in a single query.
+    - ``_thread_roots`` - the derived top of each nesting tree, one query per
+      nesting LEVEL for the whole page. A flat page, like this one, costs one.
+    - ``_visible_parents`` - one batched ``visible_to`` check that returns the
+      parents' timestamps too, so the chip needs no second lookup.
+
+    That is 76 rather than the 74 of the stored-anchor shape: the anchor used to
+    be a column joined in by ``select_related`` and the root another, so both were
+    free to read and neither could be wrong. Deriving them costs two flat queries
+    and removes two denormalized copies that could drift (a stored ``root`` did
+    drift, and cost a real bug on this branch). `/game` is the primary surface
+    where the parent chip renders, so this endpoint's own budget is pinned here
+    rather than only inheriting ``InteractionViewSet``'s.
+    """
+
+    def setUp(self) -> None:
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+        self.account = AccountFactory()
+        self.client.force_authenticate(user=self.account)
+
+    def _build_page(self, scene: object, *, reply_count: int) -> None:
+        """Always 6 total poses (3 targets + 3 repliers) - only `reply_count`
+        of the 3 repliers actually answer anything. Holding the total row count
+        constant isolates the reply-handling cost: every OTHER cached_* field's
+        per-row fallback cost (favorites, reactions, receivers, target personas,
+        action links) stays identical between scenarios, so any difference in query
+        count comes only from `_visible_parent_ids` and the anchor read.
+        """
+        targets = [InteractionFactory(scene=scene) for _ in range(3)]
+        repliers = [InteractionFactory(scene=scene) for _ in range(3)]
+        for i in range(reply_count):
+            thread = InteractionThread.objects.create(
+                holder_kind=InteractionThread.HolderKind.SCENE,
+                holder_id=scene.pk,
+                scene_id=scene.pk,
+            )
+            # The answered row is the first member, so it is the anchor (#3787).
+            targets[i].thread = thread
+            targets[i].save(update_fields=["thread"])
+            repliers[i].thread = thread
+            repliers[i].save(update_fields=["thread"])
+
+    def test_query_budget_with_one_reply(self) -> None:
+        """Baseline: 6 total poses, 1 of them a reply."""
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=1)
+        with self.assertNumQueries(76):
+            response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 6
+
+    def test_query_budget_does_not_scale_with_reply_count(self) -> None:
+        """Same 6 total poses, all 3 are replies: the count must not grow. Each of
+        the three batches above resolves the whole page at once, so tripling the
+        replies adds no query."""
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=3)
+        with self.assertNumQueries(76):
+            response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
+        assert response.status_code == 200
+        assert len(response.json()["results"]) == 6

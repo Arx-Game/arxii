@@ -639,7 +639,11 @@ export function GamePage() {
     (interaction: Interaction) => {
       setReplyTarget(interaction);
       if (active) {
-        const key = interaction.thread_id ?? getThreadKey(interaction);
+        // #3787 rework: a nested exchange opens ONE tab, not one per level --
+        // `getThreadKey` already prefers `root_thread_id` for exactly this, so
+        // the explicit read ahead of it does too rather than quietly disagreeing.
+        const key =
+          interaction.root_thread_id ?? interaction.thread_id ?? getThreadKey(interaction);
         if (key !== 'room') dispatch(openThreadTab({ character: active, threadKey: key }));
       }
     },
@@ -937,6 +941,7 @@ export function GamePage() {
               roomName={roomName}
               isAtPlace={isAtPlace}
               currentPlaceId={currentPlace?.id ?? null}
+              currentPlaceName={currentPlace?.name ?? null}
               conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}

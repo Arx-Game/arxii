@@ -92,6 +92,19 @@ repos:
         # objectdb-param: the whole codebase already passes, so there is no debt
         # to phase in, and the failure mode is silent in both directions.
         # Suppress a genuine external key with `# noqa: IDENT_DASH` plus a reason.
+      # str-exc-response: django_notes.md's ViewSet standards say never put
+      # str(exc) in a response, and CodeQL flags the same shape as
+      # py/stack-trace-exposure. Nothing enforced it until #3787 shipped one to
+      # the point of enqueue. Scoped to world's API surface, which passes clean;
+      # web/admin/ carries 15 pre-existing instances on staff-only surfaces and
+      # is the next scope expansion, same phase-in pattern as objectdb-param.
+      - id: str-exc-response
+        name: Reject str(exc) on a caught exception in views and serializers
+        entry: uv run python tools/lint_str_exc_response.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/world/.*(views|serializers)\.py$
       - id: objectdb-param
         name: Reject ObjectDB-typed args and model FKs
         entry: uv run python tools/lint_objectdb_param.py

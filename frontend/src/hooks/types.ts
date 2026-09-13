@@ -229,6 +229,8 @@ export interface InteractionWsPayload {
   target_persona_ids: number[];
   /** Explicit narrative topology when supplied by the play protocol. */
   thread_id?: string | null;
+  /** Top of the nesting tree this row's exchange belongs to (#3787). */
+  root_thread_id?: string | null;
   reply_to?: { id: string; timestamp: string } | null;
   /** Cosmetic companion pose attribution (#3294); null/absent for a normal pose. */
   attributed_companion_id?: number | null;
