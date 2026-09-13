@@ -60,6 +60,23 @@ async function waitForResultCardSettled(resultLabel: import('@playwright/test').
     .toBeGreaterThan(0.95);
 }
 
+/**
+ * The dialog itself (overlay + content) runs its own Radix animate-in
+ * (`data-[state=open]:fade-in-0 zoom-in-95`, 200ms). A screenshot taken the
+ * instant `getByRole('dialog')` resolves visible can land mid-fade, showing
+ * the page underneath through a still-transparent overlay/content — that
+ * looks like a stacking defect but is really a timing race. Poll both
+ * `data-state` and computed opacity before trusting any capture of it.
+ */
+async function waitForDialogFullyOpen(dialog: import('@playwright/test').Locator) {
+  await expect(dialog).toHaveAttribute('data-state', 'open');
+  await expect
+    .poll(() => dialog.evaluate((el) => Number(getComputedStyle(el).opacity)), {
+      timeout: 3_000,
+    })
+    .toBeGreaterThan(0.99);
+}
+
 interface RouletteFace {
   label: string;
   weight: number;
@@ -99,6 +116,9 @@ test.describe('#3807 outcome delivery + resolution wheel — fixture-backed evid
     await expect(markedRow).toBeVisible();
     await expect(markedRow).toContainText('This happened to you');
     await expect(markedRow).toContainText('Nyx attempts to persuade Tehom: Partial Success');
+    // The flag is the one element this screen exists to show — assert it
+    // reads, not just that the row contains its text.
+    await expect(markedRow.getByText('This happened to you')).toBeVisible();
 
     pushActionRow(connections[0], {
       id: 911,
@@ -109,6 +129,12 @@ test.describe('#3807 outcome delivery + resolution wheel — fixture-backed evid
     const unmarkedRow = page.getByText('Nyx attempts to persuade the guard: Success');
     await expect(unmarkedRow).toBeVisible();
     await expect(page.getByTestId('involvement-mark-911')).toHaveCount(0);
+
+    // A plain full-page capture can land scrolled so the marked row's own
+    // top edge (and the amber flag on it) sits above the fold — scroll it
+    // into view first so both rows, and the flag, are actually in frame.
+    await markedRow.scrollIntoViewIfNeeded();
+    await expect(markedRow.getByText('This happened to you')).toBeInViewport();
 
     await page.screenshot({
       path: '../docs/reviews/3807-shots/build-screen1-reader.png',
@@ -184,13 +210,14 @@ test.describe('#3807 outcome delivery + resolution wheel — fixture-backed evid
     const resultLabel = dialog.locator('p.text-lg.font-bold');
     await expect(resultLabel).toBeVisible({ timeout: 9_000 });
     await expect(resultLabel).toHaveText('Partial Success');
-    // No repeated eyebrow: tier_name === label here, so RouletteResult skips
-    // its small-caps tier line entirely rather than showing "Partial
-    // Success" twice (once as eyebrow, once as the label).
+    // The caption reads "Outcome" rather than repeating "Partial Success":
+    // tier_name === label here, so RouletteResult shows the generic caption
+    // instead of showing "Partial Success" twice (once as eyebrow, once as
+    // the label) — matching the approved demo's small-caps "OUTCOME" line.
     const resultEyebrow = dialog.locator(
       'p.mb-2.text-xs.font-semibold.uppercase.tracking-wider.opacity-70'
     );
-    await expect(resultEyebrow).toHaveCount(0);
+    await expect(resultEyebrow).toHaveText('Outcome');
     await waitForResultCardSettled(resultLabel);
 
     await page.screenshot({
@@ -255,11 +282,46 @@ test.describe('#3807 outcome delivery + resolution wheel — fixture-backed evid
 
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
+    // #3807 review finding: a capture taken the instant the dialog becomes
+    // visible can land mid Radix animate-in, with the composer and reader
+    // showing through a still-transparent overlay/content — wait for the
+    // dialog's own entrance to finish before trusting anything about what's
+    // drawn on top of it.
+    await waitForDialogFullyOpen(dialog);
+
+    // And wait for the wheel to actually land, same as the desktop captures,
+    // so the mobile shot shows the settled result card, not a mid-spin disc.
+    const resultLabel = dialog.locator('p.text-lg.font-bold');
+    await expect(resultLabel).toBeVisible({ timeout: 9_000 });
+    await expect(resultLabel).toHaveText('Partial Success');
+    await waitForResultCardSettled(resultLabel);
 
     const hasNoHorizontalScroll = await page.evaluate(
       () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
     );
     expect(hasNoHorizontalScroll).toBe(true);
+
+    // Permanent stacking assertion (#3807 finding 2): with the dialog open,
+    // the point at the composer's Send button must resolve to something
+    // inside the dialog, never the composer itself — the dialog's overlay
+    // (or content) has to be genuinely on top, not just drawn to look that
+    // way. This is the direct check for a real z-index defect, as opposed to
+    // the animate-in timing race `waitForDialogFullyOpen` guards against.
+    // A plain attribute selector, not `getByRole('button', { name: 'Send' })`
+    // — the role query intermittently resolved to zero elements here even
+    // though the button was present and unambiguous in the DOM.
+    const sendButton = page.locator('button[aria-label="Send"]');
+    await expect(sendButton).toHaveCount(1);
+    const sendBox = await sendButton.evaluate((el) => el.getBoundingClientRect());
+    const topElementIsInDialog = await page.evaluate(
+      ({ x, y }) => {
+        const el = document.elementFromPoint(x, y);
+        const dialogEl = document.querySelector('[role="dialog"]');
+        return Boolean(el && dialogEl && dialogEl.contains(el));
+      },
+      { x: sendBox.x + sendBox.width / 2, y: sendBox.y + sendBox.height / 2 }
+    );
+    expect(topElementIsInDialog).toBe(true);
 
     await page.screenshot({
       path: '../docs/reviews/3807-shots/build-mobile-400.png',
