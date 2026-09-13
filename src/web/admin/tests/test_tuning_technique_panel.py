@@ -120,6 +120,8 @@ class TestTechniqueFragmentView(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         self.assertIn('id="panel-techniques-form"', body)
+        self.assertIn('id="panel-techniques-refresh"', body)
+        self.assertIn("Starting kit report", body)
         self.assertIn("No evaluation has been run yet", body)
 
     @patch(_PATCH_TARGET)

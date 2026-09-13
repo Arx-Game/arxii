@@ -126,3 +126,9 @@ class TechniquePowerReport:
     de_per_anima: float
     #: e.g. "weapon_scaled", "windup:2", "passive", "no_result_charts".
     flags: tuple[str, ...]
+    #: Deterministic (FORMULA/PARSED) and approximate (ESTIMATE) contributions.
+    #: These are exposed separately so a total never makes an estimate look measured.
+    formula_baseline_de: float = 0.0
+    estimated_baseline_de: float = 0.0
+    formula_amplified_de: float = 0.0
+    estimated_amplified_de: float = 0.0

@@ -48,6 +48,10 @@ from world.magic.services.power_terms import (
     get_covenant_role_blend_config,
     specialty_power_contribution,
 )
+from world.magic.services.technique_effects import (
+    technique_is_not_castable_standalone,
+    technique_is_underspecified,
+)
 from world.magic.types.technique_power import (
     EvalContext,
     PayloadValuation,
@@ -678,7 +682,7 @@ def _effective_anima(technique: Technique) -> int:
     return result.effective_cost
 
 
-def evaluate_technique(
+def evaluate_technique(  # noqa: C901 - report assembly intentionally keeps all valuation stages together
     technique: Technique,
     context: EvalContext,
     reference: ReferenceFrame,
@@ -709,6 +713,11 @@ def evaluate_technique(
     effective_anima = _effective_anima(technique)
 
     if not _bands:
+        flags = ["no_result_charts"]
+        if technique_is_not_castable_standalone(technique):
+            flags.append("not_castable_standalone")
+        if technique_is_underspecified(technique):
+            flags.append("underspecified")
         return TechniquePowerReport(
             technique_id=technique.pk,
             name=technique.name,
@@ -723,7 +732,7 @@ def evaluate_technique(
             valuations=(),
             effective_anima=effective_anima,
             de_per_anima=0.0,
-            flags=("no_result_charts",),
+            flags=tuple(flags),
         )
 
     valuations = _all_payload_valuations(
@@ -745,17 +754,50 @@ def evaluate_technique(
     baseline_de = sum(v.value for v in valuations)
     amplified_de = sum(v.value for v in amplified_valuations)
 
+    def deterministic_total(values: list[PayloadValuation]) -> float:
+        """Return formula/parsed value while excluding estimates and zero buckets."""
+        return sum(
+            value.value
+            for value in values
+            if value.provenance
+            not in {
+                ValuationProvenance.ESTIMATE,
+                ValuationProvenance.UNPRICED_DISPEL,
+                ValuationProvenance.UNPRICEABLE,
+                ValuationProvenance.INERT_PAYLOAD,
+            }
+        )
+
+    formula_baseline_de = deterministic_total(valuations)
+    estimated_baseline_de = sum(
+        value.value for value in valuations if value.provenance == ValuationProvenance.ESTIMATE
+    )
+    formula_amplified_de = deterministic_total(amplified_valuations)
+    estimated_amplified_de = sum(
+        value.value
+        for value in amplified_valuations
+        if value.provenance == ValuationProvenance.ESTIMATE
+    )
+
     flags: list[str] = []
+    if technique_is_not_castable_standalone(technique):
+        flags.append("not_castable_standalone")
+    if technique_is_underspecified(technique):
+        flags.append("underspecified")
     damage_profiles = technique.cached_damage_profiles
     if any(row.uses_equipped_weapon for row in damage_profiles):
         flags.append("weapon_scaled")
     if any(row.execute_missing_health_multiplier for row in damage_profiles):
         flags.append("execute_ramp")
 
+    divisor = 1 + technique.windup_rounds if technique.windup_rounds > 0 else 1
     if technique.windup_rounds > 0:
-        divisor = 1 + technique.windup_rounds
         baseline_de /= divisor
         amplified_de /= divisor
+        formula_baseline_de /= divisor
+        estimated_baseline_de /= divisor
+        formula_amplified_de /= divisor
+        estimated_amplified_de /= divisor
         flags.append(f"windup:{technique.windup_rounds}")
 
     de_per_anima = baseline_de / max(1, effective_anima)
@@ -775,6 +817,10 @@ def evaluate_technique(
         effective_anima=effective_anima,
         de_per_anima=de_per_anima,
         flags=tuple(flags),
+        formula_baseline_de=formula_baseline_de,
+        estimated_baseline_de=estimated_baseline_de,
+        formula_amplified_de=formula_amplified_de,
+        estimated_amplified_de=estimated_amplified_de,
     )
 
 

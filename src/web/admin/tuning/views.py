@@ -35,14 +35,20 @@ from web.admin.tuning import (
 from web.admin.tuning.checks_analytics import compute_chart_distributions, compute_matchup
 from web.admin.tuning.condition_analytics import compute_condition_danger
 from web.admin.tuning.consequence_analytics import inspect_pool, list_pools
+from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
+from world.character_creation.models import Beginnings
+from world.classes.models import Path, PathStage
 from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
+from world.magic.models.gifts import Gift, Tradition
 from world.magic.services.technique_effects import technique_catalog_revision
 
 _DEFAULT_ROLLER_POINTS = 25
 _DEFAULT_TARGET_DIFFICULTY = 25
 _DEFAULT_CONDITION_SEVERITY = 5
+_INCOMPLETE_KIT_MESSAGE = "Choose a Beginning, path, gift, and tradition together."
+_INVALID_KIT_TRADITION_MESSAGE = "This tradition is not available for the selected Beginning."
 
 # 24h - a simulation batch is expensive (dozens of full combat rounds), so a
 # cached report should outlive a single admin session by a wide margin.
@@ -330,6 +336,37 @@ class TechniqueAnalyticsForm(forms.Form):
         return _clamp(self.cleaned_data["thread_level"], 0, 30)
 
 
+class StartingKitForm(forms.Form):
+    """Select one authored CG combination for the starting-kit report."""
+
+    beginning = forms.ModelChoiceField(queryset=Beginnings.objects.order_by("name"), required=False)
+    path = forms.ModelChoiceField(
+        queryset=Path.objects.filter(stage=PathStage.PROSPECT, is_active=True).order_by("name"),
+        required=False,
+    )
+    gift = forms.ModelChoiceField(queryset=Gift.objects.order_by("name"), required=False)
+    tradition = forms.ModelChoiceField(
+        queryset=Tradition.objects.filter(is_active=True).order_by("name"), required=False
+    )
+    for _stat_name in REQUIRED_STATS:
+        locals()[_stat_name] = forms.IntegerField(
+            initial=STAT_DEFAULT_VALUE, min_value=1, max_value=5, required=False
+        )
+
+    def clean(self) -> dict[str, Any]:
+        cleaned = super().clean()
+        selected = [cleaned.get(name) for name in ("beginning", "path", "gift", "tradition")]
+        if any(selected) and not all(selected):
+            raise forms.ValidationError(_INCOMPLETE_KIT_MESSAGE)
+        if all(selected):
+            beginning = cleaned["beginning"]
+            tradition = cleaned["tradition"]
+            allowed = {row.tradition_id for row in beginning.cached_beginning_traditions}
+            if tradition.pk not in allowed:
+                self.add_error("tradition", _INVALID_KIT_TRADITION_MESSAGE)
+        return cleaned
+
+
 def _technique_form_defaults() -> dict[str, Any]:
     """Initial values for a fresh GET form, mirroring `TechniqueAnalyticsParams` defaults."""
     defaults = technique_analytics.TechniqueAnalyticsParams()
@@ -389,9 +426,27 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
     intercept this call - same discipline as `tuning_simulation_fragment`.
     """
     panel: technique_analytics.TechniquePanelData | None = None
+    kit_report: technique_analytics.StartingKitReport | None = None
 
-    if request.method == "POST":
+    if request.method == "POST" and request.POST.get("kit_evaluate"):
+        form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
+        kit_form = StartingKitForm(request.POST)
+        last_key = cache.get(_technique_last_key())
+        panel = cache.get(last_key) if last_key else None
+        if kit_form.is_valid() and kit_form.cleaned_data["beginning"]:
+            kit_report = technique_analytics.build_starting_kit_report(
+                kit_form.cleaned_data["beginning"],
+                kit_form.cleaned_data["path"],
+                kit_form.cleaned_data["gift"],
+                kit_form.cleaned_data["tradition"],
+                stats={
+                    name: kit_form.cleaned_data[name] or STAT_DEFAULT_VALUE
+                    for name in REQUIRED_STATS
+                },
+            )
+    elif request.method == "POST":
         form = TechniqueAnalyticsForm(request.POST)
+        kit_form = StartingKitForm()
         if form.is_valid():
             params = technique_analytics.TechniqueAnalyticsParams(
                 level=form.cleaned_data["level"],
@@ -405,6 +460,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
             _cache_technique_panel(params, panel)
     else:
         form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
+        kit_form = StartingKitForm()
         last_key = cache.get(_technique_last_key())
         cached_panel = cache.get(last_key) if last_key else None
         if cached_panel is not None:
@@ -418,7 +474,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
             else:
                 panel = cached_panel
 
-    context = {"form": form, "panel": panel}
+    context = {"form": form, "panel": panel, "kit_form": kit_form, "kit_report": kit_report}
     return render(request, "admin/tuning/_techniques_panel.html", context)
 
 

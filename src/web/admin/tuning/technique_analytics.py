@@ -19,17 +19,22 @@ simulation panel's cache-key/last-key-pointer contract - see that view's docstri
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from django.core.cache import cache
 
-from world.magic.services import technique_power_eval
+from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
+from world.checks.constants import LEVEL_POINTS_PER_LEVEL
+from world.magic.services import de_valuation, technique_power_eval
+from world.magic.services.cg_catalog import get_technique_options
 from world.magic.services.technique_effects import technique_catalog_revision
 from world.magic.types.technique_power import (
     EvalContext,
     ReferenceFrame,
     TechniquePowerReport,
 )
+from world.traits.constants import STAT_DISPLAY_DIVISOR, TraitType
+from world.traits.models import PointConversionRange
 
 #: Sort-key identifiers, named constants (not bare string literals) so the
 #: comparisons in `_sort_value` don't trip `tools/lint_string_literal.py`.
@@ -55,6 +60,8 @@ _ROLL_MODIFIER_DEFAULT = 0
 #: 24h - matches `_SIMULATION_CACHE_TIMEOUT` in `web.admin.tuning.views`; a
 #: catalog-wide evaluation run should outlive a single admin session.
 _CORPUS_CACHE_TIMEOUT = 60 * 60 * 24
+
+INVALID_TRADITION_MESSAGE = "Tradition is not available for this Beginning."
 
 
 def resolve_sort_key(sort: str) -> str:
@@ -91,6 +98,35 @@ class TechniqueRow:
 
 
 @dataclass(frozen=True, slots=True)
+class TechniqueValuationTotals:
+    """Panel-wide DE totals split by confidence instead of hiding estimates."""
+
+    formula_baseline_de: float = 0.0
+    estimated_baseline_de: float = 0.0
+    formula_amplified_de: float = 0.0
+    estimated_amplified_de: float = 0.0
+
+
+@dataclass(frozen=True, slots=True)
+class StartingKitReport:
+    """A real CG combination evaluated as one starting kit."""
+
+    beginning_name: str
+    path_name: str
+    gift_name: str
+    tradition_name: str
+    stats: dict[str, int]
+    roller_points: int
+    reports: tuple[TechniquePowerReport, ...]
+    baseline_de: float
+    amplified_de: float
+    formula_baseline_de: float
+    estimated_baseline_de: float
+    formula_amplified_de: float
+    estimated_amplified_de: float
+
+
+@dataclass(frozen=True, slots=True)
 class TechniquePanelData:
     """Everything the `_techniques_panel.html` fragment renders (#3279 Task 3)."""
 
@@ -104,6 +140,7 @@ class TechniquePanelData:
     provenance_summary: dict[str, int]
     params: TechniqueAnalyticsParams
     reference: ReferenceFrame
+    totals: TechniqueValuationTotals = field(default_factory=TechniqueValuationTotals)
 
 
 def _corpus_cache_key(params: TechniqueAnalyticsParams) -> str:
@@ -203,6 +240,12 @@ def build_technique_panel(params: TechniqueAnalyticsParams) -> TechniquePanelDat
 
     sort = resolve_sort_key(params.sort)
     rows.sort(key=lambda row: _sort_value(row, sort))
+    totals = TechniqueValuationTotals(
+        formula_baseline_de=sum(report.formula_baseline_de for report in reports),
+        estimated_baseline_de=sum(report.estimated_baseline_de for report in reports),
+        formula_amplified_de=sum(report.formula_amplified_de for report in reports),
+        estimated_amplified_de=sum(report.estimated_amplified_de for report in reports),
+    )
 
     return TechniquePanelData(
         rows=rows,
@@ -210,4 +253,82 @@ def build_technique_panel(params: TechniqueAnalyticsParams) -> TechniquePanelDat
         provenance_summary=_provenance_summary(reports),
         params=params,
         reference=reference,
+        totals=totals,
+    )
+
+
+def starting_stats_roller_points(stats: dict[str, int]) -> int:
+    """Convert CG display-scale stats to a representative level-one check pool.
+
+    A technique has no single check type, so the kit report uses the mean of the
+    twelve starting stat pools plus the level-one floor. This preserves the real
+    CG allocation (rather than the catalog's level-10 anchor) while keeping the
+    report honest about being a representative combat context.
+    """
+    values = [stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS]
+    converted = [
+        PointConversionRange.calculate_points(TraitType.STAT, value * STAT_DISPLAY_DIVISOR)
+        for value in values
+    ]
+    if not any(converted):
+        converted = [value * STAT_DISPLAY_DIVISOR for value in values]
+    return round(sum(converted) / len(converted)) + LEVEL_POINTS_PER_LEVEL
+
+
+def build_starting_kit_report(
+    beginning,
+    path,
+    gift,
+    tradition,
+    *,
+    stats: dict[str, int] | None = None,
+) -> StartingKitReport:
+    """Evaluate the authored Beginning/path/gift/tradition starter pool together.
+
+    This deliberately uses ``get_technique_options`` instead of duplicating the
+    path/tradition union rule. The report prices every authored option in that
+    combination; the CG pick budget remains a separate player-choice concern.
+    """
+    stats = stats or dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+    allowed_traditions = {row.tradition_id for row in beginning.cached_beginning_traditions}
+    if tradition.pk not in allowed_traditions:
+        raise ValueError(INVALID_TRADITION_MESSAGE)
+
+    options = get_technique_options(path, gift, tradition)
+    techniques = {technique.pk: technique for technique in [*options.pool, *options.tradition]}
+    ordered = [techniques[key] for key in sorted(techniques)]
+    context = EvalContext(
+        level=1,
+        thread_level=1,
+        roller_points=starting_stats_roller_points(stats),
+        target_difficulty=25,
+        roll_modifier=0,
+    )
+    reference = de_valuation.compute_reference_frame(context)
+    multiplier_cache = {}
+    bands = de_valuation.matchup_bands(context)
+    reports = tuple(
+        technique_power_eval.evaluate_technique(
+            technique,
+            context,
+            reference,
+            _multiplier_cache=multiplier_cache,
+            _bands=bands,
+        )
+        for technique in ordered
+    )
+    return StartingKitReport(
+        beginning_name=beginning.name,
+        path_name=path.name,
+        gift_name=gift.name,
+        tradition_name=tradition.name,
+        stats=dict(stats),
+        roller_points=context.roller_points,
+        reports=reports,
+        baseline_de=sum(report.baseline_de for report in reports),
+        amplified_de=sum(report.amplified_de for report in reports),
+        formula_baseline_de=sum(report.formula_baseline_de for report in reports),
+        estimated_baseline_de=sum(report.estimated_baseline_de for report in reports),
+        formula_amplified_de=sum(report.formula_amplified_de for report in reports),
+        estimated_amplified_de=sum(report.estimated_amplified_de for report in reports),
     )

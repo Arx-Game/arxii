@@ -89,6 +89,8 @@ class TechniquePowerEvalDamageTests(TestCase):
         self.assertAlmostEqual(report.baseline_de, expected_de, places=9)
         self.assertEqual(len(report.valuations), 1)
         self.assertEqual(report.valuations[0].kind, "damage")
+        self.assertAlmostEqual(report.formula_baseline_de, report.baseline_de)
+        self.assertEqual(report.estimated_baseline_de, 0.0)
 
     def test_amplified_power_matches_role_band_pure_helpers(self) -> None:
         """amplified_power - baseline_power == int(blend) + int(specialty) at thread_level."""

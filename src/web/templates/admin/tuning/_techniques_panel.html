@@ -109,8 +109,44 @@
   </div>
   <div class="tuning-field">
     <button type="submit">{% translate "Evaluate catalog" %}</button>
+    <button type="submit" id="panel-techniques-refresh" name="refresh" value="1">{% translate "Refresh" %}</button>
   </div>
 </form>
+
+<section class="starting-kit">
+  <h3>{% translate "Starting kit report" %}</h3>
+  <p>{% translate "Evaluate the authored path/tradition technique pool at level 1 using the selected Beginning's starting context. This prices the available kit together; it is not a cast-readiness certificate." %}</p>
+  <form class="tuning-form" method="post" hx-post="{% url 'admin_tuning_techniques' %}" hx-target="#panel-techniques">
+    {% csrf_token %}
+    <input type="hidden" name="kit_evaluate" value="1">
+    {% for field in kit_form %}
+    <div class="tuning-field">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {{ field.errors }}
+    </div>
+    {% endfor %}
+    <div class="tuning-field"><button type="submit">{% translate "Evaluate starting kit" %}</button></div>
+    {{ kit_form.non_field_errors }}
+  </form>
+</section>
+
+{% if kit_report %}
+<section class="starting-kit-summary">
+  <p><strong>{{ kit_report.beginning_name }}</strong> / {{ kit_report.path_name }} / {{ kit_report.gift_name }} / {{ kit_report.tradition_name }}
+    &middot; {% translate "representative starting roller points" %}: {{ kit_report.roller_points }}</p>
+  <p>{% translate "Kit Base DE" %}: <strong>{{ kit_report.baseline_de|floatformat:2 }}</strong>
+    &middot; {% translate "Kit Anchor DE" %}: <strong>{{ kit_report.amplified_de|floatformat:2 }}</strong></p>
+  <p>{% translate "Formula/parsed Base" %}: {{ kit_report.formula_baseline_de|floatformat:2 }}
+    &middot; {% translate "Estimated Base" %}: {{ kit_report.estimated_baseline_de|floatformat:2 }}</p>
+  <ul class="zero-bucket-list">
+    {% for report in kit_report.reports %}
+    <li>{{ report.name }}: {{ report.baseline_de|floatformat:2 }} DE
+      {% for flag in report.flags %}<span class="badge">{{ flag }}</span>{% endfor %}</li>
+    {% empty %}<li>{% translate "No techniques are authored for this combination." %}</li>{% endfor %}
+  </ul>
+</section>
+{% endif %}
 
 {% if panel %}
 <p>
@@ -118,6 +154,13 @@
   <strong>{{ panel.reference.outgoing_dpr|floatformat:2 }}</strong>
   ({{ panel.reference.source_label }})
 </p>
+<p class="provenance-summary">
+  <span>{% translate "Formula/parsed Base" %}: {{ panel.totals.formula_baseline_de|floatformat:2 }}</span>
+  <span>{% translate "Estimated Base" %}: {{ panel.totals.estimated_baseline_de|floatformat:2 }}</span>
+  <span>{% translate "Formula/parsed Anchor" %}: {{ panel.totals.formula_amplified_de|floatformat:2 }}</span>
+  <span>{% translate "Estimated Anchor" %}: {{ panel.totals.estimated_amplified_de|floatformat:2 }}</span>
+</p>
+<p>{% translate "DE is a combat-impact valuation, not proof that a technique is executable." %}</p>
 
 <table class="tuning-table">
   <thead>
