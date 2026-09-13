@@ -14,6 +14,15 @@ model with no rows behind it. Each visible row also carries a stock-admin
 change-form link (`_queue_row`): the workbench editor only exposes prose
 fields, so that link is how an author reaches the row's other fields.
 
+#3828 turned the page into a writing pass. `QueueFilters` is the one
+parser/serializer of the four filter params; an absent `?status=` means
+`unwritten` (To write) and `unreviewed` means written-and-not-reviewed (To
+review). The queue's title carries the filtered count, its response sets
+`HX-Replace-Url` so a reload keeps the filters, and each row link hands the
+editor `queue=` (the filter querystring) and `pos=` (its index), which
+`_queue_nav` turns into the editor's Next control: the row after this one, or
+the row that shifted into its slot once a stamp has removed it.
+
 Task 4 gates the dashboard on a linked `ContentContributor` (see
 `web.admin.authoring.contributors`): an unlinked account gets the setup panel
 in place of the stats/queue skeleton, and `authoring_setup` is the plain-POST
@@ -295,7 +304,7 @@ def authoring_dashboard(request: HttpRequest) -> HttpResponse:
 
 @superuser_required
 def authoring_stats_fragment(request: HttpRequest) -> HttpResponse:
-    """Per-domain rollup panel: rows/unwritten/unreviewed/word counts."""
+    """Per-domain rollup panel: rows / to write / to review / word counts."""
     _, stats = build_backlog()
     context = {"stats": stats}
     return render(request, "admin/authoring/_stats_panel.html", context)

@@ -96,6 +96,21 @@ class TestAuthoringStatsFragment(AuthoringViewsTestCase):
         self.assertIn("traits", body)
         self.assertIn(">2<", body)
 
+    def test_columns_use_the_queue_vocabulary(self) -> None:
+        """Stats and queue agree: To write / To review, the latter written and not reviewed."""
+        self._trait("Alpha", "One two three four words here.")
+        self._trait("Beta", "One two three.", written=True)
+        self._trait("Gamma", "One two.", written=True, reviewed=True)
+
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring_stats")).content.decode()
+        self.assertIn("<th>To write</th>", body)
+        self.assertIn("<th>To review</th>", body)
+        self.assertNotIn("Unreviewed", body)
+        cells = re.findall(r"<td>(\d+)</td>", body)
+        # rows, to write, to review, words total, words to write
+        self.assertEqual(cells, ["3", "1", "1", "11", "6"])
+
 
 class TestAuthoringQueueFragment(AuthoringViewsTestCase):
     def test_staff_non_superuser_forbidden(self) -> None:
