@@ -136,6 +136,10 @@ points it already bakes in (from the port):
 - **Mandatory `verify-against-code` pass:** before the spec is finalized, run
   `tools/skills/verify-against-code/` and embed the anti-reinvention ledger as a
   section of the spec.
+- **Mandatory `schema-shape` pass:** whenever the design proposes a new
+  model, table, FK, column, or primary-key choice, run
+  `tools/skills/schema-shape/` and embed its six-question answers in the
+  spec.
 - **Spec-review dispatch:** when the brainstorming skill reaches spec review,
   dispatch with the prompt at
   `tools/skills/issue-to-merged-pr/spec-document-reviewer-prompt.md`.
