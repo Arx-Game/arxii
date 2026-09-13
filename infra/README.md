@@ -160,9 +160,12 @@ long-lived, rotate on suspicion):**
   out-of-band R2 credential (distinct from Linode, scoped to the offsite
   bucket; this is what makes the 3-2-1 independent)
 - `ARXII_DJANGO_SUPERUSER_PASSWORD` — password for the first-run Django/Evennia
-  superuser; consumed once by `evennia createsuperuser --noinput`, then
+  superuser; consumed once by `python -m django createsuperuser --noinput`, then
   long-lived (it's still the correct password if you ever delete/recreate the
-  superuser). Username + email are non-secret Variables (see below) so they
+  superuser). That command resolves to `core_management`'s override, which heals
+  the row Django's version leaves without Evennia's first-save setup (#3812: the
+  bare row could log in and run no command); the server-start sweep heals any
+  such row on every deploy regardless. Username + email are non-secret Variables (see below) so they
   default sensibly without you touching the Environment Variables page; just
   the password is a Secret.
 - `ANSIBLE_SSH_PRIVATE_KEY` — private half of the SSH admin keypair Ansible uses
