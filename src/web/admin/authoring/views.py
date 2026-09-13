@@ -68,7 +68,7 @@ form, checked or not, so its presence alone marks a real submission.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -79,7 +79,7 @@ from django.utils import timezone
 from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
-from core.app_domains import credited_content_models, resolve_model_by_name
+from core.app_domains import credited_content_models, domain_of, resolve_model_by_name
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
@@ -430,7 +430,103 @@ class _EditorFlags:
     field_errors: dict[str, list[str]] | None = None
 
 
-def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
+#: The end-of-list line per status (#3828); `_queue_nav` appends " in <domain>" when
+#: a domain filter is set, and the widen link clears it.
+_EXHAUSTED_TEXT = {
+    BacklogStatusFilter.UNWRITTEN: "Nothing left to write",
+    BacklogStatusFilter.UNREVIEWED: "Nothing left to review",
+    BacklogStatusFilter.PLACEHOLDER: "No placeholder text left",
+    BacklogStatusFilter.ALL: "Nothing left",
+}
+
+
+@dataclass
+class _QueueNav:
+    """Where this row sits in the list the writer opened it from, and what comes after (#3828).
+
+    `position` is 1-based and `None` once the row has left the list (it was
+    just credited or reviewed out of it, or a change-form deep link opened a
+    row the default filter never showed). `next_url` is the editor link for
+    the successor; when there is none, `exhausted_text` says so and
+    `widen_url` (only when a domain filter was set) reopens the dashboard
+    with that domain cleared.
+    """
+
+    total: int
+    count_noun: str
+    scope_label: str
+    position: int | None = None
+    next_url: str | None = None
+    next_identity: str = ""
+    exhausted_text: str = ""
+    widen_url: str | None = None
+
+
+def _nav_params(params: QueryDict) -> tuple[QueueFilters, int | None]:
+    """The `queue=` filter querystring and `pos=` index an editor request carries.
+
+    `queue` is one opaque param holding the queue's own querystring (see
+    `_editor_url`) rather than the four filter params spread out, because the
+    editor already uses `model` for the row's own label and the queue uses it
+    for the model filter. A non-numeric or absent `pos` is `None`.
+    """
+    filters = QueueFilters.from_params(QueryDict(params.get("queue", "")))
+    raw_pos = params.get("pos", "")
+    return filters, int(raw_pos) if raw_pos.isdigit() else None
+
+
+def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) -> _QueueNav:
+    """Resolve the successor of `target` in the filtered queue (#3828).
+
+    Three cases, in order:
+
+    - the row is in the filtered list at index `i`: the successor is
+      `filtered[i + 1]`, so skipping a row moves past it, never back to the head;
+    - the row is not in the list but `pos` is known: it was just credited or
+      reviewed out of the list, and `filtered[pos]` is the row that shifted up
+      into its slot - the same row the arrow pointed at before the stamp;
+    - neither: a deep link with no queue context, and the head of the list is
+      the most useful place to send the writer.
+
+    One `build_backlog()` scan per editor request, the same cost the queue panel
+    already pays; the module docstring of `backlog.py` owns the scale ceiling.
+    """
+    rows, _ = build_backlog()
+    filtered = _filtered_rows(rows, filters)
+    label = f"{domain_of(target.model)}.{target.model.__name__}"
+    current_pk = target.instance.pk
+    index = next(
+        (i for i, row in enumerate(filtered) if row.model_label == label and row.pk == current_pk),
+        None,
+    )
+    if index is not None:
+        next_pos = index + 1
+    elif pos is not None:
+        next_pos = pos
+    else:
+        next_pos = 0
+
+    nav = _QueueNav(
+        total=len(filtered),
+        count_noun=filters.count_noun,
+        scope_label=filters.scope_label,
+        position=None if index is None else index + 1,
+    )
+    if next_pos < len(filtered):
+        successor = filtered[next_pos]
+        nav.next_url = _editor_url(successor.model_label, successor.pk, filters, next_pos)
+        nav.next_identity = successor.identity
+        return nav
+
+    text = _EXHAUSTED_TEXT.get(filters.status, "Nothing left")
+    nav.exhausted_text = f"{text} in {filters.domain}." if filters.domain else f"{text}."
+    if filters.domain:
+        nav.widen_url = _dashboard_url(replace(filters, domain="", model=""))
+    return nav
+
+
+def _build_editor_context(target: _EditorTarget, flags: _EditorFlags, params: QueryDict) -> dict:
+    filters, pos = _nav_params(params)
     context = {
         "model_label": target.model_label,
         "pk": target.pk,
@@ -441,8 +537,13 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
         "needs_setup": flags.needs_setup,
         "freeze_sentence": _FREEZE_SENTENCE,
         "export_sentence": _EXPORT_SENTENCE,
+        # Carried back on every POST as hidden inputs, so a Save or a credit
+        # re-renders with the arrow still pointing at the right row (#3828).
+        "queue_query": filters.as_query(),
+        "pos": "" if pos is None else pos,
     }
     if target.model is not None and target.instance is not None:
+        context["nav"] = _queue_nav(target, filters, pos)
         field_errors = flags.field_errors or {}
         prose_names = prose_fields_for(target.model)
         prose_set = set(prose_names)
@@ -477,7 +578,10 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
 def _render_editor_fragment(
     request: HttpRequest, target: _EditorTarget, flags: _EditorFlags | None = None
 ) -> HttpResponse:
-    context = _build_editor_context(target, flags or _EditorFlags())
+    # The queue context (`queue=`/`pos=`) rides the GET querystring on open and
+    # the POST body (hidden inputs) on every action, so read whichever this is.
+    params = request.POST if request.method == "POST" else request.GET
+    context = _build_editor_context(target, flags or _EditorFlags(), params)
     return render(request, "admin/authoring/_editor_panel.html", context)
 
 

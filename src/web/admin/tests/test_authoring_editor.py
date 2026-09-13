@@ -1,5 +1,6 @@
 """Tests for the Authoring Workbench row editor fragments (#3019 Task 5)."""
 
+import re
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
@@ -171,7 +172,133 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertIn(f'hx-post="{reverse("admin_authoring_editor_save")}"', body)
         self.assertIn(f'hx-post="{reverse("admin_authoring_editor_credit")}"', body)
         self.assertIn(f'hx-post="{reverse("admin_authoring_editor_review")}"', body)
-        self.assertEqual(body.count('hx-target="#authoring-editor"'), 3)
+        buttons = re.findall(r"<button[^>]*hx-post=[^>]*>", body, re.DOTALL)
+        self.assertEqual(len(buttons), 3)
+        for button in buttons:
+            self.assertIn('hx-target="#authoring-editor"', button)
+
+
+class TestAuthoringEditorNext(AuthoringEditorTestCase):
+    """The Next control: the row after this one in the list the writer is looking at (#3828).
+
+    Every case here would fail if the editor went back to knowing only
+    `model`/`pk`: it could neither name a successor nor keep naming the same
+    one after the current row has been credited out of the list.
+    """
+
+    #: Each `CodexEntryFactory` row drags a `CodexSubject` and `CodexCategory` in
+    #: with it, and both are credited models in the same domain that sort ahead
+    #: of entries - so these tests narrow the queue to the entry model, exactly
+    #: as a writer picking "CodexEntry" in the model dropdown would.
+    ENTRIES = "model=codex.CodexEntry"
+
+    def _next_link(self, body: str) -> str | None:
+        match = re.search(r'class="editor-next"[^>]*hx-get="([^"]*)"', body)
+        return match.group(1) if match else None
+
+    def _open(self, entry: CodexEntry, **params: object):
+        self.client.force_login(self.super)
+        return self.client.get(
+            reverse("admin_authoring_editor"),
+            {"model": "codex.CodexEntry", "pk": entry.pk, **params},
+        )
+
+    def test_next_points_at_the_row_after_this_one_in_the_queue(self) -> None:
+        first = self._entry(name="First")
+        second = self._entry(name="Second")
+        self._entry(name="Third")
+
+        body = self._open(first, queue=self.ENTRIES, pos=0).content.decode()
+
+        link = self._next_link(body)
+        self.assertIsNotNone(link, "no Next link rendered")
+        self.assertIn(f"pk={second.pk}", link)
+        self.assertIn("pos=1", link)
+        # The identity string is the row's natural key ("<subject>, Second"), so
+        # match the name inside it rather than the whole key.
+        self.assertRegex(body, r"Next: [^<]*Second")
+        self.assertIn("Row 1 of 3 to write", body)
+
+    def test_next_is_by_position_so_a_skipped_row_stays_behind(self) -> None:
+        self._entry(name="First")
+        second = self._entry(name="Second")
+        third = self._entry(name="Third")
+
+        body = self._open(second, queue=self.ENTRIES, pos=1).content.decode()
+
+        link = self._next_link(body)
+        self.assertIn(f"pk={third.pk}", link)
+        self.assertIn("pos=2", link)
+
+    def test_next_after_credit_points_at_the_row_that_took_its_place(self) -> None:
+        first = self._entry(name="First")
+        second = self._entry(name="Second")
+        self.client.force_login(self.super)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_credit"),
+            {"model": "codex.CodexEntry", "pk": first.pk, "queue": self.ENTRIES, "pos": 0},
+        )
+        body = resp.content.decode()
+
+        link = self._next_link(body)
+        self.assertIsNotNone(link, "Next vanished once the row left the To write list")
+        self.assertIn(f"pk={second.pk}", link)
+        self.assertIn("pos=0", link)
+        self.assertNotIn("Row 1 of", body)
+        self.assertIn("1 to write", body)
+
+    def test_next_from_a_deep_link_uses_the_head_of_the_default_queue(self) -> None:
+        """A change-form link carries no queue context: Next still points somewhere useful."""
+        written = self._entry(name="Written", written_by=self.writer)
+
+        body = self._open(written).content.decode()
+
+        link = self._next_link(body)
+        self.assertIsNotNone(link)
+        self.assertIn("pos=0", link)
+        self.assertIn("queue=&", link)
+        self.assertNotIn("Row ", body)
+
+    def test_exhausted_filter_says_so_and_offers_to_widen(self) -> None:
+        only = self._entry(name="Only")
+
+        body = self._open(only, queue=f"domain=codex&{self.ENTRIES}", pos=0).content.decode()
+
+        self.assertIsNone(self._next_link(body))
+        self.assertIn("Nothing left to write in codex.", body)
+        self.assertIn(f'href="{reverse("admin_authoring")}"', body)
+
+    def test_exhausted_with_no_domain_has_nothing_to_widen(self) -> None:
+        only = self._entry(name="Only")
+
+        body = self._open(only, queue=self.ENTRIES, pos=0).content.decode()
+
+        self.assertIn("Nothing left to write.", body)
+        self.assertNotIn("Widen", body)
+
+    def test_post_forms_carry_queue_and_pos_so_a_save_keeps_next(self) -> None:
+        first = self._entry(name="First")
+        second = self._entry(name="Second")
+
+        body = self._open(first, queue=self.ENTRIES, pos=0).content.decode()
+        self.assertIn(f'<input type="hidden" name="queue" value="{self.ENTRIES}">', body)
+        self.assertIn('<input type="hidden" name="pos" value="0">', body)
+
+        resp = self.client.post(
+            reverse("admin_authoring_editor_save"),
+            {
+                "model": "codex.CodexEntry",
+                "pk": first.pk,
+                "queue": self.ENTRIES,
+                "pos": 0,
+                "lore_content": "Saved prose.",
+            },
+        )
+        link = self._next_link(resp.content.decode())
+        self.assertIsNotNone(link, "Next vanished after a plain Save")
+        self.assertIn(f"pk={second.pk}", link)
+        self.assertIn("queue=model%3Dcodex.CodexEntry", link)
 
 
 class TestAuthoringEditorSave(AuthoringEditorTestCase):

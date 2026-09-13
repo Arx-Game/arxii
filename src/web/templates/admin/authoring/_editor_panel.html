@@ -28,7 +28,20 @@
   }
 </style>
 
-<h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
+<div class="editor-head">
+  <h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
+  {% if nav %}
+  <span class="editor-pos">
+    {% if nav.position %}
+    {% blocktranslate with position=nav.position total=nav.total noun=nav.count_noun scope=nav.scope_label trimmed %}
+    Row {{ position }} of {{ total }} {{ noun }} &middot; {{ scope }}
+    {% endblocktranslate %}
+    {% else %}
+    {{ nav.total }} {{ nav.count_noun }} &middot; {{ nav.scope_label }}
+    {% endif %}
+  </span>
+  {% endif %}
+</div>
 
 {% if error %}
 <p class="errornote">{{ error }}</p>
@@ -97,6 +110,12 @@
   {% csrf_token %}
   <input type="hidden" name="model" value="{{ model_label }}">
   <input type="hidden" name="pk" value="{{ pk }}">
+  {% comment %}
+  The queue this row was opened from and its index in it, carried through every
+  action so the Next control still resolves after a save or a credit (#3828).
+  {% endcomment %}
+  <input type="hidden" name="queue" value="{{ queue_query }}">
+  <input type="hidden" name="pos" value="{{ pos }}">
   {% for field in prose_fields %}
   <div class="prose-field">
     <label for="id_{{ field.name }}">{{ field.name }}</label>
@@ -119,6 +138,19 @@
             hx-target="#authoring-editor" hx-swap="innerHTML">
       {% translate "Mark reviewed" %}
     </button>
+    {% if nav.next_url %}
+    <a class="editor-next" href="#authoring-editor" hx-get="{{ nav.next_url }}"
+       hx-target="#authoring-editor" hx-swap="innerHTML show:top">
+      {% blocktranslate with identity=nav.next_identity %}Next: {{ identity }}{% endblocktranslate %} &rarr;
+    </a>
+    {% elif nav %}
+    <span class="editor-exhausted">
+      {{ nav.exhausted_text }}
+      {% if nav.widen_url %}
+      <a href="{{ nav.widen_url }}">{% translate "Widen to all domains" %}</a>
+      {% endif %}
+    </span>
+    {% endif %}
   </div>
 </form>
 
