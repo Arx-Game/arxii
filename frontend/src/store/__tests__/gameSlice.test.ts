@@ -49,6 +49,7 @@ interface RoomData {
   is_owner: boolean;
   hub: HubTidings | null;
   is_public: boolean;
+  viewer_place_id: number | null;
 }
 
 interface Session {
@@ -113,6 +114,7 @@ const createRoomData = (
   is_owner: false,
   hub: null,
   is_public: false,
+  viewer_place_id: null,
 });
 
 const createRoomStateObject = (

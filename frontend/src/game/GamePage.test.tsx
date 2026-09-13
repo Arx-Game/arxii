@@ -335,6 +335,7 @@ function seedActiveSceneWithRoom() {
         is_owner: false,
         is_public: true,
         hub: null,
+        viewer_place_id: null,
       },
     })
   );

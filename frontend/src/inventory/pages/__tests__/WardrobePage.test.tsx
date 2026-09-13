@@ -458,6 +458,7 @@ describe('WardrobePage', () => {
             is_owner: false,
             is_public: false,
             hub: null,
+            viewer_place_id: null,
           },
         })
       );
