@@ -38,6 +38,8 @@ interface RoomData {
   npc_givers?: NpcGiver[];
   /** #3288 — true when ANY occupant is concealed. Identity-free OOC disclosure. */
   has_unseen_presence?: boolean;
+  /** The viewer's own current Place, if any (#3810); sourced from the room_state push. */
+  viewer_place_id: number | null;
 }
 
 /**

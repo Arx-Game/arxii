@@ -64,6 +64,18 @@ def ensure_scene_for_location(
     return scene
 
 
+def _broadcast_room_state_for_persona(persona: Persona) -> None:
+    """Re-broadcast room_state at the persona's character's location, if any.
+
+    Guards on location being set (and carrying the broadcast hook) the same way
+    ``world.stealth.services.refresh_room_state`` does, since not every persona
+    fixture (or off-screen character) has a real room to broadcast into.
+    """
+    location = persona.character_sheet.character.location
+    if location is not None and hasattr(location, "_broadcast_room_state"):
+        location._broadcast_room_state()  # noqa: SLF001
+
+
 def join_place(
     *,
     place: Place,
@@ -89,6 +101,7 @@ def join_place(
         place=place,
         persona=persona,
     )
+    _broadcast_room_state_for_persona(persona)
     return presence
 
 
@@ -128,4 +141,5 @@ def leave_place(
         place=place,
         persona=persona,
     ).delete()
+    _broadcast_room_state_for_persona(persona)
     return deleted > 0

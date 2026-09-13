@@ -149,11 +149,13 @@ vi.mock('@/game/playQueries', async (importOriginal) => {
 // ---------------------------------------------------------------------------
 // Scene toolset (#2156 Task 6): ConsentPrompt/ActionPanel/PendingActionAttachments
 // are self-fetching components with heavy internal query machinery unrelated to
-// this test's concern (toolset mounting + isAtPlace wiring) — stubbed out as
+// this test's concern (toolset mounting + isAtPlace wiring), stubbed out as
 // lightweight divs, mirroring SceneDetailPage.test.tsx's proven pattern. PlaceBar
-// is stubbed too: `isAtPlace` is derived by GamePage's OWN `['scene-places', ...]`
-// query (query-reuse, not a callback prop), so exercising it only requires
-// controlling `fetchPlaces` — it doesn't require PlaceBar's real render tree.
+// is stubbed too. As of #3810, `isAtPlace`/`currentPlaceId` are derived from
+// Redux's `roomData.viewer_place_id`, not from this query. GamePage's OWN
+// `['scene-places', ...]` query is kept only to resolve the current place's
+// display NAME, so `fetchPlaces` is still mocked here to control that name
+// lookup, but it no longer drives whether `isAtPlace` is true.
 // ---------------------------------------------------------------------------
 
 vi.mock('@/scenes/components/ConsentPrompt', () => ({
@@ -319,7 +321,7 @@ function seedWhisperThread() {
 // carry both together (see handleRoomStatePayload.ts), and GamePage derives the
 // Place-bar/isAtPlace room id from `session.room.id`, so the toolset needs a
 // seeded room to mount PlaceBar and derive `isAtPlace` at all.
-function seedActiveSceneWithRoom() {
+function seedActiveSceneWithRoom(viewerPlaceId: number | null = null) {
   store.dispatch(startSession(ACTIVE_NAME));
   store.dispatch(
     setSessionRoom({
@@ -335,6 +337,7 @@ function seedActiveSceneWithRoom() {
         is_owner: false,
         is_public: true,
         hub: null,
+        viewer_place_id: viewerPlaceId,
       },
     })
   );
@@ -1033,9 +1036,9 @@ describe('GamePage', () => {
       expect(screen.queryByTestId('pending-action-attachments')).not.toBeInTheDocument();
     });
 
-    it('passes isAtPlace=true to ModeSelector, offering the tt mode, when a place has viewer_is_present:true', async () => {
+    it('passes isAtPlace=true to ModeSelector, offering the tt mode, when roomData.viewer_place_id is set (#3810)', async () => {
       store.dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
+      seedActiveSceneWithRoom(9);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: true }],
       });
@@ -1049,9 +1052,9 @@ describe('GamePage', () => {
       expect(await screen.findByText('Tabletalk')).toBeInTheDocument();
     });
 
-    it('does not offer the tt mode when the viewer is not present at any place', async () => {
+    it('does not offer the tt mode when roomData.viewer_place_id is null (#3810)', async () => {
       store.dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
+      seedActiveSceneWithRoom(null);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: false }],
       });

@@ -707,7 +707,11 @@ plus the reachability rule (#3787).
   predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
   the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
   venue's reply target is refused, never widened, and both refusals preserve the writer's
-  draft. See ADR-0293.
+  draft. Its rules are also deliberately mirrored client-side, in
+  `frontend/src/scenes/replyReachability.ts` (#3787) and `frontend/src/scenes/tagReachability.ts`
+  (#3810), so the composer can give a pre-emptive refusal before the server's own
+  authoritative check runs; that mirroring is intentional and kept in step with
+  `persona_can_receive`, not eliminated. See ADR-0293.
 - **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
   `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
   keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round

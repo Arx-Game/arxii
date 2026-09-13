@@ -106,6 +106,8 @@ export interface RoomStateObject {
   is_public?: boolean;
   /** Whether this object has an active BOARD-kind MissionGiver bound to it (#3044). */
   is_mission_board?: boolean;
+  /** The Place this character currently occupies, if any (#3810). Only ever set on `characters` entries. */
+  place_id?: number | null;
 }
 
 /** An active class-1+ NPC placement (Functionary) standing in this room (#3044). */
@@ -142,6 +144,8 @@ export interface RoomStatePayload {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  /** The caller's own current Place, if any (#3810); excluded from `characters` by design. */
+  viewer_place_id?: number | null;
   scene?: SceneSummary | null;
   hub?: HubTidings | null;
   /** Active NPC placements in this room (#3044); absent/empty when none stand here. */

@@ -29,6 +29,7 @@ import { createActionRequest } from '@/scenes/actionQueries';
 import { submitPose, fetchScene, sceneKeys, fetchPoseSubmission } from '@/scenes/queries';
 import type { SceneDetail } from '@/scenes/queries';
 import { replyReachability } from '@/scenes/replyReachability';
+import { tagReachability } from '@/scenes/tagReachability';
 import { excerptOf } from '@/lib/formatParser';
 
 export interface ComposerMode {
@@ -478,9 +479,29 @@ export function CommandInput({
     [replyTarget, isAtPlace, currentPlaceId, currentPlaceName]
   );
 
+  // #3810 -- the pre-emptive tag refusal: composerMode.targets (the real,
+  // server-validated target list) is rechecked against tagReachability the
+  // instant EITHER of two things changes: `composerMode.command` (a mode
+  // switch carrying a stale whisper target into e.g. Tabletalk,
+  // `handleModeChange` below), or `roomCharacters`/`isAtPlace`/
+  // `currentPlaceId` (a fresh room_state push moving an already-tagged
+  // target, or the actor's own place). One derived value, two triggers.
+  const tagRefusal = useMemo(
+    () =>
+      composerMode && composerMode.targets.length > 0
+        ? tagReachability(composerMode.targets, roomCharacters, composerMode.command, {
+            isAtPlace: isAtPlace ?? false,
+            currentPlaceId,
+            currentPlaceName,
+          })
+        : null,
+    [composerMode, roomCharacters, isAtPlace, currentPlaceId, currentPlaceName]
+  );
+
   const handleSubmit = useCallback(() => {
     if (!ready || submittingRef.current) return;
     if (replyRefusal && !replyRefusal.reachable) return;
+    if (tagRefusal && !tagRefusal.reachable) return;
     const trimmed = draft.content.trim();
     if (!trimmed) return;
     if (draft.content.length > MAX_POSE_LENGTH) {
@@ -810,6 +831,7 @@ export function CommandInput({
     replyTarget,
     onCancelReply,
     replyRefusal,
+    tagRefusal,
   ]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1020,6 +1042,17 @@ export function CommandInput({
           {replyRefusal.hint && <span className="text-muted-foreground">{replyRefusal.hint}</span>}
         </div>
       )}
+      {tagRefusal && !tagRefusal.reachable && (
+        <div
+          className="flex flex-col gap-0.5 border-l-2 border-destructive bg-destructive/10 px-3 py-1.5 text-xs"
+          data-testid="tag-refusal"
+          role="status"
+          aria-live="polite"
+        >
+          <strong className="text-destructive">{tagRefusal.reason}</strong>
+          {tagRefusal.hint && <span className="text-muted-foreground">{tagRefusal.hint}</span>}
+        </div>
+      )}
       <RichTextInput
         value={draft.content}
         onChange={handleChange}
@@ -1027,7 +1060,11 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={5}
         submitOnEnter={submitOnEnter}
-        submitDisabled={!ready || Boolean(replyRefusal && !replyRefusal.reachable)}
+        submitDisabled={
+          !ready ||
+          Boolean(replyRefusal && !replyRefusal.reachable) ||
+          Boolean(tagRefusal && !tagRefusal.reachable)
+        }
         disabled={draft.status === 'pending'}
         leftSlot={
           <div className="flex items-center gap-1">
