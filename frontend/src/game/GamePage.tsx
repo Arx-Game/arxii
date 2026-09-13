@@ -779,20 +779,27 @@ export function GamePage() {
   // untouched here; see the task report.)
   const placesRoomId = sceneId && roomData ? String(roomData.id) : undefined;
 
-  // `isAtPlace` (#2156): derived from the SAME `['scene-places', placesRoomId]`
-  // query key `PlaceBar` uses below, so React Query's cache dedupes the two
-  // fetches into one (query-reuse, chosen over a callback-prop approach per
-  // the task brief).
+  // #3810: `placesData` is kept ONLY to resolve a display NAME for the current
+  // place (cosmetic, used only in the pre-emptive refusal's hint text). The
+  // load-bearing boolean/id come from Redux's room_state push instead of this
+  // query's own `viewer_is_present` field, which is never invalidated by
+  // anyone's join/leave (confirmed: no caller anywhere calls
+  // queryClient.invalidateQueries(['scene-places', ...])) and so goes stale
+  // for up to the query's 5-minute staleTime, including for the viewer's OWN
+  // moves. `currentPlaceId` below is correct the instant a fresh room_state
+  // frame arrives instead.
   const { data: placesData } = useQuery({
     queryKey: ['scene-places', placesRoomId],
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
-  // #3760 Task 10 fix — `currentPlace` (not just the boolean) is threaded down to
-  // CommandInput so tt (tabletalk) can dispatch via executeAction with a real
-  // place kwarg, the same way say/whisper already do.
-  const currentPlace = placesData?.results?.find((place) => place.viewer_is_present);
-  const isAtPlace = !!currentPlace;
+  // #3760 Task 10 fix: `currentPlaceId` is threaded down to CommandInput so tt
+  // (tabletalk) can dispatch via executeAction with a real place kwarg, the
+  // same way say/whisper already do.
+  const currentPlaceId = roomData?.viewer_place_id ?? null;
+  const isAtPlace = currentPlaceId !== null;
+  const currentPlaceName =
+    placesData?.results?.find((place) => place.id === currentPlaceId)?.name ?? null;
 
   // Pending unlinked actions for the chip strip — only fetched once a scene
   // is active (personaId gated to null otherwise disables the query).
@@ -940,8 +947,8 @@ export function GamePage() {
               roomId={roomData?.id ?? null}
               roomName={roomName}
               isAtPlace={isAtPlace}
-              currentPlaceId={currentPlace?.id ?? null}
-              currentPlaceName={currentPlace?.name ?? null}
+              currentPlaceId={currentPlaceId}
+              currentPlaceName={currentPlaceName}
               conversationTabs={reference ? undefined : conversationTabs}
               speakingAs={speakingAsProps(activeEntry)}
               reference={reference}
