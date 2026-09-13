@@ -60,7 +60,7 @@ Nothing walks the tree; both are columns on the one thread row.
 `world.scenes.reachability.persona_can_receive` is the one predicate answering "can this
 persona receive content of this shape, right now" - a live spatial-presence question,
 distinct from `InteractionQuerySet.visible_to` (a read-access/privacy-tier question over
-history). It is read from two call sites, never duplicated:
+history). Server-side, it is read from two call sites, never duplicated:
 
 - **Tagging** (`create_interaction`'s `target_personas` handling): every named target is
   checked before any row is written. A target who fails the check raises
@@ -82,6 +82,15 @@ Both refusals translate through the same `{code, field, detail, hint}` 400 body
 and telnet alike. Neither ever widens the audience of an already-refused reply to make
 it land (ADR-0293, decision 1); the Place-to-Scene case above is not a widening, since
 the writer could already read what they're answering.
+
+`persona_can_receive`'s rules are also deliberately mirrored client-side, in
+`frontend/src/scenes/replyReachability.ts` (#3787, reply targets) and
+`frontend/src/scenes/tagReachability.ts` (#3810, tagged targets). Neither mirror
+replaces the server check above; both exist solely so the composer can give a
+pre-emptive refusal (disabled Send, inline hint) before the round trip that hits the
+server's own authoritative check. This duplication is intentional and must be kept in
+step with `persona_can_receive` whenever its rules change - it is not something to
+eliminate.
 
 **Reachability governs only player-authored addressing.** A resolved combat action's
 targets are written through `write_target_personas` directly, with no reachability check
