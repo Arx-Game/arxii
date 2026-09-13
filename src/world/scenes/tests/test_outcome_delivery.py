@@ -15,9 +15,13 @@ from django.db import transaction
 from django.test import TestCase
 from evennia.objects.objects import ObjectSessionHandler
 
+from actions.constants import ActionTargetType, ResolutionPhase
 from actions.factories import ActionTemplateFactory
+from actions.types import PendingActionResolution, StepResult
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
+from world.checks.types import CheckResult as RealCheckResult
 from world.conditions.factories import ConditionInstanceFactory, TreatmentTemplateFactory
 from world.conditions.types import TreatmentOutcome
 from world.magic.factories import TechniqueFactory
@@ -26,6 +30,7 @@ from world.scenes.action_constants import ActionDelivery, ActionRequestStatus, C
 from world.scenes.action_services import (
     _resolve_treatment_request,
     create_action_request,
+    create_and_resolve_area_action,
     respond_to_action_request,
 )
 from world.scenes.cast_services import create_cast_outcome_pose
@@ -34,6 +39,49 @@ from world.scenes.factories import SceneActionRequestFactory, SceneFactory
 from world.scenes.interaction_services import create_interaction, deliver_outcome_interaction
 from world.scenes.models import Persona
 from world.scenes.types import EnhancedSceneActionResult
+from world.traits.factories import CheckSystemSetupFactory
+
+
+def _pending_resolution_with_chart(chart: object, outcome: object) -> PendingActionResolution:
+    """A PendingActionResolution whose check_result is a REAL CheckResult, so
+    check_outcome_faces() (chart bands, not a MagicMock) can build faces from it."""
+    check_result = RealCheckResult(
+        check_type=None,
+        outcome=outcome,
+        chart=chart,
+        roller_rank=None,
+        target_rank=None,
+        rank_difference=0,
+        trait_points=0,
+        aspect_bonus=0,
+        total_points=0,
+    )
+    main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
+
+
+def _pending_resolution_partial_success() -> PendingActionResolution:
+    """A mocked (chart-less) resolution whose outcome is a Partial Success --
+    success_level 0, so the old wording rendered it as "Failure (Partial Success)"."""
+    check_result = MagicMock()
+    check_result.success_level = 0
+    check_result.outcome_name = "Partial Success"
+    main_result = StepResult(step_label="main", check_result=check_result, consequence_id=None)
+    return PendingActionResolution(
+        template_id=1,
+        character_id=1,
+        target_difficulty=45,
+        resolution_context_data={"character_id": 1, "challenge_instance_id": None},
+        current_phase=ResolutionPhase.COMPLETE,
+        main_result=main_result,
+    )
 
 
 def _placed_persona(room: object, db_key: str) -> Persona:
@@ -337,3 +385,118 @@ class CastOutcomePoseDeliveryTests(_ScenePipelineTestCase):
         ]
         assert vague_calls
         assert not bystander_calls
+
+
+class CheckOutcomeTheaterDeliveryTests(_ScenePipelineTestCase):
+    """The #3807 Part B roulette wheel reaches the roller and target, on commit only."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        setup = CheckSystemSetupFactory.create()
+        cls.chart = setup["charts"][0]
+        cls.outcome = setup["outcomes"]["partial"]
+
+    def _accept_with_chart(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _pending_resolution_with_chart(self.chart, self.outcome)
+        template = ActionTemplateFactory()
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="intimidate",
+        )
+        request.action_template = template
+        request.save(update_fields=["action_template"])
+        respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_initiator_and_target_get_roulette_not_bystander(self, mock_resolve: MagicMock) -> None:
+        initiator_char = self.initiator.character_sheet.character
+        target_char = self.target.character_sheet.character
+        bystander_char = self.bystander.character_sheet.character
+        initiator_char.msg = Mock()
+        target_char.msg = Mock()
+        bystander_char.msg = Mock()
+
+        with self.captureOnCommitCallbacks(execute=True):
+            self._accept_with_chart(mock_resolve)
+
+        def _has_roulette(mock_msg: Mock) -> bool:
+            return any("roulette_result" in c.kwargs for c in mock_msg.call_args_list)
+
+        assert _has_roulette(initiator_char.msg)
+        assert _has_roulette(target_char.msg)
+        assert not _has_roulette(bystander_char.msg)
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_roulette_never_fires_without_a_commit(self, mock_resolve: MagicMock) -> None:
+        """Mirrors RollbackDeliveryTests: TestCase's own wrapping transaction never
+        commits without captureOnCommitCallbacks, so the on_commit callback never runs."""
+        initiator_char = self.initiator.character_sheet.character
+        initiator_char.msg = Mock()
+
+        self._accept_with_chart(mock_resolve)
+
+        assert not any("roulette_result" in c.kwargs for c in initiator_char.msg.call_args_list)
+
+
+class AreaActionTheaterDeliveryTests(_ScenePipelineTestCase):
+    """An area action's roulette wheel reaches the roller only (#3807 Part B) --
+    no target persona means no target to reveal it to."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        super().setUpTestData()
+        setup = CheckSystemSetupFactory.create()
+        cls.chart = setup["charts"][0]
+        cls.outcome = setup["outcomes"]["success"]
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_area_action_roulette_reaches_roller_only(self, mock_resolve: MagicMock) -> None:
+        initiator_char = self.initiator.character_sheet.character
+        bystander_char = self.bystander.character_sheet.character
+        initiator_char.msg = Mock()
+        bystander_char.msg = Mock()
+
+        mock_resolve.return_value = _pending_resolution_with_chart(self.chart, self.outcome)
+        template = ActionTemplateFactory(target_type=ActionTargetType.AREA, category="social")
+        ActionPointPool.get_or_create_for_character(initiator_char)
+
+        with self.captureOnCommitCallbacks(execute=True):
+            create_and_resolve_area_action(
+                scene=self.scene,
+                initiator_persona=self.initiator,
+                action_template=template,
+                action_key="spread_a_tale",
+            )
+
+        assert any("roulette_result" in c.kwargs for c in initiator_char.msg.call_args_list)
+        assert not any("roulette_result" in c.kwargs for c in bystander_char.msg.call_args_list)
+
+
+class PartialSuccessWordingTests(_ScenePipelineTestCase):
+    """A Partial Success is stored as the outcome name alone, no "Failure" prefix
+
+    (success_level 0 previously read as status_word "Failure", so a Partial
+    Success was stored as "Failure (Partial Success)" -- #3807 Part B)."""
+
+    @patch("world.scenes.action_services.start_action_resolution")
+    def test_partial_success_content_has_no_failure_prefix(self, mock_resolve: MagicMock) -> None:
+        mock_resolve.return_value = _pending_resolution_partial_success()
+        template = ActionTemplateFactory()
+        request = create_action_request(
+            scene=self.scene,
+            initiator_persona=self.initiator,
+            target_persona=self.target,
+            action_key="persuade",
+        )
+        request.action_template = template
+        request.save(update_fields=["action_template"])
+
+        respond_to_action_request(action_request=request, decision=ConsentDecision.ACCEPT)
+
+        request.refresh_from_db()
+        content = request.result_interaction.content
+        assert "Partial Success" in content
+        assert "Failure" not in content
