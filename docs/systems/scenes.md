@@ -404,6 +404,26 @@ result = respond_to_action_target(
 the single check-and-fatigue resolution point; `difficulty_override` is the numeric value
 produced by combining the defender's plausibility base with any active-resistance increment.
 
+### Result delivery (#3807)
+
+A resolved request's result row is not only persisted, it is delivered live. The
+targeted/area result row (and, for a MUTTER delivery, the room-heard fragment row) from
+`_create_result_interaction`, a treatment outcome from `_resolve_treatment_request`, and a
+cast outcome pose from `create_cast_outcome_pose` (`cast_services.py`) all call
+`deliver_outcome_interaction(interaction, location=...)` (`interaction_services.py`) once
+the target rows are written, so the live push's involvement mark already carries
+`target_persona_ids`. `deliver_outcome_interaction` registers a `transaction.on_commit`
+callback: it pushes the WebSocket payload via `push_interaction`, then sends the same
+`interaction.content` as plain text to the non-web sessions of exactly the objects the push
+reached (telnet parity). A social-check result additionally schedules the resolution-theater
+success-level wheel to the roller and target; see "Resolution theater" in
+`docs/systems/checks.md`.
+
+`push_interaction` gained an optional `location` kwarg (#3807): when omitted it still
+resolves from the writer persona's own character location, byte-identical to before; a
+caller passes it explicitly for a Narrator-authored row, since the Narrator's character is
+never physically placed anywhere.
+
 ### Good-Sport Kudos Accrual
 
 When a defender accepts an action request, `_accrue_engagement_for_primary` (primary target)

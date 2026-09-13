@@ -345,4 +345,5 @@ treat those names as hints to confirm, not gospel.
 - [0294 - Login is the presence step, sessions share a character, and puppeting records the selection](0294-login-is-the-presence-step-and-sessions-share-a-character.md) (#3812; amends ADR-0241; related #3412, #3752, #3596)
 - [0295 - Leaving the world is explicit; navigation keeps presence; nobody enters nowhere](0295-leaving-the-world-is-explicit-navigation-keeps-presence.md) (#3818; amends ADR-0241, ADR-0294; related ADR-0247, #2121, #3813)
 - [0296 - The commit hook never clears the worktree, so implementers can share one](0296-the-commit-hook-never-clears-the-worktree.md) (#3814; related #3787, #3652)
+- [0297 - Every resolved outcome is delivered, and the wheel shows the raw chart](0297-every-resolved-outcome-is-delivered-and-the-wheel-shows-the-raw-chart.md) (#3807; related ADR-0293)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

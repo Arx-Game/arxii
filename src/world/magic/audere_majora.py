@@ -614,7 +614,9 @@ def _post_declaration(character: ObjectDB, text: str):
     except (AttributeError, Persona.DoesNotExist):
         return scene, None
 
-    interaction = create_interaction(
+    # #3807: returned to cross_threshold, which pushes this row via push_interaction
+    # once the rest of the crossing (level write, path history, receipt) has landed.
+    interaction = create_interaction(  # noqa: UNDELIVERED - caller delivers it, see above
         persona=persona,
         content=text,
         mode=InteractionMode.POSE,

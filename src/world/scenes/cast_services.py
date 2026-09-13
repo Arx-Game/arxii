@@ -56,7 +56,11 @@ from world.scenes.action_constants import (
 )
 from world.scenes.action_models import SceneActionPullDeclaration, SceneActionRequest
 from world.scenes.constants import InteractionMode, InteractionVisibility
-from world.scenes.interaction_services import create_interaction, write_target_personas
+from world.scenes.interaction_services import (
+    create_interaction,
+    deliver_outcome_interaction,
+    write_target_personas,
+)
 from world.scenes.narrator import get_or_create_narrator_persona
 from world.scenes.types import CastResult, EnhancedSceneActionResult
 
@@ -319,6 +323,10 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         technique_name: Optional display name override. When provided (e.g. a
             gift-technique's unlocked-variant name from #1581), uses this in the
             narration instead of ``technique.name``.
+
+    Every row this function creates -- the unconcealed pose, the concealed
+    attributed pose, and each lower attribution tier from ``_emit_tier`` -- is
+    delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -344,6 +352,12 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         signature_snippet=signature_snippet,
     )
 
+    # #3807: every row this function creates was persisted and delivered to
+    # nobody live. Location comes from the scene, not the writer -- the Narrator
+    # persona is never physically placed (a receiver-scoped row below still
+    # reaches its receivers regardless; only a room-heard row needs this).
+    location = scene.location
+
     if not audience.concealed:
         unconcealed_pose = create_interaction(
             persona=get_or_create_narrator_persona(),
@@ -353,6 +367,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
         )
         if target_persona is not None:
             write_target_personas(unconcealed_pose, [target_persona])
+        deliver_outcome_interaction(unconcealed_pose, location=location)
         return unconcealed_pose
 
     from world.magic.narration import (  # noqa: PLC0415
@@ -370,6 +385,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     )
     if target_persona is not None:
         write_target_personas(pose, [target_persona])
+    deliver_outcome_interaction(pose, location=location)
 
     # Empty when the technique has no perceptible effect, which is also exactly when
     # resolve_cast_audience leaves effect_only empty — the two agree by construction.
@@ -380,7 +396,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
     def _emit_tier(recipients: list[Persona], content: str) -> None:
         if not recipients or not content:
             return
-        create_interaction(
+        tier_interaction = create_interaction(
             persona=get_or_create_narrator_persona(),
             content=content,
             mode=InteractionMode.OUTCOME,
@@ -388,6 +404,7 @@ def create_cast_outcome_pose(  # noqa: PLR0913 - all params describe one pose; c
             receivers=recipients,
             visibility=InteractionVisibility.PERCEIVED_ONLY,
         )
+        deliver_outcome_interaction(tier_interaction, location=location)
 
     _emit_tier(audience.vague, render_vague_cast_narration(unattributed))
     _emit_tier(audience.effect_only, unattributed)

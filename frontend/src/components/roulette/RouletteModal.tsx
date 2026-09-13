@@ -70,7 +70,7 @@ export function RouletteModal() {
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col items-center gap-4 py-4">
+        <div className="flex flex-col items-stretch gap-4 py-4">
           <RouletteWheel
             key={instanceKey.current}
             consequences={current.consequences}
