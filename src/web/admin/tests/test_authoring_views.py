@@ -1,6 +1,7 @@
 """Tests for the Authoring Workbench dashboard, stats, and queue panels (#3019)."""
 
 from datetime import date
+import re
 
 from django.test import TestCase
 from django.urls import reverse
@@ -92,7 +93,7 @@ class TestAuthoringQueueFragment(AuthoringViewsTestCase):
         self._trait("Finished Row", "Ordinary finished prose.", written=True, reviewed=True)
 
         self.client.force_login(self.super)
-        resp = self.client.get(reverse("admin_authoring_queue"))
+        resp = self.client.get(reverse("admin_authoring_queue"), {"status": "all"})
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         self.assertLess(body.index("Placeholder Row"), body.index("Finished Row"))
@@ -128,15 +129,74 @@ class TestAuthoringQueueFragment(AuthoringViewsTestCase):
         self.assertIn("Unwritten Row", body)
         self.assertNotIn("Written Row", body)
 
-    def test_status_filter_unreviewed(self) -> None:
+    def test_status_filter_to_review_is_written_and_not_reviewed(self) -> None:
+        """`unreviewed` is a review pass: written rows awaiting review, never unwritten ones.
+
+        Before #3828 it meant `not reviewed`, which made it a superset of every
+        unwritten row and useless for a review pass.
+        """
         self._trait("Unreviewed Row", "Ordinary unreviewed prose.", written=True)
         self._trait("Reviewed Row", "Ordinary reviewed prose.", written=True, reviewed=True)
+        self._trait("Unwritten Row", "Ordinary unwritten prose.")
 
         self.client.force_login(self.super)
         resp = self.client.get(reverse("admin_authoring_queue"), {"status": "unreviewed"})
         body = resp.content.decode()
         self.assertIn("Unreviewed Row", body)
         self.assertNotIn("Reviewed Row", body)
+        self.assertNotIn("Unwritten Row", body)
+
+    def test_default_status_is_to_write(self) -> None:
+        """No `?status=` means To write: written rows are hidden until asked for (#3828)."""
+        self._trait("Unwritten Row", "Ordinary unwritten prose here.")
+        self._trait("Written Row", "Ordinary written prose here.", written=True)
+
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring_queue")).content.decode()
+        self.assertIn("Unwritten Row", body)
+        self.assertNotIn("Written Row", body)
+        self.assertIn('<option value="unwritten" selected>', body)
+
+    def test_status_all_shows_every_row(self) -> None:
+        self._trait("Unwritten Row", "Ordinary unwritten prose here.")
+        self._trait("Written Row", "Ordinary written prose here.", written=True, reviewed=True)
+
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse("admin_authoring_queue"), {"status": "all"})
+        body = resp.content.decode()
+        self.assertIn("Unwritten Row", body)
+        self.assertIn("Written Row", body)
+
+    def _headline(self, body: str) -> tuple[str, str]:
+        """The queue headline's (count, qualifier) pair, e.g. ("2", "to write · all domains")."""
+        match = re.search(r'class="queue-headline">(\d+)<small>(.*?)</small>', body, re.DOTALL)
+        self.assertIsNotNone(match, "no queue headline rendered")
+        return match.group(1), match.group(2)
+
+    def test_headline_counts_the_filtered_rows_only(self) -> None:
+        """The number beside the title is what is left under the filters, never the backlog."""
+        self._trait("Alpha", "Ordinary unwritten prose here.")
+        self._trait("Beta", "Ordinary unwritten prose here.")
+        self._trait("Gamma", "Ordinary written prose here.", written=True, reviewed=True)
+
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring_queue")).content.decode()
+        count, qualifier = self._headline(body)
+        self.assertEqual(count, "2")
+        self.assertIn("to write", qualifier)
+        self.assertIn("all domains", qualifier)
+
+    def test_headline_names_the_picked_domain_and_status(self) -> None:
+        self._trait("Alpha", "Ordinary written prose here.", written=True)
+
+        self.client.force_login(self.super)
+        resp = self.client.get(
+            reverse("admin_authoring_queue"), {"domain": "traits", "status": "unreviewed"}
+        )
+        count, qualifier = self._headline(resp.content.decode())
+        self.assertEqual(count, "1")
+        self.assertIn("to review", qualifier)
+        self.assertIn("traits", qualifier)
 
     def test_q_filter_matches_name_substring(self) -> None:
         self._trait("Sunfire Blessing", "Ordinary finished prose here.")

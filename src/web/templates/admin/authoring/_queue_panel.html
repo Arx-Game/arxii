@@ -39,11 +39,36 @@
     color: var(--body-quiet-color);
     font-size: 0.9rem;
   }
+  #panel-authoring-queue h2 {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  #panel-authoring-queue .queue-headline {
+    font-size: 1.4rem;
+    font-variant-numeric: tabular-nums;
+  }
+  #panel-authoring-queue .queue-headline small {
+    font-size: 0.85rem;
+    font-weight: normal;
+    color: var(--body-quiet-color);
+    margin-left: 0.35rem;
+  }
 </style>
 
-<h2>{% translate "Backlog Queue" %}</h2>
+{% comment %}
+The headline is the count under the CURRENT filters, never the whole backlog
+(#3828): a writer knocking out one domain watches "212 to write · magic" fall
+to zero, and finished work never inflates what is left.
+{% endcomment %}
+<h2>
+  {% translate "Backlog Queue" %}
+  <span class="queue-headline">{{ total }}<small>{{ count_noun }} &middot; {{ scope_label }}</small></span>
+</h2>
 <p>
-  {% translate "Worst-first: placeholder-marked rows first, then unwritten, then unreviewed." %}
+  {% translate "Worst-first: placeholder-marked rows first, then unwritten, then written but unreviewed." %}
 </p>
 
 <form class="tuning-form" hx-get="{% url 'admin_authoring_queue' %}"
@@ -73,7 +98,6 @@
   <div class="tuning-field">
     <label for="queue-status">{% translate "Status" %}</label>
     <select id="queue-status" name="status">
-      <option value="">{% translate "All statuses" %}</option>
       {% for value, label in status_choices %}
       <option value="{{ value }}" {% if selected_status == value %}selected{% endif %}>
         {{ label }}
@@ -124,8 +148,7 @@
         {% endif %}
         {% if not entry.row.written %}
         <span class="badge">{% translate "Unwritten" %}</span>
-        {% endif %}
-        {% if not entry.row.reviewed %}
+        {% elif not entry.row.reviewed %}
         <span class="badge">{% translate "Unreviewed" %}</span>
         {% endif %}
       </td>

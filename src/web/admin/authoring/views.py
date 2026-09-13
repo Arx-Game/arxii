@@ -76,6 +76,7 @@ from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
 from core.app_domains import credited_content_models, resolve_model_by_name
@@ -85,7 +86,7 @@ from web.admin.authoring.contributors import current_contributor, link_contribut
 from web.admin.authoring.links import admin_change_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
-from web.admin.constants import BacklogStatusFilter
+from web.admin.constants import DEFAULT_BACKLOG_STATUS, BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
@@ -143,26 +144,74 @@ def _builders_context() -> dict[str, object]:
     }
 
 
-def _row_matches(row: BacklogRow, domain: str, model: str, status: str, query: str) -> bool:
-    """One row's pass/fail against every active filter, checked in one call.
+#: The headline noun for each status: "212 to write", "60 to review" (#3828).
+_COUNT_NOUNS = {
+    BacklogStatusFilter.UNWRITTEN: "to write",
+    BacklogStatusFilter.UNREVIEWED: "to review",
+    BacklogStatusFilter.PLACEHOLDER: "with placeholder text",
+    BacklogStatusFilter.ALL: "rows",
+}
 
-    Called from a single list comprehension over the full row list in
-    `_filtered_rows`, so the combined filter set is one scan regardless of
-    how many of `domain`/`model`/`status`/`query` are actually set.
+
+@dataclass(frozen=True)
+class QueueFilters:
+    """The queue's four filter params, parsed once and serialised back the same way.
+
+    Every surface that carries the queue's state - the fragment's own form,
+    the `HX-Replace-Url` the fragment answers with, the `queue=` param each
+    row link hands the editor (#3828) - goes through this one class, so no
+    two of them can disagree about what an absent `status` means.
     """
-    if domain and row.domain != domain:
-        return False
-    if model and row.model_label != model:
-        return False
-    if query and query not in row.identity.lower():
-        return False
-    return _status_matches(row, status)
+
+    domain: str = ""
+    model: str = ""
+    status: str = DEFAULT_BACKLOG_STATUS
+    query: str = ""
+
+    @classmethod
+    def from_params(cls, params: QueryDict) -> QueueFilters:
+        return cls(
+            domain=params.get("domain") or "",
+            model=params.get("model") or "",
+            status=params.get("status") or DEFAULT_BACKLOG_STATUS,
+            query=(params.get("q") or "").strip(),
+        )
+
+    def as_query(self) -> str:
+        """Urlencoded form, omitting empties and the default status - the URL a reload sees."""
+        pairs = {"domain": self.domain, "model": self.model, "q": self.query}
+        if self.status != DEFAULT_BACKLOG_STATUS:
+            pairs["status"] = self.status
+        return urlencode({key: value for key, value in pairs.items() if value})
+
+    @property
+    def count_noun(self) -> str:
+        return _COUNT_NOUNS.get(self.status, "rows")
+
+    @property
+    def scope_label(self) -> str:
+        return self.domain or "all domains"
+
+    def matches(self, row: BacklogRow) -> bool:
+        """One row's pass/fail against every active filter, checked in one call.
+
+        Called from a single list comprehension over the full row list in
+        `_filtered_rows`, so the combined filter set is one scan regardless of
+        how many filters are actually set.
+        """
+        if self.domain and row.domain != self.domain:
+            return False
+        if self.model and row.model_label != self.model:
+            return False
+        if self.query and self.query.lower() not in row.identity.lower():
+            return False
+        return _status_matches(row, self.status)
 
 
 def _status_matches(row: BacklogRow, status: str) -> bool:
-    """One row against the status filter alone; an unset or unknown status matches every row.
+    """One row against the status filter alone; `all` or an unknown value matches every row.
 
-    Split out of `_row_matches` so neither function carries a branch per
+    Split out of `QueueFilters.matches` so neither carries a branch per
     filter *and* a branch per status value - the combined form tripped
     ruff's return-count ceiling once the model filter joined it.
     """
@@ -171,16 +220,12 @@ def _status_matches(row: BacklogRow, status: str) -> bool:
     if status == BacklogStatusFilter.UNWRITTEN:
         return not row.written
     if status == BacklogStatusFilter.UNREVIEWED:
-        return not row.reviewed
+        return row.written and not row.reviewed
     return True
 
 
-def _filtered_rows(rows: list[BacklogRow], request: HttpRequest) -> list[BacklogRow]:
-    domain = request.GET.get("domain") or ""
-    model = request.GET.get("model") or ""
-    status = request.GET.get("status") or ""
-    query = (request.GET.get("q") or "").strip().lower()
-    return [row for row in rows if _row_matches(row, domain, model, status, query)]
+def _filtered_rows(rows: list[BacklogRow], filters: QueueFilters) -> list[BacklogRow]:
+    return [row for row in rows if filters.matches(row)]
 
 
 def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
@@ -249,24 +294,26 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
     """
     rows, _ = build_backlog()
     domains = sorted({row.domain for row in rows})
-    selected_domain = request.GET.get("domain", "")
+    filters = QueueFilters.from_params(request.GET)
 
-    filtered = _filtered_rows(rows, request)
+    filtered = _filtered_rows(rows, filters)
     total = len(filtered)
     visible = filtered[:_QUEUE_DISPLAY_CAP]
 
     context = {
         "rows": [_queue_row(row) for row in visible],
         "total": total,
+        "count_noun": filters.count_noun,
+        "scope_label": filters.scope_label,
         "display_cap": _QUEUE_DISPLAY_CAP,
         "capped": total > _QUEUE_DISPLAY_CAP,
         "domains": domains,
-        "selected_domain": selected_domain,
-        "models": _model_options(rows, selected_domain),
-        "selected_model": request.GET.get("model", ""),
-        "selected_status": request.GET.get("status", ""),
+        "selected_domain": filters.domain,
+        "models": _model_options(rows, filters.domain),
+        "selected_model": filters.model,
+        "selected_status": filters.status,
         "status_choices": BacklogStatusFilter.choices,
-        "query": request.GET.get("q", ""),
+        "query": filters.query,
         "editor_url": reverse("admin_authoring_editor"),
     }
     return render(request, "admin/authoring/_queue_panel.html", context)
