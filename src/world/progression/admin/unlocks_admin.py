@@ -14,6 +14,7 @@ from world.progression.models import (
     ClassXPCost,
     CodexKnowledgeRequirement,
     ItemRequirement,
+    LegendRequirement,
     LevelRequirement,
     MajorGiftTechniqueRequirement,
     MultiClassLevel,
@@ -268,6 +269,15 @@ class TierRequirementAdmin(admin.ModelAdmin):
 
     list_display = ["minimum_tier", "class_level_unlock", "is_active"]
     list_filter = ["minimum_tier", "is_active", "class_level_unlock__character_class"]
+    search_fields = ["description", "class_level_unlock__character_class__name"]
+
+
+@admin.register(LegendRequirement)
+class LegendRequirementAdmin(admin.ModelAdmin):
+    """#3831 - the minimum-legend gate for a path-leveling unlock."""
+
+    list_display = ["minimum_legend", "counts_from_level_offset", "class_level_unlock", "is_active"]
+    list_filter = ["is_active", "class_level_unlock__character_class"]
     search_fields = ["description", "class_level_unlock__character_class__name"]
 
 

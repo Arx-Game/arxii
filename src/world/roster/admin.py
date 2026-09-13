@@ -20,9 +20,12 @@ from world.roster.models import (
     RosterApplication,
     RosterEntry,
     RosterTenure,
+    Soul,
+    SoulIncarnation,
     TenureDisplaySettings,
     TenureGallery,
     TenureMedia,
+    UnionKind,
 )
 
 
@@ -411,3 +414,34 @@ class NPCStatlinePresetAdmin(admin.ModelAdmin):
     list_display = ["name", "description"]
     search_fields = ["name", "description"]
     inlines = [NPCPresetTraitLineInline, NPCPresetSkillLineInline]
+
+
+@admin.register(UnionKind)
+class UnionKindAdmin(admin.ModelAdmin):
+    """#3831 - authorable union vocabulary (marriage, consortium, concubinage...)."""
+
+    list_display = ["name", "realm", "confers_wedlock", "stature_share_pct", "max_concurrent"]
+    list_filter = ["confers_wedlock", "contributes_to_origin_house", "requires_landed_title"]
+    search_fields = ["name"]
+    list_select_related = ["realm"]
+    autocomplete_fields = ["realm"]
+
+
+@admin.register(Soul)
+class SoulAdmin(admin.ModelAdmin):
+    """#3831 - a soul with an ordered chain of incarnations."""
+
+    list_display = ["__str__"]
+    search_fields = ["notes"]
+
+
+@admin.register(SoulIncarnation)
+class SoulIncarnationAdmin(admin.ModelAdmin):
+    """#3831 - one life of a soul."""
+
+    list_display = ["soul", "sequence", "kinsperson", "is_public_record", "is_true"]
+    list_filter = ["is_public_record", "is_true"]
+    search_fields = ["kinsperson__name"]
+    list_select_related = ["soul", "kinsperson"]
+    autocomplete_fields = ["kinsperson"]
+    raw_id_fields = ["soul", "secret"]

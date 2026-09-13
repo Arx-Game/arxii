@@ -44,6 +44,33 @@ CONFIG_TABLE_MODELS = (
     # world/weather/models.py
     "WeatherTransition",
     "WeatherTypeShelter",
+    # world/npc_services/models.py
+    "NPCRole",
+    "NPCServiceOffer",
+    "MissionOfferDetails",
+    "PermitOfferDetails",
+    "LoanOfferDetails",
+    "TrainOfferDetails",
+    "CourtGrantOfferDetails",
+    "StylingOfferDetails",
+    "ProfileRecordingOfferDetails",
+    "NameCulture",
+    "NameCultureEntry",
+    "PersonalityTrait",
+    "StaffingProfile",
+    "StaffingProfileLine",
+    "NPCReactionLine",
+    "DistinctionRegardSeed",
+    "RegardEventConfig",
+    # world/predators/models.py
+    "PredatorKind",
+    # world/progression/models/unlocks.py + models/advancement.py
+    "LegendRequirement",
+    "DuranceTrainingSite",
+    # world/roster/models/families.py
+    "UnionKind",
+    "Soul",
+    "SoulIncarnation",
 )
 
 
