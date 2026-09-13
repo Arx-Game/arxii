@@ -20,11 +20,12 @@ from world.scenes.place_models import InteractionReceiver, Place
 class InteractionThreadError(ValueError):
     """A reply target cannot be used without exposing why to the caller.
 
-    ``venue_hint`` is set only when the refusal is specifically the reachability
-    rule (#3787 decision 3, "you can only answer someone in a venue where they
-    are available") - a holder mismatch between the reply's own draft context
-    and the target's. Other refusals (a missing or invisible target, a bad
-    timestamp) leave it ``None``; there is nowhere to send the player.
+    ``venue_hint`` is an optional actionable follow-on line, shared with
+    ``reachability.UnreachableError``'s field of the same name (#3787 decision
+    3). No holder mismatch in this module names one today - the one case that
+    used to (a Place-held draft answering a Scene-held target) was reclassified
+    as reachable, not refused (#3811 / ADR-0293 correction) - but the slot
+    stays for whichever future refusal earns ratified copy next.
     """
 
     code = "reply_target_unavailable"
@@ -108,30 +109,26 @@ def _unavailable(
     return InteractionThreadError(message, venue_hint=venue_hint)
 
 
-def _holder_mismatch(
-    interaction: Interaction,
+def _reachable_from_place(
     interaction_signature: HolderSignature,
     target_signature: HolderSignature,
-) -> InteractionThreadError:
-    """Refuse a reply whose own venue cannot reach the target's (#3787 decision 3).
+) -> bool:
+    """A Place-held draft can always answer a Scene-held target in the same scene.
 
-    Reachability is never widened to fit (decision 2 rejects audience
-    promotion) - the caller must physically leave the venue that scopes their
-    draft. The only wording specified by the approved demo (Screen 3) is this
-    concrete direction: a Place-held draft (a table-talk aside) answering a
-    Scene-held target (a room-wide pose, or a combat OUTCOME). Other holder
-    mismatches keep the generic refusal - there is no ratified copy for them yet.
+    #3811 / ADR-0293 decision 1 correction: a Place declutters room chat, it does
+    not isolate its occupants from it - a player seated at a table is still
+    present in the room and could already read the room-wide (or combat OUTCOME)
+    row being answered, so replying to it is not an audience widening. The
+    direction that stays refused is the reverse: a Scene-drafted reply cannot
+    reach a Place-held target, since that table talk was never visible outside
+    the table.
     """
-    if (
+    return (
         interaction_signature.kind == InteractionThread.HolderKind.PLACE
         and target_signature.kind == InteractionThread.HolderKind.SCENE
-    ):
-        place_name = interaction.place.name if interaction.place_id is not None else "this place"
-        return _unavailable(
-            "Answering the fight means speaking to the room.",
-            venue_hint=f"Leave {place_name} to answer this. Your draft is kept.",
-        )
-    return _unavailable()
+        and interaction_signature.scene_id is not None
+        and interaction_signature.scene_id == target_signature.scene_id
+    )
 
 
 def _account_party(interaction: Interaction) -> tuple[int, ...]:
@@ -431,8 +428,10 @@ def assign_interaction_thread(
 
     target_signature = holder_signature(target)
     interaction_signature = holder_signature(interaction)
-    if target_signature != interaction_signature:
-        raise _holder_mismatch(interaction, interaction_signature, target_signature)
+    if target_signature != interaction_signature and not _reachable_from_place(
+        interaction_signature, target_signature
+    ):
+        raise _unavailable()
 
     if target.place_id is not None and _receiver_accounts(target) != _receiver_accounts(
         interaction

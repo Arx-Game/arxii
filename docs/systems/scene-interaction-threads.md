@@ -68,14 +68,20 @@ history). It is read from two call sites, never duplicated:
   would work; `create_interaction` writes nothing when this fires.
 - **Replying** (`thread_services.assign_interaction_thread`): a reply whose holder
   (scene/place/whisper-party signature) doesn't match its target's raises
-  `InteractionThreadError` (`code = "reply_target_unavailable"`), carrying the same
-  `venue_hint` shape when the mismatch is specifically a Place-to-scene reach failure.
+  `InteractionThreadError` (`code = "reply_target_unavailable"`) - **except** a
+  Place-held draft answering a Scene-held target in the SAME scene, which is
+  reachable by design (#3811 / ADR-0293 decision 1 correction): a Place declutters
+  room chat, it does not isolate its occupants from it, so a reply from a table
+  can always answer the room-wide (or combat OUTCOME) row it already saw. The
+  reverse direction - a room-drafted reply reaching table talk it was never able
+  to see - stays refused, with no ratified hint copy.
 
 Both refusals translate through the same `{code, field, detail, hint}` 400 body
 (`interaction_views._refusal_response`) and the same telnet hint-append in
 `Action.run()`'s exception handler (`actions/base.py`) - one refusal vocabulary for REST
-and telnet alike. Both preserve the writer's draft; neither ever widens the audience to
-make the reply land (ADR-0293, decision 1: refuse, never promote).
+and telnet alike. Neither ever widens the audience of an already-refused reply to make
+it land (ADR-0293, decision 1); the Place-to-Scene case above is not a widening, since
+the writer could already read what they're answering.
 
 **Reachability governs only player-authored addressing.** A resolved combat action's
 targets are written through `write_target_personas` directly, with no reachability check
