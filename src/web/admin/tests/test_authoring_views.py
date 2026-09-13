@@ -63,6 +63,18 @@ class TestAuthoringDashboardView(AuthoringViewsTestCase):
         self.assertIn('id="panel-authoring-stats"', body)
         self.assertIn('id="panel-authoring-queue"', body)
 
+    def test_dashboard_forwards_its_querystring_to_the_first_queue_load(self) -> None:
+        """`/_authoring/?domain=traits` reopens on traits: the URL the fragment kept (#3828)."""
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring"), {"domain": "traits"}).content.decode()
+        section = re.search(r'<section[^>]*id="panel-authoring-queue"[^>]*>', body, re.DOTALL)
+        self.assertIsNotNone(section)
+        queue_url = reverse("admin_authoring_queue")
+        self.assertIn(f'hx-get="{queue_url}?domain=traits"', section.group(0))
+        # Only the first load comes from the section; the refresh is the form's own.
+        self.assertIn('hx-trigger="load"', section.group(0))
+        self.assertNotIn("authoring-backlog-changed", section.group(0))
+
 
 class TestAuthoringStatsFragment(AuthoringViewsTestCase):
     def test_staff_non_superuser_forbidden(self) -> None:
@@ -256,6 +268,43 @@ class TestAuthoringQueueFragment(AuthoringViewsTestCase):
         body = self.client.get(reverse("admin_authoring_queue")).content.decode()
         self.assertIn('href="#authoring-editor"', body)
         self.assertIn('hx-swap="innerHTML show:top"', body)
+
+    def test_queue_response_replaces_the_browser_url_with_its_filters(self) -> None:
+        """A reload comes back to the same filters: the fragment rewrites the page URL (#3828)."""
+        self.client.force_login(self.super)
+
+        resp = self.client.get(
+            reverse("admin_authoring_queue"), {"domain": "traits", "status": "unreviewed"}
+        )
+        self.assertEqual(
+            resp["HX-Replace-Url"], f"{reverse('admin_authoring')}?domain=traits&status=unreviewed"
+        )
+
+        resp = self.client.get(reverse("admin_authoring_queue"))
+        self.assertEqual(resp["HX-Replace-Url"], reverse("admin_authoring"))
+
+    def test_filter_form_refreshes_itself_on_backlog_changed(self) -> None:
+        """The credit/review refresh re-submits the live form, so the filters survive it (#3828)."""
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring_queue")).content.decode()
+        form = re.search(r"<form[^>]*id=\"queue-filters\"[^>]*>", body, re.DOTALL)
+        self.assertIsNotNone(form, "the filter form has no id for the refresh to find")
+        self.assertIn("authoring-backlog-changed from:body", form.group(0))
+
+    def test_row_links_carry_the_queue_filters_and_position(self) -> None:
+        """Each row hands the editor the list it came from and its index in it (#3828)."""
+        self._trait("Alpha Row", "Ordinary unwritten prose here.")
+        self._trait("Beta Row", "Ordinary unwritten prose here.")
+
+        self.client.force_login(self.super)
+        body = self.client.get(
+            reverse("admin_authoring_queue"), {"domain": "traits"}
+        ).content.decode()
+        links = re.findall(r'hx-get="([^"]*editor/[^"]*)"', body)
+        self.assertEqual(len(links), 2)
+        self.assertIn("queue=domain%3Dtraits", links[0])
+        self.assertIn("pos=0", links[0])
+        self.assertIn("pos=1", links[1])
 
     def test_display_capped_at_100_with_showing_note(self) -> None:
         for i in range(101):

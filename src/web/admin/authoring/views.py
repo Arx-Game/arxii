@@ -247,14 +247,31 @@ def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
     ]
 
 
-def _queue_row(row: BacklogRow) -> dict:
-    """One queue row plus its stock-admin link, mirroring `_entry_row` below.
+def _editor_url(model_label: str, pk: object, filters: QueueFilters, pos: int) -> str:
+    """The editor deep-link for one row, carrying the list it came from (#3828).
 
-    The link is built here rather than on `BacklogRow` itself for the same
+    `queue` is the filter querystring the row was listed under and `pos` its
+    index in that list; the editor's Next control (`_queue_nav`) needs both to
+    find the row that follows this one, and to keep finding it after this row
+    has been credited out of the list. `links.workbench_editor_url` is the
+    context-free form the stock change form uses.
+    """
+    query = urlencode({"model": model_label, "pk": pk, "queue": filters.as_query(), "pos": pos})
+    return f"{reverse('admin_authoring_editor')}?{query}"
+
+
+def _queue_row(row: BacklogRow, pos: int, filters: QueueFilters) -> dict:
+    """One queue row plus its two links, mirroring `_entry_row` below.
+
+    The links are built here rather than on `BacklogRow` itself for the same
     reason the related-entries pane builds its own: `backlog.py` is the data
     tier and knows nothing about the admin registry or URL routing.
     """
-    return {"row": row, "admin_url": admin_change_url(row.model_label, row.pk)}
+    return {
+        "row": row,
+        "editor_url": _editor_url(row.model_label, row.pk, filters, pos),
+        "admin_url": admin_change_url(row.model_label, row.pk),
+    }
 
 
 @superuser_required
@@ -301,7 +318,7 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
     visible = filtered[:_QUEUE_DISPLAY_CAP]
 
     context = {
-        "rows": [_queue_row(row) for row in visible],
+        "rows": [_queue_row(row, pos, filters) for pos, row in enumerate(visible)],
         "total": total,
         "count_noun": filters.count_noun,
         "scope_label": filters.scope_label,
@@ -314,9 +331,19 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
         "selected_status": filters.status,
         "status_choices": BacklogStatusFilter.choices,
         "query": filters.query,
-        "editor_url": reverse("admin_authoring_editor"),
     }
-    return render(request, "admin/authoring/_queue_panel.html", context)
+    response = render(request, "admin/authoring/_queue_panel.html", context)
+    # Replace (not push) the page URL with the live filters, so a reload comes
+    # back to the same list without each keystroke in the search box becoming
+    # its own history entry (#3828). `dashboard.html` forwards that querystring
+    # into the first queue load.
+    response["HX-Replace-Url"] = _dashboard_url(filters)
+    return response
+
+
+def _dashboard_url(filters: QueueFilters) -> str:
+    query = filters.as_query()
+    return f"{reverse('admin_authoring')}?{query}" if query else reverse("admin_authoring")
 
 
 @dataclass

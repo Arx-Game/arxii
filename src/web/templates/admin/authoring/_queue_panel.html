@@ -71,8 +71,16 @@ to zero, and finished work never inflates what is left.
   {% translate "Worst-first: placeholder-marked rows first, then unwritten, then written but unreviewed." %}
 </p>
 
-<form class="tuning-form" hx-get="{% url 'admin_authoring_queue' %}"
-      hx-target="#panel-authoring-queue" hx-trigger="change, keyup changed delay:300ms">
+{% comment %}
+The form re-submits ITSELF on `authoring-backlog-changed` (the event a credit
+or review stamp fires, see views._BACKLOG_CHANGED_EVENT), so the refresh
+carries whatever the writer has picked. The dashboard section only fires the
+first `load`; before #3828 it also owned the refresh, with no params, and a
+writer lost their domain on every credited row.
+{% endcomment %}
+<form class="tuning-form" id="queue-filters" hx-get="{% url 'admin_authoring_queue' %}"
+      hx-target="#panel-authoring-queue"
+      hx-trigger="change, keyup changed delay:300ms, authoring-backlog-changed from:body">
   <div class="tuning-field">
     <label for="queue-domain">{% translate "Domain" %}</label>
     <select id="queue-domain" name="domain">
@@ -134,7 +142,7 @@ to zero, and finished work never inflates what is left.
     <tr>
       <td>
         <a href="#authoring-editor"
-           hx-get="{{ editor_url }}?model={{ entry.row.model_label|urlencode }}&amp;pk={{ entry.row.pk }}"
+           hx-get="{{ entry.editor_url }}"
            hx-target="#authoring-editor" hx-swap="innerHTML show:top">
           {{ entry.row.identity }}
         </a>

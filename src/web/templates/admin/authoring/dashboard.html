@@ -20,9 +20,16 @@
     <p>Loading stats&hellip;</p>
   </section>
 
+  {% comment %}
+  The first queue load forwards this page's own querystring - the one the
+  fragment keeps current through HX-Replace-Url - so a reload of
+  `/_authoring/?domain=magic` reopens on magic (#3828). Refreshes after a
+  credit/review stamp are the filter form's own `hx-trigger`, not this
+  section's, so they carry the live filter values.
+  {% endcomment %}
   <section class="tuning-panel" id="panel-authoring-queue"
-           hx-get="{% url 'admin_authoring_queue' %}"
-           hx-trigger="load, authoring-backlog-changed from:body">
+           hx-get="{% url 'admin_authoring_queue' %}{% if request.GET %}?{{ request.GET.urlencode }}{% endif %}"
+           hx-trigger="load">
     <p>Loading queue&hellip;</p>
   </section>
 
