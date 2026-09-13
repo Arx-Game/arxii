@@ -71,6 +71,57 @@ CONFIG_TABLE_MODELS = (
     "UnionKind",
     "Soul",
     "SoulIncarnation",
+    # world/magic/models/fury.py
+    "FuryTier",
+    "FuryConfig",
+    # world/magic/models/aura.py
+    "AuraAffinityThreshold",
+    # world/magic/models/technique_builder.py
+    "TechniqueBudgetConfig",
+    "TechniqueTierBudget",
+    # world/magic/audere_majora.py
+    "AudereMajoraThreshold",
+    # world/magic/models/anima.py
+    "AnimaConfig",
+    # world/magic/models/corruption_config.py
+    "CorruptionConfig",
+    # world/magic/models/affinity.py
+    "ResonanceTier",
+    # world/magic/models/resonance_environment.py
+    "ResonanceAlignmentBoonTier",
+    # world/magic/models/grants.py
+    "BeginningsRitualGrant",
+    "PathRitualGrant",
+    "DistinctionRitualGrant",
+    "TraditionRitualGrant",
+    "CodexEntryRitualGrant",
+    "DistinctionResonanceGrant",
+    # world/magic/models/liturgy.py
+    "RitualLiturgy",
+    # world/magic/models/portals.py
+    "PortalAnchorKind",
+    # world/magic/models/techniques.py
+    "TechniqueCapabilityRequirement",
+    # world/magic/specialization/models.py
+    "TechniqueVariant",
+    "TechniqueVariantCapabilityGrant",
+    "TechniqueVariantDamageProfile",
+    "TechniqueVariantAppliedCondition",
+    # world/mechanics/models.py
+    "AestheticAxisConfig",
+    # world/missions/models.py
+    "MissionCategory",
+    "MissionAssistPattern",
+    "MissionNodeSupportOption",
+    "MissionOptionRouteCandidate",
+    "MissionTemplate",
+    "MissionNode",
+    "MissionOption",
+    "MissionOptionRoute",
+    "MissionOptionOpponentLine",
+    "MissionOptionRouteReward",
+    "MissionRenownAward",
+    "MissionGiver",
 )
 
 

@@ -14,14 +14,18 @@ from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
     AudereMajoraFaithVariantAppliedCondition,
+    AudereMajoraThreshold,
 )
 from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
+    AnimaConfig,
     AnimaRitualBudgetAward,
     AnimaRitualPerformance,
+    AuraAffinityThreshold,
     AuraPowerConfig,
+    BeginningsRitualGrant,
     CapabilityPowerConfig,
     CharacterAnima,
     CharacterAura,
@@ -31,13 +35,19 @@ from world.magic.models import (
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
+    CodexEntryRitualGrant,
     CompromiseActType,
+    CorruptionConfig,
     CovenantRoleBlendConfig,
     CrossingChoice,
     CrossingOption,
+    DistinctionResonanceGrant,
     DistinctionResonanceRankThreshold,
+    DistinctionRitualGrant,
     EffectType,
     Facet,
+    FuryConfig,
+    FuryTier,
     Gift,
     GiftAcquisitionConfig,
     GiftUnlock,
@@ -51,6 +61,8 @@ from world.magic.models import (
     MotifResonance,
     MotifResonanceStyle,
     PathGiftGrant,
+    PathRitualGrant,
+    PortalAnchorKind,
     PoseEndorsement,
     Reincarnation,
     RelationshipBondPullTuning,
@@ -58,11 +70,13 @@ from world.magic.models import (
     ResonanceEnvironmentConfig,
     ResonanceGainConfig,
     ResonanceGrant,
+    ResonanceTier,
     Restriction,
     Ritual,
     RitualAnimaContribution,
     RitualCheckConfig,
     RitualComponentRequirement,
+    RitualLiturgy,
     SanctumDissolutionRecoveryAward,
     SanctumHomecomingGainAward,
     SanctumPurgingRetentionAward,
@@ -76,7 +90,9 @@ from world.magic.models import (
     StyleCapabilityRequirement,
     Technique,
     TechniqueAppliedCondition,
+    TechniqueBudgetConfig,
     TechniqueCapabilityGrant,
+    TechniqueCapabilityRequirement,
     TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueGrant,
@@ -85,6 +101,7 @@ from world.magic.models import (
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
+    TechniqueTierBudget,
     TechniqueTreatment,
     Thread,
     ThreadLevelUnlock,
@@ -97,6 +114,7 @@ from world.magic.models import (
     TouchstoneCastConfig,
     Tradition,
     TraditionGiftGrant,
+    TraditionRitualGrant,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -108,6 +126,7 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
+from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
@@ -115,6 +134,12 @@ from world.magic.services.technique_effects import (
     technique_is_not_castable_standalone,
     technique_payload_prefetches,
     technique_relationship_is_ambiguous,
+)
+from world.magic.specialization.models import (
+    TechniqueVariant,
+    TechniqueVariantAppliedCondition,
+    TechniqueVariantCapabilityGrant,
+    TechniqueVariantDamageProfile,
 )
 
 
@@ -1926,3 +1951,367 @@ class FeedingRecordAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(FuryTier)
+class FuryTierAdmin(admin.ModelAdmin):
+    """#3831 - authored, player-chosen depth-of-rage catalog (analogous to IntensityTier)."""
+
+    list_display = [
+        "name",
+        "depth",
+        "control_penalty",
+        "intensity_bonus",
+        "lucid_grade_floor",
+        "berserk_severity",
+    ]
+    search_fields = ["name"]
+
+
+@admin.register(FuryConfig)
+class FuryConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton tuning surface for the Fury lever (mirrors StrainConfig)."""
+
+    list_display = [
+        "check_trait",
+        "provocation_cap_per_tier",
+        "bonus_scale_per_cap_point",
+        "cap_ease_per_point",
+        "default_berserk_duration_rounds",
+    ]
+    list_filter = ["check_trait"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not FuryConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(AuraAffinityThreshold)
+class AuraAffinityThresholdAdmin(admin.ModelAdmin):
+    """#3831 - authored affinity-percentage threshold granting an achievement on crossing."""
+
+    list_display = ["affinity", "threshold_percent", "discovery_achievement"]
+    list_filter = ["affinity"]
+    list_select_related = ["discovery_achievement"]
+    autocomplete_fields = ["discovery_achievement"]
+
+
+@admin.register(TechniqueBudgetConfig)
+class TechniqueBudgetConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton power-cost-per-unit knobs for the technique budget builder."""
+
+    list_display = [
+        "intensity_unit_cost",
+        "control_unit_cost",
+        "capability_value_unit_cost",
+        "damage_unit_cost",
+        "condition_severity_unit_cost",
+        "condition_duration_unit_cost",
+        "payload_base_cost",
+        "restriction_refund_multiplier",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not TechniqueBudgetConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(TechniqueTierBudget)
+class TechniqueTierBudgetAdmin(admin.ModelAdmin):
+    """#3831 - per-tier reference power budget + the level techniques at that tier stamp."""
+
+    list_display = ["tier", "power_budget", "representative_level", "label"]
+
+
+@admin.register(AudereMajoraThreshold)
+class AudereMajoraThresholdAdmin(admin.ModelAdmin):
+    """#3831 - one authored Crossing-the-Threshold boundary level (5/10/15/20)."""
+
+    list_display = [
+        "boundary_level",
+        "target_stage",
+        "minimum_intensity_tier",
+        "requires_active_audere",
+        "deed_title",
+        "magnitude",
+        "risk",
+    ]
+    list_filter = ["target_stage", "requires_active_audere", "magnitude", "risk"]
+    list_select_related = ["minimum_intensity_tier", "minimum_warp_stage"]
+    autocomplete_fields = ["minimum_intensity_tier", "minimum_warp_stage"]
+    filter_horizontal = ["archetypes"]
+
+
+@admin.register(AnimaConfig)
+class AnimaConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton anima regen/cap tuning surface (#3001)."""
+
+    list_display = [
+        "daily_regen_amount",
+        "level_zero_maximum",
+        "maximum_per_level",
+        "death_harvest_multiplier",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not AnimaConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(CorruptionConfig)
+class CorruptionConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Corruption-foundation coefficient tuning surface."""
+
+    list_display = [
+        "celestial_coefficient",
+        "primal_coefficient",
+        "abyssal_coefficient",
+        "tier_1_coefficient",
+        "tier_2_coefficient",
+        "tier_3_coefficient",
+        "tier_4_coefficient",
+        "tier_5_coefficient",
+        "updated_at",
+    ]
+    readonly_fields = ["updated_at"]
+    raw_id_fields = ["updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not CorruptionConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(ResonanceTier)
+class ResonanceTierAdmin(admin.ModelAdmin):
+    """#3831 - ordered potency tier for resonance-tied items and touchstones."""
+
+    list_display = ["name", "tier_level"]
+    search_fields = ["name"]
+
+
+@admin.register(ResonanceAlignmentBoonTier)
+class ResonanceAlignmentBoonTierAdmin(admin.ModelAdmin):
+    """#3831 - which named buff an ALIGNED affinity pairing grants at a magnitude threshold."""
+
+    list_display = ["affinity_interaction", "min_magnitude", "condition_template"]
+    list_select_related = ["affinity_interaction", "condition_template"]
+    autocomplete_fields = ["condition_template"]
+    raw_id_fields = ["affinity_interaction"]
+
+
+@admin.register(BeginningsRitualGrant)
+class BeginningsRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Beginnings choice."""
+
+    list_display = ["beginnings", "ritual"]
+    list_select_related = ["beginnings", "ritual"]
+    autocomplete_fields = ["beginnings", "ritual"]
+    search_fields = ["beginnings__name", "ritual__name"]
+
+
+@admin.register(PathRitualGrant)
+class PathRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Path choice."""
+
+    list_display = ["path", "ritual"]
+    list_select_related = ["path", "ritual"]
+    autocomplete_fields = ["path", "ritual"]
+    search_fields = ["path__name", "ritual__name"]
+
+
+@admin.register(DistinctionRitualGrant)
+class DistinctionRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Distinction."""
+
+    list_display = ["distinction", "ritual"]
+    list_select_related = ["distinction", "ritual"]
+    autocomplete_fields = ["distinction", "ritual"]
+    search_fields = ["distinction__name", "ritual__name"]
+
+
+@admin.register(TraditionRitualGrant)
+class TraditionRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Tradition."""
+
+    list_display = ["tradition", "ritual"]
+    list_select_related = ["tradition", "ritual"]
+    autocomplete_fields = ["tradition", "ritual"]
+    search_fields = ["tradition__name", "ritual__name"]
+
+
+@admin.register(CodexEntryRitualGrant)
+class CodexEntryRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by learning a Codex entry."""
+
+    list_display = ["codex_entry", "ritual"]
+    list_select_related = ["codex_entry", "ritual"]
+    autocomplete_fields = ["codex_entry", "ritual"]
+    search_fields = ["codex_entry__name", "ritual__name"]
+
+
+@admin.register(DistinctionResonanceGrant)
+class DistinctionResonanceGrantAdmin(admin.ModelAdmin):
+    """#3831 - currency knobs (flat seed + earn-rate bonus) a Distinction grants in a Resonance."""
+
+    list_display = [
+        "distinction",
+        "resonance",
+        "flat_amount_per_rank",
+        "earn_rate_bonus_per_rank",
+    ]
+    list_select_related = ["distinction", "resonance"]
+    autocomplete_fields = ["distinction", "resonance"]
+    search_fields = ["distinction__name", "resonance__name"]
+
+
+@admin.register(RitualLiturgy)
+class RitualLiturgyAdmin(admin.ModelAdmin):
+    """#3831 - the public, non-spoiler officiant's spoken invocation for a Ritual."""
+
+    list_display = ["ritual"]
+    autocomplete_fields = ["ritual"]
+    search_fields = ["ritual__name", "opening_call"]
+
+
+@admin.register(PortalAnchorKind)
+class PortalAnchorKindAdmin(admin.ModelAdmin):
+    """#3831 - staff-authored medium of portal travel (e.g. Mirror, Doorway)."""
+
+    list_display = ["name", "arrival_verb", "departure_verb"]
+    search_fields = ["name", "description"]
+
+
+@admin.register(TechniqueCapabilityRequirement)
+class TechniqueCapabilityRequirementAdmin(admin.ModelAdmin):
+    """#3831 - a capability a character must possess to perform a Technique."""
+
+    list_display = ["technique", "capability", "minimum_value"]
+    list_select_related = ["technique", "capability"]
+    autocomplete_fields = ["technique", "capability"]
+    search_fields = ["technique__name", "capability__name"]
+
+
+class TechniqueVariantCapabilityGrantInline(admin.TabularInline):
+    """#3831 - capability granted by this variant (mirrors TechniqueCapabilityGrantInline)."""
+
+    model = TechniqueVariantCapabilityGrant
+    extra = 1
+    autocomplete_fields = ["capability", "prerequisite"]
+
+
+class TechniqueVariantAppliedConditionInline(admin.TabularInline):
+    """#3831 - applied-condition payload rows on the TechniqueVariant admin."""
+
+    model = TechniqueVariantAppliedCondition
+    extra = 1
+    autocomplete_fields = ["condition"]
+
+
+class TechniqueVariantDamageProfileInline(admin.TabularInline):
+    """#3831 - damage payload rows on the TechniqueVariant admin."""
+
+    model = TechniqueVariantDamageProfile
+    extra = 1
+    autocomplete_fields = ["damage_type"]
+
+
+@admin.register(TechniqueVariant)
+class TechniqueVariantAdmin(admin.ModelAdmin):
+    """#3831 - a resonance-specialized form of a parent Technique (ADR-0055)."""
+
+    list_display = [
+        "parent_technique",
+        "name_override",
+        "resonance",
+        "unlock_thread_level",
+        "intensity_delta",
+        "control_delta",
+    ]
+    list_filter = ["resonance", "unlock_thread_level"]
+    search_fields = ["name_override", "parent_technique__name"]
+    list_select_related = ["parent_technique", "resonance"]
+    autocomplete_fields = [
+        "parent_technique",
+        "resonance",
+        "discovery_achievement",
+        "codex_entry",
+    ]
+    inlines = [
+        TechniqueVariantAppliedConditionInline,
+        TechniqueVariantDamageProfileInline,
+        TechniqueVariantCapabilityGrantInline,
+    ]
+
+
+@admin.register(TechniqueVariantCapabilityGrant)
+class TechniqueVariantCapabilityGrantAdmin(admin.ModelAdmin):
+    """#3831 - capability granted by a TechniqueVariant (mirrors TechniqueCapabilityGrant)."""
+
+    list_display = ["variant", "capability", "base_value", "intensity_multiplier"]
+    list_filter = ["capability"]
+    list_select_related = ["variant", "capability"]
+    autocomplete_fields = ["variant", "capability", "prerequisite"]
+    search_fields = [
+        "variant__name_override",
+        "variant__parent_technique__name",
+        "capability__name",
+    ]
+
+
+@admin.register(TechniqueVariantDamageProfile)
+class TechniqueVariantDamageProfileAdmin(admin.ModelAdmin):
+    """#3831 - damage profile for a TechniqueVariant (mirrors TechniqueDamageProfile)."""
+
+    list_display = ["variant", "damage_type", "base_damage", "damage_per_extra_sl"]
+    list_filter = ["damage_type"]
+    list_select_related = ["variant", "damage_type"]
+    autocomplete_fields = ["variant", "damage_type"]
+    search_fields = ["variant__name_override", "variant__parent_technique__name"]
+
+
+@admin.register(TechniqueVariantAppliedCondition)
+class TechniqueVariantAppliedConditionAdmin(admin.ModelAdmin):
+    """#3831 - applied condition for a TechniqueVariant (mirrors TechniqueAppliedCondition)."""
+
+    list_display = ["variant", "condition", "target_kind", "minimum_success_level"]
+    list_filter = ["target_kind", "condition"]
+    list_select_related = ["variant", "condition"]
+    autocomplete_fields = ["variant", "condition"]
+    search_fields = ["variant__name_override", "variant__parent_technique__name"]

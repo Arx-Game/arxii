@@ -509,29 +509,31 @@ class TestContentRowExportViewsConfigured(TestCase):
     def test_export_diff_confirm_for_model_with_no_registered_modeladmin(self) -> None:
         """Credited+exportable models with no ModelAdmin degrade to the workbench link.
 
-        13 credited+exportable models (e.g. ``missions.MissionTemplate``) never
-        got a ``ModelAdmin`` registered. Exporting one used to 500 the diff
-        page on ``NoReverseMatch`` building its (nonexistent) admin
-        change-form URL (#3019 review, Item 2) - it now degrades to a
-        workbench editor link, which always resolves regardless of the admin
-        registry.
+        A handful of credited+exportable models never got a ``ModelAdmin``
+        registered (``checks.ConsequenceEffect`` is one — it is deliberately
+        inline-only, mirroring ``magic.TechniqueDamageProfile``: a payload row
+        has no meaning apart from its owning ``Consequence``, #3831). Exporting
+        one used to 500 the diff page on ``NoReverseMatch`` building its
+        (nonexistent) admin change-form URL (#3019 review, Item 2) - it now
+        degrades to a workbench editor link, which always resolves regardless
+        of the admin registry. (Formerly used ``missions.MissionTemplate`` as
+        the example; #3831 gave it a standalone `ModelAdmin`.)
         """
+        from world.checks.factories import ConsequenceEffectFactory
         from world.contributors.factories import ContentContributorFactory
-        from world.missions.factories import MissionTemplateFactory
 
-        template = MissionTemplateFactory(
-            name="Row No ModelAdmin",
+        effect = ConsequenceEffectFactory(
             written_by=ContentContributorFactory(name="Row No ModelAdmin Writer"),
         )
 
-        export_resp = self._export("missions.missiontemplate", template.pk)
+        export_resp = self._export("checks.consequenceeffect", effect.pk)
         self.assertEqual(export_resp.status_code, 302)
 
-        diff_resp = self._diff("missions.missiontemplate", template.pk)
+        diff_resp = self._diff("checks.consequenceeffect", effect.pk)
         self.assertEqual(diff_resp.status_code, 200)
         self.assertIsNone(diff_resp.context["change_url"])
         workbench_url = (
-            f"{reverse('admin_authoring_editor')}?model=missions.missiontemplate&pk={template.pk}"
+            f"{reverse('admin_authoring_editor')}?model=checks.consequenceeffect&pk={effect.pk}"
         )
         self.assertEqual(diff_resp.context["workbench_url"], workbench_url)
         # The template auto-escapes the querystring's "&" to "&amp;" - assert
@@ -542,8 +544,8 @@ class TestContentRowExportViewsConfigured(TestCase):
             confirm_resp = self.client.post(
                 reverse("admin_content_export_row_confirm"),
                 {
-                    "model": "missions.missiontemplate",
-                    "pk": template.pk,
+                    "model": "checks.consequenceeffect",
+                    "pk": effect.pk,
                     "digest": diff_resp.context["digest"],
                     "action": "confirm",
                     "new_row": "1",
@@ -553,4 +555,4 @@ class TestContentRowExportViewsConfigured(TestCase):
         self.assertEqual(confirm_resp.status_code, 302)
         self.assertEqual(confirm_resp.url, reverse("admin_content_session"))
         log = run_git(self.root, "log", "--oneline", "-1").stdout
-        self.assertIn("Export MissionTemplate", log)
+        self.assertIn("Export ConsequenceEffect", log)
