@@ -31,7 +31,11 @@ from world.scenes.action_models import (
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.boon_services import BOON_ACTION_KEYS
 from world.scenes.constants import InteractionMode
-from world.scenes.interaction_services import create_interaction, write_target_personas
+from world.scenes.interaction_services import (
+    create_interaction,
+    deliver_outcome_interaction,
+    write_target_personas,
+)
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -96,6 +100,7 @@ def _resolve_treatment_request(
     ActionTemplate resolution chain entirely. The result is recorded as a regular
     scene interaction on the request and the function returns None because there
     is no PendingActionResolution to hand back to the SCENE_ADAPTIVE pipeline.
+    The row is delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     from world.conditions.services import perform_treatment  # noqa: PLC0415
 
@@ -140,6 +145,12 @@ def _resolve_treatment_request(
     # target who merely walked out of the room between request and resolution would
     # otherwise 500 the REST resolution of an action they already consented to.
     write_target_personas(interaction, [action_request.target_persona])
+    # #3807: this row was persisted and delivered to nobody live. Deliver on commit,
+    # after the target row above so the involvement mark has target_persona_ids.
+    deliver_outcome_interaction(
+        interaction,
+        location=action_request.initiator_persona.character_sheet.character.location,
+    )
 
     action_request.status = ActionRequestStatus.RESOLVED
     action_request.resolved_at = timezone.now()
@@ -1521,6 +1532,9 @@ def _create_result_interaction(
             target). Pass explicitly when resolving an additional target so the
             interaction names the correct persona rather than the primary one.
         fury_committed: Realized FuryTier post-resolution; recorded for audit.
+
+    The returned row (and the MUTTER fragment row, when delivery is MUTTER) is
+    delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
@@ -1571,17 +1585,24 @@ def _create_result_interaction(
         # refuse (and 500 an unhandled `UnreachableError` out of the REST resolver)
         # for a target who simply stood up from the table mid-action.
         write_target_personas(interaction, target_personas)
+
+    # #3807: this row was persisted and delivered to nobody live. Deliver on commit,
+    # after the target rows above so the involvement mark has target_persona_ids.
+    initiator_location = action_request.initiator_persona.character_sheet.character.location
+    deliver_outcome_interaction(interaction, location=initiator_location)
+
     if mode == InteractionMode.MUTTER:
         # #905: the room heard a fragment — and the fragment is public
         # BECAUSE it is what the room heard (#900 invariant).
         from world.scenes.interaction_services import mutter_fragment  # noqa: PLC0415
 
-        create_interaction(
+        fragment_interaction = create_interaction(
             persona=action_request.initiator_persona,
             content=mutter_fragment(content),
             mode=InteractionMode.MUTTER,
             scene=action_request.scene,
         )
+        deliver_outcome_interaction(fragment_interaction, location=initiator_location)
     return interaction
 
 
