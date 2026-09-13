@@ -83,9 +83,13 @@ pnpm install --dir frontend
 # silently bypass every commit's checks from inside Linux — git can't exec
 # the CRLF shebang and `core.hooksPath` points at a non-existent Windows
 # path. Unset the stale config, wipe any stale hook files, then reinstall.
-git config --unset-all core.hooksPath 2>/dev/null || true
+#
+# The pre-commit hook is a shim running tools/githooks/pre-commit, which checks
+# staged files without clearing the worktree (#3814); install.sh also unsets
+# core.hooksPath. The pre-push hook is still pre-commit's own. Same two commands
+# as `just install-git-hooks`.
 rm -f .git/hooks/pre-commit .git/hooks/pre-push
-uv run pre-commit install
+bash tools/githooks/install.sh
 uv run pre-commit install --hook-type pre-push
 
 # Wait for the db service (bounded — never hang first-run forever), then

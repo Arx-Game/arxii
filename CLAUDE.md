@@ -18,12 +18,43 @@ step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt
 **Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
 subagents) run strictly sequentially — one per message, verify the result
 before the next.** Parallelism is only for read-only fan-out (greps, reads,
-Explore/research agents). Two concrete failure modes motivate this:
+Explore/research agents), plus up to three implementers sharing a worktree under
+the conditions in the first bullet below. Concrete failure modes motivate this:
 
-- **Parallel implementer subagents on a shared worktree corrupt the git
-  index** — they revert each other's uncommitted edits and cross-contaminate
-  commits. Dispatch one, await it, verify the commit actually landed
-  (`git log -1`), then the next.
+- **Implementers sharing a worktree: the commit hook is the control, not
+  serialisation (#3814, ADR-0296).** pre-commit's own hook runs
+  `git checkout -- .` over the whole worktree while a commit's hooks run, so a
+  sibling's uncommitted edits vanish for about 50 seconds and anything it writes
+  then can be lost; a failed auto-fix then invites `git add -A`, which sweeps the
+  sibling's files into the commit. The installed hook (`tools/githooks/pre-commit`,
+  via `just install-git-hooks`) checks staged files without clearing anything.
+  Up to three implementers may share one worktree when:
+  - their plan tasks' `**Files:**` lists do not intersect. Tasks that share a
+    file, or need another task's output, stay serial;
+  - each dispatch names the sibling agents and their file lists, and an agent
+    that needs a file outside its own list messages that sibling (`SendMessage`)
+    before touching it;
+  - each commits only its own files with a pathspec commit,
+    `git commit -m <msg> -- <files>` (after `git add -- <file>` for a file git does
+    not track yet); never a plain `git commit`, `git add -A`, `git add .` or
+    `commit -a`, and never `git stash` (`refs/stash` is shared by every worktree),
+    `git checkout <path>`, `git restore` or `git reset`. The index is shared too:
+    a pathspec commit holds `index.lock` while its hooks run, so a sibling's
+    `git add` or commit in that window fails with "index.lock: File exists". Wait
+    and retry; never delete `index.lock`. If the hook says an auto-fixer changed a
+    file, re-run the same commit;
+  - each commits with `SKIP=ty,typescript` and runs no test suite or build (both
+    check the whole project on every commit, and `tsc` alone reaches ~1.3 GB on a
+    4 GiB container, #3707). The
+    coordinator runs `uv run pre-commit run ty --all-files` and
+    `uv run pre-commit run typescript --all-files` once before pushing, then the
+    scoped fast tier one branch at a time. `check-type-annotations` stays on: it
+    is the only annotation check (a no-op under CI's `--all-files`), and a
+    failure it raises on a sibling's staged file clears on a rerun.
+
+  Serial dispatch still verifies each commit landed (`git log -1`) before the
+  next; a concurrent wave verifies that every implementer's commit landed and names
+  only that implementer's files (`git show --stat <sha>`) before the next wave.
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
@@ -505,5 +536,7 @@ rule: see the `running-tests` skill.
   as a precheck; the whole-repo pass can crash this devcontainer** (per-file hooks
   already ran at commit, and CI is the gate). If you must re-run hooks locally,
   scope to the diff: `uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
+  That form still clears the worktree while it runs (only `--files` and
+  `--all-files` do not), so run it only when nobody has uncommitted work there.
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.
