@@ -115,8 +115,11 @@ export function RouletteWheel({
   // never always its centre.
   const landingFractionRef = useRef<number | null>(null);
   if (landingFractionRef.current === null) {
+    // Cosmetic only: the server already resolved the outcome; this just varies where the
+    // pointer stops inside that slice.
+    const roll = Math.random(); // NOSONAR cosmetic landing offset, not crypto
     landingFractionRef.current =
-      LANDING_FRACTION_MIN + Math.random() * (LANDING_FRACTION_MAX - LANDING_FRACTION_MIN);
+      LANDING_FRACTION_MIN + roll * (LANDING_FRACTION_MAX - LANDING_FRACTION_MIN);
   }
 
   const slices = useMemo(() => buildSlices(consequences), [consequences]);
