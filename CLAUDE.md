@@ -34,11 +34,18 @@ the conditions in the first bullet below. Concrete failure modes motivate this:
   - each dispatch names the sibling agents and their file lists, and an agent
     that needs a file outside its own list messages that sibling (`SendMessage`)
     before touching it;
-  - each stages only its own files (`git add -- <files>`), never `git add -A`,
-    `git add .` or `commit -a`, and never runs `git stash` (`refs/stash` is shared
-    by every worktree), `git checkout <path>`, `git restore` or `git reset`;
-  - each commits with `SKIP=ty,typescript` and runs no test suite or build (two
-    whole-project checks at up to ~1.3 GB each on a 4 GiB container). The
+  - each commits only its own files with a pathspec commit,
+    `git commit -m <msg> -- <files>` (after `git add -- <file>` for a file git does
+    not track yet); never a plain `git commit`, `git add -A`, `git add .` or
+    `commit -a`, and never `git stash` (`refs/stash` is shared by every worktree),
+    `git checkout <path>`, `git restore` or `git reset`. The index is shared too:
+    a pathspec commit holds `index.lock` while its hooks run, so a sibling's
+    `git add` or commit in that window fails with "index.lock: File exists". Wait
+    and retry; never delete `index.lock`. If the hook says an auto-fixer changed a
+    file, re-run the same commit;
+  - each commits with `SKIP=ty,typescript` and runs no test suite or build (both
+    check the whole project on every commit, and `tsc` alone reaches ~1.3 GB on a
+    4 GiB container, #3707). The
     coordinator runs `uv run pre-commit run ty --all-files` and
     `uv run pre-commit run typescript --all-files` once before pushing, then the
     scoped fast tier one branch at a time. `check-type-annotations` stays on: it
@@ -46,7 +53,8 @@ the conditions in the first bullet below. Concrete failure modes motivate this:
     failure it raises on a sibling's staged file clears on a rerun.
 
   Serial dispatch still verifies each commit landed (`git log -1`) before the
-  next; a concurrent wave verifies every implementer's commit before the next wave.
+  next; a concurrent wave verifies that every implementer's commit landed and names
+  only that implementer's files (`git show --stat <sha>`) before the next wave.
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
