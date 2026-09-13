@@ -399,6 +399,8 @@ focused checks each task already used (`just test-fast <app>` for a touched app,
 `ruff check <changed files>`). Only if a branch was built with `--no-verify`
 commits (so hooks never ran), scope the catch-up to just the branch's diff —
 `uv run pre-commit run --from-ref origin/main --to-ref HEAD` — never `--all-files`.
+That form clears the worktree while hooks run (#3814), so run it only when no other
+agent has uncommitted work in the worktree.
 
 ### 6. CI watch
 
