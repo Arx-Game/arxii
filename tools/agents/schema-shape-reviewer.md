@@ -65,7 +65,7 @@ that's a finding, not a defensible caution.
 
 **5. No stated answer, in the spec or PR description, to any of the six
 `schema-shape` questions for a surface this diff adds.** The skill's own
-"Grounding" section frames these as arguable, not automatic — a diff with a
+"Closing framing" section frames these as arguable, not automatic — a diff with a
 non-obvious shape and no stated defense is itself incomplete, whether or not
 the shape turns out to be right.
 
