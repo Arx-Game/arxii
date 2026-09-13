@@ -342,4 +342,5 @@ treat those names as hints to confirm, not gospel.
 - [0291 - Websocket liveness is a server-side auto-ping, not a client heartbeat](0291-websocket-liveness-is-a-server-side-auto-ping.md) (#3745; related #3742, #3743)
 - [0292 - There is no player-trust axis; per-thing permissions if we ever want one](0292-no-trust-axis-permissions-if-anything.md) (#3726; amends ADR-0097; related ADR-0237, ADR-0141)
 - [0293 - Reachability governs who can be addressed; the reply parent is the thread's anchor](0293-reachability-governs-addressing-not-audience-promotion.md) (#3787; related ADR-0170, ADR-0260, #3757, #3760)
+- [0295 - Leaving the world is explicit; navigation keeps presence; nobody enters nowhere](0295-leaving-the-world-is-explicit-navigation-keeps-presence.md) (#3818; amends ADR-0241, ADR-0294; related ADR-0247, #2121, #3813)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)

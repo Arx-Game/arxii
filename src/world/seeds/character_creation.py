@@ -477,13 +477,13 @@ def ensure_canonical_fallback_room() -> ObjectDB:
     ``area`` (staff edit wins), and never reassigns the reserved area if it already
     exists with a non-AUTHORED origin (staff edit wins there too — just warns).
     """
-    from evennia.objects.models import ObjectDB  # noqa: PLC0415
     from evennia.utils import create as evennia_create  # noqa: PLC0415
 
-    existing = ObjectDB.objects.filter(
-        db_key=FALLBACK_STARTING_ROOM_KEY,
-        db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
-    ).first()
+    from world.character_creation.services import resolve_fallback_starting_room  # noqa: PLC0415
+
+    # By fixture identity first (#3818): the reviewer renamed this room "City
+    # Center" in the Atlas, and a by-name lookup would mint a second one here.
+    existing = resolve_fallback_starting_room()
     if existing is not None:
         room = existing
     else:

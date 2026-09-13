@@ -7,6 +7,13 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
 ### `characters.py`
 - **`Character`**: Extends `DefaultCharacter`
 - Traits handler, item_data interface, roster integration, scene state management
+- **A character with nowhere to be lands in the fallback starting room** (#3818).
+  Evennia's `at_pre_puppet` restores `prelogout_location` or `home` and, with
+  both empty, leaves the character nowhere — which on the web is a screen that
+  waits forever for a `room_state`. Our override sets `home` to
+  `character_creation.services.resolve_fallback_starting_room()` first (found by
+  fixture identity, so the staff rename to "City Center" holds) and lets Evennia
+  do the move. Never look that room up by name.
 
 ### `rooms.py`
 - **`Room`**: Extends `DefaultRoom`

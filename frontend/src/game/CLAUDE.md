@@ -101,7 +101,18 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
   internal state) — a future caller must supply both.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
-  switching. Every non-active character's avatar carries a two-tier attention
+  switching, and the world menu (#3818): the leading button opens a
+  `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Leave the world
+  as <active>", Log out). It was a `<Link to="/">`, and `/` (`GatefoldPage`)
+  redirects an in-world player straight back to `/game`, so it flickered and
+  did nothing; `/hall` is the Hall on a route that never redirects. Navigating
+  away keeps every character tab connected (sessions and sockets live in
+  Redux/module scope, and `GamePage` has no teardown); "Leave the world" is
+  `useGameSocket().disconnect(name)`, which closes that one socket so the
+  server unpuppets the character (nobody stands unpiloted on the grid) and
+  drops the session, while the account stays signed in with its selection
+  intact. `useLogout` already closes every socket. Every non-active
+  character's avatar carries a two-tier attention
   indicator (#2166, `characterAttention` from `attention.ts` since #3774):
   a red numeric badge for _direct_ attention (an unseen whisper or @-target
   aimed at that character), else a muted dot for _ambient_ (any other unseen

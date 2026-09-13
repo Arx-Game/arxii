@@ -57,7 +57,9 @@ test('a quiet-room entry preserves an editable draft until structured presence a
   await expect(page.getByText('Entering world', { exact: true })).toBeVisible();
   await editor.fill('A quiet beginning.\n\nThe draft stays here.');
   await expect(page.getByRole('button', { name: 'Send', exact: true })).toBeDisabled();
-  await editor.press('Control+Enter');
+  // Enter sends (#3818); Shift+Enter is the line break. Both `\n`s above came
+  // in through fill(), not the key.
+  await editor.press('Enter');
   expect(sent.map((frame) => JSON.parse(frame)[1][0])).toEqual(['@ic Tehom']);
 
   socket!.send(

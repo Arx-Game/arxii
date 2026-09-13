@@ -139,7 +139,11 @@ interface CommandInputProps {
    * behind having more than one character) once the caller supplies it.
    */
   speakingAs?: { name: string; thumbnailUrl: string | null };
-  /** Narrative play uses Cmd/Ctrl+Enter; legacy command drawers may retain Enter. */
+  /**
+   * Enter sends and Shift+Enter breaks the line (the default; #3818 made the
+   * narrative composer use it too). `false` keeps Enter for paragraphs and
+   * sends on Cmd/Ctrl+Enter, for any surface that wants that.
+   */
   submitOnEnter?: boolean;
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;

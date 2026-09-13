@@ -27,6 +27,9 @@ from world.character_creation.constants import (
     AGE_MAX,
     AGE_MAX_ETERNAL_YOUTH,
     AGE_MIN,
+    FALLBACK_STARTING_ROOM_FIXTURE_KEY,
+    FALLBACK_STARTING_ROOM_KEY,
+    FALLBACK_STARTING_ROOM_TYPECLASS,
     PATH_OF_THE_CHOSEN_NAME,
     STAT_DISPLAY_DIVISOR,
     ApplicationStatus,
@@ -2036,6 +2039,32 @@ def _create_skill_values(character: ObjectDB, draft: CharacterDraft) -> None:
                     spec_id,
                     character.key,
                 )
+
+
+def resolve_fallback_starting_room() -> ObjectDB | None:
+    """The canonical fallback starting room, or ``None`` if it was never seeded (#3818).
+
+    Found by its stable identity first — the ``RoomProfile.fixture_key`` that
+    ``ensure_canonical_fallback_room`` stamps on it — and only then by the seeded
+    ``(name, typeclass)`` pair, for a room seeded before the key existed. Staff
+    rename this room (the reviewer made it "City Center" in the Atlas); a lookup
+    by name then missed, every unwired draft spawned nowhere, and the seeder would
+    have minted a second "The Wanderer's Rest" on the next Big Button press. The
+    three readers — ``CharacterDraft.get_starting_room``, the seeder, and
+    ``Character.at_pre_puppet`` — all come through here so they cannot disagree.
+    """
+    from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+
+    profile = (
+        RoomProfile.objects.filter(fixture_key=FALLBACK_STARTING_ROOM_FIXTURE_KEY)
+        .select_related("objectdb")
+        .first()
+    )
+    if profile is not None:
+        return profile.objectdb
+    return ObjectDB.objects.filter(
+        db_key=FALLBACK_STARTING_ROOM_KEY, db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS
+    ).first()
 
 
 def get_accessible_starting_areas(account: AbstractBaseUser | AnonymousUser) -> QuerySet:

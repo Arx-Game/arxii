@@ -9,6 +9,7 @@ creation commands.
 """
 
 import contextlib
+import logging
 
 from django.core.exceptions import ObjectDoesNotExist
 from django.utils import timezone
@@ -27,6 +28,8 @@ from world.magic.services.resonance_environment import (
     refresh_resonance_alignment,
 )
 from world.roster.models import RosterEntry
+
+logger = logging.getLogger(__name__)
 
 
 class Character(ObjectParent, DefaultCharacter):
@@ -419,6 +422,35 @@ class Character(ObjectParent, DefaultCharacter):
     def do_look(self, target):
         desc = self.at_look(target)
         self.msg(desc)
+
+    def at_pre_puppet(self, account, session=None, **kwargs):
+        """Give a character with nowhere to be a home before Evennia restores them (#3818).
+
+        Evennia's hook moves a location-less character to ``prelogout_location``
+        or ``home`` and, when both are empty, leaves them nowhere with a one-line
+        notice to the account. On the web that is a screen that waits forever:
+        readiness is a ``room_state`` frame, and ``send_room_state`` has nothing
+        to send without a location. So when neither is set, ``home`` becomes the
+        canonical fallback room — resolved by fixture identity, so the staff
+        rename to "City Center" is honoured — and Evennia's own restore does the
+        move. Logged, because it means a character was minted without a home.
+        A fallback that was never seeded degrades to Evennia's notice.
+        """
+        has_prelogout = self.db.prelogout_location is not None
+        if self.location is None and not has_prelogout and self.home is None:
+            from world.character_creation.services import resolve_fallback_starting_room
+
+            fallback = resolve_fallback_starting_room()
+            if fallback is not None:
+                logger.warning(
+                    "Character %s (#%s) had no location, no prelogout location and no "
+                    "home; landing them in the fallback starting room %r.",
+                    self.key,
+                    self.pk,
+                    fallback.key,
+                )
+                self.home = fallback
+        super().at_pre_puppet(account, session=session, **kwargs)
 
     def at_post_puppet(self, **kwargs):
         """Handle actions after a session puppets this character.

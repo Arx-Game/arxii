@@ -9,6 +9,7 @@ import { RequireCharacter } from './components/RequireCharacter';
 import { StaffRoute } from './components/StaffRoute';
 import { Skeleton } from './components/ui/skeleton';
 import { GatefoldPage } from './home/GatefoldPage';
+import { HallPage } from './home/HallPage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
@@ -376,6 +377,18 @@ function App() {
       <ErrorBoundary>
         <Routes>
           <Route path="/" element={<GatefoldPage />} />
+          {/* #3818 — the Hall on its own address. `/` keeps redirecting an
+              in-world player to `/game` (a reload lands back in play), so
+              the game's world menu needs a route that always renders
+              character select, with every open session left running. */}
+          <Route
+            path="/hall"
+            element={
+              <ProtectedRoute>
+                <HallPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/login"
             element={

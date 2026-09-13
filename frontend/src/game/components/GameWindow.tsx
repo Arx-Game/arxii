@@ -567,7 +567,11 @@ export function GameWindow({
           speakingAs={speakingAs}
           replyTarget={replyTarget}
           onCancelReply={onCancelReply}
-          submitOnEnter={false}
+          // Enter sends, Shift+Enter breaks the line (#3818) — the convention
+          // of every chat RP interface; the reviewer found Enter-as-newline
+          // and a reach for the Send button slower than typing. This was
+          // `submitOnEnter={false}` (Cmd/Ctrl+Enter to send) since the
+          // narrative composer landed. Ctrl/Cmd+Enter still sends too.
           draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
           // #3784 — the `room:unknown` placeholder above is not a room, it is
           // "the room we're standing in, not yet named": during entry the

@@ -1547,15 +1547,12 @@ class CharacterDraft(SharedMemoryModel):
         if self.selected_area and self.selected_area.default_starting_room:
             return self.selected_area.default_starting_room.objectdb
 
-        from world.character_creation.constants import (  # noqa: PLC0415
-            FALLBACK_STARTING_ROOM_KEY,
-            FALLBACK_STARTING_ROOM_TYPECLASS,
+        from world.character_creation.services import (  # noqa: PLC0415
+            resolve_fallback_starting_room,
         )
 
-        fallback = ObjectDB.objects.filter(
-            db_key=FALLBACK_STARTING_ROOM_KEY,
-            db_typeclass_path=FALLBACK_STARTING_ROOM_TYPECLASS,
-        ).first()
+        # By fixture identity, so a staff rename of the room is honoured (#3818).
+        fallback = resolve_fallback_starting_room()
         if fallback is not None:
             logger.warning(
                 "CharacterDraft %s has no Beginnings/StartingArea starting room "

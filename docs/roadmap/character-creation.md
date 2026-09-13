@@ -343,6 +343,14 @@ section for the full #2428/#2440/#2441/#2442 build record.
   stable `db_key`) for any hand-built `StartingArea`/`Beginnings` combo that's missing a
   room — a freshly approved character never spawns with `location=None`; the prior
   "valid for early testing" silent-`None` behavior is retired.
+- **2026-09-13, #3818:** the fallback room is found by its `RoomProfile.fixture_key`
+  (`arx/fallback-starting-room`) through
+  `world.character_creation.services.resolve_fallback_starting_room`, with the seeded
+  name only as a last resort for a room seeded before fixture keys existed. Staff
+  renamed the room "City Center" on production and the by-name lookup missed it, so
+  Apostate landed nowhere. The seeder reuses the renamed room instead of minting a
+  second one, and `Character.at_pre_puppet` sends a character with no location and no
+  home there too, so entry always completes.
 
 ## Built (2026-07-07, #2062 — kinship graph; ADR-0097)
 

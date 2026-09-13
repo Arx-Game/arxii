@@ -66,6 +66,34 @@ class GetStartingRoomFallbackTests(TestCase):
 
         self.assertIsNone(draft.get_starting_room())
 
+    def test_fallback_survives_a_staff_rename_of_the_room(self) -> None:
+        """Found by the reserved fixture identity, not the seeded name (#3818).
+
+        The reviewer renamed the seeded room "City Center" in the Atlas; a
+        by-name lookup then missed and every unwired draft spawned nowhere.
+        """
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        fallback_room = ensure_canonical_fallback_room()
+        fallback_room.key = "City Center"
+        fallback_room.save()
+        area = StartingAreaFactory(default_starting_room=None)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+
+        self.assertEqual(draft.get_starting_room(), fallback_room)
+
+    def test_resolver_falls_back_to_the_seeded_name_for_a_room_without_the_key(self) -> None:
+        """A room seeded before the fixture key existed is still found by name."""
+        from evennia.utils import create as evennia_create
+
+        from world.character_creation.constants import FALLBACK_STARTING_ROOM_KEY
+        from world.character_creation.services import resolve_fallback_starting_room
+
+        room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key=FALLBACK_STARTING_ROOM_KEY, nohome=True
+        )
+        self.assertEqual(resolve_fallback_starting_room(), room)
+
     def test_default_starting_room_is_room_profile_and_resolves_to_objectdb(self) -> None:
         """StartingArea.default_starting_room is a RoomProfile FK (#2448); resolves to ObjectDB."""
         from evennia.utils import create as evennia_create
@@ -90,6 +118,23 @@ class EnsureCanonicalFallbackRoomAuthoredTests(TestCase):
         profile = room.room_profile
         self.assertEqual(profile.origin, GridOrigin.AUTHORED)
         self.assertEqual(profile.fixture_key, FALLBACK_STARTING_ROOM_FIXTURE_KEY)
+
+    def test_rerun_reuses_a_renamed_room_instead_of_minting_another(self) -> None:
+        """The seeder finds its room by fixture identity, so a rename is not a miss (#3818)."""
+        from evennia.objects.models import ObjectDB
+
+        from world.character_creation.constants import FALLBACK_STARTING_ROOM_KEY
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        room = ensure_canonical_fallback_room()
+        room.key = "City Center"
+        room.save()
+
+        again = ensure_canonical_fallback_room()
+
+        self.assertEqual(again.pk, room.pk)
+        self.assertEqual(again.key, "City Center")
+        self.assertFalse(ObjectDB.objects.filter(db_key=FALLBACK_STARTING_ROOM_KEY).exists())
 
     def test_never_clobbers_staff_edited_fixture_key(self) -> None:
         """A staff-edited fixture_key is never overwritten on re-run."""

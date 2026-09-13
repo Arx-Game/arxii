@@ -78,6 +78,13 @@ class MockWebSocket {
     this.sent.push(data);
   }
 
+  /** Records the caller's intent only; a test dispatches the resulting
+   * `close` event itself, the way a real socket fires it asynchronously. */
+  closed = false;
+  close(): void {
+    this.closed = true;
+  }
+
   dispatch(type: string, event: unknown = {}): void {
     (this.listeners[type] ?? []).forEach((callback) => callback(event));
   }
@@ -332,5 +339,73 @@ describe('useGameSocket reconnect reconciliation ordering (#3760 Task 12)', () =
     expect((queryClient.invalidateQueries as ReturnType<typeof vi.fn>).mock.calls.length).toBe(
       invalidateCallsAfterGenTwo
     );
+  });
+});
+
+describe('useGameSocket disconnect (#3818 "Leave the world")', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('closes only that character, forgets its session, and never reconnects it', async () => {
+    const { result } = renderHook(() => useGameSocket());
+
+    await act(async () => {
+      await result.current.connect('Aria');
+      await result.current.connect('Bram');
+    });
+    const [ariaSocket, bramSocket] = MockWebSocket.instances;
+
+    act(() => {
+      result.current.disconnect('Aria');
+    });
+
+    expect(ariaSocket.closed).toBe(true);
+    expect(bramSocket.closed).toBe(false);
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'game/endSession', payload: 'Aria' });
+
+    // The server acknowledges with a normal close; Bram is still in the world,
+    // so nothing resets, and no reconnect timer ever resurrects Aria.
+    act(() => {
+      ariaSocket.dispatch('close', { code: 1000 });
+    });
+    expect(mockDispatch).not.toHaveBeenCalledWith({ type: 'game/resetGame', payload: undefined });
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(2);
+  });
+
+  it('cancels a pending reconnect for that character', async () => {
+    const { result } = renderHook(() => useGameSocket());
+
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    const ariaSocket = MockWebSocket.instances[0];
+    // An abnormal close arms the backoff reconnect...
+    act(() => {
+      ariaSocket.dispatch('close', { code: 1006 });
+    });
+
+    // ...which leaving the world on purpose must cancel.
+    act(() => {
+      result.current.disconnect('Aria');
+    });
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(MockWebSocket.instances).toHaveLength(1);
   });
 });

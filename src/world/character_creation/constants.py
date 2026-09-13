@@ -41,10 +41,14 @@ CG_MODIFIER_CATEGORY = "character_creation"
 # ``world.seeds.character_creation.ensure_canonical_fallback_room`` and wired onto
 # the dev-seeded "Arx City" StartingArea's ``default_starting_room``. Also the
 # last-resort read ``CharacterDraft.get_starting_room()`` falls back to when
-# neither a Beginnings override nor a StartingArea default is set — so a freshly
-# approved character never spawns with ``location=None``. Both the seeder and the
-# runtime fallback key off this same (name, typeclass) pair so they always agree
-# on the same room, regardless of which seed cluster ran first.
+# neither a Beginnings override nor a StartingArea default is set, and where
+# ``Character.at_pre_puppet`` lands a character with no location and no home —
+# so nobody ever plays with ``location=None``. Every reader goes through
+# ``character_creation.services.resolve_fallback_starting_room`` (#3818), which
+# finds the room by ``FALLBACK_STARTING_ROOM_FIXTURE_KEY`` first: staff rename
+# this room (it is "City Center" on production), and this name is only the
+# seed-time key and the last-resort match for a room seeded before the fixture
+# key existed.
 FALLBACK_STARTING_ROOM_KEY = "The Wanderer's Rest"
 FALLBACK_STARTING_ROOM_TYPECLASS = "typeclasses.rooms.Room"
 
