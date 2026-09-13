@@ -9,6 +9,12 @@ repos:
       - id: end-of-file-fixer
       - id: check-ast
       - id: check-added-large-files
+      # SKILL.md runs these scripts directly, and the main checkout has
+      # core.fileMode=false, so a script created there commits as 100644 and
+      # fails "permission denied" in every fresh worktree. This reads the mode
+      # from the git index, so it catches that even where chmod is ignored.
+      - id: check-shebang-scripts-are-executable
+        files: ^tools/skills/.+\.sh$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
