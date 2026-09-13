@@ -383,9 +383,14 @@ single place a new content dependency gets registered, each row naming its consu
 when the row is absent.
 
 - `ContentDependency` (frozen dataclass): `key`, `label`, `tier`, `consumer`,
-  `consequence`, `probe`. `DependencyTier` is `REQUIRED` (a code path a player or
-  staff member can hit today breaks or goes silently inert) or `TUNING` (a config
-  singleton the game runs without, just with worse numbers).
+  `consequence`, `probe`, and optional `admin_model`. `DependencyTier` is `REQUIRED`
+  (a code path a player or staff member can hit today breaks or goes silently inert)
+  or `TUNING` (a config singleton the game runs without, just with worse numbers).
+- Every panel row links to the admin page where its rows are authored (#3831):
+  `DependencyRow.admin_url` resolves `admin_model`, else the probe's own
+  `model_label()`, through `web.admin.authoring.links.admin_changelist_url`, and
+  renders no link for a model with no registered `ModelAdmin`. Set `admin_model` on a
+  `CustomProbe` declaration, which names no model itself.
 - Four probe shapes, all subclasses of `ContentProbe`: `NamedRowsProbe` (every one
   of a set of names exists on a model, case-sensitive by default - opt into
   `case_insensitive=True` only for a declaration whose consumer itself resolves

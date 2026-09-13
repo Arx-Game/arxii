@@ -78,6 +78,27 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     way - the ``(model_label, pk)`` signature both ``RelatedEntry`` and
     ``BacklogRow`` can satisfy, since neither carries the model class itself.
     """
+    return _registered_admin_reverse(model_label, "change", args=(pk,))
+
+
+def admin_changelist_url(model_label: str) -> str | None:
+    """Stock-admin changelist link for a whole model, or ``None`` when it has no ``ModelAdmin``.
+
+    The table-level sibling of ``admin_change_url``. The Required content panel
+    (#3831) links every dependency to the page where staff author its rows, and a
+    model with no registered admin renders no link rather than a dead one.
+    """
+    return _registered_admin_reverse(model_label, "changelist")
+
+
+def _registered_admin_reverse(
+    model_label: str, view: str, *, args: tuple[object, ...] = ()
+) -> str | None:
+    """Reverse ``admin:<app>_<model>_<view>`` only for a model registered in ``admin.site``.
+
+    Checking the registry first keeps an unregistered model from ever reaching
+    ``reverse()``; the ``NoReverseMatch`` catch is defense in depth.
+    """
     try:
         model = resolve_model_by_name(model_label)
     except LookupError:
@@ -87,6 +108,6 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     app_label = model._meta.app_label  # noqa: SLF001
     model_name = model._meta.model_name  # noqa: SLF001
     try:
-        return reverse(f"admin:{app_label}_{model_name}_change", args=[pk])
+        return reverse(f"admin:{app_label}_{model_name}_{view}", args=args)
     except NoReverseMatch:
         return None

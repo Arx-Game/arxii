@@ -194,7 +194,12 @@ class FilteredRowProbe(ContentProbe):
 
 @dataclass(frozen=True, slots=True)
 class ContentDependency:
-    """One registry row: a code path's hard dependency on authored content."""
+    """One registry row: a code path's hard dependency on authored content.
+
+    `admin_model` names the model whose admin page authors this dependency's rows,
+    for a probe that cannot say so itself (a `CustomProbe`). Left `None`, the
+    probe's own `model_label()` is used.
+    """
 
     key: str
     label: str
@@ -202,6 +207,7 @@ class ContentDependency:
     consumer: str
     consequence: str
     probe: ContentProbe
+    admin_model: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +216,14 @@ class DependencyRow:
 
     dependency: ContentDependency
     result: ProbeResult
+
+    @property
+    def admin_url(self) -> str | None:
+        """Admin changelist where staff author this dependency's rows (#3831), or None."""
+        from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+
+        model_label = self.dependency.admin_model or self.dependency.probe.model_label()
+        return admin_changelist_url(model_label) if model_label else None
 
 
 @dataclass(frozen=True, slots=True)
