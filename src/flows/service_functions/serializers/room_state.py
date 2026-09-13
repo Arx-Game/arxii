@@ -15,6 +15,7 @@ class ObjectStateSerializer(serializers.Serializer):
     thumbnail_url = serializers.URLField(allow_null=True)
     commands = serializers.ListField(child=serializers.CharField())
     is_mission_board = serializers.BooleanField()
+    place_id = serializers.IntegerField(allow_null=True)
 
     def to_representation(self, instance):
         """Convert BaseState instance to dict representation."""
@@ -44,6 +45,11 @@ class ObjectStateSerializer(serializers.Serializer):
             # pointed at it (no dedicated typeclass — see MissionGiver's
             # docstring), so this can't be derived from typeclass alone.
             "is_mission_board": instance.obj.pk in board_target_ids,
+            # #3810 — the character's current Place, if any; None for
+            # non-characters and for characters with no active PlacePresence.
+            # Batched by the caller (see `_serialize_contents`'s
+            # `place_by_character_id`) rather than looked up per row.
+            "place_id": (self.context or {}).get("place_by_character_id", {}).get(instance.obj.pk),
         }
 
     def _resolve_thumbnail_for_viewer(
@@ -288,14 +294,17 @@ class RoomStatePayloadSerializer(serializers.Serializer):
 
             obj_serializer = ObjectStateSerializer(
                 obj,
-                context={"looker": caller, "board_target_ids": board_target_ids},
+                context={
+                    "looker": caller,
+                    "board_target_ids": board_target_ids,
+                    "place_by_character_id": place_by_character_id,
+                },
             )
             serialized = obj_serializer.data
 
             if isinstance(obj, ExitState):
                 exits.append(serialized)
             elif is_character:
-                serialized["place_id"] = place_by_character_id.get(obj.obj.pk)
                 characters.append(serialized)
             else:
                 objects.append(serialized)
