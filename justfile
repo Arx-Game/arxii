@@ -265,6 +265,13 @@ fmt *args:
 precommit:
     uv run pre-commit run --all-files
 
+# Install the git hooks: the no-clearing pre-commit shim (#3814) and pre-commit's
+# pre-push hook. post-create.sh runs the same two commands on container create;
+# run this to pick up the shim in an existing container.
+install-git-hooks:
+    bash tools/githooks/install.sh
+    uv run pre-commit install --hook-type pre-push
+
 # Format-then-commit (#756): pre-applies ruff format to the named files so
 # the pre-commit format hook can't abort the first pass ("files were
 # modified by this hook") and leave HEAD silently unmoved. Hooks still run.
