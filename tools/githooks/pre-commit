@@ -7,8 +7,17 @@
 # good. This runs the same hooks with `pre-commit run --files <staged files>`, which never
 # stashes, and decides from the result whether to pass, re-stage an auto-fix, or refuse.
 #
-# Installed by tools/githooks/install.sh as a shim in the shared .git/hooks. CI's required
-# `pre-commit` job still runs every hook on exactly what was committed.
+# The index is shared too. A plain `git commit` releases index.lock before hooks run, so a
+# sibling's `git add` during them lands in this commit; `git commit -- <files>` holds the
+# lock throughout, which is why concurrent agents commit with a pathspec (CLAUDE.md).
+#
+# What counts as a pass: a failure caused only by files outside this commit changing (a
+# sibling's edit, or a hook that writes files it was not given, so keep hooks writing only
+# their own files). Not checked here: a staged file missing from disk, and `always_run`
+# hooks on a commit with no staged files. CI's required `pre-commit` job runs every hook on
+# exactly what was committed.
+#
+# Installed by tools/githooks/install.sh as a shim in the shared .git/hooks.
 set -uo pipefail
 
 readonly MAX_ATTEMPTS=3
@@ -40,11 +49,21 @@ else
   exit 1
 fi
 
+# A pathspec commit (`git commit -- <files>`, `--only`) runs hooks against a temporary index
+# named next-index-<pid>.lock. Re-staging there never reaches the real index, so an auto-fix
+# is picked up by re-running the same commit instead.
+temporary_index=0
+case "$(basename "${GIT_INDEX_FILE:-}")" in
+  next-index-*.lock) temporary_index=1 ;;
+esac
+
+# Same filter pre-commit uses for staged files.
 files=()
 while IFS= read -r -d '' file; do
   files+=("$file")
-done < <(git diff --cached --name-only -z --diff-filter=ACMR)
+done < <(git diff --cached --name-only -z --diff-filter=ACMRTUXB)
 
+# With no files, `pre-commit run --files` would take pre-commit's stashing path.
 if [ "${#files[@]}" -eq 0 ]; then
   exit 0
 fi
@@ -101,6 +120,15 @@ for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
       exit 1
     fi
   done
+
+  if [ "$temporary_index" -eq 1 ]; then
+    say "an auto-fixer changed ${changed[*]}; re-run the same git commit to include the fix"
+    exit 1
+  fi
+
+  if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+    break
+  fi
 
   git add -- "${changed[@]}"
   say "re-staged auto-fixed file(s): ${changed[*]}"

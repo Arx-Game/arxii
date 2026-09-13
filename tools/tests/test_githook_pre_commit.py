@@ -43,6 +43,11 @@ done
 exit 0
 """
 
+_GROWER = """#!/usr/bin/env bash
+[ -n "${GROW:-}" ] || exit 0
+for f in "$@"; do echo x >>"$f"; done
+"""
+
 _CONFIG = """repos:
 - repo: local
   hooks:
@@ -61,6 +66,11 @@ _CONFIG = """repos:
     entry: {hooks}/gate.sh
     language: system
     pass_filenames: false
+    files: \\.txt$
+  - id: grower
+    name: grower
+    entry: {hooks}/grower.sh
+    language: system
     files: \\.txt$
 """
 
@@ -91,7 +101,13 @@ class NoClearingHookTests(unittest.TestCase):
         self.pre_commit_home = base / "pre-commit-home"
         for directory in (self.repo, self.hooks, self.gate):
             directory.mkdir()
-        for name, script in (("fixer.sh", _FIXER), ("failer.sh", _FAILER), ("gate.sh", _GATE)):
+        scripts = (
+            ("fixer.sh", _FIXER),
+            ("failer.sh", _FAILER),
+            ("gate.sh", _GATE),
+            ("grower.sh", _GROWER),
+        )
+        for name, script in scripts:
             path = self.hooks / name
             path.write_text(script, encoding="utf-8")
             path.chmod(0o755)
@@ -136,9 +152,9 @@ class NoClearingHookTests(unittest.TestCase):
     def commit_env(self, **extra: str) -> dict[str, str]:
         return _clean_env(PRE_COMMIT_HOME=str(self.pre_commit_home), **extra)
 
-    def commit(self, **extra: str) -> subprocess.CompletedProcess[str]:
+    def commit(self, *args: str, **extra: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
-            ["git", "commit", "-m", "change"],
+            ["git", "commit", *(args or ("-m", "change"))],
             cwd=self.repo,
             env=self.commit_env(**extra),
             capture_output=True,
@@ -146,10 +162,10 @@ class NoClearingHookTests(unittest.TestCase):
             check=False,
         )
 
-    def start_gated_commit(self) -> subprocess.Popen[str]:
+    def start_gated_commit(self, *args: str) -> subprocess.Popen[str]:
         """Start a commit and return once its hooks are running (the gate has started)."""
         process = subprocess.Popen(
-            ["git", "commit", "-m", "change"],
+            ["git", "commit", *(args or ("-m", "change"))],
             cwd=self.repo,
             env=self.commit_env(GATE_DIR=str(self.gate)),
             stdout=subprocess.PIPE,
@@ -312,6 +328,62 @@ class NoClearingHookTests(unittest.TestCase):
         self.assertEqual(pre_push.read_text(encoding="utf-8"), "#!/bin/sh\necho sentinel\n")
         hooks_path = self.git("config", "--get", "core.hooksPath", check=False)
         self.assertEqual(hooks_path.returncode, 1)
+
+    def test_pathspec_commit_keeps_a_sibling_out_of_the_index_during_hooks(self) -> None:
+        """A pathspec commit holds index.lock while hooks run, so a sibling cannot mix in."""
+        self.write("a.txt", "base\nA\n")
+        self.write("b.txt", "base\nB\n")
+
+        process = self.start_gated_commit("-m", "A", "--", "a.txt")
+        sibling = subprocess.run(
+            ["git", "commit", "-m", "B", "--", "b.txt"],
+            cwd=self.repo,
+            env=self.commit_env(),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        returncode, output = self.release(process)
+
+        self.assertNotEqual(sibling.returncode, 0, sibling.stdout + sibling.stderr)
+        self.assertIn("index.lock", sibling.stderr)
+        self.assertEqual(returncode, 0, output)
+        self.assertEqual(self.head_files(), ["a.txt"])
+        retry = self.commit("-m", "B", "--", "b.txt")
+        self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+        self.assertEqual(self.head_files(), ["b.txt"])
+
+    def test_auto_fix_in_a_pathspec_commit_asks_for_the_same_commit_again(self) -> None:
+        """Re-staging in git's temporary index never reaches the real one, so refuse instead."""
+        self.write("a.txt", "base\nA   \n")
+        head = self.head_sha()
+
+        first = self.commit("-m", "change", "--", "a.txt")
+
+        self.assertNotEqual(first.returncode, 0, first.stdout + first.stderr)
+        self.assertIn("re-run the same git commit", first.stdout + first.stderr)
+        self.assertEqual(self.head_sha(), head)
+        self.assertEqual(self.read("a.txt"), "base\nA\n")
+        self.assertEqual(self.git("diff", "--cached", "--name-only").stdout, "")
+
+        second = self.commit("-m", "change", "--", "a.txt")
+
+        self.assertEqual(second.returncode, 0, second.stdout + second.stderr)
+        self.assertEqual(self.git("show", "HEAD:a.txt").stdout, "base\nA\n")
+        self.assertEqual(self.git("status", "--short").stdout, "")
+
+    def test_retry_cap_refuses_without_staging_its_last_fix(self) -> None:
+        self.write("a.txt", "base\nA\n")
+        self.git("add", "a.txt")
+        head = self.head_sha()
+
+        result = self.commit(GROW="1")
+
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("after 3 attempts", result.stdout + result.stderr)
+        self.assertEqual(self.head_sha(), head)
+        self.assertEqual(self.git("show", ":a.txt").stdout.count("x\n"), 2)
+        self.assertEqual(self.read("a.txt").count("x\n"), 3)
 
 
 if __name__ == "__main__":
