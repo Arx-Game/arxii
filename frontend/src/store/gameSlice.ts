@@ -132,6 +132,15 @@ export const gameSlice = createSlice({
         state.sessions[name].unread = 0;
       }
     },
+    /**
+     * Forget one character's session after its socket was closed on purpose
+     * (#3818 "Leave the world"). `active` is left alone: it mirrors the durable
+     * server selection (ADR-0241), and leaving the world does not un-select —
+     * the player is still playing this character, offscreen.
+     */
+    endSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      delete state.sessions[action.payload];
+    },
     setSessionConnectionStatus: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; status: boolean }>
@@ -451,6 +460,7 @@ export const gameSlice = createSlice({
 
 export const {
   startSession,
+  endSession,
   setActiveSession,
   setSessionConnectionStatus,
   setSessionLifecycle,

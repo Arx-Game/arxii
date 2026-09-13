@@ -1,13 +1,21 @@
 import { useState } from 'react';
 
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Menu, ScrollText, Swords, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { setActiveSession, startSession } from '@/store/gameSlice';
 import { useSelectCharacterMutation } from '@/roster/queries';
+import { useLogout } from '@/evennia_replacements/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
@@ -128,10 +136,24 @@ export function GameTopBar({
   onJumpToCombat,
 }: GameTopBarProps) {
   const dispatch = useAppDispatch();
-  const { connect } = useGameSocket();
+  const { connect, disconnect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
   const selectCharacter = useSelectCharacterMutation();
   const queryClient = useQueryClient();
+  const logout = useLogout();
+  const navigate = useNavigate();
+
+  // #3818 "Leave the world": drop this character's socket so the server
+  // unpuppets them (nobody left standing unpiloted on the grid), keep the
+  // account signed in and the selection intact for offscreen play, and go to
+  // character select. The account refetch re-hydrates the selection mirror
+  // if this was the last open session (the close handler resets game state).
+  const leaveTheWorld = () => {
+    if (!active) return;
+    disconnect(active);
+    void queryClient.invalidateQueries({ queryKey: ['account'] });
+    navigate('/hall');
+  };
 
   const activeSession = active ? sessions[active] : null;
   const isConnected = activeSession?.isConnected ?? false;
@@ -184,14 +206,38 @@ export function GameTopBar({
   return (
     <>
       <div className="flex min-w-0 flex-wrap items-center gap-2 border-b bg-card px-3 py-2 sm:gap-4 sm:px-4">
-        <Link
-          to="/"
-          aria-label="Open world menu"
-          title="World menu"
-          className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 hover:bg-accent"
-        >
-          <Menu className="h-5 w-5" />
-        </Link>
+        {/* #3818 — a real menu. This was `<Link to="/">`, and `/` sends an
+            in-world player straight back to `/game` (GatefoldPage), so it
+            flickered and did nothing, and nothing led back to character select.
+            Sessions and sockets live in Redux/module scope, so every item here
+            keeps the open character tabs alive. */}
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Open world menu"
+            title="World menu"
+            className="inline-flex min-h-11 min-w-11 items-center justify-center rounded p-2 hover:bg-accent focus:outline-none"
+          >
+            <Menu className="h-5 w-5" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuItem asChild>
+              <Link to="/hall">Your characters</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/roster">Roster</Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/profile/settings">Settings</Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            {active && sessions[active] && (
+              <DropdownMenuItem onClick={leaveTheWorld}>
+                Leave the world as {active}
+              </DropdownMenuItem>
+            )}
+            <DropdownMenuItem onClick={() => logout.mutate()}>Log out</DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
         <span className="text-sm font-bold tracking-wide text-foreground">ARX II</span>
 
         <div className="mx-2 h-6 w-px bg-border" />

@@ -342,6 +342,24 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   item by verification (Apostate's 2026-08-28 ruling). Zero backend changes this
   slice. See ADR-0247 for the rejected selection-keyed-redirect and
   in-client-sheet-drawer alternatives.
+- **Game entry repairs (#3818, 2026-09-13):** three things Apostate hit on the first
+  production login after #3813. (1) A character with no location, no
+  `prelogout_location` and no `home` was left nowhere by Evennia's `at_pre_puppet`,
+  and the fallback room (renamed "City Center" by staff) was looked up by its seeded
+  name, so `/game` waited forever for a `room_state`. `Character.at_pre_puppet` now
+  sends such a character to the fallback room, which every reader resolves by
+  `RoomProfile.fixture_key` through `resolve_fallback_starting_room`. (2) The top-bar
+  hamburger was a `<Link to="/">`, and `/` redirects an in-world player straight back
+  to `/game`, so it flickered and did nothing. It is now a real menu: Your
+  characters (`/hall`, a new always-reachable Hall route; `/` keeps its redirect),
+  Roster, Settings, "Leave the world as <name>" (closes that character's socket so
+  the server unpuppets them, keeps the account signed in and the selection intact,
+  goes to the Hall), Log out. Sessions live in Redux/module scope, so navigating
+  away keeps every character tab connected; leaving explicitly is the only way a
+  character drops off the grid short of logging out, which already closes every
+  socket. (3) The composer now sends on Enter with Shift+Enter for a line break, the
+  convention every chat RP client uses; `CommandInput` already did this, and
+  `GameWindow` was the one caller overriding it.
 
 **#3412 status: slices 1-4 all complete.** Remaining scope is phased seams only,
 carried forward as future work rather than blocking anything in this issue:

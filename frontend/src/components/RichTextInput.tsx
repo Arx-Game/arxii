@@ -272,8 +272,10 @@ export function RichTextInput({
       if (handleAutocompleteKey(e)) return;
       if (handleFormattingKey(e)) return;
 
-      // Narrative writing keeps Enter for paragraphs. Legacy command surfaces
-      // retain Enter-to-send unless the caller opts into the safer shortcut.
+      // Enter sends and Shift+Enter breaks the line — the chat-RP convention,
+      // and since #3818 what the narrative composer uses too. A caller that
+      // wants Enter for paragraphs passes submitOnEnter={false} and sends on
+      // Cmd/Ctrl+Enter instead.
       if (
         e.key === 'Enter' &&
         !e.nativeEvent.isComposing &&

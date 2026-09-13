@@ -3,6 +3,7 @@ import {
   addSessionMessage,
   addSessionDiagnostic,
   addAmbientNotice,
+  endSession,
   resetGame,
   setSessionConnectionStatus,
   setSessionLifecycle,
@@ -276,6 +277,24 @@ export function useGameSocket() {
     Object.values(sockets).forEach((socket) => socket.close());
   }, []);
 
+  /**
+   * Leave the world as one character (#3818): close that character's socket
+   * on purpose (a normal close, so the close handler never schedules a
+   * reconnect) and forget its session. The server unpuppets when the last
+   * session on the character goes, so the character leaves the grid rather
+   * than standing there unpiloted. The durable selection is untouched — the
+   * player is still playing this character, offscreen; `/game` re-enters.
+   */
+  const disconnect = useCallback(
+    (character: MyRosterEntry['name']) => {
+      clearReconnect(character);
+      const socket = sockets[character];
+      if (socket) socket.close();
+      dispatch(endSession(character));
+    },
+    [dispatch]
+  );
+
   const connect = useCallback(
     async (character: MyRosterEntry['name']) => {
       if (sockets[character] || connecting.has(character)) return;
@@ -470,5 +489,5 @@ export function useGameSocket() {
     []
   );
 
-  return { connect, send, disconnectAll, executeAction, currentGeneration };
+  return { connect, disconnect, send, disconnectAll, executeAction, currentGeneration };
 }

@@ -15,7 +15,9 @@
  * account is signed in. An account whose active character is CONNECTED
  * (not merely selected) skips the Hall entirely and lands in `/game` —
  * the Hall is a menu for picking a character, not a waiting room for one
- * already in play.
+ * already in play. An in-world player who WANTS the Hall (to open another
+ * character, with this one left running) reaches it at `/hall`, which never
+ * redirects (#3818); the game's world menu links there.
  *
  * Visual source of truth: docs/superpowers/plans/gatefold-reference.html.
  */

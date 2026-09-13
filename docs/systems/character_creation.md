@@ -119,8 +119,17 @@ from world.character_creation.models import CharacterDraft
 draft.is_expired                        # True if > 60 days inactive (staff exempt)
 draft.get_starting_room()               # Beginnings override -> area default -> canonical
                                          # fallback room (logged loudly) -> None (#2121);
-                                         # see world.seeds.character_creation.
-                                         # ensure_canonical_fallback_room
+                                         # the fallback is services.
+                                         # resolve_fallback_starting_room(), which finds
+                                         # the seeded room by RoomProfile.fixture_key
+                                         # ("arx/fallback-starting-room"), never by name:
+                                         # staff renamed it "City Center" on production
+                                         # and a by-name lookup missed it (#3818). Seeded
+                                         # by world.seeds.character_creation.
+                                         # ensure_canonical_fallback_room, which reuses
+                                         # the renamed room through the same resolver.
+                                         # Character.at_pre_puppet also lands a character
+                                         # with no location and no home there.
 draft.get_stage_completion()            # Dict[int, bool] for all stages
 draft.can_submit()                      # True if all stages (except Review) complete
 draft.calculate_cg_points_remaining()   # starting_budget - total_spent
