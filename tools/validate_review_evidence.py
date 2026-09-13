@@ -29,6 +29,9 @@ _REQUIRED_FIELDS = (
 _LEDGER_COLUMNS = 4
 _UNRESOLVED_HEADING = "## unresolved findings"
 _ISSUE_LINK = re.compile(r"^(Refs|Closes)\s+#([0-9]+)\.?\s*$", re.MULTILINE)
+# The PR body's report reference: a backtick-wrapped repository path, or a bare
+# https URL. The review-evidence workflow imports this rather than copying it.
+REPORT_LINE = re.compile(r"^- Report: (?:`([^`]+)`|(https://\S+))$", re.MULTILINE)
 
 
 def linked_issue_number(body: str) -> str | None:
@@ -62,8 +65,7 @@ def validate_pr_body(body: str, expected_issue: str | None = None) -> list[str]:
         errors.append("PR body must begin with Refs or Closes followed by an issue number")
     elif expected_issue and linked_issue != expected_issue:
         errors.append(f"PR body links issue #{linked_issue}, expected #{expected_issue}")
-    report = re.search(r"^- Report: (?:`([^`]+)`|(https://\S+))$", body, re.MULTILINE)
-    if report is None:
+    if REPORT_LINE.search(body) is None:
         errors.append("PR body is missing the committed review report link")
     if "## Review evidence" not in body:
         errors.append("PR body is missing the Review evidence section")

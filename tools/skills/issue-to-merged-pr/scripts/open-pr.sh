@@ -92,12 +92,6 @@ if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
     EVIDENCE_REFERENCE="$EVIDENCE_URL"
   else
     uv run python tools/validate_review_evidence.py "$EVIDENCE_FILE" --revision "$REVIEWED_SHA"
-    # Left bare (not backtick-wrapped) here — the REPORT_LINE branch below
-    # (added for #3785, after this branch's own backtick-wrap was added for
-    # #3786) already wraps any non-URL EVIDENCE_REFERENCE in backticks.
-    # Wrapping here too produced a DOUBLE-backtick "- Report: ``path``" line
-    # that fails both validate_review_evidence.py's validate_pr_body and the
-    # review-evidence CI job's identical regex (#3794 hit this).
     EVIDENCE_REFERENCE="$EVIDENCE_FILE"
   fi
 else
@@ -107,16 +101,16 @@ EVIDENCE_MARKER=""
 EVIDENCE_STATUS="- Review evidence is not required; this issue is not labeled \`review:evidence-required\`."
 if [[ "$EVIDENCE_REQUIRED" == "1" ]]; then
   EVIDENCE_MARKER="<!-- review-evidence-required -->"
-  # validate_review_evidence.py's --pr-body check (and the CI job that runs
-  # it) require this exact line shape: a bare https:// URL, or a
-  # backtick-wrapped local path -- never a bare local path. EVIDENCE_REFERENCE
-  # is ALREADY in the correct shape for both branches set above (bare URL for
-  # the PR_EVIDENCE_URL case; backtick-wrapped for the PR_EVIDENCE_FILE case)
-  # -- re-wrapping it here double-wraps the local-file case in backticks,
-  # which fails the same regex just as badly as a bare path did (#3785 hit
-  # the bare-path shape; #3797 hit this double-wrap shape once #3785's own
-  # fix landed). Use EVIDENCE_REFERENCE verbatim.
-  REPORT_LINE="$EVIDENCE_REFERENCE"
+  # The one place the report reference is shaped for the PR body. The
+  # review-evidence check (REPORT_LINE in validate_review_evidence.py) accepts
+  # a bare https URL or a backtick-wrapped path, never a bare path and never
+  # double backticks. EVIDENCE_REFERENCE stays unwrapped everywhere above.
+  # tools/tests/test_open_pr_body.py runs this script and asserts both shapes.
+  if [[ "$EVIDENCE_REFERENCE" == https://* ]]; then
+    REPORT_LINE="$EVIDENCE_REFERENCE"
+  else
+    REPORT_LINE="\`$EVIDENCE_REFERENCE\`"
+  fi
   EVIDENCE_STATUS="- Report: $REPORT_LINE
 - The local reviewer report is validated against the exact reviewed code revision before this PR is opened.
 - A PASS requires concrete evidence for every mandatory criterion, including a visual checklist where applicable, and no unresolved findings."

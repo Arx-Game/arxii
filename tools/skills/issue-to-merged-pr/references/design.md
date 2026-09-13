@@ -144,12 +144,11 @@ the state-mutating ones.
 
 {{followup_list}}
 
+{{evidence_marker}}
+
 ## Review evidence
 
-- Report: `{{evidence_file}}`
-- The report is validated against the exact reviewed code revision before this PR is opened.
-- A PASS requires every mandatory criterion to have concrete evidence and no unresolved findings.
-- The default is `Closes`; a scoped or partial change (more PRs still planned against the same issue) sets `PR_KEEP_OPEN=1` to use `Refs` instead and links the remaining work.
+{{evidence_status}}
 
 ## Notes
 
@@ -160,13 +159,17 @@ the state-mutating ones.
 <!-- last-addressed-comment: 0 -->
 ```
 
-`open-pr.sh` requires `PR_EVIDENCE_FILE` to name this tracked report and validates
-the reviewed code revision (the evidence commit parent). The default is `Closes`
+For a `review:evidence-required` issue, `open-pr.sh` requires `PR_EVIDENCE_URL` (a
+GitHub comment holding the report, preferred) or `PR_EVIDENCE_FILE` (a committed
+report path), validates it against the reviewed code revision (the evidence commit
+parent), and writes the `{{evidence_status}}` block's `- Report:` line: the URL
+bare, the path backtick-wrapped. `tools/tests/test_open_pr_body.py` runs the script
+and checks both shapes against the validator. The default is `Closes`
 — leaving an issue open needs a stated reason. `PR_KEEP_OPEN=1` switches to
 `Refs`, for the genuine case of a scoped repair PR that is one step of a
 multi-PR umbrella spec and must not silently close the umbrella issue.
 
-The trailing HTML comment is the marker `read-pr-comments.sh` reads. After the agent addresses comments and pushes, it updates the marker inline using `gh pr edit <pr> --body "<new-body-with-marker-bumped>"` (read the current body, replace the marker line, write it back — no dedicated script for this). Initial value `0` means "no comments addressed yet" — all comments are unread on first read.
+The trailing HTML comment is the marker `read-pr-comments.sh` reads. After the agent addresses comments and pushes, it updates the marker inline with `gh api -X PATCH repos/<owner>/<repo>/pulls/<pr> -F body=@-` (read the current body, replace the marker line, write it back; no dedicated script for this). Not `gh pr edit`: it fails on this repo and leaves the body unchanged, see SKILL.md step 8. Initial value `0` means "no comments addressed yet" — all comments are unread on first read.
 
 `templates/followup-issue.md`:
 
