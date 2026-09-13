@@ -10,6 +10,7 @@ from world.scenes.models import (
     ReactionEmoji,
     Scene,
     SceneParticipation,
+    SceneRoundDefaultsConfig,
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, Place, PlacePresence
@@ -135,6 +136,35 @@ class SceneSummaryRevisionAdmin(admin.ModelAdmin):
     autocomplete_fields = ["persona", "scene"]
     list_display = ["scene", "persona", "action", "timestamp"]
     list_filter = ["action"]
+
+
+@admin.register(SceneRoundDefaultsConfig)
+class SceneRoundDefaultsConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton staff-tunable defaults for new scene rounds."""
+
+    list_display = [
+        "default_mode",
+        "advance_quorum_pct",
+        "max_actions_per_round",
+        "per_target_repeat_lock",
+        "anti_spam_seconds",
+        "updated_at",
+    ]
+    list_filter = ["default_mode", "per_target_repeat_lock"]
+    readonly_fields = ["updated_at"]
+    raw_id_fields = ["updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not SceneRoundDefaultsConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
 
 
 class PlacePresenceInline(admin.TabularInline):

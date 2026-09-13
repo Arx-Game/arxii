@@ -5,8 +5,10 @@ from world.weather.models import (
     FeastDay,
     RegionWeatherState,
     WeatherEmit,
+    WeatherTransition,
     WeatherType,
     WeatherTypeExposure,
+    WeatherTypeShelter,
 )
 
 
@@ -66,3 +68,24 @@ class FeastDayAdmin(admin.ModelAdmin):
     list_display = ["name", "ic_month", "ic_day", "weather_type", "is_active"]
     list_filter = ["is_active", "weather_type"]
     search_fields = ["name"]
+
+
+@admin.register(WeatherTransition)
+class WeatherTransitionAdmin(admin.ModelAdmin):
+    """#3831 - one authored edge in the weather-transition graph (#2845, ADR-0181)."""
+
+    list_display = ["from_type", "to_type", "weight"]
+    list_filter = ["from_type", "to_type"]
+    search_fields = ["from_type__name", "to_type__name"]
+    list_select_related = ["from_type", "to_type"]
+
+
+@admin.register(WeatherTypeShelter)
+class WeatherTypeShelterAdmin(admin.ModelAdmin):
+    """#3831 - one hazard axis a weather type shelters a region from (#2845, ADR-0180)."""
+
+    list_display = ["weather_type", "damage_type", "value"]
+    list_filter = ["weather_type"]
+    search_fields = ["weather_type__name", "damage_type__name"]
+    list_select_related = ["weather_type", "damage_type"]
+    autocomplete_fields = ["damage_type"]

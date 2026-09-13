@@ -19,6 +19,7 @@ from world.societies.models import (
     LegendEvent,
     LegendHonor,
     LegendLevelCalibration,
+    LegendSettlementConfig,
     LegendSourceType,
     LegendSpread,
     NeighborhoodTurf,
@@ -32,10 +33,15 @@ from world.societies.models import (
     OrganizationType,
     OrgAppeal,
     OrgAppealSignon,
+    PhilosophicalArchetype,
+    PropagandaCampaignTier,
     RankingBandLabel,
+    RankingDisplay,
+    RenownMagnitudeAward,
     Society,
     SocietyReputation,
     SpreadingConfig,
+    StanceArchetype,
     StandingDeclaration,
     Vacancy,
 )
@@ -767,6 +773,86 @@ class RankingBandLabelAdmin(admin.ModelAdmin):
     search_fields = ("label",)
 
 
+@admin.register(RankingDisplay)
+class RankingDisplayAdmin(admin.ModelAdmin):
+    """#3831 - diegetic leaderboard props staff attach to a herald/plaque object."""
+
+    list_display = ("display_object", "ranking_type", "scope_society", "top_n")
+    list_filter = ("ranking_type",)
+    list_select_related = ("scope_society",)
+    autocomplete_fields = ("scope_society",)
+    raw_id_fields = ("display_object",)
+
+
+@admin.register(RenownMagnitudeAward)
+class RenownMagnitudeAwardAdmin(admin.ModelAdmin):
+    """#3831 - fame + prestige staff prices per RenownMagnitude tier."""
+
+    list_display = ("magnitude", "fame_award", "prestige_award")
+    list_filter = ("magnitude",)
+
+
+@admin.register(LegendSettlementConfig)
+class LegendSettlementConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Legend-settlement tuning dials (peril floor, standout)."""
+
+    list_display = ("risk_floor", "standout_fraction_tenths", "standout_min_success_level")
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not LegendSettlementConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(PhilosophicalArchetype)
+class PhilosophicalArchetypeAdmin(admin.ModelAdmin):
+    """#3831 - the six-axis principle vectors tagging renown events."""
+
+    list_display = (
+        "name",
+        "mercy_delta",
+        "method_delta",
+        "status_delta",
+        "change_delta",
+        "allegiance_delta",
+        "power_delta",
+    )
+    search_fields = ("name", "description")
+
+
+@admin.register(StanceArchetype)
+class StanceArchetypeAdmin(admin.ModelAdmin):
+    """#3831 - public philosophical stances a character may proclaim (#2842)."""
+
+    list_display = (
+        "name",
+        "mercy_delta",
+        "method_delta",
+        "status_delta",
+        "change_delta",
+        "allegiance_delta",
+        "power_delta",
+    )
+    search_fields = ("name", "description")
+
+
+@admin.register(PropagandaCampaignTier)
+class PropagandaCampaignTierAdmin(admin.ModelAdmin):
+    """#3831 - authored propaganda-campaign scale (coin cost + renown levers, #1621)."""
+
+    list_display = ("name", "threshold_coppers", "magnitude", "risk", "display_order", "is_active")
+    list_filter = ("magnitude", "risk", "is_active")
+    search_fields = ("name",)
+    filter_horizontal = ("archetypes",)
+
+
 @admin.register(GangTurfDetails)
 class GangTurfDetailsAdmin(admin.ModelAdmin):
     """#1891 — per-(GANG_TURF Project) payload."""
@@ -799,14 +885,23 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 # ---------------------------------------------------------------------------
 
 from world.societies.houses.models import (  # noqa: E402
+    DomainCrisisType,
+    DomainCrisisTypeOption,
+    EdictKind,
     HoldingKind,
     HouseAspectDefinition,
     HouseAspectOption,
     HouseClaim,
     HouseClaimAspect,
     HouseFeature,
+    HouseRecognitionRule,
     HouseTemplate,
+    NobiliaryParticle,
+    PactKind,
+    PrestigeRankBand,
+    StatureBand,
     SuccessionLaw,
+    Title,
 )
 
 
@@ -817,6 +912,115 @@ class SuccessionLawAdmin(admin.ModelAdmin):
     list_display = ("name", "derivation", "ordering_rule", "require_wedlock")
     list_filter = ("derivation", "ordering_rule", "require_wedlock")
     search_fields = ("name", "description")
+
+
+@admin.register(Title)
+class TitleAdmin(admin.ModelAdmin):
+    """#3831 - landed/dynastic titles staff mint and assign holders to."""
+
+    list_display = ("name", "tier", "realm", "house", "holder", "is_claimable")
+    list_filter = ("tier", "realm", "is_claimable")
+    search_fields = ("name",)
+    list_select_related = ("realm", "house", "holder")
+    autocomplete_fields = ("house", "holder")
+
+
+@admin.register(EdictKind)
+class EdictKindAdmin(admin.ModelAdmin):
+    """#3831 - authored standing-policy catalog for domains (#2842)."""
+
+    list_display = (
+        "name",
+        "stance",
+        "income_gross_pct",
+        "weekly_unrest_delta",
+        "weekly_upkeep_coppers",
+    )
+    list_filter = ("stance",)
+    search_fields = ("name", "description")
+    list_select_related = ("stance",)
+    autocomplete_fields = ("stance",)
+
+
+class DomainCrisisTypeOptionInline(admin.TabularInline):
+    """#3831 - the resolution options belonging to a crisis type."""
+
+    model = DomainCrisisTypeOption
+    extra = 0
+    fields = ("kind", "cost_coppers", "mission_template", "self_resolve_pct", "worsen_pct")
+    raw_id_fields = ("mission_template",)
+
+
+@admin.register(DomainCrisisType)
+class DomainCrisisTypeAdmin(admin.ModelAdmin):
+    """#3831 - authored crisis catalog row; resolution is per-type (#2238)."""
+
+    list_display = ("name", "default_severity", "valence", "audience", "automated", "spawn_weight")
+    list_filter = ("default_severity", "valence", "audience", "automated", "ignores_stature")
+    search_fields = ("name", "description")
+    inlines = (DomainCrisisTypeOptionInline,)
+
+
+@admin.register(DomainCrisisTypeOption)
+class DomainCrisisTypeOptionAdmin(admin.ModelAdmin):
+    """#3831 - one resolution option a crisis type offers (#2238)."""
+
+    list_display = ("crisis_type", "kind", "cost_coppers", "self_resolve_pct", "worsen_pct")
+    list_filter = ("kind",)
+    search_fields = ("crisis_type__name",)
+    list_select_related = ("crisis_type",)
+    raw_id_fields = ("mission_template",)
+
+
+@admin.register(StatureBand)
+class StatureBandAdmin(admin.ModelAdmin):
+    """#3831 - authored qualitative stature tier (#3091)."""
+
+    list_display = ("name", "rank", "min_percentile", "threat_multiplier")
+    search_fields = ("name",)
+
+
+@admin.register(PrestigeRankBand)
+class PrestigeRankBandAdmin(admin.ModelAdmin):
+    """#3831 - rank-relative prestige benefit tier (#3091)."""
+
+    list_display = ("name", "scope", "min_rank", "max_rank", "negative_only", "prosperity_bonus")
+    list_filter = ("scope", "negative_only")
+    search_fields = ("name",)
+
+
+@admin.register(PactKind)
+class PactKindAdmin(admin.ModelAdmin):
+    """#3831 - authored org-pact vocabulary; terms are levers, never prose (#2999)."""
+
+    list_display = (
+        "name",
+        "allied_share_pct",
+        "income_share_pct",
+        "non_aggression",
+        "mutual_defense",
+    )
+    list_filter = ("non_aggression", "mutual_defense")
+    search_fields = ("name", "description")
+
+
+@admin.register(NobiliaryParticle)
+class NobiliaryParticleAdmin(admin.ModelAdmin):
+    """#3831 - per-realm x family-type x tier-band nobiliary particle (#1884, #3261)."""
+
+    list_display = ("realm", "kind", "tier_floor", "particle", "taken_in_particle")
+    list_filter = ("realm", "kind", "tier_floor")
+    search_fields = ("particle", "taken_in_particle")
+    list_select_related = ("realm", "kind")
+
+
+@admin.register(HouseRecognitionRule)
+class HouseRecognitionRuleAdmin(admin.ModelAdmin):
+    """#3831 - a realm's law for recognizing births into houses (#1884)."""
+
+    list_display = ("realm", "kind")
+    list_filter = ("realm", "kind")
+    list_select_related = ("realm",)
 
 
 @admin.register(HoldingKind)
