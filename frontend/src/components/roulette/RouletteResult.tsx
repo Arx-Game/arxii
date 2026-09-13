@@ -25,9 +25,11 @@ export function RouletteResult({ consequence }: RouletteResultProps) {
           `shadow-lg ${color.glow}`
         )}
       >
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider opacity-70">
-          {consequence.tier_name}
-        </p>
+        {consequence.tier_name !== consequence.label && (
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wider opacity-70">
+            {consequence.tier_name}
+          </p>
+        )}
         <p className="text-lg font-bold">{consequence.label}</p>
       </div>
     </motion.div>
