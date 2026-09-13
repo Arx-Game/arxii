@@ -827,7 +827,7 @@ Check resolution engine — converts trait values to ranks and rolls against res
   `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
   player's client. A social check schedules one for roller + target via
   `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); faces come only from
-  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0296). See
+  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0297). See
   "Resolution theater" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
@@ -3449,7 +3449,7 @@ action consent flow, and a three-mode non-combat round framework.
   outcome pose is delivered live, on commit, via `deliver_outcome_interaction`
   (`interaction_services.py`): no persisted row goes undelivered. `push_interaction` gained
   an optional `location` kwarg for Narrator-authored rows (the Narrator's character is never
-  physically placed). See "Result delivery" in [scenes.md](scenes.md) and ADR-0296.
+  physically placed). See "Result delivery" in [scenes.md](scenes.md) and ADR-0297.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),

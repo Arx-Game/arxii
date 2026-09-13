@@ -285,7 +285,7 @@ interaction renders through the plain-text `parseActionContent` path; the
 structured branch has no production feeder. The rendered text is what both
 web and telnet display, with no separate fallback needed. The row is also
 delivered live via `deliver_outcome_interaction` on commit, not merely
-persisted -- see "Result delivery" in `docs/systems/scenes.md` and ADR-0296.
+persisted -- see "Result delivery" in `docs/systems/scenes.md` and ADR-0297.
 
 ## What This Does NOT Build
 

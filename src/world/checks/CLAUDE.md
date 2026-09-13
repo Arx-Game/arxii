@@ -34,7 +34,7 @@ The checks app defines types of checks (Stealth, Diplomacy, Perception, etc.) an
   resolved outcome. `maybe_emit_resolution_theater` pushes the wheel to a client and never
   raises. HARD RULE: faces are read only from the chart, never from `get_rollmod()` or any
   outcome-guarantee logic (`perform_check` step 6/8 below) -- the wheel always shows the raw
-  chart and lands on whatever actually resolved (ADR-0296). `world.scenes.action_services
+  chart and lands on whatever actually resolved (ADR-0297). `world.scenes.action_services
   ._schedule_check_outcome_theater` schedules this for every resolved social check, on commit,
   to the roller and (when present) the target.
 

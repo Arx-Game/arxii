@@ -232,7 +232,7 @@ the unified Persona identity system, and non-combat scene rounds.
   reached (telnet parity). Every production `create_interaction` call must reach a delivery
   seam in the same or an enclosing function -- enforced by `tools/lint_undelivered_interaction.py`
   (the `undelivered-interaction` pre-commit hook) and the `outcome-delivery-reviewer` agent. See
-  "Result delivery" in `docs/systems/scenes.md` and ADR-0296.
+  "Result delivery" in `docs/systems/scenes.md` and ADR-0297.
 - **`push_interaction(..., *, location=None)`**: gained an optional `location` kwarg (#3807).
   Omitted, it resolves from the writer persona's own character location, byte-identical to
   before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's

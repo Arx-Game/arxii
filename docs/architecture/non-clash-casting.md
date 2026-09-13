@@ -367,7 +367,7 @@ polarity-word prefix was dropped in #3807 Part B, since a Partial Success carrie
 success_level 0 and read as "Failure (Partial Success)"). Every write now also calls
 `deliver_outcome_interaction(interaction, location=...)` before returning, so the row reaches a
 live audience on commit instead of sitting persisted with nobody delivered to. See "Result
-delivery" in `docs/systems/scenes.md` and ADR-0296.
+delivery" in `docs/systems/scenes.md` and ADR-0297.
 
 ### `commit_to_clash` — one new arg on Interaction creation
 

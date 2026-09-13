@@ -305,7 +305,7 @@ on whatever actually resolved, never a rollmod-shaped or guarantee-shaped view o
 odds. When the resolved outcome isn't one of the chart's own bands (an outcome guarantee
 lifted it off-chart), a weight-1 face for that outcome is appended and selected, so the
 wheel still has a face to land on without silently reshaping the real bands. See
-ADR-0296.
+ADR-0297.
 
 **Frontend:** the wheel renders as a flat proportional disc (Part C), replacing the
 earlier equal-slice prism wheel; slice angles are proportional to each face's `weight`.

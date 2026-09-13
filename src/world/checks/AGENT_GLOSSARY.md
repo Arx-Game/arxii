@@ -127,7 +127,7 @@ The dramatic-reveal roulette-style wheel pushed to a player's client when a reso
 check warrants theater, built by `check_outcome_faces`/`maybe_emit_resolution_theater`
 (`world/checks/theater.py`) and rendered on the frontend as a flat proportional disc.
 For a social check its faces are read only from the check's own `ResultChart` bands,
-weighted by roll-range width, never from `rollmod` or an outcome guarantee (ADR-0296);
+weighted by roll-range width, never from `rollmod` or an outcome guarantee (ADR-0297);
 the wheel always lands on the outcome that actually resolved.
 _Avoid_: prism, roulette prism (the pre-Part-C frontend shape, since replaced),
 roulette wheel alone (ambiguous with the older equal-weighted consequence-pool spin)
