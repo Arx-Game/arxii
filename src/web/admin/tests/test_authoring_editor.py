@@ -69,7 +69,7 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
 
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
-        self.assertIn('<textarea name="summary" id="id_summary">', body)
+        self.assertIn('<textarea name="summary" id="id_summary" autofocus>', body)
         self.assertIn('<textarea name="lore_content" id="id_lore_content">', body)
         self.assertIn('<textarea name="mechanics_content" id="id_mechanics_content">', body)
         self.assertIn("The old lore text.", body)
@@ -176,6 +176,53 @@ class TestAuthoringEditorGet(AuthoringEditorTestCase):
         self.assertEqual(len(buttons), 3)
         for button in buttons:
             self.assertIn('hx-target="#authoring-editor"', button)
+
+    def test_prose_form_comes_before_the_mechanical_fields(self) -> None:
+        """The textarea is the first thing under the heading; no scroll past a table (#3828)."""
+        entry = self._entry()
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        ).content.decode()
+
+        self.assertLess(body.index("<textarea"), body.index("Mechanical fields"))
+        self.assertLess(body.index("<textarea"), body.index("Written by"))
+
+    def test_first_textarea_is_autofocused_and_the_rest_are_not(self) -> None:
+        entry = self._entry()
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        ).content.decode()
+
+        self.assertIn('<textarea name="summary" id="id_summary" autofocus>', body)
+        self.assertEqual(body.count("autofocus"), 1)
+
+    def test_mechanical_fields_collapse_in_a_details_block(self) -> None:
+        entry = self._entry()
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        ).content.decode()
+
+        details = re.search(r'<details class="editor-details">(.*?)</details>', body, re.DOTALL)
+        self.assertIsNotNone(details, "mechanical fields are not inside a details block")
+        self.assertIn("share_cost", details.group(1))
+        self.assertIn("Written by", details.group(1))
+        self.assertNotIn(" open", details.group(0)[:40])
+
+    def test_editor_root_names_the_current_row_for_the_queue_to_shade(self) -> None:
+        entry = self._entry()
+        self.client.force_login(self.super)
+
+        body = self.client.get(
+            reverse("admin_authoring_editor"), {"model": "codex.CodexEntry", "pk": entry.pk}
+        ).content.decode()
+
+        self.assertIn(f'data-current="codex.CodexEntry:{entry.pk}"', body)
 
 
 class TestAuthoringEditorNext(AuthoringEditorTestCase):

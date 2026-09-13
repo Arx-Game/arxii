@@ -1,8 +1,11 @@
 """Tests for the Authoring Workbench dashboard, stats, and queue panels (#3019)."""
 
 from datetime import date
+from pathlib import Path
 import re
 
+from django.conf import settings
+from django.contrib.staticfiles import finders
 from django.test import TestCase
 from django.urls import reverse
 from evennia.accounts.models import AccountDB
@@ -342,5 +345,96 @@ class TestAuthoringEditorFragment(AuthoringViewsTestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         self.assertNotIn("does not exist", body)
-        self.assertIn('<textarea name="description" id="id_description">', body)
+        self.assertIn('<textarea name="description" id="id_description" autofocus>', body)
         self.assertIn("Some prose worth editing.", body)
+
+
+class TestAuthoringDashboardLayout(AuthoringViewsTestCase):
+    """Page order and the queue/editor hand-off the layout depends on (#3828)."""
+
+    def test_editor_sits_above_the_queue_and_stats_below_it(self) -> None:
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring")).content.decode()
+
+        editor = body.index('id="authoring-editor"')
+        queue = body.index('id="panel-authoring-queue"')
+        stats = body.index('id="panel-authoring-stats"')
+        builders = body.index('id="panel-authoring-builders"')
+        reference = body.index('id="panel-authoring-reference"')
+        self.assertLess(editor, queue)
+        self.assertLess(queue, stats)
+        self.assertLess(stats, builders)
+        self.assertLess(builders, reference)
+
+    def test_queue_rows_carry_the_row_key_the_shading_script_matches(self) -> None:
+        trait = self._trait("Keyed Row", "Ordinary unwritten prose here.")
+        self.client.force_login(self.super)
+
+        body = self.client.get(reverse("admin_authoring_queue")).content.decode()
+        self.assertIn(f'<tr data-row="traits.Trait:{trait.pk}">', body)
+
+    def test_dashboard_carries_the_shading_script(self) -> None:
+        self.client.force_login(self.super)
+        body = self.client.get(reverse("admin_authoring")).content.decode()
+        self.assertIn("queue-row-current", body)
+        self.assertIn("data-current", body)
+        self.assertIn("htmx:afterSwap", body)
+
+
+class TestAuthoringStyling(AuthoringViewsTestCase):
+    """Every class the queue and editor templates emit must have a rule that REACHES the page.
+
+    The #3667 lesson: a class name in the markup proves nothing, and a rule in a
+    stylesheet the page never links proves nothing either. Reachable CSS here is
+    the dashboard's own inline styles (which include `_panel_css.html`), each
+    fragment's inline `<style>` block, and the stylesheets the dashboard links.
+    """
+
+    #: Classes Django admin's own stylesheets define; everything else the two
+    #: fragments emit is ours and needs a rule below.
+    ADMIN_PROVIDED_CLASSES = frozenset({"errornote", "successnote", "help", "button", "default"})
+
+    #: Applied by the dashboard's script, never emitted in markup - so it is
+    #: checked by name rather than collected from a body.
+    JS_APPLIED_CLASSES = frozenset({"queue-row-current"})
+
+    def _get(self, name: str, params: dict | None = None) -> str:
+        self.client.force_login(self.super)
+        resp = self.client.get(reverse(name), params or {})
+        self.assertEqual(resp.status_code, 200)
+        return resp.content.decode()
+
+    def _reachable_css(self, dashboard: str, *fragments: str) -> str:
+        css = "\n".join(
+            block
+            for body in (dashboard, *fragments)
+            for block in re.findall(r"<style[^>]*>(.*?)</style>", body, re.DOTALL)
+        )
+        for href in re.findall(r'<link[^>]*rel="stylesheet"[^>]*href="([^"]+)"', dashboard):
+            if not href.startswith(settings.STATIC_URL):
+                continue
+            found = finders.find(href[len(settings.STATIC_URL) :])
+            self.assertIsNotNone(found, f"linked stylesheet does not resolve: {href}")
+            css += "\n" + Path(found).read_text()
+        return css
+
+    @staticmethod
+    def _classes(body: str) -> set[str]:
+        return {token for attr in re.findall(r'class="([^"]+)"', body) for token in attr.split()}
+
+    def test_every_queue_and_editor_class_has_a_reachable_rule(self) -> None:
+        trait = self._trait("Styled Row", "Ordinary unwritten prose here.")
+        self._trait("Styled Successor", "Ordinary unwritten prose here.")
+        dashboard = self._get("admin_authoring")
+        queue = self._get("admin_authoring_queue")
+        editor = self._get(
+            "admin_authoring_editor",
+            {"model": "traits.Trait", "pk": trait.pk, "queue": "", "pos": 0},
+        )
+        css = self._reachable_css(dashboard, queue, editor)
+
+        ours = (self._classes(queue) | self._classes(editor) | self.JS_APPLIED_CLASSES) - (
+            self.ADMIN_PROVIDED_CLASSES
+        )
+        unstyled = sorted(name for name in ours if f".{name}" not in css)
+        self.assertEqual(unstyled, [], f"classes with no rule reaching the page: {unstyled}")

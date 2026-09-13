@@ -10,14 +10,14 @@
   {% else %}
   <p>Worst-first backlog queue across every credited content model.</p>
 
-  <section class="tuning-panel" id="panel-authoring-builders">
-    {% include "admin/authoring/_builders_panel.html" %}
-  </section>
-
-  <section class="tuning-panel" id="panel-authoring-stats"
-           hx-get="{% url 'admin_authoring_stats' %}"
-           hx-trigger="load, authoring-backlog-changed from:body">
-    <p>Loading stats&hellip;</p>
+  {% comment %}
+  Panel order is the writing flow (#3828): the editor first, directly under the
+  heading, so a row opened from the queue swaps in at the top of the page and
+  the Next control keeps the writer here; the queue under it; stats, builders
+  and reference search after, where a session rarely needs to scroll.
+  {% endcomment %}
+  <section class="tuning-panel" id="authoring-editor">
+    <p>{% translate "Pick a row from the queue below. The editor opens here, at the top of the page." %}</p>
   </section>
 
   {% comment %}
@@ -33,8 +33,14 @@
     <p>Loading queue&hellip;</p>
   </section>
 
-  <section class="tuning-panel" id="authoring-editor">
-    <p>Select a row from the queue below to start editing.</p>
+  <section class="tuning-panel" id="panel-authoring-stats"
+           hx-get="{% url 'admin_authoring_stats' %}"
+           hx-trigger="load, authoring-backlog-changed from:body">
+    <p>Loading stats&hellip;</p>
+  </section>
+
+  <section class="tuning-panel" id="panel-authoring-builders">
+    {% include "admin/authoring/_builders_panel.html" %}
   </section>
 
   <section class="tuning-panel" id="panel-authoring-reference"
@@ -44,4 +50,22 @@
   {% endif %}
 </div>
 <script src="{% static 'admin/js/vendor/htmx.min.js' %}" defer></script>
+<script>
+  // Shade the queue row the editor currently holds (#3828). The editor root
+  // names its row in data-current; each queue row carries the same key in
+  // data-row. Re-applied after either panel swaps, since opening a row (from
+  // the queue or from Next) replaces the editor and a credit replaces the
+  // queue. The rule for .queue-row-current lives in _queue_panel.html.
+  document.body.addEventListener("htmx:afterSwap", function (event) {
+    var target = event.detail.target;
+    if (target.id !== "authoring-editor" && target.id !== "panel-authoring-queue") {
+      return;
+    }
+    var editor = document.querySelector("#authoring-editor [data-current]");
+    var current = editor ? editor.getAttribute("data-current") : null;
+    document.querySelectorAll("#panel-authoring-queue tr[data-row]").forEach(function (row) {
+      row.classList.toggle("queue-row-current", row.getAttribute("data-row") === current);
+    });
+  });
+</script>
 {% endblock %}

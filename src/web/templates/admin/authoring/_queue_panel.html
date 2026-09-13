@@ -35,6 +35,11 @@
     color: var(--error-fg);
     border-color: var(--error-fg);
   }
+  /* The row the editor currently holds; applied by dashboard.html's script
+     from the editor's data-current, never emitted in this markup (#3828). */
+  #panel-authoring-queue tr.queue-row-current td {
+    background: var(--selected-bg);
+  }
   #panel-authoring-queue .queue-cap-note {
     color: var(--body-quiet-color);
     font-size: 0.9rem;
@@ -139,7 +144,7 @@ writer lost their domain on every credited row.
   </thead>
   <tbody>
     {% for entry in rows %}
-    <tr>
+    <tr data-row="{{ entry.row.model_label }}:{{ entry.row.pk }}">
       <td>
         <a href="#authoring-editor"
            hx-get="{{ entry.editor_url }}"

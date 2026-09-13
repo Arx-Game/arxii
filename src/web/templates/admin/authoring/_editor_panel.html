@@ -1,5 +1,28 @@
 {% load i18n content_export_tags %}
+{% comment %}
+Order is the point of this fragment (#3828): heading and position line, the
+notices, then the prose form with its actions and the Next control, and only
+THEN the mechanical fields (collapsed), related entries and mentions. The
+writer's cursor starts in the first textarea; nothing sits between the heading
+and the box they came here to fill. `data-current` on the root names this row
+so the dashboard's script can shade it in the queue.
+{% endcomment %}
 <style>
+  #authoring-editor .editor-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.75rem;
+  }
+  #authoring-editor .editor-head h2 {
+    margin: 0;
+  }
+  #authoring-editor .editor-pos {
+    color: var(--body-quiet-color);
+    font-size: 0.9rem;
+    font-variant-numeric: tabular-nums;
+  }
   #authoring-editor .prose-field {
     display: flex;
     flex-direction: column;
@@ -24,10 +47,38 @@
   #authoring-editor .editor-actions {
     margin-top: 1rem;
     display: flex;
+    flex-wrap: wrap;
+    align-items: center;
     gap: 0.5rem;
+  }
+  #authoring-editor .editor-next {
+    margin-left: auto;
+    padding: 0.5rem 0.9rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+  #authoring-editor .editor-exhausted {
+    margin-left: auto;
+    color: var(--body-quiet-color);
+    font-size: 0.9rem;
+  }
+  #authoring-editor .editor-details {
+    margin-top: 1.25rem;
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+  }
+  #authoring-editor .editor-details summary {
+    cursor: pointer;
+    font-weight: bold;
+  }
+  #authoring-editor .editor-details table.tuning-table {
+    margin-top: 0.5rem;
   }
 </style>
 
+<div data-current="{{ model_label }}:{{ pk }}">
 <div class="editor-head">
   <h2>{% blocktranslate %}Editing {{ model_label }} #{{ pk }}{% endblocktranslate %}</h2>
   {% if nav %}
@@ -92,20 +143,6 @@
 {% endif %}
 {% endif %}
 
-<h3>{% translate "Mechanical fields" %}</h3>
-<table class="tuning-table">
-  <tbody>
-    {% for field in mechanical_fields %}
-    <tr><th>{{ field.name }}</th><td>{{ field.value }}</td></tr>
-    {% endfor %}
-    <tr><th>{% translate "Written by" %}</th><td>{{ instance.written_by|default:"-" }}</td></tr>
-    <tr><th>{% translate "Written on" %}</th><td>{{ instance.written_on|default:"-" }}</td></tr>
-    <tr><th>{% translate "Reviewed by" %}</th><td>{{ instance.reviewed_by|default:"-" }}</td></tr>
-    <tr><th>{% translate "Reviewed on" %}</th><td>{{ instance.reviewed_on|default:"-" }}</td></tr>
-  </tbody>
-</table>
-
-<h3>{% translate "Prose" %}</h3>
 <form method="post">
   {% csrf_token %}
   <input type="hidden" name="model" value="{{ model_label }}">
@@ -119,7 +156,7 @@
   {% for field in prose_fields %}
   <div class="prose-field">
     <label for="id_{{ field.name }}">{{ field.name }}</label>
-    <textarea name="{{ field.name }}" id="id_{{ field.name }}">{{ field.value }}</textarea>
+    <textarea name="{{ field.name }}" id="id_{{ field.name }}"{% if forloop.first %} autofocus{% endif %}>{{ field.value }}</textarea>
     {% if field.errors %}
     <span class="errornote">{{ field.errors|join:" " }}</span>
     {% endif %}
@@ -154,6 +191,21 @@
   </div>
 </form>
 
+<details class="editor-details">
+  <summary>{% translate "Mechanical fields and credit" %}</summary>
+  <table class="tuning-table">
+    <tbody>
+      {% for field in mechanical_fields %}
+      <tr><th>{{ field.name }}</th><td>{{ field.value }}</td></tr>
+      {% endfor %}
+      <tr><th>{% translate "Written by" %}</th><td>{{ instance.written_by|default:"-" }}</td></tr>
+      <tr><th>{% translate "Written on" %}</th><td>{{ instance.written_on|default:"-" }}</td></tr>
+      <tr><th>{% translate "Reviewed by" %}</th><td>{{ instance.reviewed_by|default:"-" }}</td></tr>
+      <tr><th>{% translate "Reviewed on" %}</th><td>{{ instance.reviewed_on|default:"-" }}</td></tr>
+    </tbody>
+  </table>
+</details>
+
 <section id="authoring-related"
          hx-get="{% url 'admin_authoring_related' %}?model={{ model_label|urlencode }}&pk={{ pk }}"
          hx-trigger="load">
@@ -169,3 +221,4 @@
 <div id="authoring-mentions"></div>
 
 {% endif %}
+</div>
