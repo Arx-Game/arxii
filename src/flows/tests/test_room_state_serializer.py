@@ -5,10 +5,11 @@ from unittest.mock import MagicMock, patch
 
 from django.test import TestCase
 
-from evennia_extensions.factories import ObjectDBFactory
+from evennia_extensions.factories import ObjectDBFactory, RoomProfileFactory
 from evennia_extensions.models import ObjectDisplayData
 from flows.factories import SceneDataManagerFactory
 from flows.service_functions.serializers.room_state import build_room_state_payload
+from world.character_sheets.factories import CharacterSheetFactory
 from world.conditions.factories import (
     ConditionCategoryFactory,
     ConditionInstanceFactory,
@@ -16,6 +17,7 @@ from world.conditions.factories import (
 )
 from world.conditions.services import register_detection
 from world.roster.factories import MediaFactory, RosterEntryFactory
+from world.scenes.factories import PersonaFactory, PlaceFactory, PlacePresenceFactory
 
 
 class RoomStateSerializerCharacterSplitTests(TestCase):
@@ -154,13 +156,14 @@ class RoomStateSerializerCharacterSplitTests(TestCase):
     def test_payload_has_all_expected_keys(self):
         """Payload keys: room/characters/objects/exits/scene + heat (#1765) + hub (#1450)
         + npc_givers (#3044) + decorations/comfort_level (#2991)
-        + has_unseen_presence (#3288)."""
+        + has_unseen_presence (#3288) + viewer_place_id (#3810)."""
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert set(payload.keys()) == {
             "room",
             "characters",
             "objects",
             "exits",
+            "viewer_place_id",
             "scene",
             "heat",
             "hub",
@@ -374,3 +377,81 @@ class RoomStateSerializerConcealmentTests(TestCase):
         register_detection(self.caller_sheet, self.concealed)
         payload = build_room_state_payload(self.caller_state, self.room_state)
         assert payload["has_unseen_presence"] is True
+
+
+class RoomStatePlaceAssignmentTests(TestCase):
+    """#3810: room_state carries each character's Place, and the viewer's own."""
+
+    def setUp(self):
+        self.room = ObjectDBFactory(
+            db_key="tavern",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        self.room_profile = RoomProfileFactory(objectdb=self.room)
+
+        self.caller = ObjectDBFactory(
+            db_key="elyn",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.tablemate = ObjectDBFactory(
+            db_key="serel",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+        self.elsewhere = ObjectDBFactory(
+            db_key="vayne",
+            db_typeclass_path="typeclasses.characters.Character",
+            location=self.room,
+        )
+
+        for obj in (self.room, self.caller, self.tablemate, self.elsewhere):
+            media = MediaFactory()
+            ObjectDisplayData.objects.create(object=obj, thumbnail=media)
+
+        caller_sheet = CharacterSheetFactory(character=self.caller)
+        tablemate_sheet = CharacterSheetFactory(character=self.tablemate)
+        # elsewhere (vayne) gets no PlacePresence row at all: not at any place.
+
+        self.caller_persona = PersonaFactory(character_sheet=caller_sheet)
+        self.tablemate_persona = PersonaFactory(character_sheet=tablemate_sheet)
+
+        self.place = PlaceFactory(room=self.room_profile, name="The Long Table")
+        PlacePresenceFactory(place=self.place, persona=self.caller_persona)
+        PlacePresenceFactory(place=self.place, persona=self.tablemate_persona)
+
+        self.context = SceneDataManagerFactory()
+        self.room_state = self.context.initialize_state_for_object(self.room)
+        self.caller_state = self.context.initialize_state_for_object(self.caller)
+        self.tablemate_state = self.context.initialize_state_for_object(self.tablemate)
+        self.elsewhere_state = self.context.initialize_state_for_object(self.elsewhere)
+
+        self.room_state.dispatcher_tags = ["look"]
+        self._session_patches = []
+        for obj in (self.caller, self.tablemate, self.elsewhere):
+            p = patch.object(obj.sessions, "all", return_value=[MagicMock()])
+            p.start()
+            self._session_patches.append(p)
+
+    def tearDown(self):
+        for p in self._session_patches:
+            p.stop()
+
+    def test_tablemate_carries_place_id(self):
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        tablemate_row = next(c for c in payload["characters"] if c["name"] == "serel")
+        assert tablemate_row["place_id"] == self.place.pk
+
+    def test_character_with_no_place_carries_null(self):
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        elsewhere_row = next(c for c in payload["characters"] if c["name"] == "vayne")
+        assert elsewhere_row["place_id"] is None
+
+    def test_viewer_place_id_reflects_the_caller_own_presence(self):
+        payload = build_room_state_payload(self.caller_state, self.room_state)
+        assert payload["viewer_place_id"] == self.place.pk
+
+    def test_viewer_place_id_is_null_when_caller_has_no_presence(self):
+        # Rebuild the payload from the elsewhere (vayne) character's own point of view.
+        payload = build_room_state_payload(self.elsewhere_state, self.room_state)
+        assert payload["viewer_place_id"] is None
