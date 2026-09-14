@@ -1,0 +1,64 @@
+{% load i18n %}
+<section id="panel-techniques-pool-scan" class="pool-scan">
+  <h3>{% blocktranslate with total=scan_counts.all %}Starting pools ({{ total }}){% endblocktranslate %}</h3>
+  <p class="kit-note">
+    {% translate "A pool meets the combat floor when it holds at least one option that deals damage and one that protects (mitigation or healing)." %}
+  </p>
+  <div class="filter-row">
+    <a class="filter{% if scan_filter == "fails_floor" %} on{% endif %}"
+       hx-get="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
+       hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
+      {% blocktranslate with count=scan_counts.fails_floor %}Fails the combat floor ({{ count }}){% endblocktranslate %}
+    </a>
+    <a class="filter{% if scan_filter == "nothing_castable" %} on{% endif %}"
+       hx-get="{% url 'admin_tuning_techniques' %}?scan=nothing_castable"
+       hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
+      {% blocktranslate with count=scan_counts.nothing_castable %}Nothing castable ({{ count }}){% endblocktranslate %}
+    </a>
+    <a class="filter{% if scan_filter == "all" %} on{% endif %}"
+       hx-get="{% url 'admin_tuning_techniques' %}?scan=all"
+       hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
+      {% blocktranslate with count=scan_counts.all %}All pools ({{ count }}){% endblocktranslate %}
+    </a>
+  </div>
+  <table class="tuning-table">
+    <thead>
+      <tr>
+        <th>{% translate "Path" %}</th>
+        <th>{% translate "Gift" %}</th>
+        <th>{% translate "Options" %}</th>
+        <th>{% translate "Castable" %}</th>
+        <th>{% translate "Damage option" %}</th>
+        <th>{% translate "Protection option" %}</th>
+        <th>{% translate "Best single pick" %}</th>
+        <th></th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for row in scan_rows %}
+      <tr>
+        <td>{{ row.path_name }}</td>
+        <td>{{ row.gift_name }}</td>
+        <td>{{ row.option_count }}</td>
+        <td>{{ row.castable_count }}</td>
+        <td class="{% if row.floor.has_damage %}pass{% else %}fail{% endif %}">
+          {% if row.floor.has_damage %}{% translate "Yes" %}{% else %}{% translate "None" %}{% endif %}
+        </td>
+        <td class="{% if row.floor.has_protection %}pass{% else %}fail{% endif %}">
+          {% if row.floor.has_protection %}{% translate "Yes" %}{% else %}{% translate "None" %}{% endif %}
+        </td>
+        <td>{{ row.best_single_de|floatformat:1 }}</td>
+        <td>
+          <a hx-get="{% url 'admin_tuning_techniques' %}?kit_path={{ row.path_id }}&kit_gift={{ row.gift_id }}"
+             hx-target="#panel-techniques">{% translate "Price kit" %}</a>
+        </td>
+      </tr>
+      {% empty %}
+      <tr><td colspan="8">{% translate "No starting pool matches this filter." %}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <p class="kit-note">
+    {% translate "Tradition specials and species techniques depend on the Beginning and species, so this scan covers the path pool alone." %}
+  </p>
+</section>

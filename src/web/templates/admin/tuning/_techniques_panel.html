@@ -68,6 +68,89 @@
     margin: 0.2rem 0 0;
     padding-left: 1rem;
   }
+  #panel-techniques .kit-note {
+    color: var(--body-quiet-color);
+    font-size: 0.85rem;
+    margin: 0.25rem 0 0.75rem;
+  }
+  #panel-techniques .starting-kit {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--hairline-color);
+  }
+  #panel-techniques .kit-stats {
+    margin: 0.5rem 0 1rem;
+    font-size: 0.85rem;
+  }
+  #panel-techniques .kit-stat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr));
+    gap: 0.4rem 1rem;
+    margin-top: 0.5rem;
+  }
+  #panel-techniques .stat-tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+    gap: 0.75rem;
+    margin: 0.75rem 0;
+  }
+  #panel-techniques .stat-tile {
+    border: 1px solid var(--hairline-color);
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+  }
+  #panel-techniques .stat-tile .stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 600;
+  }
+  #panel-techniques .stat-tile .stat-label {
+    display: block;
+    font-size: 0.75rem;
+    color: var(--body-quiet-color);
+  }
+  #panel-techniques .pass {
+    color: var(--message-success-bg, #1f7a45);
+    font-weight: 600;
+  }
+  #panel-techniques .fail {
+    color: var(--error-fg);
+    font-weight: 600;
+  }
+  #panel-techniques .notice {
+    border: 1px solid var(--hairline-color);
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.03));
+    border-radius: 4px;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+    margin: 0.5rem 0;
+  }
+  #panel-techniques .kit-row-in-kit {
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.03));
+  }
+  #panel-techniques .pool-scan {
+    margin-top: 1.5rem;
+  }
+  #panel-techniques .filter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin: 0.5rem 0;
+  }
+  #panel-techniques .filter {
+    display: inline-block;
+    border: 1px solid var(--hairline-color);
+    border-radius: 12px;
+    padding: 0.1rem 0.6rem;
+    font-size: 0.75rem;
+    text-decoration: none;
+    color: inherit;
+  }
+  #panel-techniques .filter.on {
+    border-color: var(--primary);
+    background: var(--darkened-bg, rgba(0, 0, 0, 0.03));
+    font-weight: 600;
+  }
 </style>
 
 <h2>{% translate "Technique Combat Power" %}</h2>
@@ -108,45 +191,162 @@
     {{ form.sort.errors }}
   </div>
   <div class="tuning-field">
-    <button type="submit">{% translate "Evaluate catalog" %}</button>
-    <button type="submit" id="panel-techniques-refresh" name="refresh" value="1">{% translate "Refresh" %}</button>
+    <button type="submit" name="intent" value="evaluate">{% translate "Evaluate catalog" %}</button>
+    <button type="submit" id="panel-techniques-refresh" name="intent" value="refresh">{% translate "Refresh" %}</button>
   </div>
 </form>
+<p class="kit-note">{% translate "Refresh recomputes the catalog without the 24-hour cache." %}</p>
 
 <section class="starting-kit">
-  <h3>{% translate "Starting kit report" %}</h3>
-  <p>{% translate "Evaluate the authored path/tradition technique pool at level 1 using the selected Beginning's starting context. This prices the available kit together; it is not a cast-readiness certificate." %}</p>
-  <form class="tuning-form" method="post" hx-post="{% url 'admin_tuning_techniques' %}" hx-target="#panel-techniques">
-    {% csrf_token %}
-    <input type="hidden" name="kit_evaluate" value="1">
-    {% for field in kit_form %}
+  <h3>{% translate "Starting kits" %}</h3>
+  <p class="kit-note">
+    {% translate "Priced at the context a character has at the end of character creation: level 1, gift thread level 0, and the stats below." %}
+  </p>
+  <form id="panel-techniques-kit-form" class="tuning-form" method="post"
+        hx-post="{% url 'admin_tuning_techniques' %}" hx-target="#panel-techniques">
+    <input type="hidden" name="intent" value="kit">
     <div class="tuning-field">
-      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
-      {{ field }}
-      {{ field.errors }}
+      <label for="{{ kit_form.beginning.id_for_label }}">{{ kit_form.beginning.label }}</label>
+      {{ kit_form.beginning }}
+      {{ kit_form.beginning.errors }}
     </div>
-    {% endfor %}
-    <div class="tuning-field"><button type="submit">{% translate "Evaluate starting kit" %}</button></div>
+    <div class="tuning-field">
+      <label for="{{ kit_form.tradition.id_for_label }}">{{ kit_form.tradition.label }}</label>
+      {{ kit_form.tradition }}
+      {{ kit_form.tradition.errors }}
+    </div>
+    <div class="tuning-field">
+      <label for="{{ kit_form.path.id_for_label }}">{{ kit_form.path.label }}</label>
+      {{ kit_form.path }}
+      {{ kit_form.path.errors }}
+    </div>
+    <div class="tuning-field">
+      <label for="{{ kit_form.gift.id_for_label }}">{{ kit_form.gift.label }}</label>
+      {{ kit_form.gift }}
+      {{ kit_form.gift.errors }}
+    </div>
+    <div class="tuning-field">
+      <label for="{{ kit_form.species.id_for_label }}">{{ kit_form.species.label }}</label>
+      {{ kit_form.species }}
+      {{ kit_form.species.errors }}
+    </div>
+    <div class="tuning-field">
+      <label for="{{ kit_form.extra_picks.id_for_label }}">{{ kit_form.extra_picks.label }}</label>
+      {{ kit_form.extra_picks }}
+      {{ kit_form.extra_picks.errors }}
+    </div>
+    <div class="tuning-field">
+      <button type="submit">{% translate "Price this kit" %}</button>
+    </div>
     {{ kit_form.non_field_errors }}
+    <details class="kit-stats">
+      <summary>{% translate "Stats (default 2 in every stat)" %}</summary>
+      <div class="kit-stat-grid">
+        {% for field in kit_form.stat_fields %}
+        <div class="tuning-field">
+          <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {{ field }}
+          {{ field.errors }}
+        </div>
+        {% endfor %}
+      </div>
+    </details>
   </form>
-</section>
 
-{% if kit_report %}
-<section class="starting-kit-summary">
-  <p><strong>{{ kit_report.beginning_name }}</strong> / {{ kit_report.path_name }} / {{ kit_report.gift_name }} / {{ kit_report.tradition_name }}
-    &middot; {% translate "representative starting roller points" %}: {{ kit_report.roller_points }}</p>
-  <p>{% translate "Kit Base DE" %}: <strong>{{ kit_report.baseline_de|floatformat:2 }}</strong>
-    &middot; {% translate "Kit Anchor DE" %}: <strong>{{ kit_report.amplified_de|floatformat:2 }}</strong></p>
-  <p>{% translate "Formula/parsed Base" %}: {{ kit_report.formula_baseline_de|floatformat:2 }}
-    &middot; {% translate "Estimated Base" %}: {{ kit_report.estimated_baseline_de|floatformat:2 }}</p>
-  <ul class="zero-bucket-list">
-    {% for report in kit_report.reports %}
-    <li>{{ report.name }}: {{ report.baseline_de|floatformat:2 }} DE
-      {% for flag in report.flags %}<span class="badge">{{ flag }}</span>{% endfor %}</li>
-    {% empty %}<li>{% translate "No techniques are authored for this combination." %}</li>{% endfor %}
-  </ul>
+  {% if kit_report %}
+  <div id="panel-techniques-kit">
+    <h4>
+      {{ kit_report.params.beginning.name }} / {{ kit_report.params.tradition.name }} /
+      {{ kit_report.params.path.name }} / {{ kit_report.params.gift.name }}
+    </h4>
+    <p class="kit-note">
+      {% blocktranslate with points=kit_report.roller_points %}Level 1 &middot; gift thread 0 &middot; roller points {{ points }}{% endblocktranslate %}
+    </p>
+    <div class="stat-tiles">
+      <div class="stat-tile">
+        <span class="stat-value">{{ kit_report.pick_budget }}</span>
+        <span class="stat-label">
+          {% blocktranslate with extra=kit_report.params.extra_picks %}Picks (1 base, {{ extra }} from distinctions){% endblocktranslate %}
+        </span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-value">{{ kit_report.rows|length }}</span>
+        <span class="stat-label">
+          {% blocktranslate with breakdown=kit_option_summary %}Options ({{ breakdown }}){% endblocktranslate %}
+        </span>
+      </div>
+      <div class="stat-tile">
+        <span class="stat-value">{{ kit_report.kit_baseline_de|floatformat:1 }}</span>
+        <span class="stat-label">
+          {% blocktranslate with formula=kit_report.kit_formula_de|floatformat:1 estimate=kit_report.kit_estimate_de|floatformat:1 %}Best kit DE ({{ formula }} formula, {{ estimate }} estimate){% endblocktranslate %}
+        </span>
+      </div>
+      <div class="stat-tile">
+        {% if kit_report.floor.met %}
+        <span class="stat-value pass">{% translate "Met" %}</span>
+        {% elif not kit_report.floor.has_damage and not kit_report.floor.has_protection %}
+        <span class="stat-value fail">{% translate "Missing damage and protection" %}</span>
+        {% elif not kit_report.floor.has_damage %}
+        <span class="stat-value fail">{% translate "Missing damage" %}</span>
+        {% else %}
+        <span class="stat-value fail">{% translate "Missing protection" %}</span>
+        {% endif %}
+        <span class="stat-label">{% translate "Combat floor: a damage and a protection option" %}</span>
+      </div>
+    </div>
+    {% if kit_report.castable_count == 0 and kit_report.rows %}
+    <div class="notice">
+      {% blocktranslate count counter=kit_report.rows|length with total=kit_report.rows|length %}{{ total }} option, none can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% plural %}{{ total }} options, none can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% endblocktranslate %}
+    </div>
+    {% endif %}
+    <table class="tuning-table">
+      <thead>
+        <tr>
+          <th>{% translate "Option" %}</th>
+          <th>{% translate "Source" %}</th>
+          <th>{% translate "Kit DE" %}</th>
+          <th>{% translate "Formula/parsed" %}</th>
+          <th>{% translate "Estimate" %}</th>
+          <th>{% translate "At catalog anchor" %}</th>
+          <th>{% translate "Payloads" %}</th>
+          <th>{% translate "Flags" %}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in kit_report.rows %}
+        <tr{% if row.in_kit %} class="kit-row-in-kit"{% endif %}>
+          <td>{{ row.report.name }}</td>
+          <td>{{ row.source|capfirst }}</td>
+          <td>{{ row.report.baseline_de|floatformat:1 }}</td>
+          <td>{{ row.report.formula_baseline_de|floatformat:1 }}</td>
+          <td>{{ row.report.estimated_baseline_de|floatformat:1 }}</td>
+          <td>{% if row.anchor_de is not None %}{{ row.anchor_de|floatformat:1 }}{% endif %}</td>
+          <td>
+            {% for valuation in row.report.valuations %}
+            {% if valuation.value > 0 %}<span class="badge">{{ valuation.kind }}</span>{% endif %}
+            {% endfor %}
+          </td>
+          <td>
+            {% if not row.castable %}<span class="badge">{% translate "not castable" %}</span>{% endif %}
+            {% if row.mostly_estimate %}<span class="badge">{% translate "mostly estimate" %}</span>{% endif %}
+            {% for flag in row.report.flags %}
+            {% if flag != flag_not_castable %}<span class="badge">{{ flag }}</span>{% endif %}
+            {% endfor %}
+          </td>
+        </tr>
+        {% empty %}
+        <tr><td colspan="8">{% translate "This combination has no authored options." %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <section id="panel-techniques-pool-scan" class="pool-scan">
+    <button type="button" hx-get="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
+            hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">{% translate "Scan starting pools" %}</button>
+  </section>
 </section>
-{% endif %}
 
 {% if panel %}
 <p>
