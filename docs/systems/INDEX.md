@@ -8887,7 +8887,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `build_technique_panel`, over
   `world.magic.services.technique_power_eval.evaluate_all_with_reference(EvalContext) ->
   (list[TechniquePowerReport], ReferenceFrame)`; types in
-  `world/magic/types/technique_power.py`), and a capability DE-per-point league table
+  `world/magic/types/technique_power.py`), plus a starting-kit pricer and a per-pool floor
+  scan on that same panel (#3716: `build_starting_kit_report` prices one
+  character-creation combination as the picks a new character actually gets, at level 1
+  and gift thread level 0, not the panel's own level/thread knobs; `build_pool_scan`
+  judges every `PathGiftGrant` starter pool against the same combat floor in one cached
+  evaluation), and a capability DE-per-point league table
   (#3390: `capability_power_analytics.py` — `build_capability_power_panel`, over
   `world.magic.services.capability_power_eval.evaluate_all_capabilities_with_reference`).
   The evaluator prices every technique payload family in expected damage-equivalent per

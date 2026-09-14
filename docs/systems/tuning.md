@@ -237,6 +237,61 @@ passes through. The last-key pointer is revision-scoped too, so a GET after an e
 nothing rather than re-rendering the pre-edit panel. A cache eviction resets the counter,
 which costs a recomputation and never serves stale data — the key changes either way.
 
+#### Starting kits (#3716)
+
+Answers a different question than the league table above: not "how strong is this
+technique in the abstract," but "what does one specific new character actually walk
+away from character creation holding." A kit is priced at level 1 and gift thread level
+0, the state a real new character has, never the catalog panel's own level/thread knobs.
+
+- `build_starting_kit_report(StartingKitParams, *, anchor_params=None) -> StartingKitReport`
+  (`technique_analytics.py`) prices one beginning/tradition/path/gift/species/extra_picks/stats
+  combination. Its option set comes from `cg_catalog.get_technique_options` (the path and
+  tradition pools) plus `cg_catalog.get_species_technique_options` (the species pool), the
+  same catalog character creation itself reads, so the report can never diverge from what a
+  player is actually offered. Each option is tagged once by its first source via
+  `OptionSource` (PATH, TRADITION, SPECIES).
+- The kit itself is the top `1 + extra_picks` options ranked by baseline DE. `extra_picks`
+  lets staff model a distinction that grants a few extra starting picks, capped at
+  `MAX_EXTRA_PICKS`.
+- An option with no castable action template is still priced and shown, flagged rather than
+  dropped, via `is_castable` (checks `FLAG_NOT_CASTABLE_STANDALONE`).
+- `meets_combat_floor` judges the whole option set, not just the kit, against a floor of one
+  damage option plus one mitigation-or-heal option, returning a `FloorResult` (`has_damage`,
+  `has_protection`, `met`).
+- `is_mostly_estimate` flags an option whose estimated DE is more than half its baseline DE,
+  so a number built mostly from guesses reads differently than one the formula computed.
+- Each `KitOptionRow` also carries `anchor_de`: the option's baseline DE at the catalog
+  panel's own last-submitted knobs, read only from that panel's already-cached corpus
+  (`anchor_params`) and never triggering a fresh evaluation of its own. `anchor_de` is
+  `None` when the catalog panel has not been run yet.
+
+Below the kit report, a separate pool scan surfaces every `PathGiftGrant` starter pool, not
+just the one combination just priced:
+
+- `build_pool_scan() -> tuple[PoolScanRow, ...]` prices every technique once, at the same
+  level 1 / gift thread level 0 starting context, in one cached evaluation shared by every
+  pool (never a per-pool query or evaluation), then judges each path-and-gift pool against
+  `meets_combat_floor`.
+- `filter_pool_scan` / `count_pool_scan` narrow and count that list by `PoolScanFilter`:
+  `FAILS_FLOOR` (the default), `NOTHING_CASTABLE`, or `ALL`.
+
+The view (`tuning_techniques_fragment`) shares one endpoint across three POST intents,
+named by constant rather than compared as bare literals: `INTENT_EVALUATE` evaluates the
+catalog form as before; `INTENT_REFRESH` does the same but first drops the cached corpus;
+`INTENT_KIT` prices one `StartingKitForm` combination without touching the catalog panel. A
+GET carrying `?scan=<filter>` renders the pool scan fragment instead of the panel; a GET
+carrying `?kit_path=&kit_gift=` (the pool scan's own "price this kit" link) prefills the kit
+form. Refresh clears both cache layers: `clear_corpus_cache` drops the per-knob catalog
+corpus AND the pool scan's own starting-context corpus, so a non-authoring config change
+(retuning `TechniqueBudgetConfig`, say) does not leave the pool scan serving stale results
+for the rest of its 24h timeout.
+
+Every DE total on the kit report keeps the same formula/parsed-versus-estimate split as the
+league table: `provenance_split` sums FORMULA and PARSED valuations together and ESTIMATE
+valuations separately, so `kit_formula_de` and `kit_estimate_de` never blend into one number
+that reads as more certain than it actually is.
+
 **Two write paths joined that seam in #3712.** `TechniqueRemovedConditionAdmin` is a
 standalone changelist and had no save hook at all, so a dispel row edited *there* never
 invalidated its technique while the identical edit through the Technique page's inline
