@@ -16,6 +16,7 @@ from django.test import TestCase
 
 from commands.consent import CmdAccept
 from commands.offer_response import CmdDecline
+from commands.tests.message_capture import message_text
 from world.conditions.models import ConditionInstance
 from world.magic.audere import AUDERE_CONDITION_NAME, SOULFRAY_CONDITION_NAME, PendingAudereOffer
 from world.magic.audere_majora import AudereMajoraCrossing, PendingAudereMajoraOffer
@@ -181,7 +182,7 @@ class TestAudereTelnetE2E(TestCase):
             PendingAudereMajoraOffer.objects.filter(character_sheet=self.sheet).exists()
         )
         self.character.msg.assert_called()
-        error_texts = [c.args[0] for c in self.character.msg.call_args_list if c.args]
+        error_texts = [message_text(c.args[0]) for c in self.character.msg.call_args_list if c.args]
         self.assertTrue(any("declaration" in t.lower() for t in error_texts))
 
     # ------------------------------------------------------------------
@@ -198,7 +199,7 @@ class TestAudereTelnetE2E(TestCase):
         cmd.func()
 
         self.character.msg.assert_called()
-        text = self.character.msg.call_args[0][0]
+        text = message_text(self.character.msg.call_args[0][0])
         self.assertIn("surge", text.lower())
 
     def test_decline_no_args_lists_pending_offers(self) -> None:
@@ -211,5 +212,5 @@ class TestAudereTelnetE2E(TestCase):
         cmd.func()
 
         self.character.msg.assert_called()
-        text = self.character.msg.call_args[0][0]
+        text = message_text(self.character.msg.call_args[0][0])
         self.assertIn("surge", text.lower())
