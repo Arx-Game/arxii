@@ -67,7 +67,8 @@ export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
         {glyph}
       </span>
       <div className="min-w-0 flex-1">
-        {isLook && note.subject && <div className="font-medium">{note.subject}</div>}
+        {/* Plain weight, as the demo draws it: only the description below changes face. */}
+        {isLook && note.subject && <div>{note.subject}</div>}
         <EvenniaMessage
           content={note.content}
           presentation="prose"

@@ -56,7 +56,8 @@ export function CharactersList({
                 </AvatarFallback>
               </Avatar>
               <span className="text-xs">{viewer.name}</span>
-              <span className="rounded-sm bg-muted px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+              {/* Plain uppercase text at the row's end, as the demo draws it; no chip. */}
+              <span className="ml-auto text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground">
                 you
               </span>
             </button>
