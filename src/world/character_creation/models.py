@@ -2261,8 +2261,17 @@ class DistinctionOffer(
     #: Saving or deleting an offer drops its opener's cached properties, which
     #: is where ``GlimpseTag.offers`` (``world.magic.models.glimpse``) lives.
     #: A cascade or a ``queryset.delete()`` bypasses ``Model.delete()`` and
-    #: never gets here - the handler's own pk check is what covers those
-    #: (ADR-0278, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    #: never gets here - ``PrunedCachedProperty``'s own pk check is what covers
+    #: those (ADR-0296, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    #: **Known gap:** this mixin only ever sees an FK's value AT SAVE TIME, so
+    #: reassigning ``glimpse_tag`` (or any opener FK here) to a different row
+    #: clears the NEW opener's cache but never the OLD one's - the old opener
+    #: can keep serving this offer, stale, for the life of the process. Applies
+    #: to this model specifically since it's admin-editable content whose
+    #: opener FKs can be reassigned (Distinction Builder, ``GlimpseTagAdmin``
+    #: inline), unlike most other ``related_cache_fields`` relations in #3816,
+    #: which are created-once/deleted, never re-parented. Not fixed here - a
+    #: cross-cutting decision for the whole-branch review.
     related_cache_fields: ClassVar[list[str]] = [
         "glimpse_tag",
         "origin_choice",

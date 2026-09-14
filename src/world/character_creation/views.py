@@ -642,7 +642,7 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
-        """One batched offers query for the whole page, not one per row (ADR-0278).
+        """One batched offers query for the whole page, not one per row (ADR-0296).
 
         ``GlimpseTag.offers`` is a ``PrunedCachedProperty`` (ADR-0296): a ``Prefetch``
         targeting it by ``to_attr`` is sanctioned because write-side invalidation is

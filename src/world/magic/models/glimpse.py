@@ -87,15 +87,22 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
 
     @PrunedCachedProperty
     def offers(self) -> list[DistinctionOffer]:
-        """This tag's active distinction offers, in display order (#3675, ADR-0278).
+        """This tag's active distinction offers, in display order (#3675, ADR-0296).
 
-        ``related_cache_fields`` is the PRIMARY invalidation mechanism here (ADR-0296):
+        ``related_cache_fields`` is the PRIMARY invalidation mechanism here:
         ``DistinctionOffer`` writes are staff-authored/admin-tooling shaped, scattered
         across ``web/admin/distinction_builder/paste.py``, ``tradition_slate/views.py``
-        and seed data, not concentrated sole mutators, so every save/delete clears this
-        cache via ``DistinctionOffer.related_cache_fields``. Also fed cold by a
-        ``Prefetch`` (`` to_attr `` "offers") on ``CGGlimpseTagViewSet.get_queryset()``,
-        never one query per tag.
+        and seed data, not concentrated sole mutators. Also fed cold by a ``Prefetch``
+        (`` to_attr `` "offers") on ``CGGlimpseTagViewSet.get_queryset()``, never one
+        query per tag.
+
+        **Honest guarantee, not "always fresh":** a create/delete/``is_active`` toggle
+        on an offer clears THIS cache, for the offer's *current* ``glimpse_tag`` only.
+        Reassigning an offer's ``glimpse_tag`` FK (moving it to a different tag) clears
+        the *new* tag's cache but never the *old* one's - the old tag can keep serving
+        the moved offer for the life of the process. See the note on
+        ``DistinctionOffer.related_cache_fields`` for why; fixing it is a cross-cutting
+        decision for the whole #3816 branch, not this relation alone.
         """
         from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
 
