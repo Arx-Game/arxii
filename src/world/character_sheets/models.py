@@ -1288,6 +1288,14 @@ class CharacterSheet(SharedMemoryModel):
             CharacterResonance.objects.filter(character_sheet=self).select_related("resonance")
         )
 
+    @PrunedCachedProperty
+    def cached_primary_persona(self) -> list[Persona]:
+        """This sheet's PRIMARY persona, fed by the interaction feed's Prefetch
+        (see ``world/scenes/interaction_views.py``, ``to_attr`` "cached_primary_persona")."""
+        from world.scenes.constants import PersonaType  # noqa: PLC0415
+
+        return list(self.personas.filter(persona_type=PersonaType.PRIMARY))
+
     @property
     def in_control(self) -> bool:
         """Whether this character is in control of their own actions.

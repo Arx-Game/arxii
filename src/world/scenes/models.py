@@ -39,6 +39,7 @@ from world.societies.houses.constants import NameDegree, TitleSuffixMode
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.magic.models import PoseEndorsement
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
@@ -1207,6 +1208,12 @@ class Interaction(SharedMemoryModel):
         return list(
             InteractionAction.objects.filter(pose=self).select_related("action_interaction")
         )
+
+    @PrunedCachedProperty
+    def cached_endorsements(self) -> list[PoseEndorsement]:
+        """Endorsements on this pose, fed by the interaction feed's Prefetch
+        (see ``world/scenes/interaction_views.py``, ``to_attr`` "cached_endorsements")."""
+        return list(self.endorsements.select_related("endorser_sheet", "resonance"))
 
 
 class InteractionFavorite(RelatedCacheClearingMixin, SharedMemoryModel):

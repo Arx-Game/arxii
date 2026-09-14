@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
+
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 
 CHARACTER_SHEET_FK = "arxii.CharacterSheet"
 RESONANCE_FK = "arxii.Resonance"
@@ -43,7 +47,7 @@ class EndorsementBase(SharedMemoryModel):
         abstract = True
 
 
-class PoseEndorsement(EndorsementBase):
+class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
     """Unsettled endorsement of a pose. Settled at weekly tick (Spec C §4).
 
     The ``interaction`` FK uses ``db_constraint=False`` because ``Interaction``
@@ -51,6 +55,8 @@ class PoseEndorsement(EndorsementBase):
     incoming FK constraints. The denormalized ``timestamp`` field is required
     for composite-FK use and matches the pattern used by InteractionReceiver.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         "arxii.Interaction",

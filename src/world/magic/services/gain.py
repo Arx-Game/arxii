@@ -326,7 +326,13 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Already endorsed this pose"
         raise EndorsementValidationError(msg)
 
-    return PoseEndorsement.objects.create(
+    # Peek, don't read: interaction.cached_endorsements is a PrunedCachedProperty, so
+    # reading it here would trigger a query whenever the cache happens to be cold --
+    # defeating the point of caching it in the common (cold) case. A dict-lookup peek
+    # costs nothing, and skipping the mutation on a cold cache loses nothing: the next
+    # real read recomputes fresh from the DB anyway (#3816).
+    cached = interaction.__dict__.get("cached_endorsements")
+    endorsement = PoseEndorsement.objects.create(
         endorser_sheet=endorser_sheet,
         endorsee_sheet=endorsee_sheet,
         interaction=interaction,
@@ -334,6 +340,9 @@ def create_pose_endorsement(  # noqa: C901
         resonance=resonance,
         persona_snapshot=endorsee_persona,
     )
+    if cached is not None:
+        interaction.cached_endorsements = [*cached, endorsement]
+    return endorsement
 
 
 def _endorser_was_present(
