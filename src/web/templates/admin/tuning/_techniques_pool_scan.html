@@ -2,6 +2,7 @@
 <section id="panel-techniques-pool-scan" class="pool-scan">
   <h3>{% blocktranslate with total=scan_counts.all %}Starting pools ({{ total }}){% endblocktranslate %}</h3>
   <p class="kit-note">
+    {% translate "One row per path and gift pairing that has a starter pool." %}
     {% translate "A pool meets the combat floor when it holds at least one option that deals damage and one that protects (mitigation or healing)." %}
   </p>
   <div class="filter-row">
@@ -18,7 +19,7 @@
     <a class="filter{% if scan_filter == "all" %} on{% endif %}"
        hx-get="{% url 'admin_tuning_techniques' %}?scan=all"
        hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
-      {% blocktranslate with count=scan_counts.all %}All pools ({{ count }}){% endblocktranslate %}
+      {% translate "All pools" %}
     </a>
   </div>
   <table class="tuning-table">
@@ -59,6 +60,6 @@
     </tbody>
   </table>
   <p class="kit-note">
-    {% translate "Tradition specials and species techniques depend on the Beginning and species, so this scan covers the path pool alone." %}
+    {% translate 'Tradition specials and species techniques depend on the Beginning and species, so this scan covers the path pool alone; "Price kit" opens the kit report with the path and gift filled in.' %}
   </p>
 </section>

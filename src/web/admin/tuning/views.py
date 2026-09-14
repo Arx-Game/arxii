@@ -353,15 +353,21 @@ class StartingKitForm(forms.Form):
         queryset=Beginnings.objects.filter(is_active=True).order_by("name")
     )
     tradition = forms.ModelChoiceField(
-        queryset=Tradition.objects.filter(is_active=True).order_by("name")
+        queryset=Tradition.objects.filter(is_active=True).order_by("name"),
+        label="Tradition (this Beginning's)",
     )
     path = forms.ModelChoiceField(
         queryset=Path.objects.filter(stage=PathStage.PROSPECT, is_active=True).order_by("name")
     )
     gift = forms.ModelChoiceField(queryset=Gift.objects.order_by("name"))
-    species = forms.ModelChoiceField(queryset=Species.objects.order_by("name"), required=False)
+    species = forms.ModelChoiceField(
+        queryset=Species.objects.order_by("name"), required=False, label="Species (optional)"
+    )
     extra_picks = forms.IntegerField(
-        min_value=0, max_value=technique_analytics.MAX_EXTRA_PICKS, initial=0
+        min_value=0,
+        max_value=technique_analytics.MAX_EXTRA_PICKS,
+        initial=0,
+        label="Extra picks from distinctions",
     )
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

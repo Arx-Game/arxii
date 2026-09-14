@@ -13,10 +13,12 @@ from unittest.mock import patch
 
 from django.core.cache import cache
 from django.test import TestCase
+from django.utils import timezone
 
 from web.admin.tuning import technique_analytics as ta
 from world.character_creation.factories import BeginningsFactory, BeginningTraditionFactory
 from world.classes.factories import PathFactory
+from world.classes.models import PathStage
 from world.magic.factories import (
     GiftFactory,
     PathGiftGrantFactory,
@@ -194,7 +196,7 @@ class StartingKitBuilderTests(TestCase):
         anchor_params = ta.TechniqueAnalyticsParams()
         cache.set(
             ta._corpus_cache_key(anchor_params),
-            ([_report(self.strike.pk, "Strike", baseline_de=40.0)], _FRAME),
+            ([_report(self.strike.pk, "Strike", baseline_de=40.0)], _FRAME, timezone.now()),
         )
         canned = self._canned()
         kit_params = ta.StartingKitParams(
@@ -273,6 +275,20 @@ class PoolScanTests(TestCase):
         self.assertFalse(voice.floor.has_damage)
         self.assertTrue(voice.floor.has_protection)
         self.assertEqual(voice.castable_count, 1)
+
+    def test_grants_on_a_non_prospect_path_are_excluded(self) -> None:
+        """Only character-creation starter pools are scanned (#3716 fix round 1).
+
+        A grant on a path past Prospect stage (or an inactive Prospect path) would
+        render a "Price kit" link `StartingKitForm` cannot prefill - that path is not
+        in its queryset, since character creation itself never offers it.
+        """
+        later_stage_path = PathFactory(name="Path of Ashes", stage=PathStage.POTENTIAL)
+        grant = PathGiftGrantFactory(path=later_stage_path, gift=self.gift)
+        grant.starter_techniques.add(self.strike, self.ward)
+        with patch(_EVALUATE_ALL, return_value=self._corpus()):
+            rows = ta.build_pool_scan()
+        self.assertNotIn("Path of Ashes", [row.path_name for row in rows])
 
     def test_evaluates_the_catalog_once_at_the_starting_context_and_caches_it(self) -> None:
         with patch(_EVALUATE_ALL, return_value=self._corpus()) as evaluate_all:

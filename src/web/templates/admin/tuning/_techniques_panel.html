@@ -16,6 +16,11 @@
     font-size: 0.85rem;
     margin-bottom: 0.25rem;
   }
+  #panel-techniques .tuning-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
   #panel-techniques table.tuning-table {
     width: 100%;
     border-collapse: collapse;
@@ -110,8 +115,16 @@
     color: var(--body-quiet-color);
   }
   #panel-techniques .pass {
-    color: var(--message-success-bg, #1f7a45);
+    color: #1f7a45;
     font-weight: 600;
+  }
+  @media (prefers-color-scheme: dark) {
+    #panel-techniques .pass {
+      color: #6fcf97;
+    }
+  }
+  html[data-theme="dark"] #panel-techniques .pass {
+    color: #6fcf97;
   }
   #panel-techniques .fail {
     color: var(--error-fg);
@@ -190,12 +203,17 @@
     {{ form.sort }}
     {{ form.sort.errors }}
   </div>
-  <div class="tuning-field">
+  <div class="tuning-buttons">
     <button type="submit" name="intent" value="evaluate">{% translate "Evaluate catalog" %}</button>
     <button type="submit" id="panel-techniques-refresh" name="intent" value="refresh">{% translate "Refresh" %}</button>
   </div>
 </form>
-<p class="kit-note">{% translate "Refresh recomputes the catalog without the 24-hour cache." %}</p>
+<p class="kit-note">
+  {% translate "Refresh recomputes the catalog without the 24-hour cache." %}
+  {% if panel %}
+  {% blocktranslate with when=panel.evaluated_at|date:"Y-m-d H:i" %}Evaluated {{ when }}.{% endblocktranslate %}
+  {% endif %}
+</p>
 
 <section class="starting-kit">
   <h3>{% translate "Starting kits" %}</h3>
@@ -240,7 +258,7 @@
     </div>
     {{ kit_form.non_field_errors }}
     <details class="kit-stats">
-      <summary>{% translate "Stats (default 2 in every stat)" %}</summary>
+      <summary>{% translate "Stats: default allocation, 2 in every stat" %}</summary>
       <div class="kit-stat-grid">
         {% for field in kit_form.stat_fields %}
         <div class="tuning-field">
@@ -272,7 +290,11 @@
       <div class="stat-tile">
         <span class="stat-value">{{ kit_report.rows|length }}</span>
         <span class="stat-label">
+          {% if kit_option_summary %}
           {% blocktranslate with breakdown=kit_option_summary %}Options ({{ breakdown }}){% endblocktranslate %}
+          {% else %}
+          {% translate "Options" %}
+          {% endif %}
         </span>
       </div>
       <div class="stat-tile">
@@ -296,7 +318,7 @@
     </div>
     {% if kit_report.castable_count == 0 and kit_report.rows %}
     <div class="notice">
-      {% blocktranslate count counter=kit_report.rows|length with total=kit_report.rows|length %}{{ total }} option, none can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% plural %}{{ total }} options, none can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% endblocktranslate %}
+      {% blocktranslate count counter=kit_report.rows|length with total=kit_report.rows|length %}0 of {{ total }} option can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% plural %}0 of {{ total }} options can be cast today: none has an action template. Values show combat impact, not whether a character can use the technique.{% endblocktranslate %}
     </div>
     {% endif %}
     <table class="tuning-table">
@@ -339,12 +361,16 @@
         {% endfor %}
       </tbody>
     </table>
+    <p class="kit-note">
+      {% blocktranslate count counter=kit_report.pick_budget with n=kit_report.pick_budget %}Ranked by kit DE. Shaded rows are the kit: the top {{ n }} pick, totaled in the Best kit DE tile.{% plural %}Ranked by kit DE. Shaded rows are the kit: the top {{ n }} picks, totaled in the Best kit DE tile.{% endblocktranslate %}
+    </p>
   </div>
   {% endif %}
 
-  <section id="panel-techniques-pool-scan" class="pool-scan">
-    <button type="button" hx-get="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
-            hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">{% translate "Scan starting pools" %}</button>
+  <section id="panel-techniques-pool-scan" class="pool-scan"
+           hx-get="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
+           hx-trigger="load" hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
+    <p class="kit-note">{% translate "Scanning starting pools." %}</p>
   </section>
 </section>
 

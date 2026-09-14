@@ -21,15 +21,17 @@ from __future__ import annotations
 
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 
 from django.core.cache import cache
+from django.utils import timezone
 
 from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
 from world.character_creation.models import Beginnings
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
-from world.classes.models import Path
+from world.classes.models import Path, PathStage
 from world.magic.models.gifts import Gift, Tradition
 from world.magic.models.grants import PathGiftGrant
 from world.magic.models.techniques import Technique
@@ -129,6 +131,10 @@ class TechniquePanelData:
     params: TechniqueAnalyticsParams
     reference: ReferenceFrame
     totals: TechniqueValuationTotals = field(default_factory=TechniqueValuationTotals)
+    #: When the displayed corpus was actually computed (#3716 fix round 1) - cached
+    #: alongside the corpus in `_evaluate_corpus`, not the render time. `None` only for
+    #: a `TechniquePanelData` built outside `build_technique_panel` (test doubles).
+    evaluated_at: datetime | None = None
 
 
 def _corpus_cache_key(params: TechniqueAnalyticsParams) -> str:
@@ -149,12 +155,14 @@ def _corpus_cache_key(params: TechniqueAnalyticsParams) -> str:
 
 def _evaluate_corpus(
     params: TechniqueAnalyticsParams,
-) -> tuple[list[TechniquePowerReport], ReferenceFrame]:
+) -> tuple[list[TechniquePowerReport], ReferenceFrame, datetime]:
     """Run (or reuse a cached) `evaluate_all_with_reference` for *params* (#3279).
 
     Called via the module object (`technique_power_eval.evaluate_all_with_reference`,
     never a bare `from ... import`) so tests can patch it at its origin and still
-    intercept this call.
+    intercept this call. The cached tuple's third element is when this run actually
+    happened (`timezone.now()`), not when a later page render reads it - the Techniques
+    panel's "Evaluated <date>" readout (#3716 fix round 1) needs the former.
     """
     key = _corpus_cache_key(params)
     cached = cache.get(key)
@@ -168,7 +176,8 @@ def _evaluate_corpus(
         target_difficulty=params.target_difficulty,
         roll_modifier=params.roll_modifier,
     )
-    result = technique_power_eval.evaluate_all_with_reference(context)
+    reports, reference = technique_power_eval.evaluate_all_with_reference(context)
+    result = (reports, reference, timezone.now())
     cache.set(key, result, _CORPUS_CACHE_TIMEOUT)
     return result
 
@@ -215,7 +224,7 @@ def build_technique_panel(params: TechniqueAnalyticsParams) -> TechniquePanelDat
     valuation provenance across the whole corpus. The expensive evaluator run
     itself is cached independently of `sort` - see :func:`_evaluate_corpus`.
     """
-    reports, reference = _evaluate_corpus(params)
+    reports, reference, evaluated_at = _evaluate_corpus(params)
 
     rows: list[TechniqueRow] = []
     zero_bucket: list[TechniquePowerReport] = []
@@ -242,6 +251,7 @@ def build_technique_panel(params: TechniqueAnalyticsParams) -> TechniquePanelDat
         params=params,
         reference=reference,
         totals=totals,
+        evaluated_at=evaluated_at,
     )
 
 
@@ -389,7 +399,7 @@ def _cached_anchor_de(anchor_params: TechniqueAnalyticsParams | None) -> dict[in
     cached = cache.get(_corpus_cache_key(anchor_params))
     if cached is None:
         return {}
-    reports, _reference = cached
+    reports, _reference, _evaluated_at = cached
     return {report.technique_id: report.baseline_de for report in reports}
 
 
@@ -545,14 +555,21 @@ def _starting_corpus() -> dict[int, TechniquePowerReport]:
             target_difficulty=_TARGET_DIFFICULTY_DEFAULT,
             roll_modifier=_ROLL_MODIFIER_DEFAULT,
         )
-        cached = technique_power_eval.evaluate_all_with_reference(context)
+        reports, reference = technique_power_eval.evaluate_all_with_reference(context)
+        cached = (reports, reference, timezone.now())
         cache.set(_starting_corpus_cache_key(), cached, _CORPUS_CACHE_TIMEOUT)
-    reports, _reference = cached
+    reports, _reference, _evaluated_at = cached
     return {report.technique_id: report for report in reports}
 
 
 def build_pool_scan() -> tuple[PoolScanRow, ...]:
-    """Judge every path starter pool against the combat floor at the starting context.
+    """Judge every character-creation starter pool against the combat floor (#3716).
+
+    Scoped to `PathGiftGrant`s whose path is an active PROSPECT-stage path - the only
+    paths `StartingKitForm` accepts and character creation itself offers - so every
+    row's own "Price kit" link actually prefills a path the kit form can select
+    (#3716 fix round 1: a grant on a later-stage or inactive path used to render a
+    row whose link silently failed to prefill anything).
 
     Two queries for the pools (the grants, then the grant-to-technique through rows)
     and one cached catalog evaluation; no per-pool query or evaluation.
@@ -566,8 +583,10 @@ def build_pool_scan() -> tuple[PoolScanRow, ...]:
         technique_ids_by_grant.setdefault(grant_id, []).append(technique_id)
 
     rows: list[PoolScanRow] = []
-    grants = PathGiftGrant.objects.select_related("path", "gift").order_by(
-        "path__name", "gift__name"
+    grants = (
+        PathGiftGrant.objects.filter(path__stage=PathStage.PROSPECT, path__is_active=True)
+        .select_related("path", "gift")
+        .order_by("path__name", "gift__name")
     )
     for grant in grants:
         pool = [reports[pk] for pk in technique_ids_by_grant.get(grant.pk, []) if pk in reports]

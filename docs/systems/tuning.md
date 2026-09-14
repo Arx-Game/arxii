@@ -224,7 +224,10 @@ Panel mechanics mirror the Simulation panel: a param form (level, thread level, 
 knobs, sort) POSTs a recompute cached 24h under an exact-param key with a
 `tuning-tech-power:last:<revision>` pointer; `technique_analytics.py` adds an inner cache
 keyed on the analytics knobs only (excluding `sort`) so header-sort clicks never re-run
-the evaluator.
+the evaluator. The panel shows an `Evaluated <date time>` readout next to the
+Refresh note, naming when the displayed corpus was actually computed
+(`TechniquePanelData.evaluated_at`, cached alongside the corpus in `_evaluate_corpus`
+rather than read at render time); Refresh resets it (#3716 fix round 1).
 
 **Both cache layers carry the technique catalog's revision (#3682).** They used to be
 keyed on the numeric knobs alone, so re-submitting the same parameters after editing a
@@ -266,8 +269,10 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   (`anchor_params`) and never triggering a fresh evaluation of its own. `anchor_de` is
   `None` when the catalog panel has not been run yet.
 
-Below the kit report, a separate pool scan surfaces every `PathGiftGrant` starter pool, not
-just the one combination just priced:
+Below the kit report, a separate pool scan surfaces every character-creation starter pool
+(a `PathGiftGrant` whose path is an active PROSPECT-stage path - the same paths
+`StartingKitForm` and character creation itself offer, #3716 fix round 1), not just the
+one combination just priced:
 
 - `build_pool_scan() -> tuple[PoolScanRow, ...]` prices every technique once, at the same
   level 1 / gift thread level 0 starting context, in one cached evaluation shared by every
@@ -284,7 +289,7 @@ GET carrying `?scan=<filter>` renders the pool scan fragment instead of the pane
 carrying `?kit_path=&kit_gift=` (the pool scan's own "price this kit" link) prefills the kit
 form. Refresh clears both cache layers: `clear_corpus_cache` drops the per-knob catalog
 corpus AND the pool scan's own starting-context corpus, so a non-authoring config change
-(retuning `TechniqueBudgetConfig`, say) does not leave the pool scan serving stale results
+(retuning `CovenantRoleBlendConfig`, say) does not leave the pool scan serving stale results
 for the rest of its 24h timeout.
 
 Every DE total on the kit report keeps the same formula/parsed-versus-estimate split as the

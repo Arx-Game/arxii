@@ -14,8 +14,10 @@ from typing import Any
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.template.defaultfilters import date as date_filter
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from web.admin.tuning.technique_analytics import (
@@ -74,6 +76,7 @@ def _canned_panel(**overrides: Any) -> TechniquePanelData:
         "reference": ReferenceFrame(
             outgoing_dpr=9.5, incoming_dpr=9.5, source_label="median-attack estimate"
         ),
+        "evaluated_at": timezone.now(),
     }
     defaults.update(overrides)
     return TechniquePanelData(**defaults)
@@ -123,6 +126,21 @@ class TestTechniqueFragmentView(TestCase):
         self.assertIn('id="panel-techniques-refresh"', body)
         self.assertIn("Starting kits", body)
         self.assertIn("No evaluation has been run yet", body)
+        self.assertIn("Tradition (this Beginning", body)
+        self.assertIn("Species (optional)", body)
+        self.assertIn("Extra picks from distinctions", body)
+        self.assertIn('hx-trigger="load"', body)
+        self.assertIn(f'hx-get="{reverse("admin_tuning_techniques")}?scan=fails_floor"', body)
+
+    @patch(_PATCH_TARGET)
+    def test_evaluated_at_renders_next_to_the_refresh_note(self, mock_build: Any) -> None:
+        when = timezone.now()
+        mock_build.return_value = _canned_panel(evaluated_at=when)
+        self.client.force_login(self.super)
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f"Evaluated {date_filter(when, 'Y-m-d H:i')}.", body)
 
     @patch(_PATCH_TARGET)
     def test_post_valid_superuser_builds_panel_and_renders_rows(self, mock_build: Any) -> None:
@@ -417,7 +435,9 @@ class TestTechniquePanelStartingKits(TestCase):
         params = mock_kit.call_args.args[0]
         self.assertEqual((params.path, params.gift, params.extra_picks), (self.path, self.gift, 1))
         self.assertIsNone(params.species)
-        self.assertIn('id="panel-techniques-kit"', resp.content.decode())
+        body = resp.content.decode()
+        self.assertIn('id="panel-techniques-kit"', body)
+        self.assertNotIn("Options ()", body)
 
     @patch(_KIT_TARGET)
     def test_kit_result_renders_option_rows_and_tiles(self, mock_kit: Any) -> None:
@@ -521,6 +541,9 @@ class TestTechniquePanelStartingKits(TestCase):
         self.assertIn('id="panel-techniques-pool-scan"', body)
         self.assertIn("Distinctive Path", body)
         self.assertIn(f"kit_path={self.path.pk}", body)
+        self.assertIn("One row per path and gift pairing", body)
+        self.assertIn("All pools", body)
+        self.assertNotIn("All pools (", body)
 
     def test_price_kit_link_prefills_path_and_gift(self) -> None:
         resp = self.client.get(
