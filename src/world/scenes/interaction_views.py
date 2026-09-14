@@ -88,6 +88,55 @@ def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -
     return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _link_explicit_action_ids(created: Interaction, action_link_ids: list[int]) -> None:
+    """Explicit override for ``submit_pose``: create exactly the supplied links in
+    order, skipping auto-link entirely (empty list = caller opted out).
+
+    Appends the created rows onto ``created.cached_action_links`` (#3816) so the
+    response serializes the real state without an extra query.
+    """
+    created_links = InteractionAction.objects.bulk_create(
+        [
+            InteractionAction(pose=created, action_interaction_id=aid, ordering=i)
+            for i, aid in enumerate(action_link_ids)
+        ]
+    )
+    created.cached_action_links = [*created.cached_action_links, *created_links]
+
+
+def _seed_fresh_pose_caches(
+    interaction: Interaction, *, target_personas: list[Persona] | None, replayed: bool
+) -> None:
+    """Seed ``submit_pose``'s response interaction with its cached_* defaults.
+
+    The interaction has not been through ``get_queryset()``'s Prefetch pipeline —
+    freshly created, or (on replay) fetched via ``idempotent_record_interaction``'s
+    bare ``select_related`` lookup — so the ``cached_*`` to_attr attributes used by
+    ``InteractionListSerializer`` do not exist yet. Set them to empty lists to avoid
+    a live query on serialization; a new pose has no receivers, favorites, or
+    reactions (target personas are whatever was just resolved).
+
+    ``cached_action_links`` is the one exception: on a genuine (non-replayed)
+    creation, ``_on_created`` in ``submit_pose`` already populated it via direct
+    write-site mutation (#3816) with whatever ``InteractionAction`` rows were just
+    linked — stomping it here would silently drop them from the response even
+    though the rows are in the database. Only a replay (where ``_on_created``
+    never ran against this fetched-not-created row) still needs the empty default.
+    """
+    interaction.cached_receivers = []
+    interaction.cached_target_personas = target_personas or []
+    interaction.cached_favorites = []
+    interaction.cached_reactions = []
+    if replayed:
+        interaction.cached_action_links = []
+    interaction.cached_dramatic_moment_tags = []
+    interaction.cached_dramatic_moment_suggestions = []
+    interaction.cached_endorsements = []
+    # ENTRY poses opened a window above; let the serializer query it (no
+    # cached attr) so the fresh response includes the reactable strip.
+    interaction.cached_reaction_windows = None
+
+
 class InteractionCursorPagination(CursorPagination):
     page_size = 50
     ordering = "-timestamp"
@@ -407,18 +456,7 @@ class InteractionViewSet(
                 open_reaction_window(interaction=created, kind=ReactionWindowKind.ENTRANCE)
 
             if action_link_ids is not None:
-                # Explicit override: create exactly the supplied links in order,
-                # skipping auto-link entirely (empty list = caller opted out).
-                InteractionAction.objects.bulk_create(
-                    [
-                        InteractionAction(
-                            pose=created,
-                            action_interaction_id=aid,
-                            ordering=i,
-                        )
-                        for i, aid in enumerate(action_link_ids)
-                    ]
-                )
+                _link_explicit_action_ids(created, action_link_ids)
             else:
                 auto_link_pose_to_actions(created)
 
@@ -513,23 +551,9 @@ class InteractionViewSet(
                 {"ephemeral": True, "replayed": result.replayed}, status=response_status
             )
 
-        # The interaction has not been through get_queryset()'s Prefetch pipeline —
-        # freshly created, or (on replay) fetched via idempotent_record_interaction's
-        # bare select_related lookup — so the cached_* to_attr attributes used by
-        # InteractionListSerializer do not exist yet. Set them to empty lists to
-        # avoid AttributeError on serialization; a new pose has no receivers,
-        # favorites, or reactions (target personas are whatever we just resolved).
-        interaction.cached_receivers = []
-        interaction.cached_target_personas = target_personas or []
-        interaction.cached_favorites = []
-        interaction.cached_reactions = []
-        interaction.cached_action_links = []
-        interaction.cached_dramatic_moment_tags = []
-        interaction.cached_dramatic_moment_suggestions = []
-        interaction.cached_endorsements = []
-        # ENTRY poses opened a window above; let the serializer query it (no
-        # cached attr) so the fresh response includes the reactable strip.
-        interaction.cached_reaction_windows = None
+        _seed_fresh_pose_caches(
+            interaction, target_personas=target_personas, replayed=result.replayed
+        )
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )

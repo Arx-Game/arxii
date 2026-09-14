@@ -214,6 +214,7 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
     for machine-rendered content. Does no reachability check of its own; callers that
     need one run it before calling this.
     """
+    personas = list(target_personas)
     InteractionTargetPersona.objects.bulk_create(
         [
             InteractionTargetPersona(
@@ -221,9 +222,10 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
                 timestamp=interaction.timestamp,
                 persona=p,
             )
-            for p in target_personas
+            for p in personas
         ]
     )
+    interaction.cached_target_personas = [*interaction.cached_target_personas, *personas]
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
@@ -306,7 +308,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
         if effective_receivers:
             # Pin each receiver's account too (#1219), batched to one query.
             receiver_accounts = accounts_for_personas(effective_receivers)
-            InteractionReceiver.objects.bulk_create(
+            created_receivers = InteractionReceiver.objects.bulk_create(
                 [
                     InteractionReceiver(
                         interaction=interaction,
@@ -317,6 +319,7 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
                     for recv_persona in effective_receivers
                 ]
             )
+            interaction.cached_receivers = [*interaction.cached_receivers, *created_receivers]
 
         if target_personas:
             # #3787 Task 4 - the live defect: target_personas appeared nowhere in

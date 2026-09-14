@@ -46,4 +46,6 @@ def auto_link_pose_to_actions(pose: Interaction) -> list[InteractionAction]:
         InteractionAction(pose=pose, action_interaction=action, ordering=i)
         for i, action in enumerate(candidate_qs)
     ]
-    return InteractionAction.objects.bulk_create(links)
+    created = InteractionAction.objects.bulk_create(links)
+    pose.cached_action_links = [*pose.cached_action_links, *created]
+    return created

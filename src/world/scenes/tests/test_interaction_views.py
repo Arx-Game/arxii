@@ -1398,33 +1398,22 @@ class InteractionListQueryBudgetTests(APITestCase):
         """
         url = reverse("interaction-list")
         # Run once to observe the count, then assert.
-        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 + #3759 + #3787
-            # #2183 adds exactly 2 flat (not per-row) queries: the
-            # dramatic_moment_suggestions Prefetch itself, and the one
-            # SceneParticipation.exists() query that resolves viewer_can_gm for
-            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
-            # Both are bounded by "one query per request", never by row count.
-            # #3597 dropped this from 53 to 51: get_account_roster_entries and
-            # get_account_personas now read Account.cached_roster_entries /
-            # cached_persona_ids (cached_property on the Account instance) instead
-            # of running their own PlayerData lookup and a fresh Persona query per
-            # call. get_queryset() and get_serializer_context() each call both
-            # helpers, so the old request-scoped memo still paid for one roster
-            # query plus one persona query per call; the process-lifetime Account
-            # cache pays for one of each, total, no matter how many call sites hit
-            # it in this request.
-            # #3759 adds exactly 1 flat (not per-row) query: get_is_unread's
-            # _read_interaction_ids batch-resolves the page's read receipts in one
-            # InteractionReadReceipt query, mirroring _muted_persona_ids/#2183 —
-            # bounded by "one query per request", never by row count.
-            # #3787 adds NO query at all on a page with no replies, and at most 1
-            # flat one on a page with them. A reply's thread IS its parent edge (the
-            # thread is anchored on the row it answers), so get_queryset's
-            # select_related("thread") carries the whole chip payload in the row
-            # query, and only _visible_parent_ids's batched visibility check remains
-            # - skipped entirely when the page holds no replies, as here. The rework
-            # that anchored the thread removed the page-priming query this budget
-            # used to carry, which is why it dropped from 53 to 52.
+        with self.assertNumQueries(27):  # dropped from 52 by #3816 (see below)
+            # #3816 dropped this from 52 to 27: Interaction.cached_receivers /
+            # cached_target_personas / cached_favorites / cached_reactions /
+            # cached_action_links were plain @property/@x.setter pairs backed by
+            # a mangled ``_cached_x`` attribute. Django's Prefetch(to_attr=)
+            # freshness check is `X in instance.__dict__` for a genuine
+            # cached_property target, but falls back to `hasattr(instance, X)`
+            # for anything else — and the old property never raised
+            # AttributeError, so hasattr was always True and the batched
+            # Prefetch queries never actually ran; each cold instance instead
+            # fell through to a live per-row query for each of the 5 relations.
+            # Converting the 5 properties to PrunedCachedProperty (a real
+            # cached_property subclass) let the batched Prefetch queries engage
+            # correctly for the first time, replacing 5 × N per-row queries
+            # with 5 flat ones — the query count no longer scales with the
+            # number of interactions on the page.
             response = self.client.get(url, {"scene": self.scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3
@@ -1504,23 +1493,7 @@ class InteractionListQueryBudgetTests(APITestCase):
             )
 
         url = reverse("interaction-list")
-        with self.assertNumQueries(52):  # 47 + #1278 block/mute-gate loads + #2183 + #3759 + #3787
-            # #2183 adds exactly 2 flat (not per-row) queries: the
-            # dramatic_moment_suggestions Prefetch itself, and the one
-            # SceneParticipation.exists() query that resolves viewer_can_gm for
-            # the ?scene= filter (see InteractionViewSet.get_serializer_context).
-            # Both are bounded by "one query per request", never by row count.
-            # #3597 dropped this from 53 to 51 (see the sibling test above for the
-            # full explanation): Account.cached_roster_entries / cached_persona_ids
-            # replace the old request-scoped memo, so get_queryset() and
-            # get_serializer_context() share one roster query and one persona
-            # query for the whole request instead of paying for each call site.
-            # #3759 adds exactly 1 flat (not per-row) query (see the sibling test
-            # above): get_is_unread's _read_interaction_ids batch-resolves the
-            # page's read receipts in one query regardless of endorser count.
-            # #3787 adds no query here either (see the sibling test above for the
-            # full explanation): the anchor rides in on select_related("thread"),
-            # and _visible_parent_ids does not run on a page with no replies.
+        with self.assertNumQueries(27):  # dropped from 52 by #3816 — see the sibling test above
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset

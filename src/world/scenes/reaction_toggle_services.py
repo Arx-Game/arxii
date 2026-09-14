@@ -29,17 +29,25 @@ def toggle_interaction_favorite(
     """
     from world.scenes.models import InteractionFavorite  # noqa: PLC0415
 
+    # Captured before either branch mutates: InteractionFavorite.objects.create()
+    # below calls Model.save(), which (via RelatedCacheClearingMixin) clears
+    # interaction.cached_favorites out from under us as a side effect of its OWN
+    # write -- reading interaction.cached_favorites again afterward would silently
+    # re-query and double-count the row just created. Read once, up front.
+    existing = interaction.cached_favorites
     deleted, _ = InteractionFavorite.objects.filter(
         interaction=interaction,
         roster_entry=roster_entry,
     ).delete()
     if deleted:
+        interaction.cached_favorites = [f for f in existing if f.roster_entry_id != roster_entry.pk]
         return False, None
     favorite = InteractionFavorite.objects.create(
         interaction=interaction,
         timestamp=interaction.timestamp,
         roster_entry=roster_entry,
     )
+    interaction.cached_favorites = [*existing, favorite]
     return True, favorite
 
 
@@ -56,12 +64,19 @@ def toggle_interaction_reaction(
     """
     from world.scenes.models import InteractionReaction  # noqa: PLC0415
 
+    # See toggle_interaction_favorite's comment: captured before either branch
+    # mutates, since InteractionReaction.objects.create() below clears
+    # interaction.cached_reactions as a side effect of its own Model.save().
+    existing = interaction.cached_reactions
     deleted, _ = InteractionReaction.objects.filter(
         interaction=interaction,
         account=account,
         emoji=emoji,
     ).delete()
     if deleted:
+        interaction.cached_reactions = [
+            r for r in existing if (r.account_id, r.emoji) != (account.pk, emoji)
+        ]
         return False, None
     reaction = InteractionReaction.objects.create(
         interaction=interaction,
@@ -69,4 +84,5 @@ def toggle_interaction_reaction(
         account=account,
         emoji=emoji,
     )
+    interaction.cached_reactions = [*existing, reaction]
     return True, reaction

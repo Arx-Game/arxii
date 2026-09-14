@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from django.db import models
 from django.utils import timezone
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.scenes.constants import PlaceStatus
 
 
@@ -74,13 +77,15 @@ class PlacePresence(SharedMemoryModel):
         return f"{self.persona.name} at {self.place.name}"
 
 
-class InteractionReceiver(SharedMemoryModel):
+class InteractionReceiver(RelatedCacheClearingMixin, SharedMemoryModel):
     """Records exactly who received a place-scoped or targeted interaction.
 
     Replaces InteractionAudience for directed/place-scoped interactions.
     For public interactions (no place, no explicit receivers), no receiver
     rows are created -- everyone in the room can see them.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         "arxii.Interaction",

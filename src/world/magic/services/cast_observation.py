@@ -92,7 +92,7 @@ def conceal_action_interaction(action_interaction: Interaction, audience: CastAu
     # create(...) directly rather than through create_interaction, so it never pins
     # writer_account_id — receiver membership is the caster's only route back to
     # their own concealed ACTION row.
-    InteractionReceiver.objects.bulk_create(
+    created_receivers = InteractionReceiver.objects.bulk_create(
         [
             InteractionReceiver(
                 interaction=action_interaction,
@@ -103,6 +103,10 @@ def conceal_action_interaction(action_interaction: Interaction, audience: CastAu
             for p in audience.full
         ]
     )
+    action_interaction.cached_receivers = [
+        *action_interaction.cached_receivers,
+        *created_receivers,
+    ]
 
 
 def _concealment_for(

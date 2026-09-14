@@ -12,6 +12,7 @@ from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.magic.constants import LedgerOp, PowerStage
 from world.scenes.constants import (
@@ -1178,82 +1179,44 @@ class Interaction(SharedMemoryModel):
         content_preview = str(self.content)[:50]
         return f"{self.persona.name}: {content_preview}..."
 
-    @property
+    @PrunedCachedProperty
     def cached_receivers(self) -> list[InteractionReceiver]:
-        """Receiver records. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_receivers
-        except AttributeError:
-            from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
+        """Receiver records, fed by Prefetch(to_attr='cached_receivers')."""
+        from world.scenes.place_models import InteractionReceiver  # noqa: PLC0415
 
-            return list(InteractionReceiver.objects.filter(interaction=self))
+        return list(InteractionReceiver.objects.filter(interaction=self))
 
-    @cached_receivers.setter
-    def cached_receivers(self, value: list[InteractionReceiver]) -> None:
-        """Allow Prefetch(to_attr='cached_receivers') to set this."""
-        self._cached_receivers = value
-
-    @property
+    @PrunedCachedProperty
     def cached_target_personas(self) -> list[Persona]:
-        """Target personas. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_target_personas
-        except AttributeError:
-            return list(self.target_personas.all())
+        """Target personas, fed by Prefetch(to_attr='cached_target_personas')."""
+        return list(self.target_personas.all())
 
-    @cached_target_personas.setter
-    def cached_target_personas(self, value: list[Persona]) -> None:
-        """Allow Prefetch(to_attr='cached_target_personas') to set this."""
-        self._cached_target_personas = value
-
-    @property
+    @PrunedCachedProperty
     def cached_favorites(self) -> list[InteractionFavorite]:
-        """Favorites. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_favorites
-        except AttributeError:
-            return list(self.favorites.all())
+        """Favorites, fed by Prefetch(to_attr='cached_favorites')."""
+        return list(self.favorites.all())
 
-    @cached_favorites.setter
-    def cached_favorites(self, value: list[InteractionFavorite]) -> None:
-        """Allow Prefetch(to_attr='cached_favorites') to set this."""
-        self._cached_favorites = value
-
-    @property
+    @PrunedCachedProperty
     def cached_reactions(self) -> list[InteractionReaction]:
-        """Reactions. Uses Prefetch(to_attr=) when available, else queries."""
-        try:
-            return self._cached_reactions
-        except AttributeError:
-            return list(self.reactions.all())
+        """Reactions, fed by Prefetch(to_attr='cached_reactions')."""
+        return list(self.reactions.all())
 
-    @cached_reactions.setter
-    def cached_reactions(self, value: list[InteractionReaction]) -> None:
-        """Allow Prefetch(to_attr='cached_reactions') to set this."""
-        self._cached_reactions = value
-
-    @property
+    @PrunedCachedProperty
     def cached_action_links(self) -> list[InteractionAction]:
-        """InteractionAction bridge rows for this POSE. Uses Prefetch(to_attr=) when available."""
-        try:
-            return self._cached_action_links
-        except AttributeError:
-            return list(
-                InteractionAction.objects.filter(pose=self).select_related("action_interaction")
-            )
-
-    @cached_action_links.setter
-    def cached_action_links(self, value: list[InteractionAction]) -> None:
-        """Allow Prefetch(to_attr='cached_action_links') to set this."""
-        self._cached_action_links = value
+        """InteractionAction bridge rows for this POSE, fed by Prefetch(to_attr=)."""
+        return list(
+            InteractionAction.objects.filter(pose=self).select_related("action_interaction")
+        )
 
 
-class InteractionFavorite(SharedMemoryModel):
+class InteractionFavorite(RelatedCacheClearingMixin, SharedMemoryModel):
     """Private bookmark for a cherished RP moment.
 
     Purely private — no other player sees what you bookmarked. Social feedback
     (kudos, pose voting, reactions) is handled by separate systems.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         Interaction,
@@ -1286,7 +1249,7 @@ class InteractionFavorite(SharedMemoryModel):
         return f"Favorite: interaction {self.interaction_id} by {self.roster_entry}"
 
 
-class InteractionReaction(SharedMemoryModel):
+class InteractionReaction(RelatedCacheClearingMixin, SharedMemoryModel):
     """Emoji reaction on an interaction.
 
     Originally intended as a temporary bridge model, but now fully integrated
@@ -1299,6 +1262,8 @@ class InteractionReaction(SharedMemoryModel):
     ``Nomination``, #3738). No migration is planned; this model is the permanent
     home for emoji reactions, not a bridge.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         Interaction,
@@ -1398,11 +1363,13 @@ class ReactionEmoji(SharedMemoryModel):
         return f"{self.emoji} ({self.get_valence_display()})"
 
 
-class InteractionTargetPersona(SharedMemoryModel):
+class InteractionTargetPersona(RelatedCacheClearingMixin, SharedMemoryModel):
     """Explicit through model for interaction target personas.
 
     Needed for composite FK compatibility with partitioned Interaction table.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         Interaction,
@@ -1428,7 +1395,7 @@ class InteractionTargetPersona(SharedMemoryModel):
         ]
 
 
-class InteractionAction(SharedMemoryModel):
+class InteractionAction(RelatedCacheClearingMixin, SharedMemoryModel):
     """Links a POSE Interaction to the ACTION Interaction(s) it elaborates.
 
     Pattern A from the unified-combat-ui spec: the bridge points at the
@@ -1437,6 +1404,11 @@ class InteractionAction(SharedMemoryModel):
     join point — different mechanical action types still reach a uniform
     bridge target without contenttypes.
     """
+
+    # Its parent-Interaction FK is named "pose", not "interaction" (#3816) — the
+    # generic name would collide with `action_interaction`, the OTHER Interaction
+    # FK this bridge row carries.
+    related_cache_fields: ClassVar[list[str]] = ["pose"]
 
     pose = models.ForeignKey(
         INTERACTION_MODEL,

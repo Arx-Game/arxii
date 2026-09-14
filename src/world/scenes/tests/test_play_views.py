@@ -896,13 +896,19 @@ class PlayPosesQueryBudgetTests(APITestCase):
     - ``_visible_parents`` - one batched ``visible_to`` check that returns the
       parents' timestamps too, so the chip needs no second lookup.
 
-    That is 76 rather than the 74 of the stored-anchor shape: the anchor used to
-    be a column joined in by ``select_related`` and the root another, so both were
-    free to read and neither could be wrong. Deriving them costs two flat queries
-    and removes two denormalized copies that could drift (a stored ``root`` did
-    drift, and cost a real bug on this branch). `/game` is the primary surface
-    where the parent chip renders, so this endpoint's own budget is pinned here
-    rather than only inheriting ``InteractionViewSet``'s.
+    That is 27 rather than the 76 this budget carried before #3816: the 5
+    ``Interaction.cached_*`` satellite relations (receivers, target personas,
+    favorites, reactions, action links) used to be plain ``@property``/
+    ``@x.setter`` pairs whose fallback getter never raised ``AttributeError``,
+    which defeated Django's own freshness check for ``Prefetch(to_attr=)`` (a
+    ``hasattr`` probe reports "already populated" even on a cold instance) —
+    so the batched Prefetch queries never actually ran, and each of the 5
+    relations fell through to one live query PER ROW instead. Converting them
+    to ``PrunedCachedProperty`` (a real ``cached_property`` subclass) let the
+    batched Prefetch engage correctly, replacing 5 × N per-row queries with 5
+    flat ones. `/game` is the primary surface where the parent chip renders,
+    so this endpoint's own budget is pinned here rather than only inheriting
+    ``InteractionViewSet``'s.
     """
 
     def setUp(self) -> None:
@@ -916,9 +922,10 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Always 6 total poses (3 targets + 3 repliers) - only `reply_count`
         of the 3 repliers actually answer anything. Holding the total row count
         constant isolates the reply-handling cost: every OTHER cached_* field's
-        per-row fallback cost (favorites, reactions, receivers, target personas,
-        action links) stays identical between scenarios, so any difference in query
-        count comes only from `_visible_parent_ids` and the anchor read.
+        flat batched-Prefetch cost (favorites, reactions, receivers, target
+        personas, action links) stays identical between scenarios, so any
+        difference in query count comes only from `_visible_parent_ids` and the
+        anchor read.
         """
         targets = [InteractionFactory(scene=scene) for _ in range(3)]
         repliers = [InteractionFactory(scene=scene) for _ in range(3)]
@@ -938,7 +945,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(76):
+        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -949,7 +956,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(76):
+        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
