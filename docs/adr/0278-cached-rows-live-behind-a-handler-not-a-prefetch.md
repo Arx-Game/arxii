@@ -3,7 +3,7 @@
 **Status:** Accepted (2026-09-06, #3673). Extends ADR-0263 (no `to_attr` prefetch onto
 identity-mapped instances) and ADR-0008 (SharedMemoryModel everywhere); ADR-0263's rule 1
 (a grouped query instead of a `to_attr` prefetch) is the mechanism this decision puts a
-name and a home to. Narrowed by ADR-0296 (#3816): `CachedRowsHandler` is retired for the
+name and a home to. Narrowed by ADR-0298 (#3816): `CachedRowsHandler` is retired for the
 parent-owned-raw-list case in favor of `PrunedCachedProperty` + `Prefetch(to_attr=...)`
 with explicit write-side invalidation.
 

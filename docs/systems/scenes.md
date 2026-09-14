@@ -606,7 +606,7 @@ properties (`world/scenes/models.py`, `world/scenes/reaction_models.py`, and —
 attributes or `CachedRowsHandler`. `CharacterSheet.cached_primary_persona` is the one fed twice:
 once nested under endorsements on the `Interaction` queryset, once more on the separate
 `SceneEntryEndorsement` queryset built in `get_serializer_context()` — 14 `Prefetch(to_attr=...)`
-calls in total feeding those 13 properties. This is the sanctioned shape (ADR-0296): a genuine
+calls in total feeding those 13 properties. This is the sanctioned shape (ADR-0298): a genuine
 `cached_property` is the one `to_attr` target Django's own cold-instance freshness check gets right,
 and `PrunedCachedProperty` additionally re-filters any row whose pk has gone falsey (a
 `Collector.delete()` zombie) on every read. It does not by itself keep a cached list fresh across

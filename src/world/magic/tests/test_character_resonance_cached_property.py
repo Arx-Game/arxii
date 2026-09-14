@@ -93,7 +93,7 @@ class GrantResonanceWarmedCacheTests(TestCase):
         Unlike the create path, updating an existing row's balance still calls
         ``cr.save()``, which self-heals the cache via ``RelatedCacheClearingMixin``
         (one requery on the next read) rather than being mutated in place -- that
-        extra query is an accepted trade-off (ADR-0296), not the doubling bug this
+        extra query is an accepted trade-off (ADR-0298), not the doubling bug this
         module guards against.
         """
         sheet = CharacterSheetFactory()

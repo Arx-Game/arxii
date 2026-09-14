@@ -350,7 +350,7 @@ def create_pose_endorsement(  # noqa: C901
     # cached_endorsements from the pre-write snapshot we captured, rather than
     # leaving it cold until the next reader re-queries. Do not remove the mixin
     # thinking this line already covers it -- the delete path depends on the
-    # mixin alone (ADR-0296).
+    # mixin alone (ADR-0298).
     if cached is not None:
         interaction.cached_endorsements = [*cached, endorsement]
     return endorsement

@@ -443,7 +443,7 @@ by `ty`'s `invalid-method-override`). The applicant's email comes from `DraftApp
   and `kind=` (one or more `FamilyKind` ids, #3617)
 - `GET /api/character-creation/origin-templates/?beginning=X` - active Upbringings for a
   beginning; each row carries its `slots` and `claimable_kind_ids`. The questions come from
-  `OriginTemplate.questions`, a `PrunedCachedProperty` (ADR-0296) returning a plain
+  `OriginTemplate.questions`, a `PrunedCachedProperty` (ADR-0298) returning a plain
   `list[OriginTemplateSlot]` - every consumer (this serializer, the questionnaire resolver,
   the draft validators, the finalize service, the Builder rail) reads `template.questions`
   directly, no wrapper. `CGOriginTemplateViewSet.get_queryset()` batches the whole page in one

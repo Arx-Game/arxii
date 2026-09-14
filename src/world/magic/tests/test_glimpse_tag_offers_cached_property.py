@@ -1,5 +1,5 @@
 """``GlimpseTag.offers`` - a ``PrunedCachedProperty`` over a tag's distinction offers
-(#3675, #3816, ADR-0296).
+(#3675, #3816, ADR-0298).
 
 ``related_cache_fields`` is PRIMARY here: ``DistinctionOffer`` writes are
 staff-authored/admin-tooling shaped (``web/admin/distinction_builder/paste.py``,

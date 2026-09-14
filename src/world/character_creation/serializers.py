@@ -580,7 +580,7 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(CGGlimpseTagOfferSerializer(many=True))
     def get_offers(self, obj: GlimpseTag) -> list[dict]:
-        # obj.offers is a PrunedCachedProperty (ADR-0296) - fed for the whole page
+        # obj.offers is a PrunedCachedProperty (ADR-0298) - fed for the whole page
         # by CGGlimpseTagViewSet.get_queryset()'s Prefetch, select_related("distinction").
         return [_offer_row(offer, with_arrival=False) for offer in obj.offers]
 
@@ -880,11 +880,11 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
         """Return nested slots from ``obj.questions``.
 
-        ``obj.questions`` is a ``PrunedCachedProperty`` (ADR-0296) - fed for the
+        ``obj.questions`` is a ``PrunedCachedProperty`` (ADR-0298) - fed for the
         whole page by ``CGOriginTemplateViewSet.get_queryset()``'s ``Prefetch``.
         Safe on this identity-mapped model even though a plain ``to_attr``
         attribute wasn't (ADR-0263, #3673): a data descriptor's own freshness
-        check and pk-nulled self-healing are what ADR-0296 adds on top.
+        check and pk-nulled self-healing are what ADR-0298 adds on top.
 
         Choices and the branch-choice ids are each resolved with one flat query
         across every slot on this template, grouped by slot id in Python (see

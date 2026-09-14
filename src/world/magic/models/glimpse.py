@@ -87,7 +87,7 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
 
     @PrunedCachedProperty
     def offers(self) -> list[DistinctionOffer]:
-        """This tag's active distinction offers, in display order (#3675, ADR-0296).
+        """This tag's active distinction offers, in display order (#3675, ADR-0298).
 
         ``related_cache_fields`` is the PRIMARY invalidation mechanism here:
         ``DistinctionOffer`` writes are staff-authored/admin-tooling shaped, scattered

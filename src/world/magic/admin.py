@@ -707,7 +707,7 @@ class GlimpseTagAdmin(admin.ModelAdmin):
 
         preview = None
         if obj is not None and obj.pk:
-            # obj.offers is a PrunedCachedProperty (ADR-0296) - already
+            # obj.offers is a PrunedCachedProperty (ADR-0298) - already
             # active-only, select_related("distinction"), ordered.
             preview = preview_from_offers(obj.offers)
         context["offer_preview"] = preview

@@ -22,7 +22,7 @@ against pk-nulled zombie rows on every read. It does NOT by itself keep the
 cached list fresh across writes made elsewhere in the same request or
 process — that stays the paired, explicit responsibility of
 ``related_cache_fields``/``RelatedCacheClearingMixin``, or direct mutation of
-the cached list at each write site. See ADR-0296 for the fuller rationale
+the cached list at each write site. See ADR-0298 for the fuller rationale
 and how this narrows ADR-0263/ADR-0278.
 
 It must be a DATA descriptor (define ``__set__``) so ``__get__`` runs on

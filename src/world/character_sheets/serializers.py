@@ -1147,7 +1147,7 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     ]
 
 
-# The enemy rows and the Introductions are cached lists on the sheet (ADR-0278/ADR-0296):
+# The enemy rows and the Introductions are cached lists on the sheet (ADR-0278/ADR-0298):
 # ``sheet.enemy_rows`` and ``sheet.introductions`` each load once per sheet and are
 # cleared by their children's saves and deletes, so nothing is prefetched here.
 _ACTOR_SHEET_SELECT_RELATED: tuple[str, ...] = ()

@@ -17,7 +17,7 @@ pk on the shared instance it deleted, ADR-0263).
 sanctioned target: it is a genuine data descriptor (so Django's freshness check
 is correct) that also re-filters pk-gone-falsey rows out of the cached list on
 every read, self-healing against the zombie-row failure mode above. See
-ADR-0296 for the fuller rationale. A bare-string ``prefetch_related("x")`` is
+ADR-0298 for the fuller rationale. A bare-string ``prefetch_related("x")`` is
 never safe regardless of the target - it goes stale the same way through
 ``instance._prefetched_objects_cache`` - and stays rejected unconditionally by
 ``lint_prefetch_string.py``.

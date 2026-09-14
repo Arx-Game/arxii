@@ -642,9 +642,9 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
-        """One batched offers query for the whole page, not one per row (ADR-0296).
+        """One batched offers query for the whole page, not one per row (ADR-0298).
 
-        ``GlimpseTag.offers`` is a ``PrunedCachedProperty`` (ADR-0296): a ``Prefetch``
+        ``GlimpseTag.offers`` is a ``PrunedCachedProperty`` (ADR-0298): a ``Prefetch``
         targeting it by ``to_attr`` is sanctioned because write-side invalidation is
         wired explicitly (``DistinctionOffer.related_cache_fields``), unlike the bare
         wrapper this endpoint used until #3816 (``GlimpseTagOffersHandler.prime()``).
@@ -687,7 +687,7 @@ class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):
         the same staleness class ADR-0263 documents for ``to_attr``, just via
         ``instance._prefetched_objects_cache`` instead of a bare attribute name.
 
-        ``OriginTemplate.questions`` is a ``PrunedCachedProperty`` (ADR-0296): a
+        ``OriginTemplate.questions`` is a ``PrunedCachedProperty`` (ADR-0298): a
         ``Prefetch`` targeting it by ``to_attr`` is sanctioned because write-side
         invalidation is wired explicitly (``OriginTemplateSlot.related_cache_fields``),
         unlike the bare attribute this view used to reach past it with (a

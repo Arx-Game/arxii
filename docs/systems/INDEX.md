@@ -8851,7 +8851,7 @@ Extensions to Evennia models for additional data storage.
 - **`PrunedCachedProperty`** (`evennia_extensions.cached_property`) — the sanctioned
   `to_attr` target for `Prefetch(to_attr=...)` onto an identity-mapped
   (`SharedMemoryModel`) model; see `evennia_extensions/CACHED_PROPERTY_STANDARD.md`
-  and ADR-0296.
+  and ADR-0298.
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)
 - **Source:** `src/evennia_extensions/`

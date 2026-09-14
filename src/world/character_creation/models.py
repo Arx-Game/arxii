@@ -778,7 +778,7 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
 
     @PrunedCachedProperty
     def questions(self) -> list[OriginTemplateSlot]:
-        """This route's questions, in the order a player answers them (#3673, #3816, ADR-0296).
+        """This route's questions, in the order a player answers them (#3673, #3816, ADR-0298).
 
         ``related_cache_fields`` is the ONLY invalidation path here, by necessity, not
         by choice: ``OriginTemplateSlot`` has no application-level write site at all -
@@ -2258,7 +2258,7 @@ class DistinctionOffer(
     #: is where ``GlimpseTag.offers`` (``world.magic.models.glimpse``) lives.
     #: A cascade or a ``queryset.delete()`` bypasses ``Model.delete()`` and
     #: never gets here - ``PrunedCachedProperty``'s own pk check is what covers
-    #: those (ADR-0296, mirroring ``OriginTemplateSlot.related_cache_fields``).
+    #: those (ADR-0298, mirroring ``OriginTemplateSlot.related_cache_fields``).
     #: **Known gap:** this mixin only ever sees an FK's value AT SAVE TIME, so
     #: reassigning ``glimpse_tag`` (or any opener FK here) to a different row
     #: clears the NEW opener's cache but never the OLD one's - the old opener

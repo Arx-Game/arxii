@@ -327,14 +327,14 @@ now `world.character_creation.models.DistinctionOffer` rows (`chapter=glimpse`,
 offers are (`world.character_creation.offers`, `docs/systems/character_creation.md`).
 
 **A tag's offers are a self-healing cached property, fed cold via Prefetch, cleared
-via related_cache_fields (ADR-0296).** `GlimpseTag.offers` is a `PrunedCachedProperty`
+via related_cache_fields (ADR-0298).** `GlimpseTag.offers` is a `PrunedCachedProperty`
 (`evennia_extensions/cached_property.py`, `models/glimpse.py`) returning a plain
 `list[DistinctionOffer]` — active rows for the tag, ordered `sort_order, id`,
 `select_related("distinction")`. Every reader (the CG API serializer's `get_offers`,
 `GlimpseTagAdmin`'s change-form preview) reads `tag.offers` directly, no wrapper.
 `CGGlimpseTagViewSet.get_queryset()` batches the whole page in one query via
 `Prefetch("distinction_offers", ..., to_attr="offers")` — sanctioned onto a genuine
-`cached_property` with explicit write-side invalidation wired (ADR-0296), unlike the
+`cached_property` with explicit write-side invalidation wired (ADR-0298), unlike the
 `GlimpseTagOffersHandler`/`CachedRowsHandler` wrapper this replaced (#3816 Task 9).
 `DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
 "schooling_line", "enemy_reason", "appearance_section"]` clears the property's cache

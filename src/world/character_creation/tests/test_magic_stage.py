@@ -848,7 +848,7 @@ class CGGlimpseTagEndpointTest(TestCase):
         assert len(big.captured_queries) == len(small.captured_queries)
 
     def test_list_is_three_queries_offers_batched_via_prefetch(self):
-        """Session lookup + tags query + one batched offers query (ADR-0296) -
+        """Session lookup + tags query + one batched offers query (ADR-0298) -
         fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
         ``PrunedCachedProperty``, never one query per tag."""
         url = "/api/character-creation/glimpse-tags/"

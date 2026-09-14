@@ -1,6 +1,6 @@
 """``CachedRowsHandler`` — retired, kept only for ``CompanionOrderHandler``.
 
-**Retired for new code (ADR-0296).** A parent-owned list of cached rows now
+**Retired for new code (ADR-0298).** A parent-owned list of cached rows now
 uses ``PrunedCachedProperty`` (``evennia_extensions/cached_property.py``)
 paired with a ``Prefetch``'s ``to_attr`` kwarg. #3816 migrated every consumer
 that could take that shape off this module (``IntroductionsHandler``,
@@ -8,7 +8,7 @@ that could take that shape off this module (``IntroductionsHandler``,
 
 What's left is ``CachedRowsHandler`` itself, surviving only because
 ``CompanionOrderHandler`` (``world/companions/handlers.py``) still subclasses
-it. ADR-0296 scoped that one consumer OUT of #3816 — not because its
+it. ADR-0298 scoped that one consumer OUT of #3816 — not because its
 ``round_number == encounter.round_number`` filter is genuinely impossible to
 express as a single shared ``Prefetch`` queryset clause (it isn't; e.g.
 ``F("encounter__round_number")`` would do it), but because migrating it
@@ -16,7 +16,7 @@ cleanly needs a two-part shape rather than a drop-in swap: an unfiltered
 ``PrunedCachedProperty`` holding every round's orders, plus a separate
 uncached property that filters to the current round in Python on read.
 **Do not add new subclasses of this class** — new parent-owned-row-list code
-always uses ``PrunedCachedProperty`` instead (ADR-0296's "How to apply").
+always uses ``PrunedCachedProperty`` instead (ADR-0298's "How to apply").
 
 Two hazards this layer exists to close, both consequences of ADR-0008's
 identity map:
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 class CachedRowsHandler[T: "Model"]:
     """One cached, ordered list of rows belonging to ``parent``.
 
-    **Retired (ADR-0296).** ``PrunedCachedProperty`` plus a ``Prefetch``'s
+    **Retired (ADR-0298).** ``PrunedCachedProperty`` plus a ``Prefetch``'s
     ``to_attr`` kwarg is the pattern for new code. This class survives only
     because ``CompanionOrderHandler`` (``world/companions/handlers.py``)
     still subclasses it — scoped out of #3816 as needing a two-part

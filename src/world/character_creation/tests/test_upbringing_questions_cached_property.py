@@ -1,5 +1,5 @@
 """``OriginTemplate.questions`` - a ``PrunedCachedProperty`` over a route's slots
-(#3673, #3816, ADR-0296).
+(#3673, #3816, ADR-0298).
 
 ``related_cache_fields`` is the ONLY invalidation path here, by necessity, not by
 choice: ``OriginTemplateSlot`` has no application-level write site at all - it is
