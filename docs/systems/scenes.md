@@ -612,9 +612,8 @@ and `PrunedCachedProperty` additionally re-filters any row whose pk has gone fal
 `Collector.delete()` zombie) on every read. It does not by itself keep a cached list fresh across
 writes made elsewhere in the same request or process — most relations' write sites mutate the
 cached list directly or clear it via `related_cache_fields`/`RelatedCacheClearingMixin`;
-`cached_primary_persona` is the one exception, with no write-side invalidation wired at all (a
-PRIMARY persona is effectively immutable once created, which may be why, but the doc shouldn't imply
-coverage this relation doesn't have).
+`cached_primary_persona` is the one exception, with no write-side invalidation wired at all — a
+PRIMARY persona is effectively immutable once created, so no write site needs to clear it.
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.

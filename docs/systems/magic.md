@@ -343,9 +343,9 @@ limitation:** reassigning an offer's `glimpse_tag` FK (moving it between tags vi
 Distinction Builder or the `GlimpseTagAdmin` inline) clears the *new* tag's cache but
 not the *old* one's — the moved offer can keep serving under its old tag for the life
 of the process. This is a property of the shared `RelatedCacheClearingMixin` itself
-(it only ever sees the FK's current value at save time), not specific to this
-relation; fixing it is a cross-cutting decision tracked for the whole-#3816-branch
-review, not addressed per-relation.
+(it only ever sees the FK's current value at save time), not specific to
+this relation; fixing it is tracked as #3836 (a cross-cutting mixin
+change), not addressed per-relation here.
 
 **Models** (`models/glimpse.py`):
 

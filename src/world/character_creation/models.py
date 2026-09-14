@@ -831,9 +831,9 @@ class OriginTemplateSlot(
     #: serving this slot, stale, for the life of the process. Applies to this
     #: model specifically since it's admin-editable content whose owner FK can be
     #: reassigned, unlike most other ``related_cache_fields`` relations in #3816,
-    #: which are created-once/deleted, never re-parented. Not fixed here - a
-    #: cross-cutting decision for the whole-branch review (see the identical note
-    #: on ``DistinctionOffer.related_cache_fields``).
+    #: which are created-once/deleted, never re-parented. Not fixed here -
+    #: cross-cutting decision tracked as #3836 (see the identical note on
+    #: ``DistinctionOffer.related_cache_fields``).
     related_cache_fields: ClassVar[list[str]] = ["template"]
 
     template = models.ForeignKey(
@@ -2266,8 +2266,8 @@ class DistinctionOffer(
     #: to this model specifically since it's admin-editable content whose
     #: opener FKs can be reassigned (Distinction Builder, ``GlimpseTagAdmin``
     #: inline), unlike most other ``related_cache_fields`` relations in #3816,
-    #: which are created-once/deleted, never re-parented. Not fixed here - a
-    #: cross-cutting decision for the whole-branch review.
+    #: which are created-once/deleted, never re-parented. Not fixed here -
+    #: cross-cutting decision tracked as #3836.
     related_cache_fields: ClassVar[list[str]] = [
         "glimpse_tag",
         "origin_choice",

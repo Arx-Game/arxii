@@ -215,12 +215,14 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
     need one run it before calling this.
     """
     personas = list(target_personas)
-    # Captured before the bulk_create (#3816 fix round 2): reading
-    # interaction.cached_target_personas AFTER it would find a cold cache on a
-    # freshly-created interaction, re-query the DB (which now includes the rows
-    # just inserted below), and then append them again -- doubling the list,
-    # which sticks for every later read of this identity-mapped instance.
-    existing = interaction.cached_target_personas
+    # Peeked before the bulk_create (#3816 fix round 2): reading
+    # interaction.cached_target_personas (rather than peeking) would force a
+    # query on a cold cache on a freshly-created interaction, and reading it
+    # AFTER the write would re-query the DB (which now includes the rows
+    # just inserted below) and then append them again -- doubling the list,
+    # which sticks for every later read of this identity-mapped instance. A
+    # cold cache is simply left alone.
+    existing = interaction.__dict__.get("cached_target_personas")
     InteractionTargetPersona.objects.bulk_create(
         [
             InteractionTargetPersona(
@@ -231,7 +233,8 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
             for p in personas
         ]
     )
-    interaction.cached_target_personas = [*existing, *personas]
+    if existing is not None:
+        interaction.cached_target_personas = [*existing, *personas]
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields

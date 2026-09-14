@@ -138,8 +138,10 @@ class BulkCreateWriteSiteCacheTests(TestCase):
     a cache that has never been read before (the common case: these all populate
     an interaction that was just created moments ago) would find nothing in
     ``instance.__dict__``, re-query the DB (which already includes the rows just
-    inserted), and then append them again. Each fix captures the existing list
-    BEFORE the write instead.
+    inserted), and then append them again. Each write site peeks via
+    ``__dict__.get(...)`` instead of reading the property, and only writes the
+    cache back if it was already warm -- a cold cache is left cold rather than
+    raced against the write.
     """
 
     def test_write_target_personas_on_a_cold_cache_is_not_doubled(self) -> None:

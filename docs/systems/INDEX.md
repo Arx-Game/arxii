@@ -8848,6 +8848,10 @@ Extensions to Evennia models for additional data storage.
   file before the service call; `MediaViewSet.create` validates through it and
   maps the service's quota `ValidationError` to a 400 with its fixed message.
 - **Pattern:** Extend Evennia models without modifying library code
+- **`PrunedCachedProperty`** (`evennia_extensions.cached_property`) — the sanctioned
+  `to_attr` target for `Prefetch(to_attr=...)` onto an identity-mapped
+  (`SharedMemoryModel`) model; see `evennia_extensions/CACHED_PROPERTY_STANDARD.md`
+  and ADR-0296.
 - **Integrates with:** accounts, characters, Evennia core, codex (`CodexEntry.art`),
   character_creation (`StartingArea.crest_art`, `Beginnings.art`)
 - **Source:** `src/evennia_extensions/`

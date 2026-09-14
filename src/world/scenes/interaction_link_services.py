@@ -46,13 +46,15 @@ def auto_link_pose_to_actions(pose: Interaction) -> list[InteractionAction]:
         InteractionAction(pose=pose, action_interaction=action, ordering=i)
         for i, action in enumerate(candidate_qs)
     ]
-    # Captured before the bulk_create (#3816 fix round 2): reading
-    # pose.cached_action_links AFTER it would find a cold cache on a
-    # freshly-created pose, re-query the DB (which now includes the rows just
-    # inserted below), and then append them again -- doubling the list, which
-    # sticks for every later read of this identity-mapped instance in this
-    # worker process.
-    existing = pose.cached_action_links
+    # Peeked before the bulk_create (#3816 fix round 2): reading
+    # pose.cached_action_links (rather than peeking) would force a query on a
+    # cold cache on a freshly-created pose, and reading it AFTER the write
+    # would re-query the DB (which now includes the rows just inserted
+    # below) and then append them again -- doubling the list, which sticks
+    # for every later read of this identity-mapped instance in this worker
+    # process. A cold cache is simply left alone.
+    existing = pose.__dict__.get("cached_action_links")
     created = InteractionAction.objects.bulk_create(links)
-    pose.cached_action_links = [*existing, *created]
+    if existing is not None:
+        pose.cached_action_links = [*existing, *created]
     return created

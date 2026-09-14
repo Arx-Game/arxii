@@ -95,22 +95,25 @@ def _link_explicit_action_ids(created: Interaction, action_link_ids: list[int]) 
     Appends the created rows onto ``created.cached_action_links`` (#3816) so the
     response serializes the real state without an extra query.
 
-    Captures the existing cached list BEFORE the ``bulk_create`` -- reading it
-    AFTER would find a cold cache (nothing in ``__dict__`` yet) on a
-    freshly-created pose, which re-queries the DB, which now includes the rows
-    just inserted; appending them again would double the list, and (per
+    Peeks at the existing cached list BEFORE the ``bulk_create`` instead of reading
+    the property -- reading it (rather than peeking) would force a query on a cold
+    cache (nothing in ``__dict__`` yet) on a freshly-created pose, and reading it
+    AFTER the write would re-query the DB, which now includes the rows just
+    inserted; appending them again would double the list, and (per
     ``SharedMemoryModelBase``'s identity map, plus Task 1's Prefetch freshness
     fix) that doubled list would stick for every later read of this same
-    cached pk in this worker process.
+    cached pk in this worker process. A cold cache is simply left alone -- there
+    is nothing to double-count, and the next real read queries fresh.
     """
-    existing = created.cached_action_links
+    existing = created.__dict__.get("cached_action_links")
     created_links = InteractionAction.objects.bulk_create(
         [
             InteractionAction(pose=created, action_interaction_id=aid, ordering=i)
             for i, aid in enumerate(action_link_ids)
         ]
     )
-    created.cached_action_links = [*existing, *created_links]
+    if existing is not None:
+        created.cached_action_links = [*existing, *created_links]
 
 
 def _seed_fresh_pose_caches(
