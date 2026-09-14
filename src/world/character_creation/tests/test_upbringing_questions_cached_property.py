@@ -11,6 +11,13 @@ saved/deleted slot has to clear it, and a delete that never calls ``Model.delete
 never reaches that writer side at all, while ``Collector.delete()`` still nulls the
 pk on the shared instance - so ``PrunedCachedProperty`` drops pk-less rows itself
 before returning anything.
+
+Every self-heal case below also proves the CACHING itself, with
+``assertNumQueries`` - not just the eventual answer. A plain uncached ``@property``
+would return the right value in every assertion here too, since it always
+requeries fresh; the whole point of #3816 is that repeated reads cost zero queries
+once warm, and that only a genuine invalidation (not a lucky pk-pruning coincidence)
+triggers the next one.
 """
 
 from django.test import TestCase
@@ -22,9 +29,23 @@ from world.character_creation.models import OriginTemplateSlot
 class UpbringingQuestionsCachedPropertyTests(TestCase):
     def test_new_slot_is_visible_on_next_read(self):
         template = OriginTemplateFactory()
-        self.assertEqual(template.questions, [])
+        self.assertEqual(template.questions, [])  # warm, empty
+
+        with self.assertNumQueries(0):
+            # Genuinely cached: a second read of the same, unchanged state costs
+            # nothing. A plain @property would issue a query here too.
+            self.assertEqual(template.questions, [])
+
         OriginTemplateSlotFactory(template=template)
-        self.assertEqual(len(template.questions), 1)
+
+        with self.assertNumQueries(1):
+            # related_cache_fields invalidated the stale empty cache - this is a
+            # real requery, not a Python-level filter reusing the old list.
+            self.assertEqual(len(template.questions), 1)
+
+        with self.assertNumQueries(0):
+            # And the fresh answer is itself cached again.
+            self.assertEqual(len(template.questions), 1)
 
     def test_questions_come_back_in_the_order_a_player_answers_them(self):
         template = OriginTemplateFactory()
@@ -37,12 +58,44 @@ class UpbringingQuestionsCachedPropertyTests(TestCase):
         template = OriginTemplateFactory()
         first = OriginTemplateSlotFactory(template=template, name="First", sort_order=0)
         doomed = OriginTemplateSlotFactory(template=template, name="Doomed", sort_order=1)
-        assert doomed in list(template.questions)
+        warm = list(template.questions)
+        assert doomed in warm
+
+        with self.assertNumQueries(0):
+            # Genuinely cached before any write happens.
+            assert list(template.questions) == warm
+
         doomed.delete()
         assert list(template.questions) == [first], (
             "the cache served a stale list; deleting a slot must clear its "
             "Upbringing's cached properties via related_cache_fields"
         )
+
+    def test_model_delete_invalidates_via_related_cache_fields_not_just_pk_pruning(self):
+        """Isolates ``related_cache_fields``' own contribution from the pk-pruning
+        belt proven below.
+
+        ``test_a_deleted_slot_is_gone_from_a_warm_cache`` above gets the right
+        ANSWER even if ``related_cache_fields`` silently failed to fire: Django's
+        ``Model.delete()`` nulls ``doomed.pk`` regardless, and
+        ``PrunedCachedProperty``'s own pruning would filter the pk-less row out of
+        the still-cached, stale list for free - zero queries, no requery needed,
+        masking a broken invalidation path. The mixin's contribution is that it
+        clears the cache BEFORE the row's pk goes null, so the next read is a
+        genuine requery, not a Python-level filter of an already-cached list.
+        """
+        template = OriginTemplateFactory()
+        first = OriginTemplateSlotFactory(template=template, name="First", sort_order=0)
+        doomed = OriginTemplateSlotFactory(template=template, name="Doomed", sort_order=1)
+        assert doomed in list(template.questions)  # warm
+
+        doomed.delete()
+
+        with self.assertNumQueries(1):
+            # A requery, not a free Python-level filter of the stale warm list -
+            # proves related_cache_fields actually cleared the cache.
+            served = list(template.questions)
+        assert served == [first]
 
     def test_a_queryset_delete_is_caught_even_though_it_never_calls_delete(self):
         """The belt. ``queryset.delete()`` bypasses ``Model.delete()``, so no
