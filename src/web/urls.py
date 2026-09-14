@@ -2,9 +2,18 @@
 
 from django.urls import include, path, re_path
 
-from web.views import FrontendAppView
+from web.views import FrontendAppView, PasswordChangeDiscoveryView, SecurityTxtView
 
 urlpatterns = [
+    # Password managers discover this standard endpoint and follow its redirect
+    # to the authenticated account password form.
+    path(
+        ".well-known/change-password",
+        PasswordChangeDiscoveryView.as_view(),
+        name="well-known-change-password",
+    ),
+    # RFC 9116 vulnerability disclosure metadata.
+    path(".well-known/security.txt", SecurityTxtView.as_view(), name="well-known-security"),
     path("api/", include("web.api.urls")),
     path("api/roster/", include("world.roster.urls")),
     path("api/tidings/", include("world.tidings.urls")),
