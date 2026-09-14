@@ -106,7 +106,6 @@ from world.magic.exceptions import GiftResonanceUnresolvable
 from world.magic.models import (
     Gift,
     GlimpseTag,
-    GlimpseTagOffersHandler,
     Technique,
     Tradition,
 )
@@ -643,23 +642,24 @@ class CGGlimpseTagViewSet(viewsets.ReadOnlyModelViewSet):
     filterset_class = GlimpseTagFilter
 
     def get_queryset(self) -> QuerySet[GlimpseTag]:
-        return GlimpseTag.objects.filter(is_active=True)
+        """One batched offers query for the whole page, not one per row (ADR-0278).
 
-    def list(self, request: Request, *args: object, **kwargs: object) -> Response:
-        """Serialize with one batched offers query, not one per row (ADR-0278).
-
-        Mirrors ``CGOriginTemplateViewSet.list()``: this ViewSet opts out of
-        pagination, so there's no ``page`` branch to preserve. Offers are read
-        through ``GlimpseTag.offers`` (``GlimpseTagOffersHandler``), primed here
-        for the whole page rather than reached via a ``Prefetch(to_attr=...)``:
-        a `to_attr` prefetch silently stops running on an identity-mapped
-        instance the second time it's warm (ADR-0263), which is what this
-        endpoint shipped with until #3675.
+        ``GlimpseTag.offers`` is a ``PrunedCachedProperty`` (ADR-0296): a ``Prefetch``
+        targeting it by ``to_attr`` is sanctioned because write-side invalidation is
+        wired explicitly (``DistinctionOffer.related_cache_fields``), unlike the bare
+        wrapper this endpoint used until #3816 (``GlimpseTagOffersHandler.prime()``).
+        No custom ``list()`` override is needed - the default pagination-free list
+        already serializes this queryset directly.
         """
-        tags = list(self.filter_queryset(self.get_queryset()))
-        GlimpseTagOffersHandler.prime(tags)
-        serializer = self.get_serializer(tags, many=True)
-        return Response(serializer.data)
+        return GlimpseTag.objects.filter(is_active=True).prefetch_related(
+            Prefetch(
+                "distinction_offers",
+                queryset=DistinctionOffer.objects.filter(is_active=True)
+                .select_related("distinction")
+                .order_by("sort_order", "id"),
+                to_attr="offers",
+            )
+        )
 
 
 class CGOriginTemplateViewSet(viewsets.ReadOnlyModelViewSet):

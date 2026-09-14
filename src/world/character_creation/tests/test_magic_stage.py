@@ -818,10 +818,10 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         assert len(big.captured_queries) == len(small.captured_queries)
 
-    def test_list_is_three_queries_offers_primed_not_prefetched(self):
-        """Session lookup + tags query + one batched
-        ``GlimpseTagOffersHandler.prime()`` query (ADR-0278) - never a
-        ``Prefetch(to_attr=...)`` and never one query per tag."""
+    def test_list_is_three_queries_offers_batched_via_prefetch(self):
+        """Session lookup + tags query + one batched offers query (ADR-0296) -
+        fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
+        ``PrunedCachedProperty``, never one query per tag."""
         url = "/api/character-creation/glimpse-tags/"
         self.client.get(url)  # warm the session row's first-request INSERT
 

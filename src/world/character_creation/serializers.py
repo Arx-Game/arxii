@@ -580,9 +580,9 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(CGGlimpseTagOfferSerializer(many=True))
     def get_offers(self, obj: GlimpseTag) -> list[dict]:
-        # obj.offers is a GlimpseTagOffersHandler (ADR-0278) - primed for the
-        # whole page by CGGlimpseTagViewSet.list(), select_related("distinction").
-        return [_offer_row(offer, with_arrival=False) for offer in obj.offers.rows]
+        # obj.offers is a PrunedCachedProperty (ADR-0296) - fed for the whole page
+        # by CGGlimpseTagViewSet.get_queryset()'s Prefetch, select_related("distinction").
+        return [_offer_row(offer, with_arrival=False) for offer in obj.offers]
 
 
 _GLOSS_MAX_LEN = 160

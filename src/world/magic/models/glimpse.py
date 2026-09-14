@@ -13,59 +13,19 @@ All writes go through ``world.magic.services.glimpse`` so
 
 from __future__ import annotations
 
-from collections import defaultdict
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING
 
 from django.db import models
-from django.utils.functional import cached_property
 from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from evennia_extensions.handlers import CachedRowsHandler
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin
 from world.contributors.models import CreditedContent
 from world.magic.constants import GlimpseTagAxis
 
 if TYPE_CHECKING:
     from world.character_creation.models import DistinctionOffer
-
-
-class GlimpseTagOffersHandler(CachedRowsHandler["DistinctionOffer"]):
-    """The distinctions one glimpse tag opens, in display order (#3675, ADR-0278).
-
-    ``DistinctionOffer`` lives in ``world.character_creation.models``, which the
-    magic app must not import at module scope (ADR-0010: magic is the
-    general/foundational side, mirroring ``services/tradition_membership.py``'s
-    lazy imports) - both ``load()`` and ``rows_for()`` import it lazily.
-    """
-
-    attname: ClassVar[str] = "offers"
-
-    def load(self) -> list[DistinctionOffer]:
-        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
-
-        return list(
-            DistinctionOffer.objects.filter(glimpse_tag_id=self.parent.pk, is_active=True)
-            .select_related("distinction")
-            .order_by("sort_order", "id")
-        )
-
-    @classmethod
-    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[DistinctionOffer]]:
-        """One query for every offer across ``parents``, bucketed by glimpse tag."""
-        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
-
-        grouped: dict[int, list[DistinctionOffer]] = defaultdict(list)
-        rows = (
-            DistinctionOffer.objects.filter(
-                glimpse_tag_id__in=[parent.pk for parent in parents], is_active=True
-            )
-            .select_related("distinction")
-            .order_by("sort_order", "id")
-        )
-        for offer in rows:
-            grouped[offer.glimpse_tag_id].append(offer)
-        return grouped
 
 
 class GlimpseTagManager(NaturalKeyManager):
@@ -125,11 +85,25 @@ class GlimpseTag(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Shared
     class NaturalKeyConfig:
         fields = ["slug"]
 
-    @cached_property
-    def offers(self) -> GlimpseTagOffersHandler:
-        """This tag's active distinction offers. Cleared by any offer save/delete
-        through ``DistinctionOffer.related_cache_fields`` (ADR-0278)."""
-        return GlimpseTagOffersHandler(self)
+    @PrunedCachedProperty
+    def offers(self) -> list[DistinctionOffer]:
+        """This tag's active distinction offers, in display order (#3675, ADR-0278).
+
+        ``related_cache_fields`` is the PRIMARY invalidation mechanism here (ADR-0296):
+        ``DistinctionOffer`` writes are staff-authored/admin-tooling shaped, scattered
+        across ``web/admin/distinction_builder/paste.py``, ``tradition_slate/views.py``
+        and seed data, not concentrated sole mutators, so every save/delete clears this
+        cache via ``DistinctionOffer.related_cache_fields``. Also fed cold by a
+        ``Prefetch`` (`` to_attr `` "offers") on ``CGGlimpseTagViewSet.get_queryset()``,
+        never one query per tag.
+        """
+        from world.character_creation.models import DistinctionOffer  # noqa: PLC0415
+
+        return list(
+            DistinctionOffer.objects.filter(glimpse_tag_id=self.pk, is_active=True)
+            .select_related("distinction")
+            .order_by("sort_order", "id")
+        )
 
     def __str__(self) -> str:
         return f"{self.get_axis_display()}: {self.name}"
