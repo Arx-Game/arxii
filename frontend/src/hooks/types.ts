@@ -1,3 +1,5 @@
+import type { FeedKind } from '@/game/feedKinds';
+
 export const GAME_MESSAGE_TYPE = {
   SYSTEM: 'system',
   CHAT: 'chat',
@@ -43,6 +45,23 @@ export interface GameMessage {
   content: string;
   timestamp: number;
   type: GameMessageType;
+}
+
+/**
+ * One typed text line in the feed (#3856): a look result, an item line, an
+ * error, an arrival or departure, a narrative emit, or a plain system line.
+ * Built by the socket hook from a `text` frame and its `kwargs.type`
+ * (`game/feedKinds.ts` maps the wire type to the kind); rendered by both
+ * readers at its timestamp among the interactions.
+ */
+export interface FeedNote {
+  id: string;
+  kind: FeedKind;
+  content: string;
+  /** What a look was at, when the server names it (`kwargs.subject`). */
+  subject?: string;
+  /** ISO-8601, client clock at receipt; sorts as a string against interaction timestamps. */
+  timestamp: string;
 }
 
 export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unknown>?];

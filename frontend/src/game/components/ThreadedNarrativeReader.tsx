@@ -17,6 +17,9 @@ import { markConversationRead } from '../playQueries';
 import { excerptOf } from '@/lib/formatParser';
 import { useViewerPersonaId } from '@/roster/persona';
 import { replyReachability, type ViewerVenue } from '@/scenes/replyReachability';
+import type { FeedNote } from '@/hooks/types';
+import { FeedNoteBlock } from './FeedNoteBlock';
+import { interleaveNotes } from '../feedRows';
 
 // #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
 // whole-list tail-slice size -- repurposed as the default number of a single
@@ -357,6 +360,13 @@ interface ThreadedNarrativeReaderProps {
    */
   conversationRef: string;
   interactions: Interaction[];
+  /**
+   * The character's typed text lines (#3856): look results, item lines,
+   * errors, arrivals, narrative emits. Rendered at their timestamp among the
+   * poses in both views, so the column reads as one feed. Omitted by
+   * reference-mode and test callers.
+   */
+  notes?: FeedNote[];
   hasNextPage?: boolean;
   fetchNextPage: () => void;
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
@@ -412,6 +422,8 @@ interface Group {
   interactions: Interaction[];
 }
 
+const NO_NOTES: FeedNote[] = [];
+
 /**
  * A single thread's own per-thread pose window (#3759 Wave 9 F1/F2),
  * replacing the old flat, whole-list `historyStartOverride`. `start`/`end`
@@ -434,6 +446,7 @@ export function ThreadedNarrativeReader({
   conversationKey,
   conversationRef,
   interactions,
+  notes = NO_NOTES,
   hasNextPage,
   fetchNextPage,
   onAvatarClick,
@@ -587,6 +600,18 @@ export function ThreadedNarrativeReader({
     () => groups.filter((group) => !group.key.startsWith('legacy:')),
     [groups]
   );
+  // #3856: the Threads column, with the character's notes slotted in by time.
+  // A thread sits at its root pose's time, so a look taken before a thread
+  // began reads above it and one taken after reads below, whatever replies
+  // the thread has since gathered.
+  const threadRows = useMemo(
+    () =>
+      interleaveNotes(
+        groups.map((group) => ({ timestamp: group.interactions[0].timestamp, group })),
+        notes
+      ),
+    [groups, notes]
+  );
   // Shared by the default-collapse effect (below) and the "Latest activity"
   // toolbar button (#3759 Wave 9 F5) -- both need "which thread's last pose
   // is the most recent," so this is computed once rather than duplicated.
@@ -702,9 +727,15 @@ export function ThreadedNarrativeReader({
     () => [...interactions].sort((a, b) => a.timestamp.localeCompare(b.timestamp) || a.id - b.id),
     [interactions]
   );
+  // #3856: the same flat timeline with notes at their time; the virtualizer
+  // windows over these rows, so a note costs the same as a pose.
+  const chronoRows = useMemo(
+    () => interleaveNotes(chronologicalItems, notes),
+    [chronologicalItems, notes]
+  );
   const chronoParentRef = useRef<HTMLDivElement>(null);
   const chronoVirtualizer = useVirtualizer({
-    count: chronologicalItems.length,
+    count: chronoRows.length,
     getScrollElement: () => chronoParentRef.current,
     estimateSize: () => 160,
     overscan: 8,
@@ -918,7 +949,9 @@ export function ThreadedNarrativeReader({
     const stored = loadConversationAnchor(conversationKeyRef.current);
     const anchor = stored?.anchors?.chronological;
     if (!anchor) return;
-    const idx = chronologicalItems.findIndex((item) => String(item.id) === anchor.poseId);
+    const idx = chronoRows.findIndex(
+      (row) => row.type === 'item' && String(row.item.id) === anchor.poseId
+    );
     if (idx === -1) {
       // #3759 Wave 9 (F1): unlike restoreThreadsAnchor's own miss branch,
       // this has no widen step to try -- `chronologicalItems` (above) is
@@ -1244,7 +1277,7 @@ export function ThreadedNarrativeReader({
           </div>
         </div>
         {chronological &&
-          (chronologicalItems.length === 0 ? (
+          (chronoRows.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center">
               <MessageCircle className="mx-auto h-6 w-6 text-muted-foreground" />
               <h2 className="mt-2 font-serif text-xl">Begin the scene</h2>
@@ -1286,7 +1319,29 @@ export function ThreadedNarrativeReader({
             >
               <div style={{ height: chronoVirtualizer.getTotalSize(), position: 'relative' }}>
                 {chronoVirtualizer.getVirtualItems().map((virtualRow) => {
-                  const item = chronologicalItems[virtualRow.index];
+                  const row = chronoRows[virtualRow.index];
+                  if (row.type === 'note') {
+                    return (
+                      <div
+                        key={row.note.id}
+                        data-index={virtualRow.index}
+                        data-feed-row={`note:${row.note.id}`}
+                        ref={chronoVirtualizer.measureElement}
+                        style={{
+                          position: 'absolute',
+                          top: 0,
+                          left: 0,
+                          width: '100%',
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                      >
+                        <div className="px-2 py-1">
+                          <FeedNoteBlock note={row.note} />
+                        </div>
+                      </div>
+                    );
+                  }
+                  const item = row.item;
                   const poseCollapsed = collapsedPoses.has(item.id);
                   // #3759 Wave 9 review finding F4: switched from the old
                   // "In a thread"/"Standalone" label to the same
@@ -1359,7 +1414,7 @@ export function ThreadedNarrativeReader({
             </div>
           ))}
         {!chronological &&
-          (groups.length === 0 ? (
+          (threadRows.length === 0 ? (
             <div className="rounded-lg border border-dashed p-8 text-center">
               <MessageCircle className="mx-auto h-6 w-6 text-muted-foreground" />
               <h2 className="mt-2 font-serif text-xl">Begin the scene</h2>
@@ -1368,7 +1423,15 @@ export function ThreadedNarrativeReader({
               </p>
             </div>
           ) : (
-            groups.map((group) => {
+            threadRows.map((row) => {
+              if (row.type === 'note') {
+                return (
+                  <div key={row.note.id} data-feed-row={`note:${row.note.id}`}>
+                    <FeedNoteBlock note={row.note} />
+                  </div>
+                );
+              }
+              const { group } = row.item;
               const root = group.interactions[0];
               // #3759 Wave 9 fix round 1 finding I-5: `thread_id` is only
               // set for an interaction that's an EXPLICIT reply

@@ -1,8 +1,8 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
+  addFeedNote,
   addSessionMessage,
   addSessionDiagnostic,
-  addAmbientNotice,
   endSession,
   resetGame,
   setSessionConnectionStatus,
@@ -11,6 +11,7 @@ import {
 import { setAccount } from '@/store/authSlice';
 import { parseGameMessage } from './parseGameMessage';
 import { WS_MESSAGE_TYPE } from './types';
+import { classifyText } from '@/game/feedKinds';
 import { emitActionResult } from './actionResultBus';
 import { emitHazardPrompt } from './hazardPromptBus';
 
@@ -231,7 +232,13 @@ const LEGACY_TEXT_TYPES = new Set<SocketMessageType>([
   WS_MESSAGE_TYPE.MESSAGE_REACTION,
 ]);
 
-/** Renders legacy text-like frames in the appropriate feed lane. */
+/**
+ * Renders legacy text-like frames. A `text` frame becomes a feed note (#3856),
+ * its kind read from `kwargs.type` (the dict of Evennia's tuple form, which is
+ * how commands, movement announcements and the narrative service type their
+ * lines); the readers render notes at their timestamp among the interactions.
+ * The other legacy frames (login, VN, reactions) keep the message lane.
+ */
 function dispatchLegacyText(
   character: MyRosterEntry['name'],
   parsed: IncomingMessage,
@@ -241,16 +248,17 @@ function dispatchLegacyText(
 ): boolean {
   if (!LEGACY_TEXT_TYPES.has(msgType)) return false;
   const message = parseGameMessage(parsed);
-  const metadata = kwargs as Record<string, unknown> | undefined;
-  const isAmbient =
-    msgType === WS_MESSAGE_TYPE.TEXT &&
-    (metadata?.type === 'narrative' || metadata?.type === 'gemit');
-  if (isAmbient) {
+  if (msgType === WS_MESSAGE_TYPE.TEXT) {
+    const subject = typeof kwargs?.subject === 'string' ? kwargs.subject : undefined;
     dispatch(
-      addAmbientNotice({
+      addFeedNote({
         character,
-        message: message.content,
-        timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
+        note: {
+          kind: classifyText(kwargs?.type),
+          content: message.content,
+          ...(subject ? { subject } : {}),
+          timestamp: new Date().toISOString(),
+        },
       })
     );
   } else {

@@ -409,3 +409,81 @@ describe('useGameSocket disconnect (#3818 "Leave the world")', () => {
     expect(MockWebSocket.instances).toHaveLength(1);
   });
 });
+
+describe('useGameSocket text frames become feed notes (#3856)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-14T22:00:00.000Z'));
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function dispatchedTypes(): string[] {
+    return mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
+  }
+
+  function noteDispatches(): unknown[] {
+    return mockDispatch.mock.calls
+      .map(([action]) => action as { type?: string; payload?: unknown })
+      .filter((action) => action.type === 'game/addFeedNote')
+      .map((action) => action.payload);
+  }
+
+  async function deliver(frame: unknown): Promise<void> {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    act(() => {
+      MockWebSocket.instances[0].dispatch('message', { data: JSON.stringify(frame) });
+    });
+  }
+
+  it('routes a typed text frame to addFeedNote with the kind from kwargs.type', async () => {
+    await deliver(['text', ['A quiet room.'], { type: 'look' }]);
+
+    expect(noteDispatches()).toEqual([
+      {
+        character: 'Aria',
+        note: { kind: 'look', content: 'A quiet room.', timestamp: '2026-09-14T22:00:00.000Z' },
+      },
+    ]);
+  });
+
+  it('keeps the subject a look names', async () => {
+    await deliver(['text', ['A tall woman.'], { type: 'look', subject: 'Aurelia' }]);
+
+    expect(noteDispatches()[0]).toMatchObject({ note: { subject: 'Aurelia' } });
+  });
+
+  it('files a narrative emit as ambience, no longer as a separate ambient notice', async () => {
+    await deliver(['text', ['Rain begins.'], { type: 'narrative' }]);
+
+    expect(noteDispatches()[0]).toMatchObject({
+      note: { kind: 'ambience', content: 'Rain begins.' },
+    });
+    expect(dispatchedTypes()).not.toContain('game/addAmbientNotice');
+  });
+
+  it('files an untyped text frame as a system note', async () => {
+    await deliver(['text', ['You are now logged in.'], {}]);
+
+    expect(noteDispatches()[0]).toMatchObject({ note: { kind: 'system' } });
+  });
+
+  it('does not make a note out of a non-text legacy frame', async () => {
+    await deliver(['logged_in', [], {}]);
+
+    expect(noteDispatches()).toEqual([]);
+    expect(dispatchedTypes()).toContain('game/addSessionMessage');
+  });
+});

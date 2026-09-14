@@ -72,6 +72,14 @@ export function FocusPanel({
     const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
     return match?.id ?? null;
   }, [myRosterEntries, roomCharacter]);
+  // The active puppet's portrait, for the Here panel's "you" row (#3856).
+  const viewerThumbnailUrl = useMemo<string | null>(() => {
+    if (!roomCharacter) {
+      return null;
+    }
+    const match = myRosterEntries.find((entry) => entry.name === roomCharacter);
+    return match?.profile_picture_url ?? null;
+  }, [myRosterEntries, roomCharacter]);
   // The active puppet's worn persona pk — the unseen-presence report identity (#3288).
   const viewerPersonaId = useMemo<number | null>(() => {
     if (!roomCharacter) {
@@ -139,6 +147,7 @@ export function FocusPanel({
           hasActiveBattle={hasActiveBattle}
           viewerEntryId={viewerEntryId}
           viewerPersonaId={viewerPersonaId}
+          viewerThumbnailUrl={viewerThumbnailUrl}
         />
       );
       break;

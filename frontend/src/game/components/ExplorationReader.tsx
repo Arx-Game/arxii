@@ -1,14 +1,18 @@
-import type { InteractionWsPayload } from '@/hooks/types';
+import { useMemo } from 'react';
+import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import type { GameLifecycleState } from '@/store/gameSlice';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
+import { FeedNoteBlock } from './FeedNoteBlock';
+import { interleaveNotes } from '../feedRows';
 import type { RoomData } from './RoomPanel';
 
 interface ExplorationReaderProps {
   room: RoomData | null;
   ambientInteractions?: InteractionWsPayload[];
   lifecycleState?: GameLifecycleState;
-  ambientNotices?: string[];
+  /** Typed text lines for this character (#3856), shown among the ambient poses by time. */
+  notes?: FeedNote[];
   onRetry?: () => void;
 }
 
@@ -20,13 +24,20 @@ export function ExplorationReader({
   room,
   ambientInteractions = [],
   lifecycleState,
-  ambientNotices = [],
+  notes = [],
   onRetry,
 }: ExplorationReaderProps) {
   const awaitingSnapshot = lifecycleState === 'entering' && Boolean(room);
   const isStale =
     lifecycleState === 'reconnecting' || lifecycleState === 'entry-error' || awaitingSnapshot;
   const isAftermath = lifecycleState === 'aftermath';
+  // One column (#3856): the room's structured poses and the character's own
+  // notes (a look, an error, an arrival) in the order they happened, never a
+  // section of notes below a section of poses.
+  const rows = useMemo(
+    () => interleaveNotes(ambientInteractions, notes),
+    [ambientInteractions, notes]
+  );
   return (
     <section
       className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
@@ -132,59 +143,43 @@ export function ExplorationReader({
               </section>
             )}
 
-            {ambientNotices.length > 0 && (
-              <section aria-labelledby="ambient-notices-heading" className="space-y-2">
-                <h2
-                  id="ambient-notices-heading"
-                  className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
-                >
-                  Nearby activity
-                </h2>
-                {ambientNotices.map((notice, index) => (
-                  <p
-                    key={`${notice}:${index}`}
-                    className="rounded border-l-2 border-primary/40 pl-3 text-sm"
-                  >
-                    {notice}
-                  </p>
-                ))}
-              </section>
-            )}
-            {ambientInteractions.length > 0 && (
-              <section aria-labelledby="ambient-heading" className="space-y-3">
-                <h2
-                  id="ambient-heading"
-                  className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground"
-                >
-                  Nearby
-                </h2>
-                {ambientInteractions.map((interaction) => (
-                  <article
-                    key={`${interaction.id}:${interaction.timestamp}`}
-                    className="border-b pb-3 last:border-b-0"
-                  >
-                    <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
-                      <PersonaAvatar
-                        source={{
-                          name: interaction.persona.name,
-                          thumbnailUrl: interaction.persona.thumbnail_url,
-                        }}
-                        size="sm"
-                      />
-                      <span className="font-medium text-foreground">
-                        {interaction.persona.name}
-                      </span>
-                      <time dateTime={interaction.timestamp}>
-                        {new Date(interaction.timestamp).toLocaleTimeString([], {
-                          hour: 'numeric',
-                          minute: '2-digit',
-                        })}
-                      </time>
-                    </header>
-                    <FormattedContent content={interaction.content} />
-                  </article>
-                ))}
-              </section>
+            {rows.length > 0 && (
+              <ol aria-label="Activity" className="space-y-3">
+                {rows.map((row) =>
+                  row.type === 'note' ? (
+                    <li key={row.note.id} data-feed-row={`note:${row.note.id}`}>
+                      <FeedNoteBlock note={row.note} />
+                    </li>
+                  ) : (
+                    <li
+                      key={`${row.item.id}:${row.item.timestamp}`}
+                      data-feed-row={`interaction:${row.item.id}`}
+                    >
+                      <article className="border-b pb-3 last:border-b-0">
+                        <header className="mb-1 flex items-center gap-2 text-xs text-muted-foreground">
+                          <PersonaAvatar
+                            source={{
+                              name: row.item.persona.name,
+                              thumbnailUrl: row.item.persona.thumbnail_url,
+                            }}
+                            size="sm"
+                          />
+                          <span className="font-medium text-foreground">
+                            {row.item.persona.name}
+                          </span>
+                          <time dateTime={row.item.timestamp}>
+                            {new Date(row.item.timestamp).toLocaleTimeString([], {
+                              hour: 'numeric',
+                              minute: '2-digit',
+                            })}
+                          </time>
+                        </header>
+                        <FormattedContent content={row.item.content} />
+                      </article>
+                    </li>
+                  )
+                )}
+              </ol>
             )}
           </>
         )}

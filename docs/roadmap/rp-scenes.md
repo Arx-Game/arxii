@@ -463,7 +463,8 @@ combat action records whom it targeted.
 > `/game`) is closed. `GamePage` is now the composition root: it derives the active
 > session's scene, composes `useSceneInteractions` + `useThreading` once, and feeds
 > the result to `ConversationSidebar` (thread sidebar, unread badges, filter modal),
-> the center feed (chat-bubble `PoseUnit`s + `SystemLane`), and the scene toolset
+> the center feed (chat-bubble `PoseUnit`s + `SystemLane`, the latter replaced by
+> in-column `FeedNoteBlock`s in #3856), and the scene toolset
 > (actions/places/consent/composer modes incl. tabletalk) — all on `/game`.
 > `/scenes/:id` remains the unchanged record/detail page (`SceneInteractionPanel`).
 > What was built: one-play-surface composition on `/game`; per-thread unread

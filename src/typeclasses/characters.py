@@ -526,17 +526,28 @@ class Character(ObjectParent, DefaultCharacter):
         identity-free unseen-presence echo (arrivals always announce — one-way
         disclosure), while a failed re-roll quietly strips the stance and falls
         through to the normal, visible announce.
+
+        Either way the line is typed ``arrive`` for the web feed (#3856). Evennia
+        types both broadcasts with the ``move_type`` it was moved with (``move``,
+        ``traverse``, ``expel``), which reaches the wire as the ``text`` frame's
+        ``type`` option; the client shows an arrival as something to act on and a
+        departure as a quiet line, so the arrival is retyped here. Nothing else
+        reads ``move_type`` on this path.
         """
         from world.stealth.services import reroll_on_arrival
 
         if reroll_on_arrival(self):
             if self.location is not None:
                 self.location.msg_contents(
-                    "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
+                    (
+                        "PLACEHOLDER An unseen presence arrived, stealthily avoiding notice.",
+                        {"type": "arrive"},
+                    ),
                     exclude=self,
                 )
             self.msg("PLACEHOLDER You slip in, keeping to the shadows.")
             return
+        kwargs["move_type"] = "arrive"
         super().announce_move_to(source_location, msg=msg, mapping=mapping, **kwargs)
 
     def send_room_state(self, session=None):

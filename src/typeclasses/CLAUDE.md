@@ -14,6 +14,13 @@ Core game objects (characters, rooms, exits, etc.) with Arx II customizations ex
   `character_creation.services.resolve_fallback_starting_room()` first (found by
   fixture identity, so the staff rename to "City Center" holds) and lets Evennia
   do the move. Never look that room up by name.
+- **An arrival is typed `arrive` for the web feed** (#3856). Evennia types both
+  movement broadcasts with the `move_type` the object was moved with (`move`,
+  `traverse`, `expel`), so the room being entered heard the same type as the room
+  being left. `announce_move_to` sets `move_type="arrive"` before deferring to
+  Evennia, and the stealth unseen-presence echo carries the same tuple-form
+  option; the departure keeps Evennia's `move`. Nothing else reads `move_type` on
+  this path. `tests/test_move_announcements.py` pins both.
 
 ### `rooms.py`
 - **`Room`**: Extends `DefaultRoom`

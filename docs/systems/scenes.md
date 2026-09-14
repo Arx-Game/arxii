@@ -1211,10 +1211,13 @@ no child re-fetches the same scene/roster data.
 renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
 `FormattedContent`-rendered prose, and reactions — never monospace/terminal
 styling (ratified presentation bar; terminal-style rendering on the primary feed is
-a defect, not a variant). `GameWindow` renders this structured bubble feed plus
-`SystemLane` (muted, collapsible system/channel/error strip) whenever the active
-session has a scene; with no active scene it falls back to the legacy raw
-`ChatWindow` log (`frontend/src/game/components/ChatWindow.tsx`). This restyle also
+a defect, not a variant). `GameWindow` renders this structured bubble feed whenever
+the active session has a scene; with no active scene it renders `ExplorationReader`
+(`frontend/src/game/components/ExplorationReader.tsx`). Since #3856 both readers
+also show the session's typed text lines (`FeedNote`s: look results, item lines,
+errors, arrivals and departures, narrative emits) at their time among the poses,
+rendered by `FeedNoteBlock`; the collapsed `SystemLane` strip that used to hold
+untyped text is gone. This restyle also
 closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
 `FormattedContent`, so `RichTextInput`'s markdown output actually displays as
 formatted prose instead of raw text.

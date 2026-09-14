@@ -31,6 +31,7 @@ class CmdLook(ArxCommand):
     locks = "cmd:all()"
     arg_regex = r"\s|$"
     action = LookAction()
+    feed_kind = "look"
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = (self.args or "").strip()
@@ -98,7 +99,10 @@ class CmdLook(ArxCommand):
         ):
             result = ActionResult(success=False, message=f"Could not find '{args}'.")
         if result.message:
-            self.msg(result.message)
+            # Typed ``look`` on success, ``error`` on failure (#3856): the
+            # concealed-target rewrite above must stay indistinguishable from the
+            # absent-target CommandError on the wire, type included.
+            self.send_result(result.message, failed=not result.success)
 
     def _try_dispatch_at_owner(
         self,

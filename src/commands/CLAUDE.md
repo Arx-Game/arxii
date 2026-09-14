@@ -28,6 +28,16 @@ SCENE_ADAPTIVE backend.
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
+  - `feed_kind` / `send_result()` (#3856): a command that declares `feed_kind = "look"`
+    or `"item"` sends its result through Evennia's tuple form,
+    `msg((text, {"type": kind}))`, whose dict becomes the `text` frame's kwargs on the
+    web; the client's `classifyText` sorts notes by it. A failed result and every
+    `CommandError` are typed `error` whatever the kind (the concealed-target and
+    absent-target refusals must stay indistinguishable on the wire, type included);
+    `command_error` still goes out as its own structured frame. A command with no
+    kind sends the plain line it always did. Never `msg(text, type=kind)`: the
+    session handler emits every top-level keyword as a separate frame the client
+    cannot attach to the line. Telnet ignores the option.
 - **`DispatchCommand(ArxCommand)`**: Base class for commands that ride the player-action dispatcher
   - `resolve_action_ref()`: Override to return an `ActionRef` (backend + params)
   - `resolve_action_args()`: Override to return extra kwargs passed alongside the ref
@@ -47,7 +57,13 @@ Both bases stay thin: no business logic in commands — all behavior lives in
 actions, backends, and service functions.
 
 ### Command Files
-- **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
+- **`evennia_overrides/perception.py`**: `CmdLook` (`feed_kind = "look"`; its own
+  `_execute` routes through `send_result`, #3856), `CmdInventory`
+- **`evennia_overrides/system.py`**: `CmdNoMatch` (#3856) — the `CMD_NOMATCH` system
+  command in `CharacterCmdSet`. Evennia's own no-match reply is an untyped `text`
+  frame the web client could not place, so it was silent there; this reproduces
+  Evennia's wording (near-miss suggestions via `string_suggestions`, double-quoted,
+  joined with "or") and sends it typed `error`. Telnet output is byte-identical.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,

@@ -2,13 +2,12 @@ import type { ReactNode, RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { ExplorationReader } from './ExplorationReader';
 import type { GameLifecycleState, Session } from '@/store/gameSlice';
-import type { InteractionWsPayload } from '@/hooks/types';
+import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 import { ConversationTabStrip, type ConversationTabStripProps } from './ConversationTabStrip';
-import { SystemLane } from './SystemLane';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -39,7 +38,8 @@ interface GameWindowProps {
   /** Scene-less interaction frames for the exploration reader. */
   ambientInteractions?: InteractionWsPayload[];
   diagnostics?: string[];
-  ambientNotices?: string[];
+  /** Typed text lines (#3856); defaults to the session's own. */
+  notes?: FeedNote[];
   lifecycleState?: GameLifecycleState;
   composerMode?: ComposerMode;
   onModeChange: (mode: ComposerMode) => void;
@@ -286,7 +286,7 @@ type GameWindowFeedProps = Pick<
   | 'onRetryReference'
   | 'room'
   | 'ambientInteractions'
-  | 'ambientNotices'
+  | 'notes'
   | 'onAvatarClick'
   | 'onAddTarget'
   | 'onAttachAction'
@@ -320,7 +320,7 @@ function GameWindowFeed({
   session,
   room,
   ambientInteractions,
-  ambientNotices,
+  notes,
   effectiveLifecycle,
   active,
   connect,
@@ -414,16 +414,18 @@ function GameWindowFeed({
                 isAtPlace={isAtPlace}
                 currentPlaceId={currentPlaceId}
                 currentPlaceName={currentPlaceName}
+                // A reference view reads history; the live column's notes are
+                // this session's own and do not belong in it (#3856).
+                notes={reference ? undefined : (notes ?? session.notes)}
               />
             )}
           </div>
-          {!reference && <SystemLane messages={session.messages} />}
         </>
       ) : (
         <ExplorationReader
           room={room ?? session.room}
           ambientInteractions={ambientInteractions ?? session.ambientInteractions}
-          ambientNotices={ambientNotices ?? session.ambientNotices}
+          notes={notes ?? session.notes}
           lifecycleState={effectiveLifecycle}
           onRetry={() => {
             if (active) void connect(active);
@@ -440,7 +442,7 @@ export function GameWindow({
   room,
   ambientInteractions,
   diagnostics,
-  ambientNotices,
+  notes,
   lifecycleState,
   composerMode,
   onModeChange,
@@ -665,7 +667,7 @@ export function GameWindow({
         session={session}
         room={room}
         ambientInteractions={ambientInteractions}
-        ambientNotices={ambientNotices}
+        notes={notes}
         effectiveLifecycle={effectiveLifecycle}
         active={active}
         connect={connect}

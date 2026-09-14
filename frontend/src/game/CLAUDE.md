@@ -28,7 +28,9 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured chat-bubble feed
-  (`ThreadedNarrativeReader` + `SystemLane`) instead of a terminal transcript. Renders
+  (`ThreadedNarrativeReader`) instead of a terminal transcript; with no scene it
+  renders `ExplorationReader`. Both take the session's `notes` (#3856) and show
+  them at their time among the poses; a reference view gets none. Renders
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
@@ -59,6 +61,17 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   scene's entry, older entries for the same character are pruned on save.
   Best-effort: any storage error (unavailable, unparsable) is swallowed and
   treated as "nothing stored."
+- **`feedKinds.ts`**: The closed `FeedKind` union (#3856) every feed entry carries,
+  the list the filter chips will offer. `classifyText(kwargs.type)` maps a `text`
+  frame's wire type (`look`, `item`, `error`, `move`, `arrive`; `narrative` and
+  `gemit` both to `ambience`; anything else `system`) and `classifyInteraction(mode)`
+  maps an interaction's mode. A new kind is a deliberate addition here, never an ad
+  hoc string.
+- **`feedRows.ts`**: `interleaveNotes(items, notes)` (#3856) sorts an item list and
+  the session's `FeedNote`s into one column by parsed time (server timestamps may
+  lack milliseconds; note timestamps are the client clock at receipt), stable, items
+  first on a tie. Both readers use it; the scene reader feeds it thread groups at
+  their root pose's time in Threads view and the flat pose list in Chronological.
 - **`attention.ts`**: `sessionAttention(session, personaId, sinceId?)` (#2166,
   extended #3774): pure, selector-side two-tier attention derivation for one
   character's session, no new Redux write path. Reuses `getThreadKey`/
@@ -204,12 +217,20 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `true`) must be `false` whenever a non-room conversation tab is the one
   actually on screen, since `conversationKey` is always scoped to the scene
   regardless of tab — GameWindow passes `activeConvKey === 'room'`.
+- **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
+  (name, description); below them one `Activity` list of the room's ambient
+  interactions and the session's notes, ordered by time through `feedRows.ts`.
+- **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
+  by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
+  prose body), `item` and `system`; the destructive tokens and `role="alert"` for
+  `error`; a bare italic line for `arrive`/`move`; the italic line with a hairline
+  for `ambience`. Every body renders through `EvenniaMessage` in prose
+  presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
+  There is no separate system strip any more: `SystemLane` was removed with
+  #3856, since every text frame is a note in the column now.
 - **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
-- **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error
-  chatter shown alongside the structured scene feed (#2156) — no
-  `bg-black`/`font-mono`, just a quiet compact strip that expands on click.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
   newline, command history. **All composer text lives in `useDraftStore`**
   (#3784): `draft.content` is the textarea's `value` and `setContent` is the
@@ -242,7 +263,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`RoomPanel.tsx`**: Right sidebar container with room info, scene controls, navigation
 - **`RoomHeader.tsx`**: Room name and scene start/end controls
 - **`RoomDescription.tsx`**: Collapsible room description
-- **`CharactersList.tsx`**: Characters present in the room with avatars
+- **`CharactersList.tsx`**: Characters present in the room with avatars. Lists the
+  viewer first with a "you" tag (#3856) — the room state's `characters` excludes
+  them, so `RoomPanel` supplies `viewer` from its `character` prop and
+  `FocusPanel` supplies the portrait from the roster entry. Pressing the row sends
+  `look me` (never the name, which could prefix-match another occupant), so what
+  others see when they look at you lands as a look note in the column.
 - **`ExitsList.tsx`**: Clickable exit buttons for navigation
 - **`ObjectsList.tsx`**: Objects visible in the room
 - **`PortalsBlock.tsx`**: Portal-network destinations the active character could
