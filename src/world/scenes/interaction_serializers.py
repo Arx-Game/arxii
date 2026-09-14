@@ -859,16 +859,15 @@ class InteractionListSerializer(serializers.ModelSerializer):
             for s in suggestions
         ]
 
+    # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
+    # #3816 Task 3) -- fed by the prefetched
+    # `persona__character_sheet__resonances` path (set up in
+    # `interaction_views.get_queryset`) when available, and a live query on
+    # first read otherwise (e.g. serializer used outside the view's
+    # queryset pipeline). The property always exists now, so there is no
+    # fallback branch to maintain here.
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
-        """List of resonances claimed by the endorsee (pose author).
-
-        Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
-        #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
-        path (set up in ``interaction_views.get_queryset``) when available, and a
-        live query on first read otherwise (e.g. serializer used outside the
-        view's queryset pipeline). The property always exists now, so there is
-        no fallback branch to maintain here.
-        """
+        """List of resonances claimed by the endorsee (pose author)."""
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
@@ -876,16 +875,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
             {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
         ]
 
+    # Reads `Interaction.cached_endorsements` (a `PrunedCachedProperty`,
+    # #3816 Task 4) -- fed by the view queryset's Prefetch when available,
+    # and a live query on first read otherwise. Each endorser's primary
+    # persona is similarly read via `CharacterSheet.cached_primary_persona`.
+    # Both properties always exist now, so there is no fallback branch to
+    # maintain here.
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
-        """List of peers who endorsed this pose, with persona info.
-
-        Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
-        #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
-        a live query on first read otherwise. Each endorser's primary persona is
-        similarly read via ``CharacterSheet.cached_primary_persona``. Both
-        properties always exist now, so there is no fallback branch to maintain
-        here.
-        """
+        """List of peers who endorsed this pose, with persona info."""
         out = []
         for e in obj.cached_endorsements:
             persona = next(iter(e.endorser_sheet.cached_primary_persona), None)

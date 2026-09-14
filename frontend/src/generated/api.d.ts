@@ -31568,29 +31568,11 @@ export interface components {
       readonly dramatic_moment_suggestions: {
         [key: string]: unknown;
       }[];
-      /**
-       * @description List of resonances claimed by the endorsee (pose author).
-       *
-       *     Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
-       *     #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
-       *     path (set up in ``interaction_views.get_queryset``) when available, and a
-       *     live query on first read otherwise (e.g. serializer used outside the
-       *     view's queryset pipeline). The property always exists now, so there is
-       *     no fallback branch to maintain here.
-       */
+      /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
       }[];
-      /**
-       * @description List of peers who endorsed this pose, with persona info.
-       *
-       *     Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
-       *     #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
-       *     a live query on first read otherwise. Each endorser's primary persona is
-       *     similarly read via ``CharacterSheet.cached_primary_persona``. Both
-       *     properties always exist now, so there is no fallback branch to maintain
-       *     here.
-       */
+      /** @description List of peers who endorsed this pose, with persona info. */
       readonly pose_endorsers: {
         [key: string]: unknown;
       }[];
@@ -31789,29 +31771,11 @@ export interface components {
       readonly dramatic_moment_suggestions: {
         [key: string]: unknown;
       }[];
-      /**
-       * @description List of resonances claimed by the endorsee (pose author).
-       *
-       *     Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
-       *     #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
-       *     path (set up in ``interaction_views.get_queryset``) when available, and a
-       *     live query on first read otherwise (e.g. serializer used outside the
-       *     view's queryset pipeline). The property always exists now, so there is
-       *     no fallback branch to maintain here.
-       */
+      /** @description List of resonances claimed by the endorsee (pose author). */
       readonly endorsable_resonances: {
         [key: string]: unknown;
       }[];
-      /**
-       * @description List of peers who endorsed this pose, with persona info.
-       *
-       *     Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
-       *     #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
-       *     a live query on first read otherwise. Each endorser's primary persona is
-       *     similarly read via ``CharacterSheet.cached_primary_persona``. Both
-       *     properties always exist now, so there is no fallback branch to maintain
-       *     here.
-       */
+      /** @description List of peers who endorsed this pose, with persona info. */
       readonly pose_endorsers: {
         [key: string]: unknown;
       }[];
