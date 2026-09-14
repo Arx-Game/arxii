@@ -54,7 +54,7 @@ class RelatedCacheClearingMixinSnapshotTests(TestCase):
         # The clear was skipped, not just coincidentally not-re-queried.
         self.assertIn("cached_resonances", sheet.__dict__)
 
-    def test_reassigning_the_tracked_fk_clears_both_parents(self) -> None:
+    def test_reassigning_the_tracked_fk_clears_the_new_parent(self) -> None:
         sheet_a = CharacterSheetFactory()
         sheet_b = CharacterSheetFactory()
         resonance = ResonanceFactory()
@@ -69,3 +69,11 @@ class RelatedCacheClearingMixinSnapshotTests(TestCase):
 
         # The snapshot-diff branch fired: the new parent's cache was cleared.
         self.assertNotIn("cached_resonances", sheet_b.__dict__)
+
+        # The OLD parent's cache is NOT cleared -- RelatedCacheClearingMixin
+        # only ever sees the FK's post-save (new) value, never its prior one.
+        # This is the documented, known gap tracked as #3836, characterized
+        # here rather than left implicit: sheet_a's stale cached list still
+        # includes `cr` even though it no longer belongs to sheet_a.
+        self.assertIn("cached_resonances", sheet_a.__dict__)
+        self.assertEqual([r.pk for r in sheet_a.__dict__["cached_resonances"]], [cr.pk])
