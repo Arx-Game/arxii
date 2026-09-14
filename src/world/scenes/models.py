@@ -39,6 +39,7 @@ from world.societies.houses.constants import NameDegree, TitleSuffixMode
 if TYPE_CHECKING:
     from evennia.accounts.models import AccountDB
 
+    from world.combat.models import CombatRoundAction
     from world.magic.models import PoseEndorsement
     from world.magic.models.dramatic_moment import (
         DramaticMomentSuggestion,
@@ -1248,6 +1249,24 @@ class Interaction(SharedMemoryModel):
             DramaticMomentSuggestion.objects.filter(
                 interaction=self, status=SuggestionStatus.PENDING
             ).select_related("moment_type")
+        )
+
+    @PrunedCachedProperty
+    def cached_round_actions(self) -> list[CombatRoundAction]:
+        """This ACTION interaction's CombatRoundAction rows, fed by the ``to_attr``
+        "cached_round_actions" Prefetch (``world/scenes/interaction_views.py``).
+
+        Unlike this file's other cached properties, ``related_cache_fields`` on
+        ``CombatRoundAction`` is the PRIMARY invalidation mechanism here, not a
+        fallback behind direct write-site mutation — combat resolution has 16
+        scattered write sites, too many to mutate individually (#3816 Decision 5).
+        """
+        from world.combat.models import CombatRoundAction  # noqa: PLC0415
+
+        return list(
+            CombatRoundAction.objects.filter(interaction=self).select_related(
+                "focused_opponent_target"
+            )
         )
 
 

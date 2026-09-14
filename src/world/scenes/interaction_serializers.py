@@ -76,12 +76,10 @@ class InteractionActionLinkSerializer(serializers.ModelSerializer):
         action_interaction = obj.action_interaction
         if action_interaction is None:
             return False
-        # cached_round_actions is a Prefetch(to_attr=...) attribute set by the
-        # interaction_views queryset; getattr with a default keeps serialization
-        # safe if this serializer is ever used without that prefetch.
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        round_actions = getattr(action_interaction, "cached_round_actions", [])  # noqa: GETATTR_LITERAL
+        # cached_round_actions is now a PrunedCachedProperty on Interaction (#3816
+        # Task 7) — it always exists and self-heals via related_cache_fields, so a
+        # bare read replaces the old getattr-with-default guard.
+        round_actions = action_interaction.cached_round_actions
         for round_action in round_actions:
             opponent = round_action.focused_opponent_target
             if opponent is not None and opponent.status == OpponentStatus.DEFEATED:
