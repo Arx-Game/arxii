@@ -80,7 +80,17 @@ def get_reaction_kind(kind: str) -> ReactionKindConfig:
 
 def open_reaction_window(*, interaction: Interaction, kind: str) -> ReactionWindow:
     """Idempotently open a window of ``kind`` on ``interaction``."""
-    window, _ = ReactionWindow.objects.get_or_create(
+    # Peek, don't read: interaction.cached_reaction_windows is a PrunedCachedProperty, so
+    # reading it here would trigger a query whenever the cache happens to be cold --
+    # defeating the point of caching it in the common (cold) case. A dict-lookup peek
+    # costs nothing, and skipping the mutation on a cold cache loses nothing: the next
+    # real read recomputes fresh from the DB anyway (#3816). Captured BEFORE the
+    # get_or_create() below: on a real create, ReactionWindow.save() (via
+    # RelatedCacheClearingMixin + related_cache_fields=["interaction"]) clears ALL of
+    # interaction's cached_* attributes as a collateral side effect, which would pop this
+    # entry out from under a peek taken afterward.
+    cached = interaction.__dict__.get("cached_reaction_windows")
+    window, created = ReactionWindow.objects.get_or_create(
         interaction=interaction,
         kind=kind,
         defaults={
@@ -88,6 +98,8 @@ def open_reaction_window(*, interaction: Interaction, kind: str) -> ReactionWind
             "scene": interaction.scene,
         },
     )
+    if created and cached is not None:
+        interaction.cached_reaction_windows = [*cached, window]
     return window
 
 
@@ -141,11 +153,20 @@ def react_to_window(
 
     try:
         with transaction.atomic():
+            # Peek, don't read (see open_reaction_window's comment for the full
+            # rationale): window.cached_reaction_rows is a PrunedCachedProperty, and the
+            # peek must happen BEFORE WindowReaction.objects.create() below, since that
+            # create()'s own save() (via RelatedCacheClearingMixin +
+            # related_cache_fields=["window"]) clears window's cached_* attributes as a
+            # collateral side effect.
+            cached_rows = window.__dict__.get("cached_reaction_rows")
             reaction = WindowReaction.objects.create(
                 window=window,
                 reactor_persona=reactor_persona,
                 choice=choice,
             )
+            if cached_rows is not None:
+                window.cached_reaction_rows = [*cached_rows, reaction]
             config.on_reaction(window, reaction)
     except IntegrityError as exc:
         msg = "You have already reacted to this."

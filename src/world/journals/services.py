@@ -149,6 +149,10 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
         The created JournalEntry.
     """
     with transaction.atomic():
+        # Peek, don't read: a plain dict lookup never triggers the ``introductions``
+        # cached property's query. Only an already-warm cache needs the append below -
+        # a cold one reloads fresh (entry included) whenever something next reads it.
+        cached_introductions = author.__dict__.get("introductions")
         entry = JournalEntry.objects.create(
             author=author,
             title=title,
@@ -157,6 +161,8 @@ def create_journal_entry(  # noqa: PLR0913 - explicit content/visibility/tag/ove
             posthumous_override=posthumous_override,
             kind=kind,
         )
+        if cached_introductions is not None and kind != JournalKind.ENTRY:
+            author.introductions = [*cached_introductions, entry]
 
         if tags:
             JournalTag.objects.bulk_create(

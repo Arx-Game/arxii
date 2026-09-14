@@ -326,17 +326,26 @@ now `world.character_creation.models.DistinctionOffer` rows (`chapter=glimpse`,
 `glimpse_tag=<this tag>`), authored and read the same way every other CG chapter's
 offers are (`world.character_creation.offers`, `docs/systems/character_creation.md`).
 
-**A tag's offers live behind a handler, not a prefetch (ADR-0278).**
-`GlimpseTag.offers` is a `cached_property` returning a `GlimpseTagOffersHandler`
-(`CachedRowsHandler` subclass, `models/glimpse.py`): active `DistinctionOffer` rows
-for the tag, ordered `sort_order, id`, `select_related("distinction")`. Every reader
-(the CG API serializer's `get_offers`, `GlimpseTagAdmin`'s change-form preview) reads
-`tag.offers.rows`, never a `Prefetch(..., to_attr=...)`. `CGGlimpseTagViewSet.list()`
-calls `GlimpseTagOffersHandler.prime(tags)` to stay at one query for the whole page;
+**A tag's offers are a self-healing cached property, fed cold via Prefetch, cleared
+via related_cache_fields (ADR-0298).** `GlimpseTag.offers` is a `PrunedCachedProperty`
+(`evennia_extensions/cached_property.py`, `models/glimpse.py`) returning a plain
+`list[DistinctionOffer]` — active rows for the tag, ordered `sort_order, id`,
+`select_related("distinction")`. Every reader (the CG API serializer's `get_offers`,
+`GlimpseTagAdmin`'s change-form preview) reads `tag.offers` directly, no wrapper.
+`CGGlimpseTagViewSet.get_queryset()` batches the whole page in one query via
+`Prefetch("distinction_offers", ..., to_attr="offers")` — sanctioned onto a genuine
+`cached_property` with explicit write-side invalidation wired (ADR-0298), unlike the
+`GlimpseTagOffersHandler`/`CachedRowsHandler` wrapper this replaced (#3816 Task 9).
 `DistinctionOffer.related_cache_fields = ["glimpse_tag", "origin_choice",
-"schooling_line"]` clears the handler's cache on every offer save/delete. This
-replaced a `Prefetch(to_attr="cached_offers")` that shipped with the same staleness
-defect ADR-0263/ADR-0278 document on `OriginTemplate.questions`.
+"schooling_line", "enemy_reason", "appearance_section"]` clears the property's cache
+on every offer save/delete, for the offer's *current* `glimpse_tag` only. **Known
+limitation:** reassigning an offer's `glimpse_tag` FK (moving it between tags via the
+Distinction Builder or the `GlimpseTagAdmin` inline) clears the *new* tag's cache but
+not the *old* one's — the moved offer can keep serving under its old tag for the life
+of the process. This is a property of the shared `RelatedCacheClearingMixin` itself
+(it only ever sees the FK's current value at save time), not specific to
+this relation; fixing it is tracked as #3836 (a cross-cutting mixin
+change), not addressed per-relation here.
 
 **Models** (`models/glimpse.py`):
 

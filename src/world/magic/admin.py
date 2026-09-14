@@ -707,9 +707,9 @@ class GlimpseTagAdmin(admin.ModelAdmin):
 
         preview = None
         if obj is not None and obj.pk:
-            # obj.offers is the GlimpseTagOffersHandler (ADR-0278) - already
+            # obj.offers is a PrunedCachedProperty (ADR-0298) - already
             # active-only, select_related("distinction"), ordered.
-            preview = preview_from_offers(obj.offers.rows)
+            preview = preview_from_offers(obj.offers)
         context["offer_preview"] = preview
         return super().render_change_form(
             request, context, add=add, change=change, form_url=form_url, obj=obj

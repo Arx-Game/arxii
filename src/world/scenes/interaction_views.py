@@ -88,6 +88,112 @@ def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -
     return Response(body, status=status.HTTP_400_BAD_REQUEST)
 
 
+def _link_explicit_action_ids(created: Interaction, action_link_ids: list[int]) -> None:
+    """Explicit override for ``submit_pose``: create exactly the supplied links in
+    order, skipping auto-link entirely (empty list = caller opted out).
+
+    Appends the created rows onto ``created.cached_action_links`` (#3816) so the
+    response serializes the real state without an extra query.
+
+    Peeks at the existing cached list BEFORE the ``bulk_create`` instead of reading
+    the property -- reading it (rather than peeking) would force a query on a cold
+    cache (nothing in ``__dict__`` yet) on a freshly-created pose, and reading it
+    AFTER the write would re-query the DB, which now includes the rows just
+    inserted; appending them again would double the list, and (per
+    ``SharedMemoryModelBase``'s identity map, plus Task 1's Prefetch freshness
+    fix) that doubled list would stick for every later read of this same
+    cached pk in this worker process. A cold cache is simply left alone -- there
+    is nothing to double-count, and the next real read queries fresh.
+    """
+    existing = created.__dict__.get("cached_action_links")
+    created_links = InteractionAction.objects.bulk_create(
+        [
+            InteractionAction(pose=created, action_interaction_id=aid, ordering=i)
+            for i, aid in enumerate(action_link_ids)
+        ]
+    )
+    if existing is not None:
+        created.cached_action_links = [*existing, *created_links]
+
+
+def _seed_fresh_pose_caches(
+    interaction: Interaction, *, target_personas: list[Persona] | None, replayed: bool
+) -> None:
+    """Seed ``submit_pose``'s response interaction with its cached_* defaults.
+
+    The interaction has not been through ``get_queryset()``'s Prefetch pipeline —
+    freshly created, or (on replay) fetched via ``idempotent_record_interaction``'s
+    bare ``select_related`` lookup — so the ``cached_*`` to_attr attributes used by
+    ``InteractionListSerializer`` do not exist yet.
+
+    On a genuine (non-replayed) creation this call path (``submit_pose`` never
+    passes ``receivers=``/``place=``) guarantees a brand-new interaction has no
+    receivers, favorites, reactions, endorsements, dramatic-moment tags, or
+    dramatic-moment suggestions yet, so seeding ``[]`` is correct and avoids a
+    live query on serialization (dramatic-moment tags/suggestions require a
+    technique-entrance cast or the GM tag endpoint — an entirely separate
+    pipeline `_on_created` below never touches). ``cached_action_links`` is
+    the one exception even here: ``_on_created`` already populated it via direct
+    write-site mutation (#3816) with whatever ``InteractionAction`` rows were
+    just linked — stomping it would silently drop them from the response even
+    though the rows are in the database.
+
+    On a REPLAY, ``interaction`` is the OLD row fetched from the ledger — it may
+    have accumulated real favorites/reactions/receivers/action-links/endorsements/
+    dramatic-moment tags/suggestions from other requests since it was first
+    created, so stamping any of them to ``[]`` here would be a permanent lie:
+    ``PrunedCachedProperty`` treats an assigned value (``[]`` included) as
+    already fetched, so every later read of this identity-mapped instance in
+    this worker process would report zero forever. ``del`` instead, so the next
+    real read recomputes fresh from the DB (``PrunedCachedProperty.__delete__``
+    pops the entry and is a no-op if it was never set).
+
+    ``cached_reaction_windows`` gets ``del`` in BOTH branches, unlike its five
+    siblings above: an ENTRY pose's ``_on_created`` callback opens a
+    ``ReactionWindow`` on ``interaction`` (see ``open_reaction_window``) before
+    this function ever runs, and at that point the window's own write-site
+    mutation finds nothing cached yet on a brand-new interaction (this call
+    path never prefetches reaction windows) — so the mutation is skipped and
+    the freshly-opened window is never appended to any cached list here.
+    Stamping ``[]`` for a non-replayed ENTRY pose would therefore silently
+    drop that just-opened window from the response even though the row is in
+    the database — the same bug the docstring above calls out for
+    ``cached_action_links``. ``del`` (recompute fresh from the DB) is correct
+    for every pose kind, not just ENTRY: a STANDARD pose has no window either
+    way, so the recompute is a cheap empty-list query. (#3816 Task 5 — this
+    used to be an unconditional ``interaction.cached_reaction_windows = None``
+    outside the branching, which crashed ``PrunedCachedProperty.__get__``'s
+    ``all(row.pk for row in rows)`` the first time this code path ran after
+    the property conversion, since ``None`` is not iterable.)
+    """
+    if replayed:
+        del interaction.cached_receivers
+        del interaction.cached_favorites
+        del interaction.cached_reactions
+        del interaction.cached_action_links
+        del interaction.cached_endorsements
+        del interaction.cached_reaction_windows
+        del interaction.cached_dramatic_moment_tags
+        del interaction.cached_dramatic_moment_suggestions
+    else:
+        interaction.cached_receivers = []
+        interaction.cached_favorites = []
+        interaction.cached_reactions = []
+        # cached_action_links already populated by `_on_created` -- see above.
+        interaction.cached_endorsements = []
+        del interaction.cached_reaction_windows
+        # Neither dramatic-moment tags nor suggestions are ever created by
+        # `_on_created` above -- both require a technique-entrance cast or the
+        # GM tag endpoint, an entirely separate pipeline from plain pose
+        # submission -- so a brand-new interaction genuinely has none yet.
+        interaction.cached_dramatic_moment_tags = []
+        interaction.cached_dramatic_moment_suggestions = []
+    # The replay-matching `comparison_fields["target"]` check guarantees the
+    # freshly-resolved `target_personas` here is identical to the stored row's
+    # real set on a replay too, so this assignment is safe in both branches.
+    interaction.cached_target_personas = target_personas or []
+
+
 class InteractionCursorPagination(CursorPagination):
     page_size = 50
     ordering = "-timestamp"
@@ -287,6 +393,28 @@ class InteractionViewSet(
             qs = qs.exclude(persona_id__in=exclude_persona_ids)
         return qs
 
+    # Behaviorally equivalent to the inherited `mixins.ListModelMixin.list()` --
+    # same filtering, pagination, and permission behavior (materializes the
+    # queryset into a concrete list on the unpaginated path instead of passing
+    # it through unevaluated, but the serialized output is identical either
+    # way). Originally added (#3816 Task 12) to host a nested-relation batch
+    # fetch; that fetch was removed once investigation found no consumer of the
+    # relation it warmed (see that commit's message). Left as an explicit
+    # override rather than reverted, since it is behavior-neutral and this
+    # class had no `list()` of its own before. A docstring here would win over
+    # the class docstring as this operation's public API description
+    # (drf-spectacular resolves `action_doc or view_doc`) and leak this
+    # internal changelog into the published OpenAPI schema -- keep this
+    # explanation as a comment, never a docstring, on this method.
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        interactions = page if page is not None else list(queryset)
+        serializer = self.get_serializer(interactions, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
     def get_serializer_class(
         self,
     ) -> type[BaseSerializer[Interaction]]:
@@ -296,7 +424,7 @@ class InteractionViewSet(
 
     def get_permissions(self) -> Sequence[BasePermission]:
         # Sequence, not list: this class also defines a `list()` action method
-        # (below), and a bare `list[...]` annotation elsewhere in the same class
+        # (above), and a bare `list[...]` annotation elsewhere in the same class
         # body resolves against that method rather than the builtin.
         if self.action == "list":
             # Public shop-window read (#3305): landing-page scene excerpt.
@@ -407,18 +535,7 @@ class InteractionViewSet(
                 open_reaction_window(interaction=created, kind=ReactionWindowKind.ENTRANCE)
 
             if action_link_ids is not None:
-                # Explicit override: create exactly the supplied links in order,
-                # skipping auto-link entirely (empty list = caller opted out).
-                InteractionAction.objects.bulk_create(
-                    [
-                        InteractionAction(
-                            pose=created,
-                            action_interaction_id=aid,
-                            ordering=i,
-                        )
-                        for i, aid in enumerate(action_link_ids)
-                    ]
-                )
+                _link_explicit_action_ids(created, action_link_ids)
             else:
                 auto_link_pose_to_actions(created)
 
@@ -513,23 +630,9 @@ class InteractionViewSet(
                 {"ephemeral": True, "replayed": result.replayed}, status=response_status
             )
 
-        # The interaction has not been through get_queryset()'s Prefetch pipeline —
-        # freshly created, or (on replay) fetched via idempotent_record_interaction's
-        # bare select_related lookup — so the cached_* to_attr attributes used by
-        # InteractionListSerializer do not exist yet. Set them to empty lists to
-        # avoid AttributeError on serialization; a new pose has no receivers,
-        # favorites, or reactions (target personas are whatever we just resolved).
-        interaction.cached_receivers = []
-        interaction.cached_target_personas = target_personas or []
-        interaction.cached_favorites = []
-        interaction.cached_reactions = []
-        interaction.cached_action_links = []
-        interaction.cached_dramatic_moment_tags = []
-        interaction.cached_dramatic_moment_suggestions = []
-        interaction.cached_endorsements = []
-        # ENTRY poses opened a window above; let the serializer query it (no
-        # cached attr) so the fresh response includes the reactable strip.
-        interaction.cached_reaction_windows = None
+        _seed_fresh_pose_caches(
+            interaction, target_personas=target_personas, replayed=result.replayed
+        )
         out_serializer = InteractionListSerializer(
             interaction, context=self.get_serializer_context()
         )

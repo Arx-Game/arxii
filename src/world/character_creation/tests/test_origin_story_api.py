@@ -66,6 +66,36 @@ class CGOriginTemplateAPITest(TestCase):
         response = anon_client.get(url, {"beginning": self.beginning.id})
         assert response.status_code in (401, 403)
 
+    def test_slots_not_cross_contaminated_between_templates(self) -> None:
+        """Two templates' slots, fetched in one batched-Prefetch request, land on
+        their OWN template only - not merged and not swapped (#3816 Task 10 fix round).
+
+        A query-count assertion alone can't catch cross-contamination: it would
+        stay green even if every template were served every other template's slots,
+        since the total row/query count is unchanged either way.
+        """
+        other_template = OriginTemplate.objects.create(
+            beginning=self.beginning,
+            name="Second Route",
+            frame_narrative="A different frame.",
+            allows_no_family=True,
+        )
+        OriginTemplateSlot.objects.create(
+            template=other_template,
+            name="Who wronged you?",
+            prompt="Who left the deepest mark?",
+        )
+
+        url = "/api/character-creation/origin-templates/"
+        response = self.client.get(url, {"beginning": self.beginning.id})
+
+        assert response.status_code == 200
+        data = response.json()
+        row_escape = next(t for t in data if t["name"] == "Escape")
+        row_second = next(t for t in data if t["name"] == "Second Route")
+        assert [s["prompt"] for s in row_escape["slots"]] == ["Who aided your flight?"]
+        assert [s["prompt"] for s in row_second["slots"]] == ["Who left the deepest mark?"]
+
 
 class PostCGOriginSlotAPITest(TestCase):
     """POST set-origin-slot / clear-origin-slot on the sheet (#2478)."""

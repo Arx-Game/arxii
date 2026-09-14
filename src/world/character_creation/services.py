@@ -542,7 +542,11 @@ def _create_enemy(
         if resolved.organization_id
         else None
     )
-    CharacterEnemy.objects.create(
+    # Peek, don't read: a plain dict lookup never triggers the ``enemy_rows`` cached
+    # property's query. Only an already-warm cache needs the append below - a cold
+    # one reloads fresh (this enemy included) whenever something next reads it.
+    cached_enemy_rows = sheet.__dict__.get("enemy_rows")
+    enemy = CharacterEnemy.objects.create(
         character=sheet,
         kind=resolved.kind,
         organization=org,
@@ -556,6 +560,8 @@ def _create_enemy(
         status=resolved.status,
         reason_id=resolved.reason_id,
     )
+    if cached_enemy_rows is not None:
+        sheet.enemy_rows = [*cached_enemy_rows, enemy]
     if org is not None:
         bump_organization_reputation(persona, org, ENEMY_REPUTATION_SEED[resolved.degree])
 

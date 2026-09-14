@@ -326,7 +326,13 @@ def create_pose_endorsement(  # noqa: C901
         msg = "Already endorsed this pose"
         raise EndorsementValidationError(msg)
 
-    return PoseEndorsement.objects.create(
+    # Peek, don't read: interaction.cached_endorsements is a PrunedCachedProperty, so
+    # reading it here would trigger a query whenever the cache happens to be cold --
+    # defeating the point of caching it in the common (cold) case. A dict-lookup peek
+    # costs nothing, and skipping the mutation on a cold cache loses nothing: the next
+    # real read recomputes fresh from the DB anyway (#3816).
+    cached = interaction.__dict__.get("cached_endorsements")
+    endorsement = PoseEndorsement.objects.create(
         endorser_sheet=endorser_sheet,
         endorsee_sheet=endorsee_sheet,
         interaction=interaction,
@@ -334,6 +340,20 @@ def create_pose_endorsement(  # noqa: C901
         resonance=resonance,
         persona_snapshot=endorsee_persona,
     )
+    # PoseEndorsement.objects.create() above runs PoseEndorsement.save(), which
+    # (via RelatedCacheClearingMixin + related_cache_fields=["interaction"])
+    # clears ALL of interaction's cached_* attributes as a collateral side effect
+    # of that write -- including the one we peeked above. That clearing is
+    # correct and load-bearing on its own (it is what covers PoseEndorsementViewSet
+    # .destroy(), which has no direct-mutation counterpart at all), but it means
+    # the assignment below is not redundant with it: it re-warms specifically
+    # cached_endorsements from the pre-write snapshot we captured, rather than
+    # leaving it cold until the next reader re-queries. Do not remove the mixin
+    # thinking this line already covers it -- the delete path depends on the
+    # mixin alone (ADR-0298).
+    if cached is not None:
+        interaction.cached_endorsements = [*cached, endorsement]
+    return endorsement
 
 
 def _endorser_was_present(
@@ -944,6 +964,14 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
     if existing >= moment_type.per_scene_cap:
         raise DramaticMomentCapExceeded(DramaticMomentCapExceeded.user_message)
 
+    # Peek (not read) BEFORE the create below — DramaticMomentTag carries
+    # RelatedCacheClearingMixin, so .create() clears every cached_* attribute on
+    # `interaction` as a side effect, including this one. Reading the property here
+    # would either force an unwanted query or get wiped out from under us.
+    cached_tags = (
+        interaction.__dict__.get("cached_dramatic_moment_tags") if interaction is not None else None
+    )
+
     tag = DramaticMomentTag.objects.create(
         moment_type=moment_type,
         character_sheet=character_sheet,
@@ -952,6 +980,8 @@ def create_dramatic_moment_tag(  # noqa: PLR0913 - cohesive params describing on
         interaction=interaction,
         interaction_timestamp=interaction.timestamp if interaction is not None else None,
     )
+    if cached_tags is not None:
+        interaction.cached_dramatic_moment_tags = [*cached_tags, tag]
     if granted_resonance is not None:
         grant_resonance(
             character_sheet,
@@ -1036,6 +1066,16 @@ def maybe_suggest_dramatic_moments(
             >= moment_type.per_scene_cap
         ):
             continue
+        # Peek (not read) BEFORE get_or_create — a row it creates fires
+        # DramaticMomentSuggestion's RelatedCacheClearingMixin, which clears every
+        # cached_* attribute on `interaction` as a side effect. Peeked fresh each
+        # loop iteration so a suggestion appended on a prior pass isn't lost to the
+        # next iteration's clear.
+        cached_suggestions = (
+            interaction.__dict__.get("cached_dramatic_moment_suggestions")
+            if interaction is not None
+            else None
+        )
         suggestion, was_created = DramaticMomentSuggestion.objects.get_or_create(
             moment_type=moment_type,
             character_sheet=character_sheet,
@@ -1050,6 +1090,8 @@ def maybe_suggest_dramatic_moments(
         )
         if was_created:
             created.append(suggestion)
+            if cached_suggestions is not None:
+                interaction.cached_dramatic_moment_suggestions = [*cached_suggestions, suggestion]
     return created
 
 
@@ -1072,6 +1114,17 @@ def resolve_dramatic_moment_suggestion(
     if suggestion.status != SuggestionStatus.PENDING:
         raise DramaticMomentSuggestionAlreadyResolved
 
+    # Peek (not read) BEFORE any of the writes below — both the confirm branch's
+    # create_dramatic_moment_tag (a DramaticMomentTag .create()) and this function's
+    # own suggestion.save() fire RelatedCacheClearingMixin, clearing every cached_*
+    # attribute on `interaction` as a side effect.
+    interaction = suggestion.interaction
+    cached_suggestions = (
+        interaction.__dict__.get("cached_dramatic_moment_suggestions")
+        if interaction is not None
+        else None
+    )
+
     with transaction.atomic():
         if confirm:
             tag = create_dramatic_moment_tag(
@@ -1090,6 +1143,13 @@ def resolve_dramatic_moment_suggestion(
             suggestion.status = SuggestionStatus.DISMISSED
         suggestion.resolved_by = resolver
         suggestion.save()
+
+    # A resolved suggestion is no longer PENDING, so it must drop out of the cached,
+    # PENDING-filtered list rather than being left stale in it.
+    if cached_suggestions is not None:
+        interaction.cached_dramatic_moment_suggestions = [
+            s for s in cached_suggestions if s.pk != suggestion.pk
+        ]
     return suggestion
 
 

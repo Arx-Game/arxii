@@ -580,9 +580,9 @@ class CGGlimpseTagSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(CGGlimpseTagOfferSerializer(many=True))
     def get_offers(self, obj: GlimpseTag) -> list[dict]:
-        # obj.offers is a GlimpseTagOffersHandler (ADR-0278) - primed for the
-        # whole page by CGGlimpseTagViewSet.list(), select_related("distinction").
-        return [_offer_row(offer, with_arrival=False) for offer in obj.offers.rows]
+        # obj.offers is a PrunedCachedProperty (ADR-0298) - fed for the whole page
+        # by CGGlimpseTagViewSet.get_queryset()'s Prefetch, select_related("distinction").
+        return [_offer_row(offer, with_arrival=False) for offer in obj.offers]
 
 
 _GLOSS_MAX_LEN = 160
@@ -878,12 +878,13 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
 
     @extend_schema_field(OriginTemplateSlotSerializer(many=True))
     def get_slots(self, obj: OriginTemplate) -> list[dict]:
-        """Return nested slots from the view's grouping, or one fresh query.
+        """Return nested slots from ``obj.questions``.
 
-        Never from a ``to_attr`` prefetch attribute: ``OriginTemplate`` is
-        identity-mapped, so an attribute set by one request answered the next one
-        too and a question deleted in between was still served, with a null id
-        (ADR-0263, #3673).
+        ``obj.questions`` is a ``PrunedCachedProperty`` (ADR-0298) - fed for the
+        whole page by ``CGOriginTemplateViewSet.get_queryset()``'s ``Prefetch``.
+        Safe on this identity-mapped model even though a plain ``to_attr``
+        attribute wasn't (ADR-0263, #3673): a data descriptor's own freshness
+        check and pk-nulled self-healing are what ADR-0298 adds on top.
 
         Choices and the branch-choice ids are each resolved with one flat query
         across every slot on this template, grouped by slot id in Python (see
@@ -899,7 +900,7 @@ class CGOriginTemplateSerializer(serializers.ModelSerializer):
         resolve_groups`` stays the draft-time resolver (SAME_AS / SERVED_HOUSE /
         OWN_FAMILY, and other single-slot callers) and is not used here.
         """
-        slots = obj.questions.rows
+        slots = obj.questions
         choices_by_slot: dict[int, list[OriginTemplateSlotChoice]] = defaultdict(list)
         slot_ids = [slot.id for slot in slots]
         if slot_ids:

@@ -76,12 +76,10 @@ class InteractionActionLinkSerializer(serializers.ModelSerializer):
         action_interaction = obj.action_interaction
         if action_interaction is None:
             return False
-        # cached_round_actions is a Prefetch(to_attr=...) attribute set by the
-        # interaction_views queryset; getattr with a default keeps serialization
-        # safe if this serializer is ever used without that prefetch.
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        round_actions = getattr(action_interaction, "cached_round_actions", [])  # noqa: GETATTR_LITERAL
+        # cached_round_actions is now a PrunedCachedProperty on Interaction (#3816
+        # Task 7) — it always exists and self-heals via related_cache_fields, so a
+        # bare read replaces the old getattr-with-default guard.
+        round_actions = action_interaction.cached_round_actions
         for round_action in round_actions:
             opponent = round_action.focused_opponent_target
             if opponent is not None and opponent.status == OpponentStatus.DEFEATED:
@@ -682,18 +680,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         from world.scenes.reaction_services import get_reaction_kind  # noqa: PLC0415
 
-        windows = getattr(obj, "cached_reaction_windows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if windows is None:
-            windows = list(obj.reaction_windows.all())
+        windows = obj.cached_reaction_windows
         if not windows:
             return []
 
         viewer_persona_ids: set[int] = self.context.get("persona_ids", set())
         payloads: list[dict] = []
         for window in windows:
-            rows = getattr(window, "cached_reaction_rows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-            if rows is None:
-                rows = list(window.reactions.select_related("reactor_persona"))
+            rows = window.cached_reaction_rows
             try:
                 config = get_reaction_kind(window.kind)
             except DjangoValidationError:
@@ -765,9 +759,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
         still renders, since the moment itself is public.
         """
-        tags = getattr(obj, "cached_dramatic_moment_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if tags is None:
-            return []
+        tags = obj.cached_dramatic_moment_tags
         is_staff = bool(self.context.get("is_staff", False))
         viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
         revealed_sheet_ids = self._revealed_sheet_ids()
@@ -854,9 +846,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         if not self._viewer_can_gm_scene(obj.scene):
             return []
-        suggestions = getattr(obj, "cached_dramatic_moment_suggestions", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if suggestions is None:
-            return []
+        suggestions = obj.cached_dramatic_moment_suggestions
         return [
             {
                 "id": s.pk,
@@ -869,35 +859,32 @@ class InteractionListSerializer(serializers.ModelSerializer):
             for s in suggestions
         ]
 
+    # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
+    # #3816 Task 3) -- fed by the prefetched
+    # `persona__character_sheet__resonances` path (set up in
+    # `interaction_views.get_queryset`) when available, and a live query on
+    # first read otherwise (e.g. serializer used outside the view's
+    # queryset pipeline). The property always exists now, so there is no
+    # fallback branch to maintain here.
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
-        """List of resonances claimed by the endorsee (pose author).
-
-        Reads from the prefetched ``persona__character_sheet__resonances``
-        path (set up in ``interaction_views.get_queryset``) via the
-        ``cached_resonances`` to_attr. Falls back to a live query if the attr
-        is absent (e.g. serializer used outside the view's queryset pipeline).
-        """
+        """List of resonances claimed by the endorsee (pose author)."""
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        resonances = getattr(sheet, "cached_resonances", None)  # noqa: GETATTR_LITERAL
-        if resonances is None:
-            resonances = list(sheet.resonances.select_related("resonance"))
-        return [{"id": cr.resonance_id, "name": cr.resonance.name} for cr in resonances]
+        return [
+            {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
+        ]
 
+    # Reads `Interaction.cached_endorsements` (a `PrunedCachedProperty`,
+    # #3816 Task 4) -- fed by the view queryset's Prefetch when available,
+    # and a live query on first read otherwise. Each endorser's primary
+    # persona is similarly read via `CharacterSheet.cached_primary_persona`.
+    # Both properties always exist now, so there is no fallback branch to
+    # maintain here.
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
-        """List of peers who endorsed this pose, with persona info.
-
-        Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-        view queryset). Each endorser's primary persona is pre-loaded via
-        ``cached_primary_persona`` (another nested Prefetch).
-        """
+        """List of peers who endorsed this pose, with persona info."""
         out = []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
             if persona is None:
                 continue
@@ -918,9 +905,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         each cached endorsement's ``endorser_sheet_id``.
         """
         sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             if e.endorser_sheet_id in sheet_ids:
                 return {
                     "id": e.pk,

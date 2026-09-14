@@ -235,7 +235,7 @@ def visible_slot_ids(draft: CharacterDraft) -> set[int]:
         return set()
     path = draft.resolve_family_path()
     answers = DraftAnswers.from_draft(draft)
-    slots = template.questions.rows
+    slots = template.questions
     slots_by_id = {s.id: s for s in slots}
     choice_ids_by_slot, branch = _load_choice_maps(template.id)
     shown: set[int] = set()

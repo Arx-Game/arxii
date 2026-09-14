@@ -3,7 +3,9 @@
 **Status:** Accepted (2026-09-06, #3673). Extends ADR-0263 (no `to_attr` prefetch onto
 identity-mapped instances) and ADR-0008 (SharedMemoryModel everywhere); ADR-0263's rule 1
 (a grouped query instead of a `to_attr` prefetch) is the mechanism this decision puts a
-name and a home to.
+name and a home to. Narrowed by ADR-0298 (#3816): `CachedRowsHandler` is retired for the
+parent-owned-raw-list case in favor of `PrunedCachedProperty` + `Prefetch(to_attr=...)`
+with explicit write-side invalidation.
 
 **Context.** ADR-0263 recorded that a `Prefetch(..., to_attr=X)` onto an identity-mapped
 parent silently stops running once `X` is set, so later requests re-serve the first
@@ -47,8 +49,16 @@ descriptor runs on the read and a model base class never sees it.
 
 **How to apply.** `grep -rn "to_attr=" src/` is the audit; 343 sites are grandfathered by
 the `pattern:PREFETCH_TO_ATTR` ratchet in `tools/noqa_ratchet_baseline.txt`, whose count
-may only go down. A new one fails anywhere in `src/`. The `prefetch-to-attr` hook covers
-the surfaces already converted and names what to build instead; an app joins its `files:`
-regex when its count reaches zero. `OriginTemplate.questions` is the worked example - one
-handler read by the CG API serializer, the questionnaire resolver, the draft validators,
-the finalize service and the Builder's rail.
+may only go down. A new one fails anywhere in `src/`. **The `prefetch-to-attr` hook does
+not cover the converted surfaces** — its `files:` scope (`evennia_extensions/`,
+`web/admin/upbringing_builder/`) has zero `to_attr` call sites today, only prose mentions,
+so a clean run of the hook is not evidence the converted `PrunedCachedProperty` properties
+elsewhere are enforced. Nor is "an app joins its `files:` regex when its count reaches
+zero" a reachable exit criterion: most converted `to_attr` sites split the `Prefetch` call
+from the `PrunedCachedProperty` definition across files (the dominant, correct layout,
+`world/scenes` included), and the hook's same-file heuristic false-positives on that split
+regardless of how much of an app has converted — widening it is blocked on #3835. See
+`evennia_extensions/CACHED_PROPERTY_STANDARD.md` for the hook's current coverage state.
+`OriginTemplate.questions` is the worked example - one handler read by the CG API
+serializer, the questionnaire resolver, the draft validators, the finalize service and the
+Builder's rail.

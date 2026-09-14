@@ -744,6 +744,35 @@ class CGGlimpseTagEndpointTest(TestCase):
             }
         ]
 
+    def test_offers_not_cross_contaminated_between_tags(self):
+        """Two tags' offers, fetched in one batched-Prefetch request, land on their
+        OWN tag only - not merged and not swapped (#3816 Task 9 fix round).
+
+        A query-count assertion alone can't catch cross-contamination: it would
+        stay green even if every tag were served every other tag's offers, since
+        the total row/query count is unchanged either way.
+        """
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tag-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="tag-b")
+        offer_a = DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Owned By A"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag_a,
+        )
+        offer_b = DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Owned By B"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag_b,
+        )
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        row_a = next(r for r in response.data if r["slug"] == "tag-a")
+        row_b = next(r for r in response.data if r["slug"] == "tag-b")
+        assert [o["offer_id"] for o in row_a["offers"]] == [offer_a.id]
+        assert [o["offer_id"] for o in row_b["offers"]] == [offer_b.id]
+
     def test_axis_filter(self):
         GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-only")
         GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="consequence-only")
@@ -818,10 +847,10 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         assert len(big.captured_queries) == len(small.captured_queries)
 
-    def test_list_is_three_queries_offers_primed_not_prefetched(self):
-        """Session lookup + tags query + one batched
-        ``GlimpseTagOffersHandler.prime()`` query (ADR-0278) - never a
-        ``Prefetch(to_attr=...)`` and never one query per tag."""
+    def test_list_is_three_queries_offers_batched_via_prefetch(self):
+        """Session lookup + tags query + one batched offers query (ADR-0298) -
+        fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
+        ``PrunedCachedProperty``, never one query per tag."""
         url = "/api/character-creation/glimpse-tags/"
         self.client.get(url)  # warm the session row's first-request INSERT
 

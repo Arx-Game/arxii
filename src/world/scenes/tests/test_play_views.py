@@ -14,13 +14,19 @@ from evennia_extensions.factories import AccountFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import (
     InteractionFactory,
+    InteractionReactionFactory,
     PersonaFactory,
     PlaceFactory,
     SceneFactory,
 )
 from world.scenes.interaction_services import create_interaction
-from world.scenes.models import Interaction, InteractionReadReceipt, InteractionThread
-from world.scenes.play_views import _queryset
+from world.scenes.models import (
+    Interaction,
+    InteractionAction,
+    InteractionReadReceipt,
+    InteractionThread,
+)
+from world.scenes.play_views import _queryset, _rows
 from world.scenes.thread_services import ReplyTarget
 
 
@@ -896,13 +902,27 @@ class PlayPosesQueryBudgetTests(APITestCase):
     - ``_visible_parents`` - one batched ``visible_to`` check that returns the
       parents' timestamps too, so the chip needs no second lookup.
 
-    That is 76 rather than the 74 of the stored-anchor shape: the anchor used to
-    be a column joined in by ``select_related`` and the root another, so both were
-    free to read and neither could be wrong. Deriving them costs two flat queries
-    and removes two denormalized copies that could drift (a stored ``root`` did
-    drift, and cost a real bug on this branch). `/game` is the primary surface
-    where the parent chip renders, so this endpoint's own budget is pinned here
-    rather than only inheriting ``InteractionViewSet``'s.
+    Two of those three batches are themselves why the budget was 76 rather than 74
+    before #3816 touched anything: the anchor and root used to be columns
+    joined in by ``select_related``, free to read but backed by two
+    denormalized copies that could drift (a stored ``root`` did drift, and
+    cost a real bug on this branch) -- deriving them instead costs the two
+    flat queries above, still present in the 27 (and the 8-query warm floor
+    below) as (4) and (5).
+
+    That is 27 rather than the 76 this budget carried before #3816: the 5
+    ``Interaction.cached_*`` satellite relations (receivers, target personas,
+    favorites, reactions, action links) used to be plain ``@property``/
+    ``@x.setter`` pairs whose fallback getter never raised ``AttributeError``,
+    which defeated Django's own freshness check for ``Prefetch(to_attr=)`` (a
+    ``hasattr`` probe reports "already populated" even on a cold instance) —
+    so the batched Prefetch queries never actually ran, and each of the 5
+    relations fell through to one live query PER ROW instead. Converting them
+    to ``PrunedCachedProperty`` (a real ``cached_property`` subclass) let the
+    batched Prefetch engage correctly, replacing 5 × N per-row queries with 5
+    flat ones. `/game` is the primary surface where the parent chip renders,
+    so this endpoint's own budget is pinned here rather than only inheriting
+    ``InteractionViewSet``'s.
     """
 
     def setUp(self) -> None:
@@ -912,13 +932,17 @@ class PlayPosesQueryBudgetTests(APITestCase):
         self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
 
-    def _build_page(self, scene: object, *, reply_count: int) -> None:
+    def _build_page(self, scene: object, *, reply_count: int) -> list[Interaction]:
         """Always 6 total poses (3 targets + 3 repliers) - only `reply_count`
         of the 3 repliers actually answer anything. Holding the total row count
         constant isolates the reply-handling cost: every OTHER cached_* field's
-        per-row fallback cost (favorites, reactions, receivers, target personas,
-        action links) stays identical between scenarios, so any difference in query
-        count comes only from `_visible_parent_ids` and the anchor read.
+        flat batched-Prefetch cost (favorites, reactions, receivers, target
+        personas, action links) stays identical between scenarios, so any
+        difference in query count comes only from `_visible_parent_ids` and the
+        anchor read.
+
+        Returns all 6 poses (targets then repliers) so callers can reference
+        specific rows (e.g. to add a reaction to one after the page is warm).
         """
         targets = [InteractionFactory(scene=scene) for _ in range(3)]
         repliers = [InteractionFactory(scene=scene) for _ in range(3)]
@@ -933,12 +957,13 @@ class PlayPosesQueryBudgetTests(APITestCase):
             targets[i].save(update_fields=["thread"])
             repliers[i].thread = thread
             repliers[i].save(update_fields=["thread"])
+        return targets + repliers
 
     def test_query_budget_with_one_reply(self) -> None:
         """Baseline: 6 total poses, 1 of them a reply."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=1)
-        with self.assertNumQueries(76):
+        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
@@ -949,7 +974,151 @@ class PlayPosesQueryBudgetTests(APITestCase):
         replies adds no query."""
         scene = SceneFactory()
         self._build_page(scene, reply_count=3)
-        with self.assertNumQueries(76):
+        with self.assertNumQueries(27):  # dropped from 76 by #3816 — see the class docstring
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
+
+    def test_query_budget_second_request_against_same_page_is_cheaper(self) -> None:
+        """Proves Django's own prefetch machinery skips already-warm instances --
+        the whole point of fixing Defect A via `PrunedCachedProperty` instead of a
+        page-scoped cache that would requery every time.
+
+        The 6 `Interaction` rows stay resident in the idmapper identity map
+        across requests within a process, and once `PrunedCachedProperty` (a
+        genuine `cached_property`) has populated the 5 `cached_*` satellite
+        relations (receivers, target personas, favorites, reactions, action
+        links) on each of them, Django's own `Prefetch(to_attr=)` freshness
+        check (`to_attr in instance.__dict__`) reports every instance already
+        fetched and skips issuing all 5 of those batch queries on the second
+        request -- verified directly against the captured query log, not
+        inferred from the count alone.
+
+        8 is the measured floor for what's left, none of it something this
+        plan touched: (1) the session lookup, (2) the account's `Block` list
+        (a relationship gate, re-checked fresh every request by design), (3)
+        the outer paginated `Interaction` select itself -- idmapper reuses the
+        returned Python objects but the SQL still runs, since the ORM has no
+        way to know in advance which rows a filter/order will return without
+        asking the database, (4) `_thread_roots`' parent-id lookup, (5)
+        `_thread_anchors`' MIN(id) aggregate, (6) the read-receipt batch, (7)
+        the mute-list batch, and (8) `_visible_parents`. (4)-(8) are batched
+        page-wide queries keyed by thread/scene id, not by already-cached
+        instance, so unlike the 5 satellite relations they have no
+        cached_property to go stale-free through -- and (2)/(6)/(7) are
+        exactly the per-viewer page-scoped context caches the task brief
+        calls out as out of scope for #3816: they cost their own fixed
+        per-request queries by design, on both the cold and warm request.
+        """
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=1)
+        url = f"/api/play/poses/?conversation=scene:{scene.pk}"
+        first = self.client.get(url)
+        assert first.status_code == 200
+        with self.assertNumQueries(8):
+            second = self.client.get(url)
+        assert second.status_code == 200
+        assert len(second.json()["results"]) == 6
+
+    def test_reaction_added_after_first_load_is_visible_on_next_request(self) -> None:
+        """This is the test that would have caught Defect B before #3816.
+
+        Defect B: the old `Interaction.cached_reactions` fallback getter never
+        raised `AttributeError`, so once an instance was resident in the
+        idmapper identity map with a (possibly empty) reaction list already
+        computed, a write made through a DIFFERENT request/process was
+        invisible to any later read of that same warm instance -- the batch
+        never re-ran. `PrunedCachedProperty` alone doesn't fix this; it's the
+        write-site `related_cache_fields` invalidation (wired in prior tasks)
+        that clears the cached attribute off the idmapper-resident instance so
+        the next request's Prefetch actually re-fetches it.
+        """
+        scene = SceneFactory()
+        poses = self._build_page(scene, reply_count=1)
+        url = f"/api/play/poses/?conversation=scene:{scene.pk}"
+        first = self.client.get(url)
+        assert first.status_code == 200
+
+        other_account = AccountFactory()
+        InteractionReactionFactory(interaction=poses[0], account=other_account)
+
+        second = self.client.get(url)
+        assert second.status_code == 200
+        reactions = next(
+            row["reactions"] for row in second.json()["results"] if row["id"] == poses[0].pk
+        )
+        assert len(reactions) == 1
+
+    def test_nested_action_interaction_scalars_and_round_actions_stay_free(self) -> None:
+        """Regression guard, not a fix.
+
+        #3816 Task 12's own investigation found the nested action-interaction
+        N+1 the issue's original profiling flagged ("doubled Persona queries
+        from the nested action-interaction fetch") was already resolved before
+        this whole SDD plan began: `db6cc0a4f8` (2026-05-24) gave
+        `cached_action_links`'s own Prefetch `select_related("action_interaction")`,
+        so the FK itself is one query for the whole page, not one per row. A
+        repo-wide grep additionally found no production code anywhere reads
+        `action_interaction.persona` -- `InlineActionInteractionSerializer`
+        (`interaction_serializers.py`) only ever read `id`/`content`/`mode`/
+        `timestamp`, plain scalars off the already-fetched row. So there was
+        nothing left to batch; a batch-fetch commit was reverted in favor of
+        this test, which instead pins the ALREADY-correct behavior: walking
+        every pose's `action_interaction` scalar fields, plus its
+        `cached_round_actions` (#996's `has_critical_effect` read), across a
+        page of poses costs a small, FIXED number of extra queries -- not one
+        per pose -- protecting against a future regression if this prefetch
+        chain ever breaks.
+
+        Each linked ACTION interaction lives in its OWN scene (never the
+        page's scene) so it never surfaces as a top-level row of the page in
+        its own right -- otherwise the idmapper identity map would silently
+        warm it via the page's own top-level `select_related`, passing this
+        test for the wrong reason (identity-map reuse, not the existing
+        `action_links` Prefetch this test actually guards).
+        """
+        scene = SceneFactory()
+        poses = []
+        for _ in range(2):
+            action = InteractionFactory(scene=SceneFactory(), mode=InteractionMode.ACTION)
+            pose = InteractionFactory(scene=scene, mode=InteractionMode.POSE)
+            InteractionAction.objects.create(pose=pose, action_interaction=action, ordering=0)
+            poses.append(pose)
+
+        # Flush the idmapper identity map: every object built above (`action`,
+        # the `InteractionAction` rows) is still resident with its relations
+        # set directly in Python from construction. Without this, a later
+        # re-fetch of the SAME pk returns those already-warm instances
+        # regardless of query shape (SharedMemoryModel's identity map), which
+        # would pass this test for the wrong reason.
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        factory = APIRequestFactory()
+        django_request = factory.get("/api/play/poses/")
+        force_authenticate(django_request, user=self.account)
+        request = Request(django_request)
+
+        with self.assertNumQueries(18):
+            _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
+
+        pose_ids = {pose.pk for pose in poses}
+        walked_poses = [row for row in interactions if row.pk in pose_ids]
+        assert len(walked_poses) == 2
+
+        # Everything InlineActionInteractionSerializer / has_critical_effect
+        # reads off the nested action-interaction is already resolved by
+        # get_queryset()'s existing Prefetch chain -- walking it here must
+        # cost nothing further.
+        with self.assertNumQueries(0):
+            for row in walked_poses:
+                links = row.cached_action_links
+                assert len(links) == 1
+                action_interaction = links[0].action_interaction
+                assert action_interaction is not None
+                assert action_interaction.id is not None
+                assert action_interaction.content is not None
+                assert action_interaction.mode == InteractionMode.ACTION
+                assert action_interaction.timestamp is not None
+                assert action_interaction.cached_round_actions == []

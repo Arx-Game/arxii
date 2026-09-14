@@ -37,13 +37,18 @@ PATTERNS: dict[str, str] = {
     # tick, CLI/request boundary) that logs with exc_info. New ones need the
     # same classification — or a narrower catch.
     "BROAD_EXCEPT": r"except Exception\b",
-    # `Prefetch(..., to_attr=...)` onto an identity-mapped instance (#3673,
-    # ADR-0263): Django skips a prefetch whose to_attr is already set and the
-    # identity map hands the same instance to the next request, so the second
-    # request re-serves the first one's rows - deleted ones included, arriving
-    # with a null id. Rows a parent owns belong behind a CachedRowsHandler
-    # (evennia_extensions/handlers.py). The grandfathered remainder is every
-    # site that predates the handler; each one retired lowers this number.
+    # A `to_attr` prefetch onto an identity-mapped instance (#3673, ADR-0263):
+    # Django skips a prefetch whose target already looks set, and the identity
+    # map hands the same instance to the next request, so the second request
+    # re-serves the first one's rows - deleted ones included, arriving with a
+    # null id. As of #3816, `to_attr` is sanctioned only onto a
+    # `PrunedCachedProperty` (evennia_extensions/cached_property.py);
+    # `lint_prefetch_to_attr.py` enforces that narrower rule within its scope.
+    # This raw-string count stays broader on purpose (it has no way to tell a
+    # sanctioned target from an unsanctioned one) - it is the outer net for
+    # every site outside that hook's scope, and each site converted to
+    # `PrunedCachedProperty` (or, rarely, the narrower `CachedRowsHandler`)
+    # lowers this number.
     "PREFETCH_TO_ATTR": r"to_attr=",
 }
 

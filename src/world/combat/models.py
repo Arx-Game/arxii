@@ -1,7 +1,7 @@
 """Models for the combat system."""
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
 
 if TYPE_CHECKING:
@@ -1366,8 +1367,28 @@ class CombatParticipant(SharedMemoryModel):
         return f"{self.character_sheet}"
 
 
-class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
-    """A PC's declared actions for a round."""
+class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, SharedMemoryModel):
+    """A PC's declared actions for a round.
+
+    ``related_cache_fields = ["interaction"]`` is the PRIMARY invalidation for
+    ``Interaction.cached_round_actions`` — not a fallback behind direct
+    write-site mutation. Combat resolution writes ``interaction``/resolves this
+    row from 16 scattered call sites across ``services.py``/``simulation.py``,
+    too many to mutate individually (#3816 Decision 5), so every save routes
+    through ``RelatedCacheClearingMixin`` instead.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
+    #: Interaction.cached_round_actions filters solely via the interaction FK
+    #: (both the view Prefetch and the model fallback) -- safe to skip the
+    #: clear on the ~16 scattered saves that touch round_number/is_ready/etc.
+    #: without touching interaction. The ONE save that legitimately needs the
+    #: clear is the interaction transition itself (None -> set, an UPDATE
+    #: here since interaction is nullable and set later, not at creation) --
+    #: the snapshot-diff mechanism still catches that, since it compares the
+    #: FK's raw id, not whether this is a create (#3816 final review; see the
+    #: flag's docstring on the mixin).
+    skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     confirm_soulfray_risk = models.BooleanField(
         default=False,

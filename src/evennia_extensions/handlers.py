@@ -1,10 +1,22 @@
-"""Handlers that own cached rows for a parent model.
+"""``CachedRowsHandler`` — retired, kept only for ``CompanionOrderHandler``.
 
-The layer beneath serializers. A serializer turns model data into a wire
-format; it should not know where the rows came from, and it should not be
-responsible for cleaning them up. Telnet commands, flows and service functions
-read the same rows and never touch a serializer at all, so a guard that lives
-in serialization is a guard half the game does not get.
+**Retired for new code (ADR-0298).** A parent-owned list of cached rows now
+uses ``PrunedCachedProperty`` (``evennia_extensions/cached_property.py``)
+paired with a ``Prefetch``'s ``to_attr`` kwarg. #3816 migrated every consumer
+that could take that shape off this module (``IntroductionsHandler``,
+``EnemyRowsHandler``, ``GlimpseTagOffersHandler``, ``UpbringingQuestionsHandler``).
+
+What's left is ``CachedRowsHandler`` itself, surviving only because
+``CompanionOrderHandler`` (``world/companions/handlers.py``) still subclasses
+it. ADR-0298 scoped that one consumer OUT of #3816 — not because its
+``round_number == encounter.round_number`` filter is genuinely impossible to
+express as a single shared ``Prefetch`` queryset clause (it isn't; e.g.
+``F("encounter__round_number")`` would do it), but because migrating it
+cleanly needs a two-part shape rather than a drop-in swap: an unfiltered
+``PrunedCachedProperty`` holding every round's orders, plus a separate
+uncached property that filters to the current round in Python on read.
+**Do not add new subclasses of this class** — new parent-owned-row-list code
+always uses ``PrunedCachedProperty`` instead (ADR-0298's "How to apply").
 
 Two hazards this layer exists to close, both consequences of ADR-0008's
 identity map:
@@ -36,6 +48,14 @@ if TYPE_CHECKING:
 
 class CachedRowsHandler[T: "Model"]:
     """One cached, ordered list of rows belonging to ``parent``.
+
+    **Retired (ADR-0298).** ``PrunedCachedProperty`` plus a ``Prefetch``'s
+    ``to_attr`` kwarg is the pattern for new code. This class survives only
+    because ``CompanionOrderHandler`` (``world/companions/handlers.py``)
+    still subclasses it — scoped out of #3816 as needing a two-part
+    migration, not because its filter can't be expressed as a shared
+    ``Prefetch`` queryset clause (see the module docstring above). **Do not
+    add new subclasses of this class.**
 
     Subclasses implement ``load()``. Reads go through ``rows``, which never
     returns a row the database no longer has. Hang the handler off the parent
