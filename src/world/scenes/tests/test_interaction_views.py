@@ -12,10 +12,12 @@ from evennia_extensions.factories import AccountFactory, CharacterFactory, Objec
 from evennia_extensions.models import PlayerData
 from world.character_sheets.factories import CharacterSheetFactory
 from world.magic.factories import (
+    CharacterResonanceFactory,
     PoseEndorsementFactory,
     ResonanceFactory,
     SceneEntryEndorsementFactory,
 )
+from world.magic.services.gain import create_pose_endorsement
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import (
     InteractionMode,
@@ -36,6 +38,10 @@ from world.scenes.models import (
     InteractionTargetPersona,
     InteractionThread,
     SceneParticipation,
+)
+from world.scenes.reaction_toggle_services import (
+    toggle_interaction_favorite,
+    toggle_interaction_reaction,
 )
 from world.scenes.thread_services import thread_anchor_id
 
@@ -1129,6 +1135,87 @@ class PoseSubmitViewTests(APITestCase):
         assert first.status_code == status.HTTP_201_CREATED
         assert second.status_code == status.HTTP_409_CONFLICT
         assert Interaction.objects.filter(persona=self.persona).count() == 1
+
+    def test_replay_preserves_data_accumulated_since_the_original_submission(self) -> None:
+        """A REPLAYED resubmit must not wipe cached_* data seen since the original (#3816).
+
+        Reproduces the exact "permanent lie" bug ``_seed_fresh_pose_caches`` guards
+        against: unconditionally stamping ``[]`` on a REPLAYED interaction would
+        silently zero every ``cached_*`` list for every later read of this
+        identity-mapped instance in this worker process, even though the DB still
+        holds the real rows -- `PrunedCachedProperty` treats an assigned value
+        (``[]`` included) as already fetched, forever.
+
+        Covers all five lists ``_seed_fresh_pose_caches`` branches on
+        replayed/non-replayed: ``cached_receivers``, ``cached_favorites``,
+        ``cached_reactions``, ``cached_action_links`` (Task 2), and
+        ``cached_endorsements`` (this task, #3816 Task 4).
+        """
+        scene = SceneFactory(location=self.room, participants=[self.account, self.other_account])
+        payload = {
+            "persona_id": self.persona.pk,
+            "scene_id": scene.pk,
+            "content": "Silas studies the map.",
+            "client_request_id": "88888888-8888-8888-8888-888888888888",
+        }
+
+        first = self.client.post(self.url, payload, format="json")
+        assert first.status_code == status.HTTP_201_CREATED, first.data
+        pose_id = first.data["id"]
+        interaction = Interaction.objects.get(pk=pose_id)
+
+        # --- Accumulate real data on the pose via each sibling's real write
+        # path, as if from other requests made between the original submission
+        # and the retry below.
+        resonance = ResonanceFactory()
+        CharacterResonanceFactory(character_sheet=self.identity, resonance=resonance)
+        create_pose_endorsement(self.other_identity, interaction, resonance)
+        toggle_interaction_favorite(interaction=interaction, roster_entry=self.roster_entry)
+        toggle_interaction_reaction(interaction=interaction, account=self.other_account, emoji="👍")
+        InteractionReceiverFactory(interaction=interaction, persona=self.other_persona)
+        action = self._make_action(offset_seconds=1)
+        InteractionAction.objects.create(pose=interaction, action_interaction=action, ordering=0)
+
+        # A GET warms every cached_* attribute on this SAME identity-mapped
+        # instance with real, current DB data via the view's own Prefetch
+        # pipeline -- mirroring another request having already read this pose
+        # before the retry below arrives.
+        list_url = reverse("interaction-list")
+        warmed = self.client.get(list_url, {"scene": scene.pk})
+        assert warmed.status_code == status.HTTP_200_OK
+        warmed_row = next(r for r in warmed.data["results"] if r["id"] == pose_id)
+        assert len(warmed_row["pose_endorsers"]) == 1
+        assert warmed_row["is_favorited"] is True
+        assert warmed_row["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert warmed_row["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(warmed_row["action_links"]) == 1
+
+        # --- Resubmit the IDENTICAL payload: hits the replay path.
+        second = self.client.post(self.url, payload, format="json")
+        assert second.status_code == status.HTTP_200_OK
+        assert second.data["replayed"] is True
+        assert second.data["id"] == pose_id
+
+        # The immediate replay response must still show every accumulated row --
+        # a buggy unconditional `= []` stamp would zero all five right here.
+        assert len(second.data["pose_endorsers"]) == 1
+        assert second.data["pose_endorsers"][0]["resonance_id"] == resonance.pk
+        assert second.data["is_favorited"] is True
+        assert second.data["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert second.data["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(second.data["action_links"]) == 1
+
+        # The "permanent lie" half: a FOLLOWING read of this identity-mapped
+        # instance must still see the real data too, not a value the seed step
+        # permanently stamped to zero for this worker process.
+        following = self.client.get(list_url, {"scene": scene.pk})
+        assert following.status_code == status.HTTP_200_OK
+        following_row = next(r for r in following.data["results"] if r["id"] == pose_id)
+        assert len(following_row["pose_endorsers"]) == 1
+        assert following_row["is_favorited"] is True
+        assert following_row["reactions"] == [{"emoji": "👍", "count": 1, "reacted": False}]
+        assert following_row["receiver_persona_ids"] == [self.other_persona.pk]
+        assert len(following_row["action_links"]) == 1
 
 
 class ActionLinksSerializerTests(APITestCase):

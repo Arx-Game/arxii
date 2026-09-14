@@ -340,6 +340,17 @@ def create_pose_endorsement(  # noqa: C901
         resonance=resonance,
         persona_snapshot=endorsee_persona,
     )
+    # PoseEndorsement.objects.create() above runs PoseEndorsement.save(), which
+    # (via RelatedCacheClearingMixin + related_cache_fields=["interaction"])
+    # clears ALL of interaction's cached_* attributes as a collateral side effect
+    # of that write -- including the one we peeked above. That clearing is
+    # correct and load-bearing on its own (it is what covers PoseEndorsementViewSet
+    # .destroy(), which has no direct-mutation counterpart at all), but it means
+    # the assignment below is not redundant with it: it re-warms specifically
+    # cached_endorsements from the pre-write snapshot we captured, rather than
+    # leaving it cold until the next reader re-queries. Do not remove the mixin
+    # thinking this line already covers it -- the delete path depends on the
+    # mixin alone (ADR-0296).
     if cached is not None:
         interaction.cached_endorsements = [*cached, endorsement]
     return endorsement

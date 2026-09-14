@@ -889,14 +889,15 @@ class InteractionListSerializer(serializers.ModelSerializer):
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
         """List of peers who endorsed this pose, with persona info.
 
-        Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-        view queryset). Each endorser's primary persona is pre-loaded via
-        ``cached_primary_persona`` (another nested Prefetch).
+        Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
+        #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
+        a live query on first read otherwise. Each endorser's primary persona is
+        similarly read via ``CharacterSheet.cached_primary_persona``. Both
+        properties always exist now, so there is no fallback branch to maintain
+        here.
         """
         out = []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
             if persona is None:
                 continue
@@ -917,9 +918,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         each cached endorsement's ``endorser_sheet_id``.
         """
         sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             if e.endorser_sheet_id in sheet_ids:
                 return {
                     "id": e.pk,
