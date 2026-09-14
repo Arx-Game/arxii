@@ -14,19 +14,25 @@ generic social-surface record, deliberately thin.
 
 from __future__ import annotations
 
+from typing import ClassVar
+
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.cached_property import PrunedCachedProperty
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.scenes.constants import ReactionWindowKind
 
 
-class ReactionWindow(SharedMemoryModel):
+class ReactionWindow(RelatedCacheClearingMixin, SharedMemoryModel):
     """A reaction affordance on one scene interaction, open until scene close.
 
     The ``interaction`` FK uses ``db_constraint=False`` because Interaction
     is partitioned by timestamp; the denormalized ``timestamp`` mirrors the
     InteractionReceiver / PoseEndorsement pattern for composite-FK use.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
 
     interaction = models.ForeignKey(
         "arxii.Interaction",
@@ -75,9 +81,16 @@ class ReactionWindow(SharedMemoryModel):
     def is_open(self) -> bool:
         return self.settled_at is None
 
+    @PrunedCachedProperty
+    def cached_reaction_rows(self) -> list[WindowReaction]:
+        """Reactions on this window, fed by Prefetch(to_attr='cached_reaction_rows')."""
+        return list(self.reactions.select_related("reactor_persona"))
 
-class WindowReaction(SharedMemoryModel):
+
+class WindowReaction(RelatedCacheClearingMixin, SharedMemoryModel):
     """One persona's reaction to a window — at most one per (window, persona)."""
+
+    related_cache_fields: ClassVar[list[str]] = ["window"]
 
     window = models.ForeignKey(
         ReactionWindow,

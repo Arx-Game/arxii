@@ -141,6 +141,24 @@ def _seed_fresh_pose_caches(
     forever. ``del`` instead, so the next real read recomputes fresh from the DB
     (``PrunedCachedProperty.__delete__`` pops the entry and is a no-op if it was
     never set).
+
+    ``cached_reaction_windows`` gets ``del`` in BOTH branches, unlike its five
+    siblings above: an ENTRY pose's ``_on_created`` callback opens a
+    ``ReactionWindow`` on ``interaction`` (see ``open_reaction_window``) before
+    this function ever runs, and at that point the window's own write-site
+    mutation finds nothing cached yet on a brand-new interaction (this call
+    path never prefetches reaction windows) — so the mutation is skipped and
+    the freshly-opened window is never appended to any cached list here.
+    Stamping ``[]`` for a non-replayed ENTRY pose would therefore silently
+    drop that just-opened window from the response even though the row is in
+    the database — the same bug the docstring above calls out for
+    ``cached_action_links``. ``del`` (recompute fresh from the DB) is correct
+    for every pose kind, not just ENTRY: a STANDARD pose has no window either
+    way, so the recompute is a cheap empty-list query. (#3816 Task 5 — this
+    used to be an unconditional ``interaction.cached_reaction_windows = None``
+    outside the branching, which crashed ``PrunedCachedProperty.__get__``'s
+    ``all(row.pk for row in rows)`` the first time this code path ran after
+    the property conversion, since ``None`` is not iterable.)
     """
     if replayed:
         del interaction.cached_receivers
@@ -148,21 +166,20 @@ def _seed_fresh_pose_caches(
         del interaction.cached_reactions
         del interaction.cached_action_links
         del interaction.cached_endorsements
+        del interaction.cached_reaction_windows
     else:
         interaction.cached_receivers = []
         interaction.cached_favorites = []
         interaction.cached_reactions = []
         # cached_action_links already populated by `_on_created` -- see above.
         interaction.cached_endorsements = []
+        del interaction.cached_reaction_windows
     # The replay-matching `comparison_fields["target"]` check guarantees the
     # freshly-resolved `target_personas` here is identical to the stored row's
     # real set on a replay too, so this assignment is safe in both branches.
     interaction.cached_target_personas = target_personas or []
     interaction.cached_dramatic_moment_tags = []
     interaction.cached_dramatic_moment_suggestions = []
-    # ENTRY poses opened a window above; let the serializer query it (no
-    # cached attr) so the fresh response includes the reactable strip.
-    interaction.cached_reaction_windows = None
 
 
 class InteractionCursorPagination(CursorPagination):

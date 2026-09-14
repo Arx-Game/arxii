@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from world.scenes.legend_murmur_handler import PersonaLegendMurmurHandler
     from world.scenes.persona_handlers import ScenePersonaHandler
     from world.scenes.place_models import InteractionReceiver
+    from world.scenes.reaction_models import ReactionWindow
 
 # Lazy model references (Django app_label.ModelName), extracted to satisfy S1192.
 CHARACTER_SHEET_MODEL = "arxii.CharacterSheet"
@@ -1214,6 +1215,13 @@ class Interaction(SharedMemoryModel):
         """Endorsements on this pose, fed by the interaction feed's Prefetch
         (see ``world/scenes/interaction_views.py``, ``to_attr`` "cached_endorsements")."""
         return list(self.endorsements.select_related("endorser_sheet", "resonance"))
+
+    @PrunedCachedProperty
+    def cached_reaction_windows(self) -> list[ReactionWindow]:
+        """Reaction windows on this interaction, fed by Prefetch(to_attr=)."""
+        from world.scenes.reaction_models import ReactionWindow  # noqa: PLC0415
+
+        return list(ReactionWindow.objects.filter(interaction=self))
 
 
 class InteractionFavorite(RelatedCacheClearingMixin, SharedMemoryModel):

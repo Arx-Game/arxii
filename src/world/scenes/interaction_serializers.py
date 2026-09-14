@@ -682,18 +682,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         from world.scenes.reaction_services import get_reaction_kind  # noqa: PLC0415
 
-        windows = getattr(obj, "cached_reaction_windows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if windows is None:
-            windows = list(obj.reaction_windows.all())
+        windows = obj.cached_reaction_windows
         if not windows:
             return []
 
         viewer_persona_ids: set[int] = self.context.get("persona_ids", set())
         payloads: list[dict] = []
         for window in windows:
-            rows = getattr(window, "cached_reaction_rows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-            if rows is None:
-                rows = list(window.reactions.select_related("reactor_persona"))
+            rows = window.cached_reaction_rows
             try:
                 config = get_reaction_kind(window.kind)
             except DjangoValidationError:

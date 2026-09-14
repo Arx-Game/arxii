@@ -66,7 +66,7 @@ def _set_empty_cached_attrs(interaction) -> None:
     interaction.cached_reactions = []
     interaction.cached_action_links = []
     interaction.cached_endorsements = []
-    interaction.cached_reaction_windows = None
+    interaction.cached_reaction_windows = []
 
 
 class Task1PoseKindEndorseeSheetIdTests(TestCase):
