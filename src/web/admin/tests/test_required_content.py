@@ -970,3 +970,42 @@ class TestCompanionDefeatPoolProbe(TestCase):
         result = rc._probe_companion_defeat_pool()
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
+
+
+class TestRiskCalibrationsProbe(TestCase):
+    """`risk-calibrations` (#3831): `risk` is unique on `RiskCalibration`, so
+    partial coverage must report exactly the uncovered levels, not "present" for
+    having at least one row - the same partial-coverage shape
+    `TestEscalationCurveProbe` above guards against."""
+
+    def test_missing_every_level_with_no_rows(self) -> None:
+        from world.societies.constants import RenownRisk
+
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(
+            set(result.missing),
+            {RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME},
+        )
+
+    def test_present_when_all_four_levels_are_covered(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        for risk in (RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME):
+            RiskCalibrationFactory(risk=risk)
+        result = rc._probe_risk_calibrations()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_reports_only_the_uncovered_level(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        RiskCalibrationFactory(risk=RenownRisk.LOW)
+        RiskCalibrationFactory(risk=RenownRisk.MODERATE)
+        RiskCalibrationFactory(risk=RenownRisk.HIGH)
+        # RenownRisk.EXTREME deliberately left uncovered.
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (RenownRisk.EXTREME,))
