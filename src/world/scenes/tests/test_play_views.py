@@ -902,6 +902,14 @@ class PlayPosesQueryBudgetTests(APITestCase):
     - ``_visible_parents`` - one batched ``visible_to`` check that returns the
       parents' timestamps too, so the chip needs no second lookup.
 
+    Those three batches are themselves why the budget was 76 rather than 74
+    before #3816 touched anything: the anchor and root used to be columns
+    joined in by ``select_related``, free to read but backed by two
+    denormalized copies that could drift (a stored ``root`` did drift, and
+    cost a real bug on this branch) -- deriving them instead costs the two
+    flat queries above, still present in the 27 (and the 8-query warm floor
+    below) as (4) and (5).
+
     That is 27 rather than the 76 this budget carried before #3816: the 5
     ``Interaction.cached_*`` satellite relations (receivers, target personas,
     favorites, reactions, action links) used to be plain ``@property``/

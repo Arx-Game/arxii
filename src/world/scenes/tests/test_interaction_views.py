@@ -1662,10 +1662,28 @@ class InteractionListQueryBudgetTests(APITestCase):
         (6) the read-receipt batch, (7) the mute-list batch. None of the 5
         `cached_*` satellite-relation Prefetch queries this plan converted to
         `PrunedCachedProperty` ran a second time -- verified directly against
-        the captured query log. This endpoint has no `_thread_anchors` /
-        `_thread_roots` / `_visible_parents` batches (those are `/api/play/`
-        reply-chip machinery `/api/interactions/` doesn't use), which is the
-        whole gap between 7 here and 8 there.
+        the captured query log.
+
+        The 7-vs-8 delta is NOT explained by "this endpoint is missing 3
+        batches" -- the two pages diverge in query shape in both directions,
+        not one: `/api/play/poses/` pays for 3 reply-chip batches
+        (`_thread_roots`, `_thread_anchors`, `_visible_parents`) that this
+        endpoint has no equivalent of, while THIS endpoint separately pays
+        for 2 batches (`SceneEntryEndorsement`, the GM/owner check) that
+        `/api/play/poses/` has no equivalent of. Net: +3 there, +2 here,
+        for a net difference of 1 -- not 3 -- against whatever shared floor
+        the two pages' other batches (session, `Block`, outer select,
+        read-receipts, mutes) would otherwise land on.
+
+        For the same reason, don't read anything structural into the two
+        endpoints' matching COLD budgets (27 and 27, pinned above and in
+        `PlayPosesQueryBudgetTests`) -- that match is a coincidence of two
+        genuinely different pages (6 interactions / 0 endorsements here vs.
+        3 interactions / 2+2 endorsements there) landing on the same total
+        by chance, not evidence the two endpoints share a query floor or
+        the same batch composition. The warm counts (7 and 8) already prove
+        they don't: the batches diverge 3-for-2 in different directions, as
+        above.
         """
         url = reverse("interaction-list")
         first = self.client.get(url, {"scene": self.scene.pk})

@@ -3123,15 +3123,10 @@ export interface paths {
       cookie?: never;
     };
     /**
-     * @description Serialize with one batched offers query, not one per row (ADR-0278).
+     * @description List active glimpse tags for the CG guided glimpse flow (#2427).
      *
-     *     Mirrors ``CGOriginTemplateViewSet.list()``: this ViewSet opts out of
-     *     pagination, so there's no ``page`` branch to preserve. Offers are read
-     *     through ``GlimpseTag.offers`` (``GlimpseTagOffersHandler``), primed here
-     *     for the whole page rather than reached via a ``Prefetch(to_attr=...)``:
-     *     a `to_attr` prefetch silently stops running on an identity-mapped
-     *     instance the second time it's warm (ADR-0263), which is what this
-     *     endpoint shipped with until #3675.
+     *     Global authored catalog — not draft-dependent, so it also serves the
+     *     post-CG "finish your glimpse later" surface on the character sheet.
      */
     get: operations['character_creation_glimpse_tags_list'];
     put?: never;
@@ -31576,10 +31571,12 @@ export interface components {
       /**
        * @description List of resonances claimed by the endorsee (pose author).
        *
-       *     Reads from the prefetched ``persona__character_sheet__resonances``
-       *     path (set up in ``interaction_views.get_queryset``) via the
-       *     ``cached_resonances`` to_attr. Falls back to a live query if the attr
-       *     is absent (e.g. serializer used outside the view's queryset pipeline).
+       *     Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
+       *     #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
+       *     path (set up in ``interaction_views.get_queryset``) when available, and a
+       *     live query on first read otherwise (e.g. serializer used outside the
+       *     view's queryset pipeline). The property always exists now, so there is
+       *     no fallback branch to maintain here.
        */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -31587,9 +31584,12 @@ export interface components {
       /**
        * @description List of peers who endorsed this pose, with persona info.
        *
-       *     Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-       *     view queryset). Each endorser's primary persona is pre-loaded via
-       *     ``cached_primary_persona`` (another nested Prefetch).
+       *     Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
+       *     #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
+       *     a live query on first read otherwise. Each endorser's primary persona is
+       *     similarly read via ``CharacterSheet.cached_primary_persona``. Both
+       *     properties always exist now, so there is no fallback branch to maintain
+       *     here.
        */
       readonly pose_endorsers: {
         [key: string]: unknown;
@@ -31792,10 +31792,12 @@ export interface components {
       /**
        * @description List of resonances claimed by the endorsee (pose author).
        *
-       *     Reads from the prefetched ``persona__character_sheet__resonances``
-       *     path (set up in ``interaction_views.get_queryset``) via the
-       *     ``cached_resonances`` to_attr. Falls back to a live query if the attr
-       *     is absent (e.g. serializer used outside the view's queryset pipeline).
+       *     Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
+       *     #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
+       *     path (set up in ``interaction_views.get_queryset``) when available, and a
+       *     live query on first read otherwise (e.g. serializer used outside the
+       *     view's queryset pipeline). The property always exists now, so there is
+       *     no fallback branch to maintain here.
        */
       readonly endorsable_resonances: {
         [key: string]: unknown;
@@ -31803,9 +31805,12 @@ export interface components {
       /**
        * @description List of peers who endorsed this pose, with persona info.
        *
-       *     Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-       *     view queryset). Each endorser's primary persona is pre-loaded via
-       *     ``cached_primary_persona`` (another nested Prefetch).
+       *     Reads ``Interaction.cached_endorsements`` (a ``PrunedCachedProperty``,
+       *     #3816 Task 4) -- fed by the view queryset's Prefetch when available, and
+       *     a live query on first read otherwise. Each endorser's primary persona is
+       *     similarly read via ``CharacterSheet.cached_primary_persona``. Both
+       *     properties always exist now, so there is no fallback branch to maintain
+       *     here.
        */
       readonly pose_endorsers: {
         [key: string]: unknown;
