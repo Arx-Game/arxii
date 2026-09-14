@@ -43,4 +43,4 @@ class CmdNoMatch(ArxCommand):
             text += f" Maybe you meant {list_to_string(suggestions, endsep='or', addquote=True)}?"
         else:
             text += ' Type "help" for help.'
-        self.msg(text, type="error")
+        self.msg((text, {"type": "error"}))

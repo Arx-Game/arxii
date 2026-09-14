@@ -197,7 +197,7 @@ class ArxCommand(Command):
             # Typed ``error`` (#3856) so the web client renders it as a red note
             # in the column instead of an untyped line it cannot place; the
             # structured ``command_error`` frame stays for the toast path.
-            self.msg(str(err), type="error")
+            self.msg((str(err), {"type": "error"}))
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _execute(self) -> None:
@@ -212,20 +212,32 @@ class ArxCommand(Command):
         kwargs = self.resolve_action_args()
         result = self.action.run(actor=self.caller, **kwargs)
         if result.message:
-            self.send_result(result.message)
+            self.send_result(result.message, failed=not result.success)
 
-    def send_result(self, message: str) -> None:
+    def send_result(self, message: str, *, failed: bool = False) -> None:
         """Send a result line, typed by ``feed_kind`` when the command declares one.
 
-        The ``type`` keyword rides the websocket ``text`` frame as ``kwargs.type``
-        (the same option the narrative service sets to ``gemit``); the web client
-        sorts the line into its feed by it (#3856). Telnet ignores it. A command
-        with no kind sends the plain line it always did.
+        The option rides in Evennia's tuple form, ``(text, {"type": kind})``: the
+        session handler turns that dict into the ``text`` frame's kwargs, which
+        is where the web client reads ``kwargs.type`` (#3856). A sibling keyword
+        (``msg(text, type=kind)``) is NOT the same thing: the handler emits every
+        top-level keyword as its own command, so it leaves as a separate frame
+        the client cannot attach to the line. Evennia's own arrival and departure
+        announcements use this tuple form (``{"type": "move"}``). Telnet ignores
+        it. A command with no kind sends the plain line it always did.
+
+        A failed result is typed ``error`` whatever the command's kind, the same
+        as a ``CommandError``: "Could not find 'x'." must read identically whether
+        the target is absent (a ``CommandError``) or concealed (a failed look
+        result), or the note's styling would tell a looker that something hidden
+        is there. Every "Pose what?"-style refusal lands in the same place too.
         """
-        if self.feed_kind is None:
+        if failed:
+            self.msg((message, {"type": "error"}))
+        elif self.feed_kind is None:
             self.msg(message)
         else:
-            self.msg(message, type=self.feed_kind)
+            self.msg((message, {"type": self.feed_kind}))
 
     def get_help(
         self,

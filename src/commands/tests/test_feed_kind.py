@@ -4,7 +4,7 @@ A plain ``text`` frame carries no hint of what it is: a look result, "You take t
 lantern.", Evennia's "Command 'lok' is not available." and a staff builder's
 output all arrived identically and the client could only pile them into one
 collapsed strip. The narrative service already types its frames
-(``session.msg(text=..., type="gemit")``, ``world/narrative/services.py``) and
+(the tuple form ``msg(text=(line, {"type": "gemit"}))``, whose dict becomes the frame's kwargs) and
 the client reads ``kwargs.type``; these tests pin the same contract on the
 command layer: a command with a ``feed_kind`` sends its result typed, a
 ``CommandError`` is typed ``error``, an unmatched command name is typed ``error``
@@ -76,7 +76,7 @@ class FeedKindMechanismTests(TestCase):
         cmd.action = MagicMock()
         cmd.action.run.return_value = ActionResult(success=True, message="You take the lantern.")
         cmd.func()
-        self.caller.msg.assert_called_once_with("You take the lantern.", type="item")
+        self.caller.msg.assert_called_once_with(("You take the lantern.", {"type": "item"}))
 
     def test_a_command_without_a_kind_sends_plain_text(self):
         cmd = _make_cmd(_PlainCommand, self.caller)
@@ -88,10 +88,20 @@ class FeedKindMechanismTests(TestCase):
     def test_a_command_error_is_typed_error_and_still_sends_the_structured_frame(self):
         cmd = _make_cmd(_FailingCommand, self.caller, args="thing")
         cmd.func()
-        self.caller.msg.assert_any_call("No such thing here.", type="error")
+        self.caller.msg.assert_any_call(("No such thing here.", {"type": "error"}))
         self.caller.msg.assert_any_call(
             command_error={"error": "No such thing here.", "command": "failtest thing"}
         )
+
+    def test_a_failed_result_is_typed_error_even_on_a_kinded_command(self):
+        # A concealed look target answers with a failed result carrying the same
+        # text an absent target raises as a CommandError; the two must stay
+        # indistinguishable on the wire, so failure wins over the command's kind.
+        cmd = _make_cmd(_TypedCommand, self.caller)
+        cmd.action = MagicMock()
+        cmd.action.run.return_value = ActionResult(success=False, message="Could not find 'x'.")
+        cmd.func()
+        self.caller.msg.assert_called_once_with(("Could not find 'x'.", {"type": "error"}))
 
     def test_an_empty_result_message_sends_nothing(self):
         cmd = _make_cmd(_TypedCommand, self.caller)
@@ -138,13 +148,13 @@ class CmdNoMatchTests(TestCase):
     def test_close_miss_suggests_the_command_and_is_typed_error(self):
         self._cmd("lok").func()
         self.caller.msg.assert_called_once_with(
-            "Command 'lok' is not available. Maybe you meant \"look\"?", type="error"
+            ("Command 'lok' is not available. Maybe you meant \"look\"?", {"type": "error"})
         )
 
     def test_nothing_close_points_at_help(self):
         self._cmd("xyzzy").func()
         self.caller.msg.assert_called_once_with(
-            "Command 'xyzzy' is not available. Type \"help\" for help.", type="error"
+            ("Command 'xyzzy' is not available. Type \"help\" for help.", {"type": "error"})
         )
 
     def test_no_cmdset_still_answers(self):
@@ -152,7 +162,7 @@ class CmdNoMatchTests(TestCase):
         cmd.cmdset = None
         cmd.func()
         self.caller.msg.assert_called_once_with(
-            "Command 'lok' is not available. Type \"help\" for help.", type="error"
+            ("Command 'lok' is not available. Type \"help\" for help.", {"type": "error"})
         )
 
     def test_several_suggestions_join_with_or(self):
@@ -163,5 +173,8 @@ class CmdNoMatchTests(TestCase):
         ):
             self._cmd("sey").func()
         self.caller.msg.assert_called_once_with(
-            'Command \'sey\' is not available. Maybe you meant "say" or "pose"?', type="error"
+            (
+                'Command \'sey\' is not available. Maybe you meant "say" or "pose"?',
+                {"type": "error"},
+            )
         )

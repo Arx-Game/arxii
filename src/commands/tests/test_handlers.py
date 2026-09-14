@@ -34,7 +34,8 @@ class CommandErrorMessageTests(TestCase):
         assert caller.msg.call_count == 2
 
         text_call = caller.msg.call_args_list[0]
-        assert str(text_call.args[0]) == "bad"
+        # The error line rides Evennia's tuple form, typed for the web feed (#3856).
+        assert text_call.args[0] == ("bad", {"type": "error"})
 
         oob_call = caller.msg.call_args_list[1]
         kwargs = oob_call.kwargs
@@ -54,7 +55,7 @@ class CommandErrorMessageTests(TestCase):
         cmd.key = "stub"
 
         cmd.func()
-        caller.msg.assert_any_call("This command is not available.", type="error")
+        caller.msg.assert_any_call(("This command is not available.", {"type": "error"}))
 
     def test_action_result_message_sent_to_caller(self):
         """Successful action result message should be sent to caller."""

@@ -38,7 +38,10 @@ class CmdLockTests(TestCase):
 
         def _msg(*a, **kw):
             if a:
-                messages.append(a[0])
+                # An error line arrives in Evennia's tuple form,
+                # ``(text, {"type": "error"})`` (#3856); collect the text.
+                first = a[0]
+                messages.append(first[0] if isinstance(first, tuple) else first)
             # Only the structured command_error frame counts as a keyword call;
             # the plain line now carries its own ``type="error"`` option (#3856),
             # which is a presentation hint on the text, not a second frame.
