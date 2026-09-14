@@ -30,8 +30,8 @@ from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALU
 from world.character_creation.models import Beginnings
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.classes.models import Path
-from world.magic.models import PathGiftGrant
 from world.magic.models.gifts import Gift, Tradition
+from world.magic.models.grants import PathGiftGrant
 from world.magic.models.techniques import Technique
 from world.magic.services import cg_catalog, de_valuation, technique_power_eval
 from world.magic.services.technique_effects import technique_catalog_revision
@@ -506,8 +506,26 @@ def resolve_pool_scan_filter(value: str) -> PoolScanFilter:
 
 
 def clear_corpus_cache(params: TechniqueAnalyticsParams) -> None:
-    """Drop the cached catalog corpus for *params* so the next build recomputes (P5)."""
+    """Drop the cached catalog corpus for *params* and the pool scan's starting corpus (P5).
+
+    Refresh must invalidate both: the per-knob catalog corpus keyed on *params*
+    (:func:`_corpus_cache_key`) and the pool scan's own starting-context corpus
+    (:func:`_starting_corpus_cache_key`), which otherwise keeps serving stale
+    results for up to 24h after a non-authoring config change.
+    """
     cache.delete(_corpus_cache_key(params))
+    cache.delete(_starting_corpus_cache_key())
+
+
+def _starting_corpus_cache_key() -> str:
+    """Cache key for the pool scan's starting-context corpus (#3716 Task 3 fix round 1).
+
+    Carries the technique catalog's revision and the starting roller points, mirroring
+    :func:`_corpus_cache_key`'s revision-in-key reasoning.
+    """
+    default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+    roller_points = starting_stats_roller_points(default_stats)
+    return f"tuning-tech-power-starting-corpus:{technique_catalog_revision()}:{roller_points}"
 
 
 def _starting_corpus() -> dict[int, TechniquePowerReport]:
@@ -518,8 +536,7 @@ def _starting_corpus() -> dict[int, TechniquePowerReport]:
     """
     default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
     roller_points = starting_stats_roller_points(default_stats)
-    key = f"tuning-tech-power-starting-corpus:{technique_catalog_revision()}:{roller_points}"
-    cached = cache.get(key)
+    cached = cache.get(_starting_corpus_cache_key())
     if cached is None:
         context = EvalContext(
             level=STARTING_LEVEL,
@@ -529,7 +546,7 @@ def _starting_corpus() -> dict[int, TechniquePowerReport]:
             roll_modifier=_ROLL_MODIFIER_DEFAULT,
         )
         cached = technique_power_eval.evaluate_all_with_reference(context)
-        cache.set(key, cached, _CORPUS_CACHE_TIMEOUT)
+        cache.set(_starting_corpus_cache_key(), cached, _CORPUS_CACHE_TIMEOUT)
     reports, _reference = cached
     return {report.technique_id: report for report in reports}
 

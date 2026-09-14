@@ -297,11 +297,13 @@ class PoolScanTests(TestCase):
         self.assertEqual(ta.resolve_pool_scan_filter("bogus"), ta.PoolScanFilter.FAILS_FLOOR)
         self.assertEqual(ta.resolve_pool_scan_filter("all"), ta.PoolScanFilter.ALL)
 
-    def test_clear_corpus_cache_drops_the_catalog_entry(self) -> None:
+    def test_clear_corpus_cache_drops_both_the_catalog_and_starting_corpus_entries(self) -> None:
         params = ta.TechniqueAnalyticsParams()
         cache.set(ta._corpus_cache_key(params), self._corpus())
+        cache.set(ta._starting_corpus_cache_key(), self._corpus())
         ta.clear_corpus_cache(params)
         self.assertIsNone(cache.get(ta._corpus_cache_key(params)))
+        self.assertIsNone(cache.get(ta._starting_corpus_cache_key()))
 
 
 class CombatFloorTests(TestCase):
