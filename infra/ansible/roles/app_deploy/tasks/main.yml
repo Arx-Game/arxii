@@ -773,7 +773,7 @@
 # a stale Portal (2026-09-13, 2026-09-14) would have failed here. The probe
 # needs no credentials and no packages beyond python3, which the controller
 # has (standup.sh already requires it).
-- name: Probe the public websocket for the Portal's keepalive (#3863; about {{ app_ws_probe_seconds }}s)
+- name: Probe the public websocket for the Portal's keepalive (#3863; takes app_ws_probe_seconds)
   ansible.builtin.command:
     argv:
       - python3
