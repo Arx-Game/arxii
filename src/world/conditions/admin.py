@@ -17,9 +17,13 @@ from world.conditions.models import (
     ConditionModifierEffect,
     ConditionResistanceModifier,
     ConditionStage,
+    ConditionStageOnEntry,
     ConditionTemplate,
+    DamageSuccessLevelMultiplier,
     DamageType,
     HazardResponseState,
+    PenetrationOutcomeFactor,
+    TreatmentTemplate,
 )
 from world.contributors.admin import CREDIT_FIELDSET
 
@@ -424,3 +428,52 @@ class HazardResponseStateAdmin(admin.ModelAdmin):
     ]
     raw_id_fields = ["condition_instance"]
     readonly_fields = ["prompted_at"]
+
+
+# =============================================================================
+# #3831
+# =============================================================================
+
+
+@admin.register(DamageSuccessLevelMultiplier)
+class DamageSuccessLevelMultiplierAdmin(admin.ModelAdmin):
+    """#3831 - the tunable success_level -> damage multiplier lookup."""
+
+    list_display = ["min_success_level", "multiplier", "label"]
+    search_fields = ["label"]
+
+
+@admin.register(PenetrationOutcomeFactor)
+class PenetrationOutcomeFactorAdmin(admin.ModelAdmin):
+    """#3831 - the authored success-level -> power factor for the penetration contest (#639)."""
+
+    list_display = ["min_success_level", "factor", "label"]
+    search_fields = ["label"]
+
+
+@admin.register(TreatmentTemplate)
+class TreatmentTemplateAdmin(admin.ModelAdmin):
+    """#3831 - an authorable recipe for treating a condition or pending alteration."""
+
+    list_display = [
+        "name",
+        "key",
+        "target_condition",
+        "target_kind",
+        "check_type",
+        "requires_bond",
+    ]
+    list_filter = ["target_kind", "requires_bond", "scene_required"]
+    search_fields = ["name", "key", "target_condition__name"]
+    list_select_related = ["target_condition", "check_type", "backlash_target_condition"]
+    autocomplete_fields = ["target_condition", "check_type", "backlash_target_condition"]
+
+
+@admin.register(ConditionStageOnEntry)
+class ConditionStageOnEntryAdmin(admin.ModelAdmin):
+    """#3831 - a condition applied when a target enters a ConditionStage (Scope 6 par:4.1)."""
+
+    list_display = ["stage", "condition", "severity"]
+    search_fields = ["stage__name", "condition__name"]
+    list_select_related = ["stage", "condition"]
+    autocomplete_fields = ["stage", "condition"]

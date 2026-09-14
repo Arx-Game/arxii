@@ -10,16 +10,20 @@ from world.character_creation.models import (
     Beginnings,
     BeginningTradition,
     CGExplanation,
+    CGPointBudget,
     CharacterDraft,
     CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
     EnemyReason,
+    OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
+    SchoolingLine,
     StartingArea,
+    TraditionStateLine,
 )
 from world.codex.models import BeginningsCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
@@ -351,3 +355,58 @@ class AppearanceSectionAdmin(admin.ModelAdmin):
         (None, {"fields": ("name", "player_line", "sort_order")}),
         CREDIT_FIELDSET,
     ]
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(CGPointBudget)
+class CGPointBudgetAdmin(admin.ModelAdmin):
+    """#3831 - the CG point budget configuration (staff-tunable, no code change)."""
+
+    list_display = ["name", "starting_points", "xp_conversion_rate", "is_active"]
+    list_filter = ["is_active"]
+    search_fields = ["name"]
+
+
+@admin.register(OfferFirstLook)
+class OfferFirstLookAdmin(admin.ModelAdmin):
+    """#3831 - one Beginning pinning one offer line into its chapter's first look."""
+
+    list_display = ["beginning", "offer"]
+    list_select_related = ["beginning"]
+    raw_id_fields = ["offer"]
+    autocomplete_fields = ["beginning"]
+    search_fields = ["beginning__name"]
+
+
+@admin.register(TraditionStateLine)
+class TraditionStateLineAdmin(admin.ModelAdmin):
+    """#3831 - the standard words + drawback for one tradition state (#3675).
+
+    Normally authored on the Tradition Slate admin page
+    (``web/admin/tradition_slate/``); this standalone page is the fallback
+    editor for a one-off correction.
+    """
+
+    list_display = ["state", "entry_line", "carries"]
+    list_select_related = ["carries"]
+    autocomplete_fields = ["carries"]
+    search_fields = ["entry_line"]
+
+
+@admin.register(SchoolingLine)
+class SchoolingLineAdmin(admin.ModelAdmin):
+    """#3831 - one line of the standard schooling set under a living tradition (#3675).
+
+    Normally authored on the Tradition Slate admin page
+    (``web/admin/tradition_slate/``); this standalone page is the fallback
+    editor for a one-off correction.
+    """
+
+    list_display = ["rank", "name", "player_line", "grants"]
+    list_select_related = ["grants"]
+    autocomplete_fields = ["grants"]
+    search_fields = ["name", "player_line"]

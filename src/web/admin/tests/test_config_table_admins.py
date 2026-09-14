@@ -122,6 +122,56 @@ CONFIG_TABLE_MODELS = (
     "MissionOptionRouteReward",
     "MissionRenownAward",
     "MissionGiver",
+    # actions/models/enhancement.py + actions/models/effect_configs.py
+    "ActionEnhancement",
+    "ModifyKwargsConfig",
+    "AddModifierConfig",
+    "ConditionOnCheckConfig",
+    "RemoveConditionOnCheckConfig",
+    # behaviors/models.py (Meta.app_label = "arxii" though it's the "behaviors" app)
+    "BehaviorPackageDefinition",
+    # world/areas/positioning/models.py
+    "PositionBlueprint",
+    "BlueprintPosition",
+    "BlueprintEdge",
+    "BlueprintPositionShelter",
+    "RampartElementProfile",
+    "RampartElementResistance",
+    # world/buildings/models.py
+    "BuildingKind",
+    "PropertyGrantProfile",
+    "BuildingListing",
+    "PolishCategory",
+    "TierThreshold",
+    "ProjectTemplate",
+    "ProjectTemplatePolishIncrement",
+    "DecorationKind",
+    "DecorationAffinity",
+    # world/captivity/models.py
+    "CaptivityConfig",
+    # world/character_creation/models.py
+    "CGPointBudget",
+    "OfferFirstLook",
+    "TraditionStateLine",
+    "SchoolingLine",
+    # world/checks/models.py
+    "CheckTypeSpecialization",
+    # world/classes/models.py
+    "CharacterClass",
+    "ClassStageHealthRate",
+    # world/combat/models.py
+    "EncounterOutcomeMapping",
+    "FleeConfig",
+    "FleeTierModifier",
+    "EncounterAftermathRule",
+    "StakesEscalationModifier",
+    # world/companions/models.py
+    "CompanionAbilityFunctionTag",
+    # world/conditions/models.py
+    "DamageSuccessLevelMultiplier",
+    "PenetrationOutcomeFactor",
+    "TreatmentTemplate",
+    "ConditionStageOnEntry",
 )
 
 
