@@ -49,6 +49,38 @@ TEMPORARY_AVAILABILITY = "temporary"
 RETAINED_AVAILABILITY = "retained"
 
 
+def _apply_history_bounds(
+    queryset: QuerySet[Interaction], query_params: Mapping[str, str]
+) -> QuerySet[Interaction]:
+    """Apply inclusive lower/upper history bounds to a queryset."""
+    since = query_params.get("from")
+    if since:
+        queryset = queryset.filter(timestamp__gte=since)
+    until = query_params.get("to") or query_params.get("until")
+    if not until:
+        return queryset
+    if len(until) != DATE_ONLY_LENGTH:
+        return queryset.filter(timestamp__lte=until)
+    try:
+        exclusive_until = (date.fromisoformat(until) + timedelta(days=1)).isoformat()
+    except ValueError:
+        return queryset.filter(timestamp__lte=until)
+    return queryset.filter(timestamp__lt=exclusive_until)
+
+
+def _apply_conversation_bound(
+    queryset: QuerySet[Interaction], conversation: str | None
+) -> QuerySet[Interaction]:
+    """Push simple conversation references into the authorized queryset."""
+    if conversation and conversation.startswith("scene:"):
+        return queryset.filter(scene_id=conversation.removeprefix("scene:"))
+    if conversation and conversation.startswith("place:"):
+        return queryset.filter(place_id=conversation.removeprefix("place:"))
+    if conversation == GENERAL_CONVERSATION_KEY:
+        return queryset.filter(scene__isnull=True)
+    return queryset
+
+
 def _row_key(row: dict[str, Any]) -> tuple[str, int]:
     """Return the stable pose boundary for either a pose or summary row."""
     pose = row.get("latestVisiblePose") or row.get("pose") or row
@@ -143,51 +175,10 @@ def _queryset(
     view.format_kwarg = None
     queryset = view.get_queryset()
     query_params = request.query_params if params is None else params
-    # ``from`` is the UI spelling for an explicit older-history lower bound.
-    since = query_params.get("from")
-    until = query_params.get("to") or query_params.get("until")
-    if since:
-        queryset = queryset.filter(timestamp__gte=since)
-    if until:
-        # Date-only UI bounds include the whole selected day rather than only
-        # midnight. Datetime bounds remain exact and timezone-aware upstream.
-        if len(until) == DATE_ONLY_LENGTH:
-            try:
-                exclusive_until = (date.fromisoformat(until) + timedelta(days=1)).isoformat()
-            except ValueError:
-                queryset = queryset.filter(timestamp__lte=until)
-            else:
-                queryset = queryset.filter(timestamp__lt=exclusive_until)
-        else:
-            queryset = queryset.filter(timestamp__lte=until)
+    queryset = _apply_history_bounds(queryset, query_params)
     queryset = InteractionFilter(query_params, queryset=queryset).qs
-    # scene:/room/place: refs push down into the DB filter (`place` is a
-    # plain FK column on the row, same as `scene`). `whisper:<comma-joined
-    # ids>` does NOT -- pushing it down needs a participant-set EXACT-match
-    # (not merely "any receiver present", which `filter_kind`'s
-    # `Exists`/`OuterRef` pattern gives you), a bigger lift than a filter
-    # branch. A whisper-scoped `conversation` therefore still falls back to
-    # scanning all visible history in Python at each of this function's
-    # callers -- including `PlayReadView._mark_conversation_read`'s
-    # `pairs = [... if _conversation(row)["key"] == conversation]` filter,
-    # not just `PlaySearchView` (see its own `has_bound` comment for the same
-    # gap). This whisper gap IS reachable in production, not just a
-    # theoretical one: `HistoryNavigator.tsx`'s search form offers a
-    # "Whispers" type, `onOpenReference` carries the backend's own
-    # `whisper:<ids>` ref straight through as `GameWindow.tsx`'s
-    # `conversationRef`, and "Mark conversation read" has no `readOnly` guard
-    # -- so clicking it while reading a whisper reference posts exactly this
-    # unbounded-scan shape. The result is still correct (bounded only by the
-    # `to=before` snapshot, which happens to be the conversation's own latest
-    # timestamp) -- this is a scan-size/performance gap, not a data-integrity
-    # one -- but it is NOT "unreachable," and no future edit should assume it is.
     conversation = query_params.get("conversation")
-    if conversation and conversation.startswith("scene:"):
-        queryset = queryset.filter(scene_id=conversation.removeprefix("scene:"))
-    elif conversation and conversation.startswith("place:"):
-        queryset = queryset.filter(place_id=conversation.removeprefix("place:"))
-    elif conversation == GENERAL_CONVERSATION_KEY:
-        queryset = queryset.filter(scene__isnull=True)
+    queryset = _apply_conversation_bound(queryset, conversation)
     return queryset.order_by("timestamp", "id"), view.get_serializer_context()
 
 

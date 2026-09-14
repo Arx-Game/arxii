@@ -1400,7 +1400,43 @@ def idempotent_record_interaction(
     return IdempotentSubmissionResult(interaction=interaction, replayed=False, conflict=False)
 
 
-def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interaction creation
+def _resolve_recording_persona(character: ObjectDB, persona: Persona | None) -> Persona | None:
+    """Use the active face when a recorder did not provide an explicit persona."""
+    if persona is not None:
+        return persona
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    try:
+        return active_persona_for_sheet(character.sheet_data)
+    except ObjectDoesNotExist:
+        return None
+
+
+def _record_ephemeral_interaction(  # noqa: PLR0913
+    *,
+    persona: Persona,
+    content: str,
+    mode: str,
+    scene: Scene,
+    attributed_companion: Companion | None,
+    reply_to: ReplyTarget | None,
+    on_before_push: Callable[[Interaction | None], None] | None,
+) -> None:
+    """Push an ephemeral interaction without creating a database row."""
+    if reply_to is not None:
+        raise InteractionThreadError
+    if on_before_push is not None:
+        on_before_push(None)
+    push_ephemeral_interaction(
+        persona=persona,
+        content=content,
+        mode=mode,
+        scene=scene,
+        attributed_companion=attributed_companion,
+    )
+
+
+def record_interaction(  # noqa: PLR0913 - all fields needed for interaction creation
     *,
     character: ObjectDB,
     content: str,
@@ -1455,29 +1491,20 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
     own push before either's ledger insert could block the other, so a caller could
     see a duplicate pose even though the persisted row stayed unique.
     """
+    persona = _resolve_recording_persona(character, persona)
     if persona is None:
-        from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
-
-        try:
-            persona = active_persona_for_sheet(character.sheet_data)
-        except ObjectDoesNotExist:
-            return None
-
+        return None
     if scene is None:
         scene = get_active_scene(character.location)
-
-    # Ephemeral scenes cannot persist or join threads.
     if scene is not None and scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
-        if reply_to is not None:
-            raise InteractionThreadError
-        if on_before_push is not None:
-            on_before_push(None)
-        push_ephemeral_interaction(
+        _record_ephemeral_interaction(
             persona=persona,
             content=content,
             mode=mode,
             scene=scene,
             attributed_companion=attributed_companion,
+            reply_to=reply_to,
+            on_before_push=on_before_push,
         )
         return None
 
@@ -1494,37 +1521,28 @@ def record_interaction(  # noqa: C901, PLR0913 - all fields needed for interacti
         attributed_companion=attributed_companion,
         reply_to=reply_to,
     )
-
     if scene is not None:
         _ensure_scene_participation(scene, character)
-
     if on_before_push is not None:
         on_before_push(interaction)
-
     if on_created is not None:
         on_created(interaction)
-
     # Pass IDs we already know to avoid re-querying rows just created.
-    # For receivers: if explicitly provided use those; if place-scoped,
-    # create_interaction auto-populated from PlacePresence but we don't
-    # have the resolved list here, so let push_interaction query those.
-    r_ids: list[int] | None = None
-    r_chars: list[ObjectDB] | None = None
     if receivers is not None:
-        r_ids = [p.pk for p in receivers]
-        r_chars = [p.character_sheet.character for p in receivers]
+        receiver_ids = [p.pk for p in receivers]
+        receiver_characters = [p.character_sheet.character for p in receivers]
     elif place is None:
-        # Public interaction: no receivers
-        r_ids = []
-        r_chars = []
-
-    t_ids = [p.pk for p in target_personas] if target_personas else []
-
+        receiver_ids = []
+        receiver_characters = []
+    else:
+        receiver_ids = None
+        receiver_characters = None
+    target_ids = [p.pk for p in target_personas] if target_personas else []
     push_interaction(
         interaction,
-        receiver_persona_ids=r_ids,
-        target_persona_ids=t_ids,
-        receiver_characters=r_chars,
+        receiver_persona_ids=receiver_ids,
+        target_persona_ids=target_ids,
+        receiver_characters=receiver_characters,
     )
     return interaction
 

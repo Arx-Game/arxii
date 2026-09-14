@@ -31,6 +31,7 @@ import { useFocusStack, type FocusEntry } from '@/inventory/hooks/useFocusStack'
 import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
 import { useAppSelector, useAppDispatch } from '@/store/hooks';
+import type { AppDispatch } from '@/store/store';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import {
   markThreadSeen,
@@ -276,6 +277,102 @@ function GameRightSidebar({
   );
 }
 
+/** Start the selected session once when the game page first mounts. */
+function useAutoStartSession(
+  active: string | null,
+  sessions: Record<string, unknown>,
+  dispatch: AppDispatch,
+  connect: (name: string) => Promise<unknown>
+): void {
+  const autoStartSpent = useRef(false);
+  const hasActiveSession = active ? Boolean(sessions[active]) : false;
+  useEffect(() => {
+    if (!active || autoStartSpent.current) return;
+    autoStartSpent.current = true;
+    if (hasActiveSession) return;
+    dispatch(startSession(active));
+    connect(active).catch(() => {});
+  }, [active, hasActiveSession, dispatch, connect]);
+}
+
+interface SceneThreadStateSyncArgs {
+  sceneId: string | undefined;
+  active: string | null;
+  sceneBaselineId: number | null | undefined;
+  allInteractions: Interaction[];
+  activeThreadTab: string | null;
+  resetForNewScene: () => void;
+  setComposerMode: (mode: undefined) => void;
+  setReplyTarget: (target: Interaction | null) => void;
+  dispatch: AppDispatch;
+}
+
+/** Keep scene baselines, thread filters, composer state, and read cursors in sync. */
+function useSceneThreadStateSync({
+  sceneId,
+  active,
+  sceneBaselineId,
+  allInteractions,
+  activeThreadTab,
+  resetForNewScene,
+  setComposerMode,
+  setReplyTarget,
+  dispatch,
+}: SceneThreadStateSyncArgs): void {
+  useEffect(() => {
+    if (!sceneId || !active || sceneBaselineId != null) return;
+    let maxId: number | undefined;
+    for (const interaction of allInteractions) {
+      const id = Number(interaction.id);
+      if (maxId === undefined || id > maxId) maxId = id;
+    }
+    dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? 0 }));
+  }, [sceneId, active, sceneBaselineId, allInteractions, dispatch]);
+
+  useEffect(() => {
+    resetForNewScene();
+  }, [active, sceneId, resetForNewScene]);
+
+  useEffect(() => {
+    setComposerMode(undefined);
+    setReplyTarget(null);
+  }, [active, sceneId, setComposerMode, setReplyTarget]);
+
+  useEffect(() => {
+    if (!sceneId || !active || document.visibilityState === 'hidden') return;
+    const seenKey = activeThreadTab ?? 'room';
+    let maxId: number | undefined;
+    for (const interaction of allInteractions) {
+      if (getThreadKey(interaction) !== seenKey) continue;
+      const id = Number(interaction.id);
+      if (!Number.isFinite(id) || id <= 0) continue;
+      if (maxId === undefined || id > maxId) maxId = id;
+    }
+    const timer = window.setTimeout(() => {
+      if (maxId !== undefined && document.visibilityState !== 'hidden') {
+        dispatch(markThreadSeen({ character: active, threadKey: seenKey, interactionId: maxId }));
+      }
+    }, 1000);
+    return () => window.clearTimeout(timer);
+  }, [sceneId, active, allInteractions, activeThreadTab, dispatch]);
+}
+
+interface GameCenterProps {
+  sceneId?: string;
+  accountId: number;
+  gameWindow: ComponentProps<typeof GameWindow>;
+}
+
+function GameCenter({ sceneId, accountId, gameWindow }: GameCenterProps) {
+  return (
+    <>
+      {sceneId && <ConsentPrompt sceneId={sceneId} />}
+      <GameWindow {...gameWindow} draftScopePrefix={`account:${accountId}`} />
+      {sceneId && <ActionPanel sceneId={sceneId} />}
+    </>
+  );
+}
+
 export function GamePage() {
   const account = useAccount();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -321,15 +418,7 @@ export function GamePage() {
   // its world entry too; leaving the ref unspent there would let a later
   // cross-tab flip of `active` slip past the guard. Only null-before-hydration
   // runs leave the crossing unspent.
-  const autoStartSpent = useRef(false);
-  const hasActiveSession = active ? Boolean(sessions[active]) : false;
-  useEffect(() => {
-    if (!active || autoStartSpent.current) return;
-    autoStartSpent.current = true;
-    if (hasActiveSession) return;
-    dispatch(startSession(active));
-    connect(active).catch(() => {});
-  }, [active, hasActiveSession, dispatch, connect]);
+  useAutoStartSession(active, sessions, dispatch, connect);
 
   const focus = useFocusStack(DEFAULT_ROOM_ENTRY);
 
@@ -650,97 +739,19 @@ export function GamePage() {
     [active, dispatch]
   );
 
-  // Scene-load baseline (#2156 review fix): a single scalar snapshot, not a
-  // per-thread-key one. The old per-key baseline one-shotted per KEY, so a
-  // brand-new thread appearing mid-session (e.g. a first whisper) got its own
-  // key baselined to its first message's id the moment it was observed —
-  // countUnread's strict `>` then suppressed the badge on that very first
-  // message. Instead: the first time this effect runs for a given puppet+scene,
-  // capture the highest interaction id present at that moment as
-  // `sceneBaselineId` and never touch it again for this scene.
-  // `useThreading`'s `countUnread` falls back to this scalar only for thread
-  // keys with no `threadLastSeen` entry, so pre-existing threads (which get a
-  // `threadLastSeen` entry from the selected-thread effect below, or already
-  // had one) stay zeroed while a genuinely new thread badges from message one.
-  // `maxId ?? 0` (not `?? null`, review fix 2): a scene with ZERO interactions
-  // at load must still baseline to a real number — interaction ids are DB pks
-  // and never 0, so 0 is a safe "baselined empty" sentinel. `null` would be
-  // indistinguishable from "baseline effect hasn't run yet", which would make
-  // `countUnread` fall through to its no-baseline branch and stay silently
-  // unbadged for that scene's first message.
-  //
-  // Gated on the per-puppet Redux `sceneBaselineId == null` (review fix 3),
-  // NOT a single scalar ref keyed only by sceneId: a ref keyed on sceneId
-  // alone has two bugs with multiple puppets — (1) puppet A (scene X,
-  // baselined) -> puppet B (scene Y) -> back to puppet A (still scene X)
-  // re-triggers the effect (the ref now holds "Y", not "X") and WIPES A's
-  // already-accumulated unread by re-baselining to the current max id; (2)
-  // puppet A and puppet B in the SAME scene X: A's switch already set the
-  // ref to "X", so B's own turn never runs the effect at all and B's
-  // Redux `sceneBaselineId` starves at its initial `null` forever. Reading
-  // the per-puppet Redux value directly sidesteps both — it's already keyed
-  // by character (`sessions[active]`), and `setSessionScene` nulls it out
-  // exactly when that puppet's own scene id changes (see gameSlice.ts).
-  useEffect(() => {
-    if (!sceneId || !active) return;
-    if (activeSession?.sceneBaselineId != null) return;
-    let maxId: number | undefined;
-    for (const interaction of allInteractions) {
-      const id = Number(interaction.id);
-      if (maxId === undefined || id > maxId) maxId = id;
-    }
-    dispatch(setSceneBaseline({ character: active, baselineId: maxId ?? 0 }));
-  }, [sceneId, active, activeSession?.sceneBaselineId, allInteractions, dispatch]);
-
-  // Threading filter/mute reset on scene change or puppet switch (#2156 review
-  // fix): `useThreading`'s selectedThreadKey/enabledThreadKeys/hiddenPersonaIds
-  // are local component state that otherwise never resets across renders —
-  // GamePage is a single long-lived composition root, unlike SceneDetailPage
-  // (a route change there remounts the whole tree for free). Without this, a
-  // thread filter or muted participant picked in a PREVIOUS scene/puppet
-  // context silently keeps hiding interactions in a new one, especially when
-  // the new context happens to reuse an identical thread key (e.g. two
-  // puppets in the same room). Keyed on the same `[active, sceneId]` pair the
-  // baseline effect above uses.
-  const threadingResetForNewScene = threading.resetForNewScene;
-  useEffect(() => {
-    threadingResetForNewScene();
-  }, [active, sceneId, threadingResetForNewScene]);
-
-  // The stored composer mode is context-bound the same way tabs are (2026-07
-  // audit): a whisper mode set as character A survived switching to character
-  // B (whose activeThreadTab is null, so effectiveComposerMode fell through
-  // to the stored mode) — typing Enter then whispered A's target AS B. Reset
-  // it on the same [active, sceneId] pair every other context reset uses.
-  useEffect(() => {
-    setComposerMode(undefined);
-    setReplyTarget(null);
-  }, [active, sceneId]);
-
-  // Continuously mark the ACTIVE TAB's thread seen as its interactions grow —
-  // this is the thread the player is actively viewing (the room anchor when
-  // no tab is active), so it never accumulates unread. Unselected threads are
-  // left alone and accumulate unread from the baseline above (#2165: was
-  // keyed on threading.selectedThreadKey before conversation tabs existed).
-  useEffect(() => {
-    if (!sceneId || !active) return;
-    const seenKey = activeThreadTab ?? 'room';
-    if (document.visibilityState === 'hidden') return;
-    let maxId: number | undefined;
-    for (const interaction of allInteractions) {
-      if (getThreadKey(interaction) !== seenKey) continue;
-      const id = Number(interaction.id);
-      // Ephemeral/socket-only negative ids are never persisted as a read cursor.
-      if (!Number.isFinite(id) || id <= 0) continue;
-      if (maxId === undefined || id > maxId) maxId = id;
-    }
-    const timer = window.setTimeout(() => {
-      if (maxId !== undefined && document.visibilityState !== 'hidden') {
-        dispatch(markThreadSeen({ character: active, threadKey: seenKey, interactionId: maxId }));
-      }
-    }, 1000);
-    return () => window.clearTimeout(timer);
-  }, [sceneId, active, allInteractions, activeThreadTab, dispatch]);
+  // Keep scene baselines, thread filters, composer state, and read cursors aligned
+  // when the active scene or puppet changes.
+  useSceneThreadStateSync({
+    sceneId,
+    active,
+    sceneBaselineId: activeSession?.sceneBaselineId,
+    allInteractions,
+    activeThreadTab,
+    resetForNewScene: threading.resetForNewScene,
+    setComposerMode,
+    setReplyTarget,
+    dispatch,
+  });
 
   // #2165: the sidebar is the open-a-tab surface. A conversation row opens or
   // focuses its tab; the room row focuses the anchor. The old
@@ -874,6 +885,30 @@ export function GamePage() {
     setActionAttachment(null);
   }, []);
 
+  const liveGameWindowHandlers = reference
+    ? {
+        onAvatarClick: undefined,
+        onAddTarget: undefined,
+        onAttachAction: undefined,
+        onActionAttach: undefined,
+        onActionDetach: undefined,
+        onSubmitAction: undefined,
+        onReply: undefined,
+        replyTarget: null,
+        conversationTabs: undefined,
+      }
+    : {
+        onAvatarClick: setCardPersona,
+        onAddTarget: setPendingTarget,
+        onAttachAction: handleActionAttach,
+        onActionAttach: handleActionAttach,
+        onActionDetach: handleActionDetach,
+        onSubmitAction: handleSubmitAction,
+        onReply: handleReply,
+        replyTarget,
+        conversationTabs,
+      };
+
   if (!account) {
     return (
       <div className="mx-auto max-w-sm text-center">
@@ -898,6 +933,49 @@ export function GamePage() {
     ? sceneFeedProps(referenceSceneId ?? 'history', referencePage?.results ?? [], false, () => {})
     : sceneFeedProps(sceneId, tabInteractions, hasNextPage, fetchNextPage);
 
+  const gameWindowProps: ComponentProps<typeof GameWindow> = {
+    characters,
+    sceneFeed: displaySceneFeed,
+    room: roomData,
+    ambientInteractions: activeSession?.ambientInteractions,
+    lifecycleState: activeEncounter ? 'encounter' : activeSession?.lifecycleState,
+    composerMode: effectiveComposerMode,
+    onModeChange: setComposerMode,
+    personaId,
+    ...liveGameWindowHandlers,
+    targetToAppend,
+    onTargetConsumed: handleTargetConsumed,
+    actionAttachment,
+    pendingActionIds,
+    detachedActionIds,
+    onPoseSubmitted: handlePoseSubmitted,
+    onCancelReply: () => setReplyTarget(null),
+    draftScopePrefix: `account:${account.id}`,
+    roomId: roomData?.id ?? null,
+    roomName,
+    isAtPlace,
+    currentPlaceId,
+    currentPlaceName,
+    speakingAs: speakingAsProps(activeEntry),
+    reference,
+    targetPoseId: reference?.poseId,
+    onReturnToLive: returnToLive,
+    referenceUnavailable: Boolean(reference && referenceUnavailable),
+    referenceLoading: Boolean(reference && referenceLoading),
+    referenceRetryable: Boolean(reference && referenceRetryable),
+    onRetryReference: () => refetchReference(),
+    ...placeWidgets(placesRoomId),
+    pendingAttachments: sceneId ? (
+      <PendingActionAttachments
+        sceneId={sceneId}
+        personaId={personaId}
+        detachedIds={detachedActionIds}
+        onDetach={handleDetach}
+        onUndoDetach={handleUndoDetach}
+      />
+    ) : undefined,
+  };
+
   return (
     <>
       <GameLayout
@@ -911,68 +989,7 @@ export function GamePage() {
           />
         }
         center={
-          <>
-            {/* Scene toolset (#2156 Task 6) — mirrors SceneDetailPage.tsx:120-178's
-                props exactly. Placement differs deliberately from the record page:
-                ConsentPrompt sits above the center feed here; PlaceBar sits directly
-                above the composer (passed into GameWindow, rendered just before
-                CommandInput); ActionPanel is a `fixed` floating panel, so its DOM
-                position doesn't matter. */}
-            {sceneId && <ConsentPrompt sceneId={sceneId} />}
-            <GameWindow
-              characters={characters}
-              sceneFeed={displaySceneFeed}
-              room={roomData}
-              ambientInteractions={activeSession?.ambientInteractions}
-              lifecycleState={activeEncounter ? 'encounter' : activeSession?.lifecycleState}
-              composerMode={effectiveComposerMode}
-              onModeChange={setComposerMode}
-              personaId={personaId}
-              onAvatarClick={reference ? undefined : setCardPersona}
-              onAddTarget={reference ? undefined : setPendingTarget}
-              onAttachAction={reference ? undefined : handleActionAttach}
-              targetToAppend={targetToAppend}
-              onTargetConsumed={handleTargetConsumed}
-              actionAttachment={actionAttachment}
-              onActionAttach={reference ? undefined : handleActionAttach}
-              onActionDetach={reference ? undefined : handleActionDetach}
-              onSubmitAction={reference ? undefined : handleSubmitAction}
-              pendingActionIds={pendingActionIds}
-              detachedActionIds={detachedActionIds}
-              onPoseSubmitted={handlePoseSubmitted}
-              onReply={reference ? undefined : handleReply}
-              replyTarget={reference ? null : replyTarget}
-              onCancelReply={() => setReplyTarget(null)}
-              draftScopePrefix={`account:${account.id}`}
-              roomId={roomData?.id ?? null}
-              roomName={roomName}
-              isAtPlace={isAtPlace}
-              currentPlaceId={currentPlaceId}
-              currentPlaceName={currentPlaceName}
-              conversationTabs={reference ? undefined : conversationTabs}
-              speakingAs={speakingAsProps(activeEntry)}
-              reference={reference}
-              targetPoseId={reference?.poseId}
-              onReturnToLive={returnToLive}
-              referenceUnavailable={Boolean(reference && referenceUnavailable)}
-              referenceLoading={Boolean(reference && referenceLoading)}
-              referenceRetryable={Boolean(reference && referenceRetryable)}
-              onRetryReference={() => refetchReference()}
-              {...placeWidgets(placesRoomId)}
-              pendingAttachments={
-                sceneId ? (
-                  <PendingActionAttachments
-                    sceneId={sceneId}
-                    personaId={personaId}
-                    detachedIds={detachedActionIds}
-                    onDetach={handleDetach}
-                    onUndoDetach={handleUndoDetach}
-                  />
-                ) : undefined
-              }
-            />
-            {sceneId && <ActionPanel sceneId={sceneId} />}
-          </>
+          <GameCenter sceneId={sceneId} accountId={account.id} gameWindow={gameWindowProps} />
         }
         sidebar={
           <PlaySidebar

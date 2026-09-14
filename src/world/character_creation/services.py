@@ -1673,15 +1673,43 @@ def _create_distinctions(
     distinctions_by_id = {d.id: d for d in distinctions}
     traits_by_name = _feature_traits_by_name(entries_by_key)
 
-    # Build CharacterDistinction instances
-    char_distinctions = []
+    char_distinctions = _build_character_distinctions(
+        character,
+        entries_by_key,
+        distinctions_by_id,
+        traits_by_name,
+        markings,
+        CharacterDistinction,
+        DistinctionOrigin.CHARACTER_CREATION,
+    )
+    if not char_distinctions:
+        return
+
+    asset_names = _connection_asset_names(draft, entries_by_key.values())
+    created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
+    _create_distinction_modifiers_bulk(
+        character.sheet_data, created_distinctions, asset_names=asset_names
+    )
+
+    _mint_default_distinction_secrets(created_distinctions)
+
+
+def _build_character_distinctions(  # noqa: PLR0913
+    character: ObjectDB,
+    entries_by_key: dict,
+    distinctions_by_id: dict,
+    traits_by_name: dict[str, Any],
+    markings: dict[int, Any] | None,
+    distinction_model: type,
+    origin: str,
+) -> list:
+    """Build valid character distinctions, skipping stale feature references."""
+    result = []
     for (distinction_id, trait_name, marking_id), entry in entries_by_key.items():
         distinction = distinctions_by_id.get(distinction_id)
-        if not distinction:
+        if distinction is None:
             logger.warning(
-                "Invalid distinction ID %s in draft for character %s",
-                distinction_id,
-                character.key,
+                "Invalid distinction ID %s in draft for character %s", distinction_id, character.key
             )
             continue
         trait = traits_by_name.get(trait_name) if trait_name else None
@@ -1693,36 +1721,28 @@ def _create_distinctions(
                 character.key,
             )
             continue
-        char_distinctions.append(
-            CharacterDistinction(
+        result.append(
+            distinction_model(
                 character=character.sheet_data,
                 distinction=distinction,
                 rank=entry.get("rank", 1),
                 notes=entry.get("notes", ""),
-                origin=DistinctionOrigin.CHARACTER_CREATION,
+                origin=origin,
                 source_description="; ".join(entry.get("sources", [])),
                 feature_trait=trait,
                 feature_marking=marking,
             )
         )
+    return result
 
-    if not char_distinctions:
-        return
 
-    asset_names = _connection_asset_names(draft, entries_by_key.values())
-    created_distinctions = CharacterDistinction.objects.bulk_create(char_distinctions)
-    _create_distinction_modifiers_bulk(
-        character.sheet_data, created_distinctions, asset_names=asset_names
-    )
-
-    # #1334 — a ``secret_by_default`` kind (criminal / scandalous) relocates into a Secret on
-    # grant, so it never shows on the public distinctions list. One-time finalize over a handful
-    # of distinctions, so the per-mint query is fine; reuses the single minting authority.
+def _mint_default_distinction_secrets(created_distinctions: list) -> None:
+    """Move secret-by-default distinctions into their Secret records."""
     from world.distinctions.services import mint_distinction_secret  # noqa: PLC0415
 
-    for cd in created_distinctions:
-        if cd.distinction.secret_by_default:
-            mint_distinction_secret(cd)
+    for distinction in created_distinctions:
+        if distinction.distinction.secret_by_default:
+            mint_distinction_secret(distinction)
 
 
 def _feature_traits_by_name(entries_by_key: dict) -> dict[str, Any]:

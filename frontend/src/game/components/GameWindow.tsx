@@ -1,7 +1,7 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import { useEffect, useRef } from 'react';
 import { ExplorationReader } from './ExplorationReader';
-import type { GameLifecycleState } from '@/store/gameSlice';
+import type { GameLifecycleState, Session } from '@/store/gameSlice';
 import type { InteractionWsPayload } from '@/hooks/types';
 import type { RoomData } from './RoomPanel';
 import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
@@ -152,6 +152,287 @@ interface GameWindowProps {
  * "a different conversation was selected"; it is never a lookup value.
  */
 const ROOM_ANCHOR_CONVERSATION = 'room-anchor';
+
+interface GameWindowStatusProps {
+  reference?: GameWindowProps['reference'];
+  onReturnToLive?: () => void;
+  awaitingRoom: boolean;
+  effectiveLifecycle?: GameLifecycleState;
+  session: Session;
+  visibleDiagnostics: string[];
+  sessionNames: string[];
+  characters: MyRosterEntry[];
+  active: string | null;
+  sessions: Record<string, Session>;
+  onTabClick: (name: MyRosterEntry['name']) => void;
+}
+
+function GameWindowStatus({
+  reference,
+  onReturnToLive,
+  awaitingRoom,
+  effectiveLifecycle,
+  session,
+  visibleDiagnostics,
+  sessionNames,
+  characters,
+  active,
+  sessions,
+  onTabClick,
+}: GameWindowStatusProps) {
+  return (
+    <>
+      {reference && (
+        <div
+          className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm"
+          role="status"
+        >
+          <span>Reading history · {reference.title} · read-only</span>
+          <button
+            type="button"
+            className="rounded border px-3 py-1 text-xs font-medium"
+            onClick={onReturnToLive}
+          >
+            Return to live
+          </button>
+        </div>
+      )}
+      {awaitingRoom && (
+        <div
+          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+          role="status"
+        >
+          {session.isConnected
+            ? 'Entering the world… waiting for a confirmed location. You can write while you wait.'
+            : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
+        </div>
+      )}
+      {!awaitingRoom &&
+        (effectiveLifecycle === 'reconnecting' ||
+          (effectiveLifecycle === 'entering' && Boolean(session.room))) && (
+          <div
+            className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
+            role="status"
+          >
+            {effectiveLifecycle === 'entering'
+              ? 'Refreshing your confirmed location before play resumes…'
+              : 'Connection lost. Your confirmed story remains available while we reconnect.'}
+          </div>
+        )}
+      {visibleDiagnostics.length > 0 && (
+        <aside
+          className="shrink-0 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm"
+          role="alert"
+          aria-label="Connection notices"
+        >
+          <strong>Connection notice:</strong> {visibleDiagnostics[visibleDiagnostics.length - 1]}
+        </aside>
+      )}
+      <CharacterTabs
+        sessionNames={sessionNames}
+        characters={characters}
+        active={active}
+        sessions={sessions}
+        onTabClick={onTabClick}
+      />
+    </>
+  );
+}
+
+function CharacterTabs({
+  sessionNames,
+  characters,
+  active,
+  sessions,
+  onTabClick,
+}: Pick<
+  GameWindowStatusProps,
+  'sessionNames' | 'characters' | 'active' | 'sessions' | 'onTabClick'
+>) {
+  if (sessionNames.length < 2) return null;
+  return (
+    <div className="mb-2 flex gap-2 border-b">
+      {sessionNames.map((name) => {
+        const char = characters.find((c) => c.name === name);
+        const attention = characterAttention(char, sessions[name]);
+        return (
+          <button
+            key={name}
+            onClick={() => onTabClick(name)}
+            className={`relative rounded-t px-2 py-1 text-sm ${
+              active === name ? 'border-b-2 border-primary' : ''
+            }`}
+          >
+            {name}
+            {name !== active && (
+              <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+type GameWindowFeedProps = Pick<
+  GameWindowProps,
+  | 'sceneFeed'
+  | 'conversationTabs'
+  | 'reference'
+  | 'referenceLoading'
+  | 'referenceUnavailable'
+  | 'referenceRetryable'
+  | 'onReturnToLive'
+  | 'onRetryReference'
+  | 'room'
+  | 'ambientInteractions'
+  | 'ambientNotices'
+  | 'onAvatarClick'
+  | 'onAddTarget'
+  | 'onAttachAction'
+  | 'onReply'
+  | 'targetPoseId'
+  | 'isAtPlace'
+  | 'currentPlaceId'
+  | 'currentPlaceName'
+> & {
+  activeConvKey: string;
+  feedScrollRef: RefObject<HTMLDivElement>;
+  onFeedScroll: () => void;
+  session: Session;
+  effectiveLifecycle?: GameLifecycleState;
+  active: string | null;
+  connect: (character: string) => Promise<void>;
+};
+
+function GameWindowFeed({
+  sceneFeed,
+  conversationTabs,
+  reference,
+  referenceLoading = false,
+  referenceUnavailable = false,
+  referenceRetryable = false,
+  onReturnToLive,
+  onRetryReference,
+  activeConvKey,
+  feedScrollRef,
+  onFeedScroll,
+  session,
+  room,
+  ambientInteractions,
+  ambientNotices,
+  effectiveLifecycle,
+  active,
+  connect,
+  onAvatarClick,
+  onAddTarget,
+  onAttachAction,
+  onReply,
+  targetPoseId,
+  isAtPlace,
+  currentPlaceId,
+  currentPlaceName,
+}: GameWindowFeedProps) {
+  return (
+    <>
+      {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
+      {sceneFeed ? (
+        <>
+          <div
+            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
+            ref={feedScrollRef}
+            onScroll={onFeedScroll}
+            data-testid="feed-scroll-container"
+          >
+            {referenceLoading && reference && (
+              <div
+                className="mx-auto my-8 max-w-md p-6 text-center text-muted-foreground"
+                role="status"
+              >
+                Loading history…
+              </div>
+            )}
+            {!referenceLoading && referenceUnavailable && reference && (
+              <div
+                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
+                role="alert"
+              >
+                <h2 className="font-serif text-xl">This pose is no longer available</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  The requested history cannot be shown with your current access.
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded border px-3 py-2 text-sm"
+                  onClick={onReturnToLive}
+                >
+                  Return to live
+                </button>
+              </div>
+            )}
+            {!referenceLoading && referenceRetryable && (
+              <div
+                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
+                role="alert"
+              >
+                <h2 className="font-serif text-xl">Couldn&apos;t load that history</h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  This may be a temporary connection problem.
+                </p>
+                <button
+                  type="button"
+                  className="mt-4 rounded border px-3 py-2 text-sm"
+                  onClick={onRetryReference}
+                >
+                  Retry
+                </button>
+                <button
+                  type="button"
+                  className="mt-2 rounded border px-3 py-2 text-sm"
+                  onClick={onReturnToLive}
+                >
+                  Return to live
+                </button>
+              </div>
+            )}
+            {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
+              <ThreadedNarrativeReader
+                key={sceneFeed.sceneId}
+                sceneId={sceneFeed.sceneId}
+                conversationKey={sceneFeed.sceneId}
+                conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
+                interactions={sceneFeed.interactions}
+                hasNextPage={sceneFeed.hasNextPage}
+                fetchNextPage={sceneFeed.fetchNextPage}
+                onAvatarClick={onAvatarClick}
+                onAddTarget={onAddTarget}
+                onAttachAction={onAttachAction}
+                onReply={onReply}
+                readOnly={Boolean(reference)}
+                persistAnchor={activeConvKey === 'room'}
+                targetPoseId={targetPoseId}
+                isAtPlace={isAtPlace}
+                currentPlaceId={currentPlaceId}
+                currentPlaceName={currentPlaceName}
+              />
+            )}
+          </div>
+          {!reference && <SystemLane messages={session.messages} />}
+        </>
+      ) : (
+        <ExplorationReader
+          room={room ?? session.room}
+          ambientInteractions={ambientInteractions ?? session.ambientInteractions}
+          ambientNotices={ambientNotices ?? session.ambientNotices}
+          lifecycleState={effectiveLifecycle}
+          onRetry={() => {
+            if (active) void connect(active);
+          }}
+        />
+      )}
+    </>
+  );
+}
 
 export function GameWindow({
   characters,
@@ -356,187 +637,47 @@ export function GameWindow({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      {reference && (
-        <div
-          className="flex shrink-0 items-center justify-between gap-3 border-b bg-amber-500/10 px-4 py-2 text-sm"
-          role="status"
-        >
-          {/* #3759 Wave 9 review finding, section 5: demo copy reads "Reading
-              history · read-only" -- adds that suffix here (one-line change,
-              the string isn't otherwise composed/parameterized). */}
-          <span>Reading history · {reference.title} · read-only</span>
-          <button
-            type="button"
-            className="rounded border px-3 py-1 text-xs font-medium"
-            onClick={onReturnToLive}
-          >
-            Return to live
-          </button>
-        </div>
-      )}
-      {awaitingRoom && (
-        <div
-          className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
-          role="status"
-        >
-          {session.isConnected
-            ? 'Entering the world… waiting for a confirmed location. You can write while you wait.'
-            : 'Connection lost. Your draft is safe; you can keep writing while we reconnect.'}
-        </div>
-      )}
-      {!awaitingRoom &&
-        (effectiveLifecycle === 'reconnecting' ||
-          (effectiveLifecycle === 'entering' && Boolean(session.room))) && (
-          <div
-            className="shrink-0 border-b bg-muted/30 px-4 py-2 text-xs text-muted-foreground"
-            role="status"
-          >
-            {effectiveLifecycle === 'entering'
-              ? 'Refreshing your confirmed location before play resumes…'
-              : 'Connection lost. Your confirmed story remains available while we reconnect.'}
-          </div>
-        )}
-      {visibleDiagnostics.length > 0 && (
-        <aside
-          className="shrink-0 border-b border-destructive/40 bg-destructive/5 px-4 py-2 text-sm"
-          role="alert"
-          aria-label="Connection notices"
-        >
-          <strong>Connection notice:</strong> {visibleDiagnostics[visibleDiagnostics.length - 1]}
-        </aside>
-      )}
-      {sessionNames.length >= 2 && (
-        <div className="mb-2 flex gap-2 border-b">
-          {sessionNames.map((name) => {
-            // #3774 -- same server-plus-delta combination as GameTopBar's
-            // avatar row (canonical version lives in `characterAttention`,
-            // frontend/src/game/attention.ts); the server baseline is what
-            // makes the count right immediately after a switch, before this
-            // session has seen anything new arrive.
-            const char = characters.find((c) => c.name === name);
-            const attention = characterAttention(char, sessions[name]);
-            return (
-              <button
-                key={name}
-                onClick={() => handleTabClick(name)}
-                className={`relative rounded-t px-2 py-1 text-sm ${
-                  active === name ? 'border-b-2 border-primary' : ''
-                }`}
-              >
-                {name}
-                {/* The active character's own attention already lives in
-                    ConversationTabStrip's badges (#2166 review fold-in) — badging
-                    its own already-highlighted puppet tab too is redundant/wrong. */}
-                {name !== active && (
-                  <AttentionBadge direct={attention.direct} ambient={attention.ambient} />
-                )}
-              </button>
-            );
-          })}
-        </div>
-      )}
-      {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
-      {sceneFeed ? (
-        <>
-          <div
-            className="min-h-0 flex-1 overflow-y-auto overscroll-contain [scrollbar-gutter:stable]"
-            ref={feedScrollRef}
-            onScroll={handleFeedScroll}
-            data-testid="feed-scroll-container"
-          >
-            {referenceLoading && reference && (
-              <div
-                className="mx-auto my-8 max-w-md p-6 text-center text-muted-foreground"
-                role="status"
-              >
-                Loading history…
-              </div>
-            )}
-            {!referenceLoading && referenceUnavailable && reference && (
-              <div
-                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
-                role="alert"
-              >
-                <h2 className="font-serif text-xl">This pose is no longer available</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  The requested history cannot be shown with your current access.
-                </p>
-                <button
-                  type="button"
-                  className="mt-4 rounded border px-3 py-2 text-sm"
-                  onClick={onReturnToLive}
-                >
-                  Return to live
-                </button>
-              </div>
-            )}
-            {!referenceLoading && referenceRetryable && (
-              <div
-                className="mx-auto my-8 max-w-md rounded-lg border border-dashed p-6 text-center"
-                role="alert"
-              >
-                <h2 className="font-serif text-xl">Couldn&apos;t load that history</h2>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  This may be a temporary connection problem.
-                </p>
-                <button
-                  type="button"
-                  className="mt-4 rounded border px-3 py-2 text-sm"
-                  onClick={onRetryReference}
-                >
-                  Retry
-                </button>
-                <button
-                  type="button"
-                  className="mt-2 rounded border px-3 py-2 text-sm"
-                  onClick={onReturnToLive}
-                >
-                  Return to live
-                </button>
-              </div>
-            )}
-            {!referenceLoading && !referenceUnavailable && !referenceRetryable && (
-              <ThreadedNarrativeReader
-                key={sceneFeed.sceneId}
-                sceneId={sceneFeed.sceneId}
-                conversationKey={sceneFeed.sceneId}
-                // The REAL server-format conversation ref (#3759 review
-                // finding C1) -- `reference.key` is already in that exact
-                // shape (it's literally what's sent as the `conversation`
-                // query param to fetch this reference), and matches
-                // `_conversation()`'s own `scene:<id>` format for the live
-                // room otherwise. Distinct from `conversationKey` above,
-                // which stays the bare-id localStorage anchor/collapse key.
-                conversationRef={reference ? reference.key : `scene:${sceneFeed.sceneId}`}
-                interactions={sceneFeed.interactions}
-                hasNextPage={sceneFeed.hasNextPage}
-                fetchNextPage={sceneFeed.fetchNextPage}
-                onAvatarClick={onAvatarClick}
-                onAddTarget={onAddTarget}
-                onAttachAction={onAttachAction}
-                onReply={onReply}
-                readOnly={Boolean(reference)}
-                persistAnchor={activeConvKey === 'room'}
-                targetPoseId={targetPoseId}
-                isAtPlace={isAtPlace}
-                currentPlaceId={currentPlaceId}
-                currentPlaceName={currentPlaceName}
-              />
-            )}
-          </div>
-          {!reference && <SystemLane messages={session.messages} />}
-        </>
-      ) : (
-        <ExplorationReader
-          room={room ?? session.room}
-          ambientInteractions={ambientInteractions ?? session.ambientInteractions}
-          ambientNotices={ambientNotices ?? session.ambientNotices}
-          lifecycleState={effectiveLifecycle}
-          onRetry={() => {
-            if (active) void connect(active);
-          }}
-        />
-      )}
+      <GameWindowStatus
+        reference={reference}
+        onReturnToLive={onReturnToLive}
+        awaitingRoom={awaitingRoom}
+        effectiveLifecycle={effectiveLifecycle}
+        session={session}
+        visibleDiagnostics={visibleDiagnostics}
+        sessionNames={sessionNames}
+        characters={characters}
+        active={active}
+        sessions={sessions}
+        onTabClick={handleTabClick}
+      />
+      <GameWindowFeed
+        sceneFeed={sceneFeed}
+        conversationTabs={conversationTabs}
+        reference={reference}
+        referenceLoading={referenceLoading}
+        referenceUnavailable={referenceUnavailable}
+        referenceRetryable={referenceRetryable}
+        onReturnToLive={onReturnToLive}
+        onRetryReference={onRetryReference}
+        activeConvKey={activeConvKey}
+        feedScrollRef={feedScrollRef}
+        onFeedScroll={handleFeedScroll}
+        session={session}
+        room={room}
+        ambientInteractions={ambientInteractions}
+        ambientNotices={ambientNotices}
+        effectiveLifecycle={effectiveLifecycle}
+        active={active}
+        connect={connect}
+        onAvatarClick={onAvatarClick}
+        onAddTarget={onAddTarget}
+        onAttachAction={onAttachAction}
+        onReply={onReply}
+        targetPoseId={targetPoseId}
+        isAtPlace={isAtPlace}
+        currentPlaceId={currentPlaceId}
+        currentPlaceName={currentPlaceName}
+      />
       {placeBar}
       {tavernGameWidget}
       {speakerQueueBar}

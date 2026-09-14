@@ -142,57 +142,76 @@ def _render_page(
     )
 
 
-def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor) -> None:
-    """Every schooling line's TRADITION_STEP offer stays in step with its grant.
+def _deactivate_schooling_offer(offer: DistinctionOffer, contributor: ContentContributor) -> None:
+    """Deactivate and credit an offer whose schooling line lost its grant."""
+    if offer.is_active:
+        offer.is_active = False
+        offer.save(update_fields=["is_active"])
+        stamp_written(offer, contributor)
 
-    A line with a grant gets its offer created (crediting the new row), or
-    kept in step if the grant changed or the offer had gone inactive
-    (crediting the change); a line with no grant has any existing active
-    offer deactivated instead of left offering a distinction the line no
-    longer names - also credited, since a `DistinctionOffer` is
-    `CreditedContent` in its own right, not just the line that opens it. Its
-    `name`/`player_line` always mirror the schooling line's own - never typed
-    on the Distinction Builder's offer row for this chapter (#3675 review
-    round 1, Demo-fidelity defect A) - so a name/wording edit made here is
-    also picked up on an existing offer.
+
+def _create_schooling_offer(
+    request: HttpRequest, line: SchoolingLine, contributor: ContentContributor
+) -> None:
+    """Create and credit the offer for a newly granting schooling line."""
+    offer = DistinctionOffer.objects.create(
+        schooling_line=line,
+        chapter=OfferChapter.TRADITION_STEP,
+        distinction=line.grants,
+        name=line.name,
+        player_line=line.player_line,
+    )
+    messages.info(request, f"Created the tradition-step offer for '{line.name}'.")
+    stamp_written(offer, contributor)
+
+
+def _update_schooling_offer(
+    line: SchoolingLine, offer: DistinctionOffer, contributor: ContentContributor
+) -> None:
+    """Bring an existing offer up to date with its schooling line."""
+    update_fields = []
+    if offer.distinction_id != line.grants_id:
+        offer.distinction = line.grants
+        update_fields.append("distinction")
+    if not offer.is_active:
+        offer.is_active = True
+        update_fields.append("is_active")
+    if offer.name != line.name:
+        offer.name = line.name
+        update_fields.append("name")
+    if offer.player_line != line.player_line:
+        offer.player_line = line.player_line
+        update_fields.append("player_line")
+    if update_fields:
+        offer.save(update_fields=update_fields)
+        stamp_written(offer, contributor)
+
+
+def _sync_schooling_offer(
+    request: HttpRequest, line: SchoolingLine, contributor: ContentContributor
+) -> None:
+    """Synchronize one schooling line's tradition-step offer."""
+    offer = DistinctionOffer.objects.filter(
+        schooling_line=line, chapter=OfferChapter.TRADITION_STEP
+    ).first()
+    if line.grants_id is None:
+        if offer is not None:
+            _deactivate_schooling_offer(offer, contributor)
+    elif offer is None:
+        _create_schooling_offer(request, line, contributor)
+    else:
+        _update_schooling_offer(line, offer, contributor)
+
+
+def _sync_schooling_offers(request: HttpRequest, contributor: ContentContributor) -> None:
+    """Keep every schooling line's TRADITION_STEP offer in step with its grant.
+
+    A line with a grant gets its offer created or kept in step (crediting any
+    touched offer); a line with no grant has an existing active offer
+    deactivated. Offer names and player-facing wording always mirror the line.
     """
     for line in SchoolingLine.objects.all():
-        offer = DistinctionOffer.objects.filter(
-            schooling_line=line, chapter=OfferChapter.TRADITION_STEP
-        ).first()
-        if line.grants_id is None:
-            if offer is not None and offer.is_active:
-                offer.is_active = False
-                offer.save(update_fields=["is_active"])
-                stamp_written(offer, contributor)
-            continue
-        if offer is None:
-            offer = DistinctionOffer.objects.create(
-                schooling_line=line,
-                chapter=OfferChapter.TRADITION_STEP,
-                distinction=line.grants,
-                name=line.name,
-                player_line=line.player_line,
-            )
-            messages.info(request, f"Created the tradition-step offer for '{line.name}'.")
-            stamp_written(offer, contributor)
-            continue
-        update_fields = []
-        if offer.distinction_id != line.grants_id:
-            offer.distinction = line.grants
-            update_fields.append("distinction")
-        if not offer.is_active:
-            offer.is_active = True
-            update_fields.append("is_active")
-        if offer.name != line.name:
-            offer.name = line.name
-            update_fields.append("name")
-        if offer.player_line != line.player_line:
-            offer.player_line = line.player_line
-            update_fields.append("player_line")
-        if update_fields:
-            offer.save(update_fields=update_fields)
-            stamp_written(offer, contributor)
+        _sync_schooling_offer(request, line, contributor)
 
 
 def _save_slate(

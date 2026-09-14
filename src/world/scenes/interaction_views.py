@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from http import HTTPMethod
 from typing import Any
+from uuid import UUID
 
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
@@ -199,6 +200,67 @@ class InteractionCursorPagination(CursorPagination):
     ordering = "-timestamp"
     cursor_query_param = "cursor"
     cursor_query_description = "The pagination cursor value."
+
+
+def _record_submitted_pose(  # noqa: PLR0913
+    *,
+    persona: Persona,
+    character: Any,
+    client_request_id: UUID,
+    content: str,
+    pose_kind: str,
+    scene: Scene | None,
+    target_personas: list[Persona] | None,
+    reply_target: ReplyTarget | None,
+    on_created: Callable[[Interaction], None] | None,
+    serializer_context: dict[str, object],
+) -> Response:
+    """Record, broadcast, and serialize a submitted pose."""
+    target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+    try:
+        result = idempotent_record_interaction(
+            persona=persona,
+            client_request_id=client_request_id,
+            comparison_fields={
+                "content": content,
+                "pose_kind": pose_kind,
+                "scene_id": scene.pk if scene is not None else None,
+                "target": lambda stored: frozenset(p.pk for p in stored.target_personas.all())
+                == target_pks,
+            },
+            character=character,
+            content=content,
+            mode=InteractionMode.POSE,
+            scene=scene,
+            pose_kind=pose_kind,
+            target_personas=target_personas,
+            reply_to=reply_target,
+            on_created=on_created,
+        )
+    except InteractionThreadError as exc:
+        return _refusal_response(
+            code=exc.code, field="reply_to", detail=exc.detail, hint=exc.venue_hint
+        )
+    except UnreachableError as exc:
+        return _refusal_response(
+            code=exc.code, field="target_names", detail=exc.detail, hint=exc.venue_hint
+        )
+    if result.conflict:
+        return Response(
+            {"detail": "This request id was already used for different content."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if not result.replayed:
+        caller_state = SceneDataManager().initialize_state_for_object(character)
+        message_location(caller_state, content)
+
+    response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+    interaction = result.interaction
+    if interaction is None:
+        return Response({"ephemeral": True, "replayed": result.replayed}, status=response_status)
+    _seed_fresh_pose_caches(interaction, target_personas=target_personas, replayed=result.replayed)
+    output = InteractionListSerializer(interaction, context=serializer_context)
+    return Response({**output.data, "replayed": result.replayed}, status=response_status)
 
 
 class InteractionViewSet(
@@ -549,95 +611,17 @@ class InteractionViewSet(
             if reply_data is not None
             else None
         )
-        # Target/scene identity (#3760 final review Finding 3): a content-only
-        # comparison silently misclassified "same text, different target or
-        # scene" as a legitimate replay -- nothing (re-)delivered to the new
-        # audience, caller told it succeeded. Mirrors the fix already applied
-        # to PoseAction/WhisperAction (commit 64d7ce3e1,
-        # actions/definitions/communication.py) for this REST sibling.
-        # target_personas is M2M (via InteractionTargetPersona), so it can't
-        # be a plain getattr(stored, field) == value comparison like
-        # scene_id can; see idempotent_record_interaction's
-        # _comparison_fields_match for the callable contract.
-        target_persona_pks = (
-            frozenset(p.pk for p in target_personas) if target_personas else frozenset()
-        )
-        try:
-            result = idempotent_record_interaction(
-                persona=persona,
-                client_request_id=client_request_id,
-                comparison_fields={
-                    "content": content,
-                    "pose_kind": pose_kind,
-                    "scene_id": scene.pk if scene is not None else None,
-                    "target": lambda stored: (
-                        frozenset(p.pk for p in stored.target_personas.all()) == target_persona_pks
-                    ),
-                },
-                character=character,
-                content=content,
-                mode=InteractionMode.POSE,
-                scene=scene,
-                pose_kind=pose_kind,
-                target_personas=target_personas,
-                reply_to=reply_target,
-                on_created=_on_created,
-            )
-        except InteractionThreadError as exc:
-            return _refusal_response(
-                code=exc.code, field="reply_to", detail=exc.detail, hint=exc.venue_hint
-            )
-        except UnreachableError as exc:
-            # #3787 Task 4 - refuse tagging a persona who cannot receive the row.
-            # Nothing was written: create_interaction raises before any bulk_create.
-            return _refusal_response(
-                code=exc.code, field="target_names", detail=exc.detail, hint=exc.venue_hint
-            )
-
-        if result.conflict:
-            return Response(
-                {"detail": "This request id was already used for different content."},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-        # Broadcast raw text for telnet clients (WS parity — mirrors
-        # PoseAction.execute's message_location call). Gated on `not result.replayed`
-        # rather than a separate pre-check query (#3760 review fix): a bare
-        # PoseSubmission.exists() pre-check race-loses to two genuinely concurrent
-        # retries (both can observe "not found" before either commits), whereas
-        # `result.replayed` is already race-safe — idempotent_record_interaction's
-        # IntegrityError-catch-and-reread path also reports replayed=True for the
-        # loser of a true race, so deriving the gate from it closes that hole too.
-        # A submission that never reaches the ledger (e.g. the InteractionThreadError
-        # 400 above) is, by design, re-validated fresh on every attempt (spec
-        # Decision 3) and so broadcasts again on retry.
-        if not result.replayed:
-            sdm = SceneDataManager()
-            caller_state = sdm.initialize_state_for_object(character)
-            message_location(caller_state, content)
-
-        interaction = result.interaction
-        response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
-
-        if interaction is None:
-            # Ephemeral scene: record_interaction already pushed the real-time
-            # payload (push_ephemeral_interaction) and deliberately never persists
-            # an Interaction row — there is nothing to serialize as a resource.
-            # Reachable both on first acceptance and on a clean replay of one
-            # (idempotent_record_interaction never treats an ephemeral acceptance
-            # as a conflict — there is nothing stored to compare against).
-            return Response(
-                {"ephemeral": True, "replayed": result.replayed}, status=response_status
-            )
-
-        _seed_fresh_pose_caches(
-            interaction, target_personas=target_personas, replayed=result.replayed
-        )
-        out_serializer = InteractionListSerializer(
-            interaction, context=self.get_serializer_context()
-        )
-        return Response(
-            {**out_serializer.data, "replayed": result.replayed}, status=response_status
+        return _record_submitted_pose(
+            persona=persona,
+            character=character,
+            client_request_id=client_request_id,
+            content=content,
+            pose_kind=pose_kind,
+            scene=scene,
+            target_personas=target_personas,
+            reply_target=reply_target,
+            on_created=_on_created,
+            serializer_context=self.get_serializer_context(),
         )
 
 

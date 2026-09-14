@@ -62,9 +62,9 @@
       return;
     }
     var editor = document.querySelector("#authoring-editor [data-current]");
-    var current = editor ? editor.getAttribute("data-current") : null;
+    var current = editor ? editor.dataset.current : null;
     document.querySelectorAll("#panel-authoring-queue tr[data-row]").forEach(function (row) {
-      row.classList.toggle("queue-row-current", row.getAttribute("data-row") === current);
+      row.classList.toggle("queue-row-current", row.dataset.row === current);
     });
   });
 </script>

@@ -45,13 +45,13 @@ def sorted_offer_forms(offers_formset: BaseInlineFormSet) -> list:
 def opener_field_map() -> dict[str, list[str]]:
     """Chapter value -> the opener fields its offers may use (exactly one is set).
 
-    Built off ``DistinctionOffer.opener_fields`` (the model's own public lookup)
+    Built off ``DistinctionOffer.chapter_opener_fields`` (the model's own public lookup)
     rather than reaching for its private ``_OPENERS_FOR_CHAPTER`` table, so the
     page's chapter-cascade JS always matches whatever the model's ``clean()``
     actually enforces. The enemy chapter lists two (a reason or a degree, #3709).
     """
     return {
-        chapter.value: list(DistinctionOffer(chapter=chapter.value).opener_fields)
+        chapter.value: list(DistinctionOffer(chapter=chapter.value).chapter_opener_fields)
         for chapter in OfferChapter
     }
 

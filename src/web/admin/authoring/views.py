@@ -77,7 +77,7 @@ form, checked or not, so its presence alone marks a real submission.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -532,7 +532,7 @@ def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) ->
     text = _EXHAUSTED_TEXT.get(filters.status, "Nothing left")
     nav.exhausted_text = f"{text} in {filters.domain}." if filters.domain else f"{text}."
     if filters.domain:
-        nav.widen_url = _dashboard_url(replace(filters, domain="", model=""))
+        nav.widen_url = _dashboard_url(QueueFilters(status=filters.status, query=filters.query))
     return nav
 
 
