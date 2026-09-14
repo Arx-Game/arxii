@@ -194,7 +194,12 @@ class FilteredRowProbe(ContentProbe):
 
 @dataclass(frozen=True, slots=True)
 class ContentDependency:
-    """One registry row: a code path's hard dependency on authored content."""
+    """One registry row: a code path's hard dependency on authored content.
+
+    `admin_model` names the model whose admin page authors this dependency's rows,
+    for a probe that cannot say so itself (a `CustomProbe`). Left `None`, the
+    probe's own `model_label()` is used.
+    """
 
     key: str
     label: str
@@ -202,6 +207,7 @@ class ContentDependency:
     consumer: str
     consequence: str
     probe: ContentProbe
+    admin_model: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -210,6 +216,14 @@ class DependencyRow:
 
     dependency: ContentDependency
     result: ProbeResult
+
+    @property
+    def admin_url(self) -> str | None:
+        """Admin changelist where staff author this dependency's rows (#3831), or None."""
+        from web.admin.authoring.links import admin_changelist_url  # noqa: PLC0415
+
+        model_label = self.dependency.admin_model or self.dependency.probe.model_label()
+        return admin_changelist_url(model_label) if model_label else None
 
 
 @dataclass(frozen=True, slots=True)
@@ -652,15 +666,40 @@ def _probe_schooling_lines() -> ProbeResult:
     return ProbeResult(present=not missing, missing=missing, detail=detail)
 
 
+def _probe_risk_calibrations() -> ProbeResult:
+    """Every `RenownRisk` above `NONE` has a `RiskCalibration` row.
+
+    Consumer: `world/stories/services/stakes.py:398` (`validate_stakes_readiness`).
+    `risk` is a unique field on `RiskCalibration`, so "at least one row" is not
+    enough - a story beat risked at any uncovered level can never be marked
+    ready, regardless of how many other levels are covered.
+    """
+    from world.societies.constants import RenownRisk  # noqa: PLC0415
+    from world.stories.models import RiskCalibration  # noqa: PLC0415
+
+    expected_levels = tuple(level for level in RenownRisk.values if level != RenownRisk.NONE)
+    covered_levels = set(
+        RiskCalibration.objects.filter(risk__in=expected_levels).values_list("risk", flat=True)
+    )
+    missing = tuple(level for level in expected_levels if level not in covered_levels)
+    detail = (
+        f"Missing RiskCalibration row(s) for risk level(s): {', '.join(missing)}."
+        if missing
+        else ""
+    )
+    return ProbeResult(present=not missing, missing=missing, detail=detail)
+
+
 def _declarations() -> tuple[ContentDependency, ...]:
     """Every hard-coded row dependency the sentinel tracks.
 
-    Every `world.*` name constant is imported here, at function level, rather
-    than at module import time - so this admin module never imports game code
-    just by being imported itself, and a rename of one of these constants shows
-    up as an import error the next time this function runs rather than as a
-    silently stale string literal.
+    Every game-code name constant (`world.*`, `evennia_extensions.*`) is imported
+    here, at function level, rather than at module import time - so this admin
+    module never imports game code just by being imported itself, and a rename
+    of one of these constants shows up as an import error the next time this
+    function runs rather than as a silently stale string literal.
     """
+    from evennia_extensions.seeds import DEFAULT_ROOM_SIZE_NAME  # noqa: PLC0415
     from world.areas.positioning.constants import (  # noqa: PLC0415
         AERIAL_PROPERTY_NAME,
         CATCH_THE_FALLER_NAME,
@@ -1319,6 +1358,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "crossing offer - the corruption path silently stops advancing."
             ),
             probe=CustomProbe(fn=_probe_audere_majora_thresholds),
+            admin_model="AudereMajoraThreshold",
         ),
         ContentDependency(
             key="soulfray-stage-pools",
@@ -1348,6 +1388,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "automatically."
             ),
             probe=CustomProbe(fn=_probe_escalation_curves),
+            admin_model="StakesEscalationModifier",
         ),
         ContentDependency(
             key="encounter-outcome-mappings",
@@ -1365,6 +1406,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "row."
             ),
             probe=CustomProbe(fn=_probe_encounter_outcome_mappings),
+            admin_model="EncounterOutcomeMapping",
         ),
         ContentDependency(
             key="battle-outcome-mappings",
@@ -1559,6 +1601,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "Beginning, so the gap is silent everywhere at once."
             ),
             probe=CustomProbe(fn=_probe_tradition_state_lines),
+            admin_model="TraditionStateLine",
         ),
         ContentDependency(
             key="character_creation.tradition_schooling_lines",
@@ -1570,6 +1613,1167 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "once at the missing or blank rank."
             ),
             probe=CustomProbe(fn=_probe_schooling_lines),
+            admin_model="SchoolingLine",
+        ),
+        # --- #3831: config tables staff set - REQUIRED (empty breaks or silently
+        # disables a shipped mechanic) -----------------------------------------
+        ContentDependency(
+            key="damage-success-level-multipliers",
+            label="Damage success-level multipliers",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/combat/services.py:785 CombatTechniqueResolver._apply_damage(); "
+                "world/conditions/services.py get_damage_multiplier()"
+            ),
+            consequence=(
+                "get_damage_multiplier returns 0 for every success level, so no technique deals "
+                "damage in combat and every attack prices at 0 DE on the Techniques tuning panel. "
+                "The curve the combat tests use: min_success_level 2 at 1.00 (Full), 1 at 0.50 "
+                "(Partial)."
+            ),
+            probe=AnyRowProbe(label="DamageSuccessLevelMultiplier"),
+        ),
+        ContentDependency(
+            key="fury-tiers",
+            label="Fury tiers",
+            tier=DependencyTier.REQUIRED,
+            consumer="actions/player_interface.py:565 _fury_tier_options()",
+            consequence=(
+                "The combat declaration offers no Fury tier, so no player can commit Fury or risk "
+                "Berserk."
+            ),
+            probe=AnyRowProbe(label="FuryTier"),
+        ),
+        ContentDependency(
+            key="flee-config",
+            label="Flee rules",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/combat/services.py:422 get_flee_config()",
+            consequence=(
+                "get_flee_config raises FleeConfig.DoesNotExist, so any attempt to flee combat "
+                "errors."
+            ),
+            probe=AnyRowProbe(label="FleeConfig"),
+        ),
+        ContentDependency(
+            key="class-stage-health-rates",
+            label="Class health growth per level",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/vitals/services.py derive_base_max_health()",
+            consequence=(
+                "The class term of max health sums to 0, so a character's health never grows with "
+                "level."
+            ),
+            probe=AnyRowProbe(label="ClassStageHealthRate"),
+        ),
+        ContentDependency(
+            key="treatment-templates",
+            label="Treatments",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/conditions/services.py:4205 perform_treatment()",
+            consequence="No treatment exists to perform, so no condition or wound can be treated.",
+            probe=AnyRowProbe(label="TreatmentTemplate"),
+        ),
+        ContentDependency(
+            key="building-kinds",
+            label="Building kinds",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/buildings/services.py:139 issue_permit(); world/buildings/services.py:251 "
+                "validate_permit_site()"
+            ),
+            consequence="No permit can name a building kind, so nothing can be built.",
+            probe=AnyRowProbe(label="BuildingKind"),
+        ),
+        ContentDependency(
+            key="rampart-element-profiles",
+            label="Rampart elements",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/areas/positioning/services.py:208 raise_rampart()",
+            consequence="raise_rampart needs an element profile, so no rampart can be raised.",
+            probe=AnyRowProbe(label="RampartElementProfile"),
+        ),
+        ContentDependency(
+            key="mentor-bond-config",
+            label="Mentor bond rules",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/covenants/services.py:2226 get_mentor_bond_config()",
+            consequence=(
+                "get_mentor_bond_config raises MentorBondConfig.DoesNotExist, so Mentor's Vow "
+                "bond scaling errors."
+            ),
+            probe=AnyRowProbe(label="MentorBondConfig"),
+        ),
+        ContentDependency(
+            key="crafting-recipes",
+            label="Crafting recipes",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/items/crafting/services.py:196 _resolve_recipe_for_quote()",
+            consequence=(
+                "Every crafting quote raises CraftingNotConfigured, so no item can be crafted."
+            ),
+            probe=AnyRowProbe(label="CraftingRecipe"),
+        ),
+        ContentDependency(
+            key="npc-roles",
+            label="NPC roles",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/npc_services/views.py:214 (starting an NPC interaction)",
+            consequence="No functionary can be placed and no NPC interaction menu can open.",
+            probe=AnyRowProbe(label="NPCRole"),
+        ),
+        ContentDependency(
+            key="npc-service-offers",
+            label="NPC service offers",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/npc_services/services.py:453 available_offers()",
+            consequence=(
+                "Every NPC interaction opens to an empty menu, so permits, missions, loans, "
+                "training, court grants and styling are unreachable."
+            ),
+            probe=AnyRowProbe(label="NPCServiceOffer"),
+        ),
+        ContentDependency(
+            key="predator-kinds",
+            label="Predator kinds",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/predators/services.py:228 _maybe_spawn_band()",
+            consequence=(
+                "The weekly menace tick returns before spawning, so no predator band ever appears."
+            ),
+            probe=AnyRowProbe(label="PredatorKind"),
+        ),
+        ContentDependency(
+            key="wedlock-union-kind",
+            label="A union kind that confers wedlock",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/societies/houses/pact_services.py:238 solemnize_wedding()",
+            consequence=(
+                'solemnize_wedding refuses every wedding with "No law of marriage exists to wed '
+                'under."'
+            ),
+            probe=FilteredRowProbe(
+                label="UnionKind",
+                filters=(("confers_wedlock", True),),
+                absent_detail="No UnionKind with confers_wedlock set exists.",
+            ),
+        ),
+        ContentDependency(
+            key="claimable-titles",
+            label="Claimable titles for house founding",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/societies/houses/creator.py:51 claimable_titles()",
+            consequence=(
+                "Character creation's house-founding step has no title to claim, so no new landed "
+                "house can be founded."
+            ),
+            probe=FilteredRowProbe(
+                label="Title",
+                filters=(("is_claimable", True),),
+                absent_detail="No claimable Title exists.",
+            ),
+        ),
+        ContentDependency(
+            key="mission-givers",
+            label="Mission givers",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/missions/services/boards.py:49 postings_for_giver()",
+            consequence=(
+                "No mission board exists, so players can never discover or take a mission."
+            ),
+            probe=AnyRowProbe(label="MissionGiver"),
+        ),
+        ContentDependency(
+            key="mission-templates",
+            label="Mission templates",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/missions/services/boards.py:49 postings_for_giver()",
+            consequence=(
+                "Every mission board shows zero postings. Missions are authored in the Mission "
+                "Studio; the admin page is a table view and fallback editor."
+            ),
+            probe=AnyRowProbe(label="MissionTemplate"),
+        ),
+        ContentDependency(
+            key="default-room-size-tier",
+            label="Default room size tier",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/buildings/room_services.py:170 dig_room(); world/buildings/services.py:530 "
+                "create_entry_room()"
+            ),
+            consequence=(
+                "A default-sized room resolves no size tier and costs 0 space-budget units, so "
+                "the building space budget never limits construction."
+            ),
+            probe=NamedRowsProbe(label="RoomSizeTier", names=(DEFAULT_ROOM_SIZE_NAME,)),
+        ),
+        ContentDependency(
+            key="risk-calibrations",
+            label="Stakes risk calibrations",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/stories/services/stakes.py:398 validate_stakes_readiness()",
+            consequence=(
+                "A risked story beat at a risk level with no calibration row can never be marked "
+                "ready, so its stakes never settle."
+            ),
+            probe=CustomProbe(fn=_probe_risk_calibrations),
+            admin_model="RiskCalibration",
+        ),
+        ContentDependency(
+            key="covenant-level-thresholds",
+            label="Covenant level thresholds",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/covenants/services.py:1461 recompute_covenant_level()",
+            consequence=(
+                "recompute_covenant_level finds no threshold, so every covenant stays at level 1."
+            ),
+            probe=AnyRowProbe(label="CovenantLevelThreshold"),
+        ),
+        ContentDependency(
+            key="gang-turf-reputation-awards",
+            label="Gang turf reputation awards",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/societies/gang_turf.py:72 _tier_to_reputation_delta()",
+            consequence="A finished gang-turf project grants no reputation and moves no turf.",
+            probe=AnyRowProbe(label="GangTurfReputationAward"),
+        ),
+        ContentDependency(
+            key="war-funding-tier-bonuses",
+            label="War funding tier bonuses",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/battles/war_funding_services.py:150 complete_war_funding(); "
+                "world/battles/war_funding_services.py:200 get_war_funding_bonus()"
+            ),
+            consequence=(
+                "A finished war-funding drive grants no training XP and no strength, morale or "
+                "quality bonus."
+            ),
+            probe=AnyRowProbe(label="WarFundingTierBonus"),
+        ),
+        ContentDependency(
+            key="readiness-thresholds",
+            label="War readiness thresholds",
+            tier=DependencyTier.REQUIRED,
+            consumer="world/battles/war_funding_services.py:215 get_war_funding_bonus()",
+            consequence="Readiness a covenant builds never converts into a unit quality step.",
+            probe=AnyRowProbe(label="ReadinessThreshold"),
+        ),
+        ContentDependency(
+            key="city-defense-integrity-bonuses",
+            label="City defense integrity bonuses",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/battles/city_defense_services.py:134 get_city_defense_integrity_bonus()"
+            ),
+            consequence=(
+                "A finished city-defense project gives the defending side no fortification bonus."
+            ),
+            probe=AnyRowProbe(label="CityDefenseIntegrityBonus"),
+        ),
+        # --- #3831: config tables staff set - TUNING (game runs on defaults or a
+        # feature stays dormant) --------------------------------------------------
+        ContentDependency(
+            key="tier-thresholds",
+            label="Building polish tier thresholds",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/buildings/room_services.py:526 _check_template_prerequisites() (commission "
+                "gate)"
+            ),
+            consequence=(
+                "A polish project's tier prerequisites are an empty many-to-many, so "
+                "commissioning it never checks the building's polish tier at all."
+            ),
+            probe=AnyRowProbe(label="TierThreshold"),
+        ),
+        ContentDependency(
+            key="captivity-config",
+            label="Captivity config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/captivity/models.py:209 CaptivityConfig.load()",
+            consequence=(
+                "Captivity runs on the model's own field defaults rather than an authored row - "
+                "staff have nothing to tune."
+            ),
+            probe=AnyRowProbe(label="CaptivityConfig"),
+        ),
+        ContentDependency(
+            key="cg-point-budget",
+            label="CG point budget",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/character_creation/models.py:1793 "
+                "CharacterDraft.calculate_cg_points_remaining() "
+                "(CGPointBudget.get_active_budget()); world/character_creation/services.py:1483 "
+                "_convert_remaining_cg_points_to_xp() "
+                "(CGPointBudget.get_active_conversion_rate())"
+            ),
+            consequence=(
+                "Character creation falls back to a 100-point budget and converts unspent points "
+                "to XP at a flat 2-to-1 rate, with no active row to tune either number."
+            ),
+            probe=AnyRowProbe(label="CGPointBudget"),
+        ),
+        ContentDependency(
+            key="check-type-specializations",
+            label="Check type specializations",
+            tier=DependencyTier.TUNING,
+            consumer="world/checks/services.py:989 _calculate_specialization_points()",
+            consequence=(
+                "No check ever adds a specialization bonus - the third leg of stat + skill + "
+                "specialization is silently just stat + skill."
+            ),
+            probe=AnyRowProbe(label="CheckTypeSpecialization"),
+        ),
+        ContentDependency(
+            key="character-classes",
+            label="Character classes",
+            tier=DependencyTier.TUNING,
+            consumer="world/classes/services.py:26 ensure_default_character_class()",
+            consequence=(
+                "Only the placeholder Adventurer class exists - character creation offers no "
+                "other class to pick."
+            ),
+            probe=AnyRowProbe(label="CharacterClass"),
+        ),
+        ContentDependency(
+            key="property-grant-profiles",
+            label="Property grant profiles",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/property_grant_services.py:48 grant_property_house()",
+            consequence=(
+                "A Beginning configured to grant a starting house has no profile to grant it "
+                "from, so the character receives nothing."
+            ),
+            probe=AnyRowProbe(label="PropertyGrantProfile"),
+        ),
+        ContentDependency(
+            key="building-listings",
+            label="Building listings for sale",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/services.py:962 purchase_building()",
+            consequence="No building is ever listed for sale, so no player can buy one for coin.",
+            probe=AnyRowProbe(label="BuildingListing"),
+        ),
+        ContentDependency(
+            key="polish-categories",
+            label="Polish categories",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/polish_services.py:52 derive_tier_label()",
+            consequence=(
+                "The polish system has no categories to track, so a building's polish never "
+                "derives a tier label in any dimension."
+            ),
+            probe=AnyRowProbe(label="PolishCategory"),
+        ),
+        ContentDependency(
+            key="project-templates",
+            label="Interior design project templates",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/views.py:325 DecorationTemplateViewSet.get_queryset()",
+            consequence=(
+                "The interior-design catalog a player browses to commission a polish project is "
+                "empty, so no project can be commissioned."
+            ),
+            probe=AnyRowProbe(label="ProjectTemplate"),
+        ),
+        ContentDependency(
+            key="project-template-polish-increments",
+            label="Project template polish increments",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/buildings/polish_services.py:68 apply_project_completion(); "
+                "world/buildings/room_services.py:622 complete_interior_design()"
+            ),
+            consequence=(
+                "A commissioned project template with no increment rows applies zero polish to "
+                "the building or room it targets - the project completes and grants nothing."
+            ),
+            probe=AnyRowProbe(label="ProjectTemplatePolishIncrement"),
+        ),
+        ContentDependency(
+            key="decoration-kinds",
+            label="Decoration kinds",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/services.py:850 place_decoration()",
+            consequence="No decoration kind exists to place, so no player can decorate a room.",
+            probe=AnyRowProbe(label="DecorationKind"),
+        ),
+        ContentDependency(
+            key="companion-ability-function-tags",
+            label="Companion ability function tags",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/sphinx.py:148 _companion_supply()",
+            consequence=(
+                "A companion's abilities never count toward the Sphinx's kit coverage check, "
+                "regardless of what the companion actually brings."
+            ),
+            probe=AnyRowProbe(label="CompanionAbilityFunctionTag"),
+        ),
+        ContentDependency(
+            key="condition-stage-on-entry",
+            label="Condition stage on-entry associations",
+            tier=DependencyTier.TUNING,
+            consumer="world/conditions/services.py:3138 apply_stage_entry_aftermath()",
+            consequence=(
+                "Advancing a character into a condition stage never applies that stage's on-entry "
+                "condition - the loop has nothing to iterate."
+            ),
+            probe=AnyRowProbe(label="ConditionStageOnEntry"),
+        ),
+        ContentDependency(
+            key="penetration-outcome-factors",
+            label="Penetration outcome factors",
+            tier=DependencyTier.TUNING,
+            consumer="world/conditions/services.py:4348 get_penetration_factor()",
+            consequence=(
+                "Penetration always resolves at full power for every success level - the per- "
+                "level scaling factor is never applied."
+            ),
+            probe=AnyRowProbe(label="PenetrationOutcomeFactor"),
+        ),
+        ContentDependency(
+            key="flee-tier-modifiers",
+            label="Flee tier modifiers",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/services.py:8192 _resolve_flee()",
+            consequence=(
+                "Flee difficulty ignores the opponent's tier entirely - fleeing is exactly as "
+                "hard against a boss as against a minion."
+            ),
+            probe=AnyRowProbe(label="FleeTierModifier"),
+        ),
+        ContentDependency(
+            key="encounter-aftermath-rules",
+            label="Encounter aftermath rules",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/services.py:9479 _apply_aftermath_rules()",
+            consequence=(
+                "A finished encounter produces no aftermath for its outcome and risk level - the "
+                "lookup finds nothing to apply."
+            ),
+            probe=AnyRowProbe(label="EncounterAftermathRule"),
+        ),
+        ContentDependency(
+            key="position-blueprints",
+            label="Position blueprints",
+            tier=DependencyTier.TUNING,
+            consumer="world/areas/positioning/services.py:354 instantiate_blueprint()",
+            consequence=(
+                "GMs have no tactical map template to clone onto an encounter - every battlefield "
+                "has to be laid out by hand."
+            ),
+            probe=AnyRowProbe(label="PositionBlueprint"),
+        ),
+        ContentDependency(
+            key="rampart-element-resistances",
+            label="Rampart element resistances",
+            tier=DependencyTier.TUNING,
+            consumer="world/combat/services.py:12262 _rampart_resist()",
+            consequence=(
+                "A Rampart's element resists nothing against any damage type - every intercepted "
+                "strike lands as if the Rampart were unaligned."
+            ),
+            probe=AnyRowProbe(label="RampartElementResistance"),
+        ),
+        ContentDependency(
+            key="action-enhancements",
+            label="Action enhancements",
+            tier=DependencyTier.TUNING,
+            consumer="actions/base.py:338 Action.run()",
+            consequence=(
+                "No enhancement adds an effect to any action - the enhancement pipeline runs on "
+                "every action call with nothing authored to apply."
+            ),
+            probe=AnyRowProbe(label="ActionEnhancement"),
+        ),
+        ContentDependency(
+            key="court-grant-config",
+            label="Court grant config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/services.py:2239 get_court_grant_config()",
+            consequence=(
+                "Court grant negotiation runs entirely on the model's field defaults - staff have "
+                "no authored row to tune it through."
+            ),
+            probe=AnyRowProbe(label="CourtGrantConfig"),
+        ),
+        ContentDependency(
+            key="dream-peril-config",
+            label="Dream peril config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/dreams/peril.py:38 resolve_dream_peril_collapse()",
+            consequence=(
+                "A dream collapse always resolves at the safest outcome - the peril curve staff "
+                "would tune has no authored row behind it."
+            ),
+            probe=AnyRowProbe(label="DreamPerilConfig"),
+        ),
+        ContentDependency(
+            key="gear-archetype-compatibility",
+            label="Gear archetype compatibility",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/services.py:1015 is_gear_compatible()",
+            consequence=(
+                "A covenant role's stats and its gear archetype's stats never stack - "
+                "compatibility never authored means never compatible."
+            ),
+            probe=AnyRowProbe(label="GearArchetypeCompatibility"),
+        ),
+        ContentDependency(
+            key="covenant-rite-role-packages",
+            label="Covenant rite role packages",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/covenants/services.py:2200 perform_covenant_rite() "
+                "(CovenantRite.package_for())"
+            ),
+            consequence=(
+                "A rite participant's role and the covenant's level never change which condition "
+                "package they receive - every participant falls back to the rite's single "
+                "granted_condition."
+            ),
+            probe=AnyRowProbe(label="CovenantRiteRolePackage"),
+        ),
+        ContentDependency(
+            key="covenant-role-gift-grants",
+            label="Covenant role gift grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/services.py:854 _grant_role_gifts_and_techniques()",
+            consequence=(
+                "Engaging a covenant role grants no gifts or techniques - the role carries no "
+                "authored gift package to hand out."
+            ),
+            probe=AnyRowProbe(label="CovenantRoleGiftGrant"),
+        ),
+        ContentDependency(
+            key="insight-table-entries",
+            label="Insight table entries",
+            tier=DependencyTier.TUNING,
+            consumer="world/covenants/insight.py:31 maybe_produce_insight()",
+            consequence=(
+                "The Insight rider never fires - there is no authored entry for it to draw."
+            ),
+            probe=AnyRowProbe(label="InsightTableEntry"),
+        ),
+        ContentDependency(
+            key="vow-stat-scaling",
+            label="Vow stat scaling",
+            tier=DependencyTier.TUNING,
+            consumer="world/mechanics/services.py:1021 vow_stat_scaling_bonus()",
+            consequence=(
+                "A vow's thread level grants zero stat scaling bonus - the scaling term of the "
+                "formula is silently disabled."
+            ),
+            probe=AnyRowProbe(label="VowStatScaling"),
+        ),
+        ContentDependency(
+            key="professions",
+            label="Professions",
+            tier=DependencyTier.TUNING,
+            consumer="world/currency/services.py:1533 run_weekly_employment()",
+            consequence=(
+                "No profession exists for a character to take, so the weekly employment tick has "
+                "nothing to pay anyone for."
+            ),
+            probe=AnyRowProbe(label="Profession"),
+        ),
+        ContentDependency(
+            key="crafting-material-requirements",
+            label="Crafting material requirements",
+            tier=DependencyTier.TUNING,
+            consumer="world/items/crafting/services.py:202 build_crafting_quote()",
+            consequence=(
+                "A crafting recipe requires no materials at all - a quote for it lists an empty "
+                "ingredient list regardless of what the recipe is supposed to consume."
+            ),
+            probe=AnyRowProbe(label="CraftingMaterialRequirement"),
+        ),
+        ContentDependency(
+            key="crafting-skill-caps",
+            label="Crafting skill caps",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/items/crafting/services.py:202 build_crafting_quote() "
+                "(CraftingSkillCap.for_skill())"
+            ),
+            consequence=(
+                "Crafted quality is never capped by the crafter's skill - the skill ceiling on a "
+                "recipe's output silently does not apply."
+            ),
+            probe=AnyRowProbe(label="CraftingSkillCap"),
+        ),
+        ContentDependency(
+            key="crafting-recipe-consequences",
+            label="Crafting recipe consequences",
+            tier=DependencyTier.TUNING,
+            consumer="world/items/crafting/services.py:849 run_crafting_recipe()",
+            consequence=(
+                "A crafting attempt has no authored risk outcomes to draw from - the weighted- "
+                "consequence pool for the roll's tier is empty."
+            ),
+            probe=AnyRowProbe(label="CraftingRecipeConsequence"),
+        ),
+        ContentDependency(
+            key="crafting-recipe-modifiers",
+            label="Crafting recipe modifiers",
+            tier=DependencyTier.TUNING,
+            consumer="world/items/handlers.py:70 CharacterEquipmentHandler._equipped()",
+            consequence=(
+                "A crafted item grants no stat modifiers from its recipe, regardless of what the "
+                "recipe is meant to confer."
+            ),
+            probe=AnyRowProbe(label="CraftingRecipeModifier"),
+        ),
+        ContentDependency(
+            key="mantle-level-definitions",
+            label="Mantle level definitions",
+            tier=DependencyTier.TUNING,
+            consumer="world/items/services/mantle.py:57 record_mantle_clearances()",
+            consequence=(
+                "A mantle's attunement ladder never advances - there is no authored level for a "
+                "character's clearance to walk up to."
+            ),
+            probe=AnyRowProbe(label="MantleLevelDefinition"),
+        ),
+        ContentDependency(
+            key="sentence-ladder-rungs",
+            label="Sentence ladder rungs",
+            tier=DependencyTier.TUNING,
+            consumer="world/justice/pipeline.py:537 _ladder_kind()",
+            consequence=(
+                "Sentencing falls back to the default band with no per-society escalation - a "
+                "society's own sentencing culture never applies."
+            ),
+            probe=AnyRowProbe(label="SentenceLadderRung"),
+        ),
+        ContentDependency(
+            key="fury-config",
+            label="Fury config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/fury.py:34 _config() (get_fury_config())",
+            consequence=(
+                "Fury runs entirely on the model's field defaults - staff have no authored row to "
+                "tune its check trait or thresholds through."
+            ),
+            probe=AnyRowProbe(label="FuryConfig"),
+        ),
+        ContentDependency(
+            key="aura-affinity-thresholds",
+            label="Aura affinity thresholds",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/aura.py:106 fire_aura_threshold_crossings()",
+            consequence=(
+                "No aura-crossing achievement ever fires, no matter how far a character's "
+                "affinity drifts - there is no authored threshold to cross."
+            ),
+            probe=AnyRowProbe(label="AuraAffinityThreshold"),
+        ),
+        ContentDependency(
+            key="technique-budget-config",
+            label="Technique budget config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/technique_builder.py:42 get_technique_budget_config()",
+            consequence=(
+                "The technique builder prices every technique against the model's field defaults "
+                "rather than an authored budget."
+            ),
+            probe=AnyRowProbe(label="TechniqueBudgetConfig"),
+        ),
+        ContentDependency(
+            key="technique-tier-budget",
+            label="Technique tier budget",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/technique_builder.py:51 get_technique_tier_budget()",
+            consequence=(
+                "A technique tier's own budget is lazily created at its field defaults on first "
+                "use - staff have not tuned any tier's budget."
+            ),
+            probe=AnyRowProbe(label="TechniqueTierBudget"),
+        ),
+        ContentDependency(
+            key="anima-config",
+            label="Anima config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/anima.py:59 recompute_max_anima()",
+            consequence=(
+                "Max anima is computed entirely from the model's field defaults - staff have no "
+                "authored row to tune the formula through."
+            ),
+            probe=AnyRowProbe(label="AnimaConfig"),
+        ),
+        ContentDependency(
+            key="corruption-config",
+            label="Corruption config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/corruption.py:60 get_corruption_config()",
+            consequence=(
+                "Corruption accrual runs on the model's field defaults rather than an authored "
+                "row - staff have nothing to tune."
+            ),
+            probe=AnyRowProbe(label="CorruptionConfig"),
+        ),
+        ContentDependency(
+            key="resonance-tiers",
+            label="Resonance tiers",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/touchstone.py:19 touchstone_cast_bonus()",
+            consequence=(
+                "An equipped touchstone's tier contributes zero cast bonus - the tier-scaled term "
+                "of the formula multiplies by nothing."
+            ),
+            probe=AnyRowProbe(label="ResonanceTier"),
+        ),
+        ContentDependency(
+            key="resonance-alignment-boon-tiers",
+            label="Resonance alignment boon tiers",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/resonance_environment.py:556 clear_resonance_alignment()"
+            ),
+            consequence=(
+                "An aligned resonance environment grants no boon at any tier - there is no "
+                "authored row for a character's alignment to qualify against."
+            ),
+            probe=AnyRowProbe(label="ResonanceAlignmentBoonTier"),
+        ),
+        ContentDependency(
+            key="beginnings-ritual-grants",
+            label="Beginnings ritual grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()",
+            consequence=(
+                "A character's Beginning grants no ritual knowledge - that source of the "
+                "reconciliation contributes nothing."
+            ),
+            probe=AnyRowProbe(label="BeginningsRitualGrant"),
+        ),
+        ContentDependency(
+            key="path-ritual-grants",
+            label="Path ritual grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()",
+            consequence=(
+                "A character's Path grants no ritual knowledge - that source of the "
+                "reconciliation contributes nothing."
+            ),
+            probe=AnyRowProbe(label="PathRitualGrant"),
+        ),
+        ContentDependency(
+            key="distinction-ritual-grants",
+            label="Distinction ritual grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()",
+            consequence=(
+                "A character's Distinctions grant no ritual knowledge - that source of the "
+                "reconciliation contributes nothing."
+            ),
+            probe=AnyRowProbe(label="DistinctionRitualGrant"),
+        ),
+        ContentDependency(
+            key="tradition-ritual-grants",
+            label="Tradition ritual grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()",
+            consequence=(
+                "A character's Tradition grants no ritual knowledge - that source of the "
+                "reconciliation contributes nothing."
+            ),
+            probe=AnyRowProbe(label="TraditionRitualGrant"),
+        ),
+        ContentDependency(
+            key="codex-entry-ritual-grants",
+            label="Codex entry ritual grants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/services/ritual_knowledge.py:33 reconcile_ritual_knowledge()",
+            consequence=(
+                "A character's researched Codex entries grant no ritual knowledge - that source "
+                "of the reconciliation contributes nothing."
+            ),
+            probe=AnyRowProbe(label="CodexEntryRitualGrant"),
+        ),
+        ContentDependency(
+            key="distinction-resonance-grants",
+            label="Distinction resonance grants",
+            tier=DependencyTier.TUNING,
+            consumer=(
+                "world/magic/services/distinction_resonance.py:66 "
+                "reconcile_distinction_resonance_grants()"
+            ),
+            consequence=(
+                "A Distinction seeds no resonance for its holder - the character never gets "
+                "claimed into the resonance the distinction is meant to open."
+            ),
+            probe=AnyRowProbe(label="DistinctionResonanceGrant"),
+        ),
+        ContentDependency(
+            key="technique-variants",
+            label="Technique variants",
+            tier=DependencyTier.TUNING,
+            consumer="world/magic/specialization/services.py:341 resolve_specialized_variant()",
+            consequence=(
+                "No resonance-specialized variant exists for any technique - specialization never "
+                "changes which version of a technique a character casts."
+            ),
+            probe=AnyRowProbe(label="TechniqueVariant"),
+        ),
+        ContentDependency(
+            key="aesthetic-axis-config",
+            label="Aesthetic axis config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/mechanics/services.py:103 get_aesthetic_config()",
+            consequence=(
+                "Aesthetic axes run entirely on the model's field defaults - staff have no "
+                "authored row to tune them through."
+            ),
+            probe=AnyRowProbe(label="AestheticAxisConfig"),
+        ),
+        ContentDependency(
+            key="mission-categories",
+            label="Mission categories",
+            tier=DependencyTier.TUNING,
+            consumer="world/missions/views.py:500 MissionCategoryViewSet",
+            consequence="The mission category picker a player browses is empty.",
+            probe=AnyRowProbe(label="MissionCategory"),
+        ),
+        ContentDependency(
+            key="mission-assist-patterns",
+            label="Mission assist patterns",
+            tier=DependencyTier.TUNING,
+            consumer="world/missions/services/support.py:130 _pattern_support_moves()",
+            consequence=(
+                "A group mission offers no generic assist moves - the pattern catalog a support "
+                "character draws from is empty."
+            ),
+            probe=AnyRowProbe(label="MissionAssistPattern"),
+        ),
+        ContentDependency(
+            key="mission-node-support-options",
+            label="Mission node support options",
+            tier=DependencyTier.TUNING,
+            consumer="world/missions/services/support.py:102 _gem_support_moves()",
+            consequence=(
+                "No mission node offers an authored support move - a would-be helper has nothing "
+                "gem-specific to contribute."
+            ),
+            probe=AnyRowProbe(label="MissionNodeSupportOption"),
+        ),
+        ContentDependency(
+            key="mission-offer-details",
+            label="Mission offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/services.py:369 _mission_gates_pass()",
+            consequence=(
+                "No NPC ever offers a mission - a MISSION-kind offer with no details row fails "
+                "closed before it can be shown."
+            ),
+            probe=AnyRowProbe(label="MissionOfferDetails"),
+        ),
+        ContentDependency(
+            key="permit-offer-details",
+            label="Permit offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/buildings/services.py:120 issue_permit()",
+            consequence=(
+                "No NPC issues a building permit - the offer has no permit details row to act on."
+            ),
+            probe=AnyRowProbe(label="PermitOfferDetails"),
+        ),
+        ContentDependency(
+            key="loan-offer-details",
+            label="Loan offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:263 grant_loan()",
+            consequence="No NPC offers a loan - the offer has no loan details row to act on.",
+            probe=AnyRowProbe(label="LoanOfferDetails"),
+        ),
+        ContentDependency(
+            key="train-offer-details",
+            label="Train offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:527 run_train_offer()",
+            consequence=(
+                "No NPC trains a technique - the offer has no training details row to act on."
+            ),
+            probe=AnyRowProbe(label="TrainOfferDetails"),
+        ),
+        ContentDependency(
+            key="court-grant-offer-details",
+            label="Court grant offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:309 raise_court_grant()",
+            consequence=(
+                "A court grant petition never resolves - the offer has no court grant details row "
+                "to act on."
+            ),
+            probe=AnyRowProbe(label="CourtGrantOfferDetails"),
+        ),
+        ContentDependency(
+            key="styling-offer-details",
+            label="Styling offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:801 run_styling_offer()",
+            consequence=(
+                "No NPC restyles a character - the offer has no styling details row to act on."
+            ),
+            probe=AnyRowProbe(label="StylingOfferDetails"),
+        ),
+        ContentDependency(
+            key="profile-recording-offer-details",
+            label="Profile recording offer details",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/effects.py:891 run_profile_recording_offer()",
+            consequence=(
+                "The Archive sitting never runs - the offer has no profile-recording details row "
+                "to act on."
+            ),
+            probe=AnyRowProbe(label="ProfileRecordingOfferDetails"),
+        ),
+        ContentDependency(
+            key="name-cultures",
+            label="Name cultures",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/instantiation.py:31 name_culture_for_room()",
+            consequence=(
+                "Every newly-instantiated NPC is named Sojourner, the hardcoded fallback, since "
+                "no authored culture exists at any area or globally."
+            ),
+            probe=AnyRowProbe(label="NameCulture"),
+        ),
+        ContentDependency(
+            key="name-culture-entries",
+            label="Name culture entries",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/instantiation.py:60 _weighted_value()",
+            consequence=(
+                "An authored name culture yields no name parts to draw from - a culture with no "
+                "entries produces an empty surname or given name."
+            ),
+            probe=AnyRowProbe(label="NameCultureEntry"),
+        ),
+        ContentDependency(
+            key="personality-traits",
+            label="Personality traits",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/personality.py:27 assign_random_personality()",
+            consequence=(
+                "A newly-instantiated NPC gets no likes or dislikes - there is no authored trait "
+                "for the assignment to draw."
+            ),
+            probe=AnyRowProbe(label="PersonalityTrait"),
+        ),
+        ContentDependency(
+            key="staffing-profiles",
+            label="Staffing profiles",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/staffing.py:30 _profile_for()",
+            consequence=(
+                "A building never auto-staffs on activation - no building kind has an authored "
+                "baseline crew."
+            ),
+            probe=AnyRowProbe(label="StaffingProfile"),
+        ),
+        ContentDependency(
+            key="staffing-profile-lines",
+            label="Staffing profile lines",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/staffing.py:37 ensure_staffing_for_building()",
+            consequence=(
+                "A building kind's staffing profile staffs nothing - the profile exists but names "
+                "no role to place."
+            ),
+            probe=AnyRowProbe(label="StaffingProfileLine"),
+        ),
+        ContentDependency(
+            key="regard-event-config",
+            label="Regard event config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/npc_services/regard.py:41 get_regard_event_config()",
+            consequence=(
+                "NPC regard events run entirely on the model's field defaults - staff have no "
+                "authored row to tune the story-vital threshold through."
+            ),
+            probe=AnyRowProbe(label="RegardEventConfig"),
+        ),
+        ContentDependency(
+            key="durance-training-sites",
+            label="Durance training sites",
+            tier=DependencyTier.TUNING,
+            consumer="world/progression/services/advancement.py:392 convene_durance_at_site()",
+            consequence=(
+                "No training site is active in the room, so a Durance rite can only be convened "
+                "by an officiant directly - the site-based convene path finds nothing to "
+                "officiate through."
+            ),
+            probe=AnyRowProbe(label="DuranceTrainingSite"),
+        ),
+        ContentDependency(
+            key="legend-requirements",
+            label="Legend requirements",
+            tier=DependencyTier.TUNING,
+            consumer="world/progression/services/spends.py:112 _check_requirements()",
+            consequence=(
+                "No class unlock is gated on Legend - the requirement type is wired into the "
+                "check but no row uses it."
+            ),
+            probe=AnyRowProbe(label="LegendRequirement"),
+        ),
+        ContentDependency(
+            key="edict-kinds",
+            label="Edict kinds",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/proclamations.py:163 enact_edict()",
+            consequence="No edict kind exists, so no edict can be enacted at all.",
+            probe=AnyRowProbe(label="EdictKind"),
+        ),
+        ContentDependency(
+            key="domain-crisis-types",
+            label="Domain crisis types",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/houses/crisis_services.py:84 pick_crisis_type()",
+            consequence=(
+                "No domain crisis type exists, so a domain never spawns a crisis to resolve."
+            ),
+            probe=AnyRowProbe(label="DomainCrisisType"),
+        ),
+        ContentDependency(
+            key="domain-crisis-type-options",
+            label="Domain crisis type options",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/houses/crisis_services.py:184 pay_cost_for()",
+            consequence=(
+                "A spawned crisis offers no resolution path - the option list a player would pay "
+                "a cost against is empty."
+            ),
+            probe=AnyRowProbe(label="DomainCrisisTypeOption"),
+        ),
+        ContentDependency(
+            key="stature-bands",
+            label="Stature bands",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/houses/stature_services.py:679 band_for_percentile()",
+            consequence=(
+                "Every house gets the same neutral predation odds and no stature headline - there "
+                "is no authored band for its percentile to land in."
+            ),
+            probe=AnyRowProbe(label="StatureBand"),
+        ),
+        ContentDependency(
+            key="prestige-rank-bands",
+            label="Prestige rank bands",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/houses/stature_services.py:775 prestige_rank_band()",
+            consequence=(
+                "A house's prestige rank never drifts its prosperity - there is no authored band "
+                "for its rank to land in."
+            ),
+            probe=AnyRowProbe(label="PrestigeRankBand"),
+        ),
+        ContentDependency(
+            key="pact-kinds",
+            label="Pact kinds",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/houses/pact_services.py:64 propose_org_pact()",
+            consequence="No pact kind exists, so no organization pact can be proposed.",
+            probe=AnyRowProbe(label="PactKind"),
+        ),
+        ContentDependency(
+            key="philosophical-archetypes",
+            label="Philosophical archetypes",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/scandal.py:67 scandalous_societies()",
+            consequence=(
+                "Scandal reactions ignore philosophy entirely - with no archetype authored, a "
+                "deed's philosophical tags never read as scandal to any society."
+            ),
+            probe=AnyRowProbe(label="PhilosophicalArchetype"),
+        ),
+        ContentDependency(
+            key="stance-archetypes",
+            label="Stance archetypes",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/proclamations.py:63 apply_stance_reception()",
+            consequence=(
+                "No stance exists to proclaim - a persona has nothing to align a proclamation to."
+            ),
+            probe=AnyRowProbe(label="StanceArchetype"),
+        ),
+        ContentDependency(
+            key="propaganda-campaign-tiers",
+            label="Propaganda campaign tiers",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/propaganda.py:58 launch_propaganda_campaign()",
+            consequence="No propaganda campaign can be launched at any tier.",
+            probe=AnyRowProbe(label="PropagandaCampaignTier"),
+        ),
+        ContentDependency(
+            key="ranking-displays",
+            label="Ranking displays",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/ranking_services.py:280 render_ranking_display()",
+            consequence=(
+                "No leaderboard appears in the world - there is no authored display to render."
+            ),
+            probe=AnyRowProbe(label="RankingDisplay"),
+        ),
+        ContentDependency(
+            key="legend-settlement-config",
+            label="Legend settlement config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/models.py:1927 LegendSettlementConfig.get_active_config()",
+            consequence=(
+                "Legend settlement runs entirely on the model's field defaults - staff have no "
+                "authored row to tune it through."
+            ),
+            probe=AnyRowProbe(label="LegendSettlementConfig"),
+        ),
+        ContentDependency(
+            key="renown-magnitude-awards",
+            label="Renown magnitude awards",
+            tier=DependencyTier.TUNING,
+            consumer="world/societies/renown.py:413 _magnitude_awards()",
+            consequence=(
+                "Renown falls back to the built-in magnitude constants rather than a staff- "
+                "editable row - the table exists precisely so staff can retune these without a "
+                "deploy, and an empty one means they can't."
+            ),
+            probe=AnyRowProbe(label="RenownMagnitudeAward"),
+        ),
+        ContentDependency(
+            key="scene-round-defaults-config",
+            label="Scene round defaults config singleton",
+            tier=DependencyTier.TUNING,
+            consumer="world/scenes/models.py:1743 get_scene_round_defaults_config()",
+            consequence=(
+                "Scene rounds run entirely on the model's field defaults - staff have no authored "
+                "row to tune them through."
+            ),
+            probe=AnyRowProbe(label="SceneRoundDefaultsConfig"),
+        ),
+        ContentDependency(
+            key="weather-transitions",
+            label="Weather transitions",
+            tier=DependencyTier.TUNING,
+            consumer="world/weather/services.py:203 _pick_next_weather()",
+            consequence=(
+                "Weather rolls draw from the flat global pool for every region - an authored "
+                "transition table never narrows the roll to what makes sense for that region's "
+                "climate."
+            ),
+            probe=AnyRowProbe(label="WeatherTransition"),
+        ),
+        ContentDependency(
+            key="weather-type-shelters",
+            label="Weather type shelters",
+            tier=DependencyTier.TUNING,
+            consumer="world/weather/services.py:165 apply_weather_exposure()",
+            consequence=(
+                "Weather gives no hazard shelter of any kind - a sheltered location is exposed "
+                "exactly as much as an open one."
+            ),
+            probe=AnyRowProbe(label="WeatherTypeShelter"),
         ),
     )
 

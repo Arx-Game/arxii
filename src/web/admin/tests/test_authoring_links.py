@@ -26,7 +26,7 @@ class AdminChangeUrlTests(TestCase):
 
     def test_returns_none_for_a_model_with_no_registered_admin(self) -> None:
         """Not every credited model has a ModelAdmin; callers render nothing rather than 500."""
-        self.assertIsNone(admin_change_url("builders.BuildingKind", 7))
+        self.assertIsNone(admin_change_url("checks.ConsequenceEffect", 7))
 
     def test_returns_none_for_an_unresolvable_label(self) -> None:
         self.assertIsNone(admin_change_url("nosuchdomain.NoSuchModel", 7))

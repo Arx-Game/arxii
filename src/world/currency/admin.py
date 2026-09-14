@@ -7,6 +7,7 @@ from world.currency.models import (
     DistinctionPurseDrain,
     FavorTokenDetails,
     OrganizationTreasury,
+    Profession,
     PurseDrainWeek,
 )
 
@@ -85,3 +86,17 @@ class PurseDrainWeekAdmin(admin.ModelAdmin):
     search_fields = ("character_sheet__character__db_key",)
     raw_id_fields = ("character_sheet", "game_week")
     date_hierarchy = "snapshot_at"
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(Profession)
+class ProfessionAdmin(admin.ModelAdmin):
+    """#3831 - the on-grid job catalog: wage rate bought with a locked AP allotment."""
+
+    list_display = ("name", "wage_per_ap", "ap_reservation_weekly", "chore_check_type")
+    search_fields = ("name",)
+    autocomplete_fields = ("chore_check_type",)

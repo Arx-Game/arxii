@@ -7,6 +7,7 @@ Admin configuration for game mechanics models.
 from django.contrib import admin
 
 from world.mechanics.models import (
+    AestheticAxisConfig,
     Application,
     ApproachConsequence,
     ChallengeApproach,
@@ -297,3 +298,32 @@ class CharacterEngagementAdmin(admin.ModelAdmin):
     list_display = ("character", "engagement_type", "escalation_level", "started_at")
     list_filter = ("engagement_type",)
     readonly_fields = ("started_at",)
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(AestheticAxisConfig)
+class AestheticAxisConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton tuning the motif/style coherence walk (#546)."""
+
+    list_display = [
+        "base_magnitude",
+        "full_combination_bonus",
+        "perception_multiplier",
+        "perception_breadth_cap",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not AestheticAxisConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False

@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from world.classes.models import Aspect, Path, PathAspect
+from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
 from world.magic.models import PathGiftGrant
@@ -125,3 +125,37 @@ class AspectAdmin(admin.ModelAdmin):
     @admin.display(description="Paths")
     def path_count(self, obj):
         return obj.path_aspects.count()
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+class ClassStageHealthRateInline(admin.TabularInline):
+    """#3831 - the per-stage health-per-level rates authored for a class."""
+
+    model = ClassStageHealthRate
+    extra = 1
+
+
+@admin.register(CharacterClass)
+class CharacterClassAdmin(admin.ModelAdmin):
+    """#3831 - the character class catalog (trait requirements, progression rules)."""
+
+    list_display = ["name", "minimum_level", "is_hidden"]
+    list_filter = ["is_hidden", "minimum_level"]
+    search_fields = ["name", "description"]
+    filter_horizontal = ["core_traits"]
+    inlines = [ClassStageHealthRateInline]
+
+
+@admin.register(ClassStageHealthRate)
+class ClassStageHealthRateAdmin(admin.ModelAdmin):
+    """#3831 - authored per-class health gained per level within a PathStage band."""
+
+    list_display = ["character_class", "stage", "health_per_level"]
+    list_filter = ["stage"]
+    search_fields = ["character_class__name"]
+    list_select_related = ["character_class"]
+    autocomplete_fields = ["character_class"]

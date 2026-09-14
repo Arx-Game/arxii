@@ -9,6 +9,7 @@ from world.checks.models import (
     CheckType,
     CheckTypeAspect,
     CheckTypeCapabilityModifier,
+    CheckTypeSpecialization,
     CheckTypeTrait,
     Consequence,
     ConsequenceEffect,
@@ -104,3 +105,13 @@ class CheckCallAdmin(admin.ModelAdmin):
     list_select_related = ["check_type", "scene", "caller_persona"]
     autocomplete_fields = ["scene", "caller_persona", "check_type"]
     inlines = [CheckCallTargetInline]
+
+
+@admin.register(CheckTypeSpecialization)
+class CheckTypeSpecializationAdmin(admin.ModelAdmin):
+    """#3831 - the weighted specialization contribution to a check type (#1688)."""
+
+    list_display = ["check_type", "specialization", "weight"]
+    search_fields = ["check_type__name", "specialization__name"]
+    list_select_related = ["check_type", "specialization"]
+    autocomplete_fields = ["check_type", "specialization"]

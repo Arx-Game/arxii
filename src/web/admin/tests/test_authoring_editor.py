@@ -530,10 +530,10 @@ class TestAuthoringEditorCredit(AuthoringEditorTestCase):
         # BuildingKind is credited (CreditedContent) but is one of the three
         # builder-domain models outside CONTENT_MODELS/MARKDOWN_EXPORT_DOMAINS
         # (NPCRole, the original sample here, was admitted to the catalog
-        # 2026-08-07) - and has no registered ModelAdmin at all, so the
-        # pre-fix unconditional handoff form would 500 (NoReverseMatch inside
-        # content_export_row's refusal redirect) the moment an operator
-        # clicked it (#3019 review).
+        # 2026-08-07). Before the #3019 review fix, the unconditional handoff
+        # form 500ed (NoReverseMatch inside content_export_row's refusal
+        # redirect) the moment an operator clicked it for a row like this one;
+        # it now shows the database-only sentence instead.
         kind = BuildingKindFactory(description="Some building flavor.")
         self.client.force_login(self.super)
 

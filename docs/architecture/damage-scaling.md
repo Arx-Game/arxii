@@ -15,7 +15,7 @@ This spec adds:
 
 1. **Per-technique damage authoring** via a new `TechniqueDamageProfile` through-model. Each row is one damage component with the same formula shape used by `TechniqueAppliedCondition` and `TechniqueCapabilityGrant`. A technique can have multiple rows for multi-component damage (e.g., a slashing fire sword: one slashing row + one fire row).
 2. **Damage types and resistance lookup.** `TechniqueDamageProfile.damage_type` and `ThreatPoolEntry.damage_type` (FKs to existing `DamageType`). Damage application reads `ConditionResistanceModifier` rows on the target for matching damage types and applies the modifier as flat additional soak (negative modifier = vulnerability). Closes the existing `damage_type=None # TODO` in `_resolve_npc_action`.
-3. **Tunable success-level multiplier.** `DamageSuccessLevelMultiplier` lookup table replaces the inline full/half/zero thresholds in the PC offense path. Sane defaults seeded by the planned startup-page mechanism (or factories in tests). Tunable in admin without code changes.
+3. **Tunable success-level multiplier.** `DamageSuccessLevelMultiplier` lookup table replaces the inline full/half/zero thresholds in the PC offense path. Staff author the rows on its admin page, and the Required content panel flags an empty table (#3831). Tests use the factory.
 4. **Capability-grant `effective_intensity` extension.** `TechniqueCapabilityGrant.calculate_value()` accepts an `effective_intensity` override so combat-internal Challenge resolution (a future feature) can read pull-bumped Capability values. Out-of-combat callers continue to use `technique.intensity` unchanged.
 
 The pattern is **per-subsystem profile models, one shared formula shape**: Capabilities (existing), Conditions (existing), Damage (new), each with its own subsystem-specific metadata. They unify at the formula level, not the model level.
@@ -44,7 +44,7 @@ The pattern is **per-subsystem profile models, one shared formula shape**: Capab
 - **Condition stack-count effect on resistance** — `ConditionResistanceModifier` reads `modifier_value` flat. A future `scales_with_severity` flag could match `ConditionCheckModifier`'s shape; not needed now.
 - **Combat-internal Challenge resolution callers for `TechniqueCapabilityGrant.calculate_value`** — the `effective_intensity` keyword is added but no combat caller uses it yet. Lands when mid-combat Challenge resolution becomes a feature.
 - **`EffectType.base_power` retirement** — stays as an authoring-time default seed. Remove when content tooling matures and the field has nothing live depending on it.
-- **Auto-seed of `DamageSuccessLevelMultiplier` rows** — startup-page mechanism (planned) handles first-game-launch defaults. Tests use the factory.
+- **Auto-seed of `DamageSuccessLevelMultiplier` rows** - never built: the planned startup page did not ship. Staff author the rows in admin, and the Required content panel flags an empty table (#3831). Tests use the factory.
 
 ## Architecture
 
@@ -53,7 +53,7 @@ The pattern is **per-subsystem profile models, one shared formula shape**: Capab
 - **Combat does not import magic models.** Reads `technique.damage_profiles` via the existing reverse-FK relation it already uses for `technique.condition_applications`.
 - **Magic does not import combat.** `compute_effective_intensity` lives combat-side; magic stays generic.
 - **Conditions does not import combat.** `get_resistance_modifier_for_target` and `get_damage_multiplier` operate on `ObjectDB` targets and accept `DamageType` instances; combat consumes them but conditions doesn't know about encounters.
-- **No data migrations.** Schema-only. `DamageSuccessLevelMultiplier` defaults seeded via factories (tests) or the startup-page mechanism (production).
+- **No data migrations.** Schema-only. `DamageSuccessLevelMultiplier` rows come from factories (tests) or staff authoring in admin (production, #3831).
 
 ### Module map
 
@@ -400,7 +400,7 @@ class DamageSuccessLevelMultiplier(NaturalKeyMixin, SharedMemoryModel):
         return f"SL ≥ {self.min_success_level}: ×{self.multiplier}{suffix}"
 ```
 
-Defaults seeded by the startup-page (production) or factory (tests):
+The default curve (authored in admin in production, #3831; the factory in tests):
 - `(min_success_level=2, multiplier=Decimal("1.00"), label="Full")`
 - `(min_success_level=1, multiplier=Decimal("0.50"), label="Partial")`
 
@@ -694,7 +694,7 @@ Tests that exercise damage resolution call `DamageSuccessLevelMultiplierFactory(
 | Technique has no damage profiles | `_apply_damage` returns `[]` immediately. Conditions still apply if condition profiles exist. Pure narrative-only techniques unaffected. |
 | `damage_type=None` (untyped) | Resistance lookup short-circuits to 0. Soak still applies. |
 | Target has no `objectdb` (post-cleanup edge) | Resistance lookup short-circuits to 0; damage proceeds with soak only. |
-| `DamageSuccessLevelMultiplier` table empty (unseeded) | `get_damage_multiplier` returns 0 → no damage applied. Tests catch this via factory setup; production is seeded by the startup page. |
+| `DamageSuccessLevelMultiplier` table empty (unseeded) | `get_damage_multiplier` returns 0 → no damage applied. Tests catch this via factory setup; in production the Required content panel flags the empty table and staff author it in admin (#3831). |
 | `DAMAGE_PRE_APPLY` cancelled by reactive | One component cancelled; other components in the same cast still fire (separate events per component). |
 | Multiple components on a target defeated mid-cast | Loop breaks on the first `target.status == DEFEATED` check after a damage application. Subsequent components don't fire. No posthumous damage events. |
 | Resistance modifier sums to large negative (heavy vulnerability) | Damage amplified; clamped at end by `max(0, …)`. If play exposes pathological amplification, a clamp on resistance itself can be added in a one-line follow-up. |

@@ -122,6 +122,40 @@ class TestModelLabel(TestCase):
         self.assertFalse(probe.participates_in_name_batch())
 
 
+class TestDependencyAdminUrl(TestCase):
+    """Each panel row links to the admin page where its rows are authored (#3831)."""
+
+    @staticmethod
+    def _row(probe: rc.ContentProbe, admin_model: str | None = None) -> rc.DependencyRow:
+        dependency = rc.ContentDependency(
+            key="linked",
+            label="linked dependency",
+            tier=rc.DependencyTier.TUNING,
+            consumer="world/example.py:1 example()",
+            consequence="Example breaks.",
+            probe=probe,
+            admin_model=admin_model,
+        )
+        return rc.DependencyRow(dependency=dependency, result=rc.ProbeResult(present=False))
+
+    def test_links_the_probed_models_changelist(self) -> None:
+        row = self._row(rc.AnyRowProbe(label="LevelPowerConfig"))
+        self.assertEqual(row.admin_url, "/admin/arxii/levelpowerconfig/")
+
+    def test_admin_model_names_the_page_for_a_custom_probe(self) -> None:
+        probe = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        row = self._row(probe, admin_model="LevelPowerConfig")
+        self.assertEqual(row.admin_url, "/admin/arxii/levelpowerconfig/")
+
+    def test_no_link_when_the_probe_names_no_model(self) -> None:
+        row = self._row(rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True)))
+        self.assertIsNone(row.admin_url)
+
+    def test_no_link_for_an_unknown_model(self) -> None:
+        row = self._row(rc.AnyRowProbe(label="NoSuchModel"))
+        self.assertIsNone(row.admin_url)
+
+
 class TestFilteredRowProbe(TestCase):
     def test_present_when_the_compound_filter_matches(self) -> None:
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
@@ -936,3 +970,42 @@ class TestCompanionDefeatPoolProbe(TestCase):
         result = rc._probe_companion_defeat_pool()
         self.assertTrue(result.present)
         self.assertEqual(result.missing, ())
+
+
+class TestRiskCalibrationsProbe(TestCase):
+    """`risk-calibrations` (#3831): `risk` is unique on `RiskCalibration`, so
+    partial coverage must report exactly the uncovered levels, not "present" for
+    having at least one row - the same partial-coverage shape
+    `TestEscalationCurveProbe` above guards against."""
+
+    def test_missing_every_level_with_no_rows(self) -> None:
+        from world.societies.constants import RenownRisk
+
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(
+            set(result.missing),
+            {RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME},
+        )
+
+    def test_present_when_all_four_levels_are_covered(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        for risk in (RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME):
+            RiskCalibrationFactory(risk=risk)
+        result = rc._probe_risk_calibrations()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_reports_only_the_uncovered_level(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        RiskCalibrationFactory(risk=RenownRisk.LOW)
+        RiskCalibrationFactory(risk=RenownRisk.MODERATE)
+        RiskCalibrationFactory(risk=RenownRisk.HIGH)
+        # RenownRisk.EXTREME deliberately left uncovered.
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (RenownRisk.EXTREME,))

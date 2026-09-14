@@ -24,12 +24,17 @@ from world.combat.models import (
     ComboSlot,
     CreaturePhaseTemplate,
     CreatureTemplate,
+    EncounterAftermathRule,
+    EncounterOutcomeMapping,
     EncounterScalingConfig,
     EngagementLock,
     EscalationCurve,
+    FleeConfig,
+    FleeTierModifier,
     OpponentTierTemplate,
     PendingSelection,
     RiskScalingModifier,
+    StakesEscalationModifier,
     StakesLevelRequirement,
     StrainConfig,
     ThreatPool,
@@ -501,3 +506,66 @@ class PendingSelectionAdmin(admin.ModelAdmin):
     list_filter = ("selection_type",)
     readonly_fields = ("created_at", "resolved_at")
     raw_id_fields = ("participant", "encounter", "target_opponent")
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(EncounterOutcomeMapping)
+class EncounterOutcomeMappingAdmin(admin.ModelAdmin):
+    """#3831 - the (outcome, risk_level) -> CheckOutcome tier map for beat completion."""
+
+    list_display = ["outcome", "risk_level", "check_outcome"]
+    list_filter = ["outcome", "risk_level"]
+    list_select_related = ["check_outcome"]
+    autocomplete_fields = ["check_outcome"]
+
+
+@admin.register(FleeConfig)
+class FleeConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton authored flee-check wiring (#878)."""
+
+    list_display = ["pk", "check_type", "base_difficulty", "cover_bonus", "updated_at"]
+    autocomplete_fields = ["check_type", "consequence_pool", "updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not FleeConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(FleeTierModifier)
+class FleeTierModifierAdmin(admin.ModelAdmin):
+    """#3831 - the authored flee-difficulty modifier per opponent tier."""
+
+    list_display = ["tier", "difficulty_modifier"]
+    list_filter = ["tier"]
+
+
+@admin.register(EncounterAftermathRule)
+class EncounterAftermathRuleAdmin(admin.ModelAdmin):
+    """#3831 - the authored aftermath wiring per (outcome, risk_level) cell."""
+
+    list_display = ["outcome", "risk_level", "check_type", "base_difficulty"]
+    list_filter = ["outcome", "risk_level"]
+    list_select_related = ["check_type", "consequence_pool"]
+    autocomplete_fields = ["check_type", "consequence_pool"]
+
+
+@admin.register(StakesEscalationModifier)
+class StakesEscalationModifierAdmin(admin.ModelAdmin):
+    """#3831 - the authored stakes-level -> escalation coupling."""
+
+    list_display = ["stakes_level", "intensity_step_bonus", "initial_surge", "default_curve"]
+    list_filter = ["stakes_level"]
+    list_select_related = ["default_curve"]
+    autocomplete_fields = ["default_curve"]

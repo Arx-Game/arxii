@@ -141,8 +141,8 @@ an NPC at a bar) where concrete NPC objects aren't needed.
   differentiation deferred from #875**); `RiskScalingModifier` (per `RiskLevel` multiplier);
   `StakesLevelRequirement` (per `StakesLevel` gate); `EncounterScalingConfig` (pk=1 singleton:
   party-scaling coefficients). All staff-tunable in Django admin; defaults supplied by
-  `seed_scaling_defaults()` in factories (double as test setup + seed data, applied by the
-  planned startup-page mechanism).
+  `seed_scaling_defaults()` in factories (test setup and clone seed data; the planned
+  startup-page mechanism was never built).
 - **Scaling formula** (`world/combat/scaling.py`): `compute_opponent_stat_block(tier, encounter)`
   returns a frozen `OpponentStatBlock` (+ generated boss `PhaseSpec`s). `max_health` scales by
   `risk_mult × party_mult`, soak by risk, swarm count by party; HERO_KILLER returns its
@@ -553,7 +553,7 @@ Full design: `docs/plans/2026-04-05-party-combat-design.md`
 - **Damage types end-to-end.** `TechniqueDamageProfile.damage_type` and `ThreatPoolEntry.damage_type` (FKs to existing `DamageType`). `apply_damage_to_opponent` and `apply_damage_to_participant` accept `damage_type: DamageType | None` and apply resistance lookup. `_resolve_npc_action` passes `threat_entry.damage_type` (closes the long-standing TODO).
 - **`ConditionResistanceModifier` is now consumed.** Wired through a new `CharacterConditionHandler` (mirrors `CharacterCombatPullHandler`) — caches active condition instances + their resistance modifiers; service functions never call `.filter()` on the related manager. Negative `modifier_value` = vulnerability (target takes more damage).
 - **`CharacterConditionHandler` invalidation** is wired into every condition-mutation service (`apply_condition`, `bulk_apply_conditions`, `process_round_start/end`, `process_action_tick`, `remove_condition`, `clear_all_conditions`, `suppress_condition`, `unsuppress_condition`, `advance_condition_severity`, `decay_condition_severity`, `process_damage_interactions`).
-- **`DamageSuccessLevelMultiplier` lookup table** replaces inline full/half/zero thresholds. Tunable in admin without code changes. Defaults seeded by the planned startup-page mechanism (and by factories in tests).
+- **`DamageSuccessLevelMultiplier` lookup table** replaces inline full/half/zero thresholds. Staff author it in admin: the planned startup-page seeding was never built, and #3831 added the admin page and a Required content entry. Factories cover tests.
 - **`DamagePreApplyPayload` / `DamageAppliedPayload` `damage_type` migrated** from `str` to `DamageType | None` FK. Closes the long-standing conflation where `attack_category` (PHYSICAL/SOCIAL/MENTAL — a check category) was being passed as the damage type.
 - **`TechniqueCapabilityGrant.calculate_value` extension.** Accepts keyword-only `effective_intensity` override for future Challenge-in-combat work where pull bumps should affect Capability values.
 - **`add_opponent` Character-typeclass guard.** `existing_objectdb` must be a Character typeclass instance — raises `TypeError` otherwise. Damage path's `opponent.objectdb.conditions` access can never miss the handler.
