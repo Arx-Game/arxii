@@ -26,7 +26,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from rest_framework import serializers
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
-from evennia_extensions.handlers import CachedRowsHandler
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.mixins import CachedPropertiesMixin, RelatedCacheClearingMixin
 from world.character_creation.constants import (
     AGE_MAX,
@@ -671,32 +671,6 @@ class OriginTemplateManager(NaturalKeyManager):
     """Manager for OriginTemplate with natural key support."""
 
 
-class UpbringingQuestionsHandler(CachedRowsHandler["OriginTemplateSlot"]):
-    """The questions on one Upbringing, in the order a player answers them.
-
-    Every consumer reads the route's questions through here - the CG API
-    serializer, the questionnaire resolver, the draft validators, the Builder's
-    rail - so none of them owns a query, an ordering or a cache of its own, and
-    none of them can be handed a question the database no longer has (#3673).
-    """
-
-    attname: ClassVar[str] = "questions"
-
-    def load(self) -> list[OriginTemplateSlot]:
-        return list(self.parent.slots.order_by("sort_order", "id"))
-
-    @classmethod
-    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[OriginTemplateSlot]]:
-        """One query for every question across ``parents``, bucketed by Upbringing."""
-        grouped: dict[int, list[OriginTemplateSlot]] = defaultdict(list)
-        rows = OriginTemplateSlot.objects.filter(
-            template_id__in=[parent.pk for parent in parents]
-        ).order_by("sort_order", "id")
-        for slot in rows:
-            grouped[slot.template_id].append(slot)
-        return grouped
-
-
 class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """The Upbringing a player picks within a beginning (#2478, #3617).
 
@@ -802,11 +776,21 @@ class OriginTemplate(CachedPropertiesMixin, NaturalKeyMixin, CreditedContent, Sh
             paths.append(FamilyPath.NONE)
         return paths
 
-    @cached_property
-    def questions(self) -> UpbringingQuestionsHandler:
-        """This route's questions. Cleared by any slot save/delete through
-        ``OriginTemplateSlot.related_cache_fields``."""
-        return UpbringingQuestionsHandler(self)
+    @PrunedCachedProperty
+    def questions(self) -> list[OriginTemplateSlot]:
+        """This route's questions, in the order a player answers them (#3673, #3816, ADR-0296).
+
+        ``related_cache_fields`` is the ONLY invalidation path here, by necessity, not
+        by choice: ``OriginTemplateSlot`` has no application-level write site at all -
+        it is purely admin-authored (Upbringing Builder tooling), so
+        ``OriginTemplateSlot.related_cache_fields``/``RelatedCacheClearingMixin`` is the
+        sole writer side. Every consumer reads the route's questions through here - the
+        CG API serializer, the questionnaire resolver, the draft validators, the
+        Builder's rail - so none of them owns a query, an ordering or a cache of its
+        own. Also fed cold by a ``Prefetch`` (`` to_attr `` "questions") on
+        ``CGOriginTemplateViewSet.get_queryset()``, never one query per template.
+        """
+        return list(self.slots.order_by("sort_order", "id"))
 
     # No ``is_accessible_by``: ``is_active`` is the only thing that gates an
     # Upbringing now, and every consumer already filters on it (#3726).
@@ -837,7 +821,19 @@ class OriginTemplateSlot(
     #: Saving or deleting a question drops its Upbringing's cached properties,
     #: which is where ``OriginTemplate.questions`` lives. A cascade or a
     #: ``queryset.delete()`` bypasses ``Model.delete()`` and never gets here -
-    #: the handler's own pk check is what covers those (#3673).
+    #: ``PrunedCachedProperty``'s own pk check is what covers those (#3673,
+    #: mirroring ``DistinctionOffer.related_cache_fields``).
+    #: **Known gap:** this mixin only ever sees an FK's value AT SAVE TIME, so
+    #: reassigning ``template`` to a different Upbringing (the standalone
+    #: ``OriginTemplateSlotAdmin`` change form exposes it as a plain, unrestricted
+    #: FK field - no ``fields``/``fieldsets``/``exclude`` narrows it) clears the
+    #: NEW template's cache but never the OLD one's - the old template can keep
+    #: serving this slot, stale, for the life of the process. Applies to this
+    #: model specifically since it's admin-editable content whose owner FK can be
+    #: reassigned, unlike most other ``related_cache_fields`` relations in #3816,
+    #: which are created-once/deleted, never re-parented. Not fixed here - a
+    #: cross-cutting decision for the whole-branch review (see the identical note
+    #: on ``DistinctionOffer.related_cache_fields``).
     related_cache_fields: ClassVar[list[str]] = ["template"]
 
     template = models.ForeignKey(
