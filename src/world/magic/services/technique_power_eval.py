@@ -33,6 +33,7 @@ enumeration over the same tables — see that function's docstring.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -53,6 +54,8 @@ from world.magic.services.technique_effects import (
     technique_is_underspecified,
 )
 from world.magic.types.technique_power import (
+    FLAG_NOT_CASTABLE_STANDALONE,
+    FLAG_UNDERSPECIFIED,
     EvalContext,
     PayloadValuation,
     ReferenceFrame,
@@ -682,7 +685,45 @@ def _effective_anima(technique: Technique) -> int:
     return result.effective_cost
 
 
-def evaluate_technique(  # noqa: C901 - report assembly intentionally keeps all valuation stages together
+#: Provenances whose value is not a measured contribution: estimates are split out,
+#: and the zero buckets carry no value at all.
+_NOT_FORMULA_PROVENANCES = frozenset(
+    {
+        ValuationProvenance.ESTIMATE,
+        ValuationProvenance.UNPRICED_DISPEL,
+        ValuationProvenance.UNPRICEABLE,
+        ValuationProvenance.INERT_PAYLOAD,
+    }
+)
+
+
+def provenance_split(valuations: Sequence[PayloadValuation]) -> tuple[float, float]:
+    """Return ``(formula_or_parsed_total, estimate_total)`` for one valuation list (#3716).
+
+    Kept apart so a total never makes an estimate read as measured. FORMULA and PARSED
+    land together; ESTIMATE is its own total; the zero buckets count for neither.
+    """
+    formula = sum(v.value for v in valuations if v.provenance not in _NOT_FORMULA_PROVENANCES)
+    estimate = sum(v.value for v in valuations if v.provenance == ValuationProvenance.ESTIMATE)
+    return formula, estimate
+
+
+def _readiness_and_profile_flags(technique: Technique) -> list[str]:
+    """Return the not-castable/underspecified/weapon_scaled/execute_ramp flags (#3716)."""
+    flags: list[str] = []
+    if technique_is_not_castable_standalone(technique):
+        flags.append(FLAG_NOT_CASTABLE_STANDALONE)
+    if technique_is_underspecified(technique):
+        flags.append(FLAG_UNDERSPECIFIED)
+    damage_profiles = technique.cached_damage_profiles
+    if any(row.uses_equipped_weapon for row in damage_profiles):
+        flags.append("weapon_scaled")
+    if any(row.execute_missing_health_multiplier for row in damage_profiles):
+        flags.append("execute_ramp")
+    return flags
+
+
+def evaluate_technique(
     technique: Technique,
     context: EvalContext,
     reference: ReferenceFrame,
@@ -713,11 +754,7 @@ def evaluate_technique(  # noqa: C901 - report assembly intentionally keeps all 
     effective_anima = _effective_anima(technique)
 
     if not _bands:
-        flags = ["no_result_charts"]
-        if technique_is_not_castable_standalone(technique):
-            flags.append("not_castable_standalone")
-        if technique_is_underspecified(technique):
-            flags.append("underspecified")
+        flags = ["no_result_charts", *_readiness_and_profile_flags(technique)]
         return TechniquePowerReport(
             technique_id=technique.pk,
             name=technique.name,
@@ -754,41 +791,10 @@ def evaluate_technique(  # noqa: C901 - report assembly intentionally keeps all 
     baseline_de = sum(v.value for v in valuations)
     amplified_de = sum(v.value for v in amplified_valuations)
 
-    def deterministic_total(values: list[PayloadValuation]) -> float:
-        """Return formula/parsed value while excluding estimates and zero buckets."""
-        return sum(
-            value.value
-            for value in values
-            if value.provenance
-            not in {
-                ValuationProvenance.ESTIMATE,
-                ValuationProvenance.UNPRICED_DISPEL,
-                ValuationProvenance.UNPRICEABLE,
-                ValuationProvenance.INERT_PAYLOAD,
-            }
-        )
+    formula_baseline_de, estimated_baseline_de = provenance_split(valuations)
+    formula_amplified_de, estimated_amplified_de = provenance_split(amplified_valuations)
 
-    formula_baseline_de = deterministic_total(valuations)
-    estimated_baseline_de = sum(
-        value.value for value in valuations if value.provenance == ValuationProvenance.ESTIMATE
-    )
-    formula_amplified_de = deterministic_total(amplified_valuations)
-    estimated_amplified_de = sum(
-        value.value
-        for value in amplified_valuations
-        if value.provenance == ValuationProvenance.ESTIMATE
-    )
-
-    flags: list[str] = []
-    if technique_is_not_castable_standalone(technique):
-        flags.append("not_castable_standalone")
-    if technique_is_underspecified(technique):
-        flags.append("underspecified")
-    damage_profiles = technique.cached_damage_profiles
-    if any(row.uses_equipped_weapon for row in damage_profiles):
-        flags.append("weapon_scaled")
-    if any(row.execute_missing_health_multiplier for row in damage_profiles):
-        flags.append("execute_ramp")
+    flags: list[str] = _readiness_and_profile_flags(technique)
 
     divisor = 1 + technique.windup_rounds if technique.windup_rounds > 0 else 1
     if technique.windup_rounds > 0:

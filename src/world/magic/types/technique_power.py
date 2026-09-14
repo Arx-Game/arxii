@@ -106,6 +106,12 @@ class PayloadValuation:
     detail: str
 
 
+#: Readiness flags a report can carry (#3716). Named so readers compare against a
+#: constant rather than a bare string.
+FLAG_NOT_CASTABLE_STANDALONE = "not_castable_standalone"
+FLAG_UNDERSPECIFIED = "underspecified"
+
+
 @dataclass(frozen=True, slots=True)
 class TechniquePowerReport:
     """Full combat-power report for one technique at one evaluation context (#3279)."""
