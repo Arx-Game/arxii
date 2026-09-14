@@ -27,6 +27,7 @@ from world.scenes.constants import (
 )
 from world.scenes.factories import (
     InteractionFactory,
+    InteractionReactionFactory,
     InteractionReceiverFactory,
     PlaceFactory,
     SceneFactory,
@@ -1646,3 +1647,69 @@ class InteractionListQueryBudgetTests(APITestCase):
             assert len(row["action_links"]) == 1
             link = row["action_links"][0]
             assert link["action_interaction"]["mode"] == "action"
+
+    def test_query_budget_second_request_against_same_page_is_cheaper(self) -> None:
+        """Proves Django's own prefetch machinery skips already-warm instances --
+        the whole point of fixing Defect A via `PrunedCachedProperty` instead of a
+        page-scoped cache that would requery every time. See the sibling test in
+        `PlayPosesQueryBudgetTests` (`test_play_views.py`) for the full mechanism
+        explanation; this pins the same behavior for `GET /api/interactions/`.
+
+        7 is the measured floor here (vs. that endpoint's 8): (1) session, (2)
+        `Block` list, (3) the outer paginated `Interaction` select, (4) the
+        `SceneEntryEndorsement` batch for this scene's ENTRY poses, (5) the
+        GM/owner-participation check that gates unrevealed-identity fields,
+        (6) the read-receipt batch, (7) the mute-list batch. None of the 5
+        `cached_*` satellite-relation Prefetch queries this plan converted to
+        `PrunedCachedProperty` ran a second time -- verified directly against
+        the captured query log. This endpoint has no `_thread_anchors` /
+        `_thread_roots` / `_visible_parents` batches (those are `/api/play/`
+        reply-chip machinery `/api/interactions/` doesn't use), which is the
+        whole gap between 7 here and 8 there.
+        """
+        url = reverse("interaction-list")
+        first = self.client.get(url, {"scene": self.scene.pk})
+        assert first.status_code == 200
+        with self.assertNumQueries(7):
+            second = self.client.get(url, {"scene": self.scene.pk})
+        assert second.status_code == 200
+        assert len(second.data["results"]) == 3
+
+    def test_reaction_added_after_first_load_is_visible_on_next_request(self) -> None:
+        """This is the test that would have caught Defect B before #3816.
+
+        Defect B: the old `Interaction.cached_reactions` fallback getter never
+        raised `AttributeError`, so once an instance was resident in the
+        idmapper identity map with a (possibly empty) reaction list already
+        computed, a write made through a DIFFERENT request/process was
+        invisible to any later read of that same warm instance -- the batch
+        never re-ran. `PrunedCachedProperty` alone doesn't fix this; it's the
+        write-site `related_cache_fields` invalidation (wired in prior tasks)
+        that clears the cached attribute off the idmapper-resident instance so
+        the next request's Prefetch actually re-fetches it.
+
+        Deliberately re-fetches ``entry_pose`` through the ORM (rather than
+        reusing ``self.entry_pose``, the ``setUpTestData`` class attribute)
+        before attaching the reaction: ``setUpTestData``'s Python object is a
+        stale reference that predates this test method's own idmapper
+        identity map (cleared fresh in ``setUp``), so assigning it directly
+        as the reaction's FK would invalidate a python instance that is NOT
+        the one the first request actually warmed and the second request
+        would re-fetch -- exercising a test-fixture identity-map footgun
+        (see the `sharedmemory-model` skill), not the production write path.
+        A real write site fetches the row it mutates fresh, same as this does.
+        """
+        url = reverse("interaction-list")
+        first = self.client.get(url, {"scene": self.scene.pk})
+        assert first.status_code == 200
+
+        other_account = AccountFactory()
+        warm_entry_pose = Interaction.objects.get(pk=self.entry_pose.pk)
+        InteractionReactionFactory(interaction=warm_entry_pose, account=other_account)
+
+        second = self.client.get(url, {"scene": self.scene.pk})
+        assert second.status_code == 200
+        reactions = next(
+            row["reactions"] for row in second.data["results"] if row["id"] == self.entry_pose.pk
+        )
+        assert len(reactions) == 1

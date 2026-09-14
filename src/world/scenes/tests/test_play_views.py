@@ -14,6 +14,7 @@ from evennia_extensions.factories import AccountFactory
 from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import (
     InteractionFactory,
+    InteractionReactionFactory,
     PersonaFactory,
     PlaceFactory,
     SceneFactory,
@@ -923,7 +924,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
         self.account = AccountFactory()
         self.client.force_authenticate(user=self.account)
 
-    def _build_page(self, scene: object, *, reply_count: int) -> None:
+    def _build_page(self, scene: object, *, reply_count: int) -> list[Interaction]:
         """Always 6 total poses (3 targets + 3 repliers) - only `reply_count`
         of the 3 repliers actually answer anything. Holding the total row count
         constant isolates the reply-handling cost: every OTHER cached_* field's
@@ -931,6 +932,9 @@ class PlayPosesQueryBudgetTests(APITestCase):
         personas, action links) stays identical between scenarios, so any
         difference in query count comes only from `_visible_parent_ids` and the
         anchor read.
+
+        Returns all 6 poses (targets then repliers) so callers can reference
+        specific rows (e.g. to add a reaction to one after the page is warm).
         """
         targets = [InteractionFactory(scene=scene) for _ in range(3)]
         repliers = [InteractionFactory(scene=scene) for _ in range(3)]
@@ -945,6 +949,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
             targets[i].save(update_fields=["thread"])
             repliers[i].thread = thread
             repliers[i].save(update_fields=["thread"])
+        return targets + repliers
 
     def test_query_budget_with_one_reply(self) -> None:
         """Baseline: 6 total poses, 1 of them a reply."""
@@ -965,6 +970,76 @@ class PlayPosesQueryBudgetTests(APITestCase):
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
+
+    def test_query_budget_second_request_against_same_page_is_cheaper(self) -> None:
+        """Proves Django's own prefetch machinery skips already-warm instances --
+        the whole point of fixing Defect A via `PrunedCachedProperty` instead of a
+        page-scoped cache that would requery every time.
+
+        The 6 `Interaction` rows stay resident in the idmapper identity map
+        across requests within a process, and once `PrunedCachedProperty` (a
+        genuine `cached_property`) has populated the 5 `cached_*` satellite
+        relations (receivers, target personas, favorites, reactions, action
+        links) on each of them, Django's own `Prefetch(to_attr=)` freshness
+        check (`to_attr in instance.__dict__`) reports every instance already
+        fetched and skips issuing all 5 of those batch queries on the second
+        request -- verified directly against the captured query log, not
+        inferred from the count alone.
+
+        8 is the measured floor for what's left, none of it something this
+        plan touched: (1) the session lookup, (2) the account's `Block` list
+        (a relationship gate, re-checked fresh every request by design), (3)
+        the outer paginated `Interaction` select itself -- idmapper reuses the
+        returned Python objects but the SQL still runs, since the ORM has no
+        way to know in advance which rows a filter/order will return without
+        asking the database, (4) `_thread_roots`' parent-id lookup, (5)
+        `_thread_anchors`' MIN(id) aggregate, (6) the read-receipt batch, (7)
+        the mute-list batch, and (8) `_visible_parents`. (4)-(8) are batched
+        page-wide queries keyed by thread/scene id, not by already-cached
+        instance, so unlike the 5 satellite relations they have no
+        cached_property to go stale-free through -- and (2)/(6)/(7) are
+        exactly the per-viewer page-scoped context caches the task brief
+        calls out as out of scope for #3816: they cost their own fixed
+        per-request queries by design, on both the cold and warm request.
+        """
+        scene = SceneFactory()
+        self._build_page(scene, reply_count=1)
+        url = f"/api/play/poses/?conversation=scene:{scene.pk}"
+        first = self.client.get(url)
+        assert first.status_code == 200
+        with self.assertNumQueries(8):
+            second = self.client.get(url)
+        assert second.status_code == 200
+        assert len(second.json()["results"]) == 6
+
+    def test_reaction_added_after_first_load_is_visible_on_next_request(self) -> None:
+        """This is the test that would have caught Defect B before #3816.
+
+        Defect B: the old `Interaction.cached_reactions` fallback getter never
+        raised `AttributeError`, so once an instance was resident in the
+        idmapper identity map with a (possibly empty) reaction list already
+        computed, a write made through a DIFFERENT request/process was
+        invisible to any later read of that same warm instance -- the batch
+        never re-ran. `PrunedCachedProperty` alone doesn't fix this; it's the
+        write-site `related_cache_fields` invalidation (wired in prior tasks)
+        that clears the cached attribute off the idmapper-resident instance so
+        the next request's Prefetch actually re-fetches it.
+        """
+        scene = SceneFactory()
+        poses = self._build_page(scene, reply_count=1)
+        url = f"/api/play/poses/?conversation=scene:{scene.pk}"
+        first = self.client.get(url)
+        assert first.status_code == 200
+
+        other_account = AccountFactory()
+        InteractionReactionFactory(interaction=poses[0], account=other_account)
+
+        second = self.client.get(url)
+        assert second.status_code == 200
+        reactions = next(
+            row["reactions"] for row in second.json()["results"] if row["id"] == poses[0].pk
+        )
+        assert len(reactions) == 1
 
     def test_nested_action_interaction_scalars_and_round_actions_stay_free(self) -> None:
         """Regression guard, not a fix.
