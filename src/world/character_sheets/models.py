@@ -10,7 +10,6 @@ and the evennia_extensions/object_extensions/models.py display name system.
 
 from __future__ import annotations
 
-from collections import defaultdict
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -20,7 +19,7 @@ if TYPE_CHECKING:
     from world.classes.models import CharacterClassLevel
     from world.conditions.models import CapabilityType, ConditionTemplate
     from world.items.handlers import CharacterSheetOutfitsHandler
-    from world.journals.handlers import IntroductionsHandler
+    from world.journals.models import JournalEntry
     from world.magic.models.affinity import Resonance
     from world.magic.models.aura import CharacterResonance
     from world.mechanics.models import Property
@@ -37,7 +36,6 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from evennia_extensions.cached_property import PrunedCachedProperty
-from evennia_extensions.handlers import CachedRowsHandler
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_creation.constants import OriginStoryState
 from world.character_sheets.managers import CharacterSheetManager
@@ -966,19 +964,23 @@ class CharacterSheet(SharedMemoryModel):
     active_alternate_self_or_none = ReverseOneToOneOrNone("active_alternate_self")
     path_intent_or_none = ReverseOneToOneOrNone("path_intent")
 
-    @cached_property
-    def enemy_rows(self) -> EnemyRowsHandler:
+    @PrunedCachedProperty
+    def enemy_rows(self) -> list[CharacterEnemy]:
         """Who wants this character to fail (#3621). Cleared by any
-        ``CharacterEnemy`` save or delete through its ``related_cache_fields``."""
-        return EnemyRowsHandler(self)
+        CharacterEnemy save or delete through its related_cache_fields."""
+        return list(self.enemies.select_related("organization", "family").order_by("-price", "id"))
 
-    @cached_property
-    def introductions(self) -> IntroductionsHandler:
+    @PrunedCachedProperty
+    def introductions(self) -> list[JournalEntry]:
         """The CG Introductions this character wrote (#3621). Cleared by any
-        ``JournalEntry`` save or delete through its ``related_cache_fields``."""
-        from world.journals.handlers import IntroductionsHandler  # noqa: PLC0415
+        JournalEntry save or delete through its related_cache_fields."""
+        from world.journals.models import JournalEntry, JournalKind  # noqa: PLC0415
 
-        return IntroductionsHandler(self)
+        return list(
+            JournalEntry.objects.filter(author=self)
+            .exclude(kind=JournalKind.ENTRY)
+            .order_by("created_at", "id")
+        )
 
     @cached_property
     def primary_persona(self) -> Persona:
@@ -1560,31 +1562,3 @@ class CharacterEnemy(RelatedCacheClearingMixin, SharedMemoryModel):
         if self.family_id is not None:
             return self.family.name
         return self.figure_name
-
-
-class EnemyRowsHandler(CachedRowsHandler[CharacterEnemy]):
-    """A character's enemies, the dearest first (ADR-0278, #3621).
-
-    Every reader (the sheet serializer, GM tooling, staff placement) reads through here
-    so none owns a query or a cache, and a row staff deleted is never served.
-    """
-
-    attname: ClassVar[str] = "enemy_rows"
-
-    def load(self) -> list[CharacterEnemy]:
-        return list(
-            self.parent.enemies.select_related("organization", "family").order_by("-price", "id")
-        )
-
-    @classmethod
-    def rows_for(cls, parents: list[models.Model]) -> dict[int, list[CharacterEnemy]]:
-        """One query for every enemy across ``parents``, bucketed by sheet."""
-        grouped: dict[int, list[CharacterEnemy]] = defaultdict(list)
-        rows = (
-            CharacterEnemy.objects.filter(character_id__in=[parent.pk for parent in parents])
-            .select_related("organization", "family")
-            .order_by("-price", "id")
-        )
-        for row in rows:
-            grouped[row.character_id].append(row)
-        return grouped

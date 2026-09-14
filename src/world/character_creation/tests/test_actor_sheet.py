@@ -26,6 +26,7 @@ from world.character_creation.enemies import (
     resolve_enemy,
 )
 from world.character_creation.factories import (
+    CharacterDraftFactory,
     DistinctionOfferFactory,
     EnemyReasonFactory,
     GroupPromptFactory,
@@ -34,8 +35,9 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
 )
 from world.character_creation.models import BeginningEnemyOffer
-from world.character_creation.services import finalize_character
+from world.character_creation.services import _create_enemy, finalize_character
 from world.character_creation.tests.finalization_fixtures import FinalizationTestMixin
+from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import CharacterEnemy
 from world.character_sheets.types import EnemyDegree, EnemyKind, EnemyPowerTier, EnemyStatus
 from world.distinctions.factories import DistinctionFactory
@@ -176,6 +178,45 @@ class EnemyOffersTests(FinalizationTestMixin, TestCase):
         pending = resolve_enemy(draft)
         assert pending.price == ENEMY_PRICE_PENDING
         assert pending.status == EnemyStatus.PENDING
+
+
+class EnemyRowsCacheMutationTests(TestCase):
+    """#3816: ``_create_enemy`` writes directly into an already-warm ``enemy_rows``
+    cache (PrunedCachedProperty write-site mutation), with no re-query."""
+
+    def _minimal_draft(self):
+        return CharacterDraftFactory(
+            draft_data={
+                "enemy": {
+                    "kind": "person",
+                    "organization_id": None,
+                    "name": "A Rival",
+                    "power_tier": "",
+                    "degree": "annoyed",
+                    "why": "Petty jealousy.",
+                    "public_line": "We do not speak.",
+                }
+            }
+        )
+
+    def test_create_enemy_updates_enemy_rows_cache(self):
+        sheet = CharacterSheetFactory()
+        persona = sheet.primary_persona
+        draft = self._minimal_draft()
+        _ = sheet.enemy_rows  # warm the cache
+        _create_enemy(draft, sheet, persona, sheet.character)
+        with self.assertNumQueries(0):
+            enemy_rows = sheet.enemy_rows
+        self.assertEqual(len(enemy_rows), 1)
+        self.assertEqual(enemy_rows[0].figure_name, "A Rival")
+
+    def test_create_enemy_does_not_warm_a_cold_enemy_rows_cache(self):
+        sheet = CharacterSheetFactory()
+        persona = sheet.primary_persona
+        draft = self._minimal_draft()
+        _create_enemy(draft, sheet, persona, sheet.character)
+        self.assertNotIn("enemy_rows", sheet.__dict__)
+        self.assertEqual(len(sheet.enemy_rows), 1)
 
 
 class ActorSheetFinalizeTests(FinalizationTestMixin, TestCase):
