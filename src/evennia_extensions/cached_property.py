@@ -16,10 +16,22 @@ and so bypass ``RelatedCacheClearingMixin``/``related_cache_fields`` too,
 leaving a "zombie" row (shared under the identity map) sitting in an
 already-cached list forever otherwise.
 
+This class only fixes two things: correct freshness detection on a cold
+instance (so the batched prefetch actually runs at all) and self-healing
+against pk-nulled zombie rows on every read. It does NOT by itself keep the
+cached list fresh across writes made elsewhere in the same request or
+process — that stays the paired, explicit responsibility of
+``related_cache_fields``/``RelatedCacheClearingMixin``, or direct mutation of
+the cached list at each write site. See ADR-0296 for the fuller rationale
+and how this narrows ADR-0263/ADR-0278.
+
 It must be a DATA descriptor (define ``__set__``) so ``__get__`` runs on
 every access — a plain ``cached_property`` is a non-data descriptor, and once
 it has populated ``instance.__dict__``, Python's normal attribute lookup
-finds that entry directly and never calls ``__get__`` again.
+finds that entry directly and never calls ``__get__`` again. ``__delete__``
+is defined for the same reason ``cached_property`` supports ``del`` as its
+own invalidation idiom: without it, a data descriptor with no ``__delete__``
+rejects deletion outright instead of falling through to attribute-not-found.
 """
 
 from __future__ import annotations
@@ -32,6 +44,9 @@ class PrunedCachedProperty(cached_property):
 
     def __set__(self, instance, value) -> None:
         instance.__dict__[self.name] = value
+
+    def __delete__(self, instance) -> None:
+        instance.__dict__.pop(self.name, None)
 
     def __get__(self, instance, cls=None):
         if instance is None:
