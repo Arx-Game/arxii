@@ -7,16 +7,19 @@
   </p>
   <div class="filter-row">
     <a class="filter{% if scan_filter == "fails_floor" %} on{% endif %}"
+       href="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
        hx-get="{% url 'admin_tuning_techniques' %}?scan=fails_floor"
        hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
       {% blocktranslate with count=scan_counts.fails_floor %}Fails the combat floor ({{ count }}){% endblocktranslate %}
     </a>
     <a class="filter{% if scan_filter == "nothing_castable" %} on{% endif %}"
+       href="{% url 'admin_tuning_techniques' %}?scan=nothing_castable"
        hx-get="{% url 'admin_tuning_techniques' %}?scan=nothing_castable"
        hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
       {% blocktranslate with count=scan_counts.nothing_castable %}Nothing castable ({{ count }}){% endblocktranslate %}
     </a>
     <a class="filter{% if scan_filter == "all" %} on{% endif %}"
+       href="{% url 'admin_tuning_techniques' %}?scan=all"
        hx-get="{% url 'admin_tuning_techniques' %}?scan=all"
        hx-target="#panel-techniques-pool-scan" hx-swap="outerHTML">
       {% translate "All pools" %}
@@ -50,7 +53,8 @@
         </td>
         <td>{{ row.best_single_de|floatformat:1 }}</td>
         <td>
-          <a hx-get="{% url 'admin_tuning_techniques' %}?kit_path={{ row.path_id }}&kit_gift={{ row.gift_id }}"
+          <a href="{% url 'admin_tuning_techniques' %}?kit_path={{ row.path_id }}&kit_gift={{ row.gift_id }}"
+             hx-get="{% url 'admin_tuning_techniques' %}?kit_path={{ row.path_id }}&kit_gift={{ row.gift_id }}"
              hx-target="#panel-techniques">{% translate "Price kit" %}</a>
         </td>
       </tr>

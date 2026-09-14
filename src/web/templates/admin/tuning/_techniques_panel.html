@@ -138,7 +138,14 @@
     font-size: 0.85rem;
     margin: 0.5rem 0;
   }
-  #panel-techniques .kit-row-in-kit {
+  /* Admin's base.css zebra-stripes every row (tr:nth-child(odd/even)) using the
+     same --body-bg/--darkened-bg tokens .kit-row-in-kit relies on, which made the
+     shaded kit rows disappear among the stripes (#3716 demo-fidelity fix). Scoped
+     to this panel's own tables only - other panels keep the default striping. */
+  #panel-techniques table.tuning-table tr {
+    background: var(--body-bg);
+  }
+  #panel-techniques table.tuning-table tr.kit-row-in-kit {
     background: var(--darkened-bg, rgba(0, 0, 0, 0.03));
   }
   #panel-techniques .pool-scan {
@@ -210,7 +217,7 @@
 </form>
 <p class="kit-note">
   {% translate "Refresh recomputes the catalog without the 24-hour cache." %}
-  {% if panel %}
+  {% if panel.evaluated_at %}
   {% blocktranslate with when=panel.evaluated_at|date:"Y-m-d H:i" %}Evaluated {{ when }}.{% endblocktranslate %}
   {% endif %}
 </p>
@@ -257,7 +264,7 @@
       <button type="submit">{% translate "Price this kit" %}</button>
     </div>
     {{ kit_form.non_field_errors }}
-    <details class="kit-stats">
+    <details class="kit-stats"{% if kit_form.has_stat_errors %} open{% endif %}>
       <summary>{% translate "Stats: default allocation, 2 in every stat" %}</summary>
       <div class="kit-stat-grid">
         {% for field in kit_form.stat_fields %}
@@ -278,7 +285,7 @@
       {{ kit_report.params.path.name }} / {{ kit_report.params.gift.name }}
     </h4>
     <p class="kit-note">
-      {% blocktranslate with points=kit_report.roller_points %}Level 1 &middot; gift thread 0 &middot; roller points {{ points }}{% endblocktranslate %}
+      {% blocktranslate with points=kit_report.roller_points %}Level 1 &middot; gift thread 0 &middot; roller points {{ points }} from the chosen stats{% endblocktranslate %}
     </p>
     <div class="stat-tiles">
       <div class="stat-tile">
