@@ -215,6 +215,12 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
     need one run it before calling this.
     """
     personas = list(target_personas)
+    # Captured before the bulk_create (#3816 fix round 2): reading
+    # interaction.cached_target_personas AFTER it would find a cold cache on a
+    # freshly-created interaction, re-query the DB (which now includes the rows
+    # just inserted below), and then append them again -- doubling the list,
+    # which sticks for every later read of this identity-mapped instance.
+    existing = interaction.cached_target_personas
     InteractionTargetPersona.objects.bulk_create(
         [
             InteractionTargetPersona(
@@ -225,7 +231,7 @@ def write_target_personas(interaction: Interaction, target_personas: Iterable[Pe
             for p in personas
         ]
     )
-    interaction.cached_target_personas = [*interaction.cached_target_personas, *personas]
+    interaction.cached_target_personas = [*existing, *personas]
 
 
 def create_interaction(  # noqa: PLR0913 - atomic creation requires all interaction fields
@@ -292,6 +298,13 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
             language=language,
             attributed_companion=attributed_companion,
         )
+        # Seed the cache instead of leaving it cold (#3816 fix round 2): this
+        # interaction's pk did not exist before the .create() above, so it is
+        # guaranteed to have zero receivers right now -- reading
+        # interaction.cached_receivers for the first time AFTER the bulk_create
+        # below would re-query the DB (which would already include the rows
+        # just inserted) and then append them again, doubling the list.
+        interaction.cached_receivers = []
         # #1826 — posing in a scene is IC action in its area: lie-low breaks.
         _break_lie_low_for_interaction(persona, scene)
 

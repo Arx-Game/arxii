@@ -92,6 +92,13 @@ def conceal_action_interaction(action_interaction: Interaction, audience: CastAu
     # create(...) directly rather than through create_interaction, so it never pins
     # writer_account_id — receiver membership is the caster's only route back to
     # their own concealed ACTION row.
+    # Captured before the bulk_create (#3816 fix round 2): reading
+    # action_interaction.cached_receivers AFTER it would find a cold cache on
+    # this not-necessarily-just-created row, re-query the DB (which now
+    # includes the rows just inserted below), and then append them again --
+    # doubling the list, which sticks for every later read of this
+    # identity-mapped instance in this worker process.
+    existing_receivers = action_interaction.cached_receivers
     created_receivers = InteractionReceiver.objects.bulk_create(
         [
             InteractionReceiver(
@@ -103,10 +110,7 @@ def conceal_action_interaction(action_interaction: Interaction, audience: CastAu
             for p in audience.full
         ]
     )
-    action_interaction.cached_receivers = [
-        *action_interaction.cached_receivers,
-        *created_receivers,
-    ]
+    action_interaction.cached_receivers = [*existing_receivers, *created_receivers]
 
 
 def _concealment_for(

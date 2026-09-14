@@ -94,14 +94,23 @@ def _link_explicit_action_ids(created: Interaction, action_link_ids: list[int]) 
 
     Appends the created rows onto ``created.cached_action_links`` (#3816) so the
     response serializes the real state without an extra query.
+
+    Captures the existing cached list BEFORE the ``bulk_create`` -- reading it
+    AFTER would find a cold cache (nothing in ``__dict__`` yet) on a
+    freshly-created pose, which re-queries the DB, which now includes the rows
+    just inserted; appending them again would double the list, and (per
+    ``SharedMemoryModelBase``'s identity map, plus Task 1's Prefetch freshness
+    fix) that doubled list would stick for every later read of this same
+    cached pk in this worker process.
     """
+    existing = created.cached_action_links
     created_links = InteractionAction.objects.bulk_create(
         [
             InteractionAction(pose=created, action_interaction_id=aid, ordering=i)
             for i, aid in enumerate(action_link_ids)
         ]
     )
-    created.cached_action_links = [*created.cached_action_links, *created_links]
+    created.cached_action_links = [*existing, *created_links]
 
 
 def _seed_fresh_pose_caches(
@@ -112,23 +121,41 @@ def _seed_fresh_pose_caches(
     The interaction has not been through ``get_queryset()``'s Prefetch pipeline —
     freshly created, or (on replay) fetched via ``idempotent_record_interaction``'s
     bare ``select_related`` lookup — so the ``cached_*`` to_attr attributes used by
-    ``InteractionListSerializer`` do not exist yet. Set them to empty lists to avoid
-    a live query on serialization; a new pose has no receivers, favorites, or
-    reactions (target personas are whatever was just resolved).
+    ``InteractionListSerializer`` do not exist yet.
 
-    ``cached_action_links`` is the one exception: on a genuine (non-replayed)
-    creation, ``_on_created`` in ``submit_pose`` already populated it via direct
-    write-site mutation (#3816) with whatever ``InteractionAction`` rows were just
-    linked — stomping it here would silently drop them from the response even
-    though the rows are in the database. Only a replay (where ``_on_created``
-    never ran against this fetched-not-created row) still needs the empty default.
+    On a genuine (non-replayed) creation this call path (``submit_pose`` never
+    passes ``receivers=``/``place=``) guarantees a brand-new interaction has no
+    receivers, favorites, or reactions yet, so seeding ``[]`` is correct and
+    avoids a live query on serialization. ``cached_action_links`` is the one
+    exception even here: ``_on_created`` already populated it via direct
+    write-site mutation (#3816) with whatever ``InteractionAction`` rows were
+    just linked — stomping it would silently drop them from the response even
+    though the rows are in the database.
+
+    On a REPLAY, ``interaction`` is the OLD row fetched from the ledger — it may
+    have accumulated real favorites/reactions/receivers/action-links from other
+    requests since it was first created, so stamping any of them to ``[]`` here
+    would be a permanent lie: ``PrunedCachedProperty`` treats an assigned value
+    (``[]`` included) as already fetched, so every later read of this
+    identity-mapped instance in this worker process would report zero forever.
+    ``del`` instead, so the next real read recomputes fresh from the DB
+    (``PrunedCachedProperty.__delete__`` pops the entry and is a no-op if it was
+    never set).
     """
-    interaction.cached_receivers = []
-    interaction.cached_target_personas = target_personas or []
-    interaction.cached_favorites = []
-    interaction.cached_reactions = []
     if replayed:
-        interaction.cached_action_links = []
+        del interaction.cached_receivers
+        del interaction.cached_favorites
+        del interaction.cached_reactions
+        del interaction.cached_action_links
+    else:
+        interaction.cached_receivers = []
+        interaction.cached_favorites = []
+        interaction.cached_reactions = []
+        # cached_action_links already populated by `_on_created` -- see above.
+    # The replay-matching `comparison_fields["target"]` check guarantees the
+    # freshly-resolved `target_personas` here is identical to the stored row's
+    # real set on a replay too, so this assignment is safe in both branches.
+    interaction.cached_target_personas = target_personas or []
     interaction.cached_dramatic_moment_tags = []
     interaction.cached_dramatic_moment_suggestions = []
     interaction.cached_endorsements = []
