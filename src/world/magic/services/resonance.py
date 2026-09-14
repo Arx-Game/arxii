@@ -162,7 +162,14 @@ def grant_resonance(  # noqa: PLR0913
         if earn_rate_bonus > 0:
             amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
 
-    cr, _ = CharacterResonance.objects.get_or_create(
+    # Captured before any write below: CharacterResonance.objects.get_or_create()
+    # and cr.save() both call Model.save(), which (via RelatedCacheClearingMixin)
+    # clears character_sheet.cached_resonances out from under us as a side effect
+    # of their OWN write -- reading character_sheet.cached_resonances again
+    # afterward would silently re-query and double-count the row just created.
+    # Read once, up front, and only assign the final list after every save above.
+    existing_resonances = character_sheet.cached_resonances
+    cr, created = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
         resonance=resonance,
         defaults={"balance": 0, "lifetime_earned": 0},
@@ -170,6 +177,8 @@ def grant_resonance(  # noqa: PLR0913
     cr.balance += amount
     cr.lifetime_earned += amount
     cr.save(update_fields=["balance", "lifetime_earned"])
+    if created:
+        character_sheet.cached_resonances = [*existing_resonances, cr]
 
     ResonanceGrant.objects.create(
         character_sheet=character_sheet,

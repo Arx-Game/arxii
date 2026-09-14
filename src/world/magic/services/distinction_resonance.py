@@ -93,11 +93,19 @@ def reconcile_distinction_resonance_grants(character_distinction: CharacterDisti
 
     grants = DistinctionResonanceGrant.objects.filter(distinction=character_distinction.distinction)
     for grant in grants:
-        CharacterResonance.objects.get_or_create(
+        # Captured before the write below: get_or_create's own Model.save() (via
+        # RelatedCacheClearingMixin) clears sheet.cached_resonances out from under
+        # us as a side effect of its OWN write when it creates a row -- reading
+        # sheet.cached_resonances again afterward would silently re-query and
+        # double-count the row just created. Read once, up front.
+        existing = sheet.cached_resonances
+        cr, created = CharacterResonance.objects.get_or_create(
             character_sheet=sheet,
             resonance=grant.resonance,
             defaults={"balance": 0, "lifetime_earned": 0},
         )
+        if created:
+            sheet.cached_resonances = [*existing, cr]
 
         target = grant.flat_amount_per_rank * character_distinction.rank
         already = (

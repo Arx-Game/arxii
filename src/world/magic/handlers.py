@@ -895,11 +895,15 @@ class CharacterResonanceHandler:
         """Return the CharacterResonance row, creating it lazily if absent."""
         cr = self._by_resonance.get(resonance.pk)
         if cr is None:
-            cr, _ = CharacterResonance.objects.get_or_create(
-                character_sheet=self.character.sheet_data,
+            sheet = self.character.sheet_data
+            existing = sheet.cached_resonances
+            cr, created = CharacterResonance.objects.get_or_create(
+                character_sheet=sheet,
                 resonance=resonance,
                 defaults={"balance": 0, "lifetime_earned": 0},
             )
+            if created:
+                sheet.cached_resonances = [*existing, cr]
             self._by_resonance[resonance.pk] = cr
         return cr
 

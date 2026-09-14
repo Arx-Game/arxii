@@ -6,12 +6,14 @@ doubles as identity anchor and spendable resonance currency.
 """
 
 from decimal import Decimal
+from typing import ClassVar
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MaxValueValidator, MinValueValidator
 from django.db import models
 from evennia.utils.idmapper.models import SharedMemoryModel
 
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.magic.constants import GlimpseState
 from world.magic.models.affinity import Resonance
 from world.magic.types import AffinityType
@@ -97,13 +99,15 @@ class CharacterAura(SharedMemoryModel):
         return max(values, key=lambda x: x[0])[1]
 
 
-class CharacterResonance(SharedMemoryModel):
+class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
     """Per-character per-resonance row.
 
     Identity (the row exists = "this character is associated with this
     resonance") and currency bucket (`balance` is spendable, `lifetime_earned`
     is monotonic). See Resonance Pivot Spec A §2.2.
     """
+
+    related_cache_fields: ClassVar[list[str]] = ["character_sheet"]
 
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",

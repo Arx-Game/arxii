@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from world.items.handlers import CharacterSheetOutfitsHandler
     from world.journals.handlers import IntroductionsHandler
     from world.magic.models.affinity import Resonance
+    from world.magic.models.aura import CharacterResonance
     from world.mechanics.models import Property
     from world.scenes.models import Persona
 
@@ -35,6 +36,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.descriptors import ReverseOneToOneOrNone
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.cached_property import PrunedCachedProperty
 from evennia_extensions.handlers import CachedRowsHandler
 from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.character_creation.constants import OriginStoryState
@@ -1275,6 +1277,16 @@ class CharacterSheet(SharedMemoryModel):
             condition__corruption_resonance__isnull=False,
             current_stage__stage_order=5,
         ).exists()
+
+    @PrunedCachedProperty
+    def cached_resonances(self) -> list[CharacterResonance]:
+        """This sheet's CharacterResonance rows, fed by the interaction feed's Prefetch
+        (see ``world/scenes/interaction_views.py``, ``to_attr`` "cached_resonances")."""
+        from world.magic.models import CharacterResonance  # noqa: PLC0415
+
+        return list(
+            CharacterResonance.objects.filter(character_sheet=self).select_related("resonance")
+        )
 
     @property
     def in_control(self) -> bool:
