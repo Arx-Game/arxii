@@ -34,5 +34,16 @@ margins against it rather than against the constants themselves. Raising the
 edge timeout is not an option we control, and paying Cloudflare to raise it
 would be one — a keepalive is cheaper and works behind any intermediary.
 
-> Status: accepted · Source: #3745 (2026-09-12) · Related: #3743, #3742,
-> `docs/operations/websocket-liveness.md`
+**Amendment (#3863, 2026-09-14).** "Server-side" in this ADR's title means the
+game's side of the socket, and the process on that side is the **Portal**, not the
+Evennia Server. `evennia reload` restarts only the Server, so a deploy that reloads
+never loads this class into the process that owns the sockets: the fix rode two
+consecutive stand-ups through a reload and production kept closing idle sockets
+at 125.6 s. The deploy role now fingerprints Portal-loaded code and restarts both
+daemons when it changes (or when the operator asks via the button's `full_restart`
+input), and probes the public websocket after every reload or restart, failing the
+converge when no ping arrives. The keepalive stays where it is; what changed is the
+deploy's understanding of which process has to load it.
+
+> Status: accepted · Source: #3745 (2026-09-12); amended by #3863 (2026-09-14) ·
+> Related: #3743, #3742, #3803, `docs/operations/websocket-liveness.md`

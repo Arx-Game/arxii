@@ -41,6 +41,37 @@ the month's entire Sentry quota.
 is server-side and why 45s. Two pings fit inside 125.6s, so one lost ping does
 not cost the connection.
 
+## The keepalive is Portal-side, and a reload does not activate it
+
+The auto-ping is an attribute on the Portal's protocol class, so it is the
+**Portal** process that has to load it, and `evennia reload` never restarts the
+Portal: it restarts the Server and leaves the Portal on whatever code it booted
+with, which is the whole point of a reload (players stay connected through it).
+The deploy role's ordinary path is `systemctl reload` = `evennia reload`. The fix
+above went to production through that path in two consecutive stand-ups
+(2026-09-13 and 2026-09-14), and a probe run against production on 2026-09-14
+showed the same bare FIN at 125.5 s with no ping in the window: every gate was
+green and the Portal had never loaded the class (#3863).
+
+Two things now prevent that (#3863):
+
+- **The deploy restarts instead of reloading when Portal-loaded code changed.**
+  `roles/app_deploy` fingerprints `src/server/portal/**` and the Portal-read keys
+  of `settings.py` (`app_portal_paths`, `app_portal_settings_regex`) in the release
+  being deployed, and restarts both daemons when that fingerprint differs from the
+  one stamped at the last provable reload or restart, or when none has been stamped
+  yet. Players drop once on that path. The button's `full_restart` input forces it
+  by hand.
+- **The converge probes the public websocket after every reload or restart.** The
+  role runs `tools/ws_idle_probe.py` from the controller against the public web
+  hostname for `app_ws_probe_seconds` (130 s) and fails the run if the socket is
+  closed by the peer or no `PING` arrives. Both stand-ups above would have failed
+  here.
+
+A change to anything else the Portal loads (a listener, a protocol class, a
+settings key the regex does not match) needs the fingerprint extended in the same
+PR; the `portal-code-deploy-reviewer` agent exists to ask that question of a diff.
+
 ## Re-measuring
 
 `tools/ws_idle_probe.py` needs no credentials and no server access:

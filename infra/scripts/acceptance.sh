@@ -154,6 +154,17 @@ chk   "app_deploy stamps the reloaded SHA after a health check" \
 # and four deploys stranded); the rescue restart needs none.
 chk   "app_deploy reload falls back to a full restart on failure (wedged Server)" \
   "grep -q 'rescue:' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'state: restarted' infra/ansible/roles/app_deploy/tasks/main.yml"
+# 2026-09-14 (#3863): `evennia reload` restarts only the Server. A Portal-side
+# change (the websocket keepalive of ADR-0291) rode two stand-ups through a
+# reload and never loaded. The role must fingerprint Portal-loaded code and
+# restart when it moved, honour the button's full_restart input, and probe the
+# public websocket after a reload or restart.
+chk   "app_deploy restarts (not reloads) when Portal-loaded code changed" \
+  "grep -q 'app_needs_restart' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'app_portal_fingerprint_stamp' infra/ansible/roles/app_deploy/tasks/main.yml"
+chk   "standup.sh plumbs the full_restart input into app_full_restart" \
+  "grep -q 'ARXII_FULL_RESTART' infra/scripts/standup.sh && grep -q '^app_full_restart:' infra/scripts/standup.sh && grep -q 'ARXII_FULL_RESTART' .github/workflows/standup.yml"
+chk   "app_deploy probes the public websocket after a reload or restart" \
+  "grep -q 'ws_idle_probe.py' infra/ansible/roles/app_deploy/tasks/main.yml && grep -q 'closed by peer' infra/ansible/roles/app_deploy/tasks/main.yml"
 chk   "app_deploy's health-check backend == caddy's caddy_backend" \
   "[ \"\$(sed -n 's/^app_web_backend: //p' infra/ansible/roles/app_deploy/defaults/main.yml)\" = \"\$(sed -n 's/^caddy_backend: //p' infra/ansible/roles/caddy/defaults/main.yml | sed 's/ *#.*//')\" ]"
 chk   "app_deploy guards superuser create with an exists-check (idempotent)" \

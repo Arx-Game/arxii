@@ -144,6 +144,14 @@ preflight() {
   [[ "${APP_REF}" =~ ^[A-Za-z0-9._][A-Za-z0-9._-]*$ ]] \
       || fail "ARXII_APP_REF='${APP_REF}' is not a plain branch/tag/SHA name" \
               "(one path segment: letters, digits, '.', '_', '-'; no slash)"
+  # #3863: the full-restart opt-in (standup.yml's `full_restart` input) is
+  # written into the generated group_vars as an unquoted YAML boolean, so only
+  # the literal strings true/false may pass (empty = false, the `gh workflow
+  # run` that omits the input).
+  case "${ARXII_FULL_RESTART:-false}" in
+    true|false) ;;
+    *) fail "ARXII_FULL_RESTART='${ARXII_FULL_RESTART}' must be 'true' or 'false'" ;;
+  esac
   # #3153: ARXII_CONTENT_REPO_TOKEN/ARXII_CONTENT_REPO are deliberately NOT in
   # REQUIRED_ARXII (see that array's own comment) — they're only needed when
   # the operator opts into the content_repo refresh. But when they opt in,
@@ -331,6 +339,10 @@ admin_authorized_keys: ${authorized_keys_json}
 # standup.yml's "ref" input; main on every ordinary press. Shape-checked in
 # preflight.
 app_ref: "${APP_REF}"
+# #3863: restart both Evennia daemons instead of reloading, from standup.yml's
+# "full_restart" input; false on every ordinary press. Validated in preflight
+# to the literal true/false (an unquoted YAML boolean here, on purpose).
+app_full_restart: ${ARXII_FULL_RESTART:-false}
 EOF
 
   validate_generated_yaml "${GROUP_VARS_FILE}"   # lib.sh

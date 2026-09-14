@@ -28,6 +28,14 @@ file parses as YAML before handing it to Ansible — already a transitive depend
   rolling back to a tag, and recovering a database the migration generation guard refused
   (ADR-0276) - see "Recovering a guard-refused database" below. A SHA works but forgoes the
   shallow clone (Ansible only shallow-clones branches and tags) and logs a warning.
+- **It reloads, except when the Portal has to load the change.** `evennia reload` restarts
+  only the Server; the Portal keeps the code it booted with. The deploy fingerprints the
+  Portal-loaded files in the release (`src/server/portal/**` and the Portal-read
+  `settings.py` keys) and does a full `systemctl restart` (players drop once) when that
+  fingerprint moved or was never stamped. The `full_restart` input forces the restart by
+  hand for a Portal-side change already deployed through a reload (#3863, ADR-0291). After
+  either path the converge probes the public websocket and fails if the keepalive ping is
+  not seen before the edge's idle timeout.
 - **SSH identity.** The very first converge (brand-new host) connects as `root` — Linode injects
   the operator's key there via cloud-init before `arxadmin` exists. That first run's `base` role
   creates a dedicated `arxadmin` sudo user and installs the admin key(s) there; `ssh_hardening`
@@ -314,7 +322,13 @@ after the box itself is provisioned, the app_deploy role runs (in order):
    If the reload itself *fails* (a wedged Server can block a graceful
    reload forever — the 2026-08-23 dead-DB-connection incident), the play
    falls back to a full `systemctl restart`: players drop on that path
-   only, and the deploy still lands.
+   only, and the deploy still lands. A reload never restarts the Portal,
+   so when the release's Portal-loaded fingerprint (`app_portal_paths`,
+   `app_portal_settings_regex`) differs from the stamped one, or the
+   operator set `full_restart`, the play restarts instead of reloading
+   (#3863). After a reload or restart it runs `tools/ws_idle_probe.py`
+   from the controller against the public hostname and fails the converge
+   if the edge closes the idle socket before a keepalive ping arrives.
 
 ### Recovering a guard-refused database (ADR-0276)
 

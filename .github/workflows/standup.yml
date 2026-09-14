@@ -33,6 +33,11 @@ on:
         required: false
         type: boolean
         default: false
+      full_restart:
+        description: 'Restart both Evennia daemons (Portal and Server) instead of reloading. Players drop once. A reload never restarts the Portal, so use this to activate a Portal-side change the automatic fingerprint check did not catch (#3863, ADR-0291).'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -85,6 +90,10 @@ jobs:
           # Arx I archive sync — same on-demand idiom as the line above
           # (standup.sh adds `arx1_archive` to the --tags list on "true").
           ARXII_RUN_ARX1_ARCHIVE_SYNC: ${{ inputs.run_arx1_archive_sync }}
+          # #3863: full restart instead of reload. standup.sh validates the
+          # literal "true"/"false" and writes it into the generated group_vars
+          # as app_deploy's app_full_restart; false on every ordinary press.
+          ARXII_FULL_RESTART: ${{ inputs.full_restart }}
           # Provisioning (operator/CI-only; revoke at provider after run):
           LINODE_TOKEN: ${{ secrets.TF_LINODE_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.TF_CLOUDFLARE_API_TOKEN }}

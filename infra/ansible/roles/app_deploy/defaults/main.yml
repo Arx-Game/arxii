@@ -91,6 +91,34 @@ app_web_backend: "127.0.0.1:4001"
 # reload re-fired by the next button press instead of silently skipped.
 app_reload_stamp: /opt/arxii/reloaded_sha
 
+# Portal-loaded code (#3863). `evennia reload` restarts only the Server; the
+# Portal keeps the code it started with. So anything the Portal loads - the
+# websocket protocol class and its keepalive (ADR-0291), the telnet/SSL/
+# webserver listeners, the settings keys matched below - ships "green" through
+# a reload and does nothing until the next full restart. Two stand-ups
+# (2026-09-13 and 2026-09-14) carried the #3803 keepalive through a reload
+# each, and production kept dropping idle sockets at 125.6 s. The role now
+# fingerprints the Portal-loaded files in the release being deployed and
+# RESTARTS (players drop once) instead of reloading when that fingerprint
+# differs from the one stamped at the last provable reload/restart, when no
+# fingerprint has been stamped yet, or when the operator asks through the
+# button's `full_restart` input.
+app_full_restart: false
+app_portal_fingerprint_stamp: /opt/arxii/portal_fingerprint
+# Paths under the release root whose *.py files the Portal process imports.
+app_portal_paths:
+  - src/server/portal
+# settings.py assignments the Portal reads (an extended regex over the file's
+# lines). A change to any of these needs the Portal restarted to take effect.
+app_portal_settings_regex: '^(WEBSOCKET_|TELNET_|SSL_|PORTAL_|IDLE_TIMEOUT|WEBSERVER_|LOCKDOWN_MODE|AMP_|SSH_|IRC_|WEBCLIENT_)'
+# Post-deploy websocket probe (#3863). After a reload or restart, the
+# controller runs tools/ws_idle_probe.py against the public web hostname and
+# fails the converge if the edge closes the idle socket before the Portal's
+# keepalive ping arrives. 130 s covers the measured 125.6 s edge timeout and
+# the first two 45 s pings (docs/operations/websocket-liveness.md).
+app_ws_probe_enabled: true
+app_ws_probe_seconds: 130
+
 # First-run Django/Evennia superuser. Username + email are operator choices
 # (set via Environment Variables on the workflow); the password comes from
 # the gated Environment Secret ARXII_DJANGO_SUPERUSER_PASSWORD and is
