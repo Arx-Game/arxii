@@ -254,9 +254,16 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   same catalog character creation itself reads, so the report can never diverge from what a
   player is actually offered. Each option is tagged once by its first source via
   `OptionSource` (PATH, TRADITION, SPECIES).
+- `starting_stats_roller_points` turns the character's own twelve stats into the report's
+  roller-points knob: the mean of the twelve stats converted through `PointConversionRange`,
+  plus `LEVEL_POINTS_PER_LEVEL`. An empty `PointConversionRange` table converts every stat to
+  0 points (matching the live check path, no raw-value fallback), so an unseeded server prices
+  every kit at the level-one floor alone. The required-content sentinel (below) carries a
+  `point-conversion-ranges-stat` REQUIRED entry for exactly this table.
 - The kit itself is the top `1 + extra_picks` options ranked by baseline DE. `extra_picks`
   lets staff model a distinction that grants a few extra starting picks, capped at
-  `MAX_EXTRA_PICKS`.
+  `MAX_EXTRA_PICKS` - enforced by `StartingKitForm` (an `IntegerField` `max_value`), not by
+  `build_starting_kit_report` itself.
 - An option with no castable action template is still priced and shown, flagged rather than
   dropped, via `is_castable` (checks `FLAG_NOT_CASTABLE_STANDALONE`).
 - `meets_combat_floor` judges the whole option set, not just the kit, against a floor of one
@@ -268,6 +275,11 @@ away from character creation holding." A kit is priced at level 1 and gift threa
   panel's own last-submitted knobs, read only from that panel's already-cached corpus
   (`anchor_params`) and never triggering a fresh evaluation of its own. `anchor_de` is
   `None` when the catalog panel has not been run yet.
+- `StartingKitForm.clean()` rejects three combinations no character creation can ever
+  reach, each as a field error rather than a silent no-op: a tradition the chosen
+  Beginning does not offer, a gift the chosen tradition does not grant (a
+  `TraditionGiftGrant` row must exist for that pair), and a species the chosen Beginning
+  does not offer (`Beginnings.get_available_species()`). An unset species stays valid.
 
 Below the kit report, a separate pool scan surfaces every character-creation starter pool
 (a `PathGiftGrant` whose path is an active PROSPECT-stage path - the same paths
@@ -287,10 +299,11 @@ catalog form as before; `INTENT_REFRESH` does the same but first drops the cache
 `INTENT_KIT` prices one `StartingKitForm` combination without touching the catalog panel. A
 GET carrying `?scan=<filter>` renders the pool scan fragment instead of the panel; a GET
 carrying `?kit_path=&kit_gift=` (the pool scan's own "price this kit" link) prefills the kit
-form. Refresh clears both cache layers: `clear_corpus_cache` drops the per-knob catalog
-corpus AND the pool scan's own starting-context corpus, so a non-authoring config change
-(retuning `CovenantRoleBlendConfig`, say) does not leave the pool scan serving stale results
-for the rest of its 24h timeout.
+form. Refresh clears three things: `clear_corpus_cache` drops the per-knob catalog corpus for
+the submitted knobs and the pool scan's own starting-context corpus, and the view separately
+deletes the rendered panel entry itself (`_technique_cache_key`) - so a non-authoring config
+change (retuning `CovenantRoleBlendConfig`, say) does not leave any of the three serving stale
+results for the rest of its 24h timeout.
 
 Every DE total on the kit report keeps the same formula/parsed-versus-estimate split as the
 league table: `provenance_split` sums FORMULA and PARSED valuations together and ESTIMATE
