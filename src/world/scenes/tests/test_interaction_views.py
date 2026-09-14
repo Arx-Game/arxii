@@ -639,6 +639,13 @@ class PoseSubmitViewTests(APITestCase):
         window = ReactionWindow.objects.get(interaction=interaction)
         assert window.kind == ReactionWindowKind.ENTRANCE
         assert window.is_open
+        # #3816 Task 5: _seed_fresh_pose_caches `del`s (rather than stamps `[]`)
+        # cached_reaction_windows for exactly this reason -- the window opened
+        # above by `_on_created` must still show up in THIS response's reactable
+        # strip, not just in the database.
+        assert response.data["reaction_windows"], (
+            "ENTRY pose response must carry its reactable strip"
+        )
 
     def test_submit_standard_pose_opens_no_window(self) -> None:
         from world.scenes.reaction_models import ReactionWindow
@@ -656,6 +663,9 @@ class PoseSubmitViewTests(APITestCase):
         )
         assert response.status_code == status.HTTP_201_CREATED
         assert not ReactionWindow.objects.filter(interaction_id=response.data["id"]).exists()
+        # Negative twin of test_submit_entry_pose_opens_reaction_window's assertion
+        # above -- pins the branch distinction itself, not just the positive case.
+        assert response.data["reaction_windows"] == []
 
     def test_unauthenticated_request_is_rejected(self) -> None:
         """Unauthenticated requests are rejected with 401 or 403."""
