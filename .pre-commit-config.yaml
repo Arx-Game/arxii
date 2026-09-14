@@ -177,25 +177,46 @@ repos:
         # with `# noqa: IDMAPPER_ONLY` plus a reason, only for a model that is
         # not a SharedMemoryModel.
       - id: prefetch-to-attr
-        name: Reject to_attr prefetches; rows belong to a handler
+        name: Reject to_attr prefetches unless PrunedCachedProperty-backed
         entry: uv run python tools/lint_prefetch_to_attr.py
         language: system
         pass_filenames: true
         types: [python]
         files: ^src/(evennia_extensions|web/admin/upbringing_builder)/.*\.py$
-        # #3673 / ADR-0263: `Prefetch(..., to_attr=...)` writes a plain attribute
-        # and Django skips a prefetch that already has one, so under the identity
-        # map the second request re-serves the first request's rows - deleted ones
-        # included, arriving with a null id. Rows a parent owns go behind a
-        # CachedRowsHandler (evennia_extensions/handlers.py).
+        # #3673 / ADR-0263, narrowed by #3816: `Prefetch(..., to_attr=...)` writes
+        # a plain attribute, and Django skips a prefetch that already has one -
+        # correct only for a genuine data descriptor, silently wrong for a bare
+        # attribute or plain `@property`/`cached_property`, which always look
+        # "already set". Under the identity map that makes the second request
+        # re-serve the first request's rows - deleted ones included, arriving
+        # with a null id. `PrunedCachedProperty` (evennia_extensions/cached_property.py)
+        # is the sanctioned target: a real data descriptor that also self-heals
+        # against pk-nulled zombie rows on every read (ADR-0296). The hook allows
+        # `to_attr` only onto a same-file `PrunedCachedProperty`-decorated property
+        # of the matching name; everything else still fails. `CachedRowsHandler`
+        # (evennia_extensions/handlers.py) is reserved for the one remaining case
+        # `PrunedCachedProperty` can't cover - rows parameterized per-parent that
+        # need their own cache key - and today has exactly one consumer,
+        # `CompanionOrderHandler`.
         #
-        # SCOPE WIDENS ONE APP AT A TIME, and this regex lists the surfaces whose
-        # rows already sit behind handlers. Everywhere else is held by the
+        # SCOPE WIDENS ONE APP AT A TIME, and this regex lists only the surfaces
+        # that are actually clean under the rule above. #3816's plan converted
+        # specific named properties in world/scenes, world/journals,
+        # world/character_sheets, world/character_creation, world/magic and
+        # world/combat, but `--all-files` against those six trees under the new
+        # logic still finds ~100 unsanctioned `to_attr` sites the plan never
+        # touched (e.g. `ComboDefinition.cached_slots` in world/combat/services.py
+        # has no backing descriptor at all; `cached_codex_grants` in
+        # world/character_creation/models.py is a deliberate plain
+        # `cached_property`, not a bug) - so none of those six apps are clean yet
+        # and widening to them now would break pre-commit for the next unrelated
+        # edit to any of those files. Everywhere outside this regex is held by the
         # repo-wide `pattern:PREFETCH_TO_ATTR` ratchet in
-        # tools/noqa_ratchet_baseline.txt (343 grandfathered sites, count may only
-        # go down), so a NEW to_attr fails anywhere in src/ - this hook is the one
-        # that also says what to build instead. An app joins here when its rows
-        # have moved behind a handler and its count reaches zero.
+        # tools/noqa_ratchet_baseline.txt (count may only go down), so a NEW
+        # to_attr fails anywhere in src/ regardless - this hook is the one that
+        # also says what to build instead. An app joins here once ITS OWN
+        # `to_attr` sites are all converted to `PrunedCachedProperty` (or the
+        # narrow handler case) or individually noqa'd with a stated reason.
       - id: view-memo
         name: Reject per-request memos on views and serializers
         entry: uv run python tools/lint_view_memo.py
