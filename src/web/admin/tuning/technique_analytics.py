@@ -19,20 +19,28 @@ simulation panel's cache-key/last-key-pointer contract - see that view's docstri
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
+from decimal import Decimal
+from enum import StrEnum
 
 from django.core.cache import cache
 
 from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
+from world.character_creation.models import Beginnings
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
-from world.magic.services import de_valuation, technique_power_eval
-from world.magic.services.cg_catalog import get_technique_options
+from world.classes.models import Path
+from world.magic.models.gifts import Gift, Tradition
+from world.magic.models.techniques import Technique
+from world.magic.services import cg_catalog, de_valuation, technique_power_eval
 from world.magic.services.technique_effects import technique_catalog_revision
 from world.magic.types.technique_power import (
+    FLAG_NOT_CASTABLE_STANDALONE,
     EvalContext,
     ReferenceFrame,
     TechniquePowerReport,
 )
+from world.species.models import Species
 from world.traits.constants import STAT_DISPLAY_DIVISOR, TraitType
 from world.traits.models import PointConversionRange
 
@@ -60,8 +68,6 @@ _ROLL_MODIFIER_DEFAULT = 0
 #: 24h - matches `_SIMULATION_CACHE_TIMEOUT` in `web.admin.tuning.views`; a
 #: catalog-wide evaluation run should outlive a single admin session.
 _CORPUS_CACHE_TIMEOUT = 60 * 60 * 24
-
-INVALID_TRADITION_MESSAGE = "Tradition is not available for this Beginning."
 
 
 def resolve_sort_key(sort: str) -> str:
@@ -105,25 +111,6 @@ class TechniqueValuationTotals:
     estimated_baseline_de: float = 0.0
     formula_amplified_de: float = 0.0
     estimated_amplified_de: float = 0.0
-
-
-@dataclass(frozen=True, slots=True)
-class StartingKitReport:
-    """A real CG combination evaluated as one starting kit."""
-
-    beginning_name: str
-    path_name: str
-    gift_name: str
-    tradition_name: str
-    stats: dict[str, int]
-    roller_points: int
-    reports: tuple[TechniquePowerReport, ...]
-    baseline_de: float
-    amplified_de: float
-    formula_baseline_de: float
-    estimated_baseline_de: float
-    formula_amplified_de: float
-    estimated_amplified_de: float
 
 
 @dataclass(frozen=True, slots=True)
@@ -275,60 +262,195 @@ def starting_stats_roller_points(stats: dict[str, int]) -> int:
     return round(sum(converted) / len(converted)) + LEVEL_POINTS_PER_LEVEL
 
 
-def build_starting_kit_report(
-    beginning,
-    path,
-    gift,
-    tradition,
-    *,
-    stats: dict[str, int] | None = None,
-) -> StartingKitReport:
-    """Evaluate the authored Beginning/path/gift/tradition starter pool together.
+#: The context a character has at the end of character creation (#3716 Decision 2).
+STARTING_LEVEL = 1
+STARTING_THREAD_LEVEL = 0
+#: Upper bound on extra technique picks staff can enter; distinctions grant few.
+MAX_EXTRA_PICKS = 5
 
-    This deliberately uses ``get_technique_options`` instead of duplicating the
-    path/tradition union rule. The report prices every authored option in that
-    combination; the CG pick budget remains a separate player-choice concern.
+#: Valuation kinds that count toward the combat floor (#3716 P3).
+VALUATION_KIND_DAMAGE = "damage"
+PROTECTION_VALUATION_KINDS = frozenset({"mitigation", "heal"})
+
+
+class OptionSource(StrEnum):
+    """Where a starting-kit option comes from in character creation."""
+
+    PATH = "path"
+    TRADITION = "tradition"
+    SPECIES = "species"
+
+
+@dataclass(frozen=True, slots=True)
+class FloorResult:
+    """Whether a set of options holds a damage option and a protection option."""
+
+    has_damage: bool
+    has_protection: bool
+
+    @property
+    def met(self) -> bool:
+        return self.has_damage and self.has_protection
+
+
+def meets_combat_floor(reports: Iterable[TechniquePowerReport]) -> FloorResult:
+    """Judge options against the combat floor (#3716 P3).
+
+    Damage counts when any `damage` valuation is above 0; protection when any
+    `mitigation` or `heal` valuation is above 0. Debuffs and control count for neither.
     """
-    stats = stats or dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
-    allowed_traditions = {row.tradition_id for row in beginning.cached_beginning_traditions}
-    if tradition.pk not in allowed_traditions:
-        raise ValueError(INVALID_TRADITION_MESSAGE)
+    has_damage = False
+    has_protection = False
+    for report in reports:
+        for valuation in report.valuations:
+            if valuation.value <= 0:
+                continue
+            if valuation.kind == VALUATION_KIND_DAMAGE:
+                has_damage = True
+            elif valuation.kind in PROTECTION_VALUATION_KINDS:
+                has_protection = True
+    return FloorResult(has_damage=has_damage, has_protection=has_protection)
 
-    options = get_technique_options(path, gift, tradition)
-    techniques = {technique.pk: technique for technique in [*options.pool, *options.tradition]}
-    ordered = [techniques[key] for key in sorted(techniques)]
+
+def is_castable(report: TechniquePowerReport) -> bool:
+    """True when the technique carries an action template (no not-castable flag)."""
+    return FLAG_NOT_CASTABLE_STANDALONE not in report.flags
+
+
+def is_mostly_estimate(report: TechniquePowerReport) -> bool:
+    """True when estimates are more than half of an option's baseline DE (#3716 P7)."""
+    return report.baseline_de > 0 and report.estimated_baseline_de > report.baseline_de / 2
+
+
+@dataclass(frozen=True, slots=True)
+class StartingKitParams:
+    """One character-creation combination to price (#3716)."""
+
+    beginning: Beginnings
+    tradition: Tradition
+    path: Path
+    gift: Gift
+    species: Species | None = None
+    extra_picks: int = 0
+    #: Display-scale stats by name; a missing stat reads as the CG default.
+    stats: Mapping[str, int] = field(default_factory=dict)
+
+
+@dataclass(frozen=True, slots=True)
+class KitOptionRow:
+    """One priced option in a starting kit."""
+
+    report: TechniquePowerReport
+    source: OptionSource
+    castable: bool
+    mostly_estimate: bool
+    #: Baseline DE at the catalog panel's last knobs, or None when that corpus is not cached.
+    anchor_de: float | None
+    in_kit: bool
+
+
+@dataclass(frozen=True, slots=True)
+class StartingKitReport:
+    """A character-creation combination priced as the picks a new character gets."""
+
+    params: StartingKitParams
+    roller_points: int
+    pick_budget: int
+    #: Ranked by baseline DE (highest first), then name, then technique id.
+    rows: tuple[KitOptionRow, ...]
+    kit_baseline_de: float
+    kit_formula_de: float
+    kit_estimate_de: float
+    castable_count: int
+    floor: FloorResult
+
+
+def _kit_options(params: StartingKitParams) -> list[tuple[Technique, OptionSource]]:
+    """Character creation's own option set, each option tagged once by its first source."""
+    options = cg_catalog.get_technique_options(
+        params.path, params.gift, params.tradition, include_unready=True
+    )
+    species_options = cg_catalog.get_species_technique_options(params.species, include_unready=True)
+    sourced: dict[int, tuple[Technique, OptionSource]] = {}
+    for technique in options.pool:
+        sourced.setdefault(technique.pk, (technique, OptionSource.PATH))
+    for technique in options.tradition:
+        sourced.setdefault(technique.pk, (technique, OptionSource.TRADITION))
+    for technique in species_options:
+        sourced.setdefault(technique.pk, (technique, OptionSource.SPECIES))
+    return list(sourced.values())
+
+
+def _cached_anchor_de(anchor_params: TechniqueAnalyticsParams | None) -> dict[int, float]:
+    """Baseline DE by technique id from the cached catalog corpus, never evaluating (P8)."""
+    if anchor_params is None:
+        return {}
+    cached = cache.get(_corpus_cache_key(anchor_params))
+    if cached is None:
+        return {}
+    reports, _reference = cached
+    return {report.technique_id: report.baseline_de for report in reports}
+
+
+def build_starting_kit_report(
+    params: StartingKitParams,
+    *,
+    anchor_params: TechniqueAnalyticsParams | None = None,
+) -> StartingKitReport:
+    """Price one character-creation combination as the picks a new character gets (#3716).
+
+    Options are priced at level 1 and gift thread level 0 with the given stats; the kit
+    is the top `1 + extra_picks` options by baseline DE (P1). Options without an action
+    template are priced and flagged (P2). Evaluator helpers are called through their
+    module objects so tests can patch them at their origin.
+    """
     context = EvalContext(
-        level=1,
-        thread_level=1,
-        roller_points=starting_stats_roller_points(stats),
-        target_difficulty=25,
-        roll_modifier=0,
+        level=STARTING_LEVEL,
+        thread_level=STARTING_THREAD_LEVEL,
+        roller_points=starting_stats_roller_points(dict(params.stats)),
+        target_difficulty=_TARGET_DIFFICULTY_DEFAULT,
+        roll_modifier=_ROLL_MODIFIER_DEFAULT,
     )
     reference = de_valuation.compute_reference_frame(context)
-    multiplier_cache = {}
     bands = de_valuation.matchup_bands(context)
-    reports = tuple(
-        technique_power_eval.evaluate_technique(
-            technique,
-            context,
-            reference,
-            _multiplier_cache=multiplier_cache,
-            _bands=bands,
+    multiplier_cache: dict[int, Decimal] = {}
+    priced = [
+        (
+            technique_power_eval.evaluate_technique(
+                technique,
+                context,
+                reference,
+                _multiplier_cache=multiplier_cache,
+                _bands=bands,
+            ),
+            source,
         )
-        for technique in ordered
+        for technique, source in _kit_options(params)
+    ]
+    priced.sort(key=lambda pair: (-pair[0].baseline_de, pair[0].name.lower(), pair[0].technique_id))
+
+    pick_budget = 1 + params.extra_picks
+    anchors = _cached_anchor_de(anchor_params)
+    rows = tuple(
+        KitOptionRow(
+            report=report,
+            source=source,
+            castable=is_castable(report),
+            mostly_estimate=is_mostly_estimate(report),
+            anchor_de=anchors.get(report.technique_id),
+            in_kit=index < pick_budget,
+        )
+        for index, (report, source) in enumerate(priced)
     )
+    kit = [row.report for row in rows if row.in_kit]
     return StartingKitReport(
-        beginning_name=beginning.name,
-        path_name=path.name,
-        gift_name=gift.name,
-        tradition_name=tradition.name,
-        stats=dict(stats),
+        params=params,
         roller_points=context.roller_points,
-        reports=reports,
-        baseline_de=sum(report.baseline_de for report in reports),
-        amplified_de=sum(report.amplified_de for report in reports),
-        formula_baseline_de=sum(report.formula_baseline_de for report in reports),
-        estimated_baseline_de=sum(report.estimated_baseline_de for report in reports),
-        formula_amplified_de=sum(report.formula_amplified_de for report in reports),
-        estimated_amplified_de=sum(report.estimated_amplified_de for report in reports),
+        pick_budget=pick_budget,
+        rows=rows,
+        kit_baseline_de=sum(report.baseline_de for report in kit),
+        kit_formula_de=sum(report.formula_baseline_de for report in kit),
+        kit_estimate_de=sum(report.estimated_baseline_de for report in kit),
+        castable_count=sum(1 for row in rows if row.castable),
+        floor=meets_combat_floor(row.report for row in rows),
     )

@@ -434,16 +434,17 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
         last_key = cache.get(_technique_last_key())
         panel = cache.get(last_key) if last_key else None
         if kit_form.is_valid() and kit_form.cleaned_data["beginning"]:
-            kit_report = technique_analytics.build_starting_kit_report(
-                kit_form.cleaned_data["beginning"],
-                kit_form.cleaned_data["path"],
-                kit_form.cleaned_data["gift"],
-                kit_form.cleaned_data["tradition"],
+            kit_params = technique_analytics.StartingKitParams(
+                beginning=kit_form.cleaned_data["beginning"],
+                tradition=kit_form.cleaned_data["tradition"],
+                path=kit_form.cleaned_data["path"],
+                gift=kit_form.cleaned_data["gift"],
                 stats={
                     name: kit_form.cleaned_data[name] or STAT_DEFAULT_VALUE
                     for name in REQUIRED_STATS
                 },
             )
+            kit_report = technique_analytics.build_starting_kit_report(kit_params)
     elif request.method == "POST":
         form = TechniqueAnalyticsForm(request.POST)
         kit_form = StartingKitForm()
