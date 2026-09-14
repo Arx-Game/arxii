@@ -1388,6 +1388,7 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "automatically."
             ),
             probe=CustomProbe(fn=_probe_escalation_curves),
+            admin_model="StakesEscalationModifier",
         ),
         ContentDependency(
             key="encounter-outcome-mappings",
@@ -2054,22 +2055,6 @@ def _declarations() -> tuple[ContentDependency, ...]:
                 "lookup finds nothing to apply."
             ),
             probe=AnyRowProbe(label="EncounterAftermathRule"),
-        ),
-        ContentDependency(
-            key="stakes-escalation-modifiers",
-            label="Stakes escalation step bonus and initial surge",
-            tier=DependencyTier.TUNING,
-            consumer=(
-                "world/combat/escalation.py:157 _stakes_intensity_step_bonus(); "
-                "world/combat/escalation.py:169 _apply_initial_stakes_surge()"
-            ),
-            consequence=(
-                "A stakes level with no authored row grants no escalation step bonus and no one- "
-                "shot initial surge as the fight opens - distinct from the default_curve gap the "
-                "stakes-escalation-curves REQUIRED entry reports, since these two fields degrade "
-                "quietly rather than blocking auto-escalation."
-            ),
-            probe=AnyRowProbe(label="StakesEscalationModifier"),
         ),
         ContentDependency(
             key="position-blueprints",
