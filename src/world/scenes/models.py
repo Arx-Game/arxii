@@ -1229,7 +1229,8 @@ class Interaction(SharedMemoryModel):
 
     @PrunedCachedProperty
     def cached_dramatic_moment_tags(self) -> list[DramaticMomentTag]:
-        """GM dramatic-moment tags, fed by Prefetch(to_attr='cached_dramatic_moment_tags')."""
+        """GM dramatic-moment tags, fed by the ``to_attr``
+        "cached_dramatic_moment_tags" Prefetch."""
         from world.magic.models.dramatic_moment import DramaticMomentTag  # noqa: PLC0415
 
         return list(
@@ -1238,8 +1239,8 @@ class Interaction(SharedMemoryModel):
 
     @PrunedCachedProperty
     def cached_dramatic_moment_suggestions(self) -> list[DramaticMomentSuggestion]:
-        """Pending dramatic-moment suggestions, fed by
-        Prefetch(to_attr='cached_dramatic_moment_suggestions')."""
+        """Pending dramatic-moment suggestions, fed by the ``to_attr``
+        "cached_dramatic_moment_suggestions" Prefetch."""
         from world.magic.constants import SuggestionStatus  # noqa: PLC0415
         from world.magic.models.dramatic_moment import DramaticMomentSuggestion  # noqa: PLC0415
 

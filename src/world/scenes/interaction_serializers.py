@@ -761,9 +761,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
         still renders, since the moment itself is public.
         """
-        tags = getattr(obj, "cached_dramatic_moment_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if tags is None:
-            return []
+        tags = obj.cached_dramatic_moment_tags
         is_staff = bool(self.context.get("is_staff", False))
         viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
         revealed_sheet_ids = self._revealed_sheet_ids()
@@ -850,9 +848,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         if not self._viewer_can_gm_scene(obj.scene):
             return []
-        suggestions = getattr(obj, "cached_dramatic_moment_suggestions", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if suggestions is None:
-            return []
+        suggestions = obj.cached_dramatic_moment_suggestions
         return [
             {
                 "id": s.pk,

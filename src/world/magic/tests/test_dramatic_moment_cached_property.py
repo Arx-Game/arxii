@@ -52,7 +52,14 @@ class DramaticMomentTagCachedPropertyTest(TestCase):
             scene=self.scene,
             interaction=self.interaction,
         )
-        self.assertEqual(len(self.interaction.cached_dramatic_moment_tags), 1)
+        # assertNumQueries(0) is the actual proof the write-site mutation ran: with
+        # it deleted, DramaticMomentTag's RelatedCacheClearingMixin still pops the
+        # warmed cache and PrunedCachedProperty still falls back to a fresh query,
+        # producing the identical `len(...) == 1` result -- only a zero-query read
+        # distinguishes "mutation works" from "mutation doesn't exist."
+        with self.assertNumQueries(0):
+            cached = self.interaction.cached_dramatic_moment_tags
+        self.assertEqual(len(cached), 1)
 
     def test_create_tag_without_interaction_does_not_crash(self):
         # interaction=None is the nullable-interaction shape -- no cache to update.
@@ -95,8 +102,16 @@ class DramaticMomentSuggestionCachedPropertyTest(TestCase):
             interaction=self.interaction,
         )
         self.assertEqual(len(created), 1)
-        self.assertEqual(len(self.interaction.cached_dramatic_moment_suggestions), 1)
-        self.assertEqual(self.interaction.cached_dramatic_moment_suggestions[0].pk, created[0].pk)
+        # assertNumQueries(0) is the actual proof: it also exercises the in-loop
+        # peek inside maybe_suggest_dramatic_moments (re-peeked fresh each
+        # iteration, since DramaticMomentSuggestion's RelatedCacheClearingMixin
+        # clears the cache on every get_or_create that creates a row) -- without
+        # the write-site mutation, this read would fall back to a fresh query and
+        # still report the same length, masking the missing mutation.
+        with self.assertNumQueries(0):
+            cached = self.interaction.cached_dramatic_moment_suggestions
+        self.assertEqual(len(cached), 1)
+        self.assertEqual(cached[0].pk, created[0].pk)
 
     def test_resolve_suggestion_updates_pending_cache(self):
         # A confirmed/dismissed suggestion must drop out of the PENDING-filtered cache.
@@ -114,4 +129,8 @@ class DramaticMomentSuggestionCachedPropertyTest(TestCase):
         )
 
         self.assertEqual(resolved.status, SuggestionStatus.DISMISSED)
-        self.assertEqual(self.interaction.cached_dramatic_moment_suggestions, [])
+        # assertNumQueries(0) proves the empty list is the write-site filter, not a
+        # fresh PENDING-filtered requery that happens to also come back empty.
+        with self.assertNumQueries(0):
+            cached = self.interaction.cached_dramatic_moment_suggestions
+        self.assertEqual(cached, [])
