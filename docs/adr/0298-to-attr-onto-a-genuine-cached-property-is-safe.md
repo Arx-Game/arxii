@@ -11,10 +11,17 @@ freshness check for a genuine `cached_property` target is correct on first
 access; the staleness ADR-0263 documents is about nobody invalidating it
 afterward, not `cached_property` itself being unsafe. Checked all 5 of
 `CachedRowsHandler`'s existing consumers for a case `Prefetch` genuinely
-can't express (per-parent parameterized filtering) — found none;
-`CompanionOrderHandler`'s own batch path already fetches unfiltered and
-slices in Python, the same shape a bare `cached_property` + `Prefetch`
-achieves natively.
+can't express (per-parent parameterized filtering) — found none, though one
+needs a companion property rather than a single drop-in swap:
+`CompanionOrderHandler.rows_for()`'s batch path already does
+`filter(encounter_id__in=ids)` (no round filter at the DB level) and then
+filters to the current round in a Python loop
+(`row.round_number == row.encounter.round_number`). Migrating it off
+`CachedRowsHandler` means a `PrunedCachedProperty`-backed raw list holding
+*all* rounds' orders (fed via `Prefetch(to_attr=...)`, unfiltered), plus a
+separate plain `@property` — not itself cached, cheap to recompute — that
+filters that already-fetched list down to the current round in Python at
+read time.
 
 **Decision.** `PrunedCachedProperty` (`evennia_extensions/cached_property.py`)
 is the sanctioned primitive for a parent-owned list of rows fed via
