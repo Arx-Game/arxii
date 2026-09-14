@@ -28,6 +28,7 @@ from world.scenes.constants import (
 from world.scenes.factories import (
     InteractionFactory,
     InteractionReceiverFactory,
+    PersonaFactory,
     PlaceFactory,
     SceneFactory,
 )
@@ -1594,3 +1595,45 @@ class InteractionListQueryBudgetTests(APITestCase):
             response = self.client.get(url, {"scene": dense_scene.pk})
         assert response.status_code == 200
         assert len(response.data["results"]) == 3  # same count as small dataset
+
+    def test_query_budget_does_not_scale_with_action_link_count(self) -> None:
+        """GET /api/interactions/?scene=<id> must batch each pose's nested
+        action-interaction (#3816 Task 12) -- `InteractionViewSet.list()` applies
+        the same ``batch_fetch_nested_action_interactions`` fix `/api/play/poses/`
+        (`play_views._rows()`) does, since both endpoints share `get_queryset()`
+        but materialize their own page separately.
+
+        Each linked ACTION interaction lives in its OWN scene, never
+        `dense_scene`, so it never surfaces as a top-level row of this page in
+        its own right -- otherwise the idmapper identity map would silently warm
+        its `persona`/`character_sheet` cache via the page's own top-level
+        `select_related`, passing this test for the wrong reason.
+        """
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        dense_scene = SceneFactory()
+        for _ in range(3):
+            action_persona = PersonaFactory()
+            action = InteractionFactory(
+                scene=SceneFactory(), mode=InteractionMode.ACTION, persona=action_persona
+            )
+            pose = InteractionFactory(scene=dense_scene, mode=InteractionMode.POSE)
+            InteractionAction.objects.create(pose=pose, action_interaction=action, ordering=0)
+
+        # Flush again: the fixtures above (`action`, `action_persona`, the
+        # `InteractionAction` rows) are still resident with their relations set
+        # directly in Python from construction, which would make a later
+        # re-fetch of the SAME pk return those already-warm instances
+        # regardless of query shape (SharedMemoryModel's identity map).
+        idmapper_models.flush_cache()
+
+        url = reverse("interaction-list")
+        with self.assertNumQueries(28):  # 27 baseline + 1 nested action-interaction batch
+            response = self.client.get(url, {"scene": dense_scene.pk})
+        assert response.status_code == 200
+        results = response.data["results"]
+        assert len(results) == 3
+        for row in results:
+            assert len(row["action_links"]) == 1

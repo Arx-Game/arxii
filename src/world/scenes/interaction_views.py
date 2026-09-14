@@ -191,6 +191,46 @@ def _seed_fresh_pose_caches(
     interaction.cached_target_personas = target_personas or []
 
 
+def batch_fetch_nested_action_interactions(interactions: Sequence[Interaction]) -> None:
+    """Batch-fetch each pose's nested action-interaction's ``persona`` in one query.
+
+    ``cached_action_links``'s own Prefetch (``get_queryset()`` below) already batches
+    the ``InteractionAction.action_interaction`` FK itself for the whole page -- one
+    query, not one per row. But it never follows that FK's OWN ``persona``/
+    ``persona__character_sheet`` relation, so a caller walking
+    ``link.action_interaction.persona`` still pays one live query per DISTINCT linked
+    action, plus a second for its ``character_sheet`` (#3816 Task 12 -- the nested
+    fetch this whole issue's profiling flagged).
+
+    Collects every ``action_interaction_id`` referenced by any pose's
+    ``cached_action_links`` across ``interactions``, fetches those specific
+    ``Interaction`` rows in ONE query with ``select_related("persona__character_sheet")``,
+    then reassigns each straight back onto its ``InteractionAction.action_interaction`` --
+    a plain settable FK descriptor -- so every later read of that attribute is free.
+    Call this AFTER the page's interactions (and their ``cached_action_links``) are
+    already materialized, and before anything reads the nested relation.
+    """
+    nested_ids = {
+        link.action_interaction_id
+        for pose in interactions
+        for link in pose.cached_action_links
+        if link.action_interaction_id
+    }
+    if not nested_ids:
+        return
+    nested_by_id = {
+        row.pk: row
+        for row in Interaction.objects.filter(pk__in=nested_ids).select_related(
+            "persona__character_sheet"
+        )
+    }
+    for pose in interactions:
+        for link in pose.cached_action_links:
+            replacement = nested_by_id.get(link.action_interaction_id)
+            if replacement is not None:
+                link.action_interaction = replacement
+
+
 class InteractionCursorPagination(CursorPagination):
     page_size = 50
     ordering = "-timestamp"
@@ -389,6 +429,29 @@ class InteractionViewSet(
         if exclude_persona_ids:
             qs = qs.exclude(persona_id__in=exclude_persona_ids)
         return qs
+
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        """Materialize the page once, batch-fetch nested action-interactions
+        (#3816 Task 12), then serialize.
+
+        Mirrors ``mixins.ListModelMixin.list()`` exactly, except it realizes the
+        page's queryset into a concrete list itself so
+        ``batch_fetch_nested_action_interactions`` can run against it BEFORE
+        serialization reads any pose's ``cached_action_links``. `/api/play/poses/`
+        (``play_views._rows()``) shares this same ``get_queryset()`` and applies
+        the identical batch fetch on its own materialized list -- both list
+        surfaces onto this queryset need it, since it is the *nested*
+        ``InteractionAction.action_interaction`` relation this fixes, not
+        anything ``get_queryset()``'s own ``Prefetch`` pipeline reaches.
+        """
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        interactions = page if page is not None else list(queryset)
+        batch_fetch_nested_action_interactions(interactions)
+        serializer = self.get_serializer(interactions, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
 
     def get_serializer_class(
         self,

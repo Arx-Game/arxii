@@ -19,8 +19,13 @@ from world.scenes.factories import (
     SceneFactory,
 )
 from world.scenes.interaction_services import create_interaction
-from world.scenes.models import Interaction, InteractionReadReceipt, InteractionThread
-from world.scenes.play_views import _queryset
+from world.scenes.models import (
+    Interaction,
+    InteractionAction,
+    InteractionReadReceipt,
+    InteractionThread,
+)
+from world.scenes.play_views import _queryset, _rows
 from world.scenes.thread_services import ReplyTarget
 
 
@@ -960,3 +965,67 @@ class PlayPosesQueryBudgetTests(APITestCase):
             response = self.client.get(f"/api/play/poses/?conversation=scene:{scene.pk}")
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
+
+    def test_nested_action_interaction_persona_is_batched(self) -> None:
+        """Profiling (#3816) found doubled Persona queries from the nested
+        action-interaction fetch lacking select_related. `cached_action_links`'s
+        own Prefetch already batches the `InteractionAction.action_interaction`
+        FK itself (one query for the whole page), but never followed that FK's
+        own `persona`/`persona__character_sheet` relation -- so a caller walking
+        `link.action_interaction.persona` (the reader's own future need, and
+        anything else on this shape) paid one live query per DISTINCT linked
+        action, plus a second for its `character_sheet`. `_rows()`'s own batch
+        fetch (Task 12) now resolves that in one extra query up front, so
+        walking every pose's `action_interaction.persona.character_sheet`
+        afterward costs nothing -- not one query per pose.
+
+        Each linked ACTION interaction lives in its OWN scene (never the page's
+        scene) so it never surfaces as a top-level row of the page in its own
+        right -- otherwise the idmapper identity map would silently warm its
+        `persona`/`character_sheet` cache via the page's own top-level
+        `select_related`, passing this test for the wrong reason (identity-map
+        reuse, not the nested batch fetch this task adds).
+        """
+        scene = SceneFactory()
+        poses = []
+        for _ in range(2):
+            action_persona = PersonaFactory()
+            action = InteractionFactory(
+                scene=SceneFactory(), mode=InteractionMode.ACTION, persona=action_persona
+            )
+            pose = InteractionFactory(scene=scene, mode=InteractionMode.POSE)
+            InteractionAction.objects.create(pose=pose, action_interaction=action, ordering=0)
+            poses.append(pose)
+
+        # Flush the idmapper identity map: every object built above (`action`,
+        # `action_persona`, the `InteractionAction` rows) is still resident with
+        # its relations set directly in Python from construction. Without this,
+        # a later re-fetch of the SAME pk returns those already-warm instances
+        # regardless of query shape (SharedMemoryModel's identity map), which
+        # would pass this test for the wrong reason.
+        from evennia.utils.idmapper import models as idmapper_models
+
+        idmapper_models.flush_cache()
+
+        factory = APIRequestFactory()
+        django_request = factory.get("/api/play/poses/")
+        force_authenticate(django_request, user=self.account)
+        request = Request(django_request)
+
+        with self.assertNumQueries(19):  # 18 baseline + 1 nested action-interaction batch
+            _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
+
+        pose_ids = {pose.pk for pose in poses}
+        walked_poses = [row for row in interactions if row.pk in pose_ids]
+        assert len(walked_poses) == 2
+
+        # The batch already ran inside `_rows()` above -- walking every pose's
+        # nested action_interaction.persona.character_sheet afterward must be free.
+        with self.assertNumQueries(0):
+            for row in walked_poses:
+                links = row.cached_action_links
+                assert len(links) == 1
+                action_interaction = links[0].action_interaction
+                assert action_interaction is not None
+                assert action_interaction.persona is not None
+                assert action_interaction.persona.character_sheet is not None
