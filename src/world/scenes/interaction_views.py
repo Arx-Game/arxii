@@ -125,22 +125,25 @@ def _seed_fresh_pose_caches(
 
     On a genuine (non-replayed) creation this call path (``submit_pose`` never
     passes ``receivers=``/``place=``) guarantees a brand-new interaction has no
-    receivers, favorites, reactions, or endorsements yet, so seeding ``[]`` is
-    correct and avoids a live query on serialization. ``cached_action_links`` is
+    receivers, favorites, reactions, endorsements, dramatic-moment tags, or
+    dramatic-moment suggestions yet, so seeding ``[]`` is correct and avoids a
+    live query on serialization (dramatic-moment tags/suggestions require a
+    technique-entrance cast or the GM tag endpoint — an entirely separate
+    pipeline `_on_created` below never touches). ``cached_action_links`` is
     the one exception even here: ``_on_created`` already populated it via direct
     write-site mutation (#3816) with whatever ``InteractionAction`` rows were
     just linked — stomping it would silently drop them from the response even
     though the rows are in the database.
 
     On a REPLAY, ``interaction`` is the OLD row fetched from the ledger — it may
-    have accumulated real favorites/reactions/receivers/action-links/endorsements
-    from other requests since it was first created, so stamping any of them to
-    ``[]`` here would be a permanent lie: ``PrunedCachedProperty`` treats an
-    assigned value (``[]`` included) as already fetched, so every later read of
-    this identity-mapped instance in this worker process would report zero
-    forever. ``del`` instead, so the next real read recomputes fresh from the DB
-    (``PrunedCachedProperty.__delete__`` pops the entry and is a no-op if it was
-    never set).
+    have accumulated real favorites/reactions/receivers/action-links/endorsements/
+    dramatic-moment tags/suggestions from other requests since it was first
+    created, so stamping any of them to ``[]`` here would be a permanent lie:
+    ``PrunedCachedProperty`` treats an assigned value (``[]`` included) as
+    already fetched, so every later read of this identity-mapped instance in
+    this worker process would report zero forever. ``del`` instead, so the next
+    real read recomputes fresh from the DB (``PrunedCachedProperty.__delete__``
+    pops the entry and is a no-op if it was never set).
 
     ``cached_reaction_windows`` gets ``del`` in BOTH branches, unlike its five
     siblings above: an ENTRY pose's ``_on_created`` callback opens a
@@ -167,6 +170,8 @@ def _seed_fresh_pose_caches(
         del interaction.cached_action_links
         del interaction.cached_endorsements
         del interaction.cached_reaction_windows
+        del interaction.cached_dramatic_moment_tags
+        del interaction.cached_dramatic_moment_suggestions
     else:
         interaction.cached_receivers = []
         interaction.cached_favorites = []
@@ -174,12 +179,16 @@ def _seed_fresh_pose_caches(
         # cached_action_links already populated by `_on_created` -- see above.
         interaction.cached_endorsements = []
         del interaction.cached_reaction_windows
+        # Neither dramatic-moment tags nor suggestions are ever created by
+        # `_on_created` above -- both require a technique-entrance cast or the
+        # GM tag endpoint, an entirely separate pipeline from plain pose
+        # submission -- so a brand-new interaction genuinely has none yet.
+        interaction.cached_dramatic_moment_tags = []
+        interaction.cached_dramatic_moment_suggestions = []
     # The replay-matching `comparison_fields["target"]` check guarantees the
     # freshly-resolved `target_personas` here is identical to the stored row's
     # real set on a replay too, so this assignment is safe in both branches.
     interaction.cached_target_personas = target_personas or []
-    interaction.cached_dramatic_moment_tags = []
-    interaction.cached_dramatic_moment_suggestions = []
 
 
 class InteractionCursorPagination(CursorPagination):
