@@ -390,17 +390,20 @@ class InteractionViewSet(
             qs = qs.exclude(persona_id__in=exclude_persona_ids)
         return qs
 
+    # Behaviorally equivalent to the inherited `mixins.ListModelMixin.list()` --
+    # same filtering, pagination, and permission behavior (materializes the
+    # queryset into a concrete list on the unpaginated path instead of passing
+    # it through unevaluated, but the serialized output is identical either
+    # way). Originally added (#3816 Task 12) to host a nested-relation batch
+    # fetch; that fetch was removed once investigation found no consumer of the
+    # relation it warmed (see that commit's message). Left as an explicit
+    # override rather than reverted, since it is behavior-neutral and this
+    # class had no `list()` of its own before. A docstring here would win over
+    # the class docstring as this operation's public API description
+    # (drf-spectacular resolves `action_doc or view_doc`) and leak this
+    # internal changelog into the published OpenAPI schema -- keep this
+    # explanation as a comment, never a docstring, on this method.
     def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
-        """Materialize the page once, then serialize.
-
-        Line-for-line equivalent to the inherited ``mixins.ListModelMixin.list()``
-        -- same filtering, pagination, and permission behavior. Originally added
-        (#3816 Task 12) to host a nested-relation batch fetch; that fetch was
-        removed once investigation found no consumer of the relation it warmed
-        (see that commit's message). Left as an explicit override rather than
-        reverted, since it is behavior-neutral and this class had no `list()` of
-        its own before.
-        """
         queryset = self.filter_queryset(self.get_queryset())
         page = self.paginate_queryset(queryset)
         interactions = page if page is not None else list(queryset)
