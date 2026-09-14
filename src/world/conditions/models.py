@@ -1724,8 +1724,8 @@ class DamageSuccessLevelMultiplier(NaturalKeyMixin, SharedMemoryModel):
 
     Resolver picks the highest-threshold row whose `min_success_level` is
     ≤ the actual SL. SL below the lowest threshold yields zero damage.
-    Defaults seeded by the planned startup-page mechanism (or
-    DamageSuccessLevelMultiplierFactory in tests).
+    Staff author the rows in admin; the Required content panel flags an
+    empty table (#3831). Tests use DamageSuccessLevelMultiplierFactory.
     """
 
     min_success_level = models.IntegerField(unique=True)

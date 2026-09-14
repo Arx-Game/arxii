@@ -510,7 +510,7 @@ class TestContentRowExportViewsConfigured(TestCase):
         """Credited+exportable models with no ModelAdmin degrade to the workbench link.
 
         A handful of credited+exportable models never got a ``ModelAdmin``
-        registered (``checks.ConsequenceEffect`` is one — it is deliberately
+        registered (``checks.ConsequenceEffect`` is one - it is deliberately
         inline-only, mirroring ``magic.TechniqueDamageProfile``: a payload row
         has no meaning apart from its owning ``Consequence``, #3831). Exporting
         one used to 500 the diff page on ``NoReverseMatch`` building its

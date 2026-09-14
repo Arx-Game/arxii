@@ -1,6 +1,6 @@
 """Admin for the `npc_services` app (#3428, #3831).
 
-``ClueRevealOfferDetails`` was the first per-kind details model registered — it is
+``ClueRevealOfferDetails`` was the first per-kind details model registered - it is
 structurally the same kind of "clue placement" row as ``RoomClue``/``ClueTrigger``/
 ``ItemClueTrigger`` (`world.clues.admin`), which already use Django admin as a staff
 authoring surface for placing an existing clue somewhere in the world. #3831 (staff

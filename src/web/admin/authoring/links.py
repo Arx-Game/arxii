@@ -65,9 +65,9 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     exposes a row's prose fields, so this is the link an author follows to
     reach everything else on the row (sort orders, flags, foreign keys).
 
-    Not every credited model has a registered ``ModelAdmin`` - three
-    (``NPCRole``, ``BuildingKind``, ``DecorationKind``) were never
-    ``@admin.register``ed - so checking ``admin.site._registry`` first keeps
+    Not every credited model has a registered ``ModelAdmin`` (inline-only
+    payload rows such as ``ConsequenceEffect`` never get one) - so checking
+    ``admin.site._registry`` first keeps
     an unregistered model from ever reaching ``reverse()``. The
     ``NoReverseMatch`` catch is defense in depth for any other reason
     ``admin:<app_label>_<model_name>_change`` might not resolve. Callers

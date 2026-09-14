@@ -58,10 +58,10 @@ a page load shouldn't pay for unconditionally. Each row's links are built
 here, not carried on `RelatedEntry` itself: a workbench editor link only for
 neighbor models `credited_content_models()` covers (`entry.credited is not
 None` is the same signal), and an admin change-form link gated on the model
-actually having a registered `ModelAdmin` - three credited models
-(`NPCRole`, `BuildingKind`, `DecorationKind`) carry `CreditedContent`
-but were never `@admin.register`ed, so an unconditional `reverse()` there
-would 500 the moment one of them turned up as a neighbor.
+actually having a registered `ModelAdmin` - some credited models
+(inline-only payload rows such as `ConsequenceEffect`) have no `ModelAdmin`,
+so an unconditional `reverse()` there would 500 the moment one of them
+turned up as a neighbor.
 
 Task 7 (`authoring_reference`) is the dashboard-level reference search pane -
 independent of any one row, driven by `web.admin.authoring.reference`. A

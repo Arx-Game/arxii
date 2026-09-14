@@ -2,14 +2,14 @@
 
 Missions are normally authored through the Mission Studio React editor
 (``world/missions/services`` + the frontend graph canvas), not through this
-admin — the graph's cross-row invariants (route-set completeness, single
+admin - the graph's cross-row invariants (route-set completeness, single
 entry node, etc.) are enforced by the Studio's authoring/resolution service,
 not by these `ModelAdmin` pages. These registrations exist so staff without
 Studio access still have a table-level view of every authored row, and so
 there is a fallback editor when the Studio is unavailable or a fixture needs
 a one-off correction. Runtime/play-state models (``MissionInstance``,
 ``MissionParticipant``, ``MissionInvite``, etc.) are intentionally NOT
-registered here — they are per-run rows, not staff-authored config.
+registered here - they are per-run rows, not staff-authored config.
 """
 
 from django.contrib import admin

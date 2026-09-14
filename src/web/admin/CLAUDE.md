@@ -161,8 +161,9 @@ of every single row needing its own PR.
   through `_change_url`, which builds the target model's admin change-form
   URL **only when that model is in `admin.site._registry`** and returns
   `None` otherwise - not every credited+exportable model has a registered
-  `ModelAdmin` (13 as of #3019 review, e.g. `missions.MissionTemplate`,
-  `magic.PortalAnchorKind`), and building that URL for one used to raise
+  `ModelAdmin` (#3831 registered the config and catalog tables; what stays
+  unregistered is inline-only payload rows such as `checks.ConsequenceEffect`),
+  and building that URL for one used to raise
   `NoReverseMatch` and 500 the diff page. Every caller degrades `None` to
   `web/admin/authoring/links.py:workbench_editor_url` - an Authoring
   Workbench editor deep-link, which always resolves regardless of the admin
@@ -374,10 +375,11 @@ to `_authoring/` (`admin_authoring`).
   non-exportable model directly above the "stays in the database only"
   line it contradicted). `content_exportable` only rules out the three
   builder-domain models here - it says nothing about whether an
-  *exportable* model has a `ModelAdmin` to link back to. Thirteen other
-  credited+exportable models never got one (e.g. `missions.MissionTemplate`,
-  `magic.PortalAnchorKind`) - that gap is closed one layer down, in the
-  row-export system's own `_change_url` (below), not by this gate.
+  *exportable* model has a `ModelAdmin` to link back to. Some credited+exportable
+  models still have none (inline-only payload rows such as
+  `checks.ConsequenceEffect`; #3831 registered the config and catalog tables) -
+  that gap is closed one layer down, in the row-export system's own
+  `_change_url` (below), not by this gate.
 - **Related-entries pane + prose mentions** - `authoring/relations.py`:
   `related_entries(instance, cap=50)` walks every forward FK/O2O/M2M field
   and every reverse FK/O2O/M2M relation (a `related_name="+"` relation is
