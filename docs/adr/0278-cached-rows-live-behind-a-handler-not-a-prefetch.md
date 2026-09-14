@@ -49,8 +49,16 @@ descriptor runs on the read and a model base class never sees it.
 
 **How to apply.** `grep -rn "to_attr=" src/` is the audit; 343 sites are grandfathered by
 the `pattern:PREFETCH_TO_ATTR` ratchet in `tools/noqa_ratchet_baseline.txt`, whose count
-may only go down. A new one fails anywhere in `src/`. The `prefetch-to-attr` hook covers
-the surfaces already converted and names what to build instead; an app joins its `files:`
-regex when its count reaches zero. `OriginTemplate.questions` is the worked example - one
-handler read by the CG API serializer, the questionnaire resolver, the draft validators,
-the finalize service and the Builder's rail.
+may only go down. A new one fails anywhere in `src/`. **The `prefetch-to-attr` hook does
+not cover the converted surfaces** — its `files:` scope (`evennia_extensions/`,
+`web/admin/upbringing_builder/`) has zero `to_attr` call sites today, only prose mentions,
+so a clean run of the hook is not evidence the converted `PrunedCachedProperty` properties
+elsewhere are enforced. Nor is "an app joins its `files:` regex when its count reaches
+zero" a reachable exit criterion: most converted `to_attr` sites split the `Prefetch` call
+from the `PrunedCachedProperty` definition across files (the dominant, correct layout,
+`world/scenes` included), and the hook's same-file heuristic false-positives on that split
+regardless of how much of an app has converted — widening it is blocked on #3835. See
+`evennia_extensions/CACHED_PROPERTY_STANDARD.md` and ADR-0296 for the current state.
+`OriginTemplate.questions` is the worked example - one handler read by the CG API
+serializer, the questionnaire resolver, the draft validators, the finalize service and the
+Builder's rail.
