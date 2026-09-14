@@ -1658,8 +1658,8 @@ class InteractionListQueryBudgetTests(APITestCase):
         7 is the measured floor here (vs. that endpoint's 8): (1) session, (2)
         `Block` list, (3) the outer paginated `Interaction` select, (4) the
         `SceneEntryEndorsement` batch for this scene's ENTRY poses, (5) the
-        GM/owner-participation check that gates unrevealed-identity fields,
-        (6) the read-receipt batch, (7) the mute-list batch. None of the 5
+        GM/owner-participation check that gates PENDING dramatic-moment
+        suggestions, (6) the read-receipt batch, (7) the mute-list batch. None of the 5
         `cached_*` satellite-relation Prefetch queries this plan converted to
         `PrunedCachedProperty` ran a second time -- verified directly against
         the captured query log.
@@ -1678,22 +1678,25 @@ class InteractionListQueryBudgetTests(APITestCase):
         `/api/interactions/?scene=` would pay for all 3 of those batches too:
         pure fixture-shape coincidence, not an endpoint capability gap.
 
-        The `SceneEntryEndorsement` batch is genuinely absent from play --
-        nothing in the play response path ever reads
-        `context["scene_entry_endorsements"]`, regardless of query params.
-        The GM/owner check is a different story: it's not absent, it's
-        answered for free. `_viewer_can_gm_scene` (`interaction_serializers.py:813`)
-        falls back to `scene.is_gm()/is_owner()` for any request without a
-        `scene=` query param (both these test URLs qualify) -- that fallback
-        still costs one `SceneParticipation` query on the cold request
-        (inside the 27), but resolves to zero warm because `Scene.is_gm`/
-        `is_owner` read `participations_cached`, a `@cached_property` on the
-        same idmapper-resident `Scene` instance the first request already
-        warmed. This is request-shape, not endpoint-structural:
+        Both the `SceneEntryEndorsement` batch and the GM/owner check are
+        populated by the same `if scene_id:` block in the shared
+        `InteractionViewSet.get_serializer_context`
+        (`interaction_views.py:236-270`) -- so `/api/interactions/?scene=`
+        pays both on EVERY request, cold and warm (items (4) and (5) above),
+        and `/api/play/poses/?conversation=scene:<id>` pays neither. They
+        differ only in what happens when that context is empty: `_entry_rows`
+        finds an empty dict and the field renders empty, while
+        `_viewer_can_gm_scene` (`interaction_serializers.py:813`) falls
+        through to `scene.is_gm()`/`is_owner()` -- one `SceneParticipation`
+        query on play's cold request, zero warm, since those read
+        `participations_cached`, a `@cached_property` on the same
+        idmapper-resident `Scene` the first request already warmed. Neither
+        half is endpoint-structural; both track the query-param spelling.
         `/api/play/poses/?scene=<id>` is a real production call shape
-        (`frontend/src/game/playQueries.ts:52`, `GamePage.tsx:621`), and
-        issuing it would make play pay the GM/owner-check's cold cost too,
-        on a scene the process hasn't seen yet.
+        (`InteractionFilter.scene`, `interaction_filters.py:24`;
+        `frontend/src/game/playQueries.ts:52`, `GamePage.tsx:621`), and
+        issuing it would make play pay both batches on every request, exactly
+        like this endpoint.
 
         For the same reason, don't read anything structural into the two
         endpoints' matching COLD budgets (27 and 27, pinned here and in
@@ -1707,10 +1710,9 @@ class InteractionListQueryBudgetTests(APITestCase):
         `/api/play/poses/`'s -- 7 (this endpoint's own 2 scene-gated batches,
         unaffected) + 3 (the reply-chip batches, fixture-shape) = 10, not an
         approach toward 8. Separately, calling `/api/play/poses/?scene=<id>`
-        instead of `?conversation=scene:<id>` would add the GM/owner check's
-        cold cost to play too (request-shape) -- but never
-        `SceneEntryEndorsement`, which nothing in the play path reads under
-        any call shape.
+        instead of `?conversation=scene:<id>` would add both scene-gated
+        batches to play's warm floor as well -- request-shape, not a
+        structural property of either endpoint.
         """
         url = reverse("interaction-list")
         first = self.client.get(url, {"scene": self.scene.pk})
