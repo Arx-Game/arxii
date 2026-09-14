@@ -685,25 +685,20 @@ def _effective_anima(technique: Technique) -> int:
     return result.effective_cost
 
 
-#: Provenances whose value is not a measured contribution: estimates are split out,
-#: and the zero buckets carry no value at all.
-_NOT_FORMULA_PROVENANCES = frozenset(
-    {
-        ValuationProvenance.ESTIMATE,
-        ValuationProvenance.UNPRICED_DISPEL,
-        ValuationProvenance.UNPRICEABLE,
-        ValuationProvenance.INERT_PAYLOAD,
-    }
-)
+#: Provenances whose value is a measured contribution - defined positively (#3716 fix
+#: round 2) so a future provenance value defaults to NOT counting as measured, rather
+#: than a by-exclusion set silently treating it as formula-grade.
+_FORMULA_PROVENANCES = frozenset({ValuationProvenance.FORMULA, ValuationProvenance.PARSED})
 
 
 def provenance_split(valuations: Sequence[PayloadValuation]) -> tuple[float, float]:
     """Return ``(formula_or_parsed_total, estimate_total)`` for one valuation list (#3716).
 
     Kept apart so a total never makes an estimate read as measured. FORMULA and PARSED
-    land together; ESTIMATE is its own total; the zero buckets count for neither.
+    land together; ESTIMATE is its own total; the zero buckets (UNPRICED_DISPEL,
+    UNPRICEABLE, INERT_PAYLOAD) count for neither.
     """
-    formula = sum(v.value for v in valuations if v.provenance not in _NOT_FORMULA_PROVENANCES)
+    formula = sum(v.value for v in valuations if v.provenance in _FORMULA_PROVENANCES)
     estimate = sum(v.value for v in valuations if v.provenance == ValuationProvenance.ESTIMATE)
     return formula, estimate
 
