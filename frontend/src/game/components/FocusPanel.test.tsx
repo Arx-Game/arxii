@@ -19,8 +19,10 @@ import type { RoomData } from './RoomPanel';
 
 import { FocusPanel } from './FocusPanel';
 
+const { mockSend } = vi.hoisted(() => ({ mockSend: vi.fn() }));
+
 vi.mock('@/hooks/useGameSocket', () => ({
-  useGameSocket: () => ({ send: vi.fn() }),
+  useGameSocket: () => ({ send: mockSend }),
 }));
 
 vi.mock('@/inventory/components/CharacterFocusView', () => ({
@@ -99,6 +101,22 @@ describe('FocusPanel', () => {
     // CharactersList renders the present characters.
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
+  });
+
+  it('lists the active character as "you" and looks at them on click (#3856)', () => {
+    mockSend.mockClear();
+    const focus = makeFocusApi({ kind: 'room', room: null, sceneSummary: null }, 1);
+
+    renderUI(
+      <FocusPanel focus={focus} roomCharacter="Hero" roomData={makeRoomData()} sceneData={null} />
+    );
+
+    expect(screen.getByText('you')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /hero/i }));
+
+    // `me` rather than the name: it can never prefix-match another occupant.
+    expect(mockSend).toHaveBeenCalledWith('Hero', 'look me');
+    expect(focus.push).not.toHaveBeenCalled();
   });
 
   it('renders CharacterFocusView when focus is a character', () => {

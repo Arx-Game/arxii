@@ -263,7 +263,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`RoomPanel.tsx`**: Right sidebar container with room info, scene controls, navigation
 - **`RoomHeader.tsx`**: Room name and scene start/end controls
 - **`RoomDescription.tsx`**: Collapsible room description
-- **`CharactersList.tsx`**: Characters present in the room with avatars
+- **`CharactersList.tsx`**: Characters present in the room with avatars. Lists the
+  viewer first with a "you" tag (#3856) — the room state's `characters` excludes
+  them, so `RoomPanel` supplies `viewer` from its `character` prop and
+  `FocusPanel` supplies the portrait from the roster entry. Pressing the row sends
+  `look me` (never the name, which could prefix-match another occupant), so what
+  others see when they look at you lands as a look note in the column.
 - **`ExitsList.tsx`**: Clickable exit buttons for navigation
 - **`ObjectsList.tsx`**: Objects visible in the room
 - **`PortalsBlock.tsx`**: Portal-network destinations the active character could

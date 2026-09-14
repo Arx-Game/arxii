@@ -74,6 +74,8 @@ interface RoomPanelProps {
   viewerEntryId?: number | null;
   /** The viewer's active persona pk — the unseen-presence report identity (#3288). */
   viewerPersonaId?: number | null;
+  /** The viewer's own portrait for the "you" row (#3856); null shows initials. */
+  viewerThumbnailUrl?: string | null;
 }
 
 export function RoomPanel({
@@ -86,6 +88,7 @@ export function RoomPanel({
   hasActiveBattle = false,
   viewerEntryId = null,
   viewerPersonaId = null,
+  viewerThumbnailUrl = null,
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
@@ -250,6 +253,11 @@ export function RoomPanel({
 
       <CharactersList
         characters={room.characters}
+        viewer={{ name: character, thumbnailUrl: viewerThumbnailUrl }}
+        // `look me` (#3856): what others see when they look at you, as a note
+        // in the column. `me` rather than the name, so it can never
+        // prefix-match another occupant.
+        onViewerClick={() => send(character, 'look me')}
         onCharacterClick={onCharacterClick}
         hasUnseenPresence={Boolean(room.has_unseen_presence)}
         viewerPersonaId={viewerPersonaId}
