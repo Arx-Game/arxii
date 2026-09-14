@@ -25,6 +25,7 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return {
     isConnected: true,
     messages: [],
+    notes: [],
     unread: 0,
     commands: [],
     room: null,

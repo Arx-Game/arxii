@@ -1,4 +1,4 @@
-import type { InteractionWsPayload } from '@/hooks/types';
+import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import type { GameLifecycleState } from '@/store/gameSlice';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
@@ -8,7 +8,8 @@ interface ExplorationReaderProps {
   room: RoomData | null;
   ambientInteractions?: InteractionWsPayload[];
   lifecycleState?: GameLifecycleState;
-  ambientNotices?: string[];
+  /** Typed text lines for this character (#3856); rendered as notes. */
+  notes?: FeedNote[];
   onRetry?: () => void;
 }
 
@@ -20,7 +21,7 @@ export function ExplorationReader({
   room,
   ambientInteractions = [],
   lifecycleState,
-  ambientNotices = [],
+  notes = [],
   onRetry,
 }: ExplorationReaderProps) {
   const awaitingSnapshot = lifecycleState === 'entering' && Boolean(room);
@@ -132,7 +133,7 @@ export function ExplorationReader({
               </section>
             )}
 
-            {ambientNotices.length > 0 && (
+            {notes.length > 0 && (
               <section aria-labelledby="ambient-notices-heading" className="space-y-2">
                 <h2
                   id="ambient-notices-heading"
@@ -140,12 +141,9 @@ export function ExplorationReader({
                 >
                   Nearby activity
                 </h2>
-                {ambientNotices.map((notice, index) => (
-                  <p
-                    key={`${notice}:${index}`}
-                    className="rounded border-l-2 border-primary/40 pl-3 text-sm"
-                  >
-                    {notice}
+                {notes.map((note) => (
+                  <p key={note.id} className="rounded border-l-2 border-primary/40 pl-3 text-sm">
+                    {note.content}
                   </p>
                 ))}
               </section>

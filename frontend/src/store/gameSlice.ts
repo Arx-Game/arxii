@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type {
+  FeedNote,
   GameMessage,
   HubTidings,
   InteractionWsPayload,
@@ -60,7 +61,13 @@ export interface Session {
   ambientInteractions?: InteractionWsPayload[];
   /** Connection diagnostics are kept separate from authored/system story text. */
   diagnostics?: string[];
-  ambientNotices?: string[];
+  /**
+   * Typed text lines (#3856): look results, item lines, errors, arrivals and
+   * departures, narrative emits. Every `text` frame becomes one, kind from its
+   * `kwargs.type`; both readers render them at their timestamp among the
+   * interactions. Bounded, newest kept.
+   */
+  notes: FeedNote[];
   /** Epoch used to reject late interaction frames from the previous room. */
   ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
@@ -96,6 +103,9 @@ interface GameState {
 
 // Module-scope monotonic id for session messages (see addSessionMessage).
 let nextMessageId = 0;
+// Same for feed notes (#3856): several frames can land in one millisecond.
+let nextNoteId = 0;
+const MAX_NOTES = 200;
 
 const initialState: GameState = {
   sessions: {},
@@ -113,6 +123,7 @@ export const gameSlice = createSlice({
         state.sessions[name] = {
           isConnected: false,
           messages: [],
+          notes: [],
           unread: 0,
           commands: [],
           room: null,
@@ -207,7 +218,9 @@ export const gameSlice = createSlice({
         const nextRoomId = room?.id ?? null;
         if (previousRoomId !== nextRoomId) {
           if (session.ambientInteractions) session.ambientInteractions = [];
-          if (session.ambientNotices) session.ambientNotices = [];
+          // Notes are deliberately kept (#3856): the feed is the character's own
+          // history, and the look of the room just left, the walk itself, and an
+          // error on the way are still theirs to scroll back to.
           session.ambientRoomEnteredAt = Date.now();
         }
         session.room = room;
@@ -252,30 +265,27 @@ export const gameSlice = createSlice({
       const session = state.sessions[action.payload];
       if (session) session.diagnostics = [];
     },
-    addAmbientNotice: (
+    /**
+     * Append one typed text line (#3856). The id is assigned here, not by the
+     * caller, for the same reason as `addSessionMessage`: it is a React key.
+     * Unread counts the way a message does, so a look result or an error
+     * arriving for a character you are not watching still badges that tab.
+     */
+    addFeedNote: (
       state,
-      action: PayloadAction<{
-        character: MyRosterEntry['name'];
-        message: string;
-        timestamp?: string;
-      }>
+      action: PayloadAction<{ character: MyRosterEntry['name']; note: Omit<FeedNote, 'id'> }>
     ) => {
-      const session = state.sessions[action.payload.character];
+      const { character, note } = action.payload;
+      const session = state.sessions[character];
       if (!session) return;
-      const frameTime = action.payload.timestamp ? Date.parse(action.payload.timestamp) : NaN;
-      if (
-        session.ambientRoomEnteredAt &&
-        Number.isFinite(frameTime) &&
-        frameTime < session.ambientRoomEnteredAt
-      )
-        return;
-      const notices = session.ambientNotices ?? (session.ambientNotices = []);
-      notices.push(action.payload.message);
-      if (notices.length > 50) session.ambientNotices = notices.slice(-50);
+      nextNoteId += 1;
+      session.notes.push({ ...note, id: `n${nextNoteId}` });
+      if (session.notes.length > MAX_NOTES) session.notes = session.notes.slice(-MAX_NOTES);
+      if (state.active !== character) session.unread += 1;
     },
-    clearAmbientNotices: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+    clearFeedNotes: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
-      if (session) session.ambientNotices = [];
+      if (session) session.notes = [];
     },
     setSessionScene: (
       state,
@@ -474,8 +484,8 @@ export const {
   clearAmbientInteractions,
   addSessionDiagnostic,
   clearSessionDiagnostics,
-  addAmbientNotice,
-  clearAmbientNotices,
+  addFeedNote,
+  clearFeedNotes,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,
