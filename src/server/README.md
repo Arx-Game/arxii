@@ -31,6 +31,16 @@ functionality to replace the default. You usually need to restart the
 server to apply changes done here. The most important file is the file
 `settings.py` which is the main configuration file of Evennia.
 
+**Reload versus restart, and which process loads what (#3863).** Evennia
+is two processes. `evennia reload` restarts only the Server; the Portal
+(everything under `portal/`, the websocket and telnet protocol classes,
+and the `settings.py` keys those listeners read) keeps the code it booted
+with until a full restart (`evennia reboot`, or `systemctl restart` of the
+unit on production). The production deploy fingerprints those files and
+restarts instead of reloading when they change; see
+`docs/operations/websocket-liveness.md` and the `portal-code-deploy-reviewer`
+agent before shipping a change here that the Portal has to pick up.
+
 ## server/logs/
 
 The default location of the log files the running Evennia server creates
