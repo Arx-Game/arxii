@@ -30,6 +30,17 @@ Character-specific UI components:
 
 - **`Layout.tsx`**: Main application layout wrapper
 - **`Header.tsx`**: Application header with navigation
+- **`SelectedCharacterChip.tsx`**: The docked-portrait chip the header renders when the
+  account has a selected character (#3412). Selection is not presence, and the chip
+  shows both (#3859): it reads the character's live session from the store
+  (`sessions[name].isConnected`, the same fact `GatefoldPage`'s redirect and
+  `GameTopBar`'s dot read). With a live session the sub-line says "In the world" plus
+  the room, the button is "Return to the world", and "Leave the world" calls
+  `useGameSocket().disconnect(name)`, the world menu's own item, so the server unpuppets
+  the character; without one it offers "Enter the world" and says "Not in the world".
+  Navigating away from `/game` keeps the socket open (ADR-0295), which is why the chip
+  must read the store and never the route. Degraded lifecycle states show
+  `dockedStateLabel` instead of a presence claim.
 - **`Footer.tsx`**: Application footer
 - **`AuthProvider.tsx`**: Authentication context provider
 
