@@ -38,10 +38,7 @@ from world.scenes.constants import (
 from world.scenes.interaction_filters import InteractionFilter
 from world.scenes.interaction_permissions import get_account_personas
 from world.scenes.interaction_serializers import InteractionListSerializer
-from world.scenes.interaction_views import (
-    InteractionViewSet,
-    batch_fetch_nested_action_interactions,
-)
+from world.scenes.interaction_views import InteractionViewSet
 from world.scenes.models import Interaction, PoseSubmission
 from world.scenes.thread_services import thread_roots
 
@@ -291,18 +288,9 @@ def _rows(
     The reply parent chip needs nothing extra here: a row's thread IS its parent edge
     (#3787), and `InteractionViewSet.get_queryset` already joins `thread` in, so
     `get_reply_to` reads the anchor straight off each row.
-
-    Also batch-fetches each pose's nested action-interaction (#3816 Task 12):
-    `cached_action_links`'s own Prefetch batches the `InteractionAction.
-    action_interaction` FK itself, but never follows that FK's own `persona`
-    relation -- see `batch_fetch_nested_action_interactions`'s docstring.
-    `InteractionViewSet.list()` applies the identical fetch for `/api/interactions/`,
-    which shares this same `get_queryset()` but materializes its own page
-    separately (through DRF's pagination, not this function).
     """
     queryset, context = _queryset(request, params)
     interactions = list(queryset)
-    batch_fetch_nested_action_interactions(interactions)
     serialized = InteractionListSerializer(interactions, many=True, context=context).data
     return list(serialized), interactions
 

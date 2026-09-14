@@ -966,41 +966,46 @@ class PlayPosesQueryBudgetTests(APITestCase):
         assert response.status_code == 200
         assert len(response.json()["results"]) == 6
 
-    def test_nested_action_interaction_persona_is_batched(self) -> None:
-        """Profiling (#3816) found doubled Persona queries from the nested
-        action-interaction fetch lacking select_related. `cached_action_links`'s
-        own Prefetch already batches the `InteractionAction.action_interaction`
-        FK itself (one query for the whole page), but never followed that FK's
-        own `persona`/`persona__character_sheet` relation -- so a caller walking
-        `link.action_interaction.persona` (the reader's own future need, and
-        anything else on this shape) paid one live query per DISTINCT linked
-        action, plus a second for its `character_sheet`. `_rows()`'s own batch
-        fetch (Task 12) now resolves that in one extra query up front, so
-        walking every pose's `action_interaction.persona.character_sheet`
-        afterward costs nothing -- not one query per pose.
+    def test_nested_action_interaction_scalars_and_round_actions_stay_free(self) -> None:
+        """Regression guard, not a fix.
 
-        Each linked ACTION interaction lives in its OWN scene (never the page's
-        scene) so it never surfaces as a top-level row of the page in its own
-        right -- otherwise the idmapper identity map would silently warm its
-        `persona`/`character_sheet` cache via the page's own top-level
-        `select_related`, passing this test for the wrong reason (identity-map
-        reuse, not the nested batch fetch this task adds).
+        #3816 Task 12's own investigation found the nested action-interaction
+        N+1 the issue's original profiling flagged ("doubled Persona queries
+        from the nested action-interaction fetch") was already resolved before
+        this whole SDD plan began: `db6cc0a4f8` (2026-05-24) gave
+        `cached_action_links`'s own Prefetch `select_related("action_interaction")`,
+        so the FK itself is one query for the whole page, not one per row. A
+        repo-wide grep additionally found no production code anywhere reads
+        `action_interaction.persona` -- `InlineActionInteractionSerializer`
+        (`interaction_serializers.py`) only ever read `id`/`content`/`mode`/
+        `timestamp`, plain scalars off the already-fetched row. So there was
+        nothing left to batch; a batch-fetch commit was reverted in favor of
+        this test, which instead pins the ALREADY-correct behavior: walking
+        every pose's `action_interaction` scalar fields, plus its
+        `cached_round_actions` (#996's `has_critical_effect` read), across a
+        page of poses costs a small, FIXED number of extra queries -- not one
+        per pose -- protecting against a future regression if this prefetch
+        chain ever breaks.
+
+        Each linked ACTION interaction lives in its OWN scene (never the
+        page's scene) so it never surfaces as a top-level row of the page in
+        its own right -- otherwise the idmapper identity map would silently
+        warm it via the page's own top-level `select_related`, passing this
+        test for the wrong reason (identity-map reuse, not the existing
+        `action_links` Prefetch this test actually guards).
         """
         scene = SceneFactory()
         poses = []
         for _ in range(2):
-            action_persona = PersonaFactory()
-            action = InteractionFactory(
-                scene=SceneFactory(), mode=InteractionMode.ACTION, persona=action_persona
-            )
+            action = InteractionFactory(scene=SceneFactory(), mode=InteractionMode.ACTION)
             pose = InteractionFactory(scene=scene, mode=InteractionMode.POSE)
             InteractionAction.objects.create(pose=pose, action_interaction=action, ordering=0)
             poses.append(pose)
 
         # Flush the idmapper identity map: every object built above (`action`,
-        # `action_persona`, the `InteractionAction` rows) is still resident with
-        # its relations set directly in Python from construction. Without this,
-        # a later re-fetch of the SAME pk returns those already-warm instances
+        # the `InteractionAction` rows) is still resident with its relations
+        # set directly in Python from construction. Without this, a later
+        # re-fetch of the SAME pk returns those already-warm instances
         # regardless of query shape (SharedMemoryModel's identity map), which
         # would pass this test for the wrong reason.
         from evennia.utils.idmapper import models as idmapper_models
@@ -1012,20 +1017,25 @@ class PlayPosesQueryBudgetTests(APITestCase):
         force_authenticate(django_request, user=self.account)
         request = Request(django_request)
 
-        with self.assertNumQueries(19):  # 18 baseline + 1 nested action-interaction batch
+        with self.assertNumQueries(18):
             _, interactions = _rows(request, params={"conversation": f"scene:{scene.pk}"})
 
         pose_ids = {pose.pk for pose in poses}
         walked_poses = [row for row in interactions if row.pk in pose_ids]
         assert len(walked_poses) == 2
 
-        # The batch already ran inside `_rows()` above -- walking every pose's
-        # nested action_interaction.persona.character_sheet afterward must be free.
+        # Everything InlineActionInteractionSerializer / has_critical_effect
+        # reads off the nested action-interaction is already resolved by
+        # get_queryset()'s existing Prefetch chain -- walking it here must
+        # cost nothing further.
         with self.assertNumQueries(0):
             for row in walked_poses:
                 links = row.cached_action_links
                 assert len(links) == 1
                 action_interaction = links[0].action_interaction
                 assert action_interaction is not None
-                assert action_interaction.persona is not None
-                assert action_interaction.persona.character_sheet is not None
+                assert action_interaction.id is not None
+                assert action_interaction.content is not None
+                assert action_interaction.mode == InteractionMode.ACTION
+                assert action_interaction.timestamp is not None
+                assert action_interaction.cached_round_actions == []
