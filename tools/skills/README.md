@@ -114,6 +114,15 @@ two = a real one." Concepts only: it does **not** rename "module" or ban
 "component/service/API". Anchored on the repo's action-dispatch seam; leads with
 the plain principle in user-facing prose.
 
+### schema-shape
+
+Six worked questions to defend a proposed relational-schema shape (new
+model/table, FK, bridge table, denormalized column, primary-key choice)
+before it ships — grounded in #3787's three review rounds. Paired with the
+`schema-shape-reviewer` agent (`tools/agents/`) as a diff-time backstop.
+Wired as a mandatory pre-spec pass in `issue-to-merged-pr`, same as
+`verify-against-code`.
+
 ### architecture-cleanup
 
 Audits a subsystem for shallow modules and leaky seams via Explore subagents and

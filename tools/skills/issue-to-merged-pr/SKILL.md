@@ -202,6 +202,12 @@ ledger as a section of the spec in the issue body.** A spec without a
 code-verified ledger is not finalized. (This codifies CLAUDE.md's
 "Anti-Reinvention Pass" into the workflow.)
 
+**MANDATORY whenever the design proposes a new model, table, FK, column, or
+primary-key choice: run the `schema-shape` pass** (skill at
+`tools/skills/schema-shape/`). Answer its six questions for each proposed
+surface and embed the answers in the spec, the same pattern as the
+anti-reinvention ledger — a section of the spec, not a separate artifact.
+
 **This pass covers any "deferred follow-ups" the spec lists, too** — a deferral
 is a proposed future surface, and listing it as "later" is not a waiver. Verify
 each deferral's premise against code; drop it if it's already built/handled, and
