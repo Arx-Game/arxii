@@ -902,7 +902,7 @@ class PlayPosesQueryBudgetTests(APITestCase):
     - ``_visible_parents`` - one batched ``visible_to`` check that returns the
       parents' timestamps too, so the chip needs no second lookup.
 
-    Those three batches are themselves why the budget was 76 rather than 74
+    Two of those three batches are themselves why the budget was 76 rather than 74
     before #3816 touched anything: the anchor and root used to be columns
     joined in by ``select_related``, free to read but backed by two
     denormalized copies that could drift (a stored ``root`` did drift, and

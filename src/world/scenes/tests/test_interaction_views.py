@@ -1665,25 +1665,45 @@ class InteractionListQueryBudgetTests(APITestCase):
         the captured query log.
 
         The 7-vs-8 delta is NOT explained by "this endpoint is missing 3
-        batches" -- the two pages diverge in query shape in both directions,
-        not one: `/api/play/poses/` pays for 3 reply-chip batches
-        (`_thread_roots`, `_thread_anchors`, `_visible_parents`) that this
-        endpoint has no equivalent of, while THIS endpoint separately pays
-        for 2 batches (`SceneEntryEndorsement`, the GM/owner check) that
-        `/api/play/poses/` has no equivalent of. Net: +3 there, +2 here,
-        for a net difference of 1 -- not 3 -- against whatever shared floor
-        the two pages' other batches (session, `Block`, outer select,
-        read-receipts, mutes) would otherwise land on.
+        batches" -- and neither of the two sides of it is really a fixed
+        endpoint difference; both are shared code that happens to no-op for a
+        different reason on each side.
+
+        `_thread_roots`, `_thread_anchors`, and `_visible_parents` are methods
+        on the ONE `InteractionListSerializer` both endpoints use, not
+        per-endpoint logic, and they cost 0 queries here only because THIS
+        fixture has no threaded replies -- `thread_anchor_ids`/`thread_roots`
+        both short-circuit on an empty thread-id set, and `_visible_parents`
+        guards on `if parent_ids`. Add one threaded reply to this fixture and
+        `/api/interactions/?scene=` would pay for all 3 of those batches too:
+        pure fixture-shape coincidence, not an endpoint capability gap.
+
+        `SceneEntryEndorsement` and the GM/owner-participation pre-seed are
+        ALSO the same shared code (`InteractionViewSet.get_serializer_context`)
+        -- and also gated together, by the exact same condition:
+        `if self.request.query_params.get("scene"):`. Both cost 0 for
+        `/api/play/poses/` for the same reason: `play_views._queryset` builds
+        its context from an `InteractionViewSet` instance whose `request` is
+        the real play request, and that request's query string is
+        `?conversation=scene:<id>` -- it never carries a literal `scene=`
+        key, even though it filters to the same scene under the hood. So
+        unlike the thread batches, this half of the delta is not a fixture
+        coincidence: it would persist on ANY play fixture, because it tracks
+        the query-param spelling the two endpoints are called with, not
+        anything about the rows on the page.
 
         For the same reason, don't read anything structural into the two
-        endpoints' matching COLD budgets (27 and 27, pinned above and in
+        endpoints' matching COLD budgets (27 and 27, pinned here and in
         `PlayPosesQueryBudgetTests`) -- that match is a coincidence of two
-        genuinely different pages (6 interactions / 0 endorsements here vs.
-        3 interactions / 2+2 endorsements there) landing on the same total
-        by chance, not evidence the two endpoints share a query floor or
-        the same batch composition. The warm counts (7 and 8) already prove
-        they don't: the batches diverge 3-for-2 in different directions, as
-        above.
+        genuinely different pages (3 interactions / 2+2 endorsements here vs.
+        6 interactions / 0 endorsements there) landing on the same total by
+        chance, not evidence the two endpoints share a query floor or the
+        same batch composition. The warm counts (7 and 8) already prove they
+        don't, and for two different reasons: swap in a fixture with threaded
+        replies and this endpoint's warm floor climbs toward
+        `/api/play/poses/`'s (fixture-shape); there is no equivalent lever on
+        the play side for the `SceneEntryEndorsement`/GM-owner gap, since
+        that one tracks how the URL is called, not what the fixture holds.
         """
         url = reverse("interaction-list")
         first = self.client.get(url, {"scene": self.scene.pk})
