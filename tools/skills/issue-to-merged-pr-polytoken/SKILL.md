@@ -224,7 +224,9 @@ Only a deliberately partial step toward a multi-PR umbrella spec opts into
 pre-push precheck — it can crash this devcontainer.** The per-file hooks already
 ran at commit; CI's `pre-commit` job is the gate. Only if the branch used
 `--no-verify` commits, scope the catch-up to the diff (never `--all-files`):
-`uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
+`uv run pre-commit run --from-ref origin/main --to-ref HEAD`. That form clears the
+worktree while hooks run (#3814), so run it only when no other agent has
+uncommitted work in the worktree.
 
 ### 6. CI watch
 

@@ -14,7 +14,7 @@ repos:
       # fails "permission denied" in every fresh worktree. This reads the mode
       # from the git index, so it catches that even where chmod is ignored.
       - id: check-shebang-scripts-are-executable
-        files: ^tools/skills/.+\.sh$
+        files: ^tools/(skills/.+\.sh|githooks/.+)$
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.14.10
     hooks:
@@ -210,6 +210,27 @@ repos:
         # typeclass; request data is an explicit argument (serializer `context=`,
         # or `validated_data`) or middleware. Suppress with `# noqa: VIEW_MEMO`
         # plus a reason, only for constant configuration that defaults to None.
+      - id: undelivered-interaction
+        name: Reject a persisted Interaction with no live delivery seam
+        entry: uv run python tools/lint_undelivered_interaction.py
+        language: system
+        pass_filenames: true
+        types: [python]
+        files: ^src/.*\.py$
+        exclude: (/tests/|/migrations/)
+        # #3807 (2026-09-13): three production writers persisted an Interaction row,
+        # wrote its target rows, and returned - no WebSocket push, no telnet line, to
+        # anybody, ever (`_create_result_interaction` / `_resolve_treatment_request` in
+        # `world/scenes/action_services.py`, `create_cast_outcome_pose` in
+        # `world/scenes/cast_services.py`). Every other production
+        # `create_interaction` caller delivers its row through a push seam
+        # (`push_interaction`, `deliver_outcome_interaction`,
+        # `push_ephemeral_interaction`, `_send_to_objects`, `_broadcast_to_location`)
+        # in the same or an enclosing function; this hook enforces that pairing.
+        # Suppress with `# noqa: UNDELIVERED` plus a reason - the only one found in
+        # this codebase is that the function returns the row to a caller that
+        # delivers it itself (`world/magic/audere_majora.py`'s `_post_declaration`,
+        # whose row `cross_threshold` pushes after finishing the crossing).
       - id: check-migrations
         name: Check Django migrations
         entry: uv run python tools/check_migrations.py
@@ -258,7 +279,7 @@ repos:
       # reach it and nothing else in CI ran it - the unit tests guarding
       # compare_schemas.py, check_standalone_sql_wiring.py and the sonarcloud
       # helpers were inert (found while fixing #3544, whose own regression pins
-      # live there). Whole suite is ~0.5s, so it runs on every commit.
+      # live there). Whole suite is ~6s, so it runs on every commit.
       - id: tools-tests
         name: Unit tests for tools/ helper scripts
         entry: uv run pytest tools/tests -q
@@ -282,10 +303,10 @@ repos:
         pass_filenames: true
         files: ^frontend/.*\.test\.(ts|tsx)$
       - id: shellcheck-skills
-        name: shellcheck tools/skills bash scripts
+        name: shellcheck tools/skills and tools/githooks bash scripts
         entry: shellcheck
         language: system
-        files: ^tools/skills/.+\.sh$
+        files: ^tools/(skills/.+\.sh|githooks/.+)$
         pass_filenames: true
   - repo: local
     hooks:

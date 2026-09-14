@@ -193,10 +193,11 @@ class BuildBacklogTests(TestCase):
         by_domain = {s.domain: s for s in stats}
         trait_stats = by_domain["traits"]
         self.assertEqual(trait_stats.rows, 3)
-        self.assertEqual(trait_stats.unwritten, 1)
-        self.assertEqual(trait_stats.unreviewed, 2)
+        self.assertEqual(trait_stats.to_write, 1)
+        # To review is written-and-not-reviewed (#3828): Beta only, never Alpha.
+        self.assertEqual(trait_stats.to_review, 1)
         self.assertEqual(trait_stats.words_total, 9)
-        self.assertEqual(trait_stats.words_unwritten, 4)
+        self.assertEqual(trait_stats.words_to_write, 4)
 
     def test_scope_callable_excludes_a_row_from_every_model(self):
         self._trait("Scope Included", "Kept row here.")

@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+# Pre-commit hook that never clears the worktree (#3814, ADR-0296).
+#
+# pre-commit's own hook runs `git checkout -- .` over the WHOLE worktree while a commit's
+# hooks run, then re-applies a patch. Any other agent sharing the worktree loses its
+# uncommitted edits for that window, and anything it writes during it can be lost for
+# good. This runs the same hooks with `pre-commit run --files <staged files>`, which never
+# stashes, and decides from the result whether to pass, re-stage an auto-fix, or refuse.
+#
+# The index is shared too. A plain `git commit` releases index.lock before hooks run, so a
+# sibling's `git add` during them lands in this commit; `git commit -- <files>` holds the
+# lock throughout, which is why concurrent agents commit with a pathspec (CLAUDE.md).
+#
+# What counts as a pass: a failure caused only by files outside this commit changing (a
+# sibling's edit, or a hook that writes files it was not given, so keep hooks writing only
+# their own files). Not checked here: a staged file missing from disk, and `always_run`
+# hooks on a commit with no staged files. CI's required `pre-commit` job runs every hook on
+# exactly what was committed.
+#
+# Installed by tools/githooks/install.sh as a shim in the shared .git/hooks.
+set -uo pipefail
+
+readonly MAX_ATTEMPTS=3
+
+say() {
+  printf '[pre-commit hook] %s\n' "$*" >&2
+}
+
+hash_of() {
+  git hash-object -- "$1" 2>/dev/null || echo missing
+}
+
+if [ ! -f .pre-commit-config.yaml ]; then
+  say "no .pre-commit-config.yaml in $(pwd); refusing to commit unchecked"
+  exit 1
+fi
+
+if [ -n "$(git ls-files --unmerged)" ]; then
+  say "Unmerged files. Resolve before committing."
+  exit 1
+fi
+
+if [ -n "${PRE_COMMIT_PYTHON:-}" ] && [ -x "$PRE_COMMIT_PYTHON" ]; then
+  pre_commit=("$PRE_COMMIT_PYTHON" -m pre_commit)
+elif command -v pre-commit >/dev/null 2>&1; then
+  pre_commit=(pre-commit)
+else
+  say "pre-commit not found; set PRE_COMMIT_PYTHON or put pre-commit on PATH"
+  exit 1
+fi
+
+# A pathspec commit (`git commit -- <files>`, `--only`) runs hooks against a temporary index
+# named next-index-<pid>.lock. Re-staging there never reaches the real index, so an auto-fix
+# is picked up by re-running the same commit instead.
+temporary_index=0
+case "$(basename "${GIT_INDEX_FILE:-}")" in
+  next-index-*.lock) temporary_index=1 ;;
+esac
+
+# Same filter pre-commit uses for staged files.
+files=()
+while IFS= read -r -d '' file; do
+  files+=("$file")
+done < <(git diff --cached --name-only -z --diff-filter=ACMRTUXB)
+
+# With no files, `pre-commit run --files` would take pre-commit's stashing path.
+if [ "${#files[@]}" -eq 0 ]; then
+  exit 0
+fi
+
+# A file whose on-disk content equals its staged content may have an auto-fix re-staged.
+# Anything else would commit hunks nobody chose to stage.
+declare -A fully_staged=()
+for file in "${files[@]}"; do
+  if [ "$(hash_of "$file")" = "$(git rev-parse -q --verify ":$file")" ]; then
+    fully_staged["$file"]=1
+  fi
+done
+
+for ((attempt = 1; attempt <= MAX_ATTEMPTS; attempt++)); do
+  declare -A before=()
+  for file in "${files[@]}"; do
+    before["$file"]=$(hash_of "$file")
+  done
+
+  output_file=$(mktemp)
+  "${pre_commit[@]}" run --files "${files[@]}" | tee "$output_file"
+  status=${PIPESTATUS[0]}
+  output=$(cat "$output_file")
+  rm -f "$output_file"
+
+  if [ "$status" -eq 0 ]; then
+    exit 0
+  fi
+
+  # A hook that exited non-zero is a real failure. So is any failure that is not
+  # pre-commit's "files were modified" verdict (a config error, a crash).
+  if grep -q -- '^- exit code:' <<<"$output" \
+    || ! grep -q -- '^- files were modified by this hook' <<<"$output"; then
+    exit 1
+  fi
+
+  # pre-commit compares a whole-worktree `git diff` before and after each hook, so a
+  # sibling's write marks a hook "modified" too. Only this commit's files count.
+  changed=()
+  for file in "${files[@]}"; do
+    if [ "${before[$file]}" != "$(hash_of "$file")" ]; then
+      changed+=("$file")
+    fi
+  done
+
+  if [ "${#changed[@]}" -eq 0 ]; then
+    say "only files outside this commit changed while hooks ran; treating as pass"
+    exit 0
+  fi
+
+  for file in "${changed[@]}"; do
+    if [ -z "${fully_staged[$file]:-}" ]; then
+      say "$file was partially staged and an auto-fixer changed it; fix and re-stage by hand"
+      exit 1
+    fi
+  done
+
+  if [ "$temporary_index" -eq 1 ]; then
+    say "an auto-fixer changed ${changed[*]}; re-run the same git commit to include the fix"
+    exit 1
+  fi
+
+  if [ "$attempt" -eq "$MAX_ATTEMPTS" ]; then
+    break
+  fi
+
+  git add -- "${changed[@]}"
+  say "re-staged auto-fixed file(s): ${changed[*]}"
+done
+
+say "hooks still modifying files after $MAX_ATTEMPTS attempts"
+exit 1

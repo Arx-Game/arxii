@@ -268,16 +268,24 @@ mid-pipeline:
 
 ### 9. Interaction Recording
 
-`_create_result_interaction()` is updated to serialize the
-`EnhancedSceneActionResult` into the scene's interaction stream.
+`_create_result_interaction()` is updated to record the
+`EnhancedSceneActionResult`'s outcome into the scene's interaction stream.
 The interaction content includes both layers so the scene log reads
 as a coherent narrative.
 
-The interaction stores a structured result (the serialized
-`EnhancedSceneActionResult`), not a format string. The frontend
-`ActionResult` component renders this structured data into the
-appropriate display. The raw interaction content serves as a
-human-readable fallback for telnet clients.
+**As built (2026-09-13, #3807):** the interaction stores a plain rendered
+narrative string built by `_targeted_outcome_content`/`_area_outcome_content`
+(e.g. "Kira uses Charm to seduce Rowan: Success [Anima: 3]"), never a
+serialized `EnhancedSceneActionResult` payload (ADR-0007: no JSON fields, so
+there is nowhere on `Interaction` to hold one). `ActionResult.tsx`
+(`frontend/src/scenes/components/`) does carry a structured-data render
+branch, but its one live caller, `PoseUnit.tsx`, passes only
+`content={interaction.content}` and never a `result` prop, so every real
+interaction renders through the plain-text `parseActionContent` path; the
+structured branch has no production feeder. The rendered text is what both
+web and telnet display, with no separate fallback needed. The row is also
+delivered live via `deliver_outcome_interaction` on commit, not merely
+persisted -- see "Result delivery" in `docs/systems/scenes.md` and ADR-0297.
 
 ## What This Does NOT Build
 

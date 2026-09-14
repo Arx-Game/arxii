@@ -709,12 +709,65 @@ def _language_render_for(
     return _render_for
 
 
+def _is_delivery_receiver_scoped(interaction: Interaction, *, has_receivers: bool = False) -> bool:
+    """Whether this row's live audience is limited to its writer and receivers.
+
+    Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
+    predicate tested only whisper/place, so a VERY_PRIVATE pose would have broadcast to
+    the whole room over the WebSocket — no live caller did that, but the next one
+    would have. Fixed on sight.
+
+    ``has_receivers`` (#3807) draws the same MUTTER distinction
+    ``_is_receiver_scoped`` (the read-visibility predicate ``can_view_interaction``
+    uses) already draws: a mutter's full text is receiver-scoped exactly like a
+    whisper, while the public #905 fragment (no ``InteractionReceiver`` rows) is
+    room-heard. Before #3807 no MUTTER row reached this function's WebSocket branch
+    live (nothing delivered a resolved-action MUTTER row at all), so this gap was
+    latent; wiring delivery without it would have broadcast a mutter's full text to
+    the whole room. The caller resolves ``has_receivers`` itself (from a passed-in
+    receiver list or a query) since it is the one already fetching that list.
+
+    Shared (#3807) by ``push_interaction`` (the WebSocket payload's audience) and
+    ``deliver_outcome_interaction`` (the telnet involvement line's audience) so the
+    two channels never disagree about who heard a row -- see ``_query_receivers``
+    for the other half of that shared decision.
+    """
+    if interaction.mode == InteractionMode.MUTTER:
+        return has_receivers
+    return (
+        interaction.mode == InteractionMode.WHISPER
+        or interaction.place_id is not None
+        or interaction.visibility != InteractionVisibility.DEFAULT
+    )
+
+
+def _query_receivers(interaction: Interaction) -> tuple[list[int], list[ObjectDB]]:
+    """Query ``InteractionReceiver`` rows for ``interaction`` (persona ids + characters).
+
+    The un-cached fallback ``push_interaction`` uses when its caller has no
+    already-resolved receiver list to pass in, and what ``deliver_outcome_interaction``
+    (#3807) always uses -- it has no such precomputed list to reuse.
+    """
+    receivers = list(
+        InteractionReceiver.objects.filter(
+            interaction=interaction,
+        ).select_related("persona__character_sheet__character")
+    )
+    r_ids = [r.persona_id for r in receivers]
+    r_chars = [r.persona.character_sheet.character for r in receivers]
+    return r_ids, r_chars
+
+
 def push_interaction(
     interaction: Interaction,
     *,
     receiver_persona_ids: list[int] | None = None,
     target_persona_ids: list[int] | None = None,
     receiver_characters: list[ObjectDB] | None = None,
+    # #3807: a Narrator-authored row (cast outcome poses, treatment outcomes) has an
+    # unplaced writer, so this lets a caller hand in the room/scene location instead
+    # of deriving one from the writer persona's own (nonexistent) location.
+    location: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - any room may host this push
 ) -> None:
     """Push a persisted interaction payload to connected clients via WebSocket.
 
@@ -730,24 +783,32 @@ def push_interaction(
     receiver and target IDs are passed directly to avoid re-querying rows
     that were just created. When called standalone (e.g. from tests),
     falls back to querying.
+
+    ``location`` (#3807) defaults to the writer persona's own character location --
+    byte-identical to before. When given explicitly, it is used instead: a
+    receiver-scoped row (whisper, place-scoped, escalated visibility) still reaches
+    its writer + receivers even when neither ``location`` nor the writer's own
+    location resolves (a Narrator-authored row, or a location-less Battle scene);
+    only the room-heard broadcast branch actually needs a real location and is
+    skipped when none is available.
     """
     persona = interaction.persona
-    location = persona.character_sheet.character.location
     if location is None:
-        return
+        location = persona.character_sheet.character.location
 
-    # Use passed IDs if available; otherwise fall back to querying.
+    # Use passed IDs if available; otherwise fall back to querying. Resolved before
+    # the receiver_scoped decision (#3807) since MUTTER needs to know whether any
+    # receiver rows exist to tell its receiver-scoped full text from its room-heard
+    # fragment (see _is_delivery_receiver_scoped).
     if receiver_persona_ids is None or receiver_characters is None:
-        receivers = list(
-            InteractionReceiver.objects.filter(
-                interaction=interaction,
-            ).select_related("persona__character_sheet__character")
-        )
-        r_ids = [r.persona_id for r in receivers]
-        r_chars = [r.persona.character_sheet.character for r in receivers]
+        r_ids, r_chars = _query_receivers(interaction)
     else:
         r_ids = receiver_persona_ids
         r_chars = receiver_characters
+
+    receiver_scoped = _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids))
+    if not receiver_scoped and location is None:
+        return
 
     if target_persona_ids is None:
         targets = list(
@@ -781,15 +842,6 @@ def push_interaction(
         reply_to=_reply_parent_payload(interaction),
     )
 
-    # Any escalated visibility is receiver-scoped, not room-heard. Before #2710 this
-    # branch tested only whisper/place, so a VERY_PRIVATE pose would have broadcast to
-    # the whole room over the WebSocket — no live caller did that, but the next one
-    # would have. Fixed on sight.
-    receiver_scoped = (
-        interaction.mode == InteractionMode.WHISPER
-        or interaction.place_id is not None
-        or interaction.visibility != InteractionVisibility.DEFAULT
-    )
     if receiver_scoped:
         # Receiver-scoped modes (whisper, place-scoped, escalated visibility) keep
         # full text to their explicit receivers — the speaker chose this audience,
@@ -800,6 +852,51 @@ def push_interaction(
         _broadcast_to_location(
             location, payload, render_for=_language_render_for(interaction, persona)
         )
+
+
+# #3807: any room may host this delivery -- a Narrator-authored row's own writer has
+# no location, so the caller passes the scene/initiator location explicitly.
+def deliver_outcome_interaction(interaction: Interaction, *, location: ObjectDB | None) -> None:  # noqa: OBJECTDB_PARAM
+    """Deliver a persisted outcome row live, on commit, to whatever it reaches.
+
+    The shared fix for #3807: a resolved social check, treatment outcome, or cast
+    outcome pose was persisted and delivered to nobody live -- no WebSocket push, no
+    telnet line -- unlike every other production ``create_interaction`` caller.
+    Callers write the row (and any target rows, since the WS payload's involvement
+    mark depends on ``target_persona_ids``) and then call this once per row.
+
+    Registers a ``transaction.on_commit`` callback (never delivers a row whose
+    transaction rolls back) that:
+
+    1. Pushes the structured payload via ``push_interaction(interaction,
+       location=location)``, letting it resolve receivers/targets itself.
+    2. Sends ``interaction.content`` as plain text to the non-web sessions
+       (``_non_web_sessions`` — telnet/ssh parity, mirrors ``_send_involvement_mark``)
+       of exactly the objects the push reached: a receiver-scoped row reaches its
+       writer + receiver characters regardless of ``location`` (a Narrator writer is
+       unplaced, and a Battle-backed scene has none either); any other row reaches
+       ``location.contents`` -- skipped entirely when ``location`` is ``None`` (a
+       location-less scene has no room to broadcast a telnet line into).
+    """
+
+    def _deliver() -> None:
+        push_interaction(interaction, location=location)
+
+        r_ids, r_chars = _query_receivers(interaction)
+        if _is_delivery_receiver_scoped(interaction, has_receivers=bool(r_ids)):
+            writer_char = interaction.persona.character_sheet.character
+            recipients: Iterable[ObjectDB] = [writer_char, *r_chars]
+        elif location is not None:
+            recipients = location.contents
+        else:
+            recipients = []
+
+        for obj in recipients:
+            non_web = _non_web_sessions(obj)
+            if non_web:
+                obj.msg(interaction.content, session=non_web)
+
+    transaction.on_commit(_deliver)
 
 
 def push_ephemeral_interaction(  # noqa: PLR0913 - ephemeral payload mirrors persisted payload

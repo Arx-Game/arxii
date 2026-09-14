@@ -14,6 +14,15 @@ model with no rows behind it. Each visible row also carries a stock-admin
 change-form link (`_queue_row`): the workbench editor only exposes prose
 fields, so that link is how an author reaches the row's other fields.
 
+#3828 turned the page into a writing pass. `QueueFilters` is the one
+parser/serializer of the four filter params; an absent `?status=` means
+`unwritten` (To write) and `unreviewed` means written-and-not-reviewed (To
+review). The queue's title carries the filtered count, its response sets
+`HX-Replace-Url` so a reload keeps the filters, and each row link hands the
+editor `queue=` (the filter querystring) and `pos=` (its index), which
+`_queue_nav` turns into the editor's Next control: the row after this one, or
+the row that shifted into its slot once a stamp has removed it.
+
 Task 4 gates the dashboard on a linked `ContentContributor` (see
 `web.admin.authoring.contributors`): an unlinked account gets the setup panel
 in place of the stats/queue skeleton, and `authoring_setup` is the plain-POST
@@ -68,7 +77,7 @@ form, checked or not, so its presence alone marks a real submission.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from django.contrib import messages
 from django.core.exceptions import ValidationError
@@ -76,16 +85,17 @@ from django.http import HttpRequest, HttpResponse, QueryDict
 from django.shortcuts import redirect, render
 from django.urls import reverse
 from django.utils import timezone
+from django.utils.http import urlencode
 from django.views.decorators.http import require_POST
 
-from core.app_domains import credited_content_models, resolve_model_by_name
+from core.app_domains import credited_content_models, domain_of, resolve_model_by_name
 from core_management.prose_fields import prose_fields_for
 from web.admin.authoring.backlog import BacklogRow, build_backlog
 from web.admin.authoring.contributors import current_contributor, link_contributor
 from web.admin.authoring.links import admin_change_url
 from web.admin.authoring.reference import db_search, file_search, reference_roots
 from web.admin.authoring.relations import RelatedEntry, prose_mentions, related_entries
-from web.admin.constants import BacklogStatusFilter
+from web.admin.constants import DEFAULT_BACKLOG_STATUS, BacklogStatusFilter
 from web.admin.tuning.views import superuser_required
 from world.character_creation.models import Beginnings, OriginTemplate
 from world.contributors.models import ContentContributor
@@ -143,26 +153,74 @@ def _builders_context() -> dict[str, object]:
     }
 
 
-def _row_matches(row: BacklogRow, domain: str, model: str, status: str, query: str) -> bool:
-    """One row's pass/fail against every active filter, checked in one call.
+#: The headline noun for each status: "212 to write", "60 to review" (#3828).
+_COUNT_NOUNS = {
+    BacklogStatusFilter.UNWRITTEN: "to write",
+    BacklogStatusFilter.UNREVIEWED: "to review",
+    BacklogStatusFilter.PLACEHOLDER: "with placeholder text",
+    BacklogStatusFilter.ALL: "rows",
+}
 
-    Called from a single list comprehension over the full row list in
-    `_filtered_rows`, so the combined filter set is one scan regardless of
-    how many of `domain`/`model`/`status`/`query` are actually set.
+
+@dataclass(frozen=True)
+class QueueFilters:
+    """The queue's four filter params, parsed once and serialised back the same way.
+
+    Every surface that carries the queue's state - the fragment's own form,
+    the `HX-Replace-Url` the fragment answers with, the `queue=` param each
+    row link hands the editor (#3828) - goes through this one class, so no
+    two of them can disagree about what an absent `status` means.
     """
-    if domain and row.domain != domain:
-        return False
-    if model and row.model_label != model:
-        return False
-    if query and query not in row.identity.lower():
-        return False
-    return _status_matches(row, status)
+
+    domain: str = ""
+    model: str = ""
+    status: str = DEFAULT_BACKLOG_STATUS
+    query: str = ""
+
+    @classmethod
+    def from_params(cls, params: QueryDict) -> QueueFilters:
+        return cls(
+            domain=params.get("domain") or "",
+            model=params.get("model") or "",
+            status=params.get("status") or DEFAULT_BACKLOG_STATUS,
+            query=(params.get("q") or "").strip(),
+        )
+
+    def as_query(self) -> str:
+        """Urlencoded form, omitting empties and the default status - the URL a reload sees."""
+        pairs = {"domain": self.domain, "model": self.model, "q": self.query}
+        if self.status != DEFAULT_BACKLOG_STATUS:
+            pairs["status"] = self.status
+        return urlencode({key: value for key, value in pairs.items() if value})
+
+    @property
+    def count_noun(self) -> str:
+        return _COUNT_NOUNS.get(self.status, "rows")
+
+    @property
+    def scope_label(self) -> str:
+        return self.domain or "all domains"
+
+    def matches(self, row: BacklogRow) -> bool:
+        """One row's pass/fail against every active filter, checked in one call.
+
+        Called from a single list comprehension over the full row list in
+        `_filtered_rows`, so the combined filter set is one scan regardless of
+        how many filters are actually set.
+        """
+        if self.domain and row.domain != self.domain:
+            return False
+        if self.model and row.model_label != self.model:
+            return False
+        if self.query and self.query.lower() not in row.identity.lower():
+            return False
+        return _status_matches(row, self.status)
 
 
 def _status_matches(row: BacklogRow, status: str) -> bool:
-    """One row against the status filter alone; an unset or unknown status matches every row.
+    """One row against the status filter alone; `all` or an unknown value matches every row.
 
-    Split out of `_row_matches` so neither function carries a branch per
+    Split out of `QueueFilters.matches` so neither carries a branch per
     filter *and* a branch per status value - the combined form tripped
     ruff's return-count ceiling once the model filter joined it.
     """
@@ -171,16 +229,12 @@ def _status_matches(row: BacklogRow, status: str) -> bool:
     if status == BacklogStatusFilter.UNWRITTEN:
         return not row.written
     if status == BacklogStatusFilter.UNREVIEWED:
-        return not row.reviewed
+        return row.written and not row.reviewed
     return True
 
 
-def _filtered_rows(rows: list[BacklogRow], request: HttpRequest) -> list[BacklogRow]:
-    domain = request.GET.get("domain") or ""
-    model = request.GET.get("model") or ""
-    status = request.GET.get("status") or ""
-    query = (request.GET.get("q") or "").strip().lower()
-    return [row for row in rows if _row_matches(row, domain, model, status, query)]
+def _filtered_rows(rows: list[BacklogRow], filters: QueueFilters) -> list[BacklogRow]:
+    return [row for row in rows if filters.matches(row)]
 
 
 def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
@@ -202,14 +256,31 @@ def _model_options(rows: list[BacklogRow], domain: str) -> list[dict]:
     ]
 
 
-def _queue_row(row: BacklogRow) -> dict:
-    """One queue row plus its stock-admin link, mirroring `_entry_row` below.
+def _editor_url(model_label: str, pk: object, filters: QueueFilters, pos: int) -> str:
+    """The editor deep-link for one row, carrying the list it came from (#3828).
 
-    The link is built here rather than on `BacklogRow` itself for the same
+    `queue` is the filter querystring the row was listed under and `pos` its
+    index in that list; the editor's Next control (`_queue_nav`) needs both to
+    find the row that follows this one, and to keep finding it after this row
+    has been credited out of the list. `links.workbench_editor_url` is the
+    context-free form the stock change form uses.
+    """
+    query = urlencode({"model": model_label, "pk": pk, "queue": filters.as_query(), "pos": pos})
+    return f"{reverse('admin_authoring_editor')}?{query}"
+
+
+def _queue_row(row: BacklogRow, pos: int, filters: QueueFilters) -> dict:
+    """One queue row plus its two links, mirroring `_entry_row` below.
+
+    The links are built here rather than on `BacklogRow` itself for the same
     reason the related-entries pane builds its own: `backlog.py` is the data
     tier and knows nothing about the admin registry or URL routing.
     """
-    return {"row": row, "admin_url": admin_change_url(row.model_label, row.pk)}
+    return {
+        "row": row,
+        "editor_url": _editor_url(row.model_label, row.pk, filters, pos),
+        "admin_url": admin_change_url(row.model_label, row.pk),
+    }
 
 
 @superuser_required
@@ -233,7 +304,7 @@ def authoring_dashboard(request: HttpRequest) -> HttpResponse:
 
 @superuser_required
 def authoring_stats_fragment(request: HttpRequest) -> HttpResponse:
-    """Per-domain rollup panel: rows/unwritten/unreviewed/word counts."""
+    """Per-domain rollup panel: rows / to write / to review / word counts."""
     _, stats = build_backlog()
     context = {"stats": stats}
     return render(request, "admin/authoring/_stats_panel.html", context)
@@ -249,27 +320,39 @@ def authoring_queue_fragment(request: HttpRequest) -> HttpResponse:
     """
     rows, _ = build_backlog()
     domains = sorted({row.domain for row in rows})
-    selected_domain = request.GET.get("domain", "")
+    filters = QueueFilters.from_params(request.GET)
 
-    filtered = _filtered_rows(rows, request)
+    filtered = _filtered_rows(rows, filters)
     total = len(filtered)
     visible = filtered[:_QUEUE_DISPLAY_CAP]
 
     context = {
-        "rows": [_queue_row(row) for row in visible],
+        "rows": [_queue_row(row, pos, filters) for pos, row in enumerate(visible)],
         "total": total,
+        "count_noun": filters.count_noun,
+        "scope_label": filters.scope_label,
         "display_cap": _QUEUE_DISPLAY_CAP,
         "capped": total > _QUEUE_DISPLAY_CAP,
         "domains": domains,
-        "selected_domain": selected_domain,
-        "models": _model_options(rows, selected_domain),
-        "selected_model": request.GET.get("model", ""),
-        "selected_status": request.GET.get("status", ""),
+        "selected_domain": filters.domain,
+        "models": _model_options(rows, filters.domain),
+        "selected_model": filters.model,
+        "selected_status": filters.status,
         "status_choices": BacklogStatusFilter.choices,
-        "query": request.GET.get("q", ""),
-        "editor_url": reverse("admin_authoring_editor"),
+        "query": filters.query,
     }
-    return render(request, "admin/authoring/_queue_panel.html", context)
+    response = render(request, "admin/authoring/_queue_panel.html", context)
+    # Replace (not push) the page URL with the live filters, so a reload comes
+    # back to the same list without each keystroke in the search box becoming
+    # its own history entry (#3828). `dashboard.html` forwards that querystring
+    # into the first queue load.
+    response["HX-Replace-Url"] = _dashboard_url(filters)
+    return response
+
+
+def _dashboard_url(filters: QueueFilters) -> str:
+    query = filters.as_query()
+    return f"{reverse('admin_authoring')}?{query}" if query else reverse("admin_authoring")
 
 
 @dataclass
@@ -356,7 +439,105 @@ class _EditorFlags:
     field_errors: dict[str, list[str]] | None = None
 
 
-def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
+#: The end-of-list line per status (#3828); `_queue_nav` appends " in <domain>" when
+#: a domain filter is set, and the widen link clears it.
+_EXHAUSTED_TEXT = {
+    BacklogStatusFilter.UNWRITTEN: "Nothing left to write",
+    BacklogStatusFilter.UNREVIEWED: "Nothing left to review",
+    BacklogStatusFilter.PLACEHOLDER: "No placeholder text left",
+    BacklogStatusFilter.ALL: "Nothing left",
+}
+
+
+@dataclass
+class _QueueNav:
+    """Where this row sits in the list the writer opened it from, and what comes after (#3828).
+
+    `position` is 1-based and `None` once the row has left the list (it was
+    just credited or reviewed out of it, or a change-form deep link opened a
+    row the default filter never showed). `next_url` is the editor link for
+    the successor; when there is none, `exhausted_text` says so and
+    `widen_url` (only when a domain filter was set) reopens the dashboard
+    with that domain cleared.
+    """
+
+    total: int
+    count_noun: str
+    scope_label: str
+    position: int | None = None
+    next_url: str | None = None
+    next_identity: str = ""
+    next_position: int | None = None
+    exhausted_text: str = ""
+    widen_url: str | None = None
+
+
+def _nav_params(params: QueryDict) -> tuple[QueueFilters, int | None]:
+    """The `queue=` filter querystring and `pos=` index an editor request carries.
+
+    `queue` is one opaque param holding the queue's own querystring (see
+    `_editor_url`) rather than the four filter params spread out, because the
+    editor already uses `model` for the row's own label and the queue uses it
+    for the model filter. A non-numeric or absent `pos` is `None`.
+    """
+    filters = QueueFilters.from_params(QueryDict(params.get("queue", "")))
+    raw_pos = params.get("pos", "")
+    return filters, int(raw_pos) if raw_pos.isdigit() else None
+
+
+def _queue_nav(target: _EditorTarget, filters: QueueFilters, pos: int | None) -> _QueueNav:
+    """Resolve the successor of `target` in the filtered queue (#3828).
+
+    Three cases, in order:
+
+    - the row is in the filtered list at index `i`: the successor is
+      `filtered[i + 1]`, so skipping a row moves past it, never back to the head;
+    - the row is not in the list but `pos` is known: it was just credited or
+      reviewed out of the list, and `filtered[pos]` is the row that shifted up
+      into its slot - the same row the arrow pointed at before the stamp;
+    - neither: a deep link with no queue context, and the head of the list is
+      the most useful place to send the writer.
+
+    One `build_backlog()` scan per editor request, the same cost the queue panel
+    already pays; the module docstring of `backlog.py` owns the scale ceiling.
+    """
+    rows, _ = build_backlog()
+    filtered = _filtered_rows(rows, filters)
+    label = f"{domain_of(target.model)}.{target.model.__name__}"
+    current_pk = target.instance.pk
+    index = next(
+        (i for i, row in enumerate(filtered) if row.model_label == label and row.pk == current_pk),
+        None,
+    )
+    if index is not None:
+        next_pos = index + 1
+    elif pos is not None:
+        next_pos = pos
+    else:
+        next_pos = 0
+
+    nav = _QueueNav(
+        total=len(filtered),
+        count_noun=filters.count_noun,
+        scope_label=filters.scope_label,
+        position=None if index is None else index + 1,
+    )
+    if next_pos < len(filtered):
+        successor = filtered[next_pos]
+        nav.next_url = _editor_url(successor.model_label, successor.pk, filters, next_pos)
+        nav.next_identity = successor.identity
+        nav.next_position = next_pos + 1
+        return nav
+
+    text = _EXHAUSTED_TEXT.get(filters.status, "Nothing left")
+    nav.exhausted_text = f"{text} in {filters.domain}." if filters.domain else f"{text}."
+    if filters.domain:
+        nav.widen_url = _dashboard_url(replace(filters, domain="", model=""))
+    return nav
+
+
+def _build_editor_context(target: _EditorTarget, flags: _EditorFlags, params: QueryDict) -> dict:
+    filters, pos = _nav_params(params)
     context = {
         "model_label": target.model_label,
         "pk": target.pk,
@@ -367,8 +548,13 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
         "needs_setup": flags.needs_setup,
         "freeze_sentence": _FREEZE_SENTENCE,
         "export_sentence": _EXPORT_SENTENCE,
+        # Carried back on every POST as hidden inputs, so a Save or a credit
+        # re-renders with the arrow still pointing at the right row (#3828).
+        "queue_query": filters.as_query(),
+        "pos": "" if pos is None else pos,
     }
     if target.model is not None and target.instance is not None:
+        context["nav"] = _queue_nav(target, filters, pos)
         field_errors = flags.field_errors or {}
         prose_names = prose_fields_for(target.model)
         prose_set = set(prose_names)
@@ -403,7 +589,10 @@ def _build_editor_context(target: _EditorTarget, flags: _EditorFlags) -> dict:
 def _render_editor_fragment(
     request: HttpRequest, target: _EditorTarget, flags: _EditorFlags | None = None
 ) -> HttpResponse:
-    context = _build_editor_context(target, flags or _EditorFlags())
+    # The queue context (`queue=`/`pos=`) rides the GET querystring on open and
+    # the POST body (hidden inputs) on every action, so read whichever this is.
+    params = request.POST if request.method == "POST" else request.GET
+    context = _build_editor_context(target, flags or _EditorFlags(), params)
     return render(request, "admin/authoring/_editor_panel.html", context)
 
 

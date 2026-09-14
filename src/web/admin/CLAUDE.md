@@ -253,27 +253,49 @@ to `_authoring/` (`admin_authoring`).
 - **Dashboard + stats/queue fragments** - `authoring_dashboard` (GET) renders
   the setup panel in place of the stats/queue skeleton for an unlinked
   account (see the setup gate below), else the two HTMX panels:
-  `authoring_stats_fragment` (per-domain rows/unwritten/unreviewed/word-count
-  rollup) and `authoring_queue_fragment` (the worst-first queue itself,
-  filterable by `?domain=`, `?model=` (a full `domain.Model` label),
-  `?status=` - `web.admin.constants
-  .BacklogStatusFilter`: `placeholder`/`unwritten`/`unreviewed` - and `?q=`
-  against the row's identity string, one Python-side scan over
+  `authoring_stats_fragment` (per-domain rows / to write / to review /
+  word-count rollup; `DomainStats.to_review` is written-and-not-reviewed) and
+  `authoring_queue_fragment` (the worst-first queue itself, filterable by
+  `?domain=`, `?model=` (a full `domain.Model` label), `?status=` -
+  `web.admin.constants.BacklogStatusFilter`: `unwritten` "To write" /
+  `unreviewed` "To review" (written and not reviewed, the stock changelist's
+  `CreditStatusListFilter` "written" bucket) / `placeholder` / `all` - and
+  `?q=` against the row's identity string, one Python-side scan over
   `build_backlog()`'s already-sorted rows, capped at 100 displayed rows with
-  a "Showing 100 of N" note when truncated). The `?model=` dropdown's options
+  a "Showing 100 of N" note when truncated). **An absent `?status=` means
+  `unwritten`** (`DEFAULT_BACKLOG_STATUS`, #3828): a writing session opens on
+  the work, and `all` is the explicit everything. `QueueFilters` (views.py)
+  is the one parser/serializer of those four params - the fragment's own
+  form, the `HX-Replace-Url` header the fragment answers with (the dashboard
+  URL plus the active filters, so a reload reopens the same list;
+  `dashboard.html` forwards its querystring into the first queue load), and
+  the `queue=` param each row link hands the editor all go through it. The
+  panel title carries a **headline count** (`{{ total }} to write · magic`):
+  the size of the filtered list, never the backlog, so finished work never
+  inflates what is left (#3828). **The filter form re-submits itself** on
+  `authoring-backlog-changed` (the `HX-Trigger` a credit/review stamp
+  fires), so the refresh carries the live filter values; the dashboard
+  section only fires the first `load`. Before #3828 the section owned the
+  refresh with no params and a writer lost their domain on every credited
+  row. The `?model=` dropdown's options
   come from `_model_options`, built off those same scanned rows and narrowed
   to the picked domain, so it can never offer a model with no rows behind it.
   Each row carries two links: the identity cell `hx-get`s the prose editor
-  into `#authoring-editor`, and an "Edit in admin" cell (`_queue_row` ->
-  `links.admin_change_url`) opens the stock change form - how an author
-  reaches the fields the prose-only editor deliberately does not expose. That
-  cell renders empty for a credited model with no registered `ModelAdmin`
-  rather than a dead link. The queue's editor link and the
+  into `#authoring-editor` via `_editor_url` (`?model=&pk=&queue=<the filter
+  querystring>&pos=<the row's index in the filtered list>`, what the
+  editor's Next control resolves from), and an "Edit in admin" cell
+  (`_queue_row` -> `links.admin_change_url`) opens the stock change form -
+  how an author reaches the fields the prose-only editor deliberately does
+  not expose. That cell renders empty for a credited model with no
+  registered `ModelAdmin` rather than a dead link. Each `<tr>` carries
+  `data-row="<label>:<pk>"`; `dashboard.html`'s one script toggles
+  `queue-row-current` on the row matching the editor root's `data-current`
+  after either panel swaps. The queue's editor link and the
   related/mentions/reference panels' links all anchor
-  `href="#authoring-editor"` and swap with `show:top`: the editor panel sits
-  **below** the queue table in `dashboard.html`, so the old `href="#"`
-  scrolled nowhere and the swapped-in form landed off-screen, reading to an
-  operator as a link that does nothing.
+  `href="#authoring-editor"` and swap with `show:top`. Since #3828 the
+  editor panel sits **above** the queue, directly under the page heading
+  (then queue, stats, builders, reference), so an opened row lands at the
+  top of the page and Next keeps the writer there.
 - **Guided first-run contributor setup gate** - `authoring/contributors.py`:
   `current_contributor(user)` reads `request.user -> PlayerData ->
   ContentContributor`, `None` at any missing link; `link_contributor(user,
@@ -301,6 +323,26 @@ to `_authoring/` (`admin_authoring`).
   field **in field-declaration order** (`prose_fields_for` iterates
   `model._meta.get_fields()`, e.g. `CodexEntry` renders `summary`,
   `lore_content`, `mechanics_content` in that order, never alphabetized).
+  **Layout (#3828):** heading row (title + a `Row N of M to write · <domain>`
+  position line), notices, then the prose form - first textarea `autofocus`
+  (htmx honours it on swapped content) - with the action row, then the
+  mechanical fields and credit columns in a closed `<details
+  class="editor-details">`, then related entries and mentions. The editor
+  root carries `data-current="<label>:<pk>"` for the queue's row shading.
+  **Next (#3828):** the editor GET and all three POSTs read `queue=` (the
+  queue's filter querystring, one opaque param because the editor already
+  uses `model` for the row and the queue uses it for the model filter) and
+  `pos=` (the row's index) - from the querystring on open, from hidden inputs
+  on every action - and `_queue_nav` resolves the successor from the same
+  `build_backlog()` scan the queue does: the row at `i + 1` when the current
+  row is still in the filtered list (so skipping moves past, never back to
+  the head); `filtered[pos]`, the row that shifted into its slot, once a
+  credit or review has removed it; `filtered[0]` for a deep link with no
+  context; otherwise an end-state line ("Nothing left to write in magic.")
+  with a widen link that clears the domain and model filters. The Next link
+  is an `hx-get` of `_editor_url` for the successor with the same `queue` and
+  the successor's `pos`. `_QueueNav` is the context object; every editor
+  request now costs one backlog scan, the same as the queue panel.
   `authoring_editor_save` (POST) assigns only `prose_fields_for(model)` keys
   actually present in the POST body - allowlist-only: a mechanical field
   smuggled into the POST under its own name is never read, let alone
@@ -381,9 +423,12 @@ to `_authoring/` (`admin_authoring`).
   no content repo configured at all.
 - **URLs** (`_authoring/...`, all superuser-only): `_authoring/` ->
   `admin_authoring` (dashboard), `_authoring/stats/` ->
-  `admin_authoring_stats`, `_authoring/queue/` -> `admin_authoring_queue`,
+  `admin_authoring_stats`, `_authoring/queue/` -> `admin_authoring_queue`
+  (`?domain=&model=&status=&q=`, answers with `HX-Replace-Url`),
   `_authoring/setup/` -> `admin_authoring_setup` (POST), `_authoring/editor/`
-  -> `admin_authoring_editor` (`?model=&pk=`), `_authoring/editor/save/` ->
+  -> `admin_authoring_editor` (`?model=&pk=`, plus optional `&queue=&pos=`
+  for Next; the three POSTs below take the same two as hidden inputs),
+  `_authoring/editor/save/` ->
   `admin_authoring_editor_save` (POST), `_authoring/editor/credit/` ->
   `admin_authoring_editor_credit` (POST), `_authoring/editor/review/` ->
   `admin_authoring_editor_review` (POST), `_authoring/related/` ->

@@ -1,6 +1,6 @@
 """Type declarations for flows system."""
 
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 
 class SerializedObjectState(TypedDict):
@@ -8,6 +8,12 @@ class SerializedObjectState(TypedDict):
     name: str
     thumbnail_url: str | None
     commands: list[str]
+    # Populated by `ObjectStateSerializer.to_representation`; the older,
+    # minimal `flows.helpers.payloads.serialize_state` path (test-only) does
+    # not set either, so both stay optional here rather than forcing that
+    # path to fabricate values it has no batched lookup for.
+    is_mission_board: NotRequired[bool]
+    place_id: NotRequired[int | None]
 
 
 class SceneInfo(TypedDict):

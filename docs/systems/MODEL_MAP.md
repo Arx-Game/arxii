@@ -1508,6 +1508,7 @@
 - `refresh_origin_story_state(sheet: 'CharacterSheet') -> 'OriginStoryState' - Recompute and persist ``origin_story_state`` from slot rows + prose.`
 - `request_revisions(application: 'DraftApplication', *, reviewer: 'AbstractBaseUser | AnonymousUser', comment: 'str') -> 'None' - Request revisions on an application.`
 - `require_draft_complete(draft: 'CharacterDraft') -> 'None' - Raise DraftIncompleteError unless every non-Review stage is complete.`
+- `resolve_fallback_starting_room() -> 'ObjectDB | None' - The canonical fallback starting room, or ``None`` if it was never seeded (#3818).`
 - `resubmit_draft(application: 'DraftApplication', *, comment: 'str' = '') -> 'None' - Resubmit a draft application after revisions.`
 - `select_origin_template(draft: 'CharacterDraft', template: 'OriginTemplate') -> 'None' - Choose the draft's Upbringing; a change resets everything downstream of it (#3617).`
 - `set_family_path(draft: 'CharacterDraft', path: 'str') -> 'None' - Pick the family path when the Upbringing allows more than one (#3617).`
@@ -8179,7 +8180,6 @@
   - clash_contributions <- combat.ClashContribution
   - referencing_updates <- relationships.RelationshipUpdate
   - relationship_bumps <- relationships.RelationshipBump
-  - anchored_threads <- scenes.InteractionThread
   - favorites <- scenes.InteractionFavorite
   - reactions <- scenes.InteractionReaction
   - read_receipts <- scenes.InteractionReadReceipt
@@ -8230,12 +8230,9 @@
 
 ### InteractionThread
 **Foreign Keys:**
-  - anchor_interaction -> scenes.Interaction [FK]
   - parent -> scenes.InteractionThread [FK] (nullable)
-  - root -> scenes.InteractionThread [FK] (nullable)
 **Pointed to by:**
   - child_threads <- scenes.InteractionThread
-  - descendant_threads <- scenes.InteractionThread
   - interactions <- scenes.Interaction
 
 ### Mute

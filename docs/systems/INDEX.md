@@ -707,7 +707,11 @@ plus the reachability rule (#3787).
   predicate behind both the tagging refusal (`UnreachableError`, `create_interaction`) and
   the reply refusal (`InteractionThreadError`, `assign_interaction_thread`) - a private
   venue's reply target is refused, never widened, and both refusals preserve the writer's
-  draft. See ADR-0293.
+  draft. Its rules are also deliberately mirrored client-side, in
+  `frontend/src/scenes/replyReachability.ts` (#3787) and `frontend/src/scenes/tagReachability.ts`
+  (#3810), so the composer can give a pre-emptive refusal before the server's own
+  authoritative check runs; that mirroring is intentional and kept in step with
+  `persona_can_receive`, not eliminated. See ADR-0293.
 - **Targeting vs. grouping (#3787):** `target_persona_ids` drives the involvement mark and
   `attention.ts`'s `direct` badge tier; it does not drive reader grouping - `getThreadKey`
   keys `action`/`outcome` mode rows by scene, not by target, so a multi-target combat round
@@ -823,6 +827,12 @@ Check resolution engine — converts trait values to ranks and rolls against res
 - **Key Types:** `CheckResult` (outcome, chart, roller_rank, target_rank, trait_points, aspect_bonus, level_points, specialization_points, capability_points)
 - **Pipeline:** trait points (weighted via CheckTypeTrait) + aspect bonus (path level) + level points (`LEVEL_POINTS_PER_LEVEL * class level`, guaranteed on EVERY check — #2707, ADR-0166) + capability points (weighted via authored `CheckTypeCapabilityModifier` as `weight x (effective value − innate_baseline)`, curated gate — #2505, deviation-scored per #2704/ADR-0164) + modifiers → CheckRank → ResultChart → roll+rollmod → outcome
 - **Integrates with:** traits (lookup tables), skills (check bonuses), progression (`get_character_path_level` — sole source of a character's class level, #2707), conditions (check modifiers + `get_effective_capability_value` agency oracle for authored capability points), goals (bonuses), scenes (active resistance via `compute_resist_increment`), combat (opposed difficulty on offense/penetration/NPC-attack defense, and `CombatOpponent.level` fed into the resist path for social verbs), mechanics (`resolve_challenge()` folds its `capability_source.value` into `extra_modifiers`)
+- **Resolution theater (#924, extended #3807 Part B):** `check_outcome_faces(check_result)` /
+  `maybe_emit_resolution_theater` (`world/checks/theater.py`) push a dramatic-reveal wheel to a
+  player's client. A social check schedules one for roller + target via
+  `_schedule_check_outcome_theater` (`world/scenes/action_services.py`); faces come only from
+  the check's own `ResultChart` bands, never rollmod or an outcome guarantee (ADR-0297). See
+  "Resolution theater" in [checks.md](checks.md).
 - **Source:** `src/world/checks/`
 - **Details:** [checks.md](checks.md)
 
@@ -3439,6 +3449,11 @@ action consent flow, and a three-mode non-combat round framework.
   identified instead of being stranded under the placeholder. See
   [scenes.md](scenes.md) §"Reliable Pose Delivery — Idempotent Submission & Safe
   Drafts" for the full contract.
+- **Outcome delivery (#3807):** a resolved social-check result, treatment outcome, or cast
+  outcome pose is delivered live, on commit, via `deliver_outcome_interaction`
+  (`interaction_services.py`): no persisted row goes undelivered. `push_interaction` gained
+  an optional `location` kwarg for Narrator-authored rows (the Narrator's character is never
+  physically placed). See "Result delivery" in [scenes.md](scenes.md) and ADR-0297.
 - **Integrates with:** roster (characters), stories (EpisodeScene join), instances (preservation check),
   flows (auto-logging via message_location), combat (encounter read gate + participation convergence via
   `Scene.objects.viewable_by` / `ensure_scene_participation`),
@@ -9071,7 +9086,12 @@ Admin-hosted, superuser-only HTMX dashboards for difficulty tuning/simulation an
   `core.app_domains.credited_content_models()` model, a prose-only row editor
   with a guided first-run contributor setup gate, a related-entries/prose-
   mentions pane, and reference search over the database plus opt-in staff-
-  docs/Arx I file corpora. See the "Authoring Workbench" section in
+  docs/Arx I file corpora. #3828 made it a writing pass: the queue opens on
+  To write (`DEFAULT_BACKLOG_STATUS`) with a headline count of the filtered
+  list, To review means written-and-not-reviewed, filters survive a credit
+  (the form re-submits itself) and a reload (`HX-Replace-Url`), the editor
+  sits above the queue with prose first and a position-based Next control
+  (`_queue_nav`, `?queue=&pos=`). See the "Authoring Workbench" section in
   `src/web/admin/CLAUDE.md`.
 - **Stock-admin credit complement (#3020):** every registered credited-model admin
   gets a `credit_status` changelist filter and linked column
