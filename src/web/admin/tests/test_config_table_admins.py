@@ -172,6 +172,29 @@ CONFIG_TABLE_MODELS = (
     "PenetrationOutcomeFactor",
     "TreatmentTemplate",
     "ConditionStageOnEntry",
+    # world/covenants/models.py
+    "CourtGrantConfig",
+    "MentorBondConfig",
+    "GearArchetypeCompatibility",
+    "CovenantRiteRolePackage",
+    "CovenantRoleGiftGrant",
+    "InsightTableEntry",
+    "VowStatScaling",
+    # world/dreams/models.py
+    "DreamPerilConfig",
+    # world/currency/models.py
+    "Profession",
+    # world/items/crafting/models.py
+    "CraftingRecipe",
+    "CraftingMaterialRequirement",
+    "CraftingSkillCap",
+    "CraftingRecipeConsequence",
+    "CraftingRecipeModifier",
+    # world/items/models.py
+    "Mantle",
+    "MantleLevelDefinition",
+    # world/justice/models.py
+    "SentenceLadderRung",
 )
 
 
