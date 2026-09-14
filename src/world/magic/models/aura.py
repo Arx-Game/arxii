@@ -108,6 +108,11 @@ class CharacterResonance(RelatedCacheClearingMixin, SharedMemoryModel):
     """
 
     related_cache_fields: ClassVar[list[str]] = ["character_sheet"]
+    #: character_sheet is required (no null=True) and never reassigned after
+    #: creation, and CharacterSheet.cached_resonances filters solely on
+    #: character_sheet -- safe to skip the clear on a field-only balance
+    #: update (#3816 final review; see the flag's docstring on the mixin).
+    skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     character_sheet = models.ForeignKey(
         "arxii.CharacterSheet",

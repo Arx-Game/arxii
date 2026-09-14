@@ -1379,6 +1379,16 @@ class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, Shared
     """
 
     related_cache_fields: ClassVar[list[str]] = ["interaction"]
+    #: Interaction.cached_round_actions filters solely via the interaction FK
+    #: (both the view Prefetch and the model fallback) -- safe to skip the
+    #: clear on the ~16 scattered saves that touch round_number/is_ready/etc.
+    #: without touching interaction. The ONE save that legitimately needs the
+    #: clear is the interaction transition itself (None -> set, an UPDATE
+    #: here since interaction is nullable and set later, not at creation) --
+    #: the snapshot-diff mechanism still catches that, since it compares the
+    #: FK's raw id, not whether this is a create (#3816 final review; see the
+    #: flag's docstring on the mixin).
+    skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     confirm_soulfray_risk = models.BooleanField(
         default=False,

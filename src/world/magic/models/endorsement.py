@@ -57,6 +57,12 @@ class PoseEndorsement(RelatedCacheClearingMixin, EndorsementBase):
     """
 
     related_cache_fields: ClassVar[list[str]] = ["interaction"]
+    #: interaction is required (no null=True) and never reassigned after
+    #: creation, and Interaction.cached_endorsements filters solely via the
+    #: interaction FK (self.endorsements) -- safe to skip the clear on a
+    #: field-only settled_at/granted_amount update (#3816 final review; see
+    #: the flag's docstring on the mixin).
+    skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     interaction = models.ForeignKey(
         "arxii.Interaction",
