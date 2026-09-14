@@ -1,10 +1,25 @@
-"""Handlers that own cached rows for a parent model.
+"""``CachedRowsHandler`` — the narrow fallback for filtering `Prefetch` can't express.
 
-The layer beneath serializers. A serializer turns model data into a wire
-format; it should not know where the rows came from, and it should not be
-responsible for cleaning them up. Telnet commands, flows and service functions
-read the same rows and never touch a serializer at all, so a guard that lives
-in serialization is a guard half the game does not get.
+**This is no longer the general pattern for a parent-owned list of cached
+rows.** That role now belongs to ``PrunedCachedProperty``
+(``evennia_extensions/cached_property.py``) paired with a `Prefetch`'s
+``to_attr`` kwarg — see ADR-0296. `#3816` migrated every consumer that
+could take that shape (`IntroductionsHandler`, `EnemyRowsHandler`,
+`GlimpseTagOffersHandler`, `UpbringingQuestionsHandler`) off this module.
+
+What's left here is `CachedRowsHandler` itself, kept alive for the one
+consumer ADR-0296 did not migrate: `CompanionOrderHandler`
+(`world/companions/handlers.py`). Its `load()` filters on
+`round_number == encounter.round_number` — a value read off the *parent*
+instance at query time, not a fixed clause a single shared `Prefetch`
+queryset can express for every parent in a batch. ADR-0296's own Context
+section sketches how a future migration could still get there (an unfiltered
+`PrunedCachedProperty` holding every round's orders, plus a separate
+uncached ``@property`` that filters to the current round in Python on read)
+— it was scoped out of `#3816` as more than a drop-in swap, not ruled out
+as impossible. Until that migration happens, a new per-parent-parameterized
+consumer belongs here too; anything else wanting a cached row list should
+reach for `PrunedCachedProperty` instead.
 
 Two hazards this layer exists to close, both consequences of ADR-0008's
 identity map:
@@ -36,6 +51,15 @@ if TYPE_CHECKING:
 
 class CachedRowsHandler[T: "Model"]:
     """One cached, ordered list of rows belonging to ``parent``.
+
+    **Reach for ``PrunedCachedProperty`` instead unless your ``load()`` needs a
+    filter parameterized on the parent instance itself** (e.g. "rows whose
+    round matches *this* encounter's current round") — a single shared
+    ``Prefetch`` queryset can't express that, which is why
+    `CompanionOrderHandler` (`world/companions/handlers.py`) is still the one
+    consumer of this class (see the module docstring above and ADR-0296).
+    Every consumer that only needed "every row belonging to this parent,
+    filterable by a fixed clause" has already migrated away.
 
     Subclasses implement ``load()``. Reads go through ``rows``, which never
     returns a row the database no longer has. Hang the handler off the parent
