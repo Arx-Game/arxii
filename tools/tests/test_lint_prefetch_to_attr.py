@@ -75,6 +75,31 @@ def get_queryset():
     assert len(check_source(source)) == 1
 
 
+def test_to_attr_onto_plain_cached_property_still_fails_even_with_the_import_present():
+    """The import gate alone is not enough - a matching-named property that is
+    decorated with plain ``cached_property``, not ``PrunedCachedProperty``, must
+    still fail even when the file genuinely imports ``PrunedCachedProperty``
+    (for some other property). Without this case, a broken decorator check that
+    only looked at the import would pass unnoticed."""
+    source = """
+from evennia_extensions.cached_property import PrunedCachedProperty
+from django.utils.functional import cached_property
+
+class Foo(models.Model):
+    @cached_property
+    def cached_bar(self):
+        return list(Bar.objects.filter(foo=self))
+
+    @PrunedCachedProperty
+    def cached_other(self):
+        return list(Baz.objects.filter(foo=self))
+
+def get_queryset():
+    return Foo.objects.prefetch_related(Prefetch("bar_set", to_attr="cached_bar"))
+"""
+    assert len(check_source(source)) == 1
+
+
 def test_pruned_cached_property_without_the_import_still_fails():
     """A locally-defined/aliased ``PrunedCachedProperty`` name is not enough - the
     heuristic requires the genuine import from ``evennia_extensions.cached_property``."""

@@ -38,6 +38,17 @@ narrower than "any to_attr is fine").
 
 Use ``# noqa: PREFETCH_TO_ATTR`` to suppress a target this heuristic cannot see,
 with a reason.
+
+This hook's ``files:`` scope in ``.pre-commit-config.yaml`` currently contains
+zero ``to_attr`` call sites at all (only prose mentions), so a clean run there
+is not evidence this rewrite works against real code - only that it doesn't
+false-positive on those two directories. Widening the scope to the apps #3816
+actually converted is blocked on #3835: most of their ``to_attr`` sites split
+the ``Prefetch`` call from the ``PrunedCachedProperty`` definition across
+files (the dominant, correct layout in this codebase), which this same-file
+heuristic cannot see across, so widening naively flags already-correct code
+alongside the genuinely unconverted sites. See the hook's config comment for
+the counted breakdown.
 """
 
 from __future__ import annotations

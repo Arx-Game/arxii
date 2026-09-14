@@ -199,24 +199,46 @@ repos:
         # need their own cache key - and today has exactly one consumer,
         # `CompanionOrderHandler`.
         #
+        # THIS SCOPE HAS ZERO ENFORCEMENT FOOTPRINT TODAY: neither
+        # evennia_extensions/ nor web/admin/upbringing_builder/ contains a single
+        # `to_attr` call site (only prose mentions), so a clean run here is not
+        # evidence the rewritten check works against real code - it is only
+        # evidence it doesn't false-positive on these two directories.
+        #
         # SCOPE WIDENS ONE APP AT A TIME, and this regex lists only the surfaces
         # that are actually clean under the rule above. #3816's plan converted
         # specific named properties in world/scenes, world/journals,
         # world/character_sheets, world/character_creation, world/magic and
         # world/combat, but `--all-files` against those six trees under the new
-        # logic still finds ~100 unsanctioned `to_attr` sites the plan never
-        # touched (e.g. `ComboDefinition.cached_slots` in world/combat/services.py
-        # has no backing descriptor at all; `cached_codex_grants` in
-        # world/character_creation/models.py is a deliberate plain
-        # `cached_property`, not a bug) - so none of those six apps are clean yet
-        # and widening to them now would break pre-commit for the next unrelated
-        # edit to any of those files. Everywhere outside this regex is held by the
-        # repo-wide `pattern:PREFETCH_TO_ATTR` ratchet in
-        # tools/noqa_ratchet_baseline.txt (count may only go down), so a NEW
-        # to_attr fails anywhere in src/ regardless - this hook is the one that
-        # also says what to build instead. An app joins here once ITS OWN
-        # `to_attr` sites are all converted to `PrunedCachedProperty` (or the
-        # narrow handler case) or individually noqa'd with a stated reason.
+        # logic finds 106 unsanctioned `to_attr` sites, split two ways (counted
+        # by cross-referencing every flagged `to_attr` string against every
+        # `PrunedCachedProperty`-decorated name repo-wide, see #3835):
+        #   - ~84 are genuinely unconverted - out of this plan's scope entirely,
+        #     e.g. `ComboDefinition.cached_slots` in world/combat/services.py has
+        #     no backing descriptor at all; `cached_codex_grants` in
+        #     world/character_creation/models.py is a deliberate plain
+        #     `cached_property` for negligible-staleness authored content, not a
+        #     bug.
+        #   - ~22 are FALSE POSITIVES from this hook's own same-file heuristic -
+        #     a genuine `PrunedCachedProperty` exists, but in a different file
+        #     than the `Prefetch` call, which the heuristic cannot see across.
+        #     This includes all 14 flags in world/scenes/interaction_views.py -
+        #     this plan's own flagship conversion, already correct - because the
+        #     descriptors live in world/scenes/models.py. Splitting the
+        #     `Prefetch` call from the property definition across files is the
+        #     DOMINANT, correct layout in this codebase, not an edge case.
+        # Converting the ~84 genuine sites alone would never turn this hook green
+        # against those six trees - the ~22 cross-file false positives need
+        # EITHER a per-site `# noqa: PREFETCH_TO_ATTR` suppression, OR a genuine
+        # cross-file resolution enhancement to this hook. Widening now would
+        # break pre-commit for the next unrelated edit to any of those files.
+        # Everywhere outside this regex is held by the repo-wide
+        # `pattern:PREFETCH_TO_ATTR` ratchet in tools/noqa_ratchet_baseline.txt
+        # (count may only go down), so a NEW to_attr fails anywhere in src/
+        # regardless - this hook is the one that also says what to build
+        # instead. #3835 is the filed home for auditing the ~84 genuine sites
+        # and deciding the false-positive fix; an app joins this regex once
+        # that audit lands, not before.
       - id: view-memo
         name: Reject per-request memos on views and serializers
         entry: uv run python tools/lint_view_memo.py
