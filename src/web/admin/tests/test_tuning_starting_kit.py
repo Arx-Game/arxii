@@ -8,6 +8,7 @@ option sources, ranking, pick budget, floor, castability, estimates and anchor D
 
 from __future__ import annotations
 
+from decimal import Decimal
 from typing import Any
 from unittest.mock import patch
 
@@ -16,12 +17,15 @@ from django.test import TestCase
 from django.utils import timezone
 
 from web.admin.tuning import technique_analytics as ta
+from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALUE
 from world.character_creation.factories import BeginningsFactory, BeginningTraditionFactory
 from world.classes.factories import PathFactory
 from world.classes.models import PathStage
+from world.conditions.factories import DamageSuccessLevelMultiplierFactory
 from world.magic.factories import (
     GiftFactory,
     PathGiftGrantFactory,
+    TechniqueDamageProfileFactory,
     TechniqueFactory,
     TraditionFactory,
     TraditionGiftGrantFactory,
@@ -34,6 +38,15 @@ from world.magic.types.technique_power import (
     ValuationProvenance,
 )
 from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
+from world.traits.constants import STAT_DISPLAY_DIVISOR, TraitType
+from world.traits.factories import (
+    CheckOutcomeFactory,
+    CheckRankFactory,
+    PointConversionRangeFactory,
+    ResultChartFactory,
+    ResultChartOutcomeFactory,
+)
+from world.traits.models import PointConversionRange, ResultChart
 
 _EVALUATE = "web.admin.tuning.technique_analytics.technique_power_eval.evaluate_technique"
 _REFERENCE = "web.admin.tuning.technique_analytics.de_valuation.compute_reference_frame"
@@ -315,11 +328,51 @@ class PoolScanTests(TestCase):
 
     def test_clear_corpus_cache_drops_both_the_catalog_and_starting_corpus_entries(self) -> None:
         params = ta.TechniqueAnalyticsParams()
+        roller_points = ta._default_starting_roller_points()
         cache.set(ta._corpus_cache_key(params), self._corpus())
-        cache.set(ta._starting_corpus_cache_key(), self._corpus())
+        cache.set(ta._starting_corpus_cache_key(roller_points), self._corpus())
         ta.clear_corpus_cache(params)
         self.assertIsNone(cache.get(ta._corpus_cache_key(params)))
-        self.assertIsNone(cache.get(ta._starting_corpus_cache_key()))
+        self.assertIsNone(cache.get(ta._starting_corpus_cache_key(roller_points)))
+
+
+class RollerPointsTests(TestCase):
+    """`starting_stats_roller_points` (#3716 fix round 2).
+
+    An empty `PointConversionRange` table must give every roller 0 converted points,
+    matching the live check path (`world.checks.services._weighted_trait_points`) - no
+    raw-value fallback. The twelve stat conversions cost one query total, not one per stat.
+    """
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_empty_range_table_converts_every_stat_to_zero(self) -> None:
+        stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+        self.assertEqual(ta.starting_stats_roller_points(stats), ta.LEVEL_POINTS_PER_LEVEL)
+
+    def test_matches_calculate_points_for_a_small_authored_range_set(self) -> None:
+        PointConversionRangeFactory(
+            trait_type=TraitType.STAT, min_value=1, max_value=10, points_per_level=2
+        )
+        PointConversionRangeFactory(
+            trait_type=TraitType.STAT, min_value=11, max_value=30, points_per_level=1
+        )
+        stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+        expected_per_stat = PointConversionRange.calculate_points(
+            TraitType.STAT, STAT_DEFAULT_VALUE * STAT_DISPLAY_DIVISOR
+        )
+        expected = expected_per_stat + ta.LEVEL_POINTS_PER_LEVEL
+        self.assertEqual(ta.starting_stats_roller_points(stats), expected)
+
+    def test_fetches_the_stat_ranges_once_for_all_twelve_stats(self) -> None:
+        PointConversionRangeFactory(
+            trait_type=TraitType.STAT, min_value=1, max_value=50, points_per_level=1
+        )
+        stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+        with self.assertNumQueries(1):
+            ta.starting_stats_roller_points(stats)
 
 
 class CombatFloorTests(TestCase):
@@ -347,3 +400,48 @@ class CombatFloorTests(TestCase):
         )
         self.assertTrue(floor.has_protection)
         self.assertFalse(floor.has_damage)
+
+
+class StartingKitRealEvaluatorSmokeTest(TestCase):
+    """One real-evaluator pass with nothing patched (#3716 fix round 2).
+
+    Every other kit test above patches `evaluate_technique` (and the reference/band
+    helpers) with canned reports - a real smoke test proves the wiring holds when the
+    actual evaluator runs end to end. Setup mirrors
+    `world.magic.tests.test_technique_power_eval`'s damage-payload setup.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        CheckRankFactory(rank=0, min_points=0)
+        sl1 = CheckOutcomeFactory(name="Partial", success_level=1)
+        sl3 = CheckOutcomeFactory(name="Full", success_level=3)
+        chart = ResultChartFactory(rank_difference=0, name="Even")
+        ResultChartOutcomeFactory(chart=chart, outcome=sl1, min_roll=1, max_roll=50)
+        ResultChartOutcomeFactory(chart=chart, outcome=sl3, min_roll=51, max_roll=100)
+        DamageSuccessLevelMultiplierFactory(min_success_level=1, multiplier=Decimal("1.00"))
+
+        cls.beginning = BeginningsFactory()
+        cls.tradition = TraditionFactory()
+        BeginningTraditionFactory(beginning=cls.beginning, tradition=cls.tradition)
+        cls.path = PathFactory()
+        cls.gift = GiftFactory()
+        cls.technique = TechniqueFactory(gift=cls.gift, name="Real Strike", damage_profile=False)
+        TechniqueDamageProfileFactory(technique=cls.technique, minimum_success_level=1)
+        grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
+        grant.starter_techniques.add(cls.technique)
+
+    def setUp(self) -> None:
+        # ResultChart._chart_cache is a process-level dict, not transaction-scoped -
+        # clear it so this class's own chart wins (mirrors test_technique_power_eval.py).
+        ResultChart.clear_cache()
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_prices_the_real_technique_with_a_positive_baseline_de(self) -> None:
+        kit_params = ta.StartingKitParams(
+            beginning=self.beginning, tradition=self.tradition, path=self.path, gift=self.gift
+        )
+        report = ta.build_starting_kit_report(kit_params)
+        self.assertEqual([row.report.name for row in report.rows], ["Real Strike"])
+        self.assertGreater(report.kit_baseline_de, 0)

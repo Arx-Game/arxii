@@ -1634,6 +1634,22 @@ def _declarations() -> tuple[ContentDependency, ...]:
             probe=AnyRowProbe(label="DamageSuccessLevelMultiplier"),
         ),
         ContentDependency(
+            key="point-conversion-ranges-stat",
+            label="Stat point-conversion ranges",
+            tier=DependencyTier.REQUIRED,
+            consumer=(
+                "world/checks/services.py:916 _weighted_trait_points(); "
+                "web/admin/tuning/technique_analytics.py starting_stats_roller_points()"
+            ),
+            consequence=(
+                "PointConversionRange.calculate_points returns 0 for every stat, so every "
+                "check that weights a STAT trait rolls with 0 points from it, and the "
+                "Techniques tuning panel's starting-kit report prices every kit at the "
+                "level-one floor alone, with no contribution from the character's stats."
+            ),
+            probe=AnyRowProbe(label="PointConversionRange"),
+        ),
+        ContentDependency(
             key="fury-tiers",
             label="Fury tiers",
             tier=DependencyTier.REQUIRED,

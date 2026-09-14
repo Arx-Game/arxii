@@ -255,21 +255,50 @@ def build_technique_panel(params: TechniqueAnalyticsParams) -> TechniquePanelDat
     )
 
 
+def _points_from_ranges(ranges: Sequence[PointConversionRange], trait_value: int) -> int:
+    """Pure re-implementation of `PointConversionRange.calculate_points` (#3716).
+
+    *ranges* must already be filtered to one `trait_type` and ordered by `min_value` -
+    exactly what `calculate_points` itself queries, minus the query. Kept next to
+    :func:`starting_stats_roller_points`, the only caller that needs the twelve stat
+    conversions done in Python against one pre-fetched range list instead of issuing
+    one query per stat.
+    """
+    total_points = 0
+    for conversion_range in ranges:
+        if conversion_range.contains_value(trait_value):
+            start_in_range = max(conversion_range.min_value, 1)
+            end_in_range = min(conversion_range.max_value, trait_value)
+            if end_in_range >= start_in_range:
+                levels_in_range = end_in_range - start_in_range + 1
+                total_points += levels_in_range * conversion_range.points_per_level
+        elif trait_value > conversion_range.max_value:
+            levels_in_range = conversion_range.max_value - conversion_range.min_value + 1
+            total_points += levels_in_range * conversion_range.points_per_level
+        else:
+            break
+    return total_points
+
+
 def starting_stats_roller_points(stats: dict[str, int]) -> int:
     """Convert CG display-scale stats to a representative level-one check pool.
 
     A technique has no single check type, so the kit report uses the mean of the
     twelve starting stat pools plus the level-one floor. This preserves the real
     CG allocation (rather than the catalog's level-10 anchor) while keeping the
-    report honest about being a representative combat context.
+    report honest about being a representative combat context. An empty
+    `PointConversionRange` table converts every stat to 0 points, same as the live
+    check path (`world.checks.services._weighted_trait_points`) - no fallback to a
+    raw-value approximation.
+
+    Fetches the STAT ranges once (rather than once per stat, as
+    `PointConversionRange.calculate_points` would over twelve calls).
     """
     values = [stats.get(name, STAT_DEFAULT_VALUE) for name in REQUIRED_STATS]
-    converted = [
-        PointConversionRange.calculate_points(TraitType.STAT, value * STAT_DISPLAY_DIVISOR)
-        for value in values
-    ]
-    if not any(converted):
-        converted = [value * STAT_DISPLAY_DIVISOR for value in values]
+    ranges = list(
+        PointConversionRange.objects.filter(trait_type=TraitType.STAT).order_by("min_value")
+    )
+    converted = [_points_from_ranges(ranges, value * STAT_DISPLAY_DIVISOR) for value in values]
     return round(sum(converted) / len(converted)) + LEVEL_POINTS_PER_LEVEL
 
 
@@ -515,6 +544,12 @@ def resolve_pool_scan_filter(value: str) -> PoolScanFilter:
         return DEFAULT_POOL_SCAN_FILTER
 
 
+def _default_starting_roller_points() -> int:
+    """Roller points at the CG default stat allocation - computed once per caller."""
+    default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+    return starting_stats_roller_points(default_stats)
+
+
 def clear_corpus_cache(params: TechniqueAnalyticsParams) -> None:
     """Drop the cached catalog corpus for *params* and the pool scan's starting corpus (P5).
 
@@ -524,17 +559,15 @@ def clear_corpus_cache(params: TechniqueAnalyticsParams) -> None:
     results for up to 24h after a non-authoring config change.
     """
     cache.delete(_corpus_cache_key(params))
-    cache.delete(_starting_corpus_cache_key())
+    cache.delete(_starting_corpus_cache_key(_default_starting_roller_points()))
 
 
-def _starting_corpus_cache_key() -> str:
+def _starting_corpus_cache_key(roller_points: int) -> str:
     """Cache key for the pool scan's starting-context corpus (#3716 Task 3 fix round 1).
 
-    Carries the technique catalog's revision and the starting roller points, mirroring
-    :func:`_corpus_cache_key`'s revision-in-key reasoning.
+    Carries the technique catalog's revision and *roller_points* (computed once by the
+    caller, never here), mirroring :func:`_corpus_cache_key`'s revision-in-key reasoning.
     """
-    default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
-    roller_points = starting_stats_roller_points(default_stats)
     return f"tuning-tech-power-starting-corpus:{technique_catalog_revision()}:{roller_points}"
 
 
@@ -544,9 +577,9 @@ def _starting_corpus() -> dict[int, TechniquePowerReport]:
     Never called by `build_starting_kit_report` - that builder prices only one
     combination's own options at each character's own stats, not the whole catalog.
     """
-    default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
-    roller_points = starting_stats_roller_points(default_stats)
-    cached = cache.get(_starting_corpus_cache_key())
+    roller_points = _default_starting_roller_points()
+    cache_key = _starting_corpus_cache_key(roller_points)
+    cached = cache.get(cache_key)
     if cached is None:
         context = EvalContext(
             level=STARTING_LEVEL,
@@ -557,7 +590,7 @@ def _starting_corpus() -> dict[int, TechniquePowerReport]:
         )
         reports, reference = technique_power_eval.evaluate_all_with_reference(context)
         cached = (reports, reference, timezone.now())
-        cache.set(_starting_corpus_cache_key(), cached, _CORPUS_CACHE_TIMEOUT)
+        cache.set(cache_key, cached, _CORPUS_CACHE_TIMEOUT)
     reports, _reference, _evaluated_at = cached
     return {report.technique_id: report for report in reports}
 
