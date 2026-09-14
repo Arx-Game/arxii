@@ -310,7 +310,8 @@ class Task2EndorsableResonancesTests(TestCase):
             pk=interaction.pk
         )
         _set_empty_cached_attrs(interaction)
-        # No cached_resonances attr — serializer falls back to live query (empty).
+        # cached_resonances wasn't Prefetch-fed here, so this is a cold-cache read —
+        # a live query, empty since bare_sheet has claimed no resonances.
         data = InteractionListSerializer(interaction, context=_make_context()).data
         assert data["endorsable_resonances"] == []
 

@@ -162,13 +162,20 @@ def grant_resonance(  # noqa: PLR0913
         if earn_rate_bonus > 0:
             amount = int(amount * (1 + earn_rate_bonus / Decimal(100)))
 
-    # Captured before any write below: CharacterResonance.objects.get_or_create()
-    # and cr.save() both call Model.save(), which (via RelatedCacheClearingMixin)
-    # clears character_sheet.cached_resonances out from under us as a side effect
-    # of their OWN write -- reading character_sheet.cached_resonances again
-    # afterward would silently re-query and double-count the row just created.
-    # Read once, up front, and only assign the final list after every save above.
-    existing_resonances = character_sheet.cached_resonances
+    # Peek, don't read: character_sheet.cached_resonances would force a query
+    # when cold (the common case for a grant -- unlike Task 2's interaction
+    # relations, a grant isn't usually preceded by something else that already
+    # warmed this sheet's resonance cache in the same request), defeating the
+    # point of this optimization. A cold cache re-queries correctly on next
+    # real access regardless, so there's nothing to lose by skipping the
+    # mutation below when nothing is cached yet. Peeking (rather than reading)
+    # also sidesteps the double-count trap: CharacterResonance.objects.
+    # get_or_create() and cr.save() both call Model.save(), which (via
+    # RelatedCacheClearingMixin) clears character_sheet.cached_resonances as a
+    # side effect of their OWN write -- reading the property again afterward
+    # would silently re-query (already including the just-created row) and
+    # double-count it on append.
+    cached_resonances = character_sheet.__dict__.get("cached_resonances")
     cr, created = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
         resonance=resonance,
@@ -177,8 +184,8 @@ def grant_resonance(  # noqa: PLR0913
     cr.balance += amount
     cr.lifetime_earned += amount
     cr.save(update_fields=["balance", "lifetime_earned"])
-    if created:
-        character_sheet.cached_resonances = [*existing_resonances, cr]
+    if created and cached_resonances is not None:
+        character_sheet.cached_resonances = [*cached_resonances, cr]
 
     ResonanceGrant.objects.create(
         character_sheet=character_sheet,

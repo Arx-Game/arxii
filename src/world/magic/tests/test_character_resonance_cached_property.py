@@ -5,18 +5,38 @@
 (``world/scenes/interaction_views.py``) but had no model-level cached property backing
 it at all -- a page load's warmed cache was never kept in sync with a same-request
 resonance grant. Converting it to ``PrunedCachedProperty`` (Task 1) fixes the
-Prefetch freshness check; this task also adds direct write-site mutation at the 4
-``CharacterResonance.objects.get_or_create()`` call sites so a warmed cache reflects
-a grant without a requery.
+Prefetch freshness check; this task also adds direct write-site mutation at four
+call sites on the grant path so a warmed cache reflects a grant without a requery:
+``CharacterResonanceHandler.get_or_create`` (``handlers.py``), ``grant_resonance``
+(``services/resonance.py``), ``reconcile_distinction_resonance_grants``
+(``services/distinction_resonance.py``), and ``_convert_full``
+(``services/conversion.py``). Every OTHER ``CharacterResonance.objects.get_or_create()``
+call site in the app (e.g. ``services/corruption.py``, ``services/soul_tether.py``) is
+left untouched and relies on the mixin's fallback invalidation instead (still correct,
+just one extra query on the next read) -- these four are the ones worth optimizing
+because they sit on the hot grant path.
 
-**The double-count trap (mirrors Task 2's fix, #3816):** ``get_or_create()``'s own
-``Model.save()`` (via ``RelatedCacheClearingMixin`` + ``related_cache_fields`` on
-``CharacterResonance``) clears ``character_sheet.cached_resonances`` out from under
-callers as a side effect of creating the row -- even on a cache that was never read
-before this call. Reading ``character_sheet.cached_resonances`` again *after* the
-write re-queries the DB (which now already includes the row just created) and then
-appending it again duplicates it. Each of the 4 write sites captures the existing
-list BEFORE the get_or_create/save instead.
+**The peek-not-read rule.** Reading ``character_sheet.cached_resonances`` to capture
+it forces a query whenever the cache is cold -- which, for a resonance grant, is most
+of the time (unlike Task 2's interaction relations, a grant isn't usually preceded by
+something else that already warmed the sheet's resonance cache in the same request).
+So every site below **peeks** at ``character_sheet.__dict__.get("cached_resonances")``
+(no query, ``None`` when cold) instead of reading the property, and only performs the
+direct-mutation append when something was actually cached -- a cold cache re-queries
+correctly on next real access regardless, so there is nothing to lose by skipping the
+mutation when cold.
+
+**The double-count trap this still guards against (mirrors Task 2's fix, #3816):**
+``get_or_create()``'s own ``Model.save()`` (via ``RelatedCacheClearingMixin`` +
+``related_cache_fields`` on ``CharacterResonance``) clears
+``character_sheet.cached_resonances`` out from under callers as a side effect of
+creating the row. Reading ``character_sheet.cached_resonances`` again *after* the
+write (rather than peeking a value captured before it) would re-query the DB (which
+now already includes the row just created) and then appending it again would
+duplicate it. ``_convert_full`` peeks at the very top of the function, before its own
+``cr.save()`` -- the peeked list holds the same idmapper instance as ``cr``, so
+zeroing ``cr``'s balance in place is already reflected in the peeked list with no
+re-read needed, making that site genuinely free rather than merely no-worse.
 """
 
 from __future__ import annotations
@@ -89,16 +109,28 @@ class GrantResonanceWarmedCacheTests(TestCase):
 
 
 class CharacterResonanceColdCacheTests(TestCase):
-    """The 4 get_or_create write sites must not double-count on a cold cache.
+    """The 4 optimized write sites must not double-count on a cold cache, and must
+    not force a query to check.
 
-    ``CharacterResonance.objects.get_or_create()``'s own ``Model.save()`` clears
-    ``character_sheet.cached_resonances`` (via ``RelatedCacheClearingMixin``) as a
-    side effect of creating the row -- but a cache that has never been read before
-    this call has nothing to clear either way, so reading it for the first time
-    right AFTER the write would still re-query the DB (which already includes the
-    row just created) and then append it again, doubling it. Each fix captures the
-    existing list BEFORE the write instead.
+    Peeking ``character_sheet.__dict__.get("cached_resonances")`` (rather than
+    reading the property) means a genuinely cold cache is left alone entirely --
+    no query, no premature population -- and correctness still holds because the
+    next real read of ``cached_resonances`` queries the DB fresh, which by then
+    already includes the row the write just created.
     """
+
+    def test_grant_resonance_on_a_cold_cache_does_not_query_or_populate_it(self) -> None:
+        """The fix this class exists for: peeking must not force a query.
+
+        Reading (rather than peeking) ``character_sheet.cached_resonances`` before
+        the write would force a query on every cold-cache grant -- the common
+        case -- defeating the point of a query-reduction fix.
+        """
+        sheet = CharacterSheetFactory()
+        resonance = ResonanceFactory()
+        self.assertNotIn("cached_resonances", sheet.__dict__)
+        grant_resonance(sheet, resonance, 10, source=GainSource.STAFF_GRANT)
+        self.assertNotIn("cached_resonances", sheet.__dict__)
 
     def test_grant_resonance_on_a_cold_cache_is_not_doubled(self) -> None:
         sheet = CharacterSheetFactory()

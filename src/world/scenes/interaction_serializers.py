@@ -872,20 +872,19 @@ class InteractionListSerializer(serializers.ModelSerializer):
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
         """List of resonances claimed by the endorsee (pose author).
 
-        Reads from the prefetched ``persona__character_sheet__resonances``
-        path (set up in ``interaction_views.get_queryset``) via the
-        ``cached_resonances`` to_attr. Falls back to a live query if the attr
-        is absent (e.g. serializer used outside the view's queryset pipeline).
+        Reads ``CharacterSheet.cached_resonances`` (a ``PrunedCachedProperty``,
+        #3816 Task 3) -- fed by the prefetched ``persona__character_sheet__resonances``
+        path (set up in ``interaction_views.get_queryset``) when available, and a
+        live query on first read otherwise (e.g. serializer used outside the
+        view's queryset pipeline). The property always exists now, so there is
+        no fallback branch to maintain here.
         """
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        resonances = getattr(sheet, "cached_resonances", None)  # noqa: GETATTR_LITERAL
-        if resonances is None:
-            resonances = list(sheet.resonances.select_related("resonance"))
-        return [{"id": cr.resonance_id, "name": cr.resonance.name} for cr in resonances]
+        return [
+            {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
+        ]
 
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
         """List of peers who endorsed this pose, with persona info.

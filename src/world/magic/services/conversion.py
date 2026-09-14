@@ -155,6 +155,18 @@ def _convert_full(
     """Full conversion: convert everything (Fall/Redemption)."""
     from world.magic.models.grant import ResonanceGrant  # noqa: PLC0415
 
+    # Peek, don't read, and do it FIRST: character_sheet.cached_resonances
+    # would force a query when cold (the common case here), defeating the
+    # point of this optimization -- a cold cache re-queries correctly on next
+    # real access regardless. Peeking up front also makes this genuinely free
+    # rather than merely no-worse: the peeked list holds the same idmapper
+    # instance as `cr`, so zeroing cr's balance/lifetime_earned in place below
+    # is already reflected in the peeked list with no re-read needed, and
+    # get_or_create's/target_cr.save()'s Model.save() calls (which clear
+    # character_sheet.cached_resonances via RelatedCacheClearingMixin as a
+    # side effect of their own write) can't invalidate a local variable.
+    cached_resonances = character_sheet.__dict__.get("cached_resonances")
+
     granted_balance = int(Decimal(cr.balance) * multiplier)
     granted_lifetime = int(Decimal(cr.lifetime_earned) * multiplier)
 
@@ -162,14 +174,6 @@ def _convert_full(
     cr.lifetime_earned = 0
     cr.save(update_fields=["balance", "lifetime_earned"])
 
-    # Captured before any write below: CharacterResonance.objects.get_or_create()
-    # and target_cr.save() both call Model.save(), which (via
-    # RelatedCacheClearingMixin) clears character_sheet.cached_resonances out
-    # from under us as a side effect of their OWN write -- reading
-    # character_sheet.cached_resonances again afterward would silently re-query
-    # and double-count the row just created. Read once, up front, and only
-    # assign the final list after every save above.
-    existing_resonances = character_sheet.cached_resonances
     target_cr, created = CharacterResonance.objects.get_or_create(
         character_sheet=character_sheet,
         resonance=target_resonance,
@@ -178,8 +182,8 @@ def _convert_full(
     target_cr.balance += granted_balance
     target_cr.lifetime_earned += granted_lifetime
     target_cr.save(update_fields=["balance", "lifetime_earned"])
-    if created:
-        character_sheet.cached_resonances = [*existing_resonances, target_cr]
+    if created and cached_resonances is not None:
+        character_sheet.cached_resonances = [*cached_resonances, target_cr]
 
     ResonanceGrant.objects.create(
         character_sheet=character_sheet,
