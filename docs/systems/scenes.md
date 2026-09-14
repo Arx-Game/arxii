@@ -597,18 +597,24 @@ account's own read state and is never serialized to any other viewer (see its en
 Cursor-paginated endpoints use an opaque base64 `(timestamp, id)` boundary token (`before`/`after`)
 rather than offset pagination.
 
-The reader's per-pose nested data (persona resonances, endorsements, target personas, favorites,
-receivers, reactions, linked actions and their combat-round rows, reaction windows and their
-reactions, dramatic-moment tags and pending suggestions — 13 relations, plus a 14th for an
-endorser's primary persona resolved in `get_serializer_context()`) is batched via
-`Prefetch(..., to_attr="cached_*")` calls onto `PrunedCachedProperty` properties
-(`world/scenes/models.py`, `world/scenes/reaction_models.py`), not plain attributes or
-`CachedRowsHandler`. This is the sanctioned shape (ADR-0296): a genuine `cached_property` is the one
-`to_attr` target Django's own cold-instance freshness check gets right, and `PrunedCachedProperty`
-additionally re-filters any row whose pk has gone falsey (a `Collector.delete()` zombie) on every
-read. It does not by itself keep a cached list fresh across writes made elsewhere in the same
-request — each relation's write sites mutate the cached list directly or clear it via
-`related_cache_fields`/`RelatedCacheClearingMixin`.
+The reader's per-pose nested data (persona resonances, an endorser's primary persona, endorsements,
+target personas, favorites, receivers, reactions, linked actions and their combat-round rows,
+reaction windows and their reactions, dramatic-moment tags and pending suggestions — 13 distinct
+relations) is batched via `Prefetch(..., to_attr="cached_*")` calls onto `PrunedCachedProperty`
+properties (`world/scenes/models.py`, `world/scenes/reaction_models.py`, and — for
+`cached_resonances` and `cached_primary_persona` — `world/character_sheets/models.py`), not plain
+attributes or `CachedRowsHandler`. `CharacterSheet.cached_primary_persona` is the one fed twice:
+once nested under endorsements on the `Interaction` queryset, once more on the separate
+`SceneEntryEndorsement` queryset built in `get_serializer_context()` — 14 `Prefetch(to_attr=...)`
+calls in total feeding those 13 properties. This is the sanctioned shape (ADR-0296): a genuine
+`cached_property` is the one `to_attr` target Django's own cold-instance freshness check gets right,
+and `PrunedCachedProperty` additionally re-filters any row whose pk has gone falsey (a
+`Collector.delete()` zombie) on every read. It does not by itself keep a cached list fresh across
+writes made elsewhere in the same request or process — most relations' write sites mutate the
+cached list directly or clear it via `related_cache_fields`/`RelatedCacheClearingMixin`;
+`cached_primary_persona` is the one exception, with no write-side invalidation wired at all (a
+PRIMARY persona is effectively immutable once created, which may be why, but the doc shouldn't imply
+coverage this relation doesn't have).
 
 - `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
   whisper/OOC-channel grouping), cursor-paginated 30/page.

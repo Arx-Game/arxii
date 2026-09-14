@@ -58,7 +58,7 @@ zero" a reachable exit criterion: most converted `to_attr` sites split the `Pref
 from the `PrunedCachedProperty` definition across files (the dominant, correct layout,
 `world/scenes` included), and the hook's same-file heuristic false-positives on that split
 regardless of how much of an app has converted — widening it is blocked on #3835. See
-`evennia_extensions/CACHED_PROPERTY_STANDARD.md` and ADR-0296 for the current state.
+`evennia_extensions/CACHED_PROPERTY_STANDARD.md` for the hook's current coverage state.
 `OriginTemplate.questions` is the worked example - one handler read by the CG API
 serializer, the questionnaire resolver, the draft validators, the finalize service and the
 Builder's rail.
