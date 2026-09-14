@@ -12,6 +12,12 @@ Custom React hooks for game logic, WebSocket management, and utility functions.
 ### Message Processing
 
 - **`parseGameMessage.ts`**: Parses incoming WebSocket messages from game server
+- **Text frames become feed notes** (#3856): `useGameSocket`'s `dispatchLegacyText`
+  turns every `text` frame into an `addFeedNote` with the kind from `kwargs.type`
+  (`game/feedKinds.ts`'s `classifyText`) and `kwargs.subject` when the server names
+  one. The type rides Evennia's tuple form on the server (`msg((text, {"type":
+kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave as
+  a separate frame the client cannot attach to the line.
 - **`handleCommandPayload.ts`**: Processes command-related message payloads
 - **`handleRoomStatePayload.ts`**: Updates room state from server messages
 - **`handleScenePayload.ts`**: Processes scene-related updates

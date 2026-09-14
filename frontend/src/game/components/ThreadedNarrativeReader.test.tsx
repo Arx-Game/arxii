@@ -13,6 +13,7 @@ import {
 import { markConversationRead } from '../playQueries';
 import { useViewerPersonaId } from '@/roster/persona';
 import type { Interaction } from '@/scenes/types';
+import type { FeedNote } from '@/hooks/types';
 
 vi.mock('../playQueries', () => ({
   markConversationRead: vi.fn().mockResolvedValue({ marked: 0 }),
@@ -2276,5 +2277,85 @@ describe('ThreadedNarrativeReader', () => {
       );
       expect(poses).toEqual(['1', '2', '3']);
     });
+  });
+});
+
+describe('ThreadedNarrativeReader notes (#3856)', () => {
+  let offsetHeightSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    window.localStorage.clear();
+    // Same jsdom gap as the main suite above: the Chronological virtualizer
+    // needs a non-zero container height to render any row at all.
+    offsetHeightSpy = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(700);
+  });
+
+  afterEach(() => {
+    offsetHeightSpy.mockRestore();
+  });
+
+  const note = (id: string, content: string, minute: number): FeedNote => ({
+    id,
+    kind: 'look',
+    content,
+    timestamp: `2026-01-01T00:0${minute}:00.000Z`,
+  });
+
+  function rowOrder(): string[] {
+    return [...document.querySelectorAll('[data-thread-id], [data-feed-row]')].map(
+      (el) => el.getAttribute('data-thread-id') ?? el.getAttribute('data-feed-row') ?? ''
+    );
+  }
+
+  it('threads view renders a note at its time among the poses', () => {
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[interaction(3, 'third', null), interaction(1, 'first', null)]}
+        notes={[note('n1', 'Rain rests on the stones.', 2)]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+
+    expect(rowOrder()).toEqual(['legacy:1', 'note:n1', 'legacy:3']);
+    expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
+  });
+
+  it('chronological view renders a note at its time among the poses', async () => {
+    const user = userEvent.setup();
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[interaction(3, 'third', 'thread-a'), interaction(1, 'first', 'thread-a')]}
+        notes={[note('n1', 'Rain rests on the stones.', 2)]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+    await user.click(screen.getByRole('button', { name: /chronological/i }));
+
+    const texts = screen
+      .getAllByText(/^(first|Rain rests on the stones\.|third)$/)
+      .map((el) => el.textContent);
+    expect(texts).toEqual(['first', 'Rain rests on the stones.', 'third']);
+  });
+
+  it('shows a note in a scene with no poses yet instead of the empty prompt', () => {
+    render(
+      <ThreadedNarrativeReader
+        sceneId="1"
+        conversationKey="scene:1"
+        conversationRef="scene:1"
+        interactions={[]}
+        notes={[note('n1', 'Rain rests on the stones.', 2)]}
+        fetchNextPage={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
+    expect(screen.queryByText('Begin the scene')).not.toBeInTheDocument();
   });
 });

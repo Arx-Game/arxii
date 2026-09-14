@@ -8,7 +8,6 @@ import { ThreadedNarrativeReader } from './ThreadedNarrativeReader';
 import { CommandInput } from './CommandInput';
 import type { ComposerMode } from './CommandInput';
 import { ConversationTabStrip, type ConversationTabStripProps } from './ConversationTabStrip';
-import { SystemLane } from './SystemLane';
 import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
@@ -415,10 +414,12 @@ function GameWindowFeed({
                 isAtPlace={isAtPlace}
                 currentPlaceId={currentPlaceId}
                 currentPlaceName={currentPlaceName}
+                // A reference view reads history; the live column's notes are
+                // this session's own and do not belong in it (#3856).
+                notes={reference ? undefined : (notes ?? session.notes)}
               />
             )}
           </div>
-          {!reference && <SystemLane messages={session.messages} />}
         </>
       ) : (
         <ExplorationReader
