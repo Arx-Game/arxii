@@ -210,6 +210,100 @@ class StartingKitBuilderTests(TestCase):
         self.assertAlmostEqual(strike.anchor_de, 40.0)
 
 
+_EVALUATE_ALL = (
+    "web.admin.tuning.technique_analytics.technique_power_eval.evaluate_all_with_reference"
+)
+
+
+class PoolScanTests(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.voice = PathFactory(name="Path of the Voice")
+        cls.steel = PathFactory(name="Path of Steel")
+        cls.gift = GiftFactory(name="Oathcraft")
+        cls.strike = TechniqueFactory(gift=cls.gift, name="Strike", damage_profile=False)
+        cls.ward = TechniqueFactory(gift=cls.gift, name="Ward", damage_profile=False)
+        cls.hex = TechniqueFactory(gift=cls.gift, name="Hex", damage_profile=False)
+        steel_grant = PathGiftGrantFactory(path=cls.steel, gift=cls.gift)
+        steel_grant.starter_techniques.add(cls.strike, cls.ward)
+        voice_grant = PathGiftGrantFactory(path=cls.voice, gift=cls.gift)
+        voice_grant.starter_techniques.add(cls.hex, cls.ward)
+        PathGiftGrantFactory(path=PathFactory(name="Path of Tomes"), gift=cls.gift)
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _corpus(self) -> tuple[list[TechniquePowerReport], ReferenceFrame]:
+        return (
+            [
+                _report(
+                    self.strike.pk,
+                    "Strike",
+                    baseline_de=9.0,
+                    valuations=(_valuation("damage", 9.0, ValuationProvenance.FORMULA),),
+                    flags=(FLAG_NOT_CASTABLE_STANDALONE,),
+                ),
+                _report(
+                    self.ward.pk,
+                    "Ward",
+                    baseline_de=4.0,
+                    valuations=(_valuation("mitigation", 4.0, ValuationProvenance.PARSED),),
+                    flags=(FLAG_NOT_CASTABLE_STANDALONE,),
+                ),
+                _report(
+                    self.hex.pk,
+                    "Hex",
+                    baseline_de=6.0,
+                    valuations=(_valuation("debuff", 6.0, ValuationProvenance.FORMULA),),
+                ),
+            ],
+            _FRAME,
+        )
+
+    def test_one_row_per_pool_with_techniques(self) -> None:
+        with patch(_EVALUATE_ALL, return_value=self._corpus()):
+            rows = ta.build_pool_scan()
+        self.assertEqual([row.path_name for row in rows], ["Path of Steel", "Path of the Voice"])
+        steel = rows[0]
+        self.assertEqual((steel.option_count, steel.castable_count), (2, 0))
+        self.assertTrue(steel.floor.met)
+        self.assertAlmostEqual(steel.best_single_de, 9.0)
+        voice = rows[1]
+        self.assertFalse(voice.floor.has_damage)
+        self.assertTrue(voice.floor.has_protection)
+        self.assertEqual(voice.castable_count, 1)
+
+    def test_evaluates_the_catalog_once_at_the_starting_context_and_caches_it(self) -> None:
+        with patch(_EVALUATE_ALL, return_value=self._corpus()) as evaluate_all:
+            ta.build_pool_scan()
+            ta.build_pool_scan()
+        evaluate_all.assert_called_once()
+        context = evaluate_all.call_args.args[0]
+        self.assertEqual((context.level, context.thread_level), (1, 0))
+
+    def test_filters_and_counts(self) -> None:
+        with patch(_EVALUATE_ALL, return_value=self._corpus()):
+            rows = ta.build_pool_scan()
+        failing = ta.filter_pool_scan(rows, ta.PoolScanFilter.FAILS_FLOOR)
+        self.assertEqual([row.path_name for row in failing], ["Path of the Voice"])
+        nothing = ta.filter_pool_scan(rows, ta.PoolScanFilter.NOTHING_CASTABLE)
+        self.assertEqual([row.path_name for row in nothing], ["Path of Steel"])
+        self.assertEqual(
+            ta.count_pool_scan(rows), ta.PoolScanCounts(fails_floor=1, nothing_castable=1, all=2)
+        )
+
+    def test_unknown_filter_value_falls_back_to_the_default(self) -> None:
+        self.assertEqual(ta.resolve_pool_scan_filter("bogus"), ta.PoolScanFilter.FAILS_FLOOR)
+        self.assertEqual(ta.resolve_pool_scan_filter("all"), ta.PoolScanFilter.ALL)
+
+    def test_clear_corpus_cache_drops_the_catalog_entry(self) -> None:
+        params = ta.TechniqueAnalyticsParams()
+        cache.set(ta._corpus_cache_key(params), self._corpus())
+        ta.clear_corpus_cache(params)
+        self.assertIsNone(cache.get(ta._corpus_cache_key(params)))
+
+
 class CombatFloorTests(TestCase):
     def test_debuff_and_control_count_for_neither(self) -> None:
         debuff = _valuation("debuff", 5.0, ValuationProvenance.FORMULA)

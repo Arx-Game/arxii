@@ -19,7 +19,7 @@ simulation panel's cache-key/last-key-pointer contract - see that view's docstri
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from decimal import Decimal
 from enum import StrEnum
@@ -30,6 +30,7 @@ from world.character_creation.constants import REQUIRED_STATS, STAT_DEFAULT_VALU
 from world.character_creation.models import Beginnings
 from world.checks.constants import LEVEL_POINTS_PER_LEVEL
 from world.classes.models import Path
+from world.magic.models import PathGiftGrant
 from world.magic.models.gifts import Gift, Tradition
 from world.magic.models.techniques import Technique
 from world.magic.services import cg_catalog, de_valuation, technique_power_eval
@@ -453,4 +454,138 @@ def build_starting_kit_report(
         kit_estimate_de=sum(report.estimated_baseline_de for report in kit),
         castable_count=sum(1 for row in rows if row.castable),
         floor=meets_combat_floor(row.report for row in rows),
+    )
+
+
+class PoolScanFilter(StrEnum):
+    """Which starting pools the scan lists."""
+
+    FAILS_FLOOR = "fails_floor"
+    NOTHING_CASTABLE = "nothing_castable"
+    ALL = "all"
+
+
+DEFAULT_POOL_SCAN_FILTER = PoolScanFilter.FAILS_FLOOR
+
+#: `PathGiftGrant.starter_techniques` through-table column names (Django's auto-through
+#: naming: lowercased owning model name + `_id`), named as module constants rather than
+#: bare string literals in the `values_list` call below (#3716 Task 3 Step 1).
+_THROUGH_GRANT_COLUMN = "pathgiftgrant_id"
+_THROUGH_TECHNIQUE_COLUMN = "technique_id"
+
+
+@dataclass(frozen=True, slots=True)
+class PoolScanRow:
+    """One path and gift starter pool judged against the combat floor (#3716 P4)."""
+
+    path_id: int
+    path_name: str
+    gift_id: int
+    gift_name: str
+    option_count: int
+    castable_count: int
+    floor: FloorResult
+    best_single_de: float
+
+
+@dataclass(frozen=True, slots=True)
+class PoolScanCounts:
+    """How many pools each scan filter would list."""
+
+    fails_floor: int
+    nothing_castable: int
+    all: int
+
+
+def resolve_pool_scan_filter(value: str) -> PoolScanFilter:
+    """Whitelist-or-fallback for a `scan` querystring value."""
+    try:
+        return PoolScanFilter(value)
+    except ValueError:
+        return DEFAULT_POOL_SCAN_FILTER
+
+
+def clear_corpus_cache(params: TechniqueAnalyticsParams) -> None:
+    """Drop the cached catalog corpus for *params* so the next build recomputes (P5)."""
+    cache.delete(_corpus_cache_key(params))
+
+
+def _starting_corpus() -> dict[int, TechniquePowerReport]:
+    """Every technique priced once at the default starting context, cached by revision.
+
+    Never called by `build_starting_kit_report` - that builder prices only one
+    combination's own options at each character's own stats, not the whole catalog.
+    """
+    default_stats = dict.fromkeys(REQUIRED_STATS, STAT_DEFAULT_VALUE)
+    roller_points = starting_stats_roller_points(default_stats)
+    key = f"tuning-tech-power-starting-corpus:{technique_catalog_revision()}:{roller_points}"
+    cached = cache.get(key)
+    if cached is None:
+        context = EvalContext(
+            level=STARTING_LEVEL,
+            thread_level=STARTING_THREAD_LEVEL,
+            roller_points=roller_points,
+            target_difficulty=_TARGET_DIFFICULTY_DEFAULT,
+            roll_modifier=_ROLL_MODIFIER_DEFAULT,
+        )
+        cached = technique_power_eval.evaluate_all_with_reference(context)
+        cache.set(key, cached, _CORPUS_CACHE_TIMEOUT)
+    reports, _reference = cached
+    return {report.technique_id: report for report in reports}
+
+
+def build_pool_scan() -> tuple[PoolScanRow, ...]:
+    """Judge every path starter pool against the combat floor at the starting context.
+
+    Two queries for the pools (the grants, then the grant-to-technique through rows)
+    and one cached catalog evaluation; no per-pool query or evaluation.
+    """
+    reports = _starting_corpus()
+    through = PathGiftGrant.starter_techniques.through
+    technique_ids_by_grant: dict[int, list[int]] = {}
+    for grant_id, technique_id in through.objects.values_list(
+        _THROUGH_GRANT_COLUMN, _THROUGH_TECHNIQUE_COLUMN
+    ):
+        technique_ids_by_grant.setdefault(grant_id, []).append(technique_id)
+
+    rows: list[PoolScanRow] = []
+    grants = PathGiftGrant.objects.select_related("path", "gift").order_by(
+        "path__name", "gift__name"
+    )
+    for grant in grants:
+        pool = [reports[pk] for pk in technique_ids_by_grant.get(grant.pk, []) if pk in reports]
+        if not pool:
+            continue
+        rows.append(
+            PoolScanRow(
+                path_id=grant.path_id,
+                path_name=grant.path.name,
+                gift_id=grant.gift_id,
+                gift_name=grant.gift.name,
+                option_count=len(pool),
+                castable_count=sum(1 for report in pool if is_castable(report)),
+                floor=meets_combat_floor(pool),
+                best_single_de=max(report.baseline_de for report in pool),
+            )
+        )
+    return tuple(rows)
+
+
+def filter_pool_scan(
+    rows: Sequence[PoolScanRow], scan_filter: PoolScanFilter
+) -> tuple[PoolScanRow, ...]:
+    """Pools the chosen filter lists."""
+    if scan_filter == PoolScanFilter.FAILS_FLOOR:
+        return tuple(row for row in rows if not row.floor.met)
+    if scan_filter == PoolScanFilter.NOTHING_CASTABLE:
+        return tuple(row for row in rows if row.castable_count == 0)
+    return tuple(rows)
+
+
+def count_pool_scan(rows: Sequence[PoolScanRow]) -> PoolScanCounts:
+    """Counts for each filter chip."""
+    return PoolScanCounts(
+        fails_floor=sum(1 for row in rows if not row.floor.met),
+        nothing_castable=sum(1 for row in rows if row.castable_count == 0),
+        all=len(rows),
     )
