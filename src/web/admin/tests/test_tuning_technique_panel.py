@@ -143,6 +143,40 @@ class TestTechniqueFragmentView(TestCase):
         self.assertIn(f"Evaluated {date_filter(when, 'Y-m-d H:i')}.", body)
 
     @patch(_PATCH_TARGET)
+    def test_evaluated_readout_omitted_when_evaluated_at_is_unset(self, mock_build: Any) -> None:
+        mock_build.return_value = _canned_panel(evaluated_at=None)
+        self.client.force_login(self.super)
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Evaluated", resp.content.decode())
+
+    @patch(_PATCH_TARGET)
+    def test_get_prefills_the_catalog_form_from_the_cached_panels_own_params(
+        self, mock_build: Any
+    ) -> None:
+        mock_build.return_value = _canned_panel(
+            params=TechniqueAnalyticsParams(
+                level=17,
+                thread_level=4,
+                roller_points=30,
+                target_difficulty=28,
+                roll_modifier=2,
+                sort="name",
+            )
+        )
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+
+        resp = self.client.get(reverse("admin_tuning_techniques"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["form"].initial["level"], 17)
+        self.assertEqual(resp.context["form"].initial["thread_level"], 4)
+        self.assertEqual(resp.context["form"].initial["roller_points"], 30)
+        self.assertEqual(resp.context["form"].initial["target_difficulty"], 28)
+        self.assertEqual(resp.context["form"].initial["roll_modifier"], 2)
+        self.assertEqual(resp.context["form"].initial["sort"], "name")
+
+    @patch(_PATCH_TARGET)
     def test_post_valid_superuser_builds_panel_and_renders_rows(self, mock_build: Any) -> None:
         mock_build.return_value = _canned_panel()
         self.client.force_login(self.super)
@@ -377,7 +411,8 @@ class TestTechniquePanelStartingKits(TestCase):
             BeginningTraditionFactory,
         )
         from world.classes.factories import PathFactory
-        from world.magic.factories import GiftFactory, TraditionFactory
+        from world.magic.factories import GiftFactory, TraditionFactory, TraditionGiftGrantFactory
+        from world.species.factories import SpeciesFactory
 
         cls.super = AccountDB.objects.create_superuser("kitadmin", "kit@example.com", "pw-123456")
         cls.beginning = BeginningsFactory()
@@ -386,6 +421,9 @@ class TestTechniquePanelStartingKits(TestCase):
         BeginningTraditionFactory(beginning=cls.beginning, tradition=cls.tradition)
         cls.path = PathFactory()
         cls.gift = GiftFactory()
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        cls.other_gift = GiftFactory()
+        cls.other_species = SpeciesFactory()
 
     def setUp(self) -> None:
         cache.clear()
@@ -438,6 +476,49 @@ class TestTechniquePanelStartingKits(TestCase):
         body = resp.content.decode()
         self.assertIn('id="panel-techniques-kit"', body)
         self.assertNotIn("Options ()", body)
+
+    @patch(_KIT_TARGET)
+    def test_invalid_stat_field_opens_the_stats_details(self, mock_kit: Any) -> None:
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data(strength=99))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("errorlist", body)
+        self.assertIn('<details class="kit-stats" open>', body)
+        mock_kit.assert_not_called()
+
+    @patch(_PATCH_TARGET)
+    @patch(_KIT_TARGET)
+    def test_kit_post_prefills_the_catalog_form_from_the_cached_panel(
+        self, mock_kit: Any, mock_build: Any
+    ) -> None:
+        mock_build.return_value = _canned_panel(
+            params=TechniqueAnalyticsParams(
+                level=19,
+                thread_level=6,
+                roller_points=33,
+                target_difficulty=27,
+                roll_modifier=1,
+                sort="level",
+            )
+        )
+        self.client.post(
+            reverse("admin_tuning_techniques"),
+            {
+                "level": 19,
+                "thread_level": 6,
+                "roller_points": 33,
+                "target_difficulty": 27,
+                "roll_modifier": 1,
+                "sort": "level",
+            },
+        )
+        mock_kit.return_value = self._empty_kit()
+
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["form"].initial["level"], 19)
+        self.assertEqual(resp.context["form"].initial["sort"], "level")
 
     @patch(_KIT_TARGET)
     def test_kit_result_renders_option_rows_and_tiles(self, mock_kit: Any) -> None:
@@ -496,6 +577,26 @@ class TestTechniquePanelStartingKits(TestCase):
         resp = self.client.post(
             reverse("admin_tuning_techniques"),
             self._kit_data(tradition=self.other_tradition.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("errorlist", resp.content.decode())
+        mock_kit.assert_not_called()
+
+    @patch(_KIT_TARGET)
+    def test_gift_not_granted_by_the_tradition_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(gift=self.other_gift.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("errorlist", resp.content.decode())
+        mock_kit.assert_not_called()
+
+    @patch(_KIT_TARGET)
+    def test_species_not_offered_by_the_beginning_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(species=self.other_species.pk),
         )
         self.assertEqual(resp.status_code, 200)
         self.assertIn("errorlist", resp.content.decode())

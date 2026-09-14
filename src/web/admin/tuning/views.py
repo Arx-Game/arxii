@@ -47,6 +47,7 @@ from world.combat import simulation
 from world.combat.constants import OpponentTier, RiskLevel
 from world.combat.simulation import SimulationParams, SimulationReport
 from world.magic.models.gifts import Gift, Tradition
+from world.magic.models.grants import TraditionGiftGrant
 from world.magic.services.technique_effects import technique_catalog_revision
 from world.species.models import Species
 
@@ -314,6 +315,17 @@ def _technique_last_key() -> str:
     return f"tuning-tech-power:last:{technique_catalog_revision()}"
 
 
+#: Readable labels for `TechniqueAnalyticsForm.sort`, matching the league table's own
+#: column headers (`_techniques_panel.html`) rather than the bare internal key (#3716).
+_SORT_LABELS: dict[str, str] = {
+    technique_analytics.SORT_NAME: "Technique",
+    technique_analytics.SORT_LEVEL: "Lvl/Tier",
+    technique_analytics.SORT_BASELINE_DE: "Base DE",
+    technique_analytics.SORT_AMPLIFIED_DE: "Anchor DE",
+    technique_analytics.SORT_DE_PER_ANIMA: "DE/Anima",
+}
+
+
 class TechniqueAnalyticsForm(forms.Form):
     """Validates `sort` enum membership; clamps `level`/`thread_level` (#3279 Task 3).
 
@@ -331,7 +343,9 @@ class TechniqueAnalyticsForm(forms.Form):
     roller_points = forms.IntegerField()
     target_difficulty = forms.IntegerField()
     roll_modifier = forms.IntegerField()
-    sort = forms.ChoiceField(choices=[(key, key) for key in sorted(technique_analytics.SORT_KEYS)])
+    sort = forms.ChoiceField(
+        choices=[(key, _SORT_LABELS[key]) for key in sorted(technique_analytics.SORT_KEYS)]
+    )
 
     def clean_level(self) -> int:
         return _clamp(self.cleaned_data["level"], 1, 30)
@@ -344,6 +358,8 @@ INTENT_EVALUATE = "evaluate"
 INTENT_REFRESH = "refresh"
 INTENT_KIT = "kit"
 _KIT_TRADITION_NOT_OFFERED = "This Beginning does not offer that tradition."
+_KIT_GIFT_NOT_GRANTED = "This tradition does not grant that gift."
+_KIT_SPECIES_NOT_OFFERED = "This Beginning does not offer that species."
 
 
 class StartingKitForm(forms.Form):
@@ -381,14 +397,28 @@ class StartingKitForm(forms.Form):
         cleaned = super().clean()
         beginning = cleaned.get("beginning")
         tradition = cleaned.get("tradition")
+        gift = cleaned.get("gift")
+        species = cleaned.get("species")
         if beginning is not None and tradition is not None:
             offered = {row.tradition_id for row in beginning.cached_beginning_traditions}
             if tradition.pk not in offered:
                 self.add_error("tradition", _KIT_TRADITION_NOT_OFFERED)
+        if tradition is not None and gift is not None:
+            granted = TraditionGiftGrant.objects.filter(tradition=tradition, gift=gift).exists()
+            if not granted:
+                self.add_error("gift", _KIT_GIFT_NOT_GRANTED)
+        if beginning is not None and species is not None:
+            offered_species = beginning.get_available_species().filter(pk=species.pk).exists()
+            if not offered_species:
+                self.add_error("species", _KIT_SPECIES_NOT_OFFERED)
         return cleaned
 
     def stat_fields(self) -> list[forms.BoundField]:
         return [self[name] for name in REQUIRED_STATS]
+
+    def has_stat_errors(self) -> bool:
+        """True when any stat field failed validation - the stats `<details>` opens (#3716)."""
+        return any(self[name].errors for name in REQUIRED_STATS)
 
     def to_params(self) -> technique_analytics.StartingKitParams:
         data = self.cleaned_data
@@ -435,6 +465,29 @@ def _technique_form_defaults() -> dict[str, Any]:
         "target_difficulty": defaults.target_difficulty,
         "roll_modifier": defaults.roll_modifier,
         "sort": defaults.sort,
+    }
+
+
+def _technique_form_initial(
+    cached_panel: technique_analytics.TechniquePanelData | None,
+) -> dict[str, Any]:
+    """Catalog form initial values: the cached panel's own knobs when one exists (#3716).
+
+    A GET or a kit POST both re-render this form alongside whatever panel is already
+    cached; falling back to the module defaults here meant clicking Refresh right
+    after either silently reset every knob instead of recomputing the numbers already
+    on screen. `None` (nothing cached yet) still falls back to the module defaults.
+    """
+    if cached_panel is None:
+        return _technique_form_defaults()
+    params = cached_panel.params
+    return {
+        "level": params.level,
+        "thread_level": params.thread_level,
+        "roller_points": params.roller_points,
+        "target_difficulty": params.target_difficulty,
+        "roll_modifier": params.roll_modifier,
+        "sort": params.sort,
     }
 
 
@@ -510,7 +563,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
     intent = request.POST.get("intent", INTENT_EVALUATE)
 
     if request.method == "POST" and intent == INTENT_KIT:
-        form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
+        form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
         kit_form = StartingKitForm(request.POST)
         panel = cached_panel
         if kit_form.is_valid():
@@ -536,7 +589,7 @@ def tuning_techniques_fragment(request: HttpRequest) -> HttpResponse:
             panel = technique_analytics.build_technique_panel(params)
             _cache_technique_panel(params, panel)
     else:
-        form = TechniqueAnalyticsForm(initial=_technique_form_defaults())
+        form = TechniqueAnalyticsForm(initial=_technique_form_initial(cached_panel))
         kit_form = StartingKitForm(
             initial={
                 "path": request.GET.get("kit_path"),
