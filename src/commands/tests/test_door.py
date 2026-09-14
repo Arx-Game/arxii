@@ -39,7 +39,10 @@ class CmdLockTests(TestCase):
         def _msg(*a, **kw):
             if a:
                 messages.append(a[0])
-            if kw and kwargs_out is not None:
+            # Only the structured command_error frame counts as a keyword call;
+            # the plain line now carries its own ``type="error"`` option (#3856),
+            # which is a presentation hint on the text, not a second frame.
+            if "command_error" in kw and kwargs_out is not None:
                 kwargs_out.append(kw)
 
         cmd.msg = _msg

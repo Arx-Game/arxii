@@ -15,7 +15,6 @@ from commands.consts import HelpFileViewMode
 from commands.descriptors import CommandDescriptor
 from commands.exceptions import CommandError
 from commands.frontend_types import FrontendDescriptor
-from commands.types import Kwargs
 from world.mechanics.types import ChallengeResolutionResult
 
 if TYPE_CHECKING:
@@ -61,6 +60,11 @@ class ArxCommand(Command):
 
     # The action this command delegates to. Set by subclass.
     action: Action | None = None
+    # What kind of line this command's result is, for the web client's feed
+    # (#3856): "look", "item", or None for a plain line. Sent as the ``type``
+    # option on the ``text`` frame by ``send_result``; the client's
+    # ``classifyText`` sorts by it. Errors are typed by ``func`` regardless.
+    feed_kind: str | None = None
 
     # Help text
     title = ""
@@ -79,8 +83,13 @@ class ArxCommand(Command):
     raw_string: str | None = None
     obj: Any | None = None
 
-    def msg(self, *args: object, **kwargs: Kwargs) -> None:
-        """Send a message to the caller."""
+    def msg(self, *args: object, **kwargs: Any) -> None:
+        """Send a message to the caller.
+
+        Keywords pass straight through to Evennia's ``msg``: structured frames
+        (``command_error={...}``) and plain options (``type="look"``, #3856)
+        alike, so the annotation is ``Any`` rather than the dict-only ``Kwargs``.
+        """
         self.caller.msg(*args, **kwargs)
 
     def resolve_action_args(self) -> dict[str, Any]:
@@ -185,7 +194,10 @@ class ArxCommand(Command):
         try:
             self._execute()
         except CommandError as err:
-            self.msg(str(err))
+            # Typed ``error`` (#3856) so the web client renders it as a red note
+            # in the column instead of an untyped line it cannot place; the
+            # structured ``command_error`` frame stays for the toast path.
+            self.msg(str(err), type="error")
             self.msg(command_error={"error": str(err), "command": self.raw_string or ""})
 
     def _execute(self) -> None:
@@ -200,7 +212,20 @@ class ArxCommand(Command):
         kwargs = self.resolve_action_args()
         result = self.action.run(actor=self.caller, **kwargs)
         if result.message:
-            self.msg(result.message)
+            self.send_result(result.message)
+
+    def send_result(self, message: str) -> None:
+        """Send a result line, typed by ``feed_kind`` when the command declares one.
+
+        The ``type`` keyword rides the websocket ``text`` frame as ``kwargs.type``
+        (the same option the narrative service sets to ``gemit``); the web client
+        sorts the line into its feed by it (#3856). Telnet ignores it. A command
+        with no kind sends the plain line it always did.
+        """
+        if self.feed_kind is None:
+            self.msg(message)
+        else:
+            self.msg(message, type=self.feed_kind)
 
     def get_help(
         self,

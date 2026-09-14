@@ -31,6 +31,7 @@ class CmdLook(ArxCommand):
     locks = "cmd:all()"
     arg_regex = r"\s|$"
     action = LookAction()
+    feed_kind = "look"
 
     def resolve_action_args(self) -> dict[str, Any]:
         args = (self.args or "").strip()

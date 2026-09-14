@@ -94,7 +94,7 @@ class CmdGrantItemTests(TestCase):
         # ArxCommand's default func() (now used, since action is no longer None)
         # sends both the plain-text message and a structured command_error payload.
         self.staff_character.msg.assert_any_call(
-            "Usage: grant_item <character>=<item template name>"
+            "Usage: grant_item <character>=<item template name>", type="error"
         )
 
     def test_search_none_does_not_message_twice(self) -> None:
