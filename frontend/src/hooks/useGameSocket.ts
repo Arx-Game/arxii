@@ -199,6 +199,66 @@ function handlerFor(msgType: SocketMessageType): IncomingMessageHandler | undefi
       return undefined;
   }
 }
+/** Applies lifecycle transitions associated with handled protocol frames. */
+function updateLifecycle(
+  character: MyRosterEntry['name'],
+  msgType: SocketMessageType,
+  kwargs: Record<string, unknown> | undefined,
+  accepted: boolean | void,
+  dispatch: AppDispatch
+): void {
+  if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
+    const roomPayload = kwargs as { scene?: unknown } | undefined;
+    dispatch(
+      setSessionLifecycle({
+        character,
+        lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
+      })
+    );
+    return;
+  }
+  if (msgType !== WS_MESSAGE_TYPE.SCENE) return;
+  const scenePayload = kwargs as { action?: unknown } | undefined;
+  if (scenePayload?.action === 'end') {
+    dispatch(setSessionLifecycle({ character, lifecycleState: 'aftermath' }));
+  }
+}
+
+const LEGACY_TEXT_TYPES = new Set<SocketMessageType>([
+  WS_MESSAGE_TYPE.TEXT,
+  WS_MESSAGE_TYPE.LOGGED_IN,
+  WS_MESSAGE_TYPE.VN_MESSAGE,
+  WS_MESSAGE_TYPE.MESSAGE_REACTION,
+]);
+
+/** Renders legacy text-like frames in the appropriate feed lane. */
+function dispatchLegacyText(
+  character: MyRosterEntry['name'],
+  parsed: IncomingMessage,
+  msgType: SocketMessageType,
+  kwargs: Record<string, unknown> | undefined,
+  dispatch: AppDispatch
+): boolean {
+  if (!LEGACY_TEXT_TYPES.has(msgType)) return false;
+  const message = parseGameMessage(parsed);
+  const metadata = kwargs as Record<string, unknown> | undefined;
+  const isAmbient =
+    msgType === WS_MESSAGE_TYPE.TEXT &&
+    (metadata?.type === 'narrative' || metadata?.type === 'gemit');
+  if (isAmbient) {
+    dispatch(
+      addAmbientNotice({
+        character,
+        message: message.content,
+        timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
+      })
+    );
+  } else {
+    dispatch(addSessionMessage({ character, message }));
+  }
+  return true;
+}
+
 /** Routes one parsed incoming websocket frame to its handler, or renders it as a plain game message. */
 function dispatchIncomingMessage(
   character: MyRosterEntry['name'],
@@ -210,53 +270,10 @@ function dispatchIncomingMessage(
   const handler = handlerFor(msgType);
   if (handler) {
     const accepted = handler({ character, args, kwargs, dispatch, navigate });
-    // Lifecycle is socket-owned so protocol handlers remain small and usable
-    // in isolation. A room_state frame is the only readiness confirmation.
-    if (msgType === WS_MESSAGE_TYPE.ROOM_STATE && accepted !== false) {
-      const roomPayload = kwargs as { scene?: unknown } | undefined;
-      dispatch(
-        setSessionLifecycle({
-          character,
-          lifecycleState: roomPayload?.scene ? 'ready-scene' : 'ready-no-scene',
-        })
-      );
-    } else if (msgType === WS_MESSAGE_TYPE.SCENE) {
-      // Ending a confirmed scene is a presentation transition, not a
-      // readiness claim. Start/update frames wait for room_state confirmation.
-      const scenePayload = kwargs as { action?: unknown } | undefined;
-      if (scenePayload?.action === 'end') {
-        dispatch(setSessionLifecycle({ character, lifecycleState: 'aftermath' }));
-      }
-    }
+    updateLifecycle(character, msgType, kwargs, accepted, dispatch);
     return;
   }
-
-  // Only legacy text-like frames may enter the compact notice lane. Control
-  // frames must never fall through as JSON or appear as authored prose.
-  if (
-    msgType === WS_MESSAGE_TYPE.TEXT ||
-    msgType === WS_MESSAGE_TYPE.LOGGED_IN ||
-    msgType === WS_MESSAGE_TYPE.VN_MESSAGE ||
-    msgType === WS_MESSAGE_TYPE.MESSAGE_REACTION
-  ) {
-    const message = parseGameMessage(parsed);
-    const metadata = kwargs as Record<string, unknown> | undefined;
-    if (
-      msgType === WS_MESSAGE_TYPE.TEXT &&
-      (metadata?.type === 'narrative' || metadata?.type === 'gemit')
-    ) {
-      dispatch(
-        addAmbientNotice({
-          character,
-          message: message.content,
-          timestamp: typeof metadata?.timestamp === 'string' ? metadata.timestamp : undefined,
-        })
-      );
-    } else {
-      dispatch(addSessionMessage({ character, message }));
-    }
-    return;
-  }
+  if (dispatchLegacyText(character, parsed, msgType, kwargs, dispatch)) return;
   dispatch(
     addSessionDiagnostic({
       character,

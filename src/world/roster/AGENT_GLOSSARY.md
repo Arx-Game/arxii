@@ -330,7 +330,7 @@ living tradition's schooling stance (`schooling_line`), the question it answers 
 Actor's Sheet (`prompt`, `ActorSheetPrompt`), the enemy's picked reason (`enemy_reason`)
 or marking degree (`enemy_degree`, ruined or destroy) on the enemy chapter, or the
 section it sits in on Appearance (`appearance_section`). Every chapter's offers have
-one; `DistinctionOffer.opener_fields` names the kinds a chapter accepts (the enemy
+one; `DistinctionOffer.chapter_opener_fields` names the kinds a chapter accepts (the enemy
 chapter accepts two), a row sets exactly one, and `opener_key` is the stable string
 (`prompt:fear`, `reason:<id>`, `degree:ruined`, `section:<id>`) the leaf groups by.
 _Avoid_: trigger, gate, tag (the Glimpse's tag is one kind of opener, not the word for all)

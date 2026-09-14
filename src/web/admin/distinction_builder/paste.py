@@ -156,31 +156,37 @@ def _int(raw: str, default: int, what: str, row: RowSpec) -> int:
         return default
 
 
-def _parse_effects(raw: str, row: RowSpec) -> None:
-    for token in (t.strip() for t in raw.split(";") if t.strip()):
-        immune = token.lower().startswith("immune:")
-        if immune:
-            target_raw, sign, magnitude = token[len("immune:") :].strip(), "", None
-        else:
-            m = _EFFECT_RE.match(token)
-            if m is None:
-                row.fail(f"effect {token!r} must read +Target, -Target or immune:Target")
-                continue
-            sign, magnitude, target_raw = m.group(1), m.group(2), m.group(3).strip()
+def _parse_effect_token(token: str, row: RowSpec) -> None:
+    """Parse and append one effect token, recording invalid input on ``row``."""
+    immune = token.lower().startswith("immune:")
+    if immune:
+        target_raw, sign, magnitude = token[len("immune:") :].strip(), "", None
+    else:
+        match = _EFFECT_RE.match(token)
+        if match is None:
+            row.fail(f"effect {token!r} must read +Target, -Target or immune:Target")
+            return
+        sign, magnitude, target_raw = match.group(1), match.group(2), match.group(3).strip()
+
+    target, why = _one(
+        ModifierTarget.objects.filter(name__iexact=target_raw.replace(" ", "_")),
+        f"modifier target {target_raw!r}",
+    )
+    if target is None:
         target, why = _one(
-            ModifierTarget.objects.filter(name__iexact=target_raw.replace(" ", "_")),
+            ModifierTarget.objects.filter(name__iexact=target_raw),
             f"modifier target {target_raw!r}",
         )
-        if target is None:
-            target, why = _one(
-                ModifierTarget.objects.filter(name__iexact=target_raw),
-                f"modifier target {target_raw!r}",
-            )
-        if target is None:
-            row.fail(why)
-            continue
-        value = None if immune else int(magnitude or 1) * (-1 if sign == "-" else 1)
-        row.effects.append(EffectSpec(target.pk, value, immune, token))
+    if target is None:
+        row.fail(why)
+        return
+    value = None if immune else int(magnitude or 1) * (-1 if sign == "-" else 1)
+    row.effects.append(EffectSpec(target.pk, value, immune, token))
+
+
+def _parse_effects(raw: str, row: RowSpec) -> None:
+    for token in (t.strip() for t in raw.split(";") if t.strip()):
+        _parse_effect_token(token, row)
 
 
 #: ``offered_under`` kinds that resolve a row by name: kind -> (chapter, field, model, what).

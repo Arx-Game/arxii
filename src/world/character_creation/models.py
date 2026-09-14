@@ -2437,7 +2437,7 @@ class DistinctionOffer(
         super().save(*args, **kwargs)
 
     @property
-    def opener_fields(self) -> tuple[str, ...]:
+    def chapter_opener_fields(self) -> tuple[str, ...]:
         """The opener fields this offer's chapter accepts (exactly one must be set)."""
         return self._OPENERS_FOR_CHAPTER[OfferChapter(self.chapter)]
 
@@ -2482,7 +2482,7 @@ class DistinctionOffer(
         if len(set_openers) > 1:
             at_most_one_opener_message = "An offer is opened by at most one thing."
             raise ValidationError(at_most_one_opener_message)
-        wanted = self.opener_fields
+        wanted = self.chapter_opener_fields
         if set_openers and set_openers[0] not in wanted:
             raise ValidationError(
                 {set_openers[0]: "This chapter's offers are not opened by this field."}

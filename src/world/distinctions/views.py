@@ -692,6 +692,27 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
         """
         from world.forms.models import FormTrait  # noqa: PLC0415
 
+        named = self._named_sync_features(distinction_entries, by_id)
+        if not named:
+            return {}
+
+        traits = {
+            t.name: t.display_name
+            for t in FormTrait.objects.filter(name__in={n for n, _ in named if n})
+        }
+        markings = {
+            m.pk: (m.name or m.get_kind_display())
+            for m in draft.markings.filter(pk__in={m for _, m in named if m})
+        }
+        labels = self._feature_labels(named, traits, markings)
+        self._check_feature_unlocks(distinction_entries, by_id)
+        return labels
+
+    @staticmethod
+    def _named_sync_features(
+        distinction_entries: list[dict], by_id: dict[int, Distinction]
+    ) -> set[tuple[str, int]]:
+        """Validate feature shape and return the named features in a sync payload."""
         named: set[tuple[str, int]] = set()
         for entry in distinction_entries:
             distinction = by_id[entry["id"]]
@@ -707,18 +728,13 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
                     {"detail": f"{distinction.name} must name exactly one feature."}
                 )
             named.add((trait_name, marking_id))
+        return named
 
-        if not named:
-            return {}
-
-        traits = {
-            t.name: t.display_name
-            for t in FormTrait.objects.filter(name__in={n for n, _ in named if n})
-        }
-        markings = {
-            m.pk: (m.name or m.get_kind_display())
-            for m in draft.markings.filter(pk__in={m for _, m in named if m})
-        }
+    @staticmethod
+    def _feature_labels(
+        named: set[tuple[str, int]], traits: dict[str, str], markings: dict[int, str]
+    ) -> dict[tuple[str, int], str]:
+        """Resolve validated feature keys to their display labels."""
         labels: dict[tuple[str, int], str] = {}
         for trait_name, marking_id in named:
             if trait_name and trait_name not in traits:
@@ -728,8 +744,6 @@ class DraftDistinctionViewSet(viewsets.ViewSet):
             labels[(trait_name, marking_id)] = (
                 traits[trait_name] if trait_name else markings[marking_id]
             )
-
-        self._check_feature_unlocks(distinction_entries, by_id)
         return labels
 
     @staticmethod

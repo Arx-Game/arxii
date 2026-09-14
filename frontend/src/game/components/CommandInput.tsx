@@ -615,61 +615,65 @@ export function CommandInput({
     // EXECUTE_ACTION_SPEECH_MODES's comment. `resolvedSpeechMode` (not a live
     // composerMode read) decides which branch fires, per the critical-fix
     // comment above `resolvedSpeechMode`'s own declaration.
-    if (resolvedSpeechMode && resolvedSpeechMode.command === 'say') {
-      const clientRequestId = beginSend(liveSpeechMode);
-      pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
-      submittingRef.current = false;
-      return;
-    }
-
-    if (resolvedSpeechMode && resolvedSpeechMode.command === 'whisper') {
-      // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
-      // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
-      // it cannot resolve a target by name. `resolvedSpeechMode.targets`
-      // only ever carries persona display names (see `ComposerMode.targets`
-      // doc comment), so the name is resolved against `roomCharacters`
-      // (which carries a `dbref`, unlike `sceneDetail.participants`) to a
-      // `target_id`. When it can't be resolved (target not in this room's
-      // character list — e.g. a scene participant who has since left),
-      // fall through to the legacy `send()` path below rather than crash or
-      // silently drop the whisper.
-      const whisperTargetName = resolvedSpeechMode.targets[0];
-      const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
-      const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
-      if (whisperTargetId > 0) {
+    switch (resolvedSpeechMode?.command) {
+      case 'say': {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        executeAction(character, 'whisper', {
-          text: trimmed,
-          target_id: whisperTargetId,
-          client_request_id: clientRequestId,
-        });
+        executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
         submittingRef.current = false;
         return;
       }
-    }
 
-    if (resolvedSpeechMode && resolvedSpeechMode.command === 'tt') {
-      // tt (tabletalk) rides the `pose` registry action, scoped to the
-      // viewer's current Place via the `place` kwarg (PoseAction.execute(),
-      // `src/actions/definitions/communication.py` — resolves an int pk
-      // itself and verifies real PlacePresence, mirroring the established
-      // `_resolve_room()` REST/WS-dispatch pattern). `currentPlaceId` comes
-      // from the composition root's places query (`GamePage`/
-      // `SceneDetailPage`); when it's not resolved (not currently at a
-      // place, or the query hasn't loaded), fall through to the legacy
-      // `send()` path below rather than risk a room-wide broadcast.
-      if (currentPlaceId != null) {
-        const clientRequestId = beginSend(liveSpeechMode);
-        pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        executeAction(character, 'pose', {
-          text: trimmed,
-          place: currentPlaceId,
-          client_request_id: clientRequestId,
-        });
-        submittingRef.current = false;
-        return;
+      case 'whisper': {
+        // The wire's generic ObjectDB resolution (`_resolve_registry_kwargs`,
+        // `server/conf/inputfuncs.py`) only resolves `<field>_id` int kwargs —
+        // it cannot resolve a target by name. `resolvedSpeechMode.targets`
+        // only ever carries persona display names (see `ComposerMode.targets`
+        // doc comment), so the name is resolved against `roomCharacters`
+        // (which carries a `dbref`, unlike `sceneDetail.participants`) to a
+        // `target_id`. When it can't be resolved (target not in this room's
+        // character list — e.g. a scene participant who has since left),
+        // fall through to the legacy `send()` path below rather than crash or
+        // silently drop the whisper.
+        const whisperTargetName = resolvedSpeechMode.targets[0];
+        const whisperTargetChar = roomCharacters.find((c) => c.name === whisperTargetName);
+        const whisperTargetId = whisperTargetChar ? dbrefToId(whisperTargetChar.dbref) : 0;
+        if (whisperTargetId > 0) {
+          const clientRequestId = beginSend(liveSpeechMode);
+          pendingSpeechRef.current = { clientRequestId, text: trimmed };
+          executeAction(character, 'whisper', {
+            text: trimmed,
+            target_id: whisperTargetId,
+            client_request_id: clientRequestId,
+          });
+          submittingRef.current = false;
+          return;
+        }
+        break;
+      }
+
+      case 'tt': {
+        // tt (tabletalk) rides the `pose` registry action, scoped to the
+        // viewer's current Place via the `place` kwarg (PoseAction.execute(),
+        // `src/actions/definitions/communication.py` — resolves an int pk
+        // itself and verifies real PlacePresence, mirroring the established
+        // `_resolve_room()` REST/WS-dispatch pattern). `currentPlaceId` comes
+        // from the composition root's places query (`GamePage`/
+        // `SceneDetailPage`); when it's not resolved (not currently at a
+        // place, or the query hasn't loaded), fall through to the legacy
+        // `send()` path below rather than risk a room-wide broadcast.
+        if (currentPlaceId != null) {
+          const clientRequestId = beginSend(liveSpeechMode);
+          pendingSpeechRef.current = { clientRequestId, text: trimmed };
+          executeAction(character, 'pose', {
+            text: trimmed,
+            place: currentPlaceId,
+            client_request_id: clientRequestId,
+          });
+          submittingRef.current = false;
+          return;
+        }
+        break;
       }
     }
 

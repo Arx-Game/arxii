@@ -195,6 +195,84 @@ function initialRow(roomId: number | null, exitName: string): RowState {
   return { removed: roomId == null, roomId, exitName };
 }
 
+interface SubmitDialogArgs {
+  mode: AddDialogProps['mode'];
+  name: string;
+  roomShape: boolean;
+  areaEntranceOffered: boolean;
+  areaEntrance: RowState;
+  areaExitBack: string;
+  firstRoomName: string;
+  chosenLevel: number | null;
+  matched: AddDialogRoomOption | null;
+  matchedUnplaced: AddDialogRoomOption | null;
+  entrance: RowState;
+  exit: RowState;
+  exitThere: string;
+  exitBack: string;
+  onConfirm: (payload: AddDialogRealizePayload) => void;
+}
+
+/** Assemble the mode-specific payload without adding branching to the view. */
+function submitDialog({
+  mode,
+  name,
+  roomShape,
+  areaEntranceOffered,
+  areaEntrance,
+  areaExitBack,
+  firstRoomName,
+  chosenLevel,
+  matched,
+  matchedUnplaced,
+  entrance,
+  exit,
+  exitThere,
+  exitBack,
+  onConfirm,
+}: SubmitDialogArgs): void {
+  const trimmedName = name.trim();
+  if (mode === 'areas' && !roomShape) {
+    const entranceFrom =
+      areaEntranceOffered && !areaEntrance.removed && areaEntrance.roomId != null
+        ? {
+            roomId: areaEntrance.roomId,
+            exitName: areaEntrance.exitName.trim() || trimmedName,
+            exitBack: areaExitBack.trim() || 'out',
+            firstRoomName: firstRoomName.trim() || 'Entry',
+          }
+        : null;
+    onConfirm({
+      kind: 'area',
+      name: trimmedName,
+      ...(chosenLevel != null ? { level: chosenLevel } : {}),
+      entrance: entranceFrom,
+    });
+    return;
+  }
+  if (mode === 'exit') {
+    onConfirm({
+      kind: 'exit',
+      name: trimmedName,
+      matchedRoomId: matched?.id ?? null,
+      exitThere: exitThere.trim(),
+      exitBack: exitBack.trim(),
+    });
+    return;
+  }
+  const connection = (row: RowState, fallback: string): AddDialogConnection | null =>
+    !row.removed && row.roomId != null
+      ? { roomId: row.roomId, exitName: row.exitName.trim() || fallback }
+      : null;
+  onConfirm({
+    kind: 'room',
+    name: trimmedName,
+    matchedRoomId: matchedUnplaced?.id ?? null,
+    entrance: connection(entrance, 'in'),
+    exit: connection(exit, 'out'),
+  });
+}
+
 export function AddDialog({
   mode,
   open,
@@ -294,49 +372,23 @@ export function AddDialog({
       : [];
 
   const submit = () => {
-    const trimmedName = name.trim();
-    if (mode === 'areas' && !roomShape) {
-      const entranceFrom: AddDialogAreaEntrance | null =
-        areaEntranceOffered && !areaEntrance.removed && areaEntrance.roomId != null
-          ? {
-              roomId: areaEntrance.roomId,
-              // The way in is named after the place by default: "Sleepers Chambers".
-              exitName: areaEntrance.exitName.trim() || trimmedName,
-              exitBack: areaExitBack.trim() || 'out',
-              firstRoomName: firstRoomName.trim() || 'Entry',
-            }
-          : null;
-      onConfirm({
-        kind: 'area',
-        name: trimmedName,
-        ...(chosenLevel != null ? { level: chosenLevel } : {}),
-        entrance: entranceFrom,
-      });
-    } else if (mode === 'exit') {
-      onConfirm({
-        kind: 'exit',
-        name: trimmedName,
-        matchedRoomId: matched?.id ?? null,
-        exitThere: exitThere.trim(),
-        exitBack: exitBack.trim(),
-      });
-    } else {
-      const entranceConnection: AddDialogConnection | null =
-        !entrance.removed && entrance.roomId != null
-          ? { roomId: entrance.roomId, exitName: entrance.exitName.trim() || 'in' }
-          : null;
-      const exitConnection: AddDialogConnection | null =
-        !exit.removed && exit.roomId != null
-          ? { roomId: exit.roomId, exitName: exit.exitName.trim() || 'out' }
-          : null;
-      onConfirm({
-        kind: 'room',
-        name: trimmedName,
-        matchedRoomId: matchedUnplaced?.id ?? null,
-        entrance: entranceConnection,
-        exit: exitConnection,
-      });
-    }
+    submitDialog({
+      mode,
+      name,
+      roomShape,
+      areaEntranceOffered,
+      areaEntrance,
+      areaExitBack,
+      firstRoomName,
+      chosenLevel,
+      matched,
+      matchedUnplaced,
+      entrance,
+      exit,
+      exitThere,
+      exitBack,
+      onConfirm,
+    });
     onOpenChange(false);
   };
 
