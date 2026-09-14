@@ -1,7 +1,7 @@
-"""A cached_property that stays correct as a Prefetch(to_attr=) target.
+"""A cached_property that stays correct as a Prefetch(..., to_attr) target.
 
-Django's own ``Prefetch(..., to_attr=X)`` decides whether to run a prefetch by
-checking whether the instance already has ``X`` — for a genuine
+Django's own ``Prefetch`` with a ``to_attr`` decides whether to run a prefetch
+by checking whether the instance already has that attribute — for a genuine
 ``cached_property`` target that check is ``X in instance.__dict__`` (correct:
 empty on a fresh instance), for anything else it falls back to
 ``hasattr(instance, X)`` (unsafe: a getter that never raises makes this
