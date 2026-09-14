@@ -41,6 +41,19 @@ Character-specific UI components:
   game" CTA, pending-application status, draft-in-progress link, or the roster/create-character
   choice for a zero-character account (#2162)
 
+### Message Bodies
+
+- **`FormattedContent.tsx`**: Parses a message body's inline markup (bold, italic,
+  strikethrough, colour, links) into segments and renders them in one `<span>`. Every
+  reader that shows a pose, say, emit or whisper (`PoseUnit`, `ExplorationReader`,
+  `SceneMessages`) renders the body through it. **The feed's word-wrap rule lives here,
+  once** (#3862): the wrapper carries `[overflow-wrap:anywhere]`, so an unbroken run (a
+  URL, a keyboard mash, a long invented word) breaks at the column's edge in every reader
+  instead of widening the feed sideways. `anywhere` rather than `break-word` because only
+  `anywhere` lets the run shrink a flex child's min-content width, and the feed column is
+  a flex child. A new reader that renders a body through this component inherits the rule;
+  one that bypasses it must carry the same class itself (see `EvenniaMessage`).
+
 ### Utility Components
 
 - **`ModeToggle.tsx`**: Dark/light mode toggle

@@ -231,7 +231,11 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
   S4: no separate combat composer remains; the fold-in already carries
   `speakingAs`).
-- **`EvenniaMessage.tsx`**: Game message display and formatting
+- **`EvenniaMessage.tsx`**: Game message display and formatting for the plain-text
+  frames (look results, command replies, Evennia's own errors). Renders sanitized
+  HTML rather than going through `FormattedContent`, so it carries the feed's
+  `[overflow-wrap:anywhere]` wrap rule itself (#3862; the rule's home is
+  `frontend/src/components/FormattedContent.tsx`).
 
 ### Room Panel (`components/room-panel/`)
 

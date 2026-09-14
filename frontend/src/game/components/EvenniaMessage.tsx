@@ -54,7 +54,9 @@ export function EvenniaMessage({
 
   return (
     <div
-      className={`whitespace-pre-wrap ${presentation === 'terminal' ? 'font-mono text-sm' : 'font-[inherit] text-[length:inherit] leading-[1.55]'} ${className}`}
+      // [overflow-wrap:anywhere] (#3862): the same wrap rule FormattedContent
+      // carries, so a system line never widens the feed sideways either.
+      className={`whitespace-pre-wrap [overflow-wrap:anywhere] ${presentation === 'terminal' ? 'font-mono text-sm' : 'font-[inherit] text-[length:inherit] leading-[1.55]'} ${className}`}
       dangerouslySetInnerHTML={{ __html: processedContent }}
     />
   );
