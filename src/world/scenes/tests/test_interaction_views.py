@@ -1678,19 +1678,22 @@ class InteractionListQueryBudgetTests(APITestCase):
         `/api/interactions/?scene=` would pay for all 3 of those batches too:
         pure fixture-shape coincidence, not an endpoint capability gap.
 
-        `SceneEntryEndorsement` and the GM/owner-participation pre-seed are
-        ALSO the same shared code (`InteractionViewSet.get_serializer_context`)
-        -- and also gated together, by the exact same condition:
-        `if self.request.query_params.get("scene"):`. Both cost 0 for
-        `/api/play/poses/` for the same reason: `play_views._queryset` builds
-        its context from an `InteractionViewSet` instance whose `request` is
-        the real play request, and that request's query string is
-        `?conversation=scene:<id>` -- it never carries a literal `scene=`
-        key, even though it filters to the same scene under the hood. So
-        unlike the thread batches, this half of the delta is not a fixture
-        coincidence: it would persist on ANY play fixture, because it tracks
-        the query-param spelling the two endpoints are called with, not
-        anything about the rows on the page.
+        The `SceneEntryEndorsement` batch is genuinely absent from play --
+        nothing in the play response path ever reads
+        `context["scene_entry_endorsements"]`, regardless of query params.
+        The GM/owner check is a different story: it's not absent, it's
+        answered for free. `_viewer_can_gm_scene` (`interaction_serializers.py:813`)
+        falls back to `scene.is_gm()/is_owner()` for any request without a
+        `scene=` query param (both these test URLs qualify) -- that fallback
+        still costs one `SceneParticipation` query on the cold request
+        (inside the 27), but resolves to zero warm because `Scene.is_gm`/
+        `is_owner` read `participations_cached`, a `@cached_property` on the
+        same idmapper-resident `Scene` instance the first request already
+        warmed. This is request-shape, not endpoint-structural:
+        `/api/play/poses/?scene=<id>` is a real production call shape
+        (`frontend/src/game/playQueries.ts:52`, `GamePage.tsx:621`), and
+        issuing it would make play pay the GM/owner-check's cold cost too,
+        on a scene the process hasn't seen yet.
 
         For the same reason, don't read anything structural into the two
         endpoints' matching COLD budgets (27 and 27, pinned here and in
@@ -1700,10 +1703,14 @@ class InteractionListQueryBudgetTests(APITestCase):
         chance, not evidence the two endpoints share a query floor or the
         same batch composition. The warm counts (7 and 8) already prove they
         don't, and for two different reasons: swap in a fixture with threaded
-        replies and this endpoint's warm floor climbs toward
-        `/api/play/poses/`'s (fixture-shape); there is no equivalent lever on
-        the play side for the `SceneEntryEndorsement`/GM-owner gap, since
-        that one tracks how the URL is called, not what the fixture holds.
+        replies and this endpoint's warm floor climbs PAST
+        `/api/play/poses/`'s -- 7 (this endpoint's own 2 scene-gated batches,
+        unaffected) + 3 (the reply-chip batches, fixture-shape) = 10, not an
+        approach toward 8. Separately, calling `/api/play/poses/?scene=<id>`
+        instead of `?conversation=scene:<id>` would add the GM/owner check's
+        cold cost to play too (request-shape) -- but never
+        `SceneEntryEndorsement`, which nothing in the play path reads under
+        any call shape.
         """
         url = reverse("interaction-list")
         first = self.client.get(url, {"scene": self.scene.pk})
