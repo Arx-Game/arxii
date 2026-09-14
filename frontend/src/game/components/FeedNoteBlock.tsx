@@ -57,7 +57,10 @@ export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
       role={isError ? 'alert' : undefined}
       className={cn(
         'flex max-w-[64ch] items-start gap-2 rounded-sm border-l-2 bg-muted/50 px-2.5 py-1.5 font-sans text-xs text-muted-foreground',
-        isError && 'border-destructive bg-destructive/10 text-destructive'
+        // The dark palette's `destructive` is a deep red that vanishes on a
+        // dark ground; the app's other error text pairs it with red-400.
+        isError &&
+          'border-destructive bg-destructive/10 text-destructive dark:border-red-400/70 dark:text-red-400'
       )}
     >
       <span aria-hidden="true" className="w-3.5 flex-none text-center opacity-80">
