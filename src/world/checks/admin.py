@@ -74,6 +74,9 @@ class CheckTypeAdmin(admin.ModelAdmin):
 class ConsequenceEffectInline(admin.TabularInline):
     model = ConsequenceEffect
     extra = 1
+    # #2987: crime tags on a LEGEND_AWARD effect are authored here (the content
+    # export deliberately drops them: CrimeKind rows are seeder-owned pks).
+    autocomplete_fields = ["crime_kinds"]
 
 
 @admin.register(Consequence)

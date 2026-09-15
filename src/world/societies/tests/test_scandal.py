@@ -43,13 +43,15 @@ class ScandalForkTestCase(TestCase):
     def _mint(self, scene, archetypes, **kwargs):
         from world.societies.factories import LegendSourceTypeFactory
 
+        persona = kwargs.pop("persona", None) or self._persona()
         return create_solo_deed(
-            kwargs.pop("persona", None) or self._persona(),
+            persona,
             "PLACEHOLDER: the deed in question",
             LegendSourceTypeFactory(),
             10,
             scene=scene,
             archetypes=archetypes,
+            **kwargs,
         )
 
     def _persona(self, fame_tier: str = FameTier.NORMAL):
@@ -362,3 +364,106 @@ class ActTimeConcealmentTests(ScandalForkTestCase):
             )
         self.assertFalse(fully)
         self.assertIn(bystander, kept)
+
+
+class WitnessWindowOpeningTests(ScandalForkTestCase):
+    """#2987 - opening the WITNESS window from the deed-creation call sites.
+
+    A window opens iff the deed is anchored to an interaction, its room is
+    publicly listed, and it carries at least one DeedCrimeTag. Independent of
+    the scandal fork above: passing archetypes=None keeps route_deed_reach's
+    own early return out of play, so these tests isolate the witness-window
+    contract on its own three conditions.
+    """
+
+    def _interaction(self, scene, persona):
+        from world.scenes.factories import InteractionFactory
+
+        return InteractionFactory(scene=scene, persona=persona)
+
+    def test_public_crime_tagged_with_interaction_opens_window(self):
+        from world.justice.factories import CrimeKindFactory
+        from world.justice.models import WitnessReactionTarget
+        from world.scenes.constants import ReactionWindowKind
+        from world.scenes.reaction_models import ReactionWindow
+
+        persona = self._persona()
+        scene = self._scene(public=True)
+        interaction = self._interaction(scene, persona)
+        crime = CrimeKindFactory()
+
+        entry = self._mint(
+            scene, None, persona=persona, crime_kinds=[crime], interaction=interaction
+        )
+
+        window = ReactionWindow.objects.get(
+            interaction=interaction, kind=ReactionWindowKind.WITNESS
+        )
+        self.assertEqual(window.scene_id, scene.pk)
+        target = WitnessReactionTarget.objects.get(window=window)
+        self.assertEqual(target.legend_entry_id, entry.pk)
+
+    def test_private_deed_opens_no_window(self):
+        from world.justice.factories import CrimeKindFactory
+        from world.scenes.reaction_models import ReactionWindow
+
+        persona = self._persona()
+        scene = self._scene(public=False)
+        interaction = self._interaction(scene, persona)
+        crime = CrimeKindFactory()
+
+        self._mint(scene, None, persona=persona, crime_kinds=[crime], interaction=interaction)
+
+        self.assertFalse(ReactionWindow.objects.filter(interaction=interaction).exists())
+
+    def test_public_untagged_deed_opens_no_window(self):
+        from world.scenes.reaction_models import ReactionWindow
+
+        persona = self._persona()
+        scene = self._scene(public=True)
+        interaction = self._interaction(scene, persona)
+
+        self._mint(scene, None, persona=persona, interaction=interaction)
+
+        self.assertFalse(ReactionWindow.objects.filter(interaction=interaction).exists())
+
+    def test_public_crime_tagged_without_interaction_opens_no_window(self):
+        from world.justice.factories import CrimeKindFactory
+        from world.scenes.reaction_models import ReactionWindow
+
+        persona = self._persona()
+        scene = self._scene(public=True)
+        crime = CrimeKindFactory()
+
+        self._mint(scene, None, persona=persona, crime_kinds=[crime])
+
+        self.assertFalse(ReactionWindow.objects.exists())
+
+    def test_shared_event_opens_window_for_the_crime_tagged_participant(self):
+        from world.justice.factories import CrimeKindFactory
+        from world.justice.models import WitnessReactionTarget
+        from world.scenes.constants import ReactionWindowKind
+        from world.scenes.reaction_models import ReactionWindow
+        from world.societies.factories import LegendSourceTypeFactory
+        from world.societies.services import create_legend_event
+
+        actor = self._persona()
+        scene = self._scene(public=True)
+        interaction = self._interaction(scene, actor)
+        crime = CrimeKindFactory()
+
+        _, entries = create_legend_event(
+            "PLACEHOLDER: the shared deed",
+            LegendSourceTypeFactory(),
+            10,
+            [actor],
+            scene=scene,
+            crime_kinds=[crime],
+            interaction=interaction,
+        )
+
+        window = ReactionWindow.objects.get(
+            interaction=interaction, kind=ReactionWindowKind.WITNESS
+        )
+        target = WitnessReactionTarget.objects.get(window=window)
+        self.assertEqual(target.legend_entry_id, entries[0].pk)

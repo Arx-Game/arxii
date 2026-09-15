@@ -301,8 +301,17 @@ shipped system, now each filed:
   editor, `grant_marking` write seam (combat/soulfray scar *sourcing* remains TehomCD's consumer).
 - **Gossip & rumor authoring** — tidings is read-only and derived (no models); missions' RUMOR reward
   sink is a stub; relationship gossip unbuilt. `intent` — **#2986**.
-- **Bystander reaction menus** — ADR-0032's witness pop-up choice trees; witness-approach substrate
-  shipped (#1824), the interactive half didn't. `intent` — **#2987**.
+- **Bystander reaction menus** — ADR-0032's witness pop-up choice trees. **Built (#2987):**
+  the WITNESS reaction-window kind (report / intervene / say nothing; anonymous), opened
+  from the deed-creation seam when a public, crime-tagged, interaction-anchored deed is
+  minted (combat aftermath threads the interaction; `ConsequenceEffect.crime_kinds` is the
+  authored tag), `GET /api/reaction-windows/pending/`, and the scene page's witness pop-up
+  (`WitnessReactionOfferGate`, alongside the flourish gate). "Report" resolves at once:
+  heat against the deed-time persona plus the enforcing society's regard, through the same
+  `report_witnessed_crime` core the mission CRIME_WATCH line uses. Deferred: "intervene"
+  has no mechanical payoff (justice stays NPC-driven), and the generic scene-action
+  pipeline still cannot fire a `LEGEND_AWARD` (it builds its context before its
+  interaction exists and never populates participants; `docs/systems/justice.md`).
 - **Ambient room texture** — roaming flavor emits + room-state risk telegraphing ("a seedy district
   can spawn pickpockets"); feeder stats exist, no consumer. `intent` — **#2988**.
 - **Mood/stance system** — declared expressive state instead of pose-parsing (design-tenets). `intent`

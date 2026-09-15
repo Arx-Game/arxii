@@ -4,16 +4,20 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { reactToWindow } from '@/scenes/queries';
 import {
   fetchMyCase,
   fetchPersonaHeat,
   fetchWantedList,
+  getPendingWitnessWindows,
   postBribe,
   postEvidence,
   postLieLow,
   postPardon,
   postTrial,
 } from './api';
+
+export type { PaginatedPendingReactionWindowList, PendingReactionWindow } from './api';
 
 /** The viewer's own warrant rows — where their active persona is wanted. */
 export function usePersonaHeat(viewerEntryId: number | null) {
@@ -90,6 +94,52 @@ export function useBribeMutation(viewerEntryId: number | null) {
     mutationFn: ({ areaId }: { areaId: number }) => postBribe(viewerEntryId as number, areaId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['justice'] }).catch(() => {});
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Witness reaction windows (#2987)
+// ---------------------------------------------------------------------------
+
+const pendingWitnessWindowsKey = ['justice', 'reaction-windows', 'pending', 'witness'] as const;
+
+/**
+ * Pending witness reaction windows for the active persona. Mounted only inside
+ * the active scene view (a witness window can only open there), so the 5 s
+ * poll runs only where it matters.
+ * throwOnError deliberately NOT set: same rationale as
+ * usePendingEntryFlourishOffers (@/magic/queries) - this backs an
+ * overlay/strip that must degrade to rendering nothing on fetch errors.
+ */
+export function usePendingWitnessWindows(enabled: boolean = true) {
+  return useQuery({
+    queryKey: pendingWitnessWindowsKey,
+    queryFn: () => getPendingWitnessWindows(),
+    refetchInterval: 5_000,
+    enabled,
+  });
+}
+
+/**
+ * React to a pending window with one of its choice slugs, via the shared
+ * reactToWindow transport (POST /api/reaction-windows/{id}/react/).
+ * On success invalidates the pending inbox so the answered window clears.
+ */
+export function useReactToWindow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      windowId,
+      personaId,
+      choice,
+    }: {
+      windowId: number;
+      personaId: number;
+      choice: string;
+    }) => reactToWindow(windowId, { persona_id: personaId, choice }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: pendingWitnessWindowsKey }).catch(() => {});
     },
   });
 }

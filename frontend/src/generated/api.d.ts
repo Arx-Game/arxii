@@ -18071,14 +18071,49 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Action-only viewset: POST /reaction-windows/{pk}/react/.
+     * @description POST /reaction-windows/{pk}/react/, plus GET /reaction-windows/pending/.
      *
-     *     Reads ride the interaction feed (windows serialize inline on their
-     *     event); all eligibility/validation lives in ``react_to_window``.
-     *     ``react-to-interaction`` (#911) opens a lazy kind's window on first
-     *     reaction — kudos-style kinds need no pre-existing window row.
+     *     Most reads ride the interaction feed (windows serialize inline on their
+     *     event); all eligibility/validation for reacting lives in
+     *     ``react_to_window``. ``react-to-interaction`` (#911) opens a lazy kind's
+     *     window on first reaction: kudos-style kinds need no pre-existing window
+     *     row. ``pending`` (#2987) is the one standalone read: the bystander-facing
+     *     "what can I react to right now" list, needed because a WITNESS window
+     *     (``public=False``) never surfaces in a feed a bystander wasn't scrolling;
+     *     the reactor learns of it independently of any interaction they authored.
      */
     post: operations['reaction_windows_react_create'];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  '/api/reaction-windows/pending/': {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * @description Open windows of ``kind`` the caller's active persona can still react to.
+     *
+     *     ``kind`` defaults to WITNESS (#2987's bystander-reaction menu); any
+     *     registered ``ReactionWindowKind`` may be requested. Scoping mirrors
+     *     ``react_to_window``'s eligibility (which additionally requires
+     *     ``scene.is_active`` at reaction time): the account must be a
+     *     scene participant (a public scene is otherwise visible to anyone,
+     *     but that alone never made a non-participant a bystander) AND the
+     *     persona must be able to see the witnessed interaction
+     *     (``can_view_interaction``). Settled windows, the persona's own
+     *     deeds, and windows already reacted to are excluded. Never exposes a
+     *     reactor list; the response carries only the window's identity and
+     *     its live choices.
+     */
+    get: operations['reaction_windows_pending_retrieve'];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -18095,12 +18130,16 @@ export interface paths {
     get?: never;
     put?: never;
     /**
-     * @description Action-only viewset: POST /reaction-windows/{pk}/react/.
+     * @description POST /reaction-windows/{pk}/react/, plus GET /reaction-windows/pending/.
      *
-     *     Reads ride the interaction feed (windows serialize inline on their
-     *     event); all eligibility/validation lives in ``react_to_window``.
-     *     ``react-to-interaction`` (#911) opens a lazy kind's window on first
-     *     reaction — kudos-style kinds need no pre-existing window row.
+     *     Most reads ride the interaction feed (windows serialize inline on their
+     *     event); all eligibility/validation for reacting lives in
+     *     ``react_to_window``. ``react-to-interaction`` (#911) opens a lazy kind's
+     *     window on first reaction: kudos-style kinds need no pre-existing window
+     *     row. ``pending`` (#2987) is the one standalone read: the bystander-facing
+     *     "what can I react to right now" list, needed because a WITNESS window
+     *     (``public=False``) never surfaces in a feed a bystander wasn't scrolling;
+     *     the reactor learns of it independently of any interaction they authored.
      */
     post: operations['reaction_windows_react_to_interaction_create'];
     delete?: never;
@@ -37036,6 +37075,14 @@ export interface components {
       previous?: string | null;
       results: components['schemas']['PendingEntryFlourishOffer'][];
     };
+    PaginatedPendingReactionWindowList: {
+      count: number;
+      /** Format: uri */
+      next: string | null;
+      /** Format: uri */
+      previous: string | null;
+      results: components['schemas']['PendingReactionWindow'][];
+    };
     PaginatedPendingStageAdvanceOfferList: {
       /** @example 123 */
       count: number;
@@ -40505,6 +40552,22 @@ export interface components {
       invite_id: number;
       instance_id: number;
       template_name: string;
+    };
+    /**
+     * @description One open, not-yet-reacted-to window for the caller's active persona (#2987).
+     *
+     *     Deliberately thin: no reactor list, no counts. A hidden (``public=False``)
+     *     kind like WITNESS must stay anonymous end to end, and even a public kind's
+     *     pending entry has nothing to show yet since the viewer hasn't reacted.
+     */
+    PendingReactionWindow: {
+      id: number;
+      interaction_id: number;
+      scene_id: number;
+      kind: string;
+      readonly choices: {
+        [key: string]: string;
+      }[];
     };
     /**
      * @description Sineater-facing view of a pending stage-advance bonus offer (Task 1.7).
@@ -72245,6 +72308,32 @@ export interface operations {
         };
         content: {
           'application/json': components['schemas']['WindowReactInput'];
+        };
+      };
+    };
+  };
+  reaction_windows_pending_retrieve: {
+    parameters: {
+      query?: {
+        /** @description ReactionWindowKind to list (defaults to witness). */
+        kind?: string;
+        /** @description Page number. */
+        page?: number;
+        /** @description Rows per page (default 50, max 200). */
+        page_size?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          'application/json': components['schemas']['PaginatedPendingReactionWindowList'];
         };
       };
     };

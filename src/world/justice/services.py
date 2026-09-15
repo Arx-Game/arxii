@@ -98,6 +98,36 @@ def enforcing_society_for(area: Area | None) -> Society | None:
     return None
 
 
+def report_witnessed_crime(
+    *, persona: Persona, crime_kind: CrimeKind, room: ObjectDB
+) -> PersonaHeat | None:
+    """Mint one report's worth of consequence for ``crime_kind`` at ``room`` (#1765, #2987).
+
+    The shared report core: heat via :func:`accrue_heat`, then the enforcing
+    society's regard for ``persona`` drops by the winning law's weight
+    (established/primary personas only). Two callers share this exactly:
+    a mission's ``PROPAGATION/CRIME_WATCH`` reward line
+    (:func:`world.missions.integrations.crime_watch.flag_crime`) and a WITNESS
+    reaction window's "report" choice. Both mint pursuit heat against the
+    accused persona and sting the same society's opinion by the same amount,
+    so a scene-witnessed deed reported here is judged no differently than a
+    mission deed reported the old way. Returns None when nothing minted
+    (legal here / out of jurisdiction): the caller's report has no effect.
+    """
+    from world.societies.renown import bump_society_reputation  # noqa: PLC0415
+
+    area = area_for_room(room)
+    row = accrue_heat(persona=persona, crime_kind=crime_kind, area=area, scale=1)
+    if row is None:
+        return None  # legal here / out of jurisdiction, no consequence.
+    law = law_for(area, crime_kind)
+    society = enforcing_society_for(law.area) if law is not None else None
+    if society is not None:
+        # PLACEHOLDER magnitude: the reputation sting mirrors the heat weight.
+        bump_society_reputation(persona, society, -law.heat_weight)
+    return row
+
+
 def tag_deed_crimes(deed: LegendEntry, crime_kinds: Iterable[CrimeKind]) -> int:
     """Idempotently mark ``deed`` as an instance of each crime kind; returns rows created.
 
