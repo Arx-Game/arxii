@@ -1,12 +1,15 @@
 /**
- * Tests the #3412 wiring in GameTopBar's character-select handler: clicking
- * an avatar (alt, unplayed, or the currently-active one) fires the durable
- * server-side selection mutation ALONGSIDE the existing puppeting/session
- * dispatches — never replacing them. As of #3812 the select lands BEFORE the
- * connect (login puppets the server's selection), so the connect assertions
- * wait for the awaited mutation to settle. `useGameSocket` and
- * `useSelectCharacterMutation` are mocked so this stays a fast unit test
- * (real `connect()` opens a WebSocket and hits the network).
+ * Tests GameTopBar's character-select handler after #3479 decision 4 as
+ * reconciled with #3812 (ADR-0294): clicking an avatar (alt, unplayed, or the
+ * currently-active one) performs the puppeting/session dispatches as before
+ * and ALWAYS writes this tab's browsing identity (sessionStorage + the
+ * gameSlice mirror). The durable server-side selection mutation fires only
+ * when the click opens a socket, and BEFORE the connect (login puppets the
+ * server's selection, so the connect assertions wait for the awaited
+ * mutation to settle); moving focus between two already-connected sessions
+ * never fires it. `useGameSocket` and `useSelectCharacterMutation` are mocked
+ * so this stays a fast unit test (real `connect()` opens a WebSocket and
+ * hits the network) and so a stray mutation call is caught.
  */
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -34,7 +37,13 @@ vi.mock('@/roster/queries', () => ({
 import { GameTopBar } from './GameTopBar';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { resetGame, startSession, hydrateActiveCharacter } from '@/store/gameSlice';
+import {
+  resetGame,
+  startSession,
+  hydrateActiveCharacter,
+  setSessionConnectionStatus,
+} from '@/store/gameSlice';
+import { readTabIdentity } from '@/store/browsingIdentity';
 import type { MyRosterEntry } from '@/roster/types';
 
 const aria: MyRosterEntry = {
@@ -69,16 +78,17 @@ const bianca: MyRosterEntry = {
   character_type: 'PC',
 };
 
-describe('GameTopBar selection wiring (#3412)', () => {
+describe('GameTopBar selection wiring (#3479 decision 4)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   afterEach(() => {
     store.dispatch(resetGame());
+    sessionStorage.clear();
   });
 
-  it('fires the select mutation with the roster entry id when clicking an unplayed character', async () => {
+  it('clicking an unplayed character selects, then connects, and writes the tab identity', async () => {
     renderWithProviders(<GameTopBar characters={[aria]} />);
 
     fireEvent.click(screen.getByText('Aria'));
@@ -86,18 +96,24 @@ describe('GameTopBar selection wiring (#3412)', () => {
     expect(mutateMock).toHaveBeenCalledWith(1);
     await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Aria'));
     expect(store.getState().game.active).toBe('Aria');
+    expect(store.getState().game.browsingEntryId).toBe(1);
+    expect(readTabIdentity()?.entryId).toBe(1);
   });
 
-  it('fires the select mutation when clicking an alt (already-sessioned) character', () => {
+  it('clicking a connected alt switches the tab identity without the mutation or a connect', () => {
     store.dispatch(startSession('Bianca'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Bianca', status: true }));
     store.dispatch(startSession('Aria'));
 
     renderWithProviders(<GameTopBar characters={[aria, bianca]} />);
 
     fireEvent.click(screen.getByTitle('Switch to Bianca'));
 
-    expect(mutateMock).toHaveBeenCalledWith(2);
+    expect(mutateMock).not.toHaveBeenCalled();
+    expect(connectMock).not.toHaveBeenCalled();
     expect(store.getState().game.active).toBe('Bianca');
+    expect(store.getState().game.browsingEntryId).toBe(2);
+    expect(readTabIdentity()?.entryId).toBe(2);
   });
 
   it('the hydrated-but-disconnected active avatar is clickable and (re)selects/connects', async () => {
@@ -110,5 +126,7 @@ describe('GameTopBar selection wiring (#3412)', () => {
 
     expect(mutateMock).toHaveBeenCalledWith(1);
     await waitFor(() => expect(connectMock).toHaveBeenCalledWith('Aria'));
+    expect(store.getState().game.browsingEntryId).toBe(1);
+    expect(readTabIdentity()?.entryId).toBe(1);
   });
 });

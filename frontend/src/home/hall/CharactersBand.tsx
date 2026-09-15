@@ -38,8 +38,14 @@ import { cn } from '@/lib/utils';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import type { MyRosterEntry } from '@/roster/types';
 import { dockedStateLabel } from '@/roster/lifecycleDisplay';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useAccount, useAppDispatch, useAppSelector } from '@/store/hooks';
-import { hydrateActiveCharacter } from '@/store/gameSlice';
+import {
+  hydrateActiveCharacter,
+  setBrowsingIdentity,
+  clearBrowsingIdentity,
+} from '@/store/gameSlice';
+import { writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { GMSlot } from './GMSlot';
 
 function getInitials(name: string): string {
@@ -103,16 +109,24 @@ function CharacterCard({ entry, isDocked, onSelect }: CharacterCardProps) {
 export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) {
   const dispatch = useAppDispatch();
   const account = useAccount();
-  const activeEntryId = useAppSelector((state) => state.game.activeEntryId);
+  const { entryId } = useBrowsingIdentity();
   const selectMutation = useSelectCharacterMutation();
 
   const handleSelect = (entry: MyRosterEntry) => {
-    if (entry.id === activeEntryId) return;
+    if (entry.id === entryId) return;
+    // Write this tab's own browsing identity FIRST (#3479) so the picking
+    // tab's UI (this docked highlight, every ambient page reading
+    // useBrowsingIdentity) updates immediately: it must not wait on the
+    // select mutation's round trip or the account refetch it triggers.
+    writeTabIdentity(entry.id);
+    dispatch(setBrowsingIdentity(entry.id));
     dispatch(hydrateActiveCharacter({ name: entry.name, entryId: entry.id }));
     selectMutation.mutate(entry.id);
   };
 
   const handleClear = () => {
+    clearTabIdentity();
+    dispatch(clearBrowsingIdentity());
     dispatch(hydrateActiveCharacter(null));
     selectMutation.mutate(null);
   };
@@ -131,14 +145,14 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
           <CharacterCard
             key={entry.id}
             entry={entry}
-            isDocked={entry.id === activeEntryId}
+            isDocked={entry.id === entryId}
             onSelect={handleSelect}
           />
         ))}
         {showGMSlot && (
           <GMSlot
             gmEntry={gmEntry}
-            isDocked={gmEntry != null && gmEntry.id === activeEntryId}
+            isDocked={gmEntry != null && gmEntry.id === entryId}
             onSelect={handleSelect}
           />
         )}
@@ -149,7 +163,7 @@ export function CharactersBand({ characters }: { characters: MyRosterEntry[] }) 
           variant="outline"
           size="sm"
           className="rounded-none"
-          disabled={activeEntryId == null}
+          disabled={entryId == null}
           onClick={handleClear}
         >
           Clear Active Character

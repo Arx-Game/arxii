@@ -14,8 +14,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -167,10 +166,8 @@ function LogProgressDialog({ characterId }: { characterId: number }) {
 }
 
 export function GoalsPanel() {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId =
-    myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null;
+  const { entry } = useBrowsingIdentity();
+  const characterId = entry?.character_id ?? null;
 
   const { data, isLoading, error } = useMyGoalsQuery(characterId ?? 0);
 

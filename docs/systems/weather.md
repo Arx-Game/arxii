@@ -50,7 +50,10 @@ rather than drifting on wall-clock time. Clockless worlds fall back to a legacy
   periodic echo.
 - **Web:** `GET /api/weather/conditions/` → `WeatherWidget` in the top bar. This is
   the only REST surface in the celestial/weather family; `moon_phase` is exposed
-  here rather than on the clock endpoint.
+  here rather than on the clock endpoint. It takes an optional `?entry_id=` (#3479,
+  ADR-0302), resolved by `roster.services.selection.character_for_request`, so the
+  Hall's docked-room weather follows the tab's browsing identity; absent, the
+  account's durable selection.
 
 ## Moon
 

@@ -83,6 +83,7 @@ interface GameState {
   sessions: Record<string, Session>;
   active: string | null;
   activeEntryId: number | null;
+  browsingEntryId: number | null;
 }
 
 const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
@@ -181,6 +182,7 @@ const createStateWithSession = (
   },
   active,
   activeEntryId: null,
+  browsingEntryId: null,
 });
 
 const createStateWithMultipleSessions = (
@@ -192,6 +194,7 @@ const createStateWithMultipleSessions = (
   ),
   active,
   activeEntryId: null,
+  browsingEntryId: null,
 });
 
 // --- Tests ---
@@ -212,7 +215,12 @@ describe('gameSlice', () => {
     it('returns initial state for unknown action', () => {
       const result = reducer(undefined, { type: 'unknown' });
 
-      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
+      expect(result).toEqual({
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      });
     });
 
     it('initial state has empty sessions object', () => {
@@ -231,7 +239,12 @@ describe('gameSlice', () => {
   describe('startSession', () => {
     describe('creating new sessions', () => {
       it('creates new session if it does not exist', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -239,7 +252,12 @@ describe('gameSlice', () => {
       });
 
       it('creates session with default values', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -263,7 +281,12 @@ describe('gameSlice', () => {
       });
 
       it('initializes threadLastSeen as an empty object', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -271,7 +294,12 @@ describe('gameSlice', () => {
       });
 
       it('sets new session as active', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
 
         const result = reducer(initialState, startSession('TestCharacter'));
 
@@ -336,7 +364,12 @@ describe('gameSlice', () => {
 
     describe('edge cases', () => {
       it('handles empty string as session name', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
 
         const result = reducer(initialState, startSession(''));
 
@@ -345,7 +378,12 @@ describe('gameSlice', () => {
       });
 
       it('handles character names with special characters', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
         const specialName = "O'Brien the Third";
 
         const result = reducer(initialState, startSession(specialName));
@@ -355,7 +393,12 @@ describe('gameSlice', () => {
       });
 
       it('handles character names with unicode', () => {
-        const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+        const initialState: GameState = {
+          sessions: {},
+          active: null,
+          activeEntryId: null,
+          browsingEntryId: null,
+        };
         const unicodeName = 'Character\u2019s Name';
 
         const result = reducer(initialState, startSession(unicodeName));
@@ -1308,7 +1351,12 @@ describe('gameSlice', () => {
 
       const result = reducer(initialState, resetGame());
 
-      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
+      expect(result).toEqual({
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      });
     });
 
     it('clears all sessions', () => {
@@ -1333,11 +1381,21 @@ describe('gameSlice', () => {
     });
 
     it('works from already initial state', () => {
-      const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+      const initialState: GameState = {
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      };
 
       const result = reducer(initialState, resetGame());
 
-      expect(result).toEqual({ sessions: {}, active: null, activeEntryId: null });
+      expect(result).toEqual({
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      });
     });
 
     it('clears complex session data', () => {
@@ -1372,6 +1430,7 @@ describe('gameSlice', () => {
         },
         active: 'Hero',
         activeEntryId: 7,
+        browsingEntryId: null,
       };
 
       const result = reducer(complexState, resetGame());
@@ -1383,7 +1442,12 @@ describe('gameSlice', () => {
 
   describe('integration scenarios', () => {
     it('handles typical session lifecycle', () => {
-      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
+      let state: GameState = {
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      };
 
       // Start session
       state = reducer(state, startSession('Hero'));
@@ -1423,7 +1487,12 @@ describe('gameSlice', () => {
     });
 
     it('handles multi-character scenario with tab switching', () => {
-      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
+      let state: GameState = {
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      };
 
       // Start first character
       state = reducer(state, startSession('CharacterA'));
@@ -1456,7 +1525,12 @@ describe('gameSlice', () => {
     });
 
     it('handles reset and restart scenario', () => {
-      let state: GameState = { sessions: {}, active: null, activeEntryId: null };
+      let state: GameState = {
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      };
 
       // Build up state
       state = reducer(state, startSession('Hero'));
@@ -1626,7 +1700,12 @@ describe('conversation tabs (#2165)', () => {
 
 describe('hydrateActiveCharacter (#3412 reload survival)', () => {
   it('sets active and activeEntryId from an empty initial state', () => {
-    const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+    const initialState: GameState = {
+      sessions: {},
+      active: null,
+      activeEntryId: null,
+      browsingEntryId: null,
+    };
 
     const result = reducer(initialState, hydrateActiveCharacter({ name: 'Aria', entryId: 7 }));
 
@@ -1635,7 +1714,12 @@ describe('hydrateActiveCharacter (#3412 reload survival)', () => {
   });
 
   it('does not create a session entry for the hydrated character', () => {
-    const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+    const initialState: GameState = {
+      sessions: {},
+      active: null,
+      activeEntryId: null,
+      browsingEntryId: null,
+    };
 
     const result = reducer(initialState, hydrateActiveCharacter({ name: 'Aria', entryId: 7 }));
 
@@ -1643,7 +1727,12 @@ describe('hydrateActiveCharacter (#3412 reload survival)', () => {
   });
 
   it('overwrites a previously hydrated active/activeEntryId (e.g. re-selecting a different character)', () => {
-    const initialState: GameState = { sessions: {}, active: 'Aria', activeEntryId: 7 };
+    const initialState: GameState = {
+      sessions: {},
+      active: 'Aria',
+      activeEntryId: 7,
+      browsingEntryId: null,
+    };
 
     const result = reducer(initialState, hydrateActiveCharacter({ name: 'Bianca', entryId: 9 }));
 
@@ -1666,7 +1755,12 @@ describe('hydrateActiveCharacter (#3412 reload survival)', () => {
   // triggers) — it must actually null the mirror, not be a silent no-op.
   describe('clearing (null payload)', () => {
     it('nulls active and activeEntryId', () => {
-      const initialState: GameState = { sessions: {}, active: 'Aria', activeEntryId: 7 };
+      const initialState: GameState = {
+        sessions: {},
+        active: 'Aria',
+        activeEntryId: 7,
+        browsingEntryId: null,
+      };
 
       const result = reducer(initialState, hydrateActiveCharacter(null));
 
@@ -1675,7 +1769,12 @@ describe('hydrateActiveCharacter (#3412 reload survival)', () => {
     });
 
     it('is a no-op on an already-empty state', () => {
-      const initialState: GameState = { sessions: {}, active: null, activeEntryId: null };
+      const initialState: GameState = {
+        sessions: {},
+        active: null,
+        activeEntryId: null,
+        browsingEntryId: null,
+      };
 
       const result = reducer(initialState, hydrateActiveCharacter(null));
 

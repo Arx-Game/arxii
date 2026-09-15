@@ -6,15 +6,9 @@
  * instead of duplicating the resolution).
  */
 
-import { useMemo } from 'react';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 
 export function useActiveCharacterId(): number | null {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  return useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const { entry } = useBrowsingIdentity();
+  return entry?.character_id ?? null;
 }

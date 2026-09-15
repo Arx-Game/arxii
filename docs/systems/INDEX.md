@@ -2505,9 +2505,15 @@ Character lifecycle management with web-first applications and player anonymity.
   (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
-  presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
-  and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
-  [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
+  presence. Frontend mirrors it in `gameSlice` and surfaces it as `SelectedCharacterChip`
+  in `Header` — see [roster.md](roster.md)'s "Frontend: Selection Chrome" section for
+  the full detail. **Per-tab browsing identity (#3479, ADR-0302):** the column is the
+  default, not the only identity. Each browser tab keeps its own `RosterEntry` id in
+  `sessionStorage` (`frontend/src/store/browsingIdentity.ts`, mirrored as
+  `gameSlice.browsingEntryId`, read through `useBrowsingIdentity()`); the account
+  refetch seeds an empty tab and never overwrites one. Player-scoped reads (missions,
+  NPC interactions, weather) take an explicit `entry_id` resolved by
+  `selection.character_for_request` (own entries only; `None` falls back to the column).
 - **The Hall — logged-in home surface (#3412 slice 2, ADR-0245):** `GET
   /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
   aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not

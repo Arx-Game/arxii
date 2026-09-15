@@ -9,7 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { WorldBand } from '../WorldBand';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { hydrateActiveCharacter, resetGame } from '@/store/gameSlice';
+import { setBrowsingIdentity, resetGame } from '@/store/gameSlice';
 import type { EventListItem } from '@/events/types';
 import type { Gemit } from '@/narrative/types';
 
@@ -171,6 +171,27 @@ describe('WorldBand', () => {
     expect(screen.queryByText(/full record/i)).not.toBeInTheDocument();
   });
 
+  it('threads the docked entry id into the weather read as the browsing identity (#3479)', () => {
+    setDefaultMocks();
+    store.dispatch(setBrowsingIdentity(7));
+    renderWithProviders(<WorldBand />);
+
+    expect(mockUseWeatherConditions).toHaveBeenCalledWith(null, {
+      fallbackToSelection: true,
+      entryId: 7,
+    });
+  });
+
+  it('asks for no weather identity when nothing is docked', () => {
+    setDefaultMocks();
+    renderWithProviders(<WorldBand />);
+
+    expect(mockUseWeatherConditions).toHaveBeenCalledWith(null, {
+      fallbackToSelection: false,
+      entryId: null,
+    });
+  });
+
   it('omits the persona tidings digest plate when no character is docked', () => {
     setDefaultMocks();
     renderWithProviders(<WorldBand />);
@@ -180,7 +201,7 @@ describe('WorldBand', () => {
 
   it('renders the persona tidings digest plate ONLY when a character is docked', async () => {
     setDefaultMocks();
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<WorldBand />);
 
     await waitFor(() => {

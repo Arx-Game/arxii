@@ -342,6 +342,23 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   item by verification (Apostate's 2026-08-28 ruling). Zero backend changes this
   slice. See ADR-0247 for the rejected selection-keyed-redirect and
   in-client-sheet-drawer alternatives.
+- **Per-tab browsing identity (#3479, complete, ADR-0302):** the account column
+  (`PlayerData.selected_entry`) becomes the DEFAULT, not the only identity. Each
+  browser tab keeps its own `RosterEntry` id in `sessionStorage`
+  (`frontend/src/store/browsingIdentity.ts`; per tab by the browser's contract, in
+  try/catch), mirrored as `gameSlice.browsingEntryId` and read by every ambient page
+  (Hall, tidings, journal, wardrobe, magic, missions, NPC interactions, weather)
+  through `useBrowsingIdentity()`; `useAccountQuery`'s hydration seeds an empty tab
+  and never overwrites one, which closes the cross-tab stomp at its source. `active`
+  and `sessions` stay the live-session fields (ADR-0247's redirect untouched). The
+  Hall picker writes the tab identity and the column; in-game switches write the tab
+  identity always and the column only when they open a socket, just before the
+  connect (login puppets the column, ADR-0294). Backend: `missions`, `npc_services`
+  and `weather` reads take an explicit `entry_id` through the new
+  `selection.character_for_request` (own entries only, `PermissionDenied` for a
+  foreign id, `None` falls back to `selected_character()`); `weather/views.py`'s
+  hand-rolled selection copy folded into it. Telnet is untouched and independent by
+  design (stated at the top of `selection.py`).
 - **Game entry repairs (#3818, 2026-09-13):** three things Apostate hit on the first
   production login after #3813. (1) A character with no location, no
   `prelogout_location` and no `home` was left nowhere by Evennia's `at_pre_puppet`,

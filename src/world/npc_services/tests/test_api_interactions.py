@@ -176,6 +176,42 @@ class EndInteractionTests(TestCase):
         run.assert_called_once()
 
 
+class EntryIdIdentityTests(TestCase):
+    """#3479 per-tab browsing identity: entry_id in the body names the actor."""
+
+    def test_start_honors_owned_entry_id_and_rejects_foreign(self) -> None:
+        from world.roster.factories import RosterTenureFactory
+
+        account = AccountFactory(username="entry-id-player")
+        sheet = CharacterSheetFactory()
+        tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=sheet.character,
+            player_data__account=account,
+        )
+        role = NPCRoleFactory(name="entry-id-clerk")
+        offer = NPCServiceOfferFactory(role=role, label="entry-id-permit")
+        PermitOfferDetailsFactory(offer=offer)
+        client = APIClient()
+        client.force_authenticate(account)
+
+        foreign_tenure = RosterTenureFactory()
+        response = client.post(
+            START,
+            {"role_id": role.pk, "entry_id": foreign_tenure.roster_entry.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.data)
+
+        # No durable selection exists at all; the explicit own id resolves
+        # the actor on its own.
+        response = client.post(
+            START,
+            {"role_id": role.pk, "entry_id": tenure.roster_entry.pk},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.data)
+
+
 class AuthRequiredTests(TestCase):
     def test_anonymous_blocked(self) -> None:
         client = APIClient()

@@ -55,6 +55,7 @@ from world.npc_services.models import (
 )
 from world.npc_services.serializers import (
     ClueRevealOfferDetailsSerializer,
+    InteractionEndRequestSerializer,
     InteractionResolveRequestSerializer,
     InteractionStartRequestSerializer,
     InteractionStateSerializer,
@@ -253,13 +254,22 @@ class InteractionViewSet(viewsets.ViewSet):
     def _acting_character(self, request: Request):
         """Return the character the caller is acting as, or 400.
 
-        Resolved from the account's durable selection (``PlayerData.selected_entry``,
-        #3412) via ``selected_character``; see ``missions.views._acting_character``
+        An explicit ``entry_id`` in the request body names the tab's browsing
+        identity (#3479); otherwise the account's durable selection
+        (``PlayerData.selected_entry``, #3412) answers, via
+        ``character_for_request``. See ``missions.views._acting_character``
         for why ``request.user.puppet`` is not usable here (Sentry ARX2-7).
         """
-        from world.roster.services.selection import selected_character  # noqa: PLC0415
+        from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
-        character = selected_character(request.user)
+        raw = request.data.get("entry_id")
+        entry_id = None
+        if raw not in (None, ""):
+            try:
+                entry_id = int(raw)
+            except (TypeError, ValueError) as exc:
+                raise ValidationError({"entry_id": "A valid integer is required."}) from exc
+        character = character_for_request(request, entry_id=entry_id)
         if character is None:
             msg = "Select a character before starting an NPC interaction."
             raise ValidationError(msg)
@@ -347,6 +357,7 @@ class InteractionViewSet(viewsets.ViewSet):
         )
 
     @extend_schema(
+        request=InteractionEndRequestSerializer,
         responses={
             200: InteractionStateSerializer,
             400: OpenApiResponse(description="No puppeted character."),
@@ -355,6 +366,8 @@ class InteractionViewSet(viewsets.ViewSet):
     )
     @action(detail=False, methods=["post"])
     def end(self, request: Request) -> Response:
+        body = InteractionEndRequestSerializer(data=request.data)
+        body.is_valid(raise_exception=True)
         session = _rehydrate(request)
         character = self._acting_character(request)
 

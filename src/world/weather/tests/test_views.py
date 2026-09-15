@@ -78,6 +78,33 @@ class WeatherConditionsApiTest(APITestCase):
         self.client.force_authenticate(user=self.user)
         assert self.client.get(CONDITIONS_URL).status_code == status.HTTP_404_NOT_FOUND
 
+    def test_entry_id_names_the_acting_character(self) -> None:
+        """#3479 per-tab browsing identity: an explicit own entry_id resolves the
+        room with no durable selection at all; a foreign one is a uniform 403."""
+        from evennia_extensions.factories import CharacterFactory
+        from world.character_sheets.factories import CharacterSheetFactory
+        from world.roster.factories import RosterTenureFactory
+
+        GameClockFactory(anchor_ic_time=datetime(1010, 7, 15, 12, 0, tzinfo=UTC), paused=True)
+        storm = WeatherTypeFactory(name="TabStorm")
+        RegionWeatherStateFactory(area=self.region, weather_type=storm)
+
+        char = CharacterFactory(db_key="TabDocked", location=self.room)
+        CharacterSheetFactory(character=char)
+        tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=char,
+            player_data__account=self.user,
+        )
+
+        self.client.force_authenticate(user=self.user)
+        response = self.client.get(CONDITIONS_URL, {"entry_id": tenure.roster_entry.pk})
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["weather_type"] == "TabStorm"
+
+        foreign_tenure = RosterTenureFactory()
+        response = self.client.get(CONDITIONS_URL, {"entry_id": foreign_tenure.roster_entry.pk})
+        assert response.status_code == status.HTTP_403_FORBIDDEN
+
     def test_unknown_room_is_404(self) -> None:
         self.client.force_authenticate(user=self.user)
         response = self.client.get(CONDITIONS_URL, {"room_id": 9999999})

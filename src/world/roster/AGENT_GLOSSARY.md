@@ -194,6 +194,22 @@ character (same ambiguity); taken up (retired working label); Playing: Not In
 World (first-pass label, refined same session — "offscreen" is the established
 project word for this).
 
+**Browsing identity**:
+Which `RosterEntry` THIS browser tab is browsing as (#3479, ADR-0302): a per-tab
+fact in `sessionStorage` (`frontend/src/store/browsingIdentity.ts`), mirrored as
+`gameSlice.browsingEntryId` and read by ambient pages through
+`useBrowsingIdentity()`. Selection (the account column) is the DEFAULT a tab seeds
+from when it has none; an account refetch never overwrites a tab that has one, so
+two tabs can browse as two characters on one account. Player-scoped reads carry it
+explicitly as `entry_id`, resolved server-side by
+`world.roster.services.selection.character_for_request` (own entries only; absent
+falls back to Selection). Distinct from the live-session character (`gameSlice.active`,
+the puppet this tab's socket drives), which in-game surfaces and the Gatefold
+redirect (ADR-0247) keep reading. Telnet has no browsing identity; its identity is
+its puppet.
+_Avoid_: active character (that is the live session); selection (that is the
+account default); current character (ambiguous between the three).
+
 **Playing: Currently Offscreen**:
 Ratified player-facing label for Selection (state 2.5), by Apostate 2026-08-28 —
 a character is being played but is not in the world (vs. state 3, in-world play).

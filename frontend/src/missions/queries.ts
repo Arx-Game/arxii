@@ -8,6 +8,8 @@
 
 import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
+
 import {
   assignMission,
   getBeat,
@@ -87,20 +89,30 @@ export const missionKeys = {
   predicateLeaves: () => [...missionKeys.all, 'predicate-leaves'] as const,
   categories: () => [...missionKeys.all, 'categories'] as const,
   givers: () => [...missionKeys.all, 'givers'] as const,
+  // Player-scoped read keys carry the tab's browsing identity (#3479) as a
+  // trailing `entryId` so a browsing-identity switch refetches; the bare
+  // parent keys remain for prefix invalidation in the mutation hooks.
   journal: () => [...missionKeys.all, 'journal'] as const,
+  journalFor: (entryId: number | null) => [...missionKeys.journal(), { entryId }] as const,
   pendingInvites: () => [...missionKeys.all, 'pending-invites'] as const,
+  pendingInvitesFor: (entryId: number | null) =>
+    [...missionKeys.pendingInvites(), { entryId }] as const,
   opportunities: () => [...missionKeys.all, 'opportunities'] as const,
+  opportunitiesFor: (entryId: number | null) =>
+    [...missionKeys.opportunities(), { entryId }] as const,
   // roomKey threads the player's current room into the key so a move
   // refetches liveness — the server computes "live here" from the puppet.
-  beat: (instanceId: number, roomKey: string) =>
-    [...missionKeys.all, 'beat', instanceId, roomKey] as const,
+  beat: (instanceId: number, roomKey: string, entryId: number | null) =>
+    [...missionKeys.all, 'beat', instanceId, roomKey, { entryId }] as const,
   // Same roomKey threading for the group beat (options are per-viewer +
   // location-gated).
-  groupBeat: (instanceId: number, roomKey: string) =>
-    [...missionKeys.all, 'group-beat', instanceId, roomKey] as const,
+  groupBeat: (instanceId: number, roomKey: string, entryId: number | null) =>
+    [...missionKeys.all, 'group-beat', instanceId, roomKey, { entryId }] as const,
   giversFor: (filters: object) => [...missionKeys.givers(), filters] as const,
   boardPostings: (boardObjectId: number) =>
     [...missionKeys.all, 'board-postings', boardObjectId] as const,
+  boardPostingsFor: (boardObjectId: number, entryId: number | null) =>
+    [...missionKeys.boardPostings(boardObjectId), { entryId }] as const,
 };
 
 const FIVE_MINUTES = 5 * 60 * 1000;
@@ -339,28 +351,37 @@ export function useDeleteGiver() {
 
 // ---------------------------------------------------------------------------
 // #885 player journal/beat hooks.
+//
+// Every player-scoped hook below acts as the tab's browsing identity (#3479):
+// `useBrowsingIdentity().entryId` rides along as an `entry_id` query param.
+// Null (no identity hydrated) omits the param, so the server falls back to
+// the account's durable selection. A retired-mid-session id 403s by design:
+// no client-side fallback; the server answers.
 // ---------------------------------------------------------------------------
 
 export function useJournal(): UseQueryResult<PaginatedResponse<JournalEntry>> {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.journal(),
-    queryFn: listJournal,
+    queryKey: missionKeys.journalFor(entryId),
+    queryFn: () => listJournal(entryId),
   });
 }
 
 /** Pending mission invites for the puppet (#audit2) — surfaces even with an empty journal. */
 export function usePendingInvites(): UseQueryResult<PendingMissionInvite[]> {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.pendingInvites(),
-    queryFn: listPendingInvites,
+    queryKey: missionKeys.pendingInvitesFor(entryId),
+    queryFn: () => listPendingInvites(entryId),
     refetchInterval: 15_000,
   });
 }
 
 export function useOpportunities() {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.opportunities(),
-    queryFn: getOpportunities,
+    queryKey: missionKeys.opportunitiesFor(entryId),
+    queryFn: () => getOpportunities(entryId),
   });
 }
 
@@ -373,9 +394,10 @@ export function useBeat(
   instanceId: number | undefined,
   roomKey: string
 ): UseQueryResult<BeatView | null> {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.beat(instanceId ?? 0, roomKey),
-    queryFn: () => getBeat(instanceId as number),
+    queryKey: missionKeys.beat(instanceId ?? 0, roomKey, entryId),
+    queryFn: () => getBeat(instanceId as number, entryId),
     enabled: instanceId !== undefined,
     // Liveness (2026-07 audit): a beat can be resolved by another participant
     // or fast-forwarded by an external act — nothing pushes that, so poll
@@ -386,6 +408,7 @@ export function useBeat(
 
 export function useResolveBeat() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({
       instanceId,
@@ -395,7 +418,7 @@ export function useResolveBeat() {
       instanceId: number;
       option_id: number;
       approach_id?: number | null;
-    }) => resolveBeat(instanceId, { option_id, approach_id }),
+    }) => resolveBeat(instanceId, { option_id, approach_id }, entryId),
     onSuccess: () => {
       // Position, deeds, status, and liveness all changed.
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
@@ -406,9 +429,10 @@ export function useResolveBeat() {
 
 export function useTellTale() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({ instanceId, text }: { instanceId: number; text: string }) =>
-      tellTale(instanceId, text),
+      tellTale(instanceId, text, entryId),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
   });
 }
@@ -416,9 +440,10 @@ export function useTellTale() {
 /** Report a RESOLVED run's outcome to its report-to Functionary (#1753/#3040). */
 export function useReportMission() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({ instanceId, style }: { instanceId: number; style: ReportStyle }) =>
-      reportMission(instanceId, style),
+      reportMission(instanceId, style, entryId),
     onSuccess: () => qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {}),
   });
 }
@@ -428,9 +453,10 @@ export function useReportMission() {
  * dialog is actually open — `boardObjectId` is only meaningful then.
  */
 export function useBoardPostings(boardObjectId: number | null) {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.boardPostings(boardObjectId ?? 0),
-    queryFn: () => getBoardPostings(boardObjectId as number),
+    queryKey: missionKeys.boardPostingsFor(boardObjectId ?? 0, entryId),
+    queryFn: () => getBoardPostings(boardObjectId as number, entryId),
     enabled: boardObjectId != null,
   });
 }
@@ -438,8 +464,9 @@ export function useBoardPostings(boardObjectId: number | null) {
 /** Take a posting off a notice board — re-runs eligibility server-side (#2044/#3044). */
 export function useTakeBoardPosting(boardObjectId: number) {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
-    mutationFn: (templateId: number) => takeBoardPosting(boardObjectId, templateId),
+    mutationFn: (templateId: number) => takeBoardPosting(boardObjectId, templateId, entryId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: missionKeys.boardPostings(boardObjectId) }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
@@ -455,9 +482,10 @@ export function useGroupBeat(
   instanceId: number | undefined,
   roomKey: string
 ): UseQueryResult<GroupBeatResult> {
+  const { entryId } = useBrowsingIdentity();
   return useQuery({
-    queryKey: missionKeys.groupBeat(instanceId ?? 0, roomKey),
-    queryFn: () => getGroupBeat(instanceId as number),
+    queryKey: missionKeys.groupBeat(instanceId ?? 0, roomKey, entryId),
+    queryFn: () => getGroupBeat(instanceId as number, entryId),
     enabled: instanceId !== undefined,
     // Liveness (2026-07 audit): group ballots are inherently multiplayer —
     // without a poll, participant B never saw A's vote land, and the
@@ -469,6 +497,7 @@ export function useGroupBeat(
 
 export function useSubmitGroupPick() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({
       instanceId,
@@ -478,7 +507,7 @@ export function useSubmitGroupPick() {
       instanceId: number;
       option_id: number;
       approach_id?: number | null;
-    }) => submitGroupPick(instanceId, { option_id, approach_id }),
+    }) => submitGroupPick(instanceId, { option_id, approach_id }, entryId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'group-beat'] }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
@@ -488,9 +517,10 @@ export function useSubmitGroupPick() {
 
 export function useCastGroupVote() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({ instanceId, option_id }: { instanceId: number; option_id: number }) =>
-      castGroupVote(instanceId, { option_id }),
+      castGroupVote(instanceId, { option_id }, entryId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: [...missionKeys.all, 'group-beat'] }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
@@ -500,6 +530,7 @@ export function useCastGroupVote() {
 
 export function useInviteToMission() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: ({
       instanceId,
@@ -507,7 +538,7 @@ export function useInviteToMission() {
     }: {
       instanceId: number;
       invitee_character_id: number;
-    }) => inviteToMission(instanceId, { invitee_character_id }),
+    }) => inviteToMission(instanceId, { invitee_character_id }, entryId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.pendingInvites() }).catch(() => {});
@@ -517,9 +548,10 @@ export function useInviteToMission() {
 
 export function useRespondToMissionInvite() {
   const qc = useQueryClient();
+  const { entryId } = useBrowsingIdentity();
   return useMutation({
     mutationFn: (body: { invite_id: number; response: 'accept' | 'decline' }) =>
-      respondToMissionInvite(body),
+      respondToMissionInvite(body, entryId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: missionKeys.journal() }).catch(() => {});
       qc.invalidateQueries({ queryKey: missionKeys.pendingInvites() }).catch(() => {});

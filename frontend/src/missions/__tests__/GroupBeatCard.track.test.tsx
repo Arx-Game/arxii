@@ -5,9 +5,11 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
 import { MemoryRouter } from 'react-router-dom';
 import { vi } from 'vitest';
 
+import { store } from '@/store/store';
 import type { GroupBeatResult } from '../types';
 
 const TRACK_BEAT: GroupBeatResult = {
@@ -56,10 +58,14 @@ import { GroupBeatCard } from '../components/GroupBeatCard';
 
 function withProviders(children: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } });
+  // Redux Provider: the unmocked player hooks (InvitePicker's
+  // useInviteToMission) read the tab's browsing identity from the store (#3479).
   return (
-    <QueryClientProvider client={qc}>
-      <MemoryRouter>{children}</MemoryRouter>
-    </QueryClientProvider>
+    <Provider store={store}>
+      <QueryClientProvider client={qc}>
+        <MemoryRouter>{children}</MemoryRouter>
+      </QueryClientProvider>
+    </Provider>
   );
 }
 

@@ -12,7 +12,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { OffscreenActsPlate } from '../OffscreenActsPlate';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { hydrateActiveCharacter, resetGame } from '@/store/gameSlice';
+import { setBrowsingIdentity, resetGame } from '@/store/gameSlice';
 import type { MyRosterEntry } from '@/roster/types';
 
 const aria: MyRosterEntry = {
@@ -58,13 +58,13 @@ describe('OffscreenActsPlate', () => {
   });
 
   it('renders nothing when the docked entry id is not in the characters list (stale selection)', () => {
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 999 }));
+    store.dispatch(setBrowsingIdentity(999));
     renderWithProviders(<OffscreenActsPlate characters={[aria, bianca]} />);
     expect(screen.queryByText('Offscreen Acts')).not.toBeInTheDocument();
   });
 
   it('renders the plate with journal and goals rows for the docked character', () => {
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<OffscreenActsPlate characters={[aria, bianca]} />);
 
     expect(screen.getByText('Offscreen Acts')).toBeInTheDocument();
@@ -79,14 +79,14 @@ describe('OffscreenActsPlate', () => {
   });
 
   it('never renders a proclamation row (no FE compose surface exists)', () => {
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<OffscreenActsPlate characters={[aria]} />);
 
     expect(screen.queryByText(/proclaim/i)).not.toBeInTheDocument();
   });
 
   it('does not duplicate persona switching (that lives on PersonaTiles/CharactersBand)', () => {
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<OffscreenActsPlate characters={[aria]} />);
 
     expect(screen.queryByRole('tablist', { name: 'Personas' })).not.toBeInTheDocument();
@@ -94,7 +94,7 @@ describe('OffscreenActsPlate', () => {
 
   it('renders the act rows for a COMA docked character (the unwritten fall-through state)', () => {
     const inComa = { ...aria, lifecycle_state: 'COMA' };
-    store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+    store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<OffscreenActsPlate characters={[inComa]} />);
 
     expect(screen.getByRole('link', { name: 'Write in your journal' })).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe('OffscreenActsPlate', () => {
     'renders world-voice refusal prose instead of the act rows for %s',
     (lifecycle_state, expectedText) => {
       const degraded = { ...aria, lifecycle_state };
-      store.dispatch(hydrateActiveCharacter({ name: 'Aria', entryId: 1 }));
+      store.dispatch(setBrowsingIdentity(1));
       renderWithProviders(<OffscreenActsPlate characters={[degraded]} />);
 
       expect(screen.getByText(expectedText)).toBeInTheDocument();
