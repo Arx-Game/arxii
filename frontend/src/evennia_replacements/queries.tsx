@@ -8,14 +8,15 @@ import {
   postRegister,
 } from './api';
 import { AccountData, LoginResult } from './types';
-import { useAppDispatch, useAppSelector } from '@/store/hooks';
+import { useStore } from 'react-redux';
+import type { RootState } from '@/store/store';
+import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
 import {
   resetGame,
   hydrateActiveCharacter,
   setBrowsingIdentity,
   clearBrowsingIdentity,
-  selectBrowsingEntryId,
 } from '@/store/gameSlice';
 import { readTabIdentity, writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -24,11 +25,16 @@ import { useNavigate } from 'react-router-dom';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
-  // Redux's own idea of this tab's browsing identity, read alongside
-  // sessionStorage below so a cold-Redux/warm-storage mismatch (a page
-  // reload: sessionStorage survives, Redux does not) can be detected and
-  // repaired instead of silently left un-hydrated (#3479 review round 1).
-  const reduxBrowsingEntryId = useAppSelector(selectBrowsingEntryId);
+  // The store handle, NOT a selector: the effect below reads Redux's own idea
+  // of this tab's browsing identity at run time (so a cold-Redux/warm-storage
+  // mismatch after a reload is detected and repaired, #3479 review round 1),
+  // but a Redux-only change must never re-run the effect. With the value in
+  // the deps, the Hall's "Clear Active Character" (clearBrowsingIdentity)
+  // re-ran it against the CACHED account, whose selected_entry still named
+  // the old character, and the seed branch wrote that character straight
+  // back before the clearing mutation's refetch could land (whole-branch
+  // review, Critical). The effect keys on `result.data` alone.
+  const store = useStore<RootState>();
   const result = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
@@ -81,7 +87,7 @@ export function useAccountQuery() {
         // keeps a later refetch carrying a DIFFERENT account default from
         // overwriting an already-hydrated tab (never tears down a live
         // session either way; selection isn't presence).
-        if (reduxBrowsingEntryId !== stored.entryId) {
+        if (store.getState().game.browsingEntryId !== stored.entryId) {
           const ownedEntry = account?.available_characters.find((c) => c.id === stored.entryId);
           dispatch(setBrowsingIdentity(stored.entryId));
           if (ownedEntry) {
@@ -106,7 +112,7 @@ export function useAccountQuery() {
       dispatch(clearBrowsingIdentity());
     }
     dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
-  }, [result.data, dispatch, reduxBrowsingEntryId]);
+  }, [result.data, dispatch, store]);
 
   return result;
 }

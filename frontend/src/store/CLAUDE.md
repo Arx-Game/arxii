@@ -39,8 +39,9 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
   thread set is a mis-send vector, not just stale UI.
   `browsingEntryId` (#3479, ADR-0302) is THIS tab's browsing identity, a `RosterEntry`
   id mirrored from `browsingIdentity.ts`; `setBrowsingIdentity`/`clearBrowsingIdentity`
-  write it, and `hydrateActiveCharacter` seeds it from the account default only when
-  the tab has none. Ambient pages read it through `useBrowsingIdentity()`
+  write it, and `useAccountQuery`'s hydration effect (`evennia_replacements/queries.tsx`)
+  seeds it from the account default only when the tab has none, keyed on the account
+  payload alone so a Redux-only change (a clear) never re-seeds. Ambient pages read it through `useBrowsingIdentity()`
   (`frontend/src/roster/`); `active`/`sessions` stay the live-session fields.
 - **`browsingIdentity.ts`**: the per-tab `sessionStorage` store behind
   `browsingEntryId` (`{ entryId, tabId }`; reads and writes in try/catch, so a page

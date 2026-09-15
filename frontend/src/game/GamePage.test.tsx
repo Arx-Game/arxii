@@ -90,11 +90,15 @@ vi.mock('@/roster/queries', () => ({
   // test suite isn't exercising the drawer's own identity resolution.
   useRosterEntryByNameQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
   useRosterEntryQuery: vi.fn(() => ({ data: undefined, isLoading: false })),
-  // #3479 decision 4: GameTopBar/GameWindow's select handlers no longer call
-  // this (only the Hall picker writes the account default). The stub stays so
-  // this module mock exports the full surface and so a reintroduced call in
-  // either handler can't silently hit the network from this suite.
-  useSelectCharacterMutation: vi.fn(() => ({ mutate: vi.fn() })),
+  // #3479 (ADR-0302, reconciled with ADR-0294): GameTopBar/GameWindow's
+  // switch handlers call this only when the switch opens a socket, awaiting
+  // `mutateAsync` before the connect. Both spellings are stubbed so a switch
+  // exercised from this suite neither hits the network nor rejects inside an
+  // async handler.
+  useSelectCharacterMutation: vi.fn(() => ({
+    mutate: vi.fn(),
+    mutateAsync: vi.fn(async () => {}),
+  })),
 }));
 
 // #3412 — GamePage's mount-path auto-start effect calls `connect()`. Mocked

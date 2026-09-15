@@ -74,9 +74,10 @@ def character_for_request(request: Request, *, entry_id: int | None) -> ObjectDB
     which is how a fresh tab behaves before it has an identity of its own.
 
     Raises DRF ``PermissionDenied`` for any ``entry_id`` that does not
-    resolve to an own entry. One filtered query answers "exists" and
-    "owned" together, so the fixed message never leaks whether a foreign
-    entry id exists at all.
+    resolve to an own entry. The owned list is the player's cached active
+    tenures (``get_available_roster_entries``), so the lookup adds no query
+    of its own and a foreign id and an unknown id are indistinguishable: the
+    fixed message never leaks whether the entry exists at all.
     """
     from rest_framework.exceptions import PermissionDenied  # noqa: PLC0415
 
@@ -89,13 +90,9 @@ def character_for_request(request: Request, *, entry_id: int | None) -> ObjectDB
     player_data = PlayerData.objects.filter(account=request.user).first()
     if player_data is None:
         raise PermissionDenied(SelectionError.user_message)
-    entry = (
-        RosterEntry.objects.filter(
-            pk=entry_id,
-            character_sheet__character__in=player_data.get_available_characters(),
-        )
-        .select_related("character_sheet__character")
-        .first()
+    entry = next(
+        (owned for owned in player_data.get_available_roster_entries() if owned.pk == entry_id),
+        None,
     )
     if entry is None:
         raise PermissionDenied(SelectionError.user_message)

@@ -18,10 +18,11 @@ in telnet and in tabs a requirement, not a tolerated edge.
 already scopes per tab: a reload keeps it, a new tab starts without one. The
 account column is the default a tab seeds from when it has none, or when its
 stored entry is no longer one of the account's own; the account refetch never
-overwrites a tab that has one (`hydrateActiveCharacter` seeds, it does not
-rehydrate). `gameSlice.browsingEntryId` mirrors the tab's store for ambient pages
-through `useBrowsingIdentity()`; `active` and `sessions` stay the live-session
-fields, and the Gatefold redirect (ADR-0247) still keys on them. Every
+overwrites a tab that has one (`useAccountQuery`'s hydration effect seeds, it does
+not rehydrate, and it keys on the account payload alone).
+`gameSlice.browsingEntryId` mirrors the tab's store for ambient pages through
+`useBrowsingIdentity()`; `active` and `sessions` stay the live-session fields,
+and the Gatefold redirect (ADR-0247) still keys on them. Every
 player-scoped read the ambient pages make carries the tab's id explicitly
 (`entry_id`, resolved by `selection.character_for_request`, which accepts only
 the caller's own entries and falls back to the column when absent), so two tabs

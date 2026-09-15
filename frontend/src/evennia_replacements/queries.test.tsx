@@ -6,7 +6,7 @@
  * (vi.fn(), no msw) — mirrors consent/__tests__/queries.test.ts.
  */
 import type { ReactNode } from 'react';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { Provider } from 'react-redux';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -24,8 +24,13 @@ import { useAccountQuery } from './queries';
 import type { AccountData, AvailableCharacter } from './types';
 import type { MyRosterEntry } from '@/roster/types';
 import { store } from '@/store/store';
-import { resetGame, startSession, setSessionConnectionStatus } from '@/store/gameSlice';
-import { readTabIdentity, writeTabIdentity } from '@/store/browsingIdentity';
+import {
+  resetGame,
+  startSession,
+  setSessionConnectionStatus,
+  clearBrowsingIdentity,
+} from '@/store/gameSlice';
+import { clearTabIdentity, readTabIdentity, writeTabIdentity } from '@/store/browsingIdentity';
 
 function availableCharacter(id: number, name: string): AvailableCharacter {
   return {
@@ -200,11 +205,11 @@ describe('useAccountQuery hydration (#3412)', () => {
   });
 });
 
-// Per-tab browsing identity (#3479): `hydrateActiveCharacter` now seeds this
-// tab's `sessionStorage` identity only once, instead of unconditionally
-// re-mirroring the account's durable selection on every `['account']`
-// refetch -- the exact chokepoint that let one tab's selection stomp
-// another tab's `active` (see the #3479 ledger's `hydrateActiveCharacter` row).
+// Per-tab browsing identity (#3479): useAccountQuery's hydration effect now
+// seeds this tab's `sessionStorage` identity only once, instead of
+// unconditionally re-mirroring the account's durable selection on every
+// `['account']` refetch -- the exact chokepoint that let one tab's selection
+// stomp another tab's `active` (see the #3479 ledger's hydration row).
 describe('useAccountQuery per-tab hydration (#3479)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -264,6 +269,53 @@ describe('useAccountQuery per-tab hydration (#3479)', () => {
     expect(store.getState().game.activeEntryId).toBe(5);
     expect(readTabIdentity()?.entryId).toBe(5);
     expect(readTabIdentity()?.tabId).toBe(seededTabId);
+  });
+
+  // Whole-branch review (Critical): the effect used to key on Redux's
+  // browsingEntryId as well as on the account payload, so the Hall's "Clear
+  // Active Character" (clearTabIdentity + clearBrowsingIdentity, then the
+  // select mutation) re-ran it against the still-cached account and seeded
+  // the just-cleared character straight back. A Redux-only change must not
+  // re-seed; only a new account payload may.
+  it('does not re-seed a tab that cleared its identity until the account refetches', async () => {
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(7, 'Aria')],
+      selected_entry_id: 7,
+      selected_entry: rosterEntry(7, 'Aria'),
+    });
+
+    const { result } = renderHook(() => useAccountQuery(), { wrapper: createWrapper() });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(store.getState().game.browsingEntryId).toBe(7));
+
+    act(() => {
+      clearTabIdentity();
+      store.dispatch(clearBrowsingIdentity());
+    });
+    // Let any effect re-run settle before asserting nothing came back.
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(store.getState().game.browsingEntryId).toBeNull();
+    expect(readTabIdentity()).toBeNull();
+
+    // The clearing mutation's refetch lands with no selection: the tab stays
+    // clear, now in step with the column.
+    vi.mocked(fetchAccount).mockResolvedValue({
+      ...BASE_ACCOUNT,
+      available_characters: [availableCharacter(7, 'Aria')],
+      selected_entry_id: null,
+      selected_entry: null,
+    });
+    await result.current.refetch();
+    await waitFor(() => expect(result.current.data?.selected_entry_id).toBeNull());
+
+    expect(store.getState().game.browsingEntryId).toBeNull();
+    expect(store.getState().game.active).toBeNull();
+    expect(readTabIdentity()).toBeNull();
   });
 
   it('clears and reseeds when the stored id is no longer owned', async () => {
