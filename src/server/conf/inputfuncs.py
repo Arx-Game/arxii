@@ -59,17 +59,33 @@ from server.conf.mush_markup import normalize_mush_markup
 
 
 def text(session, *args, **kwargs):
-    """Telnet input adapter: convert MUSH ``%r``/``%t`` markup before handling.
+    """Telnet input adapter, and the staff console's tag (#3857).
 
     Telnet is line-oriented, so ``%r`` is how MU* players embed a newline into a
     single line of input. Only telnet-family sessions are rewritten; websocket /
     ajax sessions (the React frontend, which sends real newlines and dispatches
     via ``execute_action``) pass through untouched. We then delegate to Evennia's
     default ``text`` handler rather than re-implementing command handling.
+
+    A line the web client sends from its staff Commands mode carries
+    ``console=True`` (#3857). While Evennia runs that line, the session is
+    marked so ``ServerSession.data_out`` tags every ``text`` frame it sends
+    ``{"console": True}``; the client routes those to its console sheet and
+    never to the column. Command execution is synchronous for the commands
+    this exists for; output a command schedules for later is not tagged and
+    lands where it always did.
     """
+    console = bool(kwargs.pop("console", False))
     if args and str(session.protocol_key or "").startswith("telnet"):
         args = (normalize_mush_markup(args[0]), *args[1:])
-    _evennia_text(session, *args, **kwargs)
+    if not console:
+        _evennia_text(session, *args, **kwargs)
+        return
+    session.ndb.console_capture = True
+    try:
+        _evennia_text(session, *args, **kwargs)
+    finally:
+        session.ndb.console_capture = False
 
 
 def _build_action_ref(kwargs: dict) -> object:

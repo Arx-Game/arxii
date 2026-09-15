@@ -94,6 +94,9 @@ INSTALLED_APPS += [
 
 # This is the name of your game. Make it catchy!
 SERVERNAME = "Arx"
+# Our ServerSession subclass (server/conf/serversession.py): tags the output of
+# a staff console line so the web client keeps it out of the column (#3857).
+SERVER_SESSION_CLASS = "server.conf.serversession.ServerSession"
 EVENNIA_ADMIN = False
 # Sessions share a character (#3812, ADR-0294): a phone and a laptop on the same
 # character are two windows onto one object, and it does not matter which one
