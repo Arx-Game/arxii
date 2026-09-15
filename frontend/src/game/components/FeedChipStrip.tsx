@@ -83,7 +83,7 @@ export function FeedChipStrip({ state, onChange, newCounts = {} }: FeedChipStrip
             >
               {chip.label}
               {(newCounts[chip.id] ?? 0) > 0 && (
-                <span className="rounded-full bg-primary px-1.5 text-[10px] uppercase tracking-wide text-primary-foreground">
+                <span className="rounded-full bg-primary px-1.5 text-[10px] tracking-wide text-primary-foreground">
                   new
                 </span>
               )}
@@ -146,7 +146,7 @@ function FeedChipEditor({ chip, state, selectName, onChange, onClose }: FeedChip
   return (
     // The popover focuses its first control, the name, on open; a chip just
     // added gets its placeholder name selected so typing replaces it.
-    <PopoverContent align="start" className="w-64 space-y-1.5 p-3 text-xs">
+    <PopoverContent align="start" className="w-72 space-y-1.5 p-3 text-xs">
       <input
         ref={nameRef}
         aria-label="Chip name"
@@ -179,8 +179,10 @@ function FeedChipEditor({ chip, state, selectName, onChange, onClose }: FeedChip
                 onChange(setKindOwner(state, chip.id, kind, event.target.checked))
               }
             />
-            <span>{KIND_LABELS[kind]}</span>
-            {owner && !mine && <span className="text-muted-foreground">(in {owner.label})</span>}
+            <span className="whitespace-nowrap">{KIND_LABELS[kind]}</span>
+            {owner && !mine && (
+              <span className="whitespace-nowrap text-muted-foreground">(in {owner.label})</span>
+            )}
           </label>
         );
       })}
