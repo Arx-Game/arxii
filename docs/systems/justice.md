@@ -122,13 +122,16 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    comment at line 931) before its own result interaction exists, and never
    populates `participants` at all, so a `LEGEND_AWARD` effect cannot fire
    from a scene action today regardless of the interaction question.
-   Separately, no authored `LEGEND_AWARD` `ConsequenceEffect` carries
-   crime kinds yet (the model has no such field), so even a wired combat
-   deed cannot become crime-tagged through this pipeline alone; the first
-   live producer of a public, crime-tagged, interaction-anchored deed needs
-   that content authored (or a direct `create_solo_deed`/`create_legend_event`
-   caller that already passes both `crime_kinds=` and `interaction=`, neither
-   of which any caller does today).
+   The authored half of the seam is `ConsequenceEffect.crime_kinds` (M2M to
+   `CrimeKind`, read by `LEGEND_AWARD` only; tagged in the Consequence admin's
+   effect inline; dropped from the content export because `CrimeKind` rows are
+   seeder-owned pks): `_legend_award` passes the effect's kinds through
+   `create_legend_event`, so the minted deed is born crime-tagged
+   (`tag_deed_crimes`, evidence and all). A combat-aftermath `LEGEND_AWARD`
+   effect a staff member tags is therefore a live producer of a public,
+   crime-tagged, interaction-anchored deed with no further wiring;
+   `integration_tests.pipeline.test_reaction_journey_e2e` runs that chain
+   unmocked from the effect to the bystander's report.
 
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds

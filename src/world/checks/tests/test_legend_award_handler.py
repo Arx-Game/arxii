@@ -406,19 +406,11 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
         """The real create_legend_event / _maybe_open_witness_window chain, unmocked,
 
         opens a WITNESS window when the awarded deed is public, crime-tagged, and
-        interaction-anchored.
-
-        No ConsequenceEffect carries crime_kinds today: the generic LEGEND_AWARD
-        handler has no crime-tagging concept, so nothing in the resolved-action
-        pipeline can currently crime-tag the deed it awards (a genuine, separate
-        gap from this fix round's scope, flagged in the task report). The
-        DeedCrimeTag existence check is stubbed here to stand in for whatever
-        seam eventually tags such a deed, so this test isolates and proves the
-        piece this fix round actually adds: context.interaction reaching
-        open_witness_window through the real, unmocked create_legend_event call.
+        interaction-anchored. The crime tag comes from the authored seam,
+        ConsequenceEffect.crime_kinds (#2987 Task 6): _legend_award passes the
+        effect's kinds through create_legend_event, so the deed is born tagged.
         """
-        from unittest.mock import patch
-
+        from world.justice.factories import CrimeKindFactory
         from world.justice.models import DeedCrimeTag, WitnessReactionTarget
         from world.scenes.constants import ReactionWindowKind
         from world.scenes.factories import InteractionFactory
@@ -428,6 +420,8 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
         interaction = InteractionFactory(scene=scene, persona=self.persona)
         consequence = ConsequenceFactory()
         effect = _make_legend_effect(consequence, self.source_type, template="A public crime.")
+        theft = CrimeKindFactory(slug="handler-theft", name="Theft")
+        effect.crime_kinds.add(theft)
         context = ResolutionContext(
             character=self.character,
             participants=[self.persona],
@@ -435,12 +429,10 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
             interaction=interaction,
         )
 
-        with patch.object(
-            DeedCrimeTag.objects, "filter", return_value=MagicMock(exists=lambda: True)
-        ):
-            result = apply_effect(effect, context)
+        result = apply_effect(effect, context)
 
         entry = LegendEntry.objects.get(event=result.created_instance)
+        self.assertTrue(DeedCrimeTag.objects.filter(deed=entry, crime_kind=theft).exists())
         window = ReactionWindow.objects.get(
             interaction=interaction, kind=ReactionWindowKind.WITNESS
         )
@@ -449,14 +441,13 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
 
     def test_no_interaction_opens_no_window(self) -> None:
         """Same public, crime-tagged award, but context.interaction=None: no window."""
-        from unittest.mock import patch
-
-        from world.justice.models import DeedCrimeTag
+        from world.justice.factories import CrimeKindFactory
         from world.scenes.reaction_models import ReactionWindow
 
         scene = self._public_scene()
         consequence = ConsequenceFactory()
         effect = _make_legend_effect(consequence, self.source_type, template="No interaction.")
+        effect.crime_kinds.add(CrimeKindFactory(slug="handler-no-interaction", name="Theft"))
         context = ResolutionContext(
             character=self.character,
             participants=[self.persona],
@@ -464,9 +455,6 @@ class LegendAwardHandlerWitnessWindowTests(TestCase):
             interaction=None,
         )
 
-        with patch.object(
-            DeedCrimeTag.objects, "filter", return_value=MagicMock(exists=lambda: True)
-        ):
-            apply_effect(effect, context)
+        apply_effect(effect, context)
 
         self.assertFalse(ReactionWindow.objects.exists())

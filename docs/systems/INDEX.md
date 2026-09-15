@@ -1941,7 +1941,9 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
   #2378), `SentenceLadderRung` (per-society escalation step keyed on
   `(society, level)`, matched against `failed_outs - 1`, #2378),
   `WitnessReactionTarget` (`scenes.ReactionWindow` O2O sidecar for the WITNESS reaction
-  kind, `legend_entry` FK to the public act bystanders react to, #2987); `JusticeCase`
+  kind, `legend_entry` FK to the public act bystanders react to, #2987;
+  `checks.ConsequenceEffect.crime_kinds` is the authored M2M that makes a
+  `LEGEND_AWARD` deed born crime-tagged, the seam that opens the window); `JusticeCase`
   gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378) and
   `humiliation_prestige_hit` (#2378 follow-up — the exact restorable hit);
   `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
