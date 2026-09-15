@@ -1205,7 +1205,7 @@
 - `rescue_captive(captive: 'CharacterSheet') -> 'bool' - Free a captive via rescue (#931 Phase 4) — a rescue run's terminal verb.`
 - `resolve_captivity(captivity: 'Captivity', *, status: 'str') -> 'None' - End a captivity and free the captive.`
 - `resolve_capture_setup(*, captive_template: 'MissionTemplate | None' = None, rescue_template: 'MissionTemplate | None' = None, cell_name: 'str' = '', cell_description: 'str' = '', clue_name: 'str' = '', clue_description: 'str' = '', clue_detect_difficulty: 'int | None' = None) -> 'CaptureSetup' - Resolve one capture's loops + cell flavor: per-capture override, else default.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None, anchor_room: evennia.objects.models.ObjectDB | None = None, area: world.areas.models.Area | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.ceremonies
@@ -4178,12 +4178,13 @@
   - owner -> character_sheets.CharacterSheet [FK] (nullable)
   - gm_owner -> gm.GMProfile [FK] (nullable)
   - return_location -> evennia.ObjectDB [FK] (nullable)
+  - entrance_exit -> evennia_extensions.ExitProfile [FK] (nullable)
 **Pointed to by:**
   - captivities <- captivity.Captivity
 
 ### Service Functions
 - `complete_instanced_room(room: evennia.objects.models.ObjectDB) -> None - Mark room completed, relocate occupants, delete if no history.`
-- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
+- `spawn_instanced_room(name: str, description: str, owner: world.character_sheets.models.CharacterSheet | None, return_location: evennia.objects.models.ObjectDB | None, source_key: str = '', gm_owner: world.gm.models.GMProfile | None = None, anchor_room: evennia.objects.models.ObjectDB | None = None, area: world.areas.models.Area | None = None) -> evennia.objects.models.ObjectDB - Create a temporary instanced room, its RoomProfile, and lifecycle record.`
 
 
 ## world.items
@@ -6580,6 +6581,7 @@
   - authored_check_type -> checks.CheckType [FK] (nullable)
   - branch_target -> missions.MissionNode [FK] (nullable)
   - challenge -> mechanics.ChallengeTemplate [FK] (nullable)
+  - instance_area -> areas.Area [FK] (nullable)
   - opposition_sheet -> character_sheets.CharacterSheet [FK] (nullable)
   - opposition_check_type -> checks.CheckType [FK] (nullable)
   - locations -> evennia_extensions.RoomProfile [M2M]

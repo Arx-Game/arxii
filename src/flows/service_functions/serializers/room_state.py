@@ -168,20 +168,31 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         return caller, room
 
     def _exit_hidden_from_looker(self, exit_state: BaseState, caller: BaseState) -> bool:
-        """True when ``exit_state`` leads to an unpublished room ``caller`` can't see.
+        """True when ``exit_state`` leads to a room ``caller`` can't see into.
 
-        #3477 — mirrors ``ExitState.can_traverse``'s publish gate: an
-        unpublished room does not exist in the live world, so its exits are
-        omitted from the room payload for anyone but a story-runner
-        (GM/Staff, ``is_story_runner``) — not just unenterable, invisible.
+        Two independent gates, each mirroring an ``ExitState.can_traverse``
+        refusal (not just unenterable, invisible):
+
+        #3477 — the publish gate: an unpublished room does not exist in the
+        live world, so its exits are omitted from the room payload for anyone
+        but a story-runner (GM/Staff, ``is_story_runner``).
+
+        #696 gap 7 — the instance-entrance gate: a doorway into an instanced
+        room is hidden from any looker the entrance package would refuse
+        (only run participants and the GM owner see it - no story-runner
+        bypass; this gate matches the package exactly).
         """
-        if caller.obj.is_story_runner:
-            return False
         # A dangling one-way exit can have a null destination (nullable FK) —
         # ``.destination`` itself is always a real Exit property (ExitState
         # only ever wraps an Exit typeclass, see typeclasses.exits.Exit).
         destination = exit_state.obj.destination
         if destination is None:
+            return False
+        from behaviors.instance_entrance_package import entrance_refuses  # noqa: PLC0415
+
+        if entrance_refuses(destination, caller.obj):
+            return True
+        if caller.obj.is_story_runner:
             return False
         profile = destination.room_profile_or_none
         return profile is not None and profile.published_at is None

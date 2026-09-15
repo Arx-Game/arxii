@@ -679,6 +679,19 @@ class MissionOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         default="",
         help_text="Spawned room description (authored prose).",
     )
+    instance_area = models.ForeignKey(
+        "arxii.Area",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text=(
+            "Authored area override for the spawned instanced room (#696 gap 7). "
+            "Null inherits the entry point's area: the fulfilled task's target-"
+            "domain area when this run fulfills an OrgTask, else the anchor "
+            "room's area."
+        ),
+    )
     encounter_risk_level = models.CharField(
         max_length=20,
         choices=RiskLevel.choices,

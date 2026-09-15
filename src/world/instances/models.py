@@ -41,6 +41,18 @@ class InstancedRoom(SharedMemoryModel):
         on_delete=models.SET_NULL,
         related_name="+",
     )
+    # The temporary one-way doorway from the anchor room into this instance
+    # (#696 gap 7). Targets ExitProfile (the exit↔ObjectDB extension bridge,
+    # created at spawn) rather than bare ObjectDB, mirroring how `room` targets
+    # RoomProfile. Deleted by complete_instanced_room; SET_NULL so deleting the
+    # exit object never takes the lifecycle record with it.
+    entrance_exit = models.ForeignKey(
+        "arxii.ExitProfile",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
     # TODO: Replace with FK to mission/template model when missions
     # system is designed. Missions will query instances by source to
     # manage active mission rooms for a player.

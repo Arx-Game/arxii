@@ -97,6 +97,7 @@ if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from evennia_extensions.models import RoomProfile
+    from world.areas.models import Area
     from world.checks.models import CheckType
     from world.mechanics.models import ChallengeApproach
     from world.missions.models import (
@@ -518,17 +519,40 @@ def _spawn_mission_instance_room(
     if instance.spawned_room_id is not None:
         room = instance.spawned_room.objectdb
     else:
+        # Area inheritance (#696 gap 7): authored override first, then the
+        # fulfilled task's target-domain area; spawn_instanced_room falls back
+        # to the anchor room's area when both are None.
         room = spawn_instanced_room(
             name=option.instance_name or instance.template.name,
             description=option.instance_description,
             owner=character.sheet_data,
             return_location=character.location,
             source_key=f"mission:{instance.pk}",
+            anchor_room=character.location,
+            area=option.instance_area or _task_target_area(instance),
         )
         profile = room.room_profile
         instance.spawned_room = profile
         instance.save(update_fields=["spawned_room"])
     character.move_to(room, quiet=True)
+
+
+def _task_target_area(instance: MissionInstance) -> Area | None:
+    """The fulfilled OrgTask's target-domain Area, or None (#696 gap 7).
+
+    A run picked up off the mission board to handle a domain job spawns its
+    interior inside that domain, even when the doorway is elsewhere.
+    """
+    from world.tasking.models import TaskFulfillment  # noqa: PLC0415
+
+    fulfillment = (
+        TaskFulfillment.objects.filter(mission_instance=instance, is_active=True)
+        .select_related("task__target_domain")
+        .first()
+    )
+    if fulfillment is None or fulfillment.task.target_domain is None:
+        return None
+    return fulfillment.task.target_domain.area
 
 
 def _teardown_spawned_room(instance: MissionInstance) -> None:

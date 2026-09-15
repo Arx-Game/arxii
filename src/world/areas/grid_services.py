@@ -150,6 +150,23 @@ def create_exit_pair(  # noqa: PLR0913 — a symmetric pair needs both direction
     return forward, backward
 
 
+def create_one_way_exit(
+    *,
+    name: str,
+    aliases: tuple[str, ...] = (),
+    source: DefaultObject,
+    destination: DefaultObject,
+) -> ObjectDB:
+    """Create a single exit from ``source`` to ``destination`` (no reverse).
+
+    The one-direction sibling of :func:`create_exit_pair`, for doorways that
+    deliberately have no way back - e.g. temporary instance entrances (#696
+    gap 7), where leaving happens via ``complete_instanced_room`` relocation
+    rather than a return exit. Same cross-area latitude as the pair helper.
+    """
+    return _create_exit(name=name, aliases=aliases, source=source, destination=destination)
+
+
 def cell_occupied(area: Area, x: int, y: int, floor: int) -> bool:
     """Whether a room already sits at this grid cell within ``area``."""
     return RoomProfile.objects.filter(area=area, grid_x=x, grid_y=y, floor=floor).exists()
