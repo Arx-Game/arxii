@@ -102,6 +102,28 @@ class LineTests(TestCase):
     def test_an_emit_is_its_own_text(self) -> None:
         assert self._row(self.emit)["line"] == "The bells go quiet."
 
+    def test_a_muted_row_has_no_line_either(self) -> None:
+        _set_empty_cached_attrs(self.say)
+        context = _make_context()
+        # The serializer caches the viewer's mutes on its context; seed that cache.
+        context["_muted_persona_ids_cache"] = {self.persona.pk}
+        row = InteractionListSerializer(self.say, context=context).data
+        assert row["content"] == ""
+        assert row["line"] == ""
+
+    def test_a_masked_persona_reads_by_the_name_on_the_card(self) -> None:
+        """The line uses the per-viewer name (#1109): an undiscovered mask never leaks."""
+        masked_sheet = CharacterSheetFactory()
+        masked = PersonaFactory(character_sheet=masked_sheet, is_fake_name=True)
+        pose = InteractionFactory(persona=masked, content="waves.")
+        _set_empty_cached_attrs(pose)
+        viewer_sheet = CharacterSheetFactory()
+        row = InteractionListSerializer(
+            pose, context=_make_context(viewer_sheet_ids={viewer_sheet.pk})
+        ).data
+        assert row["line"] == f"{row['persona']['name']} waves."
+        assert masked_sheet.primary_persona.name not in row["line"]
+
 
 class Task1PoseKindEndorseeSheetIdTests(TestCase):
     """Task 1: pose_kind + endorsee_sheet_id exposed on InteractionListSerializer."""
