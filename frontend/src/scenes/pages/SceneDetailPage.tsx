@@ -357,7 +357,7 @@ export function SceneDetailPage() {
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {isActive && <WitnessReactionOfferGate personaId={personaId} />}
         {/* #3557 combat layout. Everything above this line either needs an
-            answer (consent, sineating, soul-tether, flourish) or is the scene's
+            answer (consent, sineating, soul-tether, flourish, witness) or is the scene's
             identity; it stays inline in both shapes. Below: while an encounter
             is active the header map yields to the rail's map (one map, with
             bystanders), the pending check-call prompt stays inline, and the

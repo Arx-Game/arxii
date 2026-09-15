@@ -468,7 +468,7 @@ class ConsequenceEffect(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         related_name="consequence_effects",
     )
     legend_description_template = models.TextField(blank=True, default="")
-    # #2987 — the authored crime-tagging seam for pipeline deeds. Read only by
+    # #2987: the authored crime-tagging seam for pipeline deeds. Read only by
     # LEGEND_AWARD: _legend_award passes these through create_legend_event, so
     # the minted deed is born crime-tagged (tag_deed_crimes) and, when public
     # and interaction-anchored, opens a WITNESS reaction window for bystanders.

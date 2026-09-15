@@ -64,6 +64,13 @@ def _maybe_open_witness_window(
     deed passes None and this is a silent no-op), the deed's room is publicly
     listed, and the deed carries at least one ``DeedCrimeTag``. Untagged or
     private deeds never open a window.
+
+    One window per interaction, and its target keeps the FIRST entry it was
+    opened for (``open_witness_window`` is idempotent per interaction). A
+    shared event with several tagged participants therefore exposes only the
+    first deed to a report today; the only wired producer (combat aftermath)
+    awards one persona, so this is a documented limit, not a live bug. A
+    group-crime producer needs a target per deed before it ships.
     """
     if interaction is None or scene.location is None:
         return

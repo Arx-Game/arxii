@@ -119,7 +119,7 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    populated by the time its consequence pool fires. The generic scene-action
    pipeline is a named gap, not wired: `world.scenes.action_services`
    `_resolve_action_against_persona` builds its `ResolutionContext` (see the
-   comment at line 931) before its own result interaction exists, and never
+   `GAP (#2987)` comment there) before its own result interaction exists, and never
    populates `participants` at all, so a `LEGEND_AWARD` effect cannot fire
    from a scene action today regardless of the interaction question.
    The authored half of the seam is `ConsequenceEffect.crime_kinds` (M2M to
@@ -131,7 +131,10 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    effect a staff member tags is therefore a live producer of a public,
    crime-tagged, interaction-anchored deed with no further wiring;
    `integration_tests.pipeline.test_reaction_journey_e2e` runs that chain
-   unmocked from the effect to the bystander's report.
+   unmocked from the effect to the bystander's report. Known limit: one window
+   per interaction, targeting the first tagged deed; a shared event with several
+   tagged participants exposes only the first to a report, so a group-crime
+   producer needs a target per deed before it ships (none exists today).
 
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds
