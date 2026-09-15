@@ -71,8 +71,17 @@ describe('SidebarTabPanel', () => {
     expect(screen.queryByText('Room contents')).not.toBeInTheDocument();
     const back = screen.getByRole('button', { name: /Quiet courtyard/ });
     expect(back).toHaveTextContent(/←\s*Quiet courtyard/);
-
-    await user.click(back);
+    // The fold stays under the section, so another section is one press away,
+    // and the open one is marked.
+    const fold = screen.getByTestId('actions-fold');
+    expect(within(fold).getByRole('button', { name: 'Events' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await user.click(within(fold).getByRole('button', { name: 'Who' }));
+    expect(screen.getByText('No presence to show.')).toBeInTheDocument();
+    expect(screen.queryByTestId('events-mount')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Quiet courtyard/ }));
     expect(screen.getByText('Room contents')).toBeInTheDocument();
     expect(screen.queryByTestId('events-mount')).not.toBeInTheDocument();
   });

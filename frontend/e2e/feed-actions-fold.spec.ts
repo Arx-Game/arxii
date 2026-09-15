@@ -49,6 +49,18 @@ test.describe('the Actions fold in the Here panel (#3856)', () => {
     const back = here.getByRole('button', { name: /Quiet courtyard/ });
     await expect(back).toBeVisible();
     await expect(here.getByText('Characters (2)')).toHaveCount(0);
+    // The fold stays under the section with the open one marked, so the next
+    // section is one press away.
+    await expect(fold.getByRole('button', { name: 'Status' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await fold.getByRole('button', { name: 'Journal' }).click();
+    await expect(fold.getByRole('button', { name: 'Journal' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    );
+    await expect(back).toBeVisible();
     await page.screenshot({
       path: '../docs/reviews/3856/actions-section-1280.png',
       fullPage: true,

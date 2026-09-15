@@ -99,6 +99,45 @@ export function SidebarTabPanel({
 
   const label = roomTabLabel ?? 'Room';
 
+  // The fold sits under whichever view is open, so a player reads Status and
+  // jumps straight to Journal without going back through the room first (the
+  // demo renders the grid after the room and after a section alike).
+  const actionsFold = (
+    <details
+      open={foldOpen}
+      onToggle={(event) => setFoldOpen((event.target as HTMLDetailsElement).open)}
+      className="border-t bg-muted/40"
+      data-testid="actions-fold"
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground [&::-webkit-details-marker]:hidden">
+        Actions
+        {foldOpen ? (
+          <ChevronDown aria-hidden="true" className="h-3 w-3" />
+        ) : (
+          <ChevronRight aria-hidden="true" className="h-3 w-3" />
+        )}
+      </summary>
+      <div className="grid grid-cols-3 gap-0.5 px-2 pb-2">
+        {SECTIONS.map(({ key, label: name, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={activeTab === key}
+            className={cn(
+              'flex min-h-11 items-center gap-1.5 rounded px-2 text-left text-xs',
+              'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'aria-pressed:bg-accent aria-pressed:font-medium'
+            )}
+            onClick={() => handleTabChange(key)}
+          >
+            <Icon aria-hidden="true" className="h-3 w-3 shrink-0 opacity-60" />
+            {name}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+
   if (activeTab !== 'room') {
     return (
       <div className="flex h-full flex-col">
@@ -123,6 +162,7 @@ export function SidebarTabPanel({
             travelPanel,
           })}
         </div>
+        {actionsFold}
       </div>
     );
   }
@@ -130,37 +170,7 @@ export function SidebarTabPanel({
   return (
     <div className="flex h-full flex-col">
       <div className="min-h-0 flex-1">{roomPanel}</div>
-      <details
-        open={foldOpen}
-        onToggle={(event) => setFoldOpen((event.target as HTMLDetailsElement).open)}
-        className="border-t bg-muted/40"
-        data-testid="actions-fold"
-      >
-        <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground [&::-webkit-details-marker]:hidden">
-          Actions
-          {foldOpen ? (
-            <ChevronDown aria-hidden="true" className="h-3 w-3" />
-          ) : (
-            <ChevronRight aria-hidden="true" className="h-3 w-3" />
-          )}
-        </summary>
-        <div className="grid grid-cols-3 gap-0.5 px-2 pb-2">
-          {SECTIONS.map(({ key, label: name, Icon }) => (
-            <button
-              key={key}
-              type="button"
-              className={cn(
-                'flex min-h-11 items-center gap-1.5 rounded px-2 text-left text-xs',
-                'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
-              )}
-              onClick={() => handleTabChange(key)}
-            >
-              <Icon aria-hidden="true" className="h-3 w-3 shrink-0 opacity-60" />
-              {name}
-            </button>
-          ))}
-        </div>
-      </details>
+      {actionsFold}
     </div>
   );
 }
