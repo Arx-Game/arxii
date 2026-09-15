@@ -283,7 +283,12 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
-  newline, command history. **All composer text lives in `useDraftStore`**
+  newline, command history. **The entrance is a state, not a toggle (#3867):**
+  `isEntrance` is derived from the room state's `scene.viewer_entered === false`; the
+  right slot shows "✨ Entrance" (`data-testid="entrance-state"`) with the
+  technique attachment (#2183) beside it until the first pose lands, which goes
+  out as `pose_kind: 'entry'` (the server marks it either way). The old
+  "Make an entrance" button is gone. **All composer text lives in `useDraftStore`**
   (#3784): `draft.content` is the textarea's `value` and `setContent` is the
   only write path — never add a second local string or storage key mirroring
   it. Clearing on a successful send is `acknowledge(clientRequestId)` alone;
@@ -314,7 +319,10 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
 - **`RoomPanel.tsx`**: Right sidebar container with room info, scene controls, navigation
 - **`RoomHeader.tsx`**: Room name and scene start/end controls
 - **`RoomDescription.tsx`**: Collapsible room description
-- **`CharactersList.tsx`**: Characters present in the room with avatars. Lists the
+- **`CharactersList.tsx`**: Characters present in the room with avatars. A row whose
+  `in_scene` is false, and the viewer's own row when `viewerInScene` is false, carries
+  the threshold mark (#3867): an asterisk after the name, `title="Not yet in the
+scene"`, no explainer. Lists the
   viewer first with a "you" tag (#3856) — the room state's `characters` excludes
   them, so `RoomPanel` supplies `viewer` from its `character` prop and
   `FocusPanel` supplies the portrait from the roster entry. Pressing the row sends

@@ -127,6 +127,12 @@ export interface RoomStateObject {
   is_mission_board?: boolean;
   /** The Place this character currently occupies, if any (#3810). Only ever set on `characters` entries. */
   place_id?: number | null;
+  /**
+   * Whether this character has entered the room's live scene (#3867): false at the
+   * threshold (present, no line of their own yet), null with no live scene. Only ever
+   * set on `characters` entries.
+   */
+  in_scene?: boolean | null;
 }
 
 /** An active class-1+ NPC placement (Functionary) standing in this room (#3044). */
@@ -187,6 +193,8 @@ export interface SceneSummary {
   description: string;
   is_owner: boolean;
   has_unseen_observer: boolean;
+  /** Whether the viewing character has entered this scene (#3867); false until their first line. */
+  viewer_entered?: boolean;
 }
 
 export interface ScenePayload {

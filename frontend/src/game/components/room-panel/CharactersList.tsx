@@ -19,6 +19,22 @@ interface CharactersListProps {
   hasUnseenPresence?: boolean;
   /** The viewer's active persona pk, for the unseen-presence report affordance. */
   viewerPersonaId?: number | null;
+  /** Whether the viewer has entered the live scene (#3867); false marks their own row. */
+  viewerInScene?: boolean | null;
+}
+
+/** The threshold mark (#3867): present in the room, not yet in the scene. */
+function ThresholdMark() {
+  return (
+    <span
+      className="text-xs font-semibold text-muted-foreground"
+      title="Not yet in the scene"
+      aria-label="not yet in the scene"
+      data-testid="threshold-mark"
+    >
+      *
+    </span>
+  );
 }
 
 export function CharactersList({
@@ -28,6 +44,7 @@ export function CharactersList({
   onCharacterClick,
   hasUnseenPresence = false,
   viewerPersonaId = null,
+  viewerInScene = null,
 }: CharactersListProps) {
   return (
     <div className="border-b px-3 py-2">
@@ -56,6 +73,7 @@ export function CharactersList({
                 </AvatarFallback>
               </Avatar>
               <span className="text-xs">{viewer.name}</span>
+              {viewerInScene === false && <ThresholdMark />}
               {/* Plain uppercase text at the row's end, as the demo draws it; no chip. */}
               <span className="ml-auto text-[0.7rem] uppercase tracking-[0.06em] text-muted-foreground">
                 you
@@ -83,6 +101,7 @@ export function CharactersList({
                   </AvatarFallback>
                 </Avatar>
                 <span className="text-xs">{char.name}</span>
+                {char.in_scene === false && <ThresholdMark />}
               </>
             );
 

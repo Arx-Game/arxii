@@ -201,8 +201,6 @@ export function CommandInput({
   // the draft: it is a log of what already went out, not composer state.
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  // #904 — next pose is a Make-an-Entrance (pose_kind=entry, REST path only).
-  const [isEntrance, setIsEntrance] = useState(false);
   // #3294 — pose as this bonded, present companion instead of yourself. Sticky
   // (not one-shot like isEntrance) until the player clears it back to "Speak
   // as yourself" — puppeting a companion is usually more than one line.
@@ -220,6 +218,15 @@ export function CommandInput({
     const room = state.game.sessions[activeCharacter]?.room;
     return room?.characters ?? [];
   });
+  // #3867 — the entrance is the first pose, not a toggle: a state the composer
+  // shows until the room's own `room_state` says this character has entered
+  // the live scene. The server marks the pose whatever is sent; `pose_kind`
+  // below just agrees with it.
+  const viewerEntered = useAppSelector((state) => {
+    if (!activeCharacter) return null;
+    return state.game.sessions[activeCharacter]?.scene?.viewer_entered ?? null;
+  });
+  const isEntrance = Boolean(sceneId) && viewerEntered === false;
   // Optional chained even though `RootState.auth` isn't nullable in the real
   // store: several existing tests mock `@/store/hooks` with a partial state
   // that omits `auth` entirely, and this must not throw for them.
@@ -751,7 +758,6 @@ export function CommandInput({
           // ack without a `commandRef` comparison of our own.
           setHistory((prev) => [...prev, trimmed]);
           setHistoryIndex(-1);
-          setIsEntrance(false);
           // #2183 — an entrance technique was attached: dispatch it now that
           // the entry pose exists, so EntranceAction can anchor to it. Plain
           // entrances (no technique attached) send nothing further — byte
@@ -849,14 +855,9 @@ export function CommandInput({
     }
   };
 
-  const handleToggleEntrance = useCallback(() => {
-    const next = !isEntrance;
-    setIsEntrance(next);
-    if (!next) {
-      // Turning the toggle off drops any attached entrance technique too —
-      // it's meaningless without an entrance pose to anchor it to.
-      setEntranceTechnique(null);
-    }
+  // Once the entrance is made, an attached technique has nothing to anchor to.
+  useEffect(() => {
+    if (!isEntrance) setEntranceTechnique(null);
   }, [isEntrance]);
 
   const handleModeChange = useCallback(
@@ -1100,19 +1101,15 @@ export function CommandInput({
         rightSlot={
           sceneId ? (
             <div className="flex items-center gap-1">
-              {personaId != null && (
-                <button
-                  type="button"
-                  aria-label="Make an entrance"
-                  title="Make an entrance: your next pose announces your arrival and others can acclaim it"
-                  aria-pressed={isEntrance}
-                  onClick={handleToggleEntrance}
-                  className={`rounded px-1 text-sm transition-colors ${
-                    isEntrance ? 'bg-amber-500/20 text-amber-500' : 'text-muted-foreground'
-                  }`}
+              {isEntrance && personaId != null && (
+                <span
+                  role="status"
+                  title="Your first pose is your entrance; others can acclaim it"
+                  data-testid="entrance-state"
+                  className="flex min-h-8 items-center gap-1 rounded bg-amber-500/20 px-2 text-xs font-medium text-amber-600 dark:text-amber-400"
                 >
-                  ✨
-                </button>
+                  ✨ Entrance
+                </span>
               )}
               {isEntrance && personaId != null && (
                 <EntranceTechniqueAttachment

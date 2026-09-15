@@ -3157,7 +3157,9 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
-action consent flow, and a three-mode non-combat round framework.
+action consent flow, and a three-mode non-combat round framework. Who is in a scene is read off its log
+(`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
+without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 
 - **Models:** `Scene` (incl. `running_beat` FK → `stories.Beat`, nullable, #3425 — the beat this
   scene is currently running, set by `RunBeatAction`/cleared by `finish_scene_full`; see

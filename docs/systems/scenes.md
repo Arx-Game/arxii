@@ -681,6 +681,39 @@ top of that server baseline.
 
 ---
 
+## Scene participation and the threshold (#3867, ADR-0300)
+
+Where a character stands is presence: the room's contents, the Here panel, the exits.
+Whether they are in the scene is participation, and participation begins with the first
+pose. It is read off the log, never stored: `world/scenes/participation.py`'s
+`has_entered(scene, character_sheet_id)` and `entered_sheet_ids(scene)` answer from the
+scene's own rows in `ENTRANCE_MODES` (pose, say, emit; whispers and mutters are directed
+and enter nothing). A character present in the room without such a line stands at the
+**threshold**: listed in the Here panel with a mark (`in_scene: false` on their
+`room_state` entry; the viewer's own `viewer_entered: false` on the scene block), able to
+see everything, and not addressable room-heard: `persona_can_receive`'s room-heard branch
+requires presence and entry, and the tag refusal names it ("<name> has not joined the
+scene yet."). A whisper, directed by construction, still reaches them. Leaving without
+posing records nothing.
+
+`SceneParticipation` answers a different question (admin co-ownership and read
+membership) and is not consulted here. A scene that formalises around people already
+posing takes their recent room lines in through `capture_prescene_interactions`, so they
+are in at once and nobody silent is. An ephemeral scene keeps no log and has no threshold.
+
+## The entrance (#904, #2183, #3867)
+
+The entrance is the first pose, not a toggle. `record_interaction` marks a writer's first
+room-heard line in a scene `pose_kind=ENTRY` whatever the client sent, demotes any later
+"entry" to standard, opens the ENTRANCE reaction window on it (#904; telnet entrances
+included) and refreshes every occupant's `room_state` so the mark leaves the entrant's
+row. `submit_pose` refuses a second client-sent entry (400). One entrance per character
+per scene makes the acclaim grant's earliest-`ENTRY` lookup correct by construction and
+its per-scene dedupe a real rule (`world/magic/services/gain.py`). The composer shows the
+entrance as a state before the first pose (`CommandInput.tsx`, `isEntrance` derived from
+`viewer_entered`), with the technique attachment (#2183) beside it; the entry flourish
+(`docs/systems/magic.md`) stays the entrant's own follow-up.
+
 ## Scene Administration (#1445)
 
 **Source:** `src/world/scenes/scene_admin_services.py`, `src/actions/definitions/scenes.py`,
@@ -692,7 +725,9 @@ All characters **present in the room at scene creation** become co-owners (`is_o
 their `SceneParticipation`). Latecomers who join after the scene has started are non-owner
 participants — they cannot inadvertently acquire admin rights by entering a room mid-scene
 (anti-grab rule). A GM or staff character bypasses the ownership check entirely; they can
-administer any scene regardless of participation.
+administer any scene regardless of participation. Co-ownership is the admin question only:
+whether someone is *in* the scene is read off the log (see "Scene participation and the
+threshold", #3867).
 
 ### Permission helper
 
