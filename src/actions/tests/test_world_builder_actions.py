@@ -491,6 +491,44 @@ class StaffLinkRoomsActionTests(TestCase):
             db_destination=self.room_a.objectdb,
         ).exists()
 
+    def test_one_way_link_makes_only_the_forward_exit(self) -> None:
+        """#3860: `one_way` needs no return name and mints nothing leading back."""
+        from actions.definitions.world_builder import StaffLinkRoomsAction
+
+        result = StaffLinkRoomsAction().run(
+            self.staff,
+            room_a_id=self.room_a.objectdb_id,
+            room_b_id=self.room_b.objectdb_id,
+            name_ab="down",
+            one_way=True,
+        )
+        assert result.success, result.message
+        assert "(one way)" in result.message
+        assert ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=self.room_a.objectdb,
+            db_destination=self.room_b.objectdb,
+        ).exists()
+        assert not ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit",
+            db_location=self.room_b.objectdb,
+            db_destination=self.room_a.objectdb,
+        ).exists()
+
+    def test_two_way_link_still_needs_both_names(self) -> None:
+        from actions.definitions.world_builder import StaffLinkRoomsAction
+
+        result = StaffLinkRoomsAction().run(
+            self.staff,
+            room_a_id=self.room_a.objectdb_id,
+            room_b_id=self.room_b.objectdb_id,
+            name_ab="down",
+        )
+        assert not result.success
+        assert not ObjectDB.objects.filter(
+            db_typeclass_path="typeclasses.exits.Exit", db_location=self.room_a.objectdb
+        ).exists()
+
     def test_non_staff_rejected(self) -> None:
         from actions.definitions.world_builder import StaffLinkRoomsAction
 

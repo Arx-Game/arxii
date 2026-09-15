@@ -94,6 +94,37 @@ class CreateExitPairTests(TestCase):
         self.assertEqual(backward.db_key, "south")
         self.assertIn("s", [a.strip().lower() for a in backward.aliases.all()])
 
+    def test_create_exit_mints_one_direction_only(self) -> None:
+        """The staff one-way link (#3860): a single exit, nothing leading back."""
+        from evennia.objects.models import ObjectDB
+
+        from world.areas.grid_services import create_exit, one_way_exit_ids
+
+        down = create_exit(name="down", aliases=("d",), source=self.room_a, destination=self.room_b)
+        self.assertEqual(down.db_location, self.room_a)
+        self.assertEqual(down.db_destination, self.room_b)
+        self.assertFalse(
+            ObjectDB.objects.filter(db_location=self.room_b, db_destination=self.room_a).exists()
+        )
+        self.assertEqual(one_way_exit_ids([down]), {down.pk})
+
+    def test_one_way_exit_ids_knows_a_pair_from_a_lone_exit(self) -> None:
+        from world.areas.grid_services import create_exit, one_way_exit_ids
+
+        north, south = create_exit_pair(
+            name="north",
+            aliases=(),
+            reverse_name="south",
+            reverse_aliases=(),
+            room_a=self.room_a,
+            room_b=self.room_b,
+        )
+        portal = create_exit(
+            name="portal", aliases=(), source=self.room_a, destination=self.cross_room
+        )
+        self.assertEqual(one_way_exit_ids([north, south, portal]), {portal.pk})
+        self.assertEqual(one_way_exit_ids([]), set())
+
     def test_cross_area_exit_allowed(self) -> None:
         forward, backward = create_exit_pair(
             name="portal",

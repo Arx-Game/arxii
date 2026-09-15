@@ -235,6 +235,13 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         intra_row = exits_by_id[self.exit_out.pk]
         self.assertEqual(intra_row["to_area_id"], self.area.pk)
 
+    def test_exit_rows_say_whether_anything_leads_back(self) -> None:
+        """#3860: a lone exit is one-way; a paired one is not."""
+        response = self._get(self._url(), self.staff_account)
+        exits_by_id = {row["id"]: row for row in response.data["exits"]}
+        self.assertTrue(exits_by_id[self.cross_exit.pk]["one_way"])
+        self.assertFalse(exits_by_id[self.exit_out.pk]["one_way"])
+
     def test_foreign_area_exit_not_included(self) -> None:
         """Exits whose *location* is outside the requested area are excluded."""
         response = self._get(self._url(), self.staff_account)
@@ -424,12 +431,38 @@ class WorldBuilderGrantScopedReadTests(WorldBuilderApiBase):
         assert "Golden Ward" in names
         assert "Ashen Row" not in names
 
+    def test_unfiled_rooms_lists_area_less_rooms_for_staff_only(self) -> None:
+        """#3860: Limbo and its kind are reachable from the rail; a warrant covers none."""
+        limbo = _room_in(None, name="Limbo")
+        response = self._get("/api/world-builder/areas/unfiled-rooms/", self.staff_account)
+        assert response.status_code == 200
+        rows = {hit["name"]: hit for hit in response.data}
+        assert "Limbo" in rows
+        assert rows["Limbo"]["id"] == limbo.pk
+        assert rows["Limbo"]["area_id"] is None
+        assert "Market Square" not in rows
+        scoped = self._get("/api/world-builder/areas/unfiled-rooms/", self.gm_account)
+        assert scoped.status_code == 200
+        assert scoped.data == []
+
     def test_grant_holder_room_search_scoped(self) -> None:
         response = self._get("/api/world-builder/areas/room-search/", self.gm_account, search="a")
         assert response.status_code == 200
         names = {hit["name"] for hit in response.data}
         assert "Market Square" in names
         assert "Ashen Gate" not in names
+
+    def test_room_detail_exits_say_whether_anything_leads_back(self) -> None:
+        """#3860: the document's chips can tag a one-way exit."""
+        response = self._get(
+            "/api/world-builder/areas/room-detail/",
+            self.staff_account,
+            room_id=self.public_room.pk,
+        )
+        assert response.status_code == 200
+        flags = {row["id"]: row["one_way"] for row in response.data["exits"]}
+        assert flags[self.cross_exit.pk] is True
+        assert flags[self.exit_out.pk] is False
 
     def test_grant_holder_room_detail_outside_subtree_reads_absent(self) -> None:
         response = self._get(
