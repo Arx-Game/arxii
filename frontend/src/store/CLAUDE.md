@@ -19,6 +19,8 @@ Redux Toolkit store for global client state management. Minimal use of Redux - o
   survive a room change on purpose: the feed is the character's own history. The
   older `messages` array is still written by the three non-text legacy frames
   (login, VN, reaction) but has had no reader since `SystemLane` went.
+  `consoleLines` (#3857) holds the staff console's lines (`addConsoleLine`, bounded
+  at 500, never counted as unread; `clearConsoleLines`).
   Each per-character `Session` also carries the **conversation-tab state** (#2165):
   `openThreadTabs` (ordered thread keys with an open tab; never contains `'room'`,
   which is always the anchor) and `activeThreadTab` (the focused tab's key, or

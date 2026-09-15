@@ -32,12 +32,19 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
   const [open, setOpen] = useState(false);
   const [seenCount, setSeenCount] = useState(0);
   const endRef = useRef<HTMLDivElement>(null);
+  // How many lines the auto-open has already answered, so closing the sheet
+  // stays closed until the NEXT line arrives.
+  const announcedRef = useRef(0);
 
   // A line arriving while a Commands-mode line is out opens the console; a
   // line arriving while the sheet is open is seen at once.
   useEffect(() => {
-    if (lines.length === 0) return;
-    if (active && !open) setOpen(true);
+    if (lines.length > announcedRef.current) {
+      announcedRef.current = lines.length;
+      if (active && !open) setOpen(true);
+    } else if (lines.length === 0) {
+      announcedRef.current = 0;
+    }
     if (open) setSeenCount(lines.length);
   }, [lines.length, active, open]);
 

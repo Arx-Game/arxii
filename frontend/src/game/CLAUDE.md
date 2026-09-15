@@ -232,7 +232,18 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
-  newline, command history. **All composer text lives in `useDraftStore`**
+  newline, command history. **The label is the truth (#3857):** `GamePage`'s
+  `effectiveComposerMode` derives Pose for the room anchor whenever no mode is
+  chosen (a fresh connection, the reset on every character or scene change), so a
+  typed line is `pose <line>` and never a raw command by accident; picking a mode
+  works before any was set. A line starting with `/` is the command after the
+  slash, sent as typed whatever the mode (`slashEscape`); `//` poses a literal
+  slash; a typed speech verb or `page` (`KNOWN_COMMANDS`) still passes through,
+  and any other word is prose (`look` on its own is the pose "look"). Staff
+  (`isStaff`, from `account.is_staff` via `GameWindow`) get a Commands entry in
+  `ModeSelector`; in that mode the formatting controls, the companion selector and
+  the scene controls step aside, the box takes the monospace face, and every line
+  goes through `useGameSocket().sendConsole`. **All composer text lives in `useDraftStore`**
   (#3784): `draft.content` is the textarea's `value` and `setContent` is the
   only write path — never add a second local string or storage key mirroring
   it. Clearing on a successful send is `acknowledge(clientRequestId)` alone;
@@ -252,6 +263,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
   S4: no separate combat composer remains; the fold-in already carries
   `speakingAs`).
+- **`StaffConsole.tsx`**: The staff console (#3857): a Console control in the
+  composer's toolbar (staff only) and the `Sheet` it opens over the play surface,
+  holding `session.consoleLines`, everything the server said back to a
+  Commands-mode line, in the terminal face inside the app's own sheet (title,
+  Clear, Close). It opens itself when a line arrives while Commands mode is active;
+  the control counts lines that arrived while it was closed.
 - **`EvenniaMessage.tsx`**: Game message display and formatting for the plain-text
   frames (look results, command replies, Evennia's own errors). Renders sanitized
   HTML rather than going through `FormattedContent`, so it carries the feed's

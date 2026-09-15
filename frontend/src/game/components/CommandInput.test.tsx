@@ -225,6 +225,37 @@ describe('CommandInput', () => {
       expect(executeActionMock).not.toHaveBeenCalled();
     });
 
+    it('a / line in a scene goes over the socket as typed, never to the pose endpoint', () => {
+      render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: '/look' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'look');
+      expect(submitPoseMock).not.toHaveBeenCalled();
+      // A typed speech verb or `page` still passes through as typed; any
+      // other verb is a pose, since the label is the truth.
+      fireEvent.change(textarea, { target: { value: 'page Nyx=on my way' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendMock).toHaveBeenLastCalledWith('Alice', 'page Nyx=on my way');
+      expect(submitPoseMock).not.toHaveBeenCalled();
+      fireEvent.change(textarea, { target: { value: 'look' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(submitPoseMock).toHaveBeenCalledWith(
+        expect.objectContaining({ scene_id: 5, content: 'look' })
+      );
+    });
+
+    it('a // line in a scene poses a literal slash through the pose endpoint', () => {
+      render(<CommandInput character="Alice" composerMode={pose} sceneId="5" personaId={9} />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: '//shrugs' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(submitPoseMock).toHaveBeenCalledWith(
+        expect.objectContaining({ scene_id: 5, content: '/shrugs' })
+      );
+      expect(sendMock).not.toHaveBeenCalled();
+    });
+
     it('a line starting with // poses a literal slash', () => {
       render(<CommandInput character="Alice" composerMode={pose} />);
       const textarea = screen.getByRole('textbox');

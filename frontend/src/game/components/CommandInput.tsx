@@ -545,6 +545,10 @@ export function CommandInput({
     // A `/` line is a command (#3857): never a speech dispatch, whatever the mode.
     const hasExplicitCommandOverride =
       KNOWN_COMMANDS.has(firstWord) || slashEscape(trimmed) !== null;
+    // What the line SAYS once the escape is read: `//` is a literal slash
+    // (#3857). The structured dispatches below carry this; history and the
+    // in-flight record keep the line as typed.
+    const spoken = trimmed.startsWith('//') ? trimmed.slice(1) : trimmed;
     const liveSpeechMode: DraftMode | null =
       !hasExplicitCommandOverride &&
       composerMode &&
@@ -596,7 +600,7 @@ export function CommandInput({
     if (asCompanion) {
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      companionEmote(asCompanion.id, trimmed, clientRequestId)
+      companionEmote(asCompanion.id, spoken, clientRequestId)
         .then(() => {
           // Finding 5 (#3760 final review) — a newer edit made while this
           // request was in flight survives, because `acknowledge` no-ops
@@ -648,7 +652,7 @@ export function CommandInput({
       case 'say': {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
+        executeAction(character, 'say', { text: spoken, client_request_id: clientRequestId });
         submittingRef.current = false;
         return;
       }
@@ -671,7 +675,7 @@ export function CommandInput({
           const clientRequestId = beginSend(liveSpeechMode);
           pendingSpeechRef.current = { clientRequestId, text: trimmed };
           executeAction(character, 'whisper', {
-            text: trimmed,
+            text: spoken,
             target_id: whisperTargetId,
             client_request_id: clientRequestId,
           });
@@ -695,7 +699,7 @@ export function CommandInput({
           const clientRequestId = beginSend(liveSpeechMode);
           pendingSpeechRef.current = { clientRequestId, text: trimmed };
           executeAction(character, 'pose', {
-            text: trimmed,
+            text: spoken,
             place: currentPlaceId,
             client_request_id: clientRequestId,
           });
@@ -716,7 +720,11 @@ export function CommandInput({
     // as `fullCommand` above — a stored whisper/tt override that fell
     // through the branches above (target/place unresolvable) must never be
     // treated as a pose and REST-submitted to the whole room.
-    const isPose = !dispatchMode || dispatchMode.command === 'pose';
+    // An explicit command (`/look`, or a typed known verb) is never a pose,
+    // whatever the mode: in a scene it goes over the socket as typed, not to
+    // the pose endpoint as prose (#3857).
+    const isPose =
+      !hasExplicitCommandOverride && (!dispatchMode || dispatchMode.command === 'pose');
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
@@ -745,7 +753,7 @@ export function CommandInput({
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
-        content: trimmed,
+        content: spoken,
         client_request_id: clientRequestId,
         pose_kind: isEntrance ? 'entry' : undefined,
         ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
