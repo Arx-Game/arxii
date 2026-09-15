@@ -39,10 +39,13 @@ function TimePlate() {
   const sessionRoomId = active ? (sessions[active]?.room?.id ?? null) : null;
   const { entryId: browsingEntryId } = useBrowsingIdentity();
   // With no live session room, the server resolves the docked character's own
-  // room (durable selection, #3412) — weather only reads for someone who IS
-  // somewhere, so the query stays off entirely with nothing docked.
+  // room; the docked entry id rides along (#3479) so the read follows THIS
+  // tab's browsing identity, not the account's durable selection. Weather
+  // only reads for someone who IS somewhere, so the query stays off entirely
+  // with nothing docked.
   const { data: conditions } = useWeatherConditions(sessionRoomId, {
     fallbackToSelection: browsingEntryId != null,
+    entryId: browsingEntryId,
   });
 
   return (

@@ -34,6 +34,12 @@ vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: () => useMyRosterEntriesQuery(),
 }));
 
+// --- Tab browsing identity (#3479): the default acting character -------------
+const useBrowsingIdentity = vi.fn();
+vi.mock('@/roster/useBrowsingIdentity', () => ({
+  useBrowsingIdentity: () => useBrowsingIdentity(),
+}));
+
 // --- Stub the lookup-list data sources so the page clears its loading gate --
 vi.mock('@/store/hooks', () => ({ useAccount: () => ({ is_staff: false }) }));
 vi.mock('@/character-creation/queries', () => ({
@@ -76,6 +82,9 @@ describe('TechniqueBuilderPage alt wiring (#774)', () => {
   beforeEach(() => {
     formProps.mockClear();
     useMyRosterEntriesQuery.mockReset();
+    // No tab browsing identity by default; individual tests dock one.
+    useBrowsingIdentity.mockReset();
+    useBrowsingIdentity.mockReturnValue({ entryId: null, name: null, entry: null });
   });
 
   it('passes the single character id to the form without showing a selector', async () => {
@@ -96,6 +105,17 @@ describe('TechniqueBuilderPage alt wiring (#774)', () => {
     const form = await screen.findByTestId('form');
     expect(form).toHaveAttribute('data-character-id', '1');
     expect(screen.getByRole('combobox')).toBeInTheDocument();
+  });
+
+  it('defaults to the tab browsing identity over the first roster entry (#3479)', async () => {
+    useMyRosterEntriesQuery.mockReturnValue({
+      data: [entry(1, 'Alice'), entry(2, 'Bob')],
+    });
+    useBrowsingIdentity.mockReturnValue({ entryId: 2, name: 'Bob', entry: entry(2, 'Bob') });
+    renderPage();
+
+    const form = await screen.findByTestId('form');
+    expect(form).toHaveAttribute('data-character-id', '2');
   });
 
   it('forwards the picked character id to the form when an alt is selected', async () => {

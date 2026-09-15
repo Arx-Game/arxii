@@ -171,6 +171,27 @@ describe('WorldBand', () => {
     expect(screen.queryByText(/full record/i)).not.toBeInTheDocument();
   });
 
+  it('threads the docked entry id into the weather read as the browsing identity (#3479)', () => {
+    setDefaultMocks();
+    store.dispatch(setBrowsingIdentity(7));
+    renderWithProviders(<WorldBand />);
+
+    expect(mockUseWeatherConditions).toHaveBeenCalledWith(null, {
+      fallbackToSelection: true,
+      entryId: 7,
+    });
+  });
+
+  it('asks for no weather identity when nothing is docked', () => {
+    setDefaultMocks();
+    renderWithProviders(<WorldBand />);
+
+    expect(mockUseWeatherConditions).toHaveBeenCalledWith(null, {
+      fallbackToSelection: false,
+      entryId: null,
+    });
+  });
+
   it('omits the persona tidings digest plate when no character is docked', () => {
     setDefaultMocks();
     renderWithProviders(<WorldBand />);
