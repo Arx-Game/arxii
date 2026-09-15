@@ -351,3 +351,110 @@ class LegendAwardRiskTierScalingTests(TestCase):
         # RISK_LEGEND_AWARDS[LOW] = 10; tier_multiplier(0) = 1.0 (success_level<=0
         # contributes no bonus) -> scaled = 10, below the authored floor of 500.
         assert event.base_value == 500
+
+
+class LegendAwardHandlerWitnessWindowTests(TestCase):
+    """#2987 fix round 1: context.interaction threads through _legend_award into
+
+    create_legend_event, and a public, crime-tagged, interaction-anchored deed
+    opens a WITNESS reaction window. This is the real production seam combat
+    wires: world.combat.services._apply_aftermath_rules sets
+    ResolutionContext.interaction to the encounter's OUTCOME interaction before
+    apply_resolution dispatches into this same handler.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.character = ObjectDBFactory(db_key="WitnessWindowChar")
+        cls.source_type = LegendSourceTypeFactory()
+        cls.persona = PersonaFactory()
+
+    def _public_scene(self):
+        from evennia_extensions.factories import RoomProfileFactory
+        from world.areas.constants import AreaLevel
+        from world.areas.factories import AreaFactory
+        from world.scenes.factories import SceneFactory
+
+        area = AreaFactory(level=AreaLevel.KINGDOM)
+        profile = RoomProfileFactory(area=area, is_public=True)
+        return SceneFactory(location=profile.objectdb)
+
+    def test_interaction_is_forwarded_to_create_legend_event(self) -> None:
+        """context.interaction reaches create_legend_event verbatim (spy, no DB effect)."""
+        from unittest.mock import patch
+
+        from world.scenes.factories import InteractionFactory
+
+        scene = self._public_scene()
+        interaction = InteractionFactory(scene=scene, persona=self.persona)
+        consequence = ConsequenceFactory()
+        effect = _make_legend_effect(consequence, self.source_type, template="Deed done.")
+        context = ResolutionContext(
+            character=self.character,
+            participants=[self.persona],
+            scene=scene,
+            interaction=interaction,
+        )
+
+        with patch("world.societies.services.create_legend_event") as spy:
+            spy.return_value = (MagicMock(), [])
+            apply_effect(effect, context)
+
+        self.assertEqual(spy.call_args.kwargs.get("interaction"), interaction)
+
+    def test_public_crime_tagged_deed_opens_witness_window_through_the_pipeline(self) -> None:
+        """The real create_legend_event / _maybe_open_witness_window chain, unmocked,
+
+        opens a WITNESS window when the awarded deed is public, crime-tagged, and
+        interaction-anchored. The crime tag comes from the authored seam,
+        ConsequenceEffect.crime_kinds (#2987 Task 6): _legend_award passes the
+        effect's kinds through create_legend_event, so the deed is born tagged.
+        """
+        from world.justice.factories import CrimeKindFactory
+        from world.justice.models import DeedCrimeTag, WitnessReactionTarget
+        from world.scenes.constants import ReactionWindowKind
+        from world.scenes.factories import InteractionFactory
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = self._public_scene()
+        interaction = InteractionFactory(scene=scene, persona=self.persona)
+        consequence = ConsequenceFactory()
+        effect = _make_legend_effect(consequence, self.source_type, template="A public crime.")
+        theft = CrimeKindFactory(slug="handler-theft", name="Theft")
+        effect.crime_kinds.add(theft)
+        context = ResolutionContext(
+            character=self.character,
+            participants=[self.persona],
+            scene=scene,
+            interaction=interaction,
+        )
+
+        result = apply_effect(effect, context)
+
+        entry = LegendEntry.objects.get(event=result.created_instance)
+        self.assertTrue(DeedCrimeTag.objects.filter(deed=entry, crime_kind=theft).exists())
+        window = ReactionWindow.objects.get(
+            interaction=interaction, kind=ReactionWindowKind.WITNESS
+        )
+        target = WitnessReactionTarget.objects.get(window=window)
+        self.assertEqual(target.legend_entry_id, entry.pk)
+
+    def test_no_interaction_opens_no_window(self) -> None:
+        """Same public, crime-tagged award, but context.interaction=None: no window."""
+        from world.justice.factories import CrimeKindFactory
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = self._public_scene()
+        consequence = ConsequenceFactory()
+        effect = _make_legend_effect(consequence, self.source_type, template="No interaction.")
+        effect.crime_kinds.add(CrimeKindFactory(slug="handler-no-interaction", name="Theft"))
+        context = ResolutionContext(
+            character=self.character,
+            participants=[self.persona],
+            scene=scene,
+            interaction=None,
+        )
+
+        apply_effect(effect, context)
+
+        self.assertFalse(ReactionWindow.objects.exists())

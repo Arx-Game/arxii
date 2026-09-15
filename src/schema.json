@@ -29380,12 +29380,16 @@ paths:
     post:
       operationId: reaction_windows_react_create
       description: |-
-        Action-only viewset: POST /reaction-windows/{pk}/react/.
+        POST /reaction-windows/{pk}/react/, plus GET /reaction-windows/pending/.
 
-        Reads ride the interaction feed (windows serialize inline on their
-        event); all eligibility/validation lives in ``react_to_window``.
-        ``react-to-interaction`` (#911) opens a lazy kind's window on first
-        reaction — kudos-style kinds need no pre-existing window row.
+        Most reads ride the interaction feed (windows serialize inline on their
+        event); all eligibility/validation for reacting lives in
+        ``react_to_window``. ``react-to-interaction`` (#911) opens a lazy kind's
+        window on first reaction: kudos-style kinds need no pre-existing window
+        row. ``pending`` (#2987) is the one standalone read: the bystander-facing
+        "what can I react to right now" list, needed because a WITNESS window
+        (``public=False``) never surfaces in a feed a bystander wasn't scrolling;
+        the reactor learns of it independently of any interaction they authored.
       parameters:
       - in: path
         name: id
@@ -29410,16 +29414,64 @@ paths:
               schema:
                 $ref: '#/components/schemas/WindowReactInput'
           description: ''
+  /api/reaction-windows/pending/:
+    get:
+      operationId: reaction_windows_pending_retrieve
+      description: |-
+        Open windows of ``kind`` the caller's active persona can still react to.
+
+        ``kind`` defaults to WITNESS (#2987's bystander-reaction menu); any
+        registered ``ReactionWindowKind`` may be requested. Scoping mirrors
+        ``react_to_window``'s eligibility (which additionally requires
+        ``scene.is_active`` at reaction time): the account must be a
+        scene participant (a public scene is otherwise visible to anyone,
+        but that alone never made a non-participant a bystander) AND the
+        persona must be able to see the witnessed interaction
+        (``can_view_interaction``). Settled windows, the persona's own
+        deeds, and windows already reacted to are excluded. Never exposes a
+        reactor list; the response carries only the window's identity and
+        its live choices.
+      parameters:
+      - in: query
+        name: kind
+        schema:
+          type: string
+        description: ReactionWindowKind to list (defaults to witness).
+      - in: query
+        name: page
+        schema:
+          type: integer
+        description: Page number.
+      - in: query
+        name: page_size
+        schema:
+          type: integer
+        description: Rows per page (default 50, max 200).
+      tags:
+      - reaction-windows
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedPendingReactionWindowList'
+          description: ''
   /api/reaction-windows/react-to-interaction/:
     post:
       operationId: reaction_windows_react_to_interaction_create
       description: |-
-        Action-only viewset: POST /reaction-windows/{pk}/react/.
+        POST /reaction-windows/{pk}/react/, plus GET /reaction-windows/pending/.
 
-        Reads ride the interaction feed (windows serialize inline on their
-        event); all eligibility/validation lives in ``react_to_window``.
-        ``react-to-interaction`` (#911) opens a lazy kind's window on first
-        reaction — kudos-style kinds need no pre-existing window row.
+        Most reads ride the interaction feed (windows serialize inline on their
+        event); all eligibility/validation for reacting lives in
+        ``react_to_window``. ``react-to-interaction`` (#911) opens a lazy kind's
+        window on first reaction: kudos-style kinds need no pre-existing window
+        row. ``pending`` (#2987) is the one standalone read: the bystander-facing
+        "what can I react to right now" list, needed because a WITNESS window
+        (``public=False``) never surfaces in a feed a bystander wasn't scrolling;
+        the reactor learns of it independently of any interaction they authored.
       tags:
       - reaction-windows
       requestBody:
@@ -65057,6 +65109,28 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PendingEntryFlourishOffer'
+    PaginatedPendingReactionWindowList:
+      type: object
+      properties:
+        count:
+          type: integer
+        next:
+          type: string
+          format: uri
+          nullable: true
+        previous:
+          type: string
+          format: uri
+          nullable: true
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/PendingReactionWindow'
+      required:
+      - count
+      - next
+      - previous
+      - results
     PaginatedPendingStageAdvanceOfferList:
       type: object
       required:
@@ -70749,6 +70823,36 @@ components:
       - instance_id
       - invite_id
       - template_name
+    PendingReactionWindow:
+      type: object
+      description: |-
+        One open, not-yet-reacted-to window for the caller's active persona (#2987).
+
+        Deliberately thin: no reactor list, no counts. A hidden (``public=False``)
+        kind like WITNESS must stay anonymous end to end, and even a public kind's
+        pending entry has nothing to show yet since the viewer hasn't reacted.
+      properties:
+        id:
+          type: integer
+        interaction_id:
+          type: integer
+        scene_id:
+          type: integer
+        kind:
+          type: string
+        choices:
+          type: array
+          items:
+            type: object
+            additionalProperties:
+              type: string
+          readOnly: true
+      required:
+      - choices
+      - id
+      - interaction_id
+      - kind
+      - scene_id
     PendingStageAdvanceOffer:
       type: object
       description: |-

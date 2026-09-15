@@ -18,6 +18,7 @@ import { SceneLinesAndVeilsCard } from '@/boundaries/components/SceneLinesAndVei
 import { SineatingInbox } from '@/magic/components/SineatingInbox';
 import { SoulTetherRescuePrompt } from '@/magic/components/SoulTetherRescuePrompt';
 import { EntryFlourishOfferGate } from '@/magic/components/EntryFlourishOfferGate';
+import { WitnessReactionOfferGate } from '@/justice/components/WitnessReactionOfferGate';
 import { CommandInput } from '@/game/components/CommandInput';
 import type { ComposerMode } from '@/game/components/CommandInput';
 import { CharacterCardDrawer } from '@/game/components/CharacterCardDrawer';
@@ -354,8 +355,9 @@ export function SceneDetailPage() {
         {isActive && <SineatingInbox />}
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
+        {isActive && <WitnessReactionOfferGate personaId={personaId} />}
         {/* #3557 combat layout. Everything above this line either needs an
-            answer (consent, sineating, soul-tether, flourish) or is the scene's
+            answer (consent, sineating, soul-tether, flourish, witness) or is the scene's
             identity; it stays inline in both shapes. Below: while an encounter
             is active the header map yields to the rail's map (one map, with
             bystanders), the pending check-call prompt stays inline, and the

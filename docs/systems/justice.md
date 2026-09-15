@@ -59,6 +59,12 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
 - `associate_heat(*, from_persona, to_persona)` — the outing/identification seam
   (copies warrants; the mask keeps its own). Callers: the mission-report
   association chance today; the #1334 secrets-outing writer later.
+- `report_witnessed_crime(*, persona, crime_kind, room) -> PersonaHeat | None`: the
+  shared report core (#2987): `accrue_heat` at `area_for_room(room)` then a
+  `bump_society_reputation` sting by the winning law's weight. Both live report
+  paths delegate here: `missions.integrations.crime_watch.flag_crime` and the
+  `world.justice.reaction_kinds` WITNESS handler's "report" choice, so a
+  scene-witnessed deed and a mission-reported deed are judged identically.
 - `tag_deed_crimes(deed, crime_kinds)` — idempotent tagging.
 - `heat_decay_tick()` — daily cron (`justice.heat_decay` in `game_clock/tasks.py`),
   decays toward zero and deletes cold rows. Magnitudes PLACEHOLDER.
@@ -87,6 +93,48 @@ enforcing society's dominion. ADR-0080 records the jurisdiction decision.
    else active persona) at the report room + a `bump_society_reputation` sting.
    `ReportStyle.MOSTLY_ACCURATE` runs a dodge check (PROVISIONAL Persuasion) to
    skip both; reporting a masked run barefaced risks the association check.
+3. **Bystander report (#2987)**: the WITNESS reaction-window kind
+   (`world.justice.reaction_kinds.WITNESS_KIND`, registered `public=False` so
+   reports stay anonymous). A PC present at a scene-witnessed public deed may
+   choose "report", which resolves immediately (inside the reaction's own
+   transaction, not at scene close): one `report_witnessed_crime` call per
+   `DeedCrimeTag` on the deed, against the deed-time actor persona, at the
+   scene's location (falling back to the actor's own current room). "Intervene"
+   and "ignore" carry no mechanical effect: justice stays NPC-driven.
+
+   The window itself is opened from the deed-creation seam, not from a
+   separate call site: `societies.services.create_solo_deed` and
+   `create_legend_event` both accept an `interaction` keyword and, right
+   after the #1464 reach fork runs, call `open_witness_window` when all three
+   hold: the caller passed an `interaction`, the deed's room is publicly
+   listed, and the deed carries at least one `DeedCrimeTag`. This check is
+   independent of the reach fork's own scandal/containment judgment; an
+   untagged or non-crime deed simply never opens a window.
+
+   Today only combat-aftermath deeds can reach the window in production.
+   `ResolutionContext.interaction` (`world.checks.types`) carries the
+   interaction through to `_legend_award`, and only
+   `world.combat.services._apply_aftermath_rules` sets it: the encounter's
+   OUTCOME interaction already exists and `context.participants` is already
+   populated by the time its consequence pool fires. The generic scene-action
+   pipeline is a named gap, not wired: `world.scenes.action_services`
+   `_resolve_action_against_persona` builds its `ResolutionContext` (see the
+   `GAP (#2987)` comment there) before its own result interaction exists, and never
+   populates `participants` at all, so a `LEGEND_AWARD` effect cannot fire
+   from a scene action today regardless of the interaction question.
+   The authored half of the seam is `ConsequenceEffect.crime_kinds` (M2M to
+   `CrimeKind`, read by `LEGEND_AWARD` only; tagged in the Consequence admin's
+   effect inline; dropped from the content export because `CrimeKind` rows are
+   seeder-owned pks): `_legend_award` passes the effect's kinds through
+   `create_legend_event`, so the minted deed is born crime-tagged
+   (`tag_deed_crimes`, evidence and all). A combat-aftermath `LEGEND_AWARD`
+   effect a staff member tags is therefore a live producer of a public,
+   crime-tagged, interaction-anchored deed with no further wiring;
+   `integration_tests.pipeline.test_reaction_journey_e2e` runs that chain
+   unmocked from the effect to the bystander's report. Known limit: one window
+   per interaction, targeting the first tagged deed; a shared event with several
+   tagged participants exposes only the first to a report, so a group-crime
+   producer needs a target per deed before it ships (none exists today).
 
 **Criminality is declared at deed birth** (user-ratified): mission runs tag every
 legend entry minted at renown emission with the run's CRIME_WATCH kinds
