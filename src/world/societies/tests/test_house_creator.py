@@ -46,6 +46,7 @@ class HouseCreatorTestData(TestCase):
             realm=cls.realm,
             kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=cls.crown.society,
+            org_type=cls.crown.org_type,
             liege=cls.crown,
             default_succession_law=cls.law,
             mercy_min=-2,
@@ -127,6 +128,7 @@ class GateTests(HouseCreatorTestData):
             realm=foreign.society.realm,
             kind=FamilyKindFactory(name=NOBLE_KIND_NAME),
             society=foreign.society,
+            org_type=foreign.org_type,
             liege=foreign,
             default_succession_law=self.law,
         )

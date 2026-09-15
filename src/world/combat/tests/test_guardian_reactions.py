@@ -518,13 +518,55 @@ class TechniqueGuardianBarrierResolutionTest(TestCase):
         ally_participant, ally_vitals, anima, _cost, _enc = self._build_guardian_and_ally(
             starting_anima=0, confirm=False
         )
-        with patch("world.combat.services.perform_check") as check:
+        with (
+            patch("world.combat.services.perform_check") as check,
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
             apply_damage_to_participant(ally_participant, 40)
         check.assert_not_called()
         ally_vitals.refresh_from_db()
         anima.refresh_from_db()
         self.assertEqual(ally_vitals.health, 60)
         self.assertEqual(anima.current, 0)
+        # #3574: the fizzle is no longer silent. One private line to the guardian
+        # naming the unguarded ally, one soft room line naming both, no numbers.
+        private.assert_called_once()
+        guardian_char, private_text = private.call_args.args
+        self.assertEqual(guardian_char.pk, anima.character.character.pk)
+        self.assertIn("for want of anima", private_text)
+        self.assertIn(str(ally_participant.character_sheet.character), private_text)
+        room.assert_called_once()
+        room_text = room.call_args.args[1]
+        self.assertIn("fails to catch", room_text)
+        ally_name = str(ally_participant.character_sheet.character)
+        self.assertIn(ally_name, room_text)
+        # No mechanical numbers (damage, anima cost) leaked into the room line.
+        # Strip the character names first: CharacterFactory names carry a
+        # sequence digit (e.g. "TestChar_13"), which is not a mechanical
+        # number.
+        room_text_no_names = room_text.replace(ally_name, "").replace(str(guardian_char), "")
+        self.assertNotRegex(room_text_no_names, r"\d")
+
+    def test_guardian_with_no_anima_pool_fizzles_with_the_same_lines(self) -> None:
+        from world.combat.services import apply_damage_to_participant
+        from world.magic.models.anima import CharacterAnima
+
+        ally_participant, ally_vitals, anima, _cost, _enc = self._build_guardian_and_ally(
+            starting_anima=5, confirm=False
+        )
+        CharacterAnima.objects.filter(pk=anima.pk).delete()
+        with (
+            patch("world.combat.services.perform_check") as check,
+            patch("world.scenes.interaction_services.narrate_privately") as private,
+            patch("world.combat.services._broadcast_commitment_line") as room,
+        ):
+            apply_damage_to_participant(ally_participant, 40)
+        check.assert_not_called()
+        ally_vitals.refresh_from_db()
+        self.assertEqual(ally_vitals.health, 60)
+        private.assert_called_once()
+        room.assert_called_once()
 
     def test_consented_guardian_out_of_anima_fires_and_accrues_soulfray(self) -> None:
         from world.combat.services import apply_damage_to_participant

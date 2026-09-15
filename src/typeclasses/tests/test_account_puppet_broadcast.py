@@ -6,7 +6,6 @@ from django.test import TestCase
 
 from evennia_extensions.factories import AccountFactory, CharacterFactory
 from typeclasses.accounts import Account
-from web.webclient.message_types import WebsocketMessageType
 from world.character_sheets.factories import CharacterSheetFactory
 from world.roster.factories import (
     RosterEntryFactory,
@@ -108,12 +107,10 @@ class PuppetCharacterBroadcastTests(TestCase):
         # Both sessions should have received a puppet_changed message
         for sess in (sess1, sess2):
             puppet_calls = [
-                call
-                for call in sess.msg.call_args_list
-                if call.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
+                call for call in sess.msg.call_args_list if "puppet_changed" in call.kwargs
             ]
             assert len(puppet_calls) >= 1, f"sess {sess.sessid} got no puppet_changed"
-            payload = puppet_calls[0].kwargs["args"][0]
+            payload = puppet_calls[0].kwargs["puppet_changed"][1]
             assert payload["session_id"] == 10
             assert payload["character_id"] == self.character.id
             assert payload["character_name"] == self.character.key
@@ -126,9 +123,7 @@ class PuppetCharacterBroadcastTests(TestCase):
         success, _msg = self.account.puppet_character_in_session(self.character, sess1)
         assert not success
         puppet_calls = [
-            call
-            for call in sess1.msg.call_args_list
-            if call.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
+            call for call in sess1.msg.call_args_list if "puppet_changed" in call.kwargs
         ]
         assert puppet_calls == []
 
@@ -165,13 +160,9 @@ class PuppetObjectDirectCallBroadcastTests(TestCase):
         finally:
             _restore_super_puppet(self.account, original)
 
-        puppet_calls = [
-            c
-            for c in sess.msg.call_args_list
-            if c.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
-        ]
+        puppet_calls = [c for c in sess.msg.call_args_list if "puppet_changed" in c.kwargs]
         assert len(puppet_calls) == 1
-        payload = puppet_calls[0].kwargs["args"][0]
+        payload = puppet_calls[0].kwargs["puppet_changed"][1]
         assert payload["character_id"] == self.character.id
         assert payload["character_name"] == self.character.key
 
@@ -191,11 +182,7 @@ class PuppetObjectDirectCallBroadcastTests(TestCase):
         finally:
             _restore_super_puppet(self.account, original)
 
-        puppet_calls = [
-            c
-            for c in sess.msg.call_args_list
-            if c.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
-        ]
+        puppet_calls = [c for c in sess.msg.call_args_list if "puppet_changed" in c.kwargs]
         assert puppet_calls == []
 
 
@@ -232,12 +219,10 @@ class UnpuppetBroadcastTests(TestCase):
 
         for sess in (sess1, sess2):
             puppet_calls = [
-                call
-                for call in sess.msg.call_args_list
-                if call.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
+                call for call in sess.msg.call_args_list if "puppet_changed" in call.kwargs
             ]
             assert len(puppet_calls) >= 1, f"sess {sess.sessid} got no puppet_changed"
-            payload = puppet_calls[-1].kwargs["args"][0]
+            payload = puppet_calls[-1].kwargs["puppet_changed"][1]
             assert payload["session_id"] == 10
             assert payload["character_id"] is None
             assert payload["character_name"] is None
@@ -266,9 +251,9 @@ class UnpuppetBroadcastTests(TestCase):
         assert fake_super.call_args.args[0] == [sess1, sess2]
 
         broadcast_session_ids = {
-            call.kwargs["args"][0]["session_id"]
+            call.kwargs["puppet_changed"][1]["session_id"]
             for call in sess1.msg.call_args_list
-            if call.kwargs.get("type") == WebsocketMessageType.PUPPET_CHANGED.value
+            if "puppet_changed" in call.kwargs
         }
         assert broadcast_session_ids == {10, 11}
 
@@ -346,3 +331,34 @@ class CanPuppetForSeanceTests(TestCase):
 
 # Silence unused-import warning for Account; imported for IDE/type clarity.
 _ = Account
+
+
+class PuppetWireFormatTests(TestCase):
+    def test_broadcast_serializes_as_one_control_frame(self):
+        """Exercise Evennia's serializer, which treats each msg keyword as a frame."""
+        import json
+        from types import SimpleNamespace
+
+        from evennia.server.portal.webclient import WebSocketClient
+        from evennia.server.sessionhandler import ServerSessionHandler
+
+        from typeclasses.accounts import Account
+
+        session = MagicMock(sessid=162, protocol_flags={"ENCODING": "utf-8"})
+        account = MagicMock()
+        account.sessions.all.return_value = [session]
+        character = SimpleNamespace(id=18, key="Tehom")
+        Account._broadcast_puppet_changed(account, session, character)
+
+        messages = ServerSessionHandler().clean_senddata(session, session.msg.call_args.kwargs)
+        portal = MagicMock()
+        for message_type, (args, kwargs) in messages.items():
+            WebSocketClient.send_default(portal, message_type, *args, **kwargs)
+
+        portal.sendLine.assert_called_once()
+        frame = json.loads(portal.sendLine.call_args.args[0])
+        self.assertEqual(frame[0], "puppet_changed")
+        self.assertEqual(frame[1], [])
+        self.assertEqual(frame[2]["session_id"], 162)
+        self.assertEqual(frame[2]["character_id"], 18)
+        self.assertEqual(frame[2]["character_name"], "Tehom")

@@ -31,8 +31,17 @@ const DEGRADED_STATE_LABELS: Record<string, string> = {
   UNKNOWN: 'Whereabouts unknown',
 };
 
-/** The "Playing: …" fragment for a docked character in a given lifecycle state. */
+/**
+ * The presence fragment for a docked character who has NO live game session
+ * (#3859): "Not in the world" while the character can still act, else the
+ * short degraded label. Callers decide liveness from the store
+ * (`gameSlice.sessions[name].isConnected`) and only reach for this when it is
+ * false; a live session is described by the caller ("In the world"), never
+ * here. The old "Currently Offscreen" wording was a placeholder that read as
+ * a fact on every page, including the Hall a player had just opened from
+ * inside the world (ADR-0295 keeps their socket open across that navigation).
+ */
 export function dockedStateLabel(lifecycleState: string): string {
-  if (ALLOWED_LIFECYCLE_STATES.has(lifecycleState)) return 'Currently Offscreen';
-  return DEGRADED_STATE_LABELS[lifecycleState] ?? 'Currently Offscreen';
+  if (ALLOWED_LIFECYCLE_STATES.has(lifecycleState)) return 'Not in the world';
+  return DEGRADED_STATE_LABELS[lifecycleState] ?? 'Not in the world';
 }

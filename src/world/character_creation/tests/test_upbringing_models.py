@@ -12,7 +12,10 @@ from world.character_creation.factories import (
     OriginTemplateSlotFactory,
     make_unknown_upbringing,
 )
-from world.character_creation.models import Beginnings, OriginTemplate
+from world.character_creation.models import (
+    Beginnings,
+    OriginTemplate,
+)
 
 
 class UpbringingFieldsTest(TestCase):

@@ -18,12 +18,43 @@ step." — not "Does the skill expect a reviewer dispatch step?"). When in doubt
 **Repo-mutating operations (`git`, `rm`, `Edit`, `Write`, and implementer
 subagents) run strictly sequentially — one per message, verify the result
 before the next.** Parallelism is only for read-only fan-out (greps, reads,
-Explore/research agents). Two concrete failure modes motivate this:
+Explore/research agents), plus up to three implementers sharing a worktree under
+the conditions in the first bullet below. Concrete failure modes motivate this:
 
-- **Parallel implementer subagents on a shared worktree corrupt the git
-  index** — they revert each other's uncommitted edits and cross-contaminate
-  commits. Dispatch one, await it, verify the commit actually landed
-  (`git log -1`), then the next.
+- **Implementers sharing a worktree: the commit hook is the control, not
+  serialisation (#3814, ADR-0296).** pre-commit's own hook runs
+  `git checkout -- .` over the whole worktree while a commit's hooks run, so a
+  sibling's uncommitted edits vanish for about 50 seconds and anything it writes
+  then can be lost; a failed auto-fix then invites `git add -A`, which sweeps the
+  sibling's files into the commit. The installed hook (`tools/githooks/pre-commit`,
+  via `just install-git-hooks`) checks staged files without clearing anything.
+  Up to three implementers may share one worktree when:
+  - their plan tasks' `**Files:**` lists do not intersect. Tasks that share a
+    file, or need another task's output, stay serial;
+  - each dispatch names the sibling agents and their file lists, and an agent
+    that needs a file outside its own list messages that sibling (`SendMessage`)
+    before touching it;
+  - each commits only its own files with a pathspec commit,
+    `git commit -m <msg> -- <files>` (after `git add -- <file>` for a file git does
+    not track yet); never a plain `git commit`, `git add -A`, `git add .` or
+    `commit -a`, and never `git stash` (`refs/stash` is shared by every worktree),
+    `git checkout <path>`, `git restore` or `git reset`. The index is shared too:
+    a pathspec commit holds `index.lock` while its hooks run, so a sibling's
+    `git add` or commit in that window fails with "index.lock: File exists". Wait
+    and retry; never delete `index.lock`. If the hook says an auto-fixer changed a
+    file, re-run the same commit;
+  - each commits with `SKIP=ty,typescript` and runs no test suite or build (both
+    check the whole project on every commit, and `tsc` alone reaches ~1.3 GB on a
+    4 GiB container, #3707). The
+    coordinator runs `uv run pre-commit run ty --all-files` and
+    `uv run pre-commit run typescript --all-files` once before pushing, then the
+    scoped fast tier one branch at a time. `check-type-annotations` stays on: it
+    is the only annotation check (a no-op under CI's `--all-files`), and a
+    failure it raises on a sibling's staged file clears on a rerun.
+
+  Serial dispatch still verifies each commit landed (`git log -1`) before the
+  next; a concurrent wave verifies that every implementer's commit landed and names
+  only that implementer's files (`git show --stat <sha>`) before the next wave.
 - **Batched mutating tool calls cascade-cancel**: when one call in a parallel
   batch errors or hits an approval prompt, the harness cancels every sibling
   in that batch, and most of the intended work silently doesn't run.
@@ -34,7 +65,19 @@ Explore/research agents). Two concrete failure modes motivate this:
   across three sessions (2 stalls in #1909, 6+ on 2026-07-06/07, 6 of 7 agents in
   #2698 *despite* a capitalised block naming `run_in_background`, `&`, `Monitor`
   and poll-a-file by name); agents route around the instruction creatively, so
-  keep it but do not treat it as the control. **The control is ordering.** Put
+  keep it but do not treat it as the control. **#3652 found the mechanism:**
+  the Bash tool's default timeout is 120 seconds and the harness
+  auto-backgrounds anything that exceeds it, so an agent running a long suite
+  in the foreground gets it backgrounded out from under it and then waits on
+  a notification that only ever wakes the main loop - it never chose to
+  background the command, so telling it not to cannot prevent this. Two of
+  nine implementers on that plan stalled this way despite dispatches naming
+  `run_in_background`, `&`, `Monitor` and poll-a-file explicitly; once
+  dispatches carried an explicit `timeout` (e.g. `600000`) on the long test
+  call, the remaining implementers ran a 4.5-5 minute suite to completion in
+  the foreground with no stalls. Pass that explicit `timeout` on any
+  long-running test call in the dispatch - it is the concrete preventive
+  alongside the ordering rule below. **The control is ordering.** Put
   this in every implementer/fix dispatch:
 
   > Commit as soon as the code change is complete and the fast oracle passes,
@@ -80,9 +123,18 @@ back from the creating command's own stdout.
   (#2906), any two migration-bearing PRs always collide** (one number
   sequence, one `max_migration.txt`) — check main's tip migration BEFORE
   enqueueing, and fix a collision with `arx manage rebase_migration arxii`
-  (resolve `max_migration.txt` to main's tip first), push, re-enqueue; see
-  the `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the
-  full recipe. Never hand-renumber. Since
+  (leave `max_migration.txt`'s conflict markers IN - the tool reads them, and it
+  renames whichever side sits after `=======`, which must be yours; a merge
+  reverses that orientation, a rebase does not), push, re-enqueue; see the
+  `issue-to-merged-pr` skill's ci-merge-queue-gotchas reference for the full
+  recipe. Never hand-renumber. A chain-regeneration PR (ADR-0276) collides
+  with every migration-bearing PR by construction: rerun `just
+  regenerate-migrations` in a fresh worktree from the tip of `main` and
+  force-push; never rebase it. **Cut it only from a commit production has
+  already deployed** (the last green "Stand up infra" run's SHA): a migration
+  production has not recorded leaves the outgoing generation partially recorded
+  and the `migrate` guard refuses the next deploy (2026-09-06; recovery is two
+  presses of the button's `ref` input, `infra/README.md`). Since
   #2906 collapsed every first-party app into one (`arxii`), there is exactly
   one `max_migration.txt` sentinel repo-wide (`src/world/migrations/`), not
   one per app - any two branches that both add a model or field now land in
@@ -267,6 +319,17 @@ or edited MUST be reviewed with the `reviewing-migrations` skill (or the
 `migration-reviewer` agent) before it is committed.** `migrate --noinput` runs
 unattended on every converge and CI only ever migrates an empty database, so the
 failures that matter are invisible to it.
+
+**Demo fidelity is the second worked example, equally non-optional: when an issue's
+spec carries a demo link, the `demo-fidelity-reviewer` agent MUST compare the built
+surface against that demo before the PR opens.** The demo *is* the approved design
+and no other gate ever reads it again. #3660 shipped an admin page with none of its
+demo's form rows, chips, submit row or rail and no rule for any of its own class
+hooks, past nineteen green tests. **And when the finding is about styling, the
+assertion is that a rule REACHES the page, never that a class name appears in the
+markup** — the first fix for that page emitted admin's exact markup and still
+rendered unstyled, because `admin/css/forms.css` is linked by `change_form.html`
+only and a page extending `base_site.html` has to link it itself (#3667).
 
 ## Database & Code Quality Invariants
 
@@ -473,5 +536,7 @@ rule: see the `running-tests` skill.
   as a precheck; the whole-repo pass can crash this devcontainer** (per-file hooks
   already ran at commit, and CI is the gate). If you must re-run hooks locally,
   scope to the diff: `uv run pre-commit run --from-ref origin/main --to-ref HEAD`.
+  That form still clears the worktree while it runs (only `--files` and
+  `--all-files` do not), so run it only when nobody has uncommitted work there.
 - **Push and let CI gate regression** — CI runs the Postgres parity suite on every
   PR; monitor the PR and fix failures there.

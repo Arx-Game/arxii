@@ -21,9 +21,14 @@ from world.magic.services.power_terms import (
     get_covenant_role_blend_config,
     specialty_power_contribution,
 )
-from world.magic.services.technique_power_eval import evaluate_technique
+from world.magic.services.technique_power_eval import evaluate_technique, provenance_split
 from world.magic.services.techniques import calculate_effective_anima_cost
-from world.magic.types.technique_power import EvalContext, ReferenceFrame
+from world.magic.types.technique_power import (
+    EvalContext,
+    PayloadValuation,
+    ReferenceFrame,
+    ValuationProvenance,
+)
 from world.traits.factories import (
     CheckOutcomeFactory,
     CheckRankFactory,
@@ -89,6 +94,8 @@ class TechniquePowerEvalDamageTests(TestCase):
         self.assertAlmostEqual(report.baseline_de, expected_de, places=9)
         self.assertEqual(len(report.valuations), 1)
         self.assertEqual(report.valuations[0].kind, "damage")
+        self.assertAlmostEqual(report.formula_baseline_de, report.baseline_de)
+        self.assertEqual(report.estimated_baseline_de, 0.0)
 
     def test_amplified_power_matches_role_band_pure_helpers(self) -> None:
         """amplified_power - baseline_power == int(blend) + int(specialty) at thread_level."""
@@ -179,3 +186,27 @@ class PowerTermPureHelperExtractionTests(TestCase):
         thread_level, multiplier_tenths = 20, 10
         expected = Decimal(thread_level) * multiplier_tenths / 10
         self.assertEqual(specialty_power_contribution(thread_level, multiplier_tenths), expected)
+
+
+class ProvenanceSplitTests(TestCase):
+    """formula/parsed and estimate totals are kept apart; zero buckets count for neither."""
+
+    def _valuation(self, value: float, provenance: ValuationProvenance) -> PayloadValuation:
+        return PayloadValuation(
+            kind="damage", label="x", value=value, provenance=provenance, detail=""
+        )
+
+    def test_splits_formula_parsed_from_estimate(self) -> None:
+        formula, estimate = provenance_split(
+            [
+                self._valuation(4.0, ValuationProvenance.FORMULA),
+                self._valuation(2.5, ValuationProvenance.PARSED),
+                self._valuation(3.0, ValuationProvenance.ESTIMATE),
+                self._valuation(0.0, ValuationProvenance.UNPRICEABLE),
+            ]
+        )
+        self.assertAlmostEqual(formula, 6.5)
+        self.assertAlmostEqual(estimate, 3.0)
+
+    def test_empty_valuations_split_to_zero(self) -> None:
+        self.assertEqual(provenance_split([]), (0.0, 0.0))

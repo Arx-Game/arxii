@@ -1,8 +1,9 @@
 from django.contrib import admin
 
-from world.classes.models import Aspect, Path, PathAspect
+from world.classes.models import Aspect, CharacterClass, ClassStageHealthRate, Path, PathAspect
 from world.codex.models import PathCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
+from world.magic.models import PathGiftGrant
 from world.progression.models import CodexKnowledgeRequirement, TraitRequirement
 from world.skills.models import PathSkillSuggestion
 
@@ -52,6 +53,24 @@ class PathCodexKnowledgeRequirementInline(admin.TabularInline):
     autocomplete_fields = ["codex_entry"]
 
 
+class PathGiftGrantInline(admin.TabularInline):
+    """The path's curated starter technique pool per gift (#3712).
+
+    The path half of the CG technique menu. Its tradition-side sibling has been
+    inline-editable on ``TraditionAdmin`` since #2426; this half had no
+    authoring surface at all, so the authored path pools could not be edited.
+    ``filter_horizontal`` does not apply to an inline, so the standalone
+    ``PathGiftGrantAdmin`` is where a pool is actually composed; this inline is
+    the way in from the path, and shows which gifts the path grants.
+    """
+
+    model = PathGiftGrant
+    extra = 0
+    fields = ["gift"]
+    autocomplete_fields = ["gift"]
+    show_change_link = True
+
+
 @admin.register(Path)
 class PathAdmin(admin.ModelAdmin):
     """Admin for character paths."""
@@ -76,6 +95,7 @@ class PathAdmin(admin.ModelAdmin):
         PathSkillSuggestionInline,
         PathTraitRequirementInline,
         PathCodexKnowledgeRequirementInline,
+        PathGiftGrantInline,
     ]
     fieldsets = (
         (None, {"fields": ("name", "description", "stage", "minimum_level")}),
@@ -105,3 +125,37 @@ class AspectAdmin(admin.ModelAdmin):
     @admin.display(description="Paths")
     def path_count(self, obj):
         return obj.path_aspects.count()
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+class ClassStageHealthRateInline(admin.TabularInline):
+    """#3831 - the per-stage health-per-level rates authored for a class."""
+
+    model = ClassStageHealthRate
+    extra = 1
+
+
+@admin.register(CharacterClass)
+class CharacterClassAdmin(admin.ModelAdmin):
+    """#3831 - the character class catalog (trait requirements, progression rules)."""
+
+    list_display = ["name", "minimum_level", "is_hidden"]
+    list_filter = ["is_hidden", "minimum_level"]
+    search_fields = ["name", "description"]
+    filter_horizontal = ["core_traits"]
+    inlines = [ClassStageHealthRateInline]
+
+
+@admin.register(ClassStageHealthRate)
+class ClassStageHealthRateAdmin(admin.ModelAdmin):
+    """#3831 - authored per-class health gained per level within a PathStage band."""
+
+    list_display = ["character_class", "stage", "health_per_level"]
+    list_filter = ["stage"]
+    search_fields = ["character_class__name"]
+    list_select_related = ["character_class"]
+    autocomplete_fields = ["character_class"]

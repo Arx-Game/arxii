@@ -22,7 +22,6 @@ import { Link } from 'react-router-dom';
 import {
   AppearanceStage,
   AttributesStage,
-  DistinctionsStage,
   FinalTouchesStage,
   GiftStage,
   HeritageStage,
@@ -193,8 +192,6 @@ export function CharacterCreationPage() {
         return <AttributesStage draft={draft} />;
       case Stage.PATH:
         return <PathStage draft={draft} />;
-      case Stage.DISTINCTIONS:
-        return <DistinctionsStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.GIFT:
         return <GiftStage draft={draft} onRegisterBeforeLeave={registerBeforeLeave} />;
       case Stage.APPEARANCE:

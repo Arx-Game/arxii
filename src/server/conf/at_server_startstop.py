@@ -29,9 +29,14 @@ def at_server_start():
     This is called every time the server starts up, regardless of
     how it was shut down.
     """
+    from evennia_extensions.account_setup import heal_bare_accounts
     from world.game_clock.scripts import ensure_game_tick_script
     from world.game_clock.tasks import register_all_tasks
 
+    # Accounts made by `createsuperuser` or pre-adapter signup skipped Evennia's
+    # first-save setup and could log in but run no command (#3812). Healing
+    # here means a deploy fixes every such row at once, with no shell access.
+    heal_bare_accounts()
     register_all_tasks()
     ensure_game_tick_script()
 

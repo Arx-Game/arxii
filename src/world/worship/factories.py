@@ -3,9 +3,15 @@
 import factory
 
 from world.skills.factories import SpecializationFactory
+from world.worship.constants import BeingRelationshipValence, BeingResonanceTier
 from world.worship.models import (
+    BeingFacet,
+    BeingNickname,
+    BeingRelationship,
+    BeingResonance,
     DevotionStanding,
     WorshipDeclaration,
+    WorshipFeastDay,
     WorshippedBeing,
     WorshipTradition,
 )
@@ -28,6 +34,50 @@ class WorshippedBeingFactory(factory.django.DjangoModelFactory):
     description = "PLACEHOLDER being lore."
     tradition = factory.SubFactory(WorshipTraditionFactory)
     is_active = True
+
+
+class BeingFacetFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingFacet
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    facet = factory.SubFactory("world.magic.factories.FacetFactory")
+
+
+class BeingResonanceFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingResonance
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    resonance = factory.SubFactory("world.magic.factories.ResonanceFactory")
+    tier = BeingResonanceTier.FAVORED
+
+
+class BeingNicknameFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingNickname
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    name = factory.Sequence(lambda n: f"Nickname {n}")
+
+
+class WorshipFeastDayFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = WorshipFeastDay
+
+    being = factory.SubFactory(WorshippedBeingFactory)
+    ic_month = 1
+    ic_day = 1
+    name = factory.Sequence(lambda n: f"Feast Day {n}")
+
+
+class BeingRelationshipFactory(factory.django.DjangoModelFactory):
+    class Meta:
+        model = BeingRelationship
+
+    being_a = factory.SubFactory(WorshippedBeingFactory)
+    being_b = factory.SubFactory(WorshippedBeingFactory)
+    valence = BeingRelationshipValence.ALLY
 
 
 class DevotionStandingFactory(factory.django.DjangoModelFactory):

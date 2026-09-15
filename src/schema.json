@@ -3742,7 +3742,6 @@ paths:
         ViewSet for listing Beginnings options.
 
         Filter by starting_area to get options available for a specific starting area.
-        Results are filtered by user trust level.
       parameters:
       - in: query
         name: starting_area
@@ -3769,7 +3768,6 @@ paths:
         ViewSet for listing Beginnings options.
 
         Filter by starting_area to get options available for a specific starting area.
-        Results are filtered by user trust level.
       parameters:
       - in: path
         name: id
@@ -4367,6 +4365,33 @@ paths:
               schema:
                 $ref: '#/components/schemas/HouseClaimStatus'
           description: ''
+  /api/character-creation/drafts/{id}/offers/:
+    get:
+      operationId: character_creation_drafts_offers_retrieve
+      description: The distinctions this draft can pick in one chapter, and what its
+        route closed.
+      parameters:
+      - in: query
+        name: chapter
+        schema:
+          type: string
+        required: true
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OffersResponse'
+          description: ''
   /api/character-creation/drafts/{id}/resubmit/:
     post:
       operationId: character_creation_drafts_resubmit_create
@@ -4397,25 +4422,14 @@ paths:
     post:
       operationId: character_creation_drafts_select_tradition_create
       description: |-
-        Select a tradition for the draft.
+        Select (or clear) the draft's tradition; reconcile what the pick carries (#3675).
 
-        Gates on ``BeginningTradition.required_distinction`` (#2426): a tradition
-        that requires formal training may only be selected once the draft already
-        holds that distinction (added via the distinctions app). There is no
-        general auto-attach — `world.distinctions.views` only *clears* the selected
-        tradition when its required distinction is later removed
-        (`_clear_tradition_if_required_distinction_removed`); it never adds one.
-
-        **One deliberate exception (#2442):** the "Unbound" drawback distinction
-        (``UNBOUND_DRAWBACK_DISTINCTION_SLUG``) IS auto-added when missing, instead
-        of rejecting the request. Unbound is CG's tradition-agnostic default (#2426)
-        — unlike Orphaned Tradition (a deliberate story pick, #2428 Task 5), a
-        player must not be forced to already know about this one specific drawback
-        before CG can complete; see
-        ``world.seeds.tests.test_playable_slice.TestSeededCharacterCreation
-        .test_tradition_step_completable_for_every_seeded_beginning`` for the
-        "CG must remain completable via the Unbound path with zero manual steps"
-        regression proof #2426 shipped, which this exception preserves.
+        There is no gate here: every tradition a Beginning's slate offers is
+        selectable outright. What the pick carries is decided by the slate line's
+        state (``BeginningTradition.state``): a ``TraditionStateLine`` row keyed
+        to that state may name a drawback distinction the pick carries for free,
+        applied by ``reconcile_offer_picks`` after the save. Clearing the tradition
+        removes whatever it carried the same way.
       parameters:
       - in: path
         name: id
@@ -4538,7 +4552,7 @@ paths:
         schema:
           type: string
       - in: query
-        name: has_open_positions
+        name: has_open_kin_slots
         schema:
           type: boolean
       - in: query
@@ -4880,14 +4894,14 @@ paths:
     get:
       operationId: character_creation_origin_templates_list
       description: |-
-        Serialize with one batched ``claimable_kind_ids`` query, not one per row.
+        Serialize with one batched ``claimable_kind_ids`` + offers query, not one per row.
 
         Mirrors ``ListModelMixin.list()`` (this ViewSet opts out of pagination,
         so there is no ``page`` branch to preserve) but materializes the
-        queryset once and passes a template-id -> kind-id grouping into the
-        serializer context (no per-request memo on ``self`` - ADR-0260; the
-        grouping is a plain argument, not state stashed on the view or
-        serializer instance).
+        queryset once and passes a template-id -> kind-id grouping and a
+        choice-id -> offers grouping into the serializer context (no per-request
+        memo on ``self`` - ADR-0260; each grouping is a plain argument, not state
+        stashed on the view or serializer instance).
       parameters:
       - in: query
         name: beginning
@@ -4913,8 +4927,6 @@ paths:
         List active origin-story templates for the CG guided flow (#2478, #3617).
 
         Filter by ``beginning`` to get templates available for a specific beginning.
-        Trust-gated: staff see every active row, everyone else only rows whose
-        ``trust_required`` is at most their own trust. Mirrors ``CGGlimpseTagViewSet``.
       parameters:
       - in: path
         name: id
@@ -5312,6 +5324,52 @@ paths:
                 items:
                   $ref: '#/components/schemas/PerspectiveEntry'
           description: ''
+  /api/character-creation/vacancies/:
+    get:
+      operationId: character_creation_vacancies_list
+      description: Openings the draft may take, priced for it (#3648). ``?draft=``
+        is required.
+      parameters:
+      - in: query
+        name: organization
+        schema:
+          type: integer
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CGVacancy'
+          description: ''
+  /api/character-creation/vacancies/{id}/:
+    get:
+      operationId: character_creation_vacancies_retrieve
+      description: Openings the draft may take, priced for it (#3648). ``?draft=``
+        is required.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Vacancy.
+        required: true
+      tags:
+      - character-creation
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CGVacancy'
+          description: ''
   /api/character-sheets/{id}/:
     get:
       operationId: character_sheets_retrieve
@@ -5504,6 +5562,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatPointState'
+          description: ''
+  /api/character-sheets/{id}/xp-ledger/:
+    get:
+      operationId: character_sheets_xp_ledger_retrieve
+      description: |-
+        What the owner has earned on, and invested in, this character (#3748).
+
+        Owner-only: XP is the player's business, not something other players read
+        off a public sheet.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - character-sheets
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CharacterXPLedger'
           description: ''
   /api/characters/online/:
     get:
@@ -6254,7 +6337,7 @@ paths:
       - in: query
         name: subject
         schema:
-          type: number
+          type: integer
       tags:
       - codex
       security:
@@ -7540,6 +7623,72 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/DuelChallenge'
+          description: ''
+  /api/combat/escalation-curves/:
+    get:
+      operationId: combat_escalation_curves_list
+      description: |-
+        Read-only escalation curve catalog for the GM settings picker (#3552).
+
+        Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+        name and description are authored encounter design a player should not
+        browse. ``?search=`` matches the name.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedEscalationCurveList'
+          description: ''
+  /api/combat/escalation-curves/{id}/:
+    get:
+      operationId: combat_escalation_curves_retrieve
+      description: |-
+        Read-only escalation curve catalog for the GM settings picker (#3552).
+
+        Mirrors ``CreatureTemplateViewSet``'s gate (``IsGMOrStaff``): a curve's
+        name and description are authored encounter design a player should not
+        browse. ``?search=`` matches the name.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this Escalation Curve.
+        required: true
+      tags:
+      - combat
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EscalationCurve'
           description: ''
   /api/combat/threat-pools/:
     get:
@@ -10536,6 +10685,7 @@ paths:
         Request body:
             {
                 "distinction_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -10599,6 +10749,7 @@ paths:
             {
                 "remove_id": int,
                 "add_id": int,
+                "offer_id": int,
                 "rank": int (optional, defaults to 1),
                 "notes": str (optional)
             }
@@ -10632,15 +10783,17 @@ paths:
     put:
       operationId: distinctions_drafts_distinctions_sync_update
       description: |-
-        Set the full list of distinctions on a draft.
+        Set the full list of CHOICE distinctions on a draft, then reconcile (#3675).
 
         Request body:
             {
-                "distinctions": [{"id": int, "rank": int}, ...]
+                "distinctions": [{"id": int, "rank": int, "offer_id": int}, ...]
             }
 
-        This replaces all distinctions on the draft with the provided list.
-        All distinctions are validated together for mutual exclusion conflicts.
+        This replaces every CHOICE-arrival distinction on the draft with the
+        provided list; every entry must resolve to an offer the draft earned
+        (``_resolve_offer``). ``reconcile_offer_picks`` runs afterward so any
+        BUNDLED/CARRIED entries the frontend never sends survive the sync.
       parameters:
       - in: path
         name: draft_id
@@ -15921,9 +16074,17 @@ paths:
         schema:
           type: string
       - in: query
+        name: kind
+        schema:
+          type: string
+      - in: query
         name: mode
         schema:
           type: string
+      - in: query
+        name: participant
+        schema:
+          type: integer
       - in: query
         name: persona
         schema:
@@ -19310,20 +19471,8 @@ paths:
   /api/magic/facets/:
     get:
       operationId: magic_facets_list
-      description: |-
-        ViewSet for Facet records.
-
-        Provides read-only access to the facet hierarchy.
-        Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
+      description: Read-only browse of the flat Facet vocabulary.
       parameters:
-      - in: query
-        name: parent
-        schema:
-          type: integer
-      - in: query
-        name: parent__isnull
-        schema:
-          type: boolean
       - name: search
         required: false
         in: query
@@ -19346,11 +19495,7 @@ paths:
   /api/magic/facets/{id}/:
     get:
       operationId: magic_facets_retrieve
-      description: |-
-        ViewSet for Facet records.
-
-        Provides read-only access to the facet hierarchy.
-        Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
+      description: Read-only browse of the flat Facet vocabulary.
       parameters:
       - in: path
         name: id
@@ -19368,21 +19513,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Facet'
-          description: ''
-  /api/magic/facets/tree/:
-    get:
-      operationId: magic_facets_tree_retrieve
-      description: Return facets as nested tree structure.
-      tags:
-      - magic
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FacetTree'
           description: ''
   /api/magic/gift-unlocks/purchase/:
     post:
@@ -27287,6 +27417,114 @@ paths:
               schema:
                 $ref: '#/components/schemas/Place'
           description: ''
+  /api/play/context/:
+    get:
+      operationId: play_context_retrieve
+      description: GET a small authorized context window around a retained pose.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/conversations/:
+    get:
+      operationId: play_conversations_retrieve
+      description: GET authorized conversation summaries for the play navigator.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/poses/:
+    get:
+      operationId: play_poses_retrieve
+      description: GET authorized poses using the existing enriched interaction DTO.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/read/:
+    post:
+      operationId: play_read_create
+      description: |-
+        POST authorized pose references to mark them read for this account.
+
+        Two request-body shapes:
+
+        - ``{"poses": [{"id": ..., "timestamp": ...}, ...]}`` — the original
+          explicit-list path, capped at ``MAX_POSES_PER_BATCH``.
+        - ``{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}`` — the
+          mark-all-before-snapshot bulk dismissal (#3759 spec section 7: "Separate
+          explicit mark-all-before-snapshot operation for deliberate dismissal.").
+          Marks every interaction this account can see in that conversation with
+          ``timestamp <= before`` as read, without the client enumerating poses.
+
+        Supplying both ``conversation`` and ``poses`` in the same request is
+        rejected with 400 rather than silently favoring one shape.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/search/:
+    get:
+      operationId: play_search_retrieve
+      description: |-
+        Search only viewer-rendered, authorized interaction text, bounded by
+        conversation/kind/date so the comprehension-aware match never scans
+        unbounded history (#3759).
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/submissions/{client_request_id}/:
+    get:
+      operationId: play_submissions_retrieve
+      description: |-
+        GET whether a submitted pose landed, by client_request_id (#3760).
+
+        Writer-only: scoped to the requesting account's own personas via
+        ``get_account_personas`` -- the same account-scoping seam
+        ``InteractionViewSet`` uses. A non-owner's lookup 404s rather than
+        403ing: a resend attempt is not proof of authorship, and a 403 would
+        still confirm the row exists.
+      parameters:
+      - in: path
+        name: client_request_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/play/threads/:
+    get:
+      operationId: play_threads_retrieve
+      description: GET server-grouped, paginated thread summaries for one conversation.
+      tags:
+      - play
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          description: No response body
   /api/player-submissions/bug-reports/:
     get:
       operationId: player_submissions_bug_reports_list
@@ -28348,175 +28586,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/SystemErrorReportDetail'
           description: ''
-  /api/player-trust/:
-    get:
-      operationId: player_trust_list
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: query
-        name: account
-        schema:
-          type: string
-        description: Account Username
-      - in: query
-        name: has_negative_feedback
-        schema:
-          type: boolean
-      - in: query
-        name: has_positive_feedback
-        schema:
-          type: boolean
-      - name: ordering
-        required: false
-        in: query
-        description: Which field to use when ordering the results.
-        schema:
-          type: string
-      - name: page
-        required: false
-        in: query
-        description: A page number within the paginated result set.
-        schema:
-          type: integer
-      - name: page_size
-        required: false
-        in: query
-        description: Number of results to return per page.
-        schema:
-          type: integer
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PaginatedPlayerTrustList'
-          description: ''
-    post:
-      operationId: player_trust_create
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-  /api/player-trust/{id}/:
-    get:
-      operationId: player_trust_retrieve
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    put:
-      operationId: player_trust_update
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    patch:
-      operationId: player_trust_partial_update
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
-    delete:
-      operationId: player_trust_destroy
-      description: |-
-        ViewSet for PlayerTrust model.
-        Manages player trust levels for content and GM activities.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: integer
-        description: A unique integer value identifying this player trust.
-        required: true
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/player-trust/my_trust/:
-    get:
-      operationId: player_trust_my_trust_retrieve
-      description: Get the current user's trust profile
-      tags:
-      - player-trust
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/PlayerTrust'
-          description: ''
   /api/precapture-consent-requests/:
     get:
       operationId: precapture_consent_requests_list
@@ -28633,6 +28702,68 @@ paths:
               schema:
                 $ref: '#/components/schemas/DuranceStatus'
           description: ''
+  /api/progression/nominations/:
+    get:
+      operationId: progression_nominations_list
+      description: |-
+        Nominations for good RP (#3738): the nominator's own side only.
+
+        POST /nominations/ — nominate the writer of a pose or journal entry
+        DELETE /nominations/<id>/ — withdraw this week's citation
+        GET /nominations/ — the requesting account's own nominations this week
+
+        There is deliberately no read of nominations received, no count and no
+        budget: a nominee learns only the settled XP at week's end.
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Nomination'
+          description: ''
+    post:
+      operationId: progression_nominations_create
+      description: Nominate the writer of a piece of this week's prose.
+      tags:
+      - progression
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NominationRequest'
+        required: true
+      security:
+      - cookieAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Nomination'
+          description: ''
+  /api/progression/nominations/{id}/:
+    delete:
+      operationId: progression_nominations_destroy
+      description: Withdraw one of the requesting account's own nominations.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - progression
+      security:
+      - cookieAuth: []
+      responses:
+        '204':
+          description: No response body
   /api/progression/path-intent/:
     get:
       operationId: progression_path_intent_retrieve
@@ -28828,81 +28959,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PurchaseUnlockResponse'
-          description: ''
-  /api/progression/votes/:
-    get:
-      operationId: progression_votes_list
-      description: |-
-        ViewSet for casting, removing, and listing weekly votes.
-
-        POST /votes/ — Cast a vote
-        DELETE /votes/<id>/ — Unvote
-        GET /votes/ — List current week's votes for the requesting user
-        GET /votes/budget/ — Return current vote budget
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WeeklyVote'
-          description: ''
-    post:
-      operationId: progression_votes_create
-      description: Cast a vote on a piece of content.
-      tags:
-      - progression
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/WeeklyVoteRequest'
-        required: true
-      security:
-      - cookieAuth: []
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WeeklyVote'
-          description: ''
-  /api/progression/votes/{id}/:
-    delete:
-      operationId: progression_votes_destroy
-      description: Remove (unvote) an existing vote by ID.
-      parameters:
-      - in: path
-        name: id
-        schema:
-          type: string
-        required: true
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '204':
-          description: No response body
-  /api/progression/votes/budget/:
-    get:
-      operationId: progression_votes_budget_retrieve
-      description: Return the current vote budget for the requesting user.
-      tags:
-      - progression
-      security:
-      - cookieAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/WeeklyVote'
           description: ''
   /api/protected-subjects/:
     get:
@@ -29312,6 +29368,146 @@ paths:
               schema:
                 $ref: '#/components/schemas/WindowReactInput'
           description: ''
+  /api/realms/:
+    get:
+      operationId: realms_list
+      description: List the realms (the hub) and retrieve one by slug (the page).
+      parameters:
+      - in: query
+        name: theme
+        schema:
+          type: string
+          enum:
+          - ariwn
+          - arx
+          - aythirmok
+          - default
+          - inferna
+          - luxen
+          - umbros
+        description: |-
+          Visual theme applied in the frontend when this realm is active.
+
+          * `default` - Default
+          * `arx` - Arx
+          * `umbros` - Umbros
+          * `luxen` - Luxen
+          * `inferna` - Inferna
+          * `ariwn` - Ariwn
+          * `aythirmok` - Aythirmok
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RealmList'
+          description: ''
+  /api/realms/{slug}/:
+    get:
+      operationId: realms_retrieve
+      description: List the realms (the hub) and retrieve one by slug (the page).
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealmDetail'
+          description: ''
+  /api/realms/{slug}/notables/:
+    get:
+      operationId: realms_notables_retrieve
+      description: 'The names spoken in the realm: top ten by renown and by legend
+        (#676''s addition).'
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RealmBoards'
+          description: ''
+  /api/realms/{slug}/organizations/:
+    get:
+      operationId: realms_organizations_list
+      description: |-
+        The realm's houses and organizations as a gate would show them.
+
+        Covert kinds (#2820) are excluded unless the viewer's active persona holds a
+        live membership in that row; an anonymous viewer gets the plain exclusion.
+        Covenants are not organizations here, as on the members' list.
+      parameters:
+      - in: path
+        name: slug
+        schema:
+          type: string
+          pattern: ^[-a-z0-9]+$
+        required: true
+      - in: query
+        name: theme
+        schema:
+          type: string
+          enum:
+          - ariwn
+          - arx
+          - aythirmok
+          - default
+          - inferna
+          - luxen
+          - umbros
+        description: |-
+          Visual theme applied in the frontend when this realm is active.
+
+          * `default` - Default
+          * `arx` - Arx
+          * `umbros` - Umbros
+          * `luxen` - Luxen
+          * `inferna` - Inferna
+          * `ariwn` - Ariwn
+          * `aythirmok` - Aythirmok
+      tags:
+      - realms
+      security:
+      - cookieAuth: []
+      - {}
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationShopWindow'
+          description: ''
   /api/register/availability/:
     get:
       operationId: register_availability_retrieve
@@ -29704,6 +29900,10 @@ paths:
           type: integer
       - in: query
         name: target
+        schema:
+          type: integer
+      - in: query
+        name: target_companion
         schema:
           type: integer
       tags:
@@ -30374,6 +30574,10 @@ paths:
         schema:
           type: integer
       - in: query
+        name: realm
+        schema:
+          type: string
+      - in: query
         name: roster
         schema:
           type: number
@@ -30470,7 +30674,10 @@ paths:
 
         Annotates ``unread_narrative_count`` (#3412 — the Hall) — unacknowledged
         ``NarrativeMessageDelivery`` rows per character, via a single aggregated
-        JOIN/GROUP BY rather than a per-row query.
+        JOIN/GROUP BY rather than a per-row query. Also attaches cross-device
+        attention (#3774) -- ``unread_direct``, ``has_ambient_unread``, and
+        ``attention_as_of_id`` -- computed once for the whole list via
+        ``account_attention()`` and handed to the serializer through context.
       tags:
       - roster
       security:
@@ -30520,7 +30727,7 @@ paths:
         schema:
           type: string
       - in: query
-        name: has_open_positions
+        name: has_open_kin_slots
         schema:
           type: boolean
       - in: query
@@ -30741,7 +30948,7 @@ paths:
       description: |-
         Viewset for game invites.
 
-        - Create: auth + trust-gated (service validates trust)
+        - Create: auth; the service refuses while registration is closed
         - List: auth, returns only the inviter's own invites
         - Resolve: AllowAny, returns display-safe context for registration page
         - Claim: auth, links invite to the authenticated account
@@ -30796,7 +31003,7 @@ paths:
       description: |-
         Viewset for game invites.
 
-        - Create: auth + trust-gated (service validates trust)
+        - Create: auth; the service refuses while registration is closed
         - List: auth, returns only the inviter's own invites
         - Resolve: AllowAny, returns display-safe context for registration page
         - Claim: auth, links invite to the authenticated account
@@ -31080,6 +31287,18 @@ paths:
       description: API viewset for managing player media.
       tags:
       - roster
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/MediaUploadRequest'
+        required: true
       security:
       - cookieAuth: []
       responses:
@@ -31669,14 +31888,16 @@ paths:
 
         Featured = the highest-reacted GM-tagged pose; a tagged pose headlines even with
         zero reactions, because storyteller curation has primacy. When the scene has no
-        tags, this falls back to the single most-voted (reactions tie-break) pose. The
-        index is the remaining poses with at least one vote or reaction, ranked by
-        all-time vote count first, reaction count as tie-break, and recency last —
-        capped at 10. Every pose is drawn through ``Interaction.visible_to`` so the reel
-        can never surface a pose the viewer cannot already see — not even as a sealed
-        slot. The payload carries interaction ids plus vote/reaction counts (the featured
-        card stays otherwise sealed); the frontend reveals a pose by fetching it through
-        the existing interaction-detail endpoint, which re-checks visibility.
+        tags, this falls back to the single most-nominated (reactions tie-break) pose.
+        The index is the remaining poses with at least one nomination or reaction,
+        ranked by all-time nomination count first, reaction count as tie-break, and
+        recency last — capped at 10. Every pose is drawn through
+        ``Interaction.visible_to`` so the reel can never surface a pose the viewer
+        cannot already see — not even as a sealed slot. The payload carries interaction
+        ids plus the reaction count only (#3738: nominations rank but are never shown;
+        the featured card stays otherwise sealed); the frontend reveals a pose by
+        fetching it through the existing interaction-detail endpoint, which re-checks
+        visibility.
       parameters:
       - in: path
         name: id
@@ -35029,11 +35250,6 @@ paths:
         name: privacy
         schema:
           type: string
-      - in: query
-        name: requires_trust_category
-        schema:
-          type: string
-        description: Requires Trust Category
       - in: query
         name: scope
         schema:
@@ -38621,6 +38837,40 @@ paths:
               schema:
                 $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
           description: ''
+  /api/world-builder/areas/unfiled-rooms/:
+    get:
+      operationId: world_builder_areas_unfiled_rooms_list
+      description: |-
+        GET /api/world-builder/areas/unfiled-rooms/ — rooms that belong to no area (#3860).
+
+        Limbo, and any room minted outside the builder: the index rail lists them so
+        reaching one never depends on knowing to search. Staff only in effect: a
+        warrant covers areas, and an area-less room lies under no warrant, so a
+        grant holder gets an empty list rather than a 403.
+      parameters:
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: page_size
+        required: false
+        in: query
+        description: Number of results to return per page.
+        schema:
+          type: integer
+      tags:
+      - world-builder
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedWorldBuilderRoomHitList'
+          description: ''
   /api/worship/beings/:
     get:
       operationId: worship_beings_list
@@ -39237,6 +39487,69 @@ components:
       - name
       - threat_pool_id
       - tier
+    AftermathBeat:
+      type: object
+      description: Schema-only shape of the beat line in an aftermath digest (#3551).
+      properties:
+        outcome:
+          type: string
+        tier_name:
+          type: string
+          nullable: true
+        resolution_text:
+          type: string
+      required:
+      - outcome
+      - resolution_text
+      - tier_name
+    AftermathDigest:
+      type: object
+      description: |-
+        Schema-only shape of ParticipantSerializer.aftermath (#3551).
+
+        Never instantiated for output.
+      properties:
+        outcome:
+          type: string
+        consequence:
+          allOf:
+          - $ref: '#/components/schemas/ConsequenceOutcome'
+          nullable: true
+        conditions:
+          type: array
+          items:
+            $ref: '#/components/schemas/ConditionInstance'
+        legend:
+          type: array
+          items:
+            $ref: '#/components/schemas/AftermathLegend'
+        beat:
+          allOf:
+          - $ref: '#/components/schemas/AftermathBeat'
+          nullable: true
+        peril_round_active:
+          type: boolean
+      required:
+      - beat
+      - conditions
+      - consequence
+      - legend
+      - outcome
+      - peril_round_active
+    AftermathLegend:
+      type: object
+      description: Schema-only shape of one legend line in an aftermath digest (#3551).
+      properties:
+        title:
+          type: string
+        description:
+          type: string
+        base_value:
+          type: integer
+      required:
+      - base_value
+      - description
+      - title
     AggregateBeatContribution:
       type: object
       description: Read-only serializer for AggregateBeatContribution ledger rows.
@@ -39405,6 +39718,20 @@ components:
       - id
       - name
       - provocation_cap
+    AnchorSourceEnum:
+      enum:
+      - pool
+      - listed
+      - same_as
+      - served_house
+      - own_family
+      type: string
+      description: |-
+        * `pool` - Every group of a type in a realm
+        * `listed` - Groups I name
+        * `same_as` - The same group as an earlier question
+        * `served_house` - The house the character's family served
+        * `own_family` - The character's own family
     ApplicablePullsRequestRequest:
       type: object
       description: |-
@@ -41197,23 +41524,24 @@ components:
           minimum: -2147483648
           description: CG point cost for this beginning; summed with species gift
             grant costs into the character-creation points budget.
-        is_accessible:
-          type: boolean
-          description: Check if the requesting user can access this option.
-          readOnly: true
         codex_entry_ids:
           type: array
           items:
             type: integer
           description: Get codex entry IDs granted by this beginnings choice.
           readOnly: true
+        heritage:
+          allOf:
+          - $ref: '#/components/schemas/HeritageAnchor'
+          readOnly: true
+          nullable: true
       required:
       - allowed_species_ids
       - art_image
       - codex_entry_ids
       - description
+      - heritage
       - id
-      - is_accessible
       - name
     BeginningsRequest:
       type: object
@@ -42034,11 +42362,11 @@ components:
     CGGlimpseTag:
       type: object
       description: |-
-        Glimpse tag row for the CG guided flow (#2427).
+        Glimpse tag row for the CG guided flow (#2427, #3675).
 
-        Backs ``GET /api/character-creation/glimpse-tags/``. Curated distinction
-        suggestions are embedded per tag (prefetched); the client dedupes across
-        the chosen tag set.
+        Backs ``GET /api/character-creation/glimpse-tags/``. The distinctions this tag
+        opens are embedded as offers (prefetched); the client dedupes across the chosen
+        tag set.
       properties:
         id:
           type: integer
@@ -42084,10 +42412,10 @@ components:
           nullable: true
           description: Affinity this tag nudges at CG finalize. Set on TONE and TRIGGER
             tags to apply a small aura adjustment. Null = no affinity nudge.
-        suggested_distinctions:
+        offers:
           type: array
           items:
-            $ref: '#/components/schemas/CGGlimpseTagSuggestedDistinction'
+            $ref: '#/components/schemas/CGGlimpseTagOffer'
           readOnly: true
       required:
       - affinity
@@ -42096,23 +42424,32 @@ components:
       - example
       - id
       - name
+      - offers
       - slug
       - sort_order
-      - suggested_distinctions
-    CGGlimpseTagSuggestedDistinction:
+    CGGlimpseTagOffer:
       type: object
-      description: Distinction stub embedded in a glimpse tag's suggestion list (#2427).
+      description: A ``DistinctionOffer`` embedded on a glimpse tag row (#3675).
       properties:
-        id:
+        offer_id:
           type: integer
-          readOnly: true
+        distinction_id:
+          type: integer
         name:
           type: string
-          readOnly: true
-          description: Display name for this distinction.
+        player_line:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
       required:
-      - id
+      - cost_per_rank
+      - distinction_id
+      - max_rank
       - name
+      - offer_id
+      - player_line
     CGOriginTemplate:
       type: object
       description: |-
@@ -42144,10 +42481,6 @@ components:
           readOnly: true
           description: Flat CG cost of this Upbringing (#3617). Negative refunds,
             like a drawback.
-        trust_required:
-          type: integer
-          readOnly: true
-          description: Minimum trust to see/select this Upbringing (#3617).
         allows_claim_family:
           type: boolean
           readOnly: true
@@ -42165,12 +42498,12 @@ components:
           items:
             type: integer
           readOnly: true
-        named_family_kind:
-          type: integer
+        family_templates:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
           readOnly: true
-          nullable: true
-          description: Kind a player-named family gets; required when naming is allowed
-            (#3617).
         slots:
           type: array
           items:
@@ -42182,14 +42515,13 @@ components:
       - allows_no_family
       - cg_point_cost
       - claimable_kind_ids
+      - family_templates
       - frame_narrative
       - id
       - is_active
       - name
-      - named_family_kind
       - slots
       - sort_order
-      - trust_required
     CGPointBudget:
       type: object
       description: Serializer for CG point budget configuration.
@@ -42223,12 +42555,12 @@ components:
         Technique row for the CG technique-options list (#2426).
 
         Backs ``GET /api/character-creation/technique-options/?draft_id=<id>&gift_id=<id>``
-        — the pool ∪ tradition availability set for one (path, gift, tradition) pick
+        — the pool ∪ tradition ∪ species availability set for one CG pick
         (see ``world.magic.services.cg_catalog.get_technique_options``). ``is_tradition_technique``
         is resolved from the ``tradition_technique_ids`` set the ViewSet places in the
         serializer context — never attached to the (SharedMemoryModel) ``Technique``
         instance itself, to avoid leaking one request's filtered flag into another's
-        cached row (see the ``required_distinction_id`` comment above).
+        cached row (see ``TraditionSerializer._beginning_tradition`` above).
       properties:
         id:
           type: integer
@@ -42253,6 +42585,10 @@ components:
           description: True when this technique came from the tradition's special
             technique set.
           readOnly: true
+        is_species_technique:
+          type: boolean
+          description: True when this technique belongs to a gift granted by the species.
+          readOnly: true
         effect_summary:
           allOf:
           - $ref: '#/components/schemas/TechniqueEffectSummary'
@@ -42263,8 +42599,74 @@ components:
       - description
       - effect_summary
       - id
+      - is_species_technique
       - is_tradition_technique
       - name
+    CGVacancy:
+      type: object
+      description: An opening reachable from the draft, priced for it (#3648).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Third daughter, Enforcer, Household guard.
+        description:
+          type: string
+          readOnly: true
+          description: Who fits here and what they do for the family.
+        basis:
+          type: string
+          readOnly: true
+        importance:
+          type: integer
+          readOnly: true
+          description: How much the family cares about the holder. 0 = would not notice.
+        presumed_importance:
+          type: integer
+          readOnly: true
+          description: What outsiders assume the family thinks of the holder.
+        cost:
+          type: integer
+          readOnly: true
+        rank_name:
+          type: string
+          readOnly: true
+          default: ''
+        count_remaining:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Openings left; blank = a standing vacancy that is always open.
+        organization:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+        kin_pool:
+          allOf:
+          - $ref: '#/components/schemas/KinSlotPool'
+          readOnly: true
+          nullable: true
+        kin_node:
+          allOf:
+          - $ref: '#/components/schemas/KinSlot'
+          readOnly: true
+          nullable: true
+      required:
+      - basis
+      - cost
+      - count_remaining
+      - description
+      - id
+      - importance
+      - kin_node
+      - kin_pool
+      - name
+      - organization
+      - presumed_importance
+      - rank_name
     CanHonor:
       type: object
       description: |-
@@ -42357,7 +42759,12 @@ components:
         * `changes_requested` - Changes requested
     CapabilityEffect:
       type: object
-      description: One Capability a technique grants (#2898).
+      description: |-
+        One Capability a technique grants by being KNOWN (#2898, ADR-0248).
+
+        Standing possession, not a cast effect — the summary sentence says so in
+        words ("Knowing it grants ..."), so a client rendering these rows must not
+        file them under what the cast does (#3682).
       properties:
         name:
           type: string
@@ -42395,6 +42802,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -42410,7 +42819,6 @@ components:
           default: shared
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -42420,6 +42828,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -42437,7 +42847,6 @@ components:
           default: shared
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -43580,7 +43989,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -43649,6 +44057,12 @@ components:
         claimed_kin_pool:
           type: integer
           readOnly: true
+        selected_vacancy:
+          type: integer
+          readOnly: true
+        served_house:
+          type: integer
+          readOnly: true
         defer_parents:
           type: boolean
         second_parent_species:
@@ -43676,10 +44090,10 @@ components:
           description: |-
             Render the selected tradition with this draft's beginning_id in context.
 
-            TraditionSerializer.required_distinction_id resolves a BeginningTradition
-            row keyed on (beginning_id, tradition_id). Drafts carry both pieces of
-            state directly, so we inject ``beginning_id`` into a per-draft context
-            rather than relying on the list endpoint's pre-built map.
+            TraditionSerializer._beginning_tradition resolves a BeginningTradition row
+            keyed on (beginning_id, tradition_id). Drafts carry both pieces of state
+            directly, so we inject ``beginning_id`` into a per-draft context rather than
+            relying on the list endpoint's pre-built map.
           readOnly: true
         public_worship:
           allOf:
@@ -43735,16 +44149,72 @@ components:
         starting_technique_picks:
           type: integer
           readOnly: true
+        age_min:
+          type: integer
+          readOnly: true
+        age_max:
+          type: integer
+          readOnly: true
+        bundled_distinctions:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          readOnly: true
+        derived_anchors:
+          type: object
+          additionalProperties:
+            allOf:
+            - $ref: '#/components/schemas/DerivedAnchor'
+            nullable: true
+          readOnly: true
+        enemy_offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnemyOffer'
+          readOnly: true
+        enemy_price_tables:
+          type: object
+          additionalProperties:
+            type: object
+            additionalProperties:
+              type: object
+              additionalProperties:
+                type: integer
+          readOnly: true
+        enemy_degree_grants:
+          type: object
+          additionalProperties:
+            type: string
+          readOnly: true
+        enemy_reasons:
+          type: array
+          items:
+            $ref: '#/components/schemas/EnemyReason'
+          readOnly: true
+        introductions_offered:
+          allOf:
+          - $ref: '#/components/schemas/IntroductionsOffered'
+          readOnly: true
       required:
+      - age_max
+      - age_min
       - build
+      - bundled_distinctions
       - cg_points_remaining
       - cg_points_spent
       - claimed_kin_pool
       - claimed_kin_slot
+      - derived_anchors
+      - enemy_degree_grants
+      - enemy_offers
+      - enemy_price_tables
+      - enemy_reasons
       - family
       - has_existing_characters
       - height_band
       - id
+      - introductions_offered
       - public_worship
       - second_parent_species
       - secret_worship
@@ -43755,6 +44225,8 @@ components:
       - selected_path
       - selected_species
       - selected_tradition
+      - selected_vacancy
+      - served_house
       - stage_completion
       - stage_errors
       - starting_technique_picks
@@ -43783,7 +44255,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -43851,6 +44322,14 @@ components:
           writeOnly: true
           nullable: true
         claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_vacancy_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        served_house_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -44080,8 +44559,16 @@ components:
           readOnly: true
         target:
           type: integer
-          description: The character this relationship is about
+          description: The character this relationship is about; null when target_companion
+            is set (#3575). Exactly one of target / target_companion is set.
           readOnly: true
+          nullable: true
+        target_companion:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The bonded companion this relationship is about (#3575); null
+            when target is set. Only the companion's owner may hold such a row.
         target_name:
           type: string
           readOnly: true
@@ -44138,6 +44625,7 @@ components:
       - source
       - source_name
       - target
+      - target_companion
       - target_name
       - track_progress
       - updated_at
@@ -44157,8 +44645,16 @@ components:
           readOnly: true
         target:
           type: integer
-          description: The character this relationship is about
+          description: The character this relationship is about; null when target_companion
+            is set (#3575). Exactly one of target / target_companion is set.
           readOnly: true
+          nullable: true
+        target_companion:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: The bonded companion this relationship is about (#3575); null
+            when target is set. Only the companion's owner may hold such a row.
         target_name:
           type: string
           readOnly: true
@@ -44209,6 +44705,7 @@ components:
       - source
       - source_name
       - target
+      - target_companion
       - target_name
       - updated_at
     CharacterRequest:
@@ -44336,6 +44833,24 @@ components:
         * `dying` - dying
         * `incapacitated` - incapacitated
         * `dead` - dead
+    CharacterXPLedger:
+      type: object
+      description: |-
+        Response for CharacterSheetViewSet.xp-ledger (#3748): what this character cost.
+
+        XP is spent by the account, so these are attribution totals, not a balance —
+        ``spent`` can exceed ``earned`` when a player invests XP earned elsewhere.
+      properties:
+        earned:
+          type: integer
+        spent:
+          type: integer
+        locked:
+          type: integer
+      required:
+      - earned
+      - locked
+      - spent
     CheckCallTarget:
       type: object
       description: |-
@@ -44790,6 +45305,30 @@ components:
       - phase
       - season
       - year
+    ClosedDistinction:
+      type: object
+      description: A ``world.character_creation.types.ClosedDistinction`` (#3675).
+      properties:
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        reason:
+          type: string
+        opener_labels:
+          type: array
+          items:
+            type: string
+        opener_ids:
+          type: array
+          items:
+            type: integer
+      required:
+      - distinction_id
+      - name
+      - opener_ids
+      - opener_labels
+      - reason
     ClueRevealOfferDetails:
       type: object
       description: |-
@@ -44899,6 +45438,11 @@ components:
           type: string
           description: Short summary for tooltips/modals (1-2 sentences).
           maxLength: 300
+        quote:
+          type: string
+          description: An italic intro line shown at the top of this entry's Codex
+            page (e.g. a quote attributed to the subject). Optional; blank hides it.
+          maxLength: 300
         lore_content:
           type: string
           nullable: true
@@ -44982,11 +45526,27 @@ components:
             Reads the queryset annotation; falls back to None where a caller
             serializes without it (e.g. featured lore).
           readOnly: true
+        also_filed_under:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Other subjects this entry is cross-listed under, via a filing.
+
+            Reads ``context["filings_by_entry"]`` (the view builds it in one
+            flat query, joined to each filed subject and that subject's
+            breadcrumb cache), so this adds no query per entry. Each item
+            mirrors the shape of a breadcrumb entry: the filed subject's id,
+            name, and its own breadcrumb path, so the frontend can link
+            straight to that listing.
+          readOnly: true
         art_url:
           type: string
           nullable: true
           readOnly: true
       required:
+      - also_filed_under
       - art_url
       - id
       - knowledge_status
@@ -45066,11 +45626,27 @@ components:
             Reads the queryset annotation; falls back to None where a caller
             serializes without it (e.g. featured lore).
           readOnly: true
+        also_filed_under:
+          type: array
+          items:
+            type: object
+            additionalProperties: {}
+          description: |-
+            Other subjects this entry is cross-listed under, via a filing.
+
+            Reads ``context["filings_by_entry"]`` (the view builds it in one
+            flat query, joined to each filed subject and that subject's
+            breadcrumb cache), so this adds no query per entry. Each item
+            mirrors the shape of a breadcrumb entry: the filed subject's id,
+            name, and its own breadcrumb path, so the frontend can link
+            straight to that listing.
+          readOnly: true
         art_url:
           type: string
           nullable: true
           readOnly: true
       required:
+      - also_filed_under
       - art_url
       - id
       - knowledge_status
@@ -45219,12 +45795,17 @@ components:
             is seeded onto the serializer context by ``CompanionViewSet.get_serializer_context``;
             with no resolvable actor location, every companion reads as absent.
           readOnly: true
+        objectdb_id:
+          type: integer
+          readOnly: true
+          nullable: true
       required:
       - archetype
       - bonded_at
       - id
       - is_present
       - name
+      - objectdb_id
       - released_at
     CompanionArchetype:
       type: object
@@ -45257,6 +45838,28 @@ components:
       - domain
       - id
       - name
+    CompanionOrderSummary:
+      type: object
+      description: Current-round companion directive exposed on an encounter read.
+      properties:
+        companion_id:
+          type: integer
+        companion_name:
+          type: string
+        order_kind:
+          type: string
+        target_opponent_id:
+          type: integer
+          nullable: true
+        defending_participant_id:
+          type: integer
+          nullable: true
+      required:
+      - companion_id
+      - companion_name
+      - defending_participant_id
+      - order_kind
+      - target_opponent_id
     ConditionCategory:
       type: object
       description: Serializer for condition categories.
@@ -45731,6 +46334,24 @@ components:
       description: |-
         * `group_vote` - Group Vote
         * `joint` - Joint
+    ConnectionKindEnum:
+      enum:
+      - raised_by
+      - taught_by
+      - served
+      - sailed_with
+      - owes
+      - sworn_to
+      - hunted_by
+      type: string
+      description: |-
+        * `raised_by` - Raised by
+        * `taught_by` - Taught by
+        * `served` - Served
+        * `sailed_with` - Sailed with
+        * `owes` - Owes
+        * `sworn_to` - Sworn to
+        * `hunted_by` - Hunted by
     ConnectionTypeEnum:
       enum:
       - therefore
@@ -46840,7 +47461,6 @@ components:
       - 1
       - 2
       - 3
-      - 4
       - 5
       - 6
       - 7
@@ -46853,7 +47473,6 @@ components:
         * `1` - Origin
         * `2` - Heritage
         * `3` - Lineage
-        * `4` - Distinctions
         * `5` - Path
         * `6` - Gift
         * `7` - Attributes & Skills
@@ -47346,11 +47965,32 @@ components:
         * `whisper` - Whisper (target only)
         * `table_talk` - Table talk (your place)
         * `mutter` - Mutter (partial echo)
+    DerivedAnchor:
+      type: object
+      description: |-
+        An OWN_FAMILY/SERVED_HOUSE GROUP question's resolved org (#3660 ruling L).
+
+        No ``gloss`` (unlike ``OriginGroupSerializer``) - this backs the fact-card
+        display on an already-answered question, not a picker.
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - id
+      - influence
+      - name
     DevelopmentWrite:
       type: object
       description: Serializer for creating a relationship development update.
       properties:
         target_persona_id:
+          type: integer
+        target_companion_id:
           type: integer
         track_id:
           type: integer
@@ -47370,7 +48010,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -47380,6 +48019,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -47400,7 +48041,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -47793,11 +48433,6 @@ components:
           nullable: true
           description: Return child variants if this is a variant parent.
           readOnly: true
-        prerequisite_description:
-          type: string
-          nullable: true
-          description: Return a human-readable description of prerequisites.
-          readOnly: true
         codex_entry_ids:
           type: array
           items:
@@ -47815,7 +48450,6 @@ components:
       - is_variant_parent
       - max_rank
       - name
-      - prerequisite_description
       - slug
       - tags
       - variants
@@ -48212,9 +48846,15 @@ components:
       - submitted_at
     DraftDistinctionCreateRequest:
       type: object
-      description: Request body for adding a distinction to a draft (create).
+      description: |-
+        Request body for adding a distinction to a draft (create).
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` the pick came from, every
+        add must resolve to an offer the draft earned.
       properties:
         distinction_id:
+          type: integer
+        offer_id:
           type: integer
         rank:
           type: integer
@@ -48224,9 +48864,21 @@ components:
           default: ''
       required:
       - distinction_id
+      - offer_id
     DraftDistinctionEntry:
       type: object
-      description: Read shape of one distinction entry stored in draft_data.
+      description: |-
+        Read shape of one distinction entry stored in draft_data.
+
+        ``offer_ids``/``sources``/``arrivals`` (#3675) name an entry's contributing
+        ``DistinctionOffer`` rows, their display labels, and how each arrived
+        (choice/bundled/carried) -- ``world.distinctions.types.DraftDistinctionEntry``
+        carries them on every offer-tracked entry. ``required=False`` mirrors runtime
+        reality: a legacy entry saved before the offers system landed (0106) has no
+        ``offer_ids`` key at all (see ``offers._drop_vanished_sources``). ``offer_ids``
+        has no declared item type because it mixes ``int`` (a real ``DistinctionOffer``
+        row) and ``str`` (a tradition-state-carried drawback's synthetic
+        ``"state:<TraditionState>"`` key).
       properties:
         distinction_id:
           type: integer
@@ -48242,6 +48894,23 @@ components:
           type: integer
         notes:
           type: string
+        offer_ids:
+          type: array
+          items: {}
+        sources:
+          type: array
+          items:
+            type: string
+        arrivals:
+          type: array
+          items:
+            type: string
+        feature_trait:
+          type: string
+          default: ''
+        feature_marking:
+          type: integer
+          default: 0
       required:
       - category_slug
       - cost
@@ -48252,11 +48921,17 @@ components:
       - rank
     DraftDistinctionSwapRequest:
       type: object
-      description: Request body for swapping mutually-exclusive distinctions.
+      description: |-
+        Request body for swapping mutually-exclusive distinctions.
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` the added distinction
+        came from, the same offer rule ``create`` enforces.
       properties:
         remove_id:
           type: integer
         add_id:
+          type: integer
+        offer_id:
           type: integer
         rank:
           type: integer
@@ -48266,6 +48941,7 @@ components:
           default: ''
       required:
       - add_id
+      - offer_id
       - remove_id
     DraftDistinctionSwapResult:
       type: object
@@ -48279,15 +48955,35 @@ components:
       - removed
     DraftDistinctionSyncItemRequest:
       type: object
-      description: One ``{id, rank}`` pair in the sync request list.
+      description: |-
+        One ``{id, rank, offer_id}`` entry in the sync request list.
+
+        ``offer_id`` (#3675) names the ``DistinctionOffer`` this CHOICE pick came
+        from; required, since carried/bundled entries are re-applied by
+        ``reconcile_offer_picks`` rather than sent by the client.
+
+        ``feature_trait``/``feature_marking`` (#3739) name the one feature a
+        ``taken_per_feature`` pick is aimed at -- a ``FormTrait.name`` or a
+        ``DraftMarking`` pk, never both, and neither on any other distinction. The
+        view rejects the wrong combination rather than silently ignoring it, because
+        the feature is the only thing that keeps two picks of one distinction apart.
       properties:
         id:
           type: integer
         rank:
           type: integer
           default: 1
+        offer_id:
+          type: integer
+        feature_trait:
+          type: string
+          default: ''
+        feature_marking:
+          type: integer
+          default: 0
       required:
       - id
+      - offer_id
     DraftDistinctionSyncRequest:
       type: object
       description: Request body for replacing the full distinction list (sync).
@@ -49053,6 +49749,11 @@ components:
           items:
             $ref: '#/components/schemas/PendingAttack'
           readOnly: true
+        companion_orders:
+          type: array
+          items:
+            $ref: '#/components/schemas/CompanionOrderSummary'
+          readOnly: true
         resolution_order:
           type: array
           items:
@@ -49119,6 +49820,7 @@ components:
           nullable: true
       required:
       - clashes
+      - companion_orders
       - completed_at
       - created_at
       - current_round_actions
@@ -49260,6 +49962,68 @@ components:
         * `party_combat` - Party Combat
         * `open_encounter` - Open Encounter
         * `duel` - Duel
+    EnemyOffer:
+      type: object
+      description: One person or group a draft may name as its enemy (#3621). Read-only,
+        schema only.
+      properties:
+        kind:
+          type: string
+          readOnly: true
+        organization_id:
+          type: integer
+          readOnly: true
+          nullable: true
+        name:
+          type: string
+          readOnly: true
+        reach:
+          type: string
+          readOnly: true
+        power_tier:
+          type: string
+          readOnly: true
+        why:
+          type: string
+          readOnly: true
+        source:
+          type: string
+          readOnly: true
+        reason_id:
+          type: integer
+          readOnly: true
+          nullable: true
+      required:
+      - kind
+      - name
+      - organization_id
+      - power_tier
+      - reach
+      - reason_id
+      - source
+      - why
+    EnemyReason:
+      type: object
+      description: One authored reason an enemy wants the character to fail (#3709).
+        Read-only.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        player_line:
+          type: string
+          readOnly: true
+        fits:
+          type: string
+          readOnly: true
+      required:
+      - fits
+      - id
+      - name
+      - player_line
     EngagementLock:
       type: object
       description: |-
@@ -49765,6 +50529,33 @@ components:
         * `moderate` - Moderate
         * `high` - High
         * `extreme` - Extreme
+    EscalationCurve:
+      type: object
+      description: |-
+        Read-only escalation curve catalog row for the GM settings picker (#3552).
+
+        GM-gated at the viewset (curve names and descriptions are authored
+        encounter design, the same reasoning as the bestiary catalog, #3424).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        start_round:
+          type: integer
+          readOnly: true
+          description: First round the escalation tick fires (>=2 keeps round one
+            calm).
+      required:
+      - description
+      - id
+      - name
+      - start_round
     EstateClaim:
       type: object
       properties:
@@ -50493,38 +51284,21 @@ components:
       - sheltered
     Facet:
       type: object
-      description: Serializer for Facet model with hierarchy info.
+      description: Serializer for the flat Facet vocabulary.
       properties:
         id:
           type: integer
           readOnly: true
         name:
           type: string
-          description: Facet name (e.g., 'Wolf', 'Silk', 'Creatures').
+          description: Facet name (e.g., 'Wolf', 'Silk', 'Scythe').
           maxLength: 100
-        parent:
-          type: integer
-          nullable: true
-          description: Parent facet for hierarchy (null = top-level category).
-        parent_name:
-          type: string
-          readOnly: true
-          nullable: true
         description:
           type: string
           description: Description of this facet's thematic meaning.
-        depth:
-          type: integer
-          readOnly: true
-        full_path:
-          type: string
-          readOnly: true
       required:
-      - depth
-      - full_path
       - id
       - name
-      - parent_name
     FacetCraftResult:
       type: object
       description: 'Response for a facet-craft attempt: rolled outcome + resolved
@@ -50563,31 +51337,6 @@ components:
       - outcome_name
       - quality_tier
       - success_level
-    FacetTree:
-      type: object
-      description: Serializer for Facet with nested children for tree display.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        name:
-          type: string
-          description: Facet name (e.g., 'Wolf', 'Silk', 'Creatures').
-          maxLength: 100
-        description:
-          type: string
-          description: Description of this facet's thematic meaning.
-        children:
-          type: array
-          items:
-            type: object
-            additionalProperties: {}
-          description: Recursively serialize children.
-          readOnly: true
-      required:
-      - children
-      - id
-      - name
     Family:
       type: object
       description: Serializer for family selection and display.
@@ -50623,16 +51372,23 @@ components:
             in character creation and (#1884) to resolve the nobiliary particle
         born_particle:
           type: string
-          readOnly: true
           description: Nobiliary particle a born member wears (#3261); '' when none.
+          readOnly: true
         taken_in_particle:
           type: string
           readOnly: true
           description: Particle a married/adopted/legitimized member wears; '' when
             none.
+        inherited:
+          type: object
+          additionalProperties: {}
+          readOnly: true
+          description: Aspects/features/liege a house materialized on this family
+            carries (#3648).
       required:
       - born_particle
       - id
+      - inherited
       - kind
       - name
       - taken_in_particle
@@ -50850,16 +51606,22 @@ components:
     FieldEnum:
       enum:
       - background
-      - personality
+      - never_do
+      - protect
+      - fear
       type: string
       description: |-
         * `background` - Background
-        * `personality` - Personality
+        * `never_do` - What would you never do?
+        * `protect` - What would you protect at all costs?
+        * `fear` - What are you deathly afraid of?
     FirstImpressionWrite:
       type: object
       description: Serializer for creating a first impression.
       properties:
         target_persona_id:
+          type: integer
+        target_companion_id:
           type: integer
         track_id:
           type: integer
@@ -50880,7 +51642,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -50890,6 +51651,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         track_id:
           type: integer
         points:
@@ -50911,7 +51674,6 @@ components:
           default: private
       required:
       - points
-      - target_persona_id
       - title
       - track_id
       - writeup
@@ -53157,6 +53919,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - id
@@ -53189,6 +53956,11 @@ components:
         is_cg_selectable:
           type: boolean
           description: Whether players can select heights in this band during CG
+        cg_hint:
+          type: string
+          description: What character creation says about picking this band, shown
+            on the option (for example what opens a band players cannot normally take)
+          maxLength: 200
       required:
       - display_name
       - max_inches
@@ -53220,6 +53992,26 @@ components:
       - id
       - name
       - target_kind
+    HeritageAnchor:
+      type: object
+      description: |-
+        The world fact behind a heritage's CG age ceiling (#3663).
+
+        Nested read-only under Beginnings so the appearance stage can say "The first
+        Misbegotten were born in 980 AS." from data; the ceiling itself comes from
+        the draft's ``age_max``.
+      properties:
+        name:
+          type: string
+          readOnly: true
+          description: Heritage name (e.g., 'Sleeper', 'Misbegotten', 'Normal')
+        first_appeared_ic_year:
+          type: integer
+          nullable: true
+          readOnly: true
+      required:
+      - first_appeared_ic_year
+      - name
     HiddenPresenceReportCreate:
       type: object
       description: |-
@@ -53291,15 +54083,12 @@ components:
           type: integer
         rank:
           type: integer
-        vote_count:
-          type: integer
         reaction_count:
           type: integer
       required:
       - interaction_id
       - rank
       - reaction_count
-      - vote_count
     HighlightReelFeatured:
       type: object
       description: |-
@@ -53308,19 +54097,17 @@ components:
         The collapsed featured card is *fully sealed* — it shows no pose content, type, or
         participants until the viewer expands it, at which point the frontend fetches the
         pose through the existing interaction-detail endpoint (which re-checks visibility).
-        Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
-        (#2161) are exposed so the frontend can badge the sealed card.
+        Sending pose content here would defeat the seal, but ``reaction_count`` (#2161)
+        is exposed so the frontend can badge the sealed card. Nominations (#3738) rank
+        the reel but are never counted out loud: a nomination is invisible.
       properties:
         interaction_id:
-          type: integer
-        vote_count:
           type: integer
         reaction_count:
           type: integer
       required:
       - interaction_id
       - reaction_count
-      - vote_count
     HouseAspectDefinition:
       type: object
       description: A required catalog choice on a template, with its active options
@@ -53546,6 +54333,10 @@ components:
           allOf:
           - $ref: '#/components/schemas/HouseStature'
           nullable: true
+        vacancies:
+          type: array
+          items:
+            $ref: '#/components/schemas/VacancyOffer'
       required:
       - aspects
       - domains
@@ -53555,6 +54346,7 @@ components:
       - open_crises
       - stature
       - titles
+      - vacancies
       - vassal_names
     HouseDomain:
       type: object
@@ -53994,6 +54786,52 @@ components:
         id:
           type: integer
           readOnly: true
+        thread_id:
+          type: string
+          nullable: true
+          description: Return only explicit topology; unthreaded rows remain standalone.
+          readOnly: true
+        root_thread_id:
+          type: string
+          nullable: true
+          description: |-
+            The top of the nesting tree this row's exchange belongs to (#3787).
+
+            A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+            nested threads by construction. This is the one key every row of a single
+            exchange shares, so a reader groups the whole of it into one card without
+            walking parents. Null when the row's own thread IS the root, and for a row
+            that answers nothing: the reader falls back to ``thread_id`` there, exactly
+            as ``InteractionThread.root`` is null on a root thread. Costs no query -
+            ``get_queryset`` joins ``thread`` in for the parent chip already.
+          readOnly: true
+        reply_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            The interaction this one answered, when the viewer may also read it.
+
+            Gated on the PARENT's own visibility, not on this row's membership: a reply
+            stays readable to everyone who can see it, but its chip appears only for a
+            viewer who could already read what it answered. Never infers a parent from
+            neighboring interactions.
+          readOnly: true
+        conversation:
+          type: object
+          additionalProperties:
+            type: string
+          description: Expose a non-authorizing context identity for reader grouping.
+          readOnly: true
+        availability:
+          type: string
+          description: Classify temporary scene rows without changing retention behavior.
+          readOnly: true
+        is_unread:
+          type: boolean
+          description: True when the read-receipt table has no row for this viewer+pose
+            (#3759).
+          readOnly: true
         persona:
           type: object
           description: Persona data embedded in interaction payloads.
@@ -54026,6 +54864,17 @@ components:
             is the reveal path — a viewer who clicks 'expand' fetches the full content
             here. Still subject to per-viewer language comprehension (#2993) — the
             mute reveal is not a comprehension bypass.
+          readOnly: true
+        line:
+          type: string
+          description: |-
+            The whole sentence this viewer reads (#3858): the actor in the line.
+
+            Rendered at display time from the same per-viewer name ``get_persona``
+            resolves (a mask stays a mask, #1109), the same per-viewer content
+            ``get_content`` produces (a muted row stays blank, a comprehension-graded
+            read stays graded), and the mode. A companion pose reads as the companion
+            (#3294). Never stored: ``content`` stays what was typed.
           readOnly: true
         mode:
           allOf:
@@ -54191,25 +55040,14 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: |-
-            List of resonances claimed by the endorsee (pose author).
-
-            Reads from the prefetched ``persona__character_sheet__resonances``
-            path (set up in ``interaction_views.get_queryset``) via the
-            ``cached_resonances`` to_attr. Falls back to a live query if the attr
-            is absent (e.g. serializer used outside the view's queryset pipeline).
+          description: List of resonances claimed by the endorsee (pose author).
           readOnly: true
         pose_endorsers:
           type: array
           items:
             type: object
             additionalProperties: {}
-          description: |-
-            List of peers who endorsed this pose, with persona info.
-
-            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-            view queryset). Each endorser's primary persona is pre-loaded via
-            ``cached_primary_persona`` (another nested Prefetch).
+          description: List of peers who endorsed this pose, with persona info.
           readOnly: true
         my_pose_endorsement:
           type: object
@@ -54245,7 +55083,9 @@ components:
       required:
       - action_links
       - attributed_companion
+      - availability
       - content
+      - conversation
       - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
@@ -54255,8 +55095,10 @@ components:
       - id
       - is_favorited
       - is_muted
+      - is_unread
       - language_id
       - language_name
+      - line
       - my_pose_endorsement
       - persona
       - place_name
@@ -54265,7 +55107,10 @@ components:
       - reactions
       - receiver_persona_ids
       - receivers
+      - reply_to
+      - root_thread_id
       - target_persona_ids
+      - thread_id
       - timestamp
     InteractionFavorite:
       type: object
@@ -54298,6 +55143,52 @@ components:
         id:
           type: integer
           readOnly: true
+        thread_id:
+          type: string
+          nullable: true
+          description: Return only explicit topology; unthreaded rows remain standalone.
+          readOnly: true
+        root_thread_id:
+          type: string
+          nullable: true
+          description: |-
+            The top of the nesting tree this row's exchange belongs to (#3787).
+
+            A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+            nested threads by construction. This is the one key every row of a single
+            exchange shares, so a reader groups the whole of it into one card without
+            walking parents. Null when the row's own thread IS the root, and for a row
+            that answers nothing: the reader falls back to ``thread_id`` there, exactly
+            as ``InteractionThread.root`` is null on a root thread. Costs no query -
+            ``get_queryset`` joins ``thread`` in for the parent chip already.
+          readOnly: true
+        reply_to:
+          type: object
+          additionalProperties: {}
+          nullable: true
+          description: |-
+            The interaction this one answered, when the viewer may also read it.
+
+            Gated on the PARENT's own visibility, not on this row's membership: a reply
+            stays readable to everyone who can see it, but its chip appears only for a
+            viewer who could already read what it answered. Never infers a parent from
+            neighboring interactions.
+          readOnly: true
+        conversation:
+          type: object
+          additionalProperties:
+            type: string
+          description: Expose a non-authorizing context identity for reader grouping.
+          readOnly: true
+        availability:
+          type: string
+          description: Classify temporary scene rows without changing retention behavior.
+          readOnly: true
+        is_unread:
+          type: boolean
+          description: True when the read-receipt table has no row for this viewer+pose
+            (#3759).
+          readOnly: true
         persona:
           type: object
           description: Persona data embedded in interaction payloads.
@@ -54329,6 +55220,17 @@ components:
             Muted personas' interactions stay visible (so the scene stays coherent)
             but their text is redacted. The viewer can click-to-expand to fetch the
             full content via the detail endpoint.
+          readOnly: true
+        line:
+          type: string
+          description: |-
+            The whole sentence this viewer reads (#3858): the actor in the line.
+
+            Rendered at display time from the same per-viewer name ``get_persona``
+            resolves (a mask stays a mask, #1109), the same per-viewer content
+            ``get_content`` produces (a muted row stays blank, a comprehension-graded
+            read stays graded), and the mode. A companion pose reads as the companion
+            (#3294). Never stored: ``content`` stays what was typed.
           readOnly: true
         mode:
           allOf:
@@ -54494,25 +55396,14 @@ components:
           items:
             type: object
             additionalProperties: {}
-          description: |-
-            List of resonances claimed by the endorsee (pose author).
-
-            Reads from the prefetched ``persona__character_sheet__resonances``
-            path (set up in ``interaction_views.get_queryset``) via the
-            ``cached_resonances`` to_attr. Falls back to a live query if the attr
-            is absent (e.g. serializer used outside the view's queryset pipeline).
+          description: List of resonances claimed by the endorsee (pose author).
           readOnly: true
         pose_endorsers:
           type: array
           items:
             type: object
             additionalProperties: {}
-          description: |-
-            List of peers who endorsed this pose, with persona info.
-
-            Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-            view queryset). Each endorser's primary persona is pre-loaded via
-            ``cached_primary_persona`` (another nested Prefetch).
+          description: List of peers who endorsed this pose, with persona info.
           readOnly: true
         my_pose_endorsement:
           type: object
@@ -54543,7 +55434,9 @@ components:
       required:
       - action_links
       - attributed_companion
+      - availability
       - content
+      - conversation
       - dramatic_moment_suggestions
       - dramatic_moment_tags
       - endorsable_resonances
@@ -54553,8 +55446,10 @@ components:
       - id
       - is_favorited
       - is_muted
+      - is_unread
       - language_id
       - language_name
+      - line
       - my_pose_endorsement
       - persona
       - place_name
@@ -54562,7 +55457,10 @@ components:
       - reaction_windows
       - reactions
       - receiver_persona_ids
+      - reply_to
+      - root_thread_id
       - target_persona_ids
+      - thread_id
       - timestamp
     InteractionListRequest:
       type: object
@@ -54760,6 +55658,16 @@ components:
       description: |-
         * `incapacitated` - Character Incapacitated
         * `near_death` - Character Near Death
+    IntroductionsOffered:
+      type: object
+      description: Which Introductions a draft is offered (#3621). Read-only, schema
+        only.
+      properties:
+        first_journal:
+          type: boolean
+          readOnly: true
+      required:
+      - first_journal
     IssueInvite:
       type: object
       description: Input for issuing a new invite — write-only, not model-backed.
@@ -54813,7 +55721,12 @@ components:
       - target
     ItemFacetRead:
       type: object
-      description: Read serializer for ItemFacet (GET list/detail).
+      description: |-
+        Read serializer for ItemFacet (GET list/detail).
+
+        ``is_inherent`` is exposed so the client can suppress the detach affordance:
+        the service refuses to remove an inherent row (``InherentFacetNotRemovable``,
+        #3776), and a button that always errors is worse than no button.
       properties:
         id:
           type: integer
@@ -54824,6 +55737,12 @@ components:
         facet:
           type: integer
           readOnly: true
+        is_inherent:
+          type: boolean
+          readOnly: true
+          description: True when this facet came from the template's inherent_facets
+            at creation time, not a crafter's own attach_facet_to_item call. Does
+            not count against the instance's facet_capacity.
         applied_by_account:
           type: integer
           readOnly: true
@@ -54841,6 +55760,7 @@ components:
       - attachment_quality_tier
       - facet
       - id
+      - is_inherent
       - item_instance
     ItemFacetWriteRequest:
       type: object
@@ -55289,6 +56209,103 @@ components:
           - $ref: '#/components/schemas/NullEnum'
       required:
       - label
+    KinSlot:
+      type: object
+      description: An open appable position (CG slot browser).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: Display name for unbound nodes (sheet-bound nodes read the
+            sheet).
+        name_locked:
+          type: boolean
+          readOnly: true
+          description: Whether a claimant must keep the pre-authored name.
+        description:
+          type: string
+          readOnly: true
+          description: Blurb for described/NPC tiers.
+        age_min:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'Slot constraint: minimum age for a claimant.'
+        age_max:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'Slot constraint: maximum age for a claimant.'
+        allowed_genders:
+          type: array
+          items:
+            type: string
+            description: Display label (e.g., 'Male')
+          readOnly: true
+        family:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Current primary surname family — a denorm maintained by the
+            membership services; FamilyMembership rows carry the history and basis.
+      required:
+      - age_max
+      - age_min
+      - allowed_genders
+      - description
+      - family
+      - id
+      - name
+      - name_locked
+    KinSlotPool:
+      type: object
+      description: An open slot pool (CG slot browser).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        family:
+          type: integer
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+          description: Player-facing pool blurb, e.g. "children of the current nobles".
+        count_remaining:
+          type: integer
+          readOnly: true
+          description: Slots left in this pool; claiming decrements.
+        age_min:
+          type: integer
+          readOnly: true
+          nullable: true
+        age_max:
+          type: integer
+          readOnly: true
+          nullable: true
+        allowed_genders:
+          type: array
+          items:
+            type: string
+            description: Display label (e.g., 'Male')
+          readOnly: true
+        parent_names:
+          type: array
+          items:
+            type: string
+          readOnly: true
+      required:
+      - age_max
+      - age_min
+      - allowed_genders
+      - count_remaining
+      - description
+      - family
+      - id
+      - parent_names
     Kind4adEnum:
       enum:
       - update
@@ -55687,6 +56704,18 @@ components:
       - origin_affinity_name
       - player_description
       - tier
+    LifeStageEnum:
+      enum:
+      - childhood
+      - youth
+      - at_the_glimpse
+      - since_the_glimpse
+      type: string
+      description: |-
+        * `childhood` - Childhood
+        * `youth` - Youth
+        * `at_the_glimpse` - At the Glimpse
+        * `since_the_glimpse` - Since the Glimpse
     ListenerPost:
       type: object
       description: |-
@@ -56044,6 +57073,7 @@ components:
           type: integer
         next_milestone_year:
           type: integer
+          nullable: true
         stats:
           type: array
           items:
@@ -56139,6 +57169,29 @@ components:
         * `gallery` - Gallery Image
         * `background` - Background
         * `illustration` - Illustration
+    MediaUploadRequest:
+      type: object
+      description: Validate a player's media upload before it reaches CloudinaryGalleryService.
+      properties:
+        image_file:
+          type: string
+          format: binary
+          pattern: (?:jpg|jpeg|png|gif|webp)$
+        media_type:
+          allOf:
+          - $ref: '#/components/schemas/MediaTypeEnum'
+          default: photo
+        title:
+          type: string
+          default: ''
+        description:
+          type: string
+          default: ''
+        created_by:
+          type: integer
+          nullable: true
+      required:
+      - image_file
     MentorPersona:
       type: object
       description: Minimal read-only representation of a mentor persona.
@@ -58264,6 +59317,42 @@ components:
             plain, unannotated ``RosterEntry`` — fall back to a direct count there,
             a single extra query on that single-object path only.
           readOnly: true
+        unread_direct:
+          type: integer
+          description: |-
+            Poses aimed at this character's personas and not yet read.
+
+            Only populated on `GET /api/roster/entries/mine/`, which computes
+            attention for the whole list up front. `/api/user/`'s `selected_entry`
+            and the `select` action's response reuse this same serializer but do
+            not compute attention, so this reads 0 there, not a live count.
+          readOnly: true
+        has_ambient_unread:
+          type: boolean
+          description: |-
+            Whether a scene this character is still in has moved without them.
+
+            Only populated on `GET /api/roster/entries/mine/`, which computes
+            attention for the whole list up front. `/api/user/`'s `selected_entry`
+            and the `select` action's response reuse this same serializer but do
+            not compute attention, so this reads False there, not a live value.
+          readOnly: true
+        attention_as_of_id:
+          type: integer
+          description: |-
+            The newest pose the direct/ambient counts above already include.
+
+            The same for every row in a `mine()` response (one `AccountAttention`
+            per request), so the entry itself is unused; kept for the
+            `SerializerMethodField` signature. The client drops session
+            interactions at or below this id before adding its own live
+            WebSocket delta, so the same pose is never counted twice.
+
+            Only populated on `GET /api/roster/entries/mine/`, which computes
+            attention for the whole list up front. `/api/user/`'s `selected_entry`
+            and the `select` action's response reuse this same serializer but do
+            not compute attention, so this reads 0 there, not a real watermark.
+          readOnly: true
         lifecycle_state:
           type: string
           readOnly: true
@@ -58275,14 +59364,17 @@ components:
           readOnly: true
       required:
       - active_persona_id
+      - attention_as_of_id
       - character_id
       - character_type
+      - has_ambient_unread
       - id
       - lifecycle_state
       - name
       - primary_persona_id
       - profile_picture_url
       - roster_type
+      - unread_direct
       - unread_narrative_count
     MyStoryGrant:
       type: object
@@ -59027,6 +60119,82 @@ components:
         * `gm` - GM
         * `experienced` - Experienced GM
         * `senior` - Senior GM
+    Nomination:
+      type: object
+      description: |-
+        One of the requesting account's own nominations this week.
+
+        The only read anyone gets of a nomination: the nominator's own list, so
+        they know whom they have already nominated. A nominee never sees a row.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/NominationTargetTypeEnum'
+          description: |-
+            What the nominator read: a pose (interaction) or a journal entry.
+
+            * `interaction` - Interaction
+            * `journal` - Journal Entry
+        target_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'PK of the cited piece (not a FK: the interaction table is
+            partitioned).'
+        nominee_name:
+          type: string
+          readOnly: true
+        target_name:
+          type: string
+          description: A short label for the cited piece.
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - nominee_name
+      - target_id
+      - target_name
+      - target_type
+    NominationRequest:
+      type: object
+      description: |-
+        One of the requesting account's own nominations this week.
+
+        The only read anyone gets of a nomination: the nominator's own list, so
+        they know whom they have already nominated. A nominee never sees a row.
+      properties:
+        target_type:
+          allOf:
+          - $ref: '#/components/schemas/NominationTargetTypeEnum'
+          description: |-
+            What the nominator read: a pose (interaction) or a journal entry.
+
+            * `interaction` - Interaction
+            * `journal` - Journal Entry
+        target_id:
+          type: integer
+          maximum: 2147483647
+          minimum: 0
+          description: 'PK of the cited piece (not a FK: the interaction table is
+            partitioned).'
+      required:
+      - target_id
+      - target_type
+    NominationTargetTypeEnum:
+      enum:
+      - interaction
+      - journal
+      type: string
+      description: |-
+        * `interaction` - Interaction
+        * `journal` - Journal Entry
     NotificationLevelEnum:
       enum:
       - personal
@@ -59227,6 +60395,21 @@ components:
         * `accepted` - Accepted
         * `declined` - Declined
         * `expired` - Expired
+    OffersResponse:
+      type: object
+      description: The ``offers``/``closed`` payload the offers action returns (#3675).
+      properties:
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/VisibleOffer'
+        closed:
+          type: array
+          items:
+            $ref: '#/components/schemas/ClosedDistinction'
+      required:
+      - closed
+      - offers
     OldLevelEnum:
       enum:
       - starting
@@ -59254,6 +60437,11 @@ components:
         to be able to look at an opponent and gauge whether they're punching up
         or down, so unlike soak_value/probing_threshold this is not wrapped in a
         SerializerMethodField behind ``_is_gm_or_staff``.
+
+        Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+        are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+        are public derived booleans, since the room narration has already told
+        everyone the boss enraged or its wall broke.
       properties:
         id:
           type: integer
@@ -59306,8 +60494,53 @@ components:
           type: integer
           maximum: 2147483647
           minimum: 0
+        phase_count:
+          type: integer
+          nullable: true
+          readOnly: true
+        damage_multiplier:
+          type: string
+          nullable: true
+          readOnly: true
+        break_bar_current:
+          type: integer
+          nullable: true
+          readOnly: true
+        break_bar_threshold:
+          type: integer
+          nullable: true
+          readOnly: true
+        vulnerability_rounds_remaining:
+          type: integer
+          nullable: true
+          readOnly: true
+        morale:
+          type: integer
+          nullable: true
+          readOnly: true
+        max_morale:
+          type: integer
+          nullable: true
+          readOnly: true
+        morale_state:
+          type: string
+          nullable: true
+          readOnly: true
+        is_enraged:
+          type: boolean
+          description: 'Public: the enrage line has fired (a transition raised the
+            multiplier).'
+          readOnly: true
+        is_wall_broken:
+          type: boolean
+          description: 'Public: the break celebration named this boss and the window
+            is open.'
+          readOnly: true
         status:
           $ref: '#/components/schemas/OpponentStatusEnum'
+        allegiance:
+          type: string
+          nullable: true
         active_conditions:
           type: array
           items:
@@ -59352,18 +60585,28 @@ components:
           nullable: true
       required:
       - active_conditions
+      - break_bar_current
+      - break_bar_threshold
       - current_position
+      - damage_multiplier
       - health
       - id
+      - is_enraged
+      - is_wall_broken
       - max_health
+      - max_morale
       - mirrors_participant_id
+      - morale
+      - morale_state
       - name
       - objectdb_id
+      - phase_count
       - probing_threshold
       - soak_value
       - thumbnail_media_url
       - thumbnail_url
       - tier
+      - vulnerability_rounds_remaining
     OpponentDefaultsResponse:
       type: object
       description: |-
@@ -59425,6 +60668,11 @@ components:
         to be able to look at an opponent and gauge whether they're punching up
         or down, so unlike soak_value/probing_threshold this is not wrapped in a
         SerializerMethodField behind ``_is_gm_or_staff``.
+
+        Boss/morale readouts (phase count, damage multiplier, break bar, morale)
+        are GM-only on the same gate (#3552); ``is_enraged`` and ``is_wall_broken``
+        are public derived booleans, since the room narration has already told
+        everyone the boss enraged or its wall broke.
       properties:
         name:
           type: string
@@ -59463,6 +60711,10 @@ components:
           minimum: 0
         status:
           $ref: '#/components/schemas/OpponentStatusEnum'
+        allegiance:
+          type: string
+          nullable: true
+          minLength: 1
       required:
       - health
       - max_health
@@ -60069,6 +61321,14 @@ components:
         is_active:
           type: boolean
           readOnly: true
+        vacancy_name:
+          type: string
+          readOnly: true
+          default: ''
+        presumed_importance:
+          type: integer
+          readOnly: true
+          default: 0
       required:
       - id
       - is_active
@@ -60077,8 +61337,10 @@ components:
       - organization_name
       - persona
       - persona_name
+      - presumed_importance
       - rank
       - title
+      - vacancy_name
     OrganizationMembershipOffer:
       type: object
       properties:
@@ -60331,6 +61593,79 @@ components:
       required:
       - id
       - name
+    OrganizationShopWindow:
+      type: object
+      description: |-
+        What a realm page shows of an organization to anyone (#3725).
+
+        Name, words, colours, sigil, description, kind and society: the fields a house
+        would put on its gate. Nothing else from ``OrganizationSerializer`` is reused, so
+        members, ranks, treasury, crises, vacancies and boards cannot reach a visitor.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+          description: The organization's name
+        description:
+          type: string
+          readOnly: true
+          description: A description of the organization's purpose and history
+        words:
+          type: string
+          readOnly: true
+          description: Words / motto — house words, gang credo, guild maxim (#2079).
+        colors:
+          type: string
+          readOnly: true
+          description: The organization's colors, in prose (#2079).
+        sigil_description:
+          type: string
+          readOnly: true
+          description: Sigil / emblem, described (#2079).
+        org_type_name:
+          type: string
+          readOnly: true
+        society_name:
+          type: string
+          readOnly: true
+      required:
+      - colors
+      - description
+      - id
+      - name
+      - org_type_name
+      - sigil_description
+      - society_name
+      - words
+    OriginChoiceOffer:
+      type: object
+      description: A ``DistinctionOffer`` embedded on an Upbringing answer row (#3675).
+      properties:
+        offer_id:
+          type: integer
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        arrives_as:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
+      required:
+      - arrives_as
+      - cost_per_rank
+      - distinction_id
+      - max_rank
+      - name
+      - offer_id
+      - player_line
     OriginEnum:
       enum:
       - authored
@@ -60341,9 +61676,28 @@ components:
         * `authored` - Authored (canonical, exported)
         * `story` - GM Story (never exported)
         * `player` - Player-built (never exported)
+    OriginGroup:
+      type: object
+      description: One group a GROUP question offers, for the frontend picker (#3660
+        ruling E).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        gloss:
+          type: string
+        influence:
+          type: integer
+          nullable: true
+      required:
+      - gloss
+      - id
+      - influence
+      - name
     OriginTemplateSlot:
       type: object
-      description: 'Slot prompt within an origin template (#2478, #3617).'
+      description: 'Slot prompt within an origin template (#2478, #3617, #3660).'
       properties:
         id:
           type: integer
@@ -60383,6 +61737,75 @@ components:
           readOnly: true
           description: Player may write a free-text answer (the 'other' box on a pick-list)
             (#3617).
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/OriginTemplateSlotKindEnum'
+          readOnly: true
+          description: |-
+            What this question asks for (#3660).
+
+            * `text` - Write an answer
+            * `pick` - Pick one answer
+            * `group` - Pick a group
+            * `person` - Name a person
+        connection_kind:
+          allOf:
+          - $ref: '#/components/schemas/ConnectionKindEnum'
+          readOnly: true
+          description: |-
+            What the tie was; a tag shown on the page and the sheet (#3660).
+
+            * `raised_by` - Raised by
+            * `taught_by` - Taught by
+            * `served` - Served
+            * `sailed_with` - Sailed with
+            * `owes` - Owes
+            * `sworn_to` - Sworn to
+            * `hunted_by` - Hunted by
+        life_stage:
+          allOf:
+          - $ref: '#/components/schemas/LifeStageEnum'
+          readOnly: true
+          description: |-
+            When the tie was formed; a tag (#3660).
+
+            * `childhood` - Childhood
+            * `youth` - Youth
+            * `at_the_glimpse` - At the Glimpse
+            * `since_the_glimpse` - Since the Glimpse
+        anchor_source:
+          allOf:
+          - $ref: '#/components/schemas/AnchorSourceEnum'
+          readOnly: true
+          description: |-
+            Which groups a 'pick a group' question offers (#3660).
+
+            * `pool` - Every group of a type in a realm
+            * `listed` - Groups I name
+            * `same_as` - The same group as an earlier question
+            * `served_house` - The house the character's family served
+            * `own_family` - The character's own family
+        same_anchor_as:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: 'GROUP with SAME_AS: the earlier group question whose answer
+            is this anchor. PERSON: the group question this person belongs to (#3660).'
+        follow_up_to:
+          type: integer
+          readOnly: true
+          nullable: true
+          description: Shown only once this earlier question is answered (#3660).
+        shown_for_choice_ids:
+          type: array
+          items:
+            type: integer
+          readOnly: true
+        groups:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginGroup'
+          readOnly: true
         choices:
           type: array
           items:
@@ -60390,17 +61813,28 @@ components:
           readOnly: true
       required:
       - allows_text
+      - anchor_source
       - applies_to
       - choices
+      - connection_kind
       - example
+      - follow_up_to
+      - groups
       - id
       - is_required
+      - kind
+      - life_stage
       - name
       - prompt
+      - same_anchor_as
+      - shown_for_choice_ids
       - sort_order
     OriginTemplateSlotChoice:
       type: object
-      description: One priced answer on a pick-list Upbringing prompt (#3617).
+      description: |-
+        One priced answer on an Upbringing prompt (#3617, #3660, #3675).
+
+        The seed stays server-side.
       properties:
         id:
           type: integer
@@ -60421,6 +61855,11 @@ components:
           type: integer
           readOnly: true
           description: CG cost per point of the claimed family's influence.
+        offers:
+          type: array
+          items:
+            $ref: '#/components/schemas/OriginChoiceOffer'
+          readOnly: true
         sort_order:
           type: integer
           readOnly: true
@@ -60430,7 +61869,20 @@ components:
       - description
       - id
       - name
+      - offers
       - sort_order
+    OriginTemplateSlotKindEnum:
+      enum:
+      - text
+      - pick
+      - group
+      - person
+      type: string
+      description: |-
+        * `text` - Write an answer
+        * `pick` - Pick one answer
+        * `group` - Pick a group
+        * `person` - Name a person
     Outcome425Enum:
       enum:
       - unsatisfied
@@ -61880,6 +63332,29 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Era'
+    PaginatedEscalationCurveList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/EscalationCurve'
     PaginatedEstateClaimList:
       type: object
       required:
@@ -63756,29 +65231,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PlayerReportDetail'
-    PaginatedPlayerTrustList:
-      type: object
-      required:
-      - count
-      - results
-      properties:
-        count:
-          type: integer
-          example: 123
-        next:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=4
-        previous:
-          type: string
-          nullable: true
-          format: uri
-          example: http://api.example.org/accounts/?page=2
-        results:
-          type: array
-          items:
-            $ref: '#/components/schemas/PlayerTrust'
     PaginatedPortalDestinationList:
       type: object
       required:
@@ -65645,8 +67097,14 @@ components:
           - $ref: '#/components/schemas/PositionSummary'
           readOnly: true
           nullable: true
+        aftermath:
+          allOf:
+          - $ref: '#/components/schemas/AftermathDigest'
+          nullable: true
+          readOnly: true
       required:
       - active_conditions
+      - aftermath
       - available_strain
       - character_name
       - character_sheet_id
@@ -66076,7 +67534,6 @@ components:
             * `1` - Origin
             * `2` - Heritage
             * `3` - Lineage
-            * `4` - Distinctions
             * `5` - Path
             * `6` - Gift
             * `7` - Attributes & Skills
@@ -66144,6 +67601,14 @@ components:
           writeOnly: true
           nullable: true
         claimed_kin_pool_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        selected_vacancy_id:
+          type: integer
+          writeOnly: true
+          nullable: true
+        served_house_id:
           type: integer
           writeOnly: true
           nullable: true
@@ -69496,7 +70961,13 @@ components:
         guise_quote:
           type: string
           readOnly: true
-        guise_personality:
+        guise_never_do:
+          type: string
+          readOnly: true
+        guise_protect:
+          type: string
+          readOnly: true
+        guise_fear:
           type: string
           readOnly: true
         guise_background:
@@ -69513,7 +70984,9 @@ components:
       - display_name
       - guise_background
       - guise_concept
-      - guise_personality
+      - guise_fear
+      - guise_never_do
+      - guise_protect
       - guise_quote
       - humiliation_mark
       - id
@@ -70453,39 +71926,6 @@ components:
       - behavior_description
       - reported_persona
       - reporter_persona
-    PlayerTrust:
-      type: object
-      description: Serializer for player trust profiles
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        account:
-          type: string
-          readOnly: true
-        total_positive_feedback:
-          type: integer
-          description: Aggregate positive feedback count from all trust levels
-          readOnly: true
-        total_negative_feedback:
-          type: integer
-          description: Aggregate negative feedback count from all trust levels
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-        updated_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - account
-      - created_at
-      - id
-      - total_negative_feedback
-      - total_positive_feedback
-      - updated_at
     PolishIncrement:
       type: object
       description: Per-category polish a decoration template grants on completion.
@@ -70961,7 +72401,9 @@ components:
             Which Profile prose field this version belongs to.
 
             * `background` - Background
-            * `personality` - Personality
+            * `never_do` - What would you never do?
+            * `protect` - What would you protect at all costs?
+            * `fear` - What are you deathly afraid of?
         text:
           type: string
           readOnly: true
@@ -71601,6 +73043,196 @@ components:
           minimum: 0
       required:
       - emoji
+    RealmBoards:
+      type: object
+      description: The realm's two boards. Rows carry a name and a phrase; no numeric
+        field exists.
+      properties:
+        renown:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingRow'
+        legend:
+          type: array
+          items:
+            $ref: '#/components/schemas/RankingRow'
+      required:
+      - legend
+      - renown
+    RealmDetail:
+      type: object
+      description: 'One card on the Realms hub: name, formal name, first motto, and
+        the route key.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+        formal_name:
+          type: string
+          readOnly: true
+          description: The long name the realm page shows under the title (#3725),
+            e.g. 'The Umbral Empire'. Blank shows nothing.
+        theme:
+          allOf:
+          - $ref: '#/components/schemas/ThemeEnum'
+          readOnly: true
+          description: |-
+            Visual theme applied in the frontend when this realm is active.
+
+            * `default` - Default
+            * `arx` - Arx
+            * `umbros` - Umbros
+            * `luxen` - Luxen
+            * `inferna` - Inferna
+            * `ariwn` - Ariwn
+            * `aythirmok` - Aythirmok
+        first_motto:
+          type: string
+          description: The motto of the lowest-ordered movement, or blank when none
+            is authored.
+          readOnly: true
+        threshold_line:
+          type: string
+          readOnly: true
+        sections:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealmTestamentSection'
+          readOnly: true
+        societies:
+          type: array
+          items:
+            $ref: '#/components/schemas/RealmSociety'
+        starting_area:
+          allOf:
+          - $ref: '#/components/schemas/RealmStartingArea'
+          nullable: true
+          readOnly: true
+      required:
+      - first_motto
+      - formal_name
+      - id
+      - name
+      - sections
+      - slug
+      - societies
+      - starting_area
+      - theme
+      - threshold_line
+    RealmList:
+      type: object
+      description: 'One card on the Realms hub: name, formal name, first motto, and
+        the route key.'
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        slug:
+          type: string
+          readOnly: true
+        formal_name:
+          type: string
+          readOnly: true
+          description: The long name the realm page shows under the title (#3725),
+            e.g. 'The Umbral Empire'. Blank shows nothing.
+        theme:
+          allOf:
+          - $ref: '#/components/schemas/ThemeEnum'
+          readOnly: true
+          description: |-
+            Visual theme applied in the frontend when this realm is active.
+
+            * `default` - Default
+            * `arx` - Arx
+            * `umbros` - Umbros
+            * `luxen` - Luxen
+            * `inferna` - Inferna
+            * `ariwn` - Ariwn
+            * `aythirmok` - Aythirmok
+        first_motto:
+          type: string
+          description: The motto of the lowest-ordered movement, or blank when none
+            is authored.
+          readOnly: true
+      required:
+      - first_motto
+      - formal_name
+      - id
+      - name
+      - slug
+      - theme
+    RealmSociety:
+      type: object
+      description: |-
+        A society as the realm page names it: what it says of itself and who enforces.
+
+        Principles, reputation and the fame offset stay off the wire (hidden mechanics).
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        enforcer_name:
+          type: string
+          readOnly: true
+          description: 'Admin-editable flavor: who hunts the wanted in this society''s
+            dominion (heat surfaces render it — e.g. Luxen''s ''The Honest''). Phrase
+            it as a collective plural: ''<name> have been looking …''.'
+      required:
+      - description
+      - enforcer_name
+      - id
+      - name
+    RealmStartingArea:
+      type: object
+      description: 'The way into a realm: its starting area and crest, from the accessible
+        set.'
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        crest_image:
+          type: string
+          nullable: true
+      required:
+      - crest_image
+      - id
+      - name
+    RealmTestamentSection:
+      type: object
+      properties:
+        sort_order:
+          type: integer
+          readOnly: true
+          description: Position of this movement in the testament, from 1.
+        body:
+          type: string
+          readOnly: true
+          description: The movement's paragraphs; blank lines separate paragraphs.
+        motto:
+          type: string
+          readOnly: true
+          description: The line the movement ends on, shown in the display face. Blank
+            shows nothing.
+      required:
+      - body
+      - motto
+      - sort_order
     RecordedProfile:
       type: object
       description: A character's Archive profile sittings + recorded history (#2632).
@@ -71685,6 +73317,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         source_track_id:
           type: integer
         target_track_id:
@@ -71703,7 +73337,6 @@ components:
       required:
       - points
       - source_track_id
-      - target_persona_id
       - target_track_id
       - title
       - writeup
@@ -71713,6 +73346,8 @@ components:
       properties:
         target_persona_id:
           type: integer
+        target_companion_id:
+          type: integer
         source_track_id:
           type: integer
         target_track_id:
@@ -71733,7 +73368,6 @@ components:
       required:
       - points
       - source_track_id
-      - target_persona_id
       - target_track_id
       - title
       - writeup
@@ -74086,8 +75720,13 @@ components:
           - $ref: '#/components/schemas/SceneClock'
           nullable: true
           readOnly: true
+        art_url:
+          type: string
+          nullable: true
+          readOnly: true
       required:
       - active_round
+      - art_url
       - clock
       - date_started
       - declared_risk
@@ -74445,6 +76084,38 @@ components:
       - content
       - persona
       - scene
+    SchoolingLine:
+      type: object
+      description: One standard schooling stance under a ``living_masters`` tradition
+        (#3675).
+      properties:
+        schooling_line_id:
+          type: integer
+        rank:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        price:
+          type: integer
+        techniques:
+          type: integer
+        grants_distinction_id:
+          type: integer
+          nullable: true
+        offer_id:
+          type: integer
+          nullable: true
+      required:
+      - grants_distinction_id
+      - name
+      - offer_id
+      - player_line
+      - price
+      - rank
+      - schooling_line_id
+      - techniques
     Scope77bEnum:
       enum:
       - appear
@@ -74707,7 +76378,11 @@ components:
           maxLength: 255
         quote:
           type: string
-        personality:
+        never_do:
+          type: string
+        protect:
+          type: string
+        fear:
           type: string
         background:
           type: string
@@ -76891,7 +78566,11 @@ components:
         * `minor` - Minor Member
     StartingArea:
       type: object
-      description: Serializer for starting areas with accessibility check.
+      description: |-
+        Serializer for starting areas.
+
+        No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+        and it never lists an area the reader may not pick (#3726).
       properties:
         id:
           type: integer
@@ -76909,24 +78588,33 @@ components:
           description: Cloudinary URL sourced from crest_art (#2408); key name kept
             for frontend compat.
           readOnly: true
-        is_accessible:
-          type: boolean
-          description: Check if the requesting user can access this area.
-          readOnly: true
         realm_theme:
           type: string
           readOnly: true
           default: default
+        realm_slug:
+          type: string
+          readOnly: true
+          nullable: true
+        realm_name:
+          type: string
+          readOnly: true
+          nullable: true
       required:
       - crest_image
       - description
       - id
-      - is_accessible
       - name
+      - realm_name
+      - realm_slug
       - realm_theme
     StartingAreaRequest:
       type: object
-      description: Serializer for starting areas with accessibility check.
+      description: |-
+        Serializer for starting areas.
+
+        No accessibility flag: ``get_accessible_starting_areas`` is the only gate,
+        and it never lists an area the reader may not pick (#3726).
       properties:
         name:
           type: string
@@ -77253,9 +78941,6 @@ components:
           items:
             $ref: '#/components/schemas/GMProfile'
           readOnly: true
-        trust_requirements:
-          type: string
-          readOnly: true
         character_sheet:
           type: integer
           description: The character this sheet belongs to
@@ -77310,7 +78995,6 @@ components:
       - primary_table
       - tenure_id
       - title
-      - trust_requirements
       - updated_at
     StoryDetailRequest:
       type: object
@@ -79290,6 +80974,11 @@ components:
           items:
             $ref: '#/components/schemas/DamageEffect'
           readOnly: true
+        treatments:
+          type: array
+          items:
+            $ref: '#/components/schemas/TreatmentEffect'
+          readOnly: true
         grants:
           type: array
           items:
@@ -79315,6 +81004,7 @@ components:
       - removes
       - summary
       - target_type
+      - treatments
     TechniqueForm:
       type: object
       description: |-
@@ -79635,6 +81325,24 @@ components:
         * `urban` - Urban
         * `water` - Open water
         * `aerial` - Open sky
+    ThemeEnum:
+      enum:
+      - default
+      - arx
+      - umbros
+      - luxen
+      - inferna
+      - ariwn
+      - aythirmok
+      type: string
+      description: |-
+        * `default` - Default
+        * `arx` - Arx
+        * `umbros` - Umbros
+        * `luxen` - Luxen
+        * `inferna` - Inferna
+        * `ariwn` - Ariwn
+        * `aythirmok` - Aythirmok
     Thread:
       type: object
       description: |-
@@ -80260,17 +81968,23 @@ components:
             every caller (no per-request filter), so attaching to the shared
             Tradition instance is safe.
           readOnly: true
-        required_distinction_id:
-          type: integer
+        state:
+          type: string
           nullable: true
-          description: |-
-            Get the required distinction ID from the BeginningTradition context.
-
-            The view computes a ``{tradition_id: BeginningTradition}`` dict per
-            request and passes it via context. We do NOT attach the BT row to
-            ``obj`` (a SharedMemoryModel ``Tradition``) via ``Prefetch(to_attr=)``
-            because that attribute would persist across requests with different
-            ``beginning_id`` values and leak filtered data between users.
+          readOnly: true
+        state_line:
+          type: string
+          readOnly: true
+        own_wording:
+          type: string
+          readOnly: true
+        refund:
+          type: integer
+          readOnly: true
+        schooling:
+          type: array
+          items:
+            $ref: '#/components/schemas/SchoolingLine'
           readOnly: true
       required:
       - codex_entry_ids
@@ -80278,8 +81992,12 @@ components:
       - id
       - is_active
       - name
-      - required_distinction_id
+      - own_wording
+      - refund
+      - schooling
       - sort_order
+      - state
+      - state_line
     TrainingAllocation:
       type: object
       description: Read-only serializer for a character's training allocation.
@@ -81035,6 +82753,31 @@ components:
       required:
       - candidates
       - scene_id
+    TreatmentEffect:
+      type: object
+      description: One treatment a technique performs on cast (#3682).
+      properties:
+        name:
+          type: string
+          readOnly: true
+        description:
+          type: string
+          readOnly: true
+        treats:
+          type: string
+          readOnly: true
+        target_kind:
+          type: string
+          readOnly: true
+        minimum_success_level:
+          type: integer
+          readOnly: true
+      required:
+      - description
+      - minimum_success_level
+      - name
+      - target_kind
+      - treats
     TreatmentTemplate:
       type: object
       description: |-
@@ -81714,6 +83457,23 @@ components:
           type: integer
       required:
       - story
+    VacancyOffer:
+      type: object
+      description: An open vacancy, as the house block offers it (#3648).
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        basis:
+          type: string
+        presumed_importance:
+          type: integer
+      required:
+      - basis
+      - id
+      - name
+      - presumed_importance
     ValenceEnum:
       enum:
       - 1
@@ -81788,6 +83548,68 @@ components:
           type: boolean
       required:
       - appear_offline
+    VisibleOffer:
+      type: object
+      description: A ``world.character_creation.types.VisibleOffer`` (#3675).
+      properties:
+        offer_id:
+          type: integer
+        distinction_id:
+          type: integer
+        name:
+          type: string
+        player_line:
+          type: string
+        chapter:
+          type: string
+        arrives_as:
+          type: string
+        opener_label:
+          type: string
+        cost_per_rank:
+          type: integer
+        max_rank:
+          type: integer
+        is_locked:
+          type: boolean
+        lock_reason:
+          type: string
+        opener_key:
+          type: string
+        first_look:
+          type: boolean
+        held:
+          type: boolean
+        effect_line:
+          type: string
+        taken_per_feature:
+          type: boolean
+        opens_feature:
+          type: boolean
+        requires_feature_opened:
+          type: boolean
+        cg_max_rank:
+          type: integer
+      required:
+      - arrives_as
+      - cg_max_rank
+      - chapter
+      - cost_per_rank
+      - distinction_id
+      - effect_line
+      - first_look
+      - held
+      - is_locked
+      - lock_reason
+      - max_rank
+      - name
+      - offer_id
+      - opener_key
+      - opener_label
+      - opens_feature
+      - player_line
+      - requires_feature_opened
+      - taken_per_feature
     VitalsFatigue:
       type: object
       description: All three fatigue pools plus global flags.
@@ -81977,58 +83799,6 @@ components:
         * `IN_TRANSIT` - In Transit
         * `ARRIVED` - Arrived
         * `ABANDONED` - Abandoned
-    WeeklyVote:
-      type: object
-      description: Read serializer for WeeklyVote instances.
-      properties:
-        id:
-          type: integer
-          readOnly: true
-        target_type:
-          $ref: '#/components/schemas/WeeklyVoteTargetTypeEnum'
-        target_id:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: PK of the voted-on object (not a FK -- no cascades)
-        target_name:
-          type: string
-          description: Resolve a human-readable name for the vote target.
-          readOnly: true
-        created_at:
-          type: string
-          format: date-time
-          readOnly: true
-      required:
-      - created_at
-      - id
-      - target_id
-      - target_name
-      - target_type
-    WeeklyVoteRequest:
-      type: object
-      description: Read serializer for WeeklyVote instances.
-      properties:
-        target_type:
-          $ref: '#/components/schemas/WeeklyVoteTargetTypeEnum'
-        target_id:
-          type: integer
-          maximum: 2147483647
-          minimum: 0
-          description: PK of the voted-on object (not a FK -- no cascades)
-      required:
-      - target_id
-      - target_type
-    WeeklyVoteTargetTypeEnum:
-      enum:
-      - interaction
-      - scene_participation
-      - journal
-      type: string
-      description: |-
-        * `interaction` - Interaction
-        * `scene_participation` - Scene Participation
-        * `journal` - Journal Entry
     Will:
       type: object
       properties:
@@ -82357,10 +84127,21 @@ components:
           type: integer
         name:
           type: string
+        level:
+          type: integer
         level_display:
           type: string
+        grid_x:
+          type: integer
+          nullable: true
+        grid_y:
+          type: integer
+          nullable: true
       required:
+      - grid_x
+      - grid_y
       - id
+      - level
       - level_display
       - name
     WorldBuilderCatalogs:
@@ -82526,6 +84307,8 @@ components:
         to_room_name:
           type: string
           nullable: true
+        one_way:
+          type: boolean
         to_area_id:
           type: integer
           nullable: true
@@ -82533,6 +84316,7 @@ components:
       - from_room_id
       - id
       - name
+      - one_way
       - to_area_id
       - to_room_id
       - to_room_name
@@ -82555,12 +84339,15 @@ components:
           type: array
           items:
             type: string
+        one_way:
+          type: boolean
       required:
       - aliases
       - id
       - is_open
       - kind
       - name
+      - one_way
       - to_room_id
     WorldBuilderGrant:
       type: object

@@ -86,7 +86,7 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
 | [Relationships & Bonds](relationships.md) | in-progress | Relationship types, situational mods, soul tethers, party bonds |
 | [RP Interaction & Scenes](rp-scenes.md) | in-progress | Rich text editor, action-attached poses, scene engagement, three-mode round framework |
 | [Events](events.md) | **MVP complete** | Scheduled RP gatherings, calendar, invitations, room modifications |
-| [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, trust tiers, time reconciliation |
+| [Stories & GM Tables](stories-gm.md) | in-progress | Story arcs, GM tables, GM trust tiers (`GMProfile.level`; there is no player-trust axis, ADR-0292), time reconciliation |
 | [Codex & Knowledge](codex.md) | in-progress | Lore repository, character-scoped knowledge, research, secrets |
 | [Investigation & Discovery](investigation-discovery.md) | in-progress | Clue model, room search, passive triggers, NPC-held clues (#3428), collaborative research projects, gating, rescue-as-clue — core loop shipped; more trigger sources + journal UI remain |
 | [Journals & Expression](journals.md) | in-progress | IC writing, praises/retorts, freeform tags, weekly XP rewards. Action-backed (#1350): web+telnet (`CmdJournal`/`CmdGoal`) converge on `action.run()`. Web frontend shipped (#2160): `/journals` page + in-scene sidebar tab |
@@ -206,7 +206,13 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   `SelectedCharacterChip` in `Header` (portrait, reused `PersonaSwitcher`, "Enter the
   world" link, "step away" clear); `GamePage`'s mount-path effect auto-starts the
   session on arrival when a selection exists but nothing is puppeting yet — the one
-  deliberate selection→presence crossing. Degradation sweep + hygiene fold-ins done in
+  deliberate selection→presence crossing. **#3812 (ADR-0294) made login itself the
+  presence step:** `Account.at_post_login` puppets the selection (then Evennia's last
+  puppet, then a sole character) on every protocol instead of rendering Evennia's OOC
+  screen; puppeting records the selection back (ADR-0241 amended); sessions share a
+  character (`MULTISESSION_MODE = 3`, unlimited simultaneous puppets); and accounts
+  that skipped first-save setup (`createsuperuser`, pre-adapter signup) heal on server
+  start, at login, and at creation. Degradation sweep + hygiene fold-ins done in
   the same slice (fold in, don't file): tidings/wardrobe loading states, a mute-settings
   link, three message-tab fixes, notification badge routing, nine feed-kind labels,
   consent-notifier gating, and a second remedy on `RequireCharacter`'s zero-character
@@ -241,6 +247,19 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
     per the standard recipe (`arx manage rebase_migration arxii` /
     renumber-at-merge) — not a defect of this slice.
 
+- **Realm pages (#3725, complete, ADR-0285):** each realm's testament (the reviewer's
+  pitch prose, authored as `RealmTestamentSection` movements with motto lines through a
+  `RealmAdmin` inline) becomes `/realms/<slug>`, the realm's page in its own palette with
+  a rail to Societies, Houses and organizations (shop-window fields; covert kinds to
+  members only), Names spoken here (two top tens, renown and legend, Active-roster
+  characters of the realm, names and band labels only, #676's per-realm addition) and
+  Characters (the roster filtered by realm). `/realms` is the hub: six cards, name,
+  formal name, first motto, each a link, reached from World › Realms. The front page's
+  realm row and the Origin index entry link to the page. `/api/realms/` amends
+  ADR-0227. **Remains:** the six testaments are entered by the reviewer (18 rows, three
+  per realm). Trust gates on starting areas came out under #3726 (ADR-0292), so Begin
+  here now hides only for a staff-only or inactive area — never for a player who has
+  not earned something.
 - **The Hall — logged-in home surface (#3412 slice 2, complete, ADR-0245):** ships
   the page slice 1 deferred. Backend: `unread_narrative_count` annotated onto
   `RosterEntryViewSet.mine`'s queryset (single aggregated JOIN/GROUP BY, not a
@@ -323,6 +342,24 @@ limits, IC-vs-UI placement, etc. — see [`design-tenets.md`](design-tenets.md).
   item by verification (Apostate's 2026-08-28 ruling). Zero backend changes this
   slice. See ADR-0247 for the rejected selection-keyed-redirect and
   in-client-sheet-drawer alternatives.
+- **Game entry repairs (#3818, 2026-09-13):** three things Apostate hit on the first
+  production login after #3813. (1) A character with no location, no
+  `prelogout_location` and no `home` was left nowhere by Evennia's `at_pre_puppet`,
+  and the fallback room (renamed "City Center" by staff) was looked up by its seeded
+  name, so `/game` waited forever for a `room_state`. `Character.at_pre_puppet` now
+  sends such a character to the fallback room, which every reader resolves by
+  `RoomProfile.fixture_key` through `resolve_fallback_starting_room`. (2) The top-bar
+  hamburger was a `<Link to="/">`, and `/` redirects an in-world player straight back
+  to `/game`, so it flickered and did nothing. It is now a real menu: Your
+  characters (`/hall`, a new always-reachable Hall route; `/` keeps its redirect),
+  Roster, Settings, "Leave the world as <name>" (closes that character's socket so
+  the server unpuppets them, keeps the account signed in and the selection intact,
+  goes to the Hall), Log out. Sessions live in Redux/module scope, so navigating
+  away keeps every character tab connected; leaving explicitly is the only way a
+  character drops off the grid short of logging out, which already closes every
+  socket. (3) The composer now sends on Enter with Shift+Enter for a line break, the
+  convention every chat RP client uses; `CommandInput` already did this, and
+  `GameWindow` was the one caller overriding it.
 
 **#3412 status: slices 1-4 all complete.** Remaining scope is phased seams only,
 carried forward as future work rather than blocking anything in this issue:

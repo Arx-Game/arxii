@@ -32,6 +32,7 @@ vi.mock('../queries', () => ({
   useProposeLethalDuel: vi.fn(),
   useCreatureTemplates: vi.fn(),
   useSpawnCreature: vi.fn(),
+  useEscalationCurves: vi.fn(),
 }));
 
 vi.mock('@/roster/usePersonaSearch', () => ({
@@ -123,6 +124,7 @@ const mockedUseRemoveOpponent = combatQueries.useRemoveOpponent as ReturnType<ty
 const mockedUseProposeLethalDuel = combatQueries.useProposeLethalDuel as ReturnType<typeof vi.fn>;
 const mockedUseCreatureTemplates = combatQueries.useCreatureTemplates as ReturnType<typeof vi.fn>;
 const mockedUseSpawnCreature = combatQueries.useSpawnCreature as ReturnType<typeof vi.fn>;
+const mockedUseEscalationCurves = combatQueries.useEscalationCurves as ReturnType<typeof vi.fn>;
 const mockedUsePersonaSearch = usePersonaSearch as unknown as ReturnType<typeof vi.fn>;
 const mockedUseMyRosterEntriesQuery = useMyRosterEntriesQuery as unknown as ReturnType<
   typeof vi.fn
@@ -238,6 +240,12 @@ beforeEach(() => {
     isPending: false,
     error: null,
     isError: false,
+  });
+  mockedUseEscalationCurves.mockReturnValue({
+    data: [
+      { id: 7, name: 'Slow Burn', description: '', start_round: 2 },
+      { id: 9, name: 'Flashpoint', description: '', start_round: 1 },
+    ],
   });
   mockedUseMyRosterEntriesQuery.mockReturnValue({
     data: [{ id: 1, name: 'GMChar', character_id: 42 }],
@@ -956,5 +964,60 @@ describe('GMEncounterControls — settings row', () => {
     );
 
     expect(screen.queryByTestId('encounter-timer-input')).not.toBeInTheDocument();
+  });
+
+  it('shows the current escalation curve and lists the catalog', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ escalation_curve: 7, escalation_curve_name: 'Slow Burn' })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('encounter-curve-select')).toHaveTextContent('Slow Burn');
+  });
+
+  it('shows None when the encounter does not escalate', () => {
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ escalation_curve: null, escalation_curve_name: null })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+    expect(screen.getByTestId('encounter-curve-select')).toHaveTextContent(/None/);
+  });
+
+  it('fires the settings mutation with the curve id when a curve is chosen', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(<GMEncounterControls sceneId={5} encounter={makeEncounter()} viewerCanGm={false} />, {
+      wrapper: createWrapper(),
+    });
+    await user.click(screen.getByTestId('encounter-curve-select'));
+    await user.click(await screen.findByRole('option', { name: 'Flashpoint' }));
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { escalationCurve: 9 },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
+  });
+
+  it('fires the settings mutation with null when None is chosen', async () => {
+    const user = userEvent.setup({ pointerEventsCheck: 0 });
+    render(
+      <GMEncounterControls
+        sceneId={5}
+        encounter={makeEncounter({ escalation_curve: 7, escalation_curve_name: 'Slow Burn' })}
+        viewerCanGm={false}
+      />,
+      { wrapper: createWrapper() }
+    );
+    await user.click(screen.getByTestId('encounter-curve-select'));
+    await user.click(await screen.findByRole('option', { name: /None/ }));
+    expect(mockUpdateSettingsMutate).toHaveBeenCalledWith(
+      { escalationCurve: null },
+      expect.objectContaining({ onError: expect.any(Function) })
+    );
   });
 });

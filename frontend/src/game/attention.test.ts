@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { sessionAttention } from './attention';
+import { chipUnread, sessionAttention } from './attention';
+import { DEFAULT_FEED_CHIPS } from './feedChips';
 import type { Session } from '@/store/gameSlice';
 import type { InteractionWsPayload } from '@/hooks/types';
 
@@ -25,6 +26,10 @@ function makeSession(overrides: Partial<Session> = {}): Session {
   return {
     isConnected: true,
     messages: [],
+    notes: [],
+    consoleLines: [],
+    minimizedFeed: [],
+    dismissedFeed: [],
     unread: 0,
     commands: [],
     room: null,
@@ -136,6 +141,68 @@ describe('sessionAttention', () => {
     expect(result).toEqual({ direct: 0, ambient: true });
   });
 
+  it('counts a mechanical row aimed at me as direct even though it groups by scene', () => {
+    // #3787 I1: decision 5 keys action/outcome rows to `scene:N` so one fight
+    // stays one reader group; decision 6 reuses this `direct` tier for them. A
+    // key-based direct tier silently demoted "a blow landed on you" to ambient.
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'outcome',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 1, ambient: false });
+  });
+
+  it('a mechanical row aimed at someone else stays ambient', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'outcome',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [42],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 0, ambient: true });
+  });
+
+  it('splits one scene thread into the blows aimed at me and the rest', () => {
+    // Both rows land in the same `scene:1` group. Direct counts only the one
+    // naming this persona; the sibling still raises ambient.
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'action',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+        makeInteraction({
+          id: 6,
+          mode: 'action',
+          persona: { id: 99, name: 'Narrator', thumbnail_url: '' },
+          target_persona_ids: [42],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID);
+
+    expect(result).toEqual({ direct: 1, ambient: true });
+  });
+
   it('falls back to the legacy unread scalar for ambient', () => {
     const session = makeSession({ unread: 3 });
 
@@ -159,5 +226,103 @@ describe('sessionAttention', () => {
     const result = sessionAttention(session, null);
 
     expect(result).toEqual({ direct: 0, ambient: true });
+  });
+
+  it('drops interactions the server already counted', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({
+          id: 5,
+          mode: 'whisper',
+          receiver_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+        makeInteraction({
+          id: 9,
+          mode: 'whisper',
+          receiver_persona_ids: [VIEWER_PERSONA_ID],
+        }),
+      ],
+    });
+
+    const result = sessionAttention(session, VIEWER_PERSONA_ID, 5);
+
+    expect(result.direct).toBe(1);
+  });
+
+  it('counts everything when no watermark is given', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        makeInteraction({ id: 5, mode: 'whisper', receiver_persona_ids: [VIEWER_PERSONA_ID] }),
+      ],
+    });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID).direct).toBe(1);
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, null).direct).toBe(1);
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, 0).direct).toBe(1);
+  });
+
+  it('a watermark does not resurrect a thread the viewer already dismissed', () => {
+    const session = makeSession({
+      threadLastSeen: { [`whisper:${VIEWER_PERSONA_ID},99`]: 20 },
+      sceneInteractions: [
+        makeInteraction({ id: 15, mode: 'whisper', receiver_persona_ids: [VIEWER_PERSONA_ID] }),
+      ],
+    });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID, 5).direct).toBe(0);
+  });
+});
+
+describe('wake filtering (#3856)', () => {
+  const roomScroll = (id: number, mode: string) =>
+    makeInteraction({ id, mode, persona: { id: 99, name: 'Other', thumbnail_url: '' } });
+
+  it('an interaction whose kind does not wake counts for nothing', () => {
+    const session = makeSession({ sceneInteractions: [roomScroll(5, 'emit')] });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID)).toEqual({ direct: 0, ambient: true });
+    expect(
+      sessionAttention(session, VIEWER_PERSONA_ID, null, { wakingKinds: new Set(['whisper']) })
+    ).toEqual({ direct: 0, ambient: false });
+  });
+
+  it('a dismissed interaction counts for nothing', () => {
+    const session = makeSession({ sceneInteractions: [roomScroll(5, 'pose')] });
+
+    expect(
+      sessionAttention(session, VIEWER_PERSONA_ID, null, { dismissed: new Set(['i:5']) })
+    ).toEqual({ direct: 0, ambient: false });
+  });
+
+  it('chipUnread counts unread interactions per waking chip that is on', () => {
+    const session = makeSession({
+      sceneInteractions: [roomScroll(5, 'pose'), roomScroll(6, 'say'), roomScroll(7, 'emit')],
+    });
+    const chips = DEFAULT_FEED_CHIPS.map((chip) =>
+      chip.id === 'am' ? { ...chip, wake: true } : chip
+    );
+
+    expect(chipUnread(session, VIEWER_PERSONA_ID, chips)).toEqual({ rp: 3 });
+  });
+
+  it('chipUnread skips a chip that is off, one that does not wake, read rows, and my own', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        roomScroll(5, 'pose'),
+        makeInteraction({
+          id: 6,
+          mode: 'pose',
+          persona: { id: VIEWER_PERSONA_ID, name: 'Me', thumbnail_url: '' },
+        }),
+        roomScroll(7, 'action'),
+      ],
+      threadLastSeen: { room: 5 },
+    });
+    const chips = DEFAULT_FEED_CHIPS.map((chip) =>
+      chip.id === 'rp' ? { ...chip, on: false } : chip
+    );
+
+    expect(chipUnread(session, VIEWER_PERSONA_ID, chips)).toEqual({});
+    expect(chipUnread(session, VIEWER_PERSONA_ID, DEFAULT_FEED_CHIPS)).toEqual({});
   });
 });

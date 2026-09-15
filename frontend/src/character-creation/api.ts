@@ -22,7 +22,6 @@ import type {
   DraftApplicationDetail,
   EffectType,
   Facet,
-  FacetTreeNode,
   Family,
   FamilySlots,
   FormOptionsResponse,
@@ -32,6 +31,8 @@ import type {
   GlimpseTagOption,
   HeightBand,
   NamingRitualConfig,
+  OfferChapter,
+  OffersResponse,
   OriginTemplate,
   Path,
   PathSkillSuggestion,
@@ -48,6 +49,7 @@ import type {
   Technique,
   TechniqueStyle,
   Tradition,
+  Vacancy,
   WorshippedBeingRef,
 } from './types';
 
@@ -323,9 +325,21 @@ export async function getDraftCGPoints(draftId: number): Promise<CGPointsBreakdo
   return res.json();
 }
 
+// Distinctions are offered by CG chapter, not a standalone stage (#3675).
+export async function getDraftOffers(
+  draftId: number,
+  chapter: OfferChapter
+): Promise<OffersResponse> {
+  const res = await apiFetch(`${BASE_URL}/drafts/${draftId}/offers/?chapter=${chapter}`);
+  if (!res.ok) {
+    throw new Error('Failed to load chapter offers');
+  }
+  return res.json();
+}
+
 // NEW: Family Tree Management
-export async function getFamiliesWithOpenPositions(areaId?: number): Promise<Family[]> {
-  const params = new URLSearchParams({ has_open_positions: 'true' });
+export async function getFamiliesWithOpenKinSlots(areaId?: number): Promise<Family[]> {
+  const params = new URLSearchParams({ has_open_kin_slots: 'true' });
   if (areaId) {
     params.append('area_id', areaId.toString());
   }
@@ -467,6 +481,22 @@ export async function getOriginTemplates(beginningId: number): Promise<OriginTem
   const res = await apiFetch(`${BASE_URL}/origin-templates/?beginning=${beginningId}`);
   if (!res.ok) {
     throw new Error('Failed to load origin templates');
+  }
+  return res.json();
+}
+
+// =============================================================================
+// Vacancies (openings on a staff family, priced for the draft, #3648)
+// =============================================================================
+
+export async function getVacancies(draftId: number, organizationId?: number): Promise<Vacancy[]> {
+  const params = new URLSearchParams({ draft: String(draftId) });
+  if (organizationId !== undefined) {
+    params.set('organization', String(organizationId));
+  }
+  const res = await apiFetch(`${BASE_URL}/vacancies/?${params.toString()}`);
+  if (!res.ok) {
+    throw new Error('Failed to load vacancies');
   }
   return res.json();
 }
@@ -688,15 +718,6 @@ export async function getPathSkillSuggestions(pathId: number): Promise<PathSkill
 export async function getFacets(): Promise<Facet[]> {
   const res = await apiFetch(`${MAGIC_URL}/facets/`);
   if (!res.ok) throw new Error('Failed to load facets');
-  return res.json();
-}
-
-/**
- * Get facets as nested tree structure.
- */
-export async function getFacetTree(): Promise<FacetTreeNode[]> {
-  const res = await apiFetch(`${MAGIC_URL}/facets/tree/`);
-  if (!res.ok) throw new Error('Failed to load facet tree');
   return res.json();
 }
 

@@ -16,10 +16,10 @@ from world.character_sheets.models import CharacterSheet
 from world.progression.models import (
     DevelopmentPoints,
     DevelopmentTransaction,
-    ExperiencePointsData,
     XPTransaction,
 )
 from world.progression.services.maturation import stat_cap_for
+from world.progression.services.xp_ledger import get_or_create_xp_tracker, record_character_earn
 from world.progression.types import DevelopmentSource, ProgressionReason
 from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.models import (
@@ -35,27 +35,24 @@ if TYPE_CHECKING:
     from world.scenes.models import Scene
 
 
-def get_or_create_xp_tracker(account: AccountDB) -> ExperiencePointsData:
-    """Get or create XP tracker for an account."""
-    xp_tracker, _created = ExperiencePointsData.objects.get_or_create(
-        account=account,
-        defaults={
-            "total_earned": 0,
-            "total_spent": 0,
-        },
-    )
-    return xp_tracker
-
-
-def award_xp(
+def award_xp(  # noqa: PLR0913 - one award seam; every field is an attribution the ledger keeps
     account: AccountDB,
     amount: int,
     reason: str = ProgressionReason.SYSTEM_AWARD,
     description: str = "",
     gm: AccountDB | None = None,
+    *,
+    character: CharacterSheet | None,
 ) -> XPTransaction:
     """
-    Award XP to an account.
+    Award XP to an account, attributed to the character that earned it (#3748).
+
+    The balance is the account's (ADR-0053) — ``character`` does not create a second
+    pool, it records which character the play that earned this happened on, so
+    "what has this player invested in this character" is answerable. It is
+    keyword-only and has no default so every call site decides deliberately;
+    ``None`` is correct for an award no character earned (a GM story reward pays
+    the GM's account for running the scene).
 
     Args:
         account: Account to award XP to
@@ -63,6 +60,7 @@ def award_xp(
         reason: Reason for the award
         description: Detailed description
         gm: GM making the award (if applicable)
+        character: Sheet whose play earned this, or None for an account-level award
 
     Returns:
         XPTransaction: The created transaction record
@@ -75,12 +73,15 @@ def award_xp(
         xp_tracker = get_or_create_xp_tracker(account)
         xp_tracker.award_xp(amount)
 
+        record_character_earn(character, amount, reason, description)
+
         # Record transaction
         return XPTransaction.objects.create(
             account=account,
             amount=amount,
             reason=reason,
             description=description,
+            character=character,
             gm=gm,
         )
 

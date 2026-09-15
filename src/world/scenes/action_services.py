@@ -11,6 +11,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from actions.services import start_action_resolution
+from world.checks.theater import check_outcome_faces, maybe_emit_resolution_theater
 from world.checks.types import ResolutionContext
 from world.progression.models import KudosSourceCategory
 from world.progression.models.kudos import KudosDifficultyWeight
@@ -31,7 +32,11 @@ from world.scenes.action_models import (
 from world.scenes.action_resolvers import get_resolver
 from world.scenes.boon_services import BOON_ACTION_KEYS
 from world.scenes.constants import InteractionMode
-from world.scenes.interaction_services import create_interaction
+from world.scenes.interaction_services import (
+    create_interaction,
+    deliver_outcome_interaction,
+    write_target_personas,
+)
 from world.scenes.models import Interaction, Persona, Scene
 from world.scenes.types import EnhancedSceneActionResult
 
@@ -96,6 +101,7 @@ def _resolve_treatment_request(
     ActionTemplate resolution chain entirely. The result is recorded as a regular
     scene interaction on the request and the function returns None because there
     is no PendingActionResolution to hand back to the SCENE_ADAPTIVE pipeline.
+    The row is delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     from world.conditions.services import perform_treatment  # noqa: PLC0415
 
@@ -128,7 +134,23 @@ def _resolve_treatment_request(
         content=content,
         mode=InteractionMode.POSE,
         scene=action_request.scene,
-        target_personas=[action_request.target_persona],
+    )
+    # ADR-0293 decision 3: system-authored rows record what happened; only a
+    # player-authored row that addresses someone is governed by reachability. This
+    # content is machine-rendered from a resolved SceneActionRequest, and its target
+    # is the request's own already-validated `target_persona`, so the target row goes
+    # through `write_target_personas` rather than `create_interaction`'s validated
+    # kwarg -- the same routing combat's `create_action_interaction_core` uses for a
+    # mechanical row written under a player's persona. `respond_to_action_request` has
+    # no `UnreachableError` handler (only `Action.run` and `submit_pose` do), so a
+    # target who merely walked out of the room between request and resolution would
+    # otherwise 500 the REST resolution of an action they already consented to.
+    write_target_personas(interaction, [action_request.target_persona])
+    # #3807: this row was persisted and delivered to nobody live. Deliver on commit,
+    # after the target row above so the involvement mark has target_persona_ids.
+    deliver_outcome_interaction(
+        interaction,
+        location=action_request.initiator_persona.character_sheet.character.location,
     )
 
     action_request.status = ActionRequestStatus.RESOLVED
@@ -153,6 +175,7 @@ if TYPE_CHECKING:
     from actions.types import PendingActionResolution
     from world.character_sheets.models import CharacterSheet
     from world.checks.models import CheckType
+    from world.checks.types import CheckResult
     from world.conditions.models import ConditionInstance, TreatmentTemplate
     from world.conditions.types import TreatmentOutcome
     from world.magic.models import FuryTier, PendingAlteration, Technique, Thread
@@ -1450,24 +1473,25 @@ def _route_delivery(
 def _area_outcome_content(
     *,
     action_request: SceneActionRequest,
-    status_word: str,
     outcome_name: str,
 ) -> str:
     """Build the content line for an area action (no target persona).
 
     A telling always names its tale (#902) — listeners can't learn a deed the
-    echo never identifies.
+    echo never identifies. Renders the outcome name alone (e.g. "Success",
+    "Partial Success") — a bare success_level polarity word doesn't belong in
+    front of it, since a Partial Success is success_level 0 and would otherwise
+    read as "Failure (Partial Success)" (#3807 Part B).
     """
     initiator_name = action_request.initiator_persona.name
     action_key = action_request.action_key
     if action_request.spread_deed_target is not None:
         outcome_line = (
             f"{initiator_name} spreads the tale of "
-            f"«{action_request.spread_deed_target.title}»: "
-            f"{status_word} ({outcome_name})"
+            f"«{action_request.spread_deed_target.title}»: {outcome_name}"
         )
     else:
-        outcome_line = f"{initiator_name} ({action_key}): {status_word} ({outcome_name})"
+        outcome_line = f"{initiator_name} ({action_key}): {outcome_name}"
     return (
         f"{action_request.pose_text}\n{outcome_line}" if action_request.pose_text else outcome_line
     )
@@ -1478,10 +1502,14 @@ def _targeted_outcome_content(
     action_request: SceneActionRequest,
     result: EnhancedSceneActionResult,
     target_name: str,
-    status_word: str,
     outcome_name: str,
 ) -> str:
-    """Build the content line for a targeted action (technique-aware)."""
+    """Build the content line for a targeted action (technique-aware).
+
+    Renders the outcome name alone — see ``_area_outcome_content`` for why a
+    success_level polarity word never precedes it (#3807 Part B). The technique
+    branch keeps its ``[Anima: N]`` suffix and the fizzle note.
+    """
     initiator_name = action_request.initiator_persona.name
     action_key = action_request.action_key
     if result.technique_result is not None and action_request.technique is not None:
@@ -1489,17 +1517,60 @@ def _targeted_outcome_content(
         anima_spent = result.technique_result.anima_cost.effective_cost
         content = (
             f"{initiator_name} uses {technique_name} to {action_key} {target_name}: "
-            f"{status_word} ({outcome_name}) [Anima: {anima_spent}]"
+            f"{outcome_name} [Anima: {anima_spent}]"
         )
     else:
-        content = (
-            f"{initiator_name} attempts to {action_key} {target_name}: "
-            f"{status_word} ({outcome_name})"
-        )
+        content = f"{initiator_name} attempts to {action_key} {target_name}: {outcome_name}"
     # #1919: Append a fizzle note when the thread pull failed at charge time.
     if result.fizzle_note:
         content += f" — {result.fizzle_note}"
     return content
+
+
+def _schedule_check_outcome_theater(
+    *,
+    action_request: SceneActionRequest,
+    check_result: CheckResult | None,
+    initiator_character: ObjectDB,
+    target_character: ObjectDB | None,
+) -> None:
+    """Schedule the #3807 Part B roulette reveal for a resolved social check.
+
+    Faces come from ``check_outcome_faces`` (chart bands only — see its HARD RULE
+    docstring; never rollmod or outcome-guarantee logic). Fires for the initiator
+    always, and for the effective target when there is one; bystanders never get
+    it. Faces are built inside the commit callback, so a rolled-back resolution
+    never reads the chart, and a check with no chart or outcome spins nothing.
+    """
+    if check_result is None:
+        return
+
+    if action_request.action_template_id is not None:
+        title = action_request.action_template.name
+    else:
+        title = action_request.action_key
+
+    def _emit() -> None:
+        faces, selected = check_outcome_faces(check_result)
+        if not faces or selected is None:
+            return
+        maybe_emit_resolution_theater(
+            character=initiator_character,
+            title=title,
+            consequences=faces,
+            selected=selected,
+            force=True,
+        )
+        if target_character is not None:
+            maybe_emit_resolution_theater(
+                character=target_character,
+                title=title,
+                consequences=faces,
+                selected=selected,
+                force=True,
+            )
+
+    transaction.on_commit(_emit)
 
 
 def _create_result_interaction(
@@ -1522,11 +1593,12 @@ def _create_result_interaction(
             target). Pass explicitly when resolving an additional target so the
             interaction names the correct persona rather than the primary one.
         fury_committed: Realized FuryTier post-resolution; recorded for audit.
+
+    The returned row (and the MUTTER fragment row, when delivery is MUTTER) is
+    delivered live on commit (#3807) via ``deliver_outcome_interaction``.
     """
     main_result = result.action_resolution.main_result
     check_result = main_result.check_result if main_result is not None else None
-    success = (check_result.success_level > 0) if check_result is not None else False
-    status_word = "Success" if success else "Failure"
     outcome_name = check_result.outcome_name if check_result is not None else "Unknown"
 
     effective_target = target_persona or action_request.target_persona
@@ -1536,7 +1608,6 @@ def _create_result_interaction(
         # text echoed above the outcome.
         content = _area_outcome_content(
             action_request=action_request,
-            status_word=status_word,
             outcome_name=outcome_name,
         )
         receivers: list[Persona] = []
@@ -1546,7 +1617,6 @@ def _create_result_interaction(
             action_request=action_request,
             result=result,
             target_name=effective_target.name,
-            status_word=status_word,
             outcome_name=outcome_name,
         )
         receivers = [effective_target]
@@ -1561,21 +1631,46 @@ def _create_result_interaction(
         scene=action_request.scene,
         place=place,
         receivers=interaction_receivers,
-        target_personas=target_personas,
         strain_committed=strain_committed,
         fury_committed=fury_committed,
     )
+    if target_personas:
+        # ADR-0293 decision 3, same routing as the treatment outcome above: a
+        # machine-rendered record of a resolved action request, whose target the
+        # request already validated. TABLE_TALK routes this row to a Place whose
+        # presence set is resolved at RESOLUTION time, so the validated kwarg would
+        # refuse (and 500 an unhandled `UnreachableError` out of the REST resolver)
+        # for a target who simply stood up from the table mid-action.
+        write_target_personas(interaction, target_personas)
+
+    # #3807: this row was persisted and delivered to nobody live. Deliver on commit,
+    # after the target rows above so the involvement mark has target_persona_ids.
+    initiator_location = action_request.initiator_persona.character_sheet.character.location
+    deliver_outcome_interaction(interaction, location=initiator_location)
+
+    # #3807 Part B: the roulette wheel for the roller (and the effective target,
+    # when there is one — no target means an area action, roller only).
+    _schedule_check_outcome_theater(
+        action_request=action_request,
+        check_result=check_result,
+        initiator_character=action_request.initiator_persona.character_sheet.character,
+        target_character=(
+            effective_target.character_sheet.character if effective_target is not None else None
+        ),
+    )
+
     if mode == InteractionMode.MUTTER:
         # #905: the room heard a fragment — and the fragment is public
         # BECAUSE it is what the room heard (#900 invariant).
         from world.scenes.interaction_services import mutter_fragment  # noqa: PLC0415
 
-        create_interaction(
+        fragment_interaction = create_interaction(
             persona=action_request.initiator_persona,
             content=mutter_fragment(content),
             mode=InteractionMode.MUTTER,
             scene=action_request.scene,
         )
+        deliver_outcome_interaction(fragment_interaction, location=initiator_location)
     return interaction
 
 

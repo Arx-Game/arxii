@@ -34,32 +34,14 @@ class RegistrationClosedError(Exception):
 
     A closed game means staff decide who gets in via ``AccountInvite``; a
     player-issued ``GameInvite`` must not be a side door around that gate.
-    Distinct from ``PermissionError`` (the trust threshold) so the API can
-    return a different message for each.
+    ``registration_open`` is the only gate on a player invite (#3726): the
+    trust threshold that used to sit alongside it was a dormant number no
+    account ever carried, so it refused every player it was asked about.
     """
 
 
 def _registration_is_open() -> bool:
     return get_registration_config().registration_open
-
-
-def _inviter_meets_trust_threshold(inviter: PlayerData) -> bool:
-    """Check if the inviter has sufficient trust to send invites.
-
-    Uses the 'INVITE' TrustCategory with a BASIC minimum threshold.
-    Returns True if the inviter meets the threshold, False otherwise.
-    """
-    from world.stories.models import PlayerTrust  # noqa: PLC0415
-    from world.stories.types import TrustLevel  # noqa: PLC0415
-
-    try:
-        trust = PlayerTrust.objects.get(account=inviter.account)
-    except PlayerTrust.DoesNotExist:
-        return False
-
-    return trust.has_minimum_trust_for_categories(
-        [{"category": "INVITE", "minimum_level": TrustLevel.BASIC}]
-    )
 
 
 @transaction.atomic
@@ -70,10 +52,8 @@ def create_game_invite(
 ) -> GameInvite:
     """Create a contextual game invite.
 
-    Validates that the inviter meets the trust threshold before creating.
-
     Args:
-        inviter: The PlayerData of the trusted player sending the invite.
+        inviter: The PlayerData of the player sending the invite.
         message: The contextual note the friend will see on registration.
         expires_in_days: Optional expiry window. None = no expiry.
 
@@ -82,15 +62,10 @@ def create_game_invite(
 
     Raises:
         RegistrationClosedError: If registration is closed (invites are off).
-        PermissionError: If the inviter does not meet the trust threshold.
     """
     if not _registration_is_open():
         msg = "Player invites are disabled while registration is closed."
         raise RegistrationClosedError(msg)
-
-    if not _inviter_meets_trust_threshold(inviter):
-        msg = "Inviter does not meet the trust threshold to send invites."
-        raise PermissionError(msg)
 
     expires_at = None
     if expires_in_days is not None:

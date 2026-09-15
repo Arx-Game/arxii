@@ -30,6 +30,17 @@ Character-specific UI components:
 
 - **`Layout.tsx`**: Main application layout wrapper
 - **`Header.tsx`**: Application header with navigation
+- **`SelectedCharacterChip.tsx`**: The docked-portrait chip the header renders when the
+  account has a selected character (#3412). Selection is not presence, and the chip
+  shows both (#3859): it reads the character's live session from the store
+  (`sessions[name].isConnected`, the same fact `GatefoldPage`'s redirect and
+  `GameTopBar`'s dot read). With a live session the sub-line says "In the world" plus
+  the room, the button is "Return to the world", and "Leave the world" calls
+  `useGameSocket().disconnect(name)`, the world menu's own item, so the server unpuppets
+  the character; without one it offers "Enter the world" and says "Not in the world".
+  Navigating away from `/game` keeps the socket open (ADR-0295), which is why the chip
+  must read the store and never the route. Degraded lifecycle states show
+  `dockedStateLabel` instead of a presence claim.
 - **`Footer.tsx`**: Application footer
 - **`AuthProvider.tsx`**: Authentication context provider
 
@@ -40,6 +51,19 @@ Character-specific UI components:
 - **`WelcomePanel.tsx`**: First-login home-page card for an authenticated account — "Enter the
   game" CTA, pending-application status, draft-in-progress link, or the roster/create-character
   choice for a zero-character account (#2162)
+
+### Message Bodies
+
+- **`FormattedContent.tsx`**: Parses a message body's inline markup (bold, italic,
+  strikethrough, colour, links) into segments and renders them in one `<span>`. Every
+  reader that shows a pose, say, emit or whisper (`PoseUnit`, `ExplorationReader`,
+  `SceneMessages`) renders the body through it. **The feed's word-wrap rule lives here,
+  once** (#3862): the wrapper carries `[overflow-wrap:anywhere]`, so an unbroken run (a
+  URL, a keyboard mash, a long invented word) breaks at the column's edge in every reader
+  instead of widening the feed sideways. `anywhere` rather than `break-word` because only
+  `anywhere` lets the run shrink a flex child's min-content width, and the feed column is
+  a flex child. A new reader that renders a body through this component inherits the rule;
+  one that bypasses it must carry the same class itself (see `EvenniaMessage`).
 
 ### Utility Components
 

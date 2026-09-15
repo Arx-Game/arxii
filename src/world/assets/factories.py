@@ -6,9 +6,22 @@ import factory
 from factory.django import DjangoModelFactory
 
 from world.assets.constants import AssetRoleContext
-from world.assets.models import CluePool, CluePoolEntry, NPCAsset
+from world.assets.models import CluePool, CluePoolEntry, DistinctionAssetGrant, NPCAsset
 
 _PERSONA_FACTORY = "world.scenes.factories.PersonaFactory"
+
+
+class DistinctionAssetGrantFactory(DjangoModelFactory):
+    """Staff-authored sidecar granting an NPCAsset from a Distinction (#1906, #3660)."""
+
+    class Meta:
+        model = DistinctionAssetGrant
+
+    distinction = factory.SubFactory("world.distinctions.factories.DistinctionFactory")
+    npc_role = factory.SubFactory("world.npc_services.factories.NPCRoleFactory")
+    role_context = AssetRoleContext.INFORMANT
+    starting_affection = 0
+    asset_display_name = factory.Sequence(lambda n: f"Asset Grant Figure {n}")
 
 
 class NPCAssetFactory(DjangoModelFactory):

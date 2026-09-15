@@ -426,6 +426,26 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         blank=True,
         help_text="Description of what this technique does.",
     )
+    hit_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this technique lands on a target (#3554). Use "
+            "{actor} and {target}; both are required. The machine appends the damage "
+            "figure and any wound, knockout or defeat clause after it, so write the blow, "
+            "not the ledger: '{actor} hurls a spear of rime at {target}'. Blank falls back "
+            "to the standard sentence. Plain register."
+        ),
+    )
+    miss_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this technique misses its target (#3554). Use "
+            "{actor} and {target}; both are required. Blank falls back to the standard "
+            "sentence. Plain register."
+        ),
+    )
     windup_rounds = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -549,11 +569,15 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         ]
 
     def clean(self) -> None:
-        """Validate reach_hops is meaningful when reach=REACH_N."""
+        """Validate reach_hops for REACH_N and the authored outcome lines (#3554)."""
+        from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
+
         super().clean()
         if self.reach == TechniqueReach.REACH_N and self.reach_hops < 1:
             msg = "reach_hops must be >= 1 when reach is REACH_N."
             raise ValidationError({"reach_hops": msg})
+        validate_outcome_narration(self.hit_narration, "hit_narration")
+        validate_outcome_narration(self.miss_narration, "miss_narration")
 
     @cached_property
     def cached_restrictions(self) -> list:
@@ -610,6 +634,22 @@ class Technique(NaturalKeyMixin, DiscoverableContent, CreditedContent, SharedMem
         To invalidate: ``del instance.cached_removed_conditions``.
         """
         return list(self.removed_conditions.select_related("condition"))
+
+    @cached_property
+    def cached_treatments(self) -> list:
+        """Treatment payload rows for this technique (#3682). Supports Prefetch(to_attr=).
+
+        The fourth cast payload family, and the one the #2898 summary never read:
+        a technique whose only authored effect was a treatment described itself as
+        having no effect at all, and ``derive_target_relationship`` fell through to
+        SELF — so a heal authored for an ally was rejected at the cast gate.
+
+        ``treatment_template`` and the condition it relieves are select_related
+        for the same reason as above.
+
+        To invalidate: ``del instance.cached_treatments``.
+        """
+        return list(self.treatments.select_related("treatment_template__target_condition"))
 
     @cached_property
     def cached_target_prerequisites(self) -> list:

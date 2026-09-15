@@ -250,17 +250,38 @@ export interface SubmitPoseBody {
    * skipped, not an error).
    */
   target_names?: string[];
+  /**
+   * Client-minted idempotency id for this send attempt (#3760 Task 16 fix —
+   * `PoseSubmitSerializer.client_request_id` is a REQUIRED field server-side;
+   * omitting it makes every REST pose submission fail its 400 validation).
+   * Reused verbatim on an unmodified retry of the same content/context (see
+   * `useDraftStore.beginSend`); a content change mints a fresh one.
+   */
+  client_request_id: string;
+  /**
+   * The pose being answered (#3787) -- `PoseSubmitSerializer.reply_to`
+   * (`world/scenes/interaction_serializers.py`'s `ReplyTargetSerializer`)
+   * already accepted this write-only field before this task; nothing on the
+   * web composer ever actually sent it. `id`/`timestamp` mirror
+   * `Interaction.reply_to`'s own shape (`scenes/types.ts`) so a row read
+   * straight off the reader can be forwarded here verbatim.
+   */
+  reply_to?: { id: number; timestamp: string };
 }
 
 /**
- * The submit-pose response body (`InteractionListSerializer` output), or
- * `{ ephemeral: true }` for ephemeral scenes that never persist an Interaction
- * row (#2156). `id` is what callers need to link a follow-up action request
- * (e.g. the technique-driven entrance's `entry_interaction_id`, #2183).
+ * The submit-pose response body (`InteractionListSerializer` output plus
+ * `replayed`), or `{ ephemeral: true, replayed }` for ephemeral scenes that
+ * never persist an Interaction row (#2156). `id` is what callers need to
+ * link a follow-up action request (e.g. the technique-driven entrance's
+ * `entry_interaction_id`, #2183). `replayed` (#3760 Task 4/16) is true when
+ * this response is the SAME accepted submission being re-served for a
+ * retried `client_request_id`, rather than a freshly created one.
  */
 export interface SubmitPoseResult {
   id?: number;
   ephemeral?: boolean;
+  replayed?: boolean;
 }
 
 export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult> {
@@ -269,9 +290,43 @@ export async function submitPose(body: SubmitPoseBody): Promise<SubmitPoseResult
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const data = (await res.json().catch(() => null)) as { detail?: string } | null;
-    throw new Error(data?.detail || 'Failed to submit pose');
+    // #3787 Screen 3 -- a reply-venue mismatch (`reply_to`) or an unreachable
+    // named target (`target_names`) 400s with the typed `{code, field,
+    // detail, hint}` body `interaction_views.py`'s `_refusal_response` builds
+    // (both `InteractionThreadError` and `UnreachableError` route through
+    // it). Use the server's own `hint` verbatim rather than inventing
+    // wording -- it names the venue the player would actually need to reach.
+    const data = (await res.json().catch(() => null)) as {
+      detail?: string;
+      hint?: string;
+    } | null;
+    const detail = data?.detail || 'Failed to submit pose';
+    throw new Error(data?.hint ? `${detail} ${data.hint}` : detail);
   }
+  return res.json();
+}
+
+/** The `PoseSubmissionDetailView` lookup response (#3760 Task 6). */
+export interface PoseSubmissionLookup {
+  interaction_id: number;
+  replayed: boolean;
+}
+
+/**
+ * "Did this send land?" — the composer's Check-status button (#3760 Task 11)
+ * against the writer-only lookup endpoint (`GET
+ * /api/play/submissions/{client_request_id}/`, Task 6). `null` means the
+ * server has no record of this attempt — the caller can safely retry, since
+ * the endpoint 404s both for "never received" and "not yours" alike (an
+ * unfound row is never proof the send failed, only that nothing landed
+ * *under this id*). Any other non-OK status is a real fetch failure.
+ */
+export async function fetchPoseSubmission(
+  clientRequestId: string
+): Promise<PoseSubmissionLookup | null> {
+  const res = await apiFetch(`/api/play/submissions/${clientRequestId}/`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error('Failed to check submission status.');
   return res.json();
 }
 

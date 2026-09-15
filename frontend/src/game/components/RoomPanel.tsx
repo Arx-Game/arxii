@@ -48,6 +48,8 @@ export interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  decorations?: string[];
+  comfort_level?: number;
   is_owner: boolean;
   is_public: boolean;
   hub: HubTidings | null;
@@ -72,6 +74,8 @@ interface RoomPanelProps {
   viewerEntryId?: number | null;
   /** The viewer's active persona pk — the unseen-presence report identity (#3288). */
   viewerPersonaId?: number | null;
+  /** The viewer's own portrait for the "you" row (#3856); null shows initials. */
+  viewerThumbnailUrl?: string | null;
 }
 
 export function RoomPanel({
@@ -84,6 +88,7 @@ export function RoomPanel({
   hasActiveBattle = false,
   viewerEntryId = null,
   viewerPersonaId = null,
+  viewerThumbnailUrl = null,
 }: RoomPanelProps) {
   const { send } = useGameSocket();
   const dispatch = useAppDispatch();
@@ -232,33 +237,54 @@ export function RoomPanel({
         <RoomAuraPicker characterId={characterId} roomId={room.id} />
       )}
 
-      {room.thumbnail_url && (
-        <div className="border-b">
-          <img src={room.thumbnail_url} alt={room.name} className="h-32 w-full object-cover" />
-        </div>
-      )}
-
       {room.description && <RoomDescription description={room.description} />}
-
-      {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
-
-      {room.hub?.kind === 'NOTICE_BOARD' && (
-        <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
+      {(room.decorations?.length || room.comfort_level != null) && (
+        <section className="border-b px-3 py-2" aria-label="Room details">
+          {room.decorations && room.decorations.length > 0 && (
+            <p className="text-xs text-muted-foreground">{room.decorations.join(' · ')}</p>
+          )}
+          {room.comfort_level != null && (
+            <p className="mt-1 text-xs text-muted-foreground">Comfort {room.comfort_level}/10</p>
+          )}
+        </section>
       )}
 
       {scene && <SceneHighlightsPanel sceneId={scene.id} />}
 
       <CharactersList
         characters={room.characters}
+        viewer={{ name: character, thumbnailUrl: viewerThumbnailUrl }}
+        // `look me` (#3856): what others see when they look at you, as a note
+        // in the column. `me` rather than the name, so it can never
+        // prefix-match another occupant.
+        onViewerClick={() => send(character, 'look me')}
         onCharacterClick={onCharacterClick}
         hasUnseenPresence={Boolean(room.has_unseen_presence)}
         viewerPersonaId={viewerPersonaId}
+        viewerInScene={scene?.viewer_entered ?? null}
       />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
+      {room.characters.length > 0 && (
+        <p className="border-b px-3 py-2 text-xs text-muted-foreground" role="note">
+          Select an occupant to open character context and authorized details.
+        </p>
+      )}
+      <ObjectsList objects={room.objects} characterId={characterId} />
+      {room.hub && <HubTidingsPanel hub={room.hub} viewerEntryId={viewerEntryId} />}
+      {room.hub?.kind === 'NOTICE_BOARD' && (
+        <RoomBoardPanel roomProfileId={room.id} characterId={characterId} />
+      )}
       <ExitsList exits={room.exits} onExit={handleExit} />
       <PortalsBlock characterId={characterId} />
       <TrapsBlock characterId={characterId} />
-      <ObjectsList objects={room.objects} characterId={characterId} />
+      {room.thumbnail_url && (
+        <details className="border-t">
+          <summary className="cursor-pointer px-3 py-2 text-xs text-muted-foreground">
+            Room art
+          </summary>
+          <img src={room.thumbnail_url} alt={room.name} className="h-32 w-full object-cover" />
+        </details>
+      )}
     </div>
   );
 }

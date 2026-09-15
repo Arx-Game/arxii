@@ -9,6 +9,7 @@ import { RequireCharacter } from './components/RequireCharacter';
 import { StaffRoute } from './components/StaffRoute';
 import { Skeleton } from './components/ui/skeleton';
 import { GatefoldPage } from './home/GatefoldPage';
+import { HallPage } from './home/HallPage';
 import { GamePage } from './game/GamePage';
 import { LoginPage } from './evennia_replacements/LoginPage';
 import { RegisterPage } from './evennia_replacements/RegisterPage';
@@ -29,6 +30,8 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AccountSettingsPage } from './account/pages/AccountSettingsPage';
 import { ScenesListPage } from './scenes/pages/ScenesListPage';
 import { TidingsPage } from './tidings/pages/TidingsPage';
+import { RealmsHubPage } from './realms/pages/RealmsHubPage';
+import { RealmPage } from './realms/pages/RealmPage';
 import { JournalPage } from './missions/pages/JournalPage';
 import { SceneDetailPage } from './scenes/pages/SceneDetailPage';
 import { BattleMapPage } from './battles/pages/BattleMapPage';
@@ -374,6 +377,18 @@ function App() {
       <ErrorBoundary>
         <Routes>
           <Route path="/" element={<GatefoldPage />} />
+          {/* #3818 — the Hall on its own address. `/` keeps redirecting an
+              in-world player to `/game` (a reload lands back in play), so
+              the game's world menu needs a route that always renders
+              character select, with every open session left running. */}
+          <Route
+            path="/hall"
+            element={
+              <ProtectedRoute>
+                <HallPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/login"
             element={
@@ -454,6 +469,8 @@ function App() {
             }
           />
           <Route path="/tidings" element={<TidingsPage />} />
+          <Route path="/realms" element={<RealmsHubPage />} />
+          <Route path="/realms/:slug" element={<RealmPage />} />
           <Route path="/scenes" element={<ScenesListPage />} />
           <Route path="/scenes/:id" element={<SceneDetailPage />} />
           <Route path="/scenes/:id/combat" element={<CombatRouteRedirect />} />

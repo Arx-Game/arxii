@@ -1,5 +1,6 @@
 /**
- * CodexChapter — "Chapter the Second: Of the Empty City" (#3305).
+ * CodexChapter — "Chapter the First: Of the Empty City" (#3305; first since #3723: what
+ * kind of game this is, for a visitor who has never seen a MU, before who they may wake as).
  *
  * Body prose is verbatim Apostate copy (arx-the-empty-city.md) — not
  * agent-drafted, so it carries no PLACEHOLDER marker. The index list below it
@@ -44,23 +45,15 @@ export function CodexChapter() {
   return (
     <div className="gatefold-leaf" id="codex">
       <div className="gatefold-leaf-main">
-        <span className="gatefold-chapter-no">Chapter the Second</span>
+        <span className="gatefold-chapter-no">Chapter the First</span>
         <h2>Of the Empty City</h2>
         <div className="gatefold-leaf-body">
-          {/* Verbatim Apostate prose, arx-the-empty-city.md */}
+          {/* Apostate's prose, verbatim (#3723). */}
           <p className="gatefold-dropcap">
-            The songs outside call it the City of Heroes. The people who live in it call it home,
-            and home is a city built for three million that holds perhaps fifty thousand, the living
-            gathered in the Ward of the Compact while eight dark wards stand empty around them,
-            swept and lamplit all the same. Arx is, at its heart, a necropolis: a city of graves and
-            memorials, built to hold the dead and to keep their testaments. Its motto is learned by
-            every Caretaker child:{' '}
-            <span className="gatefold-caps">“As Arx endures, we remember.”</span>
-          </p>
-          <p>
-            For ages, the most precious relics and secrets in the world were entrusted to Arx for
-            their safety, because nothing could touch them behind the Shroud. And now the Shroud has
-            fallen.
+            Arx is a collaborative text-based storytelling game set in a shared world whose story
+            can be influenced and changed by all the players. Much an MMO writ small or many
+            simultaneous roleplaying game tabletops in a shared environment, the players' stories
+            and roleplay shape the world and determine its outcome.
           </p>
         </div>
         {renderEntries()}
@@ -71,13 +64,13 @@ export function CodexChapter() {
         </p>
       </div>
       <aside>
+        {/* Apostate's prose, verbatim (#3723). */}
         <span className="gatefold-note">
-          <b>The Codex</b> holds the world’s public record: realms, peoples, laws, and faiths,
-          written to be read before you ever make a character.
+          <b>The Codex</b> holds the world's public knowledge, and when you are logged onto a
+          character, everything known by the character as well.
         </span>
         <span className="gatefold-note">
-          <b>No downloads.</b> The whole world runs in your browser, and it keeps its ledger between
-          scenes.
+          <b>No downloads.</b> The game can be played entirely in your browser.
         </span>
       </aside>
     </div>

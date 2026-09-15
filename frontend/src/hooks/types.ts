@@ -1,3 +1,5 @@
+import type { FeedKind } from '@/game/feedKinds';
+
 export const GAME_MESSAGE_TYPE = {
   SYSTEM: 'system',
   CHAT: 'chat',
@@ -45,6 +47,35 @@ export interface GameMessage {
   type: GameMessageType;
 }
 
+/**
+ * One typed text line in the feed (#3856): a look result, an item line, an
+ * error, an arrival or departure, a narrative emit, or a plain system line.
+ * Built by the socket hook from a `text` frame and its `kwargs.type`
+ * (`game/feedKinds.ts` maps the wire type to the kind); rendered by both
+ * readers at its timestamp among the interactions.
+ */
+export interface FeedNote {
+  id: string;
+  kind: FeedKind;
+  content: string;
+  /** What a look was at, when the server names it (`kwargs.subject`). */
+  subject?: string;
+  /** ISO-8601, client clock at receipt; sorts as a string against interaction timestamps. */
+  timestamp: string;
+}
+
+/**
+ * One line of the staff console (#3857): the Commands-mode line as sent
+ * (`sent`), or what the server said back to it.
+ */
+export interface ConsoleLine {
+  id: string;
+  content: string;
+  /** The staff member's own line, echoed above its answers. */
+  sent?: boolean;
+  timestamp: string;
+}
+
 export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unknown>?];
 
 export type OutgoingMessage =
@@ -60,12 +91,16 @@ export type OutgoingMessage =
  * returned by the backend's action dispatcher: success indicates whether the
  * service succeeded, message is a human-readable string (may be null when the
  * action has no message), and data carries any structured payload the action
- * elects to return.
+ * elects to return. `client_request_id` echoes the id the dispatching client
+ * sent in its `kwargs`, when it sent one (#3781) — a listener that tracks a
+ * specific dispatch should compare this against its own id rather than
+ * assuming the next `action_result` event on the bus is theirs.
  */
 export interface ActionResultPayload {
   success: boolean;
   message: string | null;
   data: Record<string, unknown> | null;
+  client_request_id?: string | null;
 }
 
 export interface VnMessagePayload {
@@ -102,6 +137,14 @@ export interface RoomStateObject {
   is_public?: boolean;
   /** Whether this object has an active BOARD-kind MissionGiver bound to it (#3044). */
   is_mission_board?: boolean;
+  /** The Place this character currently occupies, if any (#3810). Only ever set on `characters` entries. */
+  place_id?: number | null;
+  /**
+   * Whether this character has entered the room's live scene (#3867): false at the
+   * threshold (present, no line of their own yet), null with no live scene. Only ever
+   * set on `characters` entries.
+   */
+  in_scene?: boolean | null;
 }
 
 /** An active class-1+ NPC placement (Functionary) standing in this room (#3044). */
@@ -138,6 +181,8 @@ export interface RoomStatePayload {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  /** The caller's own current Place, if any (#3810); excluded from `characters` by design. */
+  viewer_place_id?: number | null;
   scene?: SceneSummary | null;
   hub?: HubTidings | null;
   /** Active NPC placements in this room (#3044); absent/empty when none stand here. */
@@ -160,6 +205,8 @@ export interface SceneSummary {
   description: string;
   is_owner: boolean;
   has_unseen_observer: boolean;
+  /** Whether the viewing character has entered this scene (#3867); false until their first line. */
+  viewer_entered?: boolean;
 }
 
 export interface ScenePayload {
@@ -216,6 +263,8 @@ export interface InteractionWsPayload {
   id: number;
   persona: { id: number; name: string; thumbnail_url: string };
   content: string;
+  /** The whole sentence for this viewer (#3858), the actor in the line; see `Interaction.line`. */
+  line?: string;
   mode: string;
   timestamp: string;
   scene_id: number | null;
@@ -223,6 +272,11 @@ export interface InteractionWsPayload {
   place_name: string | null;
   receiver_persona_ids: number[];
   target_persona_ids: number[];
+  /** Explicit narrative topology when supplied by the play protocol. */
+  thread_id?: string | null;
+  /** Top of the nesting tree this row's exchange belongs to (#3787). */
+  root_thread_id?: string | null;
+  reply_to?: { id: string; timestamp: string } | null;
   /** Cosmetic companion pose attribution (#3294); null/absent for a normal pose. */
   attributed_companion_id?: number | null;
   attributed_companion_name?: string | null;

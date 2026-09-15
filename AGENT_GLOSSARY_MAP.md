@@ -24,6 +24,7 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [progression](src/world/progression/AGENT_GLOSSARY.md)
 - [classes](src/world/classes/AGENT_GLOSSARY.md)
 - [societies](src/world/societies/AGENT_GLOSSARY.md)
+- [realms](src/world/realms/AGENT_GLOSSARY.md)
 - [relationships](src/world/relationships/AGENT_GLOSSARY.md)
 - [secrets](src/world/secrets/AGENT_GLOSSARY.md)
 - [justice](src/world/justice/AGENT_GLOSSARY.md)
@@ -31,12 +32,16 @@ term is chosen and the rest are listed under `_Avoid_`.
 - [codex](src/world/codex/AGENT_GLOSSARY.md)
 - [stories](src/world/stories/AGENT_GLOSSARY.md)
 - [boundaries](src/world/boundaries/AGENT_GLOSSARY.md)
-- [companions](src/world/companions/AGENT_GLOSSARY.md)
+- [companions](src/world/companions/AGENT_GLOSSARY.md) - also holds Savaged (#3652),
+  the companion-defeat pool's condition for surviving a lethal mauling
 - [gm](src/world/gm/AGENT_GLOSSARY.md)
 - [flows](src/flows/AGENT_GLOSSARY.md) - the authoring-API vocabulary (#3417); root Flow/Trigger/Event terms stay in this file's Architecture seam section
 - [roster / kinship](src/world/roster/AGENT_GLOSSARY.md) - also holds the CG Lineage-step
   terms (#3617): Upbringing, Family Path, Prompt (Upbringing), Choice (Upbringing), Family
-  Kind, Influence. Character Creation has no glossary file of its own.
+  Kind, Influence, plus (#3648) Family Template, Vacancy, Importance / Presumed importance,
+  Served house, (#3660) Connection, Anchor, Stance, Follow-up, Question kind, and (#3675)
+  Offer, Opener, Arrives as, Chapter, Tradition state, Standard lines, Schooling line,
+  Closed by route. Character Creation has no glossary file of its own.
 - [species](src/world/species/AGENT_GLOSSARY.md)
 - [missions](src/world/missions/AGENT_GLOSSARY.md)
 - [journals](src/world/journals/AGENT_GLOSSARY.md)
@@ -461,6 +466,11 @@ _Avoid_: treaty, engagement, org report.
 **XP / Kudos / Development Points**:
 Out-of-character advancement currencies for creating content and developing a character;
 XP is never a combat reward (combat merits Legend, not XP). _Avoid_: using XP for in-combat awards.
+XP is earned, held and spent by the **account** (ADR-0053), and every movement of it also
+names the character it was earned on or spent on — the per-character **attribution ledger**
+(#3748, ADR-0288; see `progression/AGENT_GLOSSARY.md`), which is what character-loss
+reimbursement reads. Attribution is not ownership: there is one balance, and it is the
+account's.
 
 ## Achievements & discovery
 

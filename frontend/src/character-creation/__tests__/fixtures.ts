@@ -15,6 +15,7 @@ import type {
   DraftData,
   EffectType,
   Family,
+  FamilyTemplate,
   GiftDetail,
   HeightBand,
   OriginTemplate,
@@ -22,12 +23,15 @@ import type {
   Resonance,
   ResonanceAssociation,
   Restriction,
+  SchoolingLineRow,
   Species,
   Stage,
   StartingArea,
   Technique,
   TechniqueStyle,
   Tradition,
+  Vacancy,
+  VisibleOffer,
 } from '../types';
 
 // =============================================================================
@@ -42,8 +46,8 @@ export const mockBeginnings: Beginnings = {
   allowed_species_ids: [1, 2],
   grants_species_languages: true,
   cg_point_cost: 0,
-  is_accessible: true,
   codex_entry_ids: [],
+  heritage: null,
 };
 
 export const mockBeginningsUnknownFamily: Beginnings = {
@@ -54,8 +58,8 @@ export const mockBeginningsUnknownFamily: Beginnings = {
   allowed_species_ids: [1, 2, 3],
   grants_species_languages: false,
   cg_point_cost: 0,
-  is_accessible: true,
   codex_entry_ids: [],
+  heritage: null,
 };
 
 // =============================================================================
@@ -67,8 +71,9 @@ export const mockStartingArea: StartingArea = {
   name: 'Arx City',
   description: 'The great capital city, a hub of politics and intrigue.',
   crest_image: '/images/arx-crest.png',
-  is_accessible: true,
   realm_theme: 'arx',
+  realm_slug: 'arx',
+  realm_name: 'Arx',
 };
 
 export const mockStartingAreaNoHeritages: StartingArea = {
@@ -76,24 +81,24 @@ export const mockStartingAreaNoHeritages: StartingArea = {
   name: 'Northern Reaches',
   description: 'A cold, frontier region.',
   crest_image: null,
-  is_accessible: true,
   realm_theme: 'default',
+  realm_slug: 'default',
+  realm_name: 'Default',
 };
 
-export const mockStartingAreaInaccessible: StartingArea = {
+export const mockStartingAreaStaffOnly: StartingArea = {
   id: 3,
   name: 'Hidden Vale',
-  description: 'A secret location accessible only to trusted players.',
+  description: 'A staff testing area. Never listed to a player: the queryset omits it.',
   crest_image: null,
-  is_accessible: false,
   realm_theme: 'default',
+  realm_slug: 'default',
+  realm_name: 'Default',
 };
 
-export const mockStartingAreas: StartingArea[] = [
-  mockStartingArea,
-  mockStartingAreaNoHeritages,
-  mockStartingAreaInaccessible,
-];
+// Every area a player is served is one they may pick — a staff-only area is
+// filtered out server-side rather than served with a closed flag (#3726).
+export const mockStartingAreas: StartingArea[] = [mockStartingArea, mockStartingAreaNoHeritages];
 
 // =============================================================================
 // Species
@@ -140,6 +145,7 @@ export const mockNobleFamily: Family = {
   description: 'An honorable noble house known for martial prowess.',
   born_particle: 'du',
   taken_in_particle: 'dau',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockNobleFamily2: Family = {
@@ -150,6 +156,7 @@ export const mockNobleFamily2: Family = {
   description: 'A cunning noble house with southern roots.',
   born_particle: 'za',
   taken_in_particle: 'zas',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockCommonerFamily: Family = {
@@ -160,6 +167,7 @@ export const mockCommonerFamily: Family = {
   description: 'A common family of craftspeople.',
   born_particle: '',
   taken_in_particle: '',
+  inherited: { aspects: [], features: [], liege_name: '' },
 };
 
 export const mockFamilies: Family[] = [mockNobleFamily, mockNobleFamily2, mockCommonerFamily];
@@ -175,12 +183,11 @@ export const mockUpbringingNamed: OriginTemplate = {
   is_active: true,
   sort_order: 1,
   cg_point_cost: 6,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: true,
   allows_no_family: false,
   claimable_kind_ids: [],
-  named_family_kind: 1,
+  family_templates: [],
   slots: [
     {
       id: 201,
@@ -191,6 +198,14 @@ export const mockUpbringingNamed: OriginTemplate = {
       is_required: true,
       applies_to: 'any',
       allows_text: true,
+      kind: 'text',
+      connection_kind: '',
+      life_stage: '',
+      anchor_source: '',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
       choices: [],
     },
   ],
@@ -203,12 +218,11 @@ export const mockUpbringingClaim: OriginTemplate = {
   is_active: true,
   sort_order: 2,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: true,
   allows_name_family: false,
   allows_no_family: false,
   claimable_kind_ids: [2],
-  named_family_kind: null,
+  family_templates: [],
   slots: [
     {
       id: 202,
@@ -219,6 +233,14 @@ export const mockUpbringingClaim: OriginTemplate = {
       is_required: false,
       applies_to: 'claimed',
       allows_text: false,
+      kind: 'pick',
+      connection_kind: '',
+      life_stage: '',
+      anchor_source: '',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
       choices: [
         {
           id: 301,
@@ -226,6 +248,7 @@ export const mockUpbringingClaim: OriginTemplate = {
           description: 'A dedicated tutor sharpened your mind.',
           cg_point_cost: 2,
           cost_per_influence: 0,
+          offers: [],
           sort_order: 1,
         },
         {
@@ -234,6 +257,7 @@ export const mockUpbringingClaim: OriginTemplate = {
           description: "Standing scales with the house's reach.",
           cg_point_cost: 0,
           cost_per_influence: 1,
+          offers: [],
           sort_order: 2,
         },
       ],
@@ -248,12 +272,11 @@ export const mockUpbringingUnknown: OriginTemplate = {
   is_active: true,
   sort_order: 3,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: false,
   allows_name_family: false,
   allows_no_family: true,
   claimable_kind_ids: [],
-  named_family_kind: null,
+  family_templates: [],
   slots: [],
 };
 
@@ -265,12 +288,11 @@ export const mockUpbringingMultiPath: OriginTemplate = {
   is_active: true,
   sort_order: 4,
   cg_point_cost: 0,
-  trust_required: 0,
   allows_claim_family: true,
   allows_name_family: true,
   allows_no_family: false,
   claimable_kind_ids: [2],
-  named_family_kind: 1,
+  family_templates: [],
   slots: [
     {
       id: 203,
@@ -281,6 +303,14 @@ export const mockUpbringingMultiPath: OriginTemplate = {
       is_required: false,
       applies_to: 'any',
       allows_text: true,
+      kind: 'text',
+      connection_kind: '',
+      life_stage: '',
+      anchor_source: '',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
       choices: [],
     },
     {
@@ -292,9 +322,292 @@ export const mockUpbringingMultiPath: OriginTemplate = {
       is_required: false,
       applies_to: 'claimed',
       allows_text: true,
+      kind: 'text',
+      connection_kind: '',
+      life_stage: '',
+      anchor_source: '',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
       choices: [],
     },
   ],
+};
+
+/**
+ * A group/person/branch Upbringing (#3660): a LISTED group question with a
+ * priced choice that grants a Distinction, a PERSON follow-up naming someone
+ * inside that group, a second GROUP follow-up shown only for one branch of
+ * the first question's answer, and a plain write-in.
+ */
+export const mockUpbringingConnections: OriginTemplate = {
+  id: 105,
+  name: 'Kept by a House',
+  frame_narrative: 'A Humble house took you in and put you to work.',
+  is_active: true,
+  sort_order: 5,
+  cg_point_cost: 0,
+  allows_claim_family: false,
+  allows_name_family: false,
+  allows_no_family: true,
+  claimable_kind_ids: [],
+  family_templates: [],
+  slots: [
+    {
+      id: 401,
+      name: 'kept_by',
+      prompt: 'Which Humble house kept you',
+      example: '',
+      sort_order: 1,
+      is_required: true,
+      applies_to: 'any',
+      allows_text: false,
+      kind: 'group',
+      connection_kind: 'raised_by',
+      life_stage: 'childhood',
+      anchor_source: 'listed',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [
+        {
+          id: 9001,
+          name: 'House Orisant',
+          gloss: 'Shipping, tithe contracts.',
+          influence: 4,
+        },
+      ],
+      choices: [
+        {
+          id: 501,
+          name: 'Livery at table',
+          description: '',
+          cg_point_cost: 0,
+          cost_per_influence: 0,
+          offers: [],
+          sort_order: 1,
+        },
+        {
+          id: 502,
+          name: 'Courier',
+          description: '',
+          cg_point_cost: 10,
+          cost_per_influence: 0,
+          offers: [
+            {
+              offer_id: 6077,
+              distinction_id: 77,
+              name: 'Kept Close',
+              player_line: '',
+              arrives_as: 'bundled',
+              cost_per_rank: 15,
+              max_rank: 1,
+            },
+          ],
+          sort_order: 2,
+        },
+      ],
+    },
+    {
+      id: 402,
+      name: 'caretaker',
+      prompt: 'Who in the house looked after you',
+      example: '',
+      sort_order: 2,
+      is_required: false,
+      applies_to: 'any',
+      allows_text: false,
+      kind: 'person',
+      connection_kind: 'raised_by',
+      life_stage: 'childhood',
+      anchor_source: '',
+      same_anchor_as: 401,
+      follow_up_to: 401,
+      shown_for_choice_ids: [],
+      groups: [],
+      choices: [],
+    },
+    {
+      id: 403,
+      name: 'courier_contact',
+      prompt: 'Did your courier runs bring you to the Rouault',
+      example: '',
+      sort_order: 3,
+      is_required: false,
+      applies_to: 'any',
+      allows_text: false,
+      kind: 'group',
+      connection_kind: 'served',
+      life_stage: 'youth',
+      anchor_source: 'listed',
+      same_anchor_as: null,
+      follow_up_to: 401,
+      shown_for_choice_ids: [502],
+      groups: [{ id: 9002, name: 'the Rouault', gloss: '', influence: 2 }],
+      choices: [],
+    },
+    {
+      id: 404,
+      name: 'other_ties',
+      prompt: 'Any other ties worth mentioning',
+      example: '',
+      sort_order: 4,
+      is_required: false,
+      applies_to: 'any',
+      allows_text: true,
+      kind: 'text',
+      connection_kind: '',
+      life_stage: '',
+      anchor_source: '',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
+      choices: [],
+    },
+  ],
+};
+
+/**
+ * An own-family GROUP question (#3660 ruling L): the server is the only side
+ * that can resolve the claimed family's house org, so this template's answer
+ * lives entirely in `CharacterDraft.derived_anchors`, keyed by this slot's id.
+ */
+export const mockUpbringingOwnFamilyGroup: OriginTemplate = {
+  id: 106,
+  name: 'Born to the House',
+  frame_narrative: 'You grew up under your family roof.',
+  is_active: true,
+  sort_order: 6,
+  cg_point_cost: 0,
+  allows_claim_family: true,
+  allows_name_family: false,
+  allows_no_family: false,
+  claimable_kind_ids: [],
+  family_templates: [],
+  slots: [
+    {
+      id: 405,
+      name: 'own_house',
+      prompt: 'What did your house expect of you',
+      example: '',
+      sort_order: 1,
+      is_required: true,
+      applies_to: 'any',
+      allows_text: false,
+      kind: 'group',
+      connection_kind: 'raised_by',
+      life_stage: 'childhood',
+      anchor_source: 'own_family',
+      same_anchor_as: null,
+      follow_up_to: null,
+      shown_for_choice_ids: [],
+      groups: [],
+      choices: [],
+    },
+  ],
+};
+
+// =============================================================================
+// Family Templates (#3648) and the name-path Upbringing that offers one
+// =============================================================================
+
+export const mockFamilyTemplate: FamilyTemplate = {
+  id: 401,
+  name: 'Regency Trust',
+  description: 'A staff-authored template for houses answering to the Regency.',
+  kind: 2,
+  name_pattern: '',
+  org_type: 1,
+  aspect_definitions: [
+    {
+      id: 601,
+      name: 'Charge',
+      prompt: 'What does this house tend to?',
+      min_picks: 1,
+      max_picks: 1,
+      options: [
+        {
+          id: 611,
+          name: 'Granaries',
+          description: 'Feeds the realm through lean years.',
+          codex_entry_id: null,
+        },
+        {
+          id: 612,
+          name: 'Aqueducts',
+          description: 'Keeps the water running.',
+          codex_entry_id: null,
+        },
+      ],
+    },
+  ],
+  features: [
+    {
+      id: 621,
+      name: 'Old Money',
+      slug: 'old-money',
+      description: 'Wealth banked for generations shows in every detail.',
+    },
+  ],
+  served_house_choices: [{ id: 501, name: 'House Regency' }],
+};
+
+export const mockUpbringingNamedWithTemplate: OriginTemplate = {
+  ...mockUpbringingNamed,
+  family_templates: [mockFamilyTemplate],
+};
+
+// =============================================================================
+// Vacancies (#3648): openings on a staff family, priced for the draft
+// =============================================================================
+
+export const mockVacancyKin: Vacancy = {
+  id: 801,
+  name: 'Third Daughter',
+  description: 'A quiet place among the family, hers to fill.',
+  basis: 'kin',
+  importance: 1,
+  presumed_importance: 5,
+  cost: 6,
+  rank_name: 'Kin',
+  count_remaining: 1,
+  organization: {
+    id: 1,
+    name: 'House Valardin',
+    family: { id: 1, name: 'Valardin', influence: 3 },
+  },
+  kin_pool: {
+    id: 901,
+    family: 1,
+    description: 'Distant cousins fostered into the household.',
+    count_remaining: 1,
+    age_min: 18,
+    age_max: 40,
+    allowed_genders: [],
+    parent_names: [],
+  },
+  kin_node: null,
+};
+
+export const mockVacancyRetainer: Vacancy = {
+  id: 802,
+  name: 'Household Guard',
+  description: 'Sworn to the house, not born to it.',
+  basis: 'retainer',
+  importance: 0,
+  presumed_importance: 0,
+  cost: 0,
+  rank_name: 'Retainer',
+  count_remaining: null,
+  organization: {
+    id: 1,
+    name: 'House Valardin',
+    family: { id: 1, name: 'Valardin', influence: 3 },
+  },
+  kin_pool: null,
+  kin_node: null,
 };
 
 // =============================================================================
@@ -308,6 +621,7 @@ export const mockHeightBandAverage: HeightBand = {
   min_inches: 64,
   max_inches: 72,
   is_cg_selectable: true,
+  cg_hint: '',
 };
 
 export const mockHeightBandTall: HeightBand = {
@@ -317,6 +631,19 @@ export const mockHeightBandTall: HeightBand = {
   min_inches: 73,
   max_inches: 78,
   is_cg_selectable: true,
+  cg_hint: '',
+};
+
+// Not normally offered to players; Giant's Blood opens it (#3675 Task 15). The
+// hint is an authored column on the row itself (fix round 1), not a name match.
+export const mockHeightBandTowering: HeightBand = {
+  id: 3,
+  name: 'towering',
+  display_name: 'Towering',
+  min_inches: 79,
+  max_inches: 96,
+  is_cg_selectable: false,
+  cg_hint: "needs Giant's Blood",
 };
 
 // =============================================================================
@@ -346,12 +673,11 @@ export const mockEmptyDraftData: DraftData = {};
 export const mockCompleteDraftData: DraftData = {
   first_name: 'Testchar',
   description: 'A tall figure with piercing eyes.',
-  personality: 'Bold and adventurous.',
+  never_do: 'Bold and adventurous.',
   background: 'Born to humble origins but destined for greatness.',
   concept: 'A warrior seeking redemption.',
   quote: 'The dawn comes for all.',
   path_skills_complete: true,
-  traits_complete: true,
   magic_complete: true,
 };
 
@@ -377,6 +703,8 @@ export const mockEmptyDraft: CharacterDraft = {
   family_path: '',
   claimed_kin_slot: null,
   claimed_kin_pool: null,
+  selected_vacancy: null,
+  served_house: null,
   defer_parents: false,
   height_band: null,
   height_inches: null,
@@ -405,6 +733,30 @@ export const mockEmptyDraft: CharacterDraft = {
   stats_points_remaining: 5,
   stats_budget: 5,
   starting_technique_picks: 1,
+  age_min: 18,
+  age_max: 65,
+  bundled_distinctions: [],
+  derived_anchors: {},
+  enemy_offers: [],
+  enemy_price_tables: {
+    group: {
+      household: { annoyed: 3, thwarted: 6, ruined: 12, destroy: 18 },
+      house: { annoyed: 8, thwarted: 16, ruined: 32, destroy: 48 },
+      society: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+      realm: { annoyed: 25, thwarted: 50, ruined: 100, destroy: 150 },
+    },
+    person: {
+      quiescent: { annoyed: 1, thwarted: 2, ruined: 4, destroy: 6 },
+      prospect: { annoyed: 2, thwarted: 4, ruined: 8, destroy: 12 },
+      potential: { annoyed: 4, thwarted: 8, ruined: 16, destroy: 24 },
+      puissant: { annoyed: 8, thwarted: 16, ruined: 32, destroy: 48 },
+      true: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+      grand: { annoyed: 15, thwarted: 30, ruined: 60, destroy: 90 },
+    },
+  },
+  enemy_degree_grants: { ruined: 'Marked', destroy: 'Hunted' },
+  enemy_reasons: [],
+  introductions_offered: { first_journal: true },
 };
 
 export const mockDraftWithArea: CharacterDraft = {
@@ -671,6 +1023,43 @@ export const mockPath: Path = {
   codex_entry_ids: [],
 };
 
+/**
+ * The standard schooling set (#3675): three stances, rank 0 through 2,
+ * authored once and shared by every `living_masters` tradition.
+ */
+export const mockSchoolingRows: SchoolingLineRow[] = [
+  {
+    schooling_line_id: 1,
+    rank: 0,
+    name: 'Newly taken in',
+    player_line: 'Taken in after the Glimpse.',
+    price: 0,
+    techniques: 1,
+    grants_distinction_id: null,
+    offer_id: null,
+  },
+  {
+    schooling_line_id: 2,
+    rank: 1,
+    name: 'Trained for years',
+    player_line: 'Trained since youth.',
+    price: 1,
+    techniques: 2,
+    grants_distinction_id: 77,
+    offer_id: 201,
+  },
+  {
+    schooling_line_id: 3,
+    rank: 2,
+    name: 'Raised within it',
+    player_line: 'Born to it.',
+    price: 2,
+    techniques: 3,
+    grants_distinction_id: 77,
+    offer_id: 202,
+  },
+];
+
 export const mockTradition: Tradition = {
   id: 1,
   name: 'The Whispering Path',
@@ -678,7 +1067,26 @@ export const mockTradition: Tradition = {
   is_active: true,
   sort_order: 1,
   codex_entry_ids: [7],
-  required_distinction_id: null,
+  state: 'living_masters',
+  state_line: 'Living masters. They will teach you, and they will ask what you do with it.',
+  own_wording: '',
+  refund: 0,
+  schooling: mockSchoolingRows,
+};
+
+/** A self-taught tradition (#3675): no schooling set, a refund on the entry. */
+export const mockSelfTaughtTradition: Tradition = {
+  id: 2,
+  name: 'Unbound',
+  description: 'No tradition; you taught yourself, badly and alone.',
+  is_active: true,
+  sort_order: 2,
+  codex_entry_ids: [],
+  state: 'self_taught',
+  state_line: 'Self-taught · slower to learn',
+  own_wording: '',
+  refund: -75,
+  schooling: [],
 };
 
 export const mockCGGiftOption: CGGiftOption = {
@@ -712,6 +1120,7 @@ export const mockTechniqueEffectSummary: TechniqueEffectSummary = {
   applies: [],
   removes: [],
   damage: [],
+  treatments: [],
   grants: [],
   summary: 'Cast on an enemy, in melee range, in the physical arena. Costs 5 anima.',
   is_underspecified: false,
@@ -724,6 +1133,7 @@ export const mockCGTechniqueOptionPool: CGTechniqueOption = {
   category: 'attack',
   codex_entry_id: null,
   is_tradition_technique: false,
+  is_species_technique: false,
   effect_summary: mockTechniqueEffectSummary,
 };
 
@@ -734,6 +1144,7 @@ export const mockCGTechniqueOptionSignature: CGTechniqueOption = {
   category: 'utility',
   codex_entry_id: 20,
   is_tradition_technique: true,
+  is_species_technique: false,
   effect_summary: mockTechniqueEffectSummary,
 };
 
@@ -747,6 +1158,7 @@ export const mockCGTechniqueOptions: CGTechniqueOption[] = [
     category: 'defense',
     codex_entry_id: null,
     is_tradition_technique: false,
+    is_species_technique: false,
     effect_summary: mockTechniqueEffectSummary,
   },
 ];
@@ -764,6 +1176,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     id,
     name: `Codex Entry ${id}`,
     summary: 'A lore entry.',
+    quote: '',
     is_public: true,
     is_featured: false,
     featured_order: null,
@@ -781,6 +1194,7 @@ export function mockCodexEntry(id: number): CodexEntryDetail {
     research_progress: null,
     art_url: null,
     perspective_of: null,
+    also_filed_under: [],
   };
 }
 
@@ -841,3 +1255,34 @@ export const mockCGExplanations: Record<string, string> = {
   arrival_door: 'Begin',
   arrival_quiet: 'Return to the Hall',
 };
+
+/**
+ * A `VisibleOffer` with every required field filled, overridable per test
+ * (#3739). The type is generated from the server's own serializer, so it grows
+ * whenever an offer does; a builder keeps that growth from touching every test
+ * that only cares about a name and a price.
+ */
+export function makeVisibleOffer(overrides: Partial<VisibleOffer> = {}): VisibleOffer {
+  return {
+    offer_id: 1,
+    distinction_id: 1,
+    name: 'An Offer',
+    player_line: '',
+    chapter: 'appearance',
+    arrives_as: 'choice',
+    opener_label: '',
+    cost_per_rank: 1,
+    max_rank: 1,
+    is_locked: false,
+    lock_reason: '',
+    opener_key: '',
+    first_look: false,
+    held: false,
+    effect_line: '',
+    taken_per_feature: false,
+    opens_feature: false,
+    requires_feature_opened: false,
+    cg_max_rank: 0,
+    ...overrides,
+  };
+}

@@ -6,9 +6,11 @@
  * author-private scoping (ADR-0117): the caller's own sheet gets the
  * full-fidelity outbound relationship list (`OwnRelationshipsList` — target
  * names, affection, per-track points/tiers, expandable history, and the
- * development/capstone/redistribute write actions); a foreign sheet gets
- * only the visibility-scoped, type-tagged timeline (`ForeignRelationshipTimeline`
- * — no numeric relationship state at all).
+ * development/capstone/redistribute write actions, plus a companion block
+ * (`CompanionBondList`, #3575) offering an impression/develop entry point
+ * for each bonded companion); a foreign sheet gets only the visibility-scoped,
+ * type-tagged timeline (`ForeignRelationshipTimeline`, with no numeric
+ * relationship state at all).
  */
 
 import { ForeignRelationshipTimeline } from './ForeignRelationshipTimeline';

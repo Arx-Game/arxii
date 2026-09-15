@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAccountProgressionQuery, useClaimKudosMutation } from './queries';
-import { VotesPanel } from './components/VotesPanel';
+import { NominationsPanel } from './components/NominationsPanel';
 import { RandomScenePanel } from './components/RandomScenePanel';
 import { GoalsPanel } from '@/goals/components/GoalsPanel';
 import { usePendingAlterations } from '@/magic/queries';
@@ -366,11 +366,11 @@ export function XpKudosPage() {
       </div>
 
       {/* Random Scene Targets + Goals (#3045) — both earn surfaces existed with zero
-          frontend callers until now; they belong beside Votes as earn-path cards, not
+          frontend callers until now; they belong beside Nominations as earn-path cards, not
           on the spend-focused Advancement tab. GoalsPanel renders nothing until an
           active character is puppeted. */}
       <div className="mb-6 grid gap-4 md:grid-cols-3">
-        <VotesPanel />
+        <NominationsPanel />
         <RandomScenePanel />
         <GoalsPanel />
       </div>

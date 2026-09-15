@@ -273,6 +273,46 @@ term would double-count it. See ADR-0166.
 
 ---
 
+## Resolution theater
+
+`world/checks/theater.py` (#924, extended #3807 Part B) is the dramatic-reveal seam: a
+roulette-style wheel pushed to a player's client, sized to feel more dangerous than the
+resolved outcome necessarily was. It fires only when the pool is wheel-worthy, and it
+never breaks resolution: `maybe_emit_resolution_theater` catches every exception around
+delivery and returns `False` rather than raise, since the wheel is garnish and the
+outcome underneath it is the meal.
+
+**Existing triggers (pre-#3807):** consequence selection whose tier pool carries a
+`character_loss` or an authored `theater`-flagged `Consequence` (`should_emit_theater`),
+and mission draws. Both build their faces from the resolved tier's own consequence pool
+via `build_roulette_payload` and fire only for the roller.
+
+**Social-check trigger (#3807 Part B):** `_schedule_check_outcome_theater`
+(`world/scenes/action_services.py`) schedules a success-level wheel for every resolved
+social check, inside `_create_result_interaction`'s `transaction.on_commit` callback so a
+rolled-back resolution never spins one. It emits to the roller always, and to the
+effective target when the action has one; bystanders never receive it.
+
+**`check_outcome_faces(check_result)`** (`world/checks/theater.py`) builds the wheel's
+faces straight off the check's own `ResultChart` bands, one unsaved `Consequence` per
+`ResultChartOutcome` row, weighted by that row's roll-range width, selecting whichever
+face matches the check's actual resolved outcome.
+
+**HARD RULE:** faces are read only from the chart's authored bands. `check_outcome_faces`
+never reads `get_rollmod()`, `effective_roll`, or any outcome-guarantee logic
+(`perform_check` step 7 above, ADR-0152): the wheel always shows the raw chart and lands
+on whatever actually resolved, never a rollmod-shaped or guarantee-shaped view of the
+odds. When the resolved outcome isn't one of the chart's own bands (an outcome guarantee
+lifted it off-chart), a weight-1 face for that outcome is appended and selected, so the
+wheel still has a face to land on without silently reshaping the real bands. See
+ADR-0297.
+
+**Frontend:** the wheel renders as a flat proportional disc (Part C), replacing the
+earlier equal-slice prism wheel; slice angles are proportional to each face's `weight`.
+
+**Deferred:** the consequence-pool's own second spin for template-driven (non-social)
+checks is tracked in #3823, not built here.
+
 ## Internal Service Functions
 
 ```python

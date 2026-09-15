@@ -8,6 +8,7 @@ from django.test import TestCase
 
 from actions.types import ActionResult
 from commands.identification import CmdIdentify
+from commands.tests.message_capture import message_text
 from evennia_extensions.factories import AccountFactory, CharacterFactory, ObjectDBFactory
 
 
@@ -27,7 +28,7 @@ class CmdIdentifyTests(TestCase):
         def _capture_msg(*a, **kw):
             del kw
             if a:
-                self.messages.append(a[0])
+                self.messages.append(message_text(a[0]))
 
         self._capture_msg = _capture_msg
 

@@ -1,5 +1,5 @@
 /**
- * GlimpseFlow Component Tests (#2427)
+ * GlimpseFlow Component Tests (#2427, offers slot #3675)
  *
  * Pure presentational component — plain render, no providers needed.
  */
@@ -18,7 +18,7 @@ const TONE_WONDER: GlimpseTagOption = {
   description: 'Awe at the impossible.',
   example: 'The light bent around her hand like water.',
   sort_order: 1,
-  suggested_distinctions: [{ id: 10, name: 'Keen Senses' }],
+  offers: [],
 };
 
 const TONE_DREAD: GlimpseTagOption = {
@@ -29,7 +29,7 @@ const TONE_DREAD: GlimpseTagOption = {
   description: 'Fear at the impossible.',
   example: 'The shadows breathed.',
   sort_order: 2,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const CONSEQUENCE_A: GlimpseTagOption = {
@@ -40,10 +40,7 @@ const CONSEQUENCE_A: GlimpseTagOption = {
   description: 'Something was owed after.',
   example: 'The price came due at midnight.',
   sort_order: 1,
-  suggested_distinctions: [
-    { id: 10, name: 'Keen Senses' },
-    { id: 11, name: 'Marked' },
-  ],
+  offers: [],
 };
 
 const CONSEQUENCE_B: GlimpseTagOption = {
@@ -54,7 +51,7 @@ const CONSEQUENCE_B: GlimpseTagOption = {
   description: 'Something new became possible.',
   example: 'A door that was not there before, now was.',
   sort_order: 2,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const WITNESS_ALONE: GlimpseTagOption = {
@@ -65,7 +62,7 @@ const WITNESS_ALONE: GlimpseTagOption = {
   description: 'No one else saw.',
   example: 'She told no one.',
   sort_order: 1,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const SENSORY_TASTE: GlimpseTagOption = {
@@ -76,7 +73,7 @@ const SENSORY_TASTE: GlimpseTagOption = {
   description: 'A sensory detail of the glimpse.',
   example: 'Copper on the tongue, like a coin.',
   sort_order: 1,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const TRIGGER_TRAUMA: GlimpseTagOption = {
@@ -87,7 +84,7 @@ const TRIGGER_TRAUMA: GlimpseTagOption = {
   description: 'A shattering event cracked you open.',
   example: 'The wound never fully closed.',
   sort_order: 1,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const TRIGGER_PATRON: GlimpseTagOption = {
@@ -98,7 +95,7 @@ const TRIGGER_PATRON: GlimpseTagOption = {
   description: 'A god, demon, or force selected you.',
   example: 'Something ancient turned its gaze upon you.',
   sort_order: 2,
-  suggested_distinctions: [],
+  offers: [],
 };
 
 const ALL_TAGS: GlimpseTagOption[] = [
@@ -115,13 +112,10 @@ function makeProps(overrides: Partial<GlimpseFlowProps> = {}): GlimpseFlowProps 
     tags: ALL_TAGS,
     selectedTagIds: [],
     prose: '',
-    linkedDistinctionIds: [],
     onChangeAxis: vi.fn(),
     onChangeProse: vi.fn(),
-    onToggleDistinctionLink: vi.fn(),
     onSkip: vi.fn(),
     showDeferralControls: true,
-    linkableDistinctions: [],
     ...overrides,
   };
 }
@@ -162,50 +156,23 @@ describe('GlimpseFlow', () => {
     expect(onChangeAxis).toHaveBeenLastCalledWith('CONSEQUENCE', []);
   });
 
-  it('dedupes a distinction suggested by two selected tags to a single suggestion', () => {
-    // TONE_WONDER (id 1) and CONSEQUENCE_A (id 3) both suggest distinction 10.
+  it('does not render a link/suggestion section (#3675: offers are chapter-scoped now)', () => {
     render(<GlimpseFlow {...makeProps({ selectedTagIds: [1, 3] })} />);
 
-    expect(screen.getAllByText('Keen Senses')).toHaveLength(1);
-    // The non-overlapping suggestion from CONSEQUENCE_A still appears.
-    expect(screen.getByText('Marked')).toBeInTheDocument();
-  });
-
-  it('does not render the suggestion panel when nothing is selected', () => {
-    render(<GlimpseFlow {...makeProps({ selectedTagIds: [] })} />);
-
     expect(screen.queryByText('Suggested Distinctions')).not.toBeInTheDocument();
+    expect(screen.queryByText('Link a distinction to your glimpse')).not.toBeInTheDocument();
   });
 
-  it('renders the manual-link control with zero suggestions', () => {
-    render(
-      <GlimpseFlow
-        {...makeProps({
-          selectedTagIds: [],
-          linkableDistinctions: [{ id: 99, name: 'Silver Tongue' }],
-        })}
-      />
-    );
+  it('renders the staff-authored story hint under the story textarea', () => {
+    render(<GlimpseFlow {...makeProps({ storyHint: 'The detail goes here.' })} />);
 
-    expect(screen.getByText('Link a distinction to your glimpse')).toBeInTheDocument();
-    expect(screen.getByText('Silver Tongue')).toBeInTheDocument();
+    expect(screen.getByText('The detail goes here.')).toBeInTheDocument();
   });
 
-  it('calls onToggleDistinctionLink when a linkable distinction is clicked', async () => {
-    const user = userEvent.setup();
-    const onToggleDistinctionLink = vi.fn();
-    render(
-      <GlimpseFlow
-        {...makeProps({
-          linkableDistinctions: [{ id: 99, name: 'Silver Tongue' }],
-          onToggleDistinctionLink,
-        })}
-      />
-    );
+  it('renders no story hint when storyHint is omitted', () => {
+    render(<GlimpseFlow {...makeProps()} />);
 
-    await user.click(screen.getByText('Silver Tongue'));
-
-    expect(onToggleDistinctionLink).toHaveBeenCalledWith(99);
+    expect(screen.queryByText('The detail goes here.')).not.toBeInTheDocument();
   });
 
   it('calls onSkip from both deferral buttons', async () => {
@@ -250,7 +217,6 @@ describe('GlimpseFlow', () => {
     expect(screen.queryByText('Witness & Secrecy: who saw?')).not.toBeInTheDocument();
     // The always-present heading and story step still render.
     expect(screen.getByText('The Glimpse')).toBeInTheDocument();
-    expect(screen.getByText('Link a distinction to your glimpse')).toBeInTheDocument();
   });
 
   it('renders the default heading above the axis accordion when no heading prop is passed', () => {

@@ -1,5 +1,7 @@
 """Service tests: worship grants, devotion, God's Favorite (#2355)."""
 
+from datetime import date
+
 from django.test import TestCase
 from django.utils.text import slugify
 
@@ -7,6 +9,7 @@ from world.achievements.models import Achievement, CharacterAchievement
 from world.character_sheets.factories import CharacterSheetFactory
 from world.character_sheets.models import Gender
 from world.roster.factories import grant_test_tenure
+from world.tarot.factories import TarotCardFactory
 from world.worship.constants import (
     GODS_FAVORITE_CHOSEN,
     GODS_FAVORITE_PRINCE,
@@ -27,6 +30,7 @@ from world.worship.services import (
     establish_patronage,
     get_chosen_favor_config,
     grant_worship,
+    is_birth_favored_by,
     release_patronage,
 )
 
@@ -293,3 +297,57 @@ class ChosenFavorConfigTests(TestCase):
         first = get_chosen_favor_config()
         second = get_chosen_favor_config()
         self.assertEqual(first.pk, second.pk)
+
+
+class BirthFavoredTests(TestCase):
+    """is_birth_favored_by (#3776) — issue #3777's reward calc reads this.
+
+    ``CharacterSheet.tarot_card`` is a forwarding property onto
+    ``true_profile.tarot_card`` (#1270 slice 3) — there is no separate
+    ``sheet.profile`` accessor, so the tarot card is set/read directly on the
+    sheet (``sheet.tarot_card = ...`` lazily creates the backing Profile).
+    """
+
+    def test_favored_when_tarot_matches_and_today_is_birthday(self) -> None:
+        being = WorshippedBeingFactory()
+        tower = TarotCardFactory(name="The Tower")
+        being.tarot_cards.add(tower)
+        sheet = CharacterSheetFactory(birthday_month=9, birthday_day=14)
+        sheet.tarot_card = tower
+        sheet.save()
+        self.assertTrue(is_birth_favored_by(sheet, being, today=date(2026, 9, 14)))
+
+    def test_not_favored_when_tarot_matches_but_not_birthday(self) -> None:
+        being = WorshippedBeingFactory()
+        tower = TarotCardFactory(name="The Tower")
+        being.tarot_cards.add(tower)
+        sheet = CharacterSheetFactory(birthday_month=9, birthday_day=14)
+        sheet.tarot_card = tower
+        sheet.save()
+        self.assertFalse(is_birth_favored_by(sheet, being, today=date(2026, 1, 1)))
+
+    def test_not_favored_when_birthday_but_tarot_does_not_match(self) -> None:
+        being = WorshippedBeingFactory()
+        being.tarot_cards.add(TarotCardFactory(name="The Tower"))
+        sheet = CharacterSheetFactory(birthday_month=9, birthday_day=14)
+        sheet.tarot_card = TarotCardFactory(name="The Fool")
+        sheet.save()
+        self.assertFalse(is_birth_favored_by(sheet, being, today=date(2026, 9, 14)))
+
+    def test_not_favored_when_sheet_has_no_tarot_card(self) -> None:
+        being = WorshippedBeingFactory()
+        being.tarot_cards.add(TarotCardFactory(name="The Tower"))
+        sheet = CharacterSheetFactory(birthday_month=9, birthday_day=14)
+        self.assertFalse(is_birth_favored_by(sheet, being, today=date(2026, 9, 14)))
+
+    def test_not_favored_when_no_active_game_clock_and_today_omitted(self) -> None:
+        """No GameClock seeded (bare test DB) — ``today=None`` must not raise;
+        mirrors the graceful "content not seeded" skip other worship service
+        functions use, rather than crashing or falling back to the real wall clock."""
+        being = WorshippedBeingFactory()
+        tower = TarotCardFactory(name="The Tower")
+        being.tarot_cards.add(tower)
+        sheet = CharacterSheetFactory(birthday_month=9, birthday_day=14)
+        sheet.tarot_card = tower
+        sheet.save()
+        self.assertFalse(is_birth_favored_by(sheet, being))

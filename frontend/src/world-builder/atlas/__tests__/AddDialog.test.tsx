@@ -48,6 +48,13 @@ const ROOM_OPTIONS = [
 ];
 
 describe('AddDialog — areas mode', () => {
+  it('names the level a planned square becomes when the parent hands one down', () => {
+    renderDialog({ mode: 'areas', childLevelLabel: 'Ward' });
+
+    expect(screen.getByRole('heading', { name: 'New ward' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Ward name')).toBeInTheDocument();
+  });
+
   it('hides the connection rows entirely and confirms {kind: "area"}', async () => {
     const { onConfirm } = renderDialog({ mode: 'areas' });
 
@@ -57,12 +64,117 @@ describe('AddDialog — areas mode', () => {
     await userEvent.type(screen.getByTestId('add-dialog-name'), 'Central Ward');
     await userEvent.click(screen.getByTestId('add-dialog-submit'));
 
-    expect(onConfirm).toHaveBeenCalledWith({ kind: 'area', name: 'Central Ward' });
+    expect(onConfirm).toHaveBeenCalledWith({ kind: 'area', name: 'Central Ward', entrance: null });
   });
 
   it('disables Add until a name is entered', () => {
     renderDialog({ mode: 'areas' });
     expect(screen.getByTestId('add-dialog-submit')).toBeDisabled();
+  });
+
+  const LEVELS = [
+    { value: 30, label: 'Ward' },
+    { value: 20, label: 'Neighborhood' },
+    { value: 10, label: 'Building' },
+  ];
+
+  it('offers every level that fits plus a room here, the next level down first', async () => {
+    const { onConfirm } = renderDialog({ mode: 'areas', areaLevelOptions: LEVELS });
+
+    const becomes = within(screen.getByTestId('add-dialog-becomes-row')).getByRole('combobox');
+    expect(becomes).toHaveValue('30');
+    expect(screen.getByLabelText('Ward name')).toBeInTheDocument();
+
+    await userEvent.selectOptions(becomes, '20');
+    expect(screen.getByLabelText('Neighborhood name')).toBeInTheDocument();
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Central Neighborhood');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Central Neighborhood',
+      level: 20,
+      entrance: null,
+    });
+  });
+
+  it('a room here takes the dig shape: room copy, connection rows, {kind: "room"}', async () => {
+    const { onConfirm } = renderDialog({
+      mode: 'areas',
+      areaLevelOptions: LEVELS,
+      roomOptions: ROOM_OPTIONS,
+      defaultNeighbor: NEIGHBOR,
+    });
+
+    await userEvent.selectOptions(
+      within(screen.getByTestId('add-dialog-becomes-row')).getByRole('combobox'),
+      'room'
+    );
+    expect(screen.getByLabelText('Room name')).toBeInTheDocument();
+    expect(screen.getByTestId('add-dialog-entrance-row')).toBeInTheDocument();
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'The City Center');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'room',
+      name: 'The City Center',
+      matchedRoomId: null,
+      entrance: { roomId: 5, exitName: 'east' },
+      exit: { roomId: 5, exitName: 'west' },
+    });
+  });
+
+  it('a building beside a room is given its door: entrance named after it, first room, way back', async () => {
+    const { onConfirm } = renderDialog({
+      mode: 'areas',
+      areaLevelOptions: [{ value: 10, label: 'Building' }],
+      roomOptions: ROOM_OPTIONS,
+      defaultNeighbor: NEIGHBOR,
+    });
+
+    expect(screen.getByTestId('add-dialog-area-entrance-row')).toBeInTheDocument();
+    expect(screen.getByTestId('add-dialog-first-room')).toHaveValue('Entry');
+    expect(screen.getByTestId('add-dialog-area-exit-back')).toHaveValue('out');
+    expect(screen.getByTestId('add-dialog-area-entrance-note')).toHaveTextContent(
+      'linked from The Gallery Stair'
+    );
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Sleepers Chambers');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Sleepers Chambers',
+      level: 10,
+      entrance: {
+        roomId: 5,
+        exitName: 'Sleepers Chambers',
+        exitBack: 'out',
+        firstRoomName: 'Entry',
+      },
+    });
+  });
+
+  it('removing the entrance leaves a building with no door and no first room', async () => {
+    const { onConfirm } = renderDialog({
+      mode: 'areas',
+      areaLevelOptions: [{ value: 10, label: 'Building' }],
+      roomOptions: ROOM_OPTIONS,
+      defaultNeighbor: NEIGHBOR,
+    });
+
+    await userEvent.click(screen.getByTestId('add-dialog-area-entrance-remove'));
+    expect(screen.queryByTestId('add-dialog-first-room')).not.toBeInTheDocument();
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'Sleepers Chambers');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'area',
+      name: 'Sleepers Chambers',
+      level: 10,
+      entrance: null,
+    });
   });
 });
 
@@ -79,6 +191,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: { roomId: 5, exitName: 'east' },
       exit: { roomId: 5, exitName: 'west' },
     });
@@ -96,6 +209,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: null,
       exit: { roomId: 5, exitName: 'west' },
     });
@@ -114,6 +228,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Attic',
+      matchedRoomId: null,
       entrance: null,
       exit: null,
     });
@@ -153,6 +268,7 @@ describe('AddDialog — rooms mode payload assembly', () => {
     expect(onConfirm).toHaveBeenCalledWith({
       kind: 'room',
       name: 'The Wine Cellar',
+      matchedRoomId: null,
       entrance: { roomId: 5, exitName: 'east' },
       exit: { roomId: 6, exitName: 'west' },
     });
@@ -177,6 +293,7 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
       matchedRoomId: null,
       exitThere: 'down',
       exitBack: 'up',
+      oneWay: false,
     });
   });
 
@@ -186,7 +303,7 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
     await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
     expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Link it');
     expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent(
-      'joins two rooms that already exist'
+      'links to The Kitchen, and The Kitchen back to here'
     );
 
     await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'north');
@@ -199,6 +316,29 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
       matchedRoomId: 6,
       exitThere: 'north',
       exitBack: 'south',
+      oneWay: false,
+    });
+  });
+
+  it('one way hides the exit back and sends oneWay with no return name (#3860)', async () => {
+    const { onConfirm } = renderDialog({ mode: 'exit', roomOptions: ROOM_OPTIONS });
+
+    await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
+    expect(screen.getByTestId('add-dialog-both-ways')).toHaveAttribute('aria-pressed', 'true');
+    await userEvent.click(screen.getByTestId('add-dialog-one-way'));
+    expect(screen.queryByTestId('add-dialog-exit-back')).toBeNull();
+    expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent('nothing leads back');
+
+    await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'down');
+    await userEvent.click(screen.getByTestId('add-dialog-submit'));
+
+    expect(onConfirm).toHaveBeenCalledWith({
+      kind: 'exit',
+      name: 'the kitchen',
+      matchedRoomId: 6,
+      exitThere: 'down',
+      exitBack: '',
+      oneWay: true,
     });
   });
 

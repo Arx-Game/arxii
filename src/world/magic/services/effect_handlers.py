@@ -4,7 +4,7 @@ Each handler is keyword-only ``def h(*, payload) -> None`` and is referenced by
 its dotted path from a seeded FlowDefinition's CALL_SERVICE_FUNCTION step.
 """
 
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from world.areas.positioning.models import Position, PositionEdge
 from world.areas.positioning.services import (
@@ -20,6 +20,9 @@ from world.conditions.constants import (
 from world.conditions.models import ConditionInstance
 from world.magic.models.anima import CharacterAnima
 from world.magic.services.soulfray import accumulate_soulfray
+
+if TYPE_CHECKING:
+    from evennia.objects.models import ObjectDB
 
 
 def move_position(*, payload: Any) -> None:
@@ -93,16 +96,52 @@ def _duration_from_instance(instance: ConditionInstance | None) -> int | None:
 # ---------------------------------------------------------------------------
 
 
+def _narrate_reactive_fizzle(
+    instance: ConditionInstance,
+    payer: "ObjectDB",  # noqa: OBJECTDB_PARAM - whichever character the ward bills, per below
+) -> None:
+    """Tell the payer, the bearer (when different) and, in combat, the room that a
+    standing ward did not answer a blow (#3574).
+
+    Private lines say the fee could not be met; the bearer's line never mentions
+    the fee (it is the caster's economy). The room line only exists inside an
+    encounter (``active_combat_engagement_for``): out of combat (Sudden Harm)
+    the payer and bearer are the whole audience that matters, and there is no
+    scene-persisting room seam outside combat to reuse.
+    """
+    from world.combat.services import (  # noqa: PLC0415
+        _broadcast_commitment_line,
+        active_combat_engagement_for,
+    )
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    bearer = instance.target
+    ward = instance.condition.name
+    if payer.pk == bearer.pk:
+        narrate_privately(payer, f"Your {ward} does not answer the blow; you cannot pay its fee.")
+    else:
+        narrate_privately(
+            payer, f"Your {ward} on {bearer} does not answer the blow; you cannot pay its fee."
+        )
+        narrate_privately(bearer, f"{payer}'s {ward} over you does not answer the blow.")
+    engagement = active_combat_engagement_for(bearer)
+    if engagement is not None:
+        _broadcast_commitment_line(
+            engagement.source, f"The {ward} over {bearer} flickers and fails."
+        )
+
+
 def _try_spend_reactive(instance: ConditionInstance) -> bool:
     """Spend the reactive anima cost, debiting the APPLIER (caster) when known.
 
     Payer rule (#2208): ``source_character`` pays when set — an ally ward
     strains its caster, never its bearer. Self-cast wards are unchanged
-    (source == bearer). Unaffordable and unconsented -> False (silent fizzle),
-    as before. A consented instance (#3573, ``soulfray_consented``) pays into
-    deficit through ``deduct_anima`` and accrues Soulfray on every fire;
-    lethality comes from the payer's live combat engagement, defaulting to
-    lethal out of combat.
+    (source == bearer). Unaffordable and unconsented -> False (a fizzle,
+    narrated by ``_narrate_reactive_fizzle``, #3574). A consented instance
+    (#3573, ``soulfray_consented``) pays into deficit through
+    ``deduct_anima`` and accrues Soulfray on every fire; lethality comes
+    from the payer's live combat engagement, defaulting to lethal out of
+    combat.
 
     Returns True immediately when cost is 0 (free-to-fire condition).
     Does NOT use select_for_update — single-threaded game tick is the expected
@@ -114,8 +153,10 @@ def _try_spend_reactive(instance: ConditionInstance) -> bool:
     payer = instance.source_character or instance.target
     anima = CharacterAnima.objects.filter(character_id=payer.pk).first()
     if anima is None:
+        _narrate_reactive_fizzle(instance, payer)
         return False
     if anima.current < cost and not instance.soulfray_consented:
+        _narrate_reactive_fizzle(instance, payer)
         return False
 
     from world.combat.services import active_combat_engagement_for  # noqa: PLC0415
@@ -147,8 +188,8 @@ def absorb_pool(*, payload: Any) -> None:
 
     Mechanics:
     - Finds the bearer's oldest active force-field ConditionInstance.
-    - Pays reactive_anima_cost (fizzles silently if unaffordable, unless the
-      instance is consented (#3573), see ``_try_spend_reactive``).
+    - Pays reactive_anima_cost (fizzles if unaffordable, narrated by
+      ``_try_spend_reactive``, unless the instance is consented (#3573)).
     - Reduces payload.amount by min(buffer, amount); decrements absorb_remaining.
     - Deletes the instance when absorb_remaining reaches 0 (buffer spent).
     """
@@ -179,9 +220,9 @@ def reflect_damage(*, payload: Any) -> None:
     """Bounce incoming damage back to the attacker (DAMAGE_PRE_APPLY, priority 20).
 
     Finds the bearer's oldest active Mirror Ward ConditionInstance, pays
-    reactive_anima_cost via ``_try_spend_reactive`` (fizzles silently if
-    unaffordable, unless the instance is consented (#3573), see
-    ``_try_spend_reactive``), zeros ``payload.amount``, then applies the
+    reactive_anima_cost via ``_try_spend_reactive`` (fizzles if unaffordable,
+    narrated by ``_try_spend_reactive``, unless the instance is consented
+    (#3573)), zeros ``payload.amount``, then applies the
     recorded amount to the attacker using ``bypass_pre_apply=True`` so the
     bounce never re-emits DAMAGE_PRE_APPLY - terminating any reflect↔reflect loop.
 
@@ -676,8 +717,8 @@ def blink_dodge(*, payload: Any) -> None:
       (flavor; if no alternate position exists the move is skipped).
     - Sets ``payload.amount = 0`` (full avoidance).
 
-    Fizzles silently when the bearer cannot afford the cost - attack lands unchanged,
-    unless the instance is consented (#3573), see ``_try_spend_reactive``.
+    Fizzles if unaffordable, narrated by ``_try_spend_reactive`` - attack lands
+    unchanged, unless the instance is consented (#3573).
     Mutation-only: setting ``payload.amount = 0`` is what stops lower-priority
     interceptors (they guard on ``payload.amount <= 0``) and zeroes the damage; there
     is no CANCEL_EVENT step (an unconditional cancel would fire on the fizzle path too).

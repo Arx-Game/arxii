@@ -93,6 +93,7 @@ from commands.evennia_overrides.items import (
 )
 from commands.evennia_overrides.movement import CmdDrop, CmdGet, CmdGive, CmdHome
 from commands.evennia_overrides.perception import CmdInventory, CmdLook
+from commands.evennia_overrides.system import CmdNoMatch
 from commands.events import CmdEvent
 from commands.expulsion import CmdExpel  # #2989
 from commands.fashion import CmdJudgePresentation
@@ -132,7 +133,7 @@ from commands.portals import CmdPortalAnchor  # #2222
 from commands.positions import CmdPosition  # #2005
 from commands.presence import CmdAfk, CmdHide
 from commands.progression import CmdProgressionUnlock, CmdTraining
-from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from commands.projects import CmdProject
 from commands.react import CmdReact
 from commands.relationships import CmdRelationship
@@ -230,6 +231,11 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
         # (PLR0915) as the command roster grows.
         command_classes = (
             CmdLook,
+            # #3856 — Evennia's CMD_NOMATCH system command, so an unmatched
+            # command name reaches the web client typed ``error`` (a red note)
+            # instead of an untyped line it cannot place. Same wording as
+            # Evennia's own fallback, suggestions included.
+            CmdNoMatch,
             CmdGet,
             CmdDrop,
             CmdGive,
@@ -485,7 +491,7 @@ class CharacterCmdSet(default_cmds.CharacterCmdSet):
             CmdAppeal,
             # #1348 — progression-reward telnet commands: kudos/vote/randomscene/pathintent.
             CmdKudos,
-            CmdVote,
+            CmdNominate,
             CmdRandomScene,
             CmdPathIntent,
             # #1346 — covenant membership lifecycle telnet namespace.

@@ -30,7 +30,10 @@ export type PositionAdjacencyItem = components['schemas']['PositionAdjacencyItem
 export type PositionNode = components['schemas']['PositionNode'];
 export type PositionEdgeInfo = components['schemas']['PositionEdge'];
 
-export type EncounterDetail = components['schemas']['EncounterDetail'];
+/** Cached encounter fixtures may predate the companion-order projection. */
+export type EncounterDetail = Omit<components['schemas']['EncounterDetail'], 'companion_orders'> & {
+  companion_orders?: components['schemas']['EncounterDetail']['companion_orders'];
+};
 
 // engagement_locks is schema-typed via @extend_schema_field (#3386) — a real
 // component, not {[key: string]: unknown}[]. Active foil-duel pairings for

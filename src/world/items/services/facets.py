@@ -7,7 +7,12 @@ from typing import TYPE_CHECKING
 
 from django.db import transaction
 
-from world.items.exceptions import FacetAlreadyAttached, FacetCapacityExceeded
+from world.items.exceptions import (
+    CraftingNotConfigured,
+    FacetAlreadyAttached,
+    FacetCapacityExceeded,
+    InherentFacetNotRemovable,
+)
 from world.items.models import EquippedItem, ItemFacet, ItemInstance, QualityTier
 
 if TYPE_CHECKING:
@@ -25,7 +30,10 @@ def assert_facet_attachable(item_instance: ItemInstance, facet: Facet) -> None:
     """
     if item_instance.item_facets.filter(facet=facet).exists():
         raise FacetAlreadyAttached
-    if item_instance.item_facets.count() >= item_instance.template.facet_capacity:
+    # Inherent facets (#3776 Task 4) are the item's own identity, auto-stamped by
+    # stamp_inherent_facets — they never count against a crafter's facet_capacity.
+    crafted_facet_count = item_instance.item_facets.filter(is_inherent=False).count()
+    if crafted_facet_count >= item_instance.template.facet_capacity:
         raise FacetCapacityExceeded
 
 
@@ -73,13 +81,71 @@ def attach_facet_to_item(
     return row
 
 
+def stamp_inherent_facets(item_instance: ItemInstance) -> None:
+    """Create an ItemFacet(is_inherent=True) row for every facet the template carries.
+
+    Idempotent — safe to call more than once; skips any facet the instance already
+    carries (inherent or crafter-attached) rather than only its own prior stamps, so
+    a re-run can never collide with the (item_instance, facet) unique constraint.
+    Does not check facet_capacity: inherent facets are the item's own identity, not
+    a crafter's creative addition.
+
+    Called from ``ItemInstance.save()`` on every brand-new instance, so the
+    zero-inherent-facets case is the overwhelmingly common one and is worth one
+    query, not three: the leading ``exists()`` short-circuits before the
+    ``values_list`` of already-carried facets, the exclusion query, and the
+    transaction. ``recycle_item`` mints a salvage instance per returned template
+    inside a loop, so this is a real per-row cost.
+
+    Stamping hangs off ``save()``, which ``bulk_create`` does not call — a
+    bulk-created ItemInstance therefore carries NO inherent facets. Known and
+    accepted (no caller bulk-creates instances today); a future one that does must
+    call this itself, per instance.
+
+    attachment_quality_tier is a required FK with no schema default — inherent
+    facets weren't crafted, so there's no natural quality to record. Resolves the
+    baseline tier via QualityTier.for_score(0) (reusing the model's own "lowest
+    tier" resolution) rather than inventing a new convention.
+
+    Raises:
+        CraftingNotConfigured: No ``QualityTier`` rows are seeded (``for_score``
+            returns ``None`` only in an unconfigured deployment) — same guard as
+            the sibling call site in ``crafting/quality.py``.
+    """
+    if not item_instance.template.inherent_facets.exists():
+        return
+    with transaction.atomic():
+        existing_facet_ids = set(item_instance.item_facets.values_list("facet_id", flat=True))
+        inherent_facets = item_instance.template.inherent_facets.exclude(id__in=existing_facet_ids)
+        if not inherent_facets.exists():
+            return
+        baseline_tier = QualityTier.for_score(0)
+        if baseline_tier is None:
+            raise CraftingNotConfigured
+        for facet in inherent_facets:
+            ItemFacet.objects.create(
+                item_instance=item_instance,
+                facet=facet,
+                is_inherent=True,
+                applied_by_account=None,
+                attachment_quality_tier=baseline_tier,
+            )
+
+
 @transaction.atomic
 def remove_facet_from_item(*, item_facet: ItemFacet) -> None:
     """Remove a facet attachment and invalidate wearers' handler caches.
 
     Args:
         item_facet: The ItemFacet row to delete.
+
+    Raises:
+        InherentFacetNotRemovable: The row is an inherent facet (#3776) — the
+            template's own identity, stamped once at creation and never
+            re-stamped, so deleting it would strip the item permanently.
     """
+    if item_facet.is_inherent:
+        raise InherentFacetNotRemovable
     instance = item_facet.item_instance
     item_facet.delete()
     # Invalidate the ItemInstance's facet cache so the removed row is no longer visible.

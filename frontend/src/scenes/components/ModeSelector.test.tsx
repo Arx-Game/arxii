@@ -4,6 +4,21 @@ import { describe, expect, it, vi } from 'vitest';
 import { ModeSelector } from './ModeSelector';
 
 describe('ModeSelector', () => {
+  it('lists Commands after a rule for staff, and not otherwise (#3857)', async () => {
+    const user = userEvent.setup();
+    const onModeChange = vi.fn();
+    const { unmount } = render(
+      <ModeSelector currentMode="pose" onModeChange={onModeChange} isAtPlace={false} staff />
+    );
+    await user.click(screen.getByRole('button', { name: /pose/i }));
+    expect(screen.getAllByRole('menuitem')).toHaveLength(5);
+    await user.click(screen.getByRole('menuitem', { name: 'Commands' }));
+    expect(onModeChange).toHaveBeenCalledWith('commands');
+    unmount();
+
+    render(<ModeSelector currentMode="commands" onModeChange={vi.fn()} isAtPlace={false} />);
+    expect(screen.getByRole('button', { name: 'Commands' })).toBeInTheDocument();
+  });
   it('renders current mode as button text', () => {
     render(<ModeSelector currentMode="pose" onModeChange={vi.fn()} isAtPlace={false} />);
     expect(screen.getByRole('button', { name: /pose/i })).toBeInTheDocument();

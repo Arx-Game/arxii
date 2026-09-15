@@ -683,7 +683,7 @@ def _technique_available_to_learner(
     # get_technique_options' pool half never reads `tradition` (it's sourced
     # from PathGiftGrant(path, gift) only) — safe to pass trainer_tradition
     # (even None) as the query arg; only the signature half is scoped by it.
-    options = get_technique_options(path, gift, trainer_tradition)
+    options = get_technique_options(path, gift, trainer_tradition, include_unready=True)
     if technique in options.pool:
         return True
     if trainer_tradition is None:
@@ -692,7 +692,9 @@ def _technique_available_to_learner(
         # empty (TraditionGiftGrant.tradition is non-nullable), so re-query
         # with each tutelage's tradition to get the real signature list.
         for tutelage in sheet.ghost_tutelages.select_related("tradition"):
-            tutelage_options = get_technique_options(path, gift, tutelage.tradition)
+            tutelage_options = get_technique_options(
+                path, gift, tutelage.tradition, include_unready=True
+            )
             if technique in tutelage_options.tradition:
                 return True
         return False

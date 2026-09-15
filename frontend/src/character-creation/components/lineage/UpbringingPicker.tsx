@@ -18,7 +18,7 @@ interface Props {
 
 function costLabel(cost: number): string {
   if (cost === 0) return 'Free';
-  return cost > 0 ? `${cost} points` : `Refunds ${-cost} points`;
+  return cost > 0 ? `${cost} points` : `Awards ${-cost} points`;
 }
 
 export function UpbringingPicker({ templates, selectedId, onSelect }: Props) {

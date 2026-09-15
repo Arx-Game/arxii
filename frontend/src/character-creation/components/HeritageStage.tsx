@@ -24,6 +24,7 @@ import {
   Note,
   Paragraphs,
   RecordRail,
+  stageEyebrow,
 } from '../folio';
 import {
   useBeginnings,
@@ -212,7 +213,7 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
           { label: 'Gender', value: draft.selected_gender?.display_name },
           { label: 'CG points', value: `${draft.cg_points_spent} of ${starting} spent` },
         ]}
-        ledger="Stage 2 of 11"
+        ledger={stageEyebrow(draft.current_stage)}
       />
       <Marginalia id="note-heritage">
         {perspectives && perspectives.length > 0 ? (
@@ -247,28 +248,24 @@ export function HeritageStage({ draft, onStageSelect }: HeritageStageProps) {
       <EntryList label="Beginnings">
         {beginnings?.map((b) => {
           const isChosen = draft.selected_beginnings?.id === b.id;
-          const closed = !b.is_accessible;
           return (
             <Entry
               key={b.id}
               name={b.name}
-              tag={closed ? 'Not available to your account' : costTag(b.cg_point_cost)}
+              tag={costTag(b.cg_point_cost)}
               chosen={isChosen}
-              closed={closed}
               open={isChosen}
             >
               {/* Decorative: the entry name beside it is the text. */}
               {b.art_image && <img className="entry-art" src={b.art_image} alt="" />}
               <Paragraphs text={b.description} />
               <CodexLine entryId={b.codex_entry_ids?.[0]} name={b.name} />
-              {!closed && (
-                <EntryDoors
-                  chooseLabel={`Choose ${b.name}`}
-                  onChoose={() => chooseBeginning(b)}
-                  chosen={isChosen}
-                  onSetAside={clearBeginning}
-                />
-              )}
+              <EntryDoors
+                chooseLabel={`Choose ${b.name}`}
+                onChoose={() => chooseBeginning(b)}
+                chosen={isChosen}
+                onSetAside={clearBeginning}
+              />
             </Entry>
           );
         })}

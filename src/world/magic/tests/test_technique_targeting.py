@@ -48,8 +48,9 @@ class DeriveTargetRelationshipTests(TestCase):
 
     def test_hostile_technique_returns_enemy(self):
         """A technique with a damage profile (is_technique_hostile=True) → ENEMY."""
-        # TechniqueFactory with damage_profile=True (the default) creates a DamageProfile
-        # with base_damage>0 making it hostile.
+        # damage_profile=True seeds a DamageProfile with base_damage>0 from the
+        # effect type's base_power, which is what makes this hostile — hostility
+        # is never read off base_power itself (ADR-0281).
         tech = TechniqueFactory(damage_profile=True)
         self.assertEqual(derive_target_relationship(tech), ConditionTargetKind.ENEMY)
 

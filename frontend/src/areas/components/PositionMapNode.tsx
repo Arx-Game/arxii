@@ -33,6 +33,11 @@ export interface OccupantMark {
 
 export interface OccupantSummary extends PersonaAvatarSource {
   marks?: OccupantMark[];
+  /**
+   * A scene persona standing on the graph who is not in the encounter (#3557).
+   * Drawn dimmed so the map still reads as a fight, not a crowd.
+   */
+  bystander?: boolean;
 }
 
 const MARK_STYLES: Record<OccupantMarkKind, { icon: typeof Swords; className: string }> = {
@@ -123,6 +128,8 @@ function OccupantMarkGlyph({ kind, title }: OccupantMark) {
  * One occupant avatar plus its status glyphs (#3555): the caller-supplied
  * marks, and a behind-cover glyph whenever the node itself carries a rampart
  * (a Rampart is deleted at zero integrity, so "present" means "still cover").
+ * A bystander (#3557) is the same avatar at reduced opacity with a
+ * "(bystander)" title.
  */
 function OccupantAvatar({
   occupant,
@@ -132,7 +139,12 @@ function OccupantAvatar({
   rampartElement: string | null;
 }) {
   return (
-    <span className="relative inline-flex" data-testid="occupant-avatar">
+    <span
+      className={`relative inline-flex ${occupant.bystander ? 'opacity-40' : ''}`}
+      title={occupant.bystander ? `${occupant.name} (bystander)` : undefined}
+      data-bystander={occupant.bystander ? 'true' : undefined}
+      data-testid="occupant-avatar"
+    >
       <PersonaAvatar source={occupant} size="sm" />
       {rampartElement != null && (
         <span

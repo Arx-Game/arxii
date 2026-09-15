@@ -27,7 +27,6 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from '@/components/ui/accordion';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -36,15 +35,14 @@ import { cn } from '@/lib/utils';
 import { Check } from 'lucide-react';
 import { useMemo } from 'react';
 import type { KeyboardEvent } from 'react';
-import type {
-  GlimpseFlowProps,
-  GlimpseSuggestedDistinction,
-  GlimpseTagOption,
-} from './glimpseTypes';
+import type { GlimpseFlowProps, GlimpseTagOption } from './glimpseTypes';
 
 // CHOOSING tags are all path-scoped to the Path of the Chosen, so the step
 // self-hides for other paths (axes with zero catalog tags don't render).
-const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
+// Exported so GlimpseAxes (the CG mount's own folio-grammar layout, #3675
+// fix round 1) can reuse this axis order + arity without redeclaring it,
+// only this component's own question-style `label` text is GlimpseFlow-only.
+export const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolean }[] = [
   { axis: 'TRIGGER', label: 'Trigger: what was happening?', multi: false },
   { axis: 'CHOOSING', label: 'The Choosing; how did it claim you?', multi: false },
   { axis: 'REFLECTION', label: 'The Reflection: what did you see in yourself?', multi: true },
@@ -53,47 +51,16 @@ const AXIS_STEPS: { axis: GlimpseTagOption['axis']; label: string; multi: boolea
   { axis: 'WITNESS', label: 'Witness & Secrecy: who saw?', multi: true },
 ];
 
-function DistinctionLinkChips({
-  distinctions,
-  linkedIds,
-  onToggle,
-}: {
-  distinctions: GlimpseSuggestedDistinction[];
-  linkedIds: Set<number>;
-  onToggle: (distinctionId: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap gap-2">
-      {distinctions.map((distinction) => {
-        const isLinked = linkedIds.has(distinction.id);
-        return (
-          <Badge
-            key={distinction.id}
-            variant={isLinked ? 'default' : 'outline'}
-            className="cursor-pointer select-none"
-            onClick={() => onToggle(distinction.id)}
-          >
-            {isLinked && <Check className="mr-1 h-3 w-3" />}
-            {distinction.name}
-          </Badge>
-        );
-      })}
-    </div>
-  );
-}
-
 export function GlimpseFlow({
   heading = 'The Glimpse',
   tags,
   selectedTagIds,
   prose,
-  linkedDistinctionIds,
   onChangeAxis,
   onChangeProse,
-  onToggleDistinctionLink,
   onSkip,
   showDeferralControls,
-  linkableDistinctions,
+  storyHint,
 }: GlimpseFlowProps) {
   const tagsByAxis = useMemo(() => {
     const map = new Map<GlimpseTagOption['axis'], GlimpseTagOption[]>();
@@ -113,23 +80,6 @@ export function GlimpseFlow({
 
   const sensoryTags = tagsByAxis.get('SENSORY') ?? [];
   const selectedTagIdSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds]);
-  const linkedIdSet = useMemo(() => new Set(linkedDistinctionIds), [linkedDistinctionIds]);
-
-  // Dedupe suggested_distinctions across every selected tag, keeping first
-  // occurrence order (a distinction suggested by two selected tags appears once).
-  const suggestedDistinctions = useMemo(() => {
-    const seen = new Set<number>();
-    const result: GlimpseSuggestedDistinction[] = [];
-    for (const tag of tags) {
-      if (!selectedTagIdSet.has(tag.id)) continue;
-      for (const distinction of tag.suggested_distinctions) {
-        if (seen.has(distinction.id)) continue;
-        seen.add(distinction.id);
-        result.push(distinction);
-      }
-    }
-    return result;
-  }, [tags, selectedTagIdSet]);
 
   // Axes with zero authored tags don't render — an empty catalog collapses
   // the accordion entirely rather than showing empty steps.
@@ -256,32 +206,7 @@ export function GlimpseFlow({
           rows={4}
           className="resize-y"
         />
-      </div>
-
-      {selectedTagIds.length > 0 && suggestedDistinctions.length > 0 && (
-        <div className="space-y-2">
-          <Label>Suggested Distinctions</Label>
-          <DistinctionLinkChips
-            distinctions={suggestedDistinctions}
-            linkedIds={linkedIdSet}
-            onToggle={onToggleDistinctionLink}
-          />
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label>Link a distinction to your glimpse</Label>
-        {linkableDistinctions.length > 0 ? (
-          <DistinctionLinkChips
-            distinctions={linkableDistinctions}
-            linkedIds={linkedIdSet}
-            onToggle={onToggleDistinctionLink}
-          />
-        ) : (
-          <p className="text-xs text-muted-foreground">
-            No distinctions to link yet: choose distinctions in the Distinctions stage first.
-          </p>
-        )}
+        {storyHint && <p className="text-xs text-muted-foreground">{storyHint}</p>}
       </div>
 
       {showDeferralControls && (

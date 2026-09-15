@@ -144,6 +144,7 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         # codex
         "codex.codexcategory",
         "codex.codexentry",
+        "codex.codexentryfiling",
         "codex.codexsubject",
         "codex.traditioncodexgrant",
         "codex.beginningscodexgrant",
@@ -219,7 +220,6 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "magic.gift",
         "magic.giftunlock",
         "magic.glimpsetag",
-        "magic.glimpsetagdistinctionsuggestion",
         "magic.intensitytier",
         # #3034: the row-level "authored_by IS NULL" split lives in
         # EXPORT_FILTERS below — a player's "author from scratch" Mage Scar
@@ -302,7 +302,14 @@ CONTENT_MODELS: frozenset[str] = frozenset(
         "roster.npcstatlinepreset",
         # skills
         "skills.skill",
-        # societies
+        # societies - house charter (#2875): dependencies listed before
+        # dependents for readability, not because the loader needs it -
+        # unresolved natural keys retry across passes and this set is
+        # unordered.
+        "societies.successionlaw",
+        "societies.holdingkind",
+        "societies.housefeature",
+        "societies.housetemplate",
         "societies.houseaspectdefinition",
         "societies.houseaspectoption",
         # species
@@ -404,6 +411,9 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # serialize as installation-local pks and mis-tag crimes on any other
     # database. Crime tags on authored effects are re-applied in admin.
     "checks.consequenceeffect": frozenset({"crime_kinds"}),
+    # #3648: which staff houses a Family Template lists as served is installation
+    # state (those orgs are not corpus rows), same rationale as faction_affiliation.
+    "societies.housetemplate": frozenset({"served_house_choices"}),
 }
 
 

@@ -9,8 +9,8 @@ Core game interface for real-time RPG interaction with WebSocket communication a
 - **`GamePage.tsx`**: Composition root for `/game` (#2156). Derives the active
   session's `sceneId`/`roomName`, calls `useSceneInteractions` +
   `useThreading` once, owns `composerMode` state, and feeds the result down
-  as props to `ConversationSidebar` (left) and `GameWindow` (center) — no
-  duplicate roster/scene-interaction queries in the children. Also owns the
+  as props to `PlaySidebar` (via `GameLayout`'s `sidebar` prop) and `GameWindow`
+  (center) — no duplicate roster/scene-interaction queries in the children. Also owns the
   **conversation-tab session state** (#2165): `openThreadTabs`/`activeThreadTab`
   live in `gameSlice` per session, and `GamePage` derives the tab strip's props,
   the tab-narrowed feed (`tabInteractions`), and the tab-locked composer mode
@@ -18,22 +18,49 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   render — the composer's audience is never stored, only derived, which is the
   mis-send guard. It also hydrates/persists the open-tab layout from
   `threadTabsStorage.ts` and resets tabs on scene change (see `gameSlice.ts`'s
-  `setSessionScene`).
+  `setSessionScene`). It also owns `sidebarMode`/`hereActiveTab` and
+  `jumpToCombat()` (#3761) — the whole cross-mode encounter-reachability
+  mechanism that routes both the top-bar banner and the sidebar's Combat nav
+  button to the same Here-mode Room-tab destination where `CombatRail`
+  renders — and, per Finding I1, `lingeringEncounterId`/`dismissedEncounterId`,
+  which keep `CombatRail` mounted after `useEncounterForScene`'s poll drops a
+  completed encounter, until the player dismisses the outcome banner.
 - **`GameWindow.tsx`**: Central communication hub with session tabs and
   command input. When the composition root passes a `sceneFeed` prop (an
   active scene), the center renders the structured chat-bubble feed
-  (`SceneMessages` + `SystemLane`) instead of the legacy `ChatWindow`. Renders
+  (`ThreadedNarrativeReader`) instead of a terminal transcript; with no scene it
+  renders `ExplorationReader`. Both take the session's `notes` (#3856) and show
+  them at their time among the poses; a reference view gets none. Owns the feed
+  filter chips (#3856 PR 2): reads them from the per-account preferences (the
+  `accountId` prop from `GamePage`), renders `FeedChipStrip` above the
+  conversation tabs, filters the scene feed, ambient poses and notes through
+  `visibleInteractions`/`visibleNotes` before either reader sees them, shows
+  "Everything is switched off. Press a chip to bring one kind back." while All is
+  off, and provides `FeedBlockControlsContext` from the session's minimised and
+  dismissed keys. A reference view gets neither strip nor filtering. Renders
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
-  when the reader was already at the bottom for that tab. The multi-puppet
+  when the reader was already at the bottom for that tab. **The room tab is
+  the one exception** (#3759): `ThreadedNarrativeReader.tsx` owns restoring
+  its own pose-identity anchor for the room view, so this Map's own restore
+  only applies there once it already holds a 'room' entry (i.e. from the
+  SECOND visit onward this session) — on the very first visit, if a
+  persisted anchor exists for the scene, GameWindow defers to the reader's
+  restore instead of racing it with a scroll-to-bottom. `handleFeedScroll`
+  also never records a position while a historical reference (`reference`
+  prop) is being read, since that view falls `activeConvKey` back to 'room'
+  too and would otherwise corrupt the live room position under the same key.
+  The multi-puppet
   session tab bar carries the same direct/ambient `AttentionBadge` as
-  `GameTopBar` (#2166), keyed per session name via each character's
-  `primary_persona_id` — with one guard `GameTopBar` doesn't need: the
-  **active** puppet's own tab never badges (`name !== active`), since its
-  attention already surfaces via `ConversationTabStrip`; badging it too would
-  double-count the active character's own unseen activity on its own
-  already-highlighted tab.
+  `GameTopBar` (#2166); since #3774, both call the same `characterAttention`
+  helper (`attention.ts`) rather than deriving the count from session data
+  alone, so a puppet tab badges correctly even before this tab has seen
+  anything new arrive for that character, with one guard `GameTopBar`
+  doesn't need: the **active** puppet's own tab never badges (`name !==
+  active`), since its attention already surfaces via `ConversationTabStrip`;
+  badging it too would double-count the active character's own unseen
+  activity on its own already-highlighted tab.
 - **`threadTabsStorage.ts`**: `loadThreadTabs`/`saveThreadTabs` (#2165) —
   client-local persistence of the open-tab layout (thread **keys** only, never
   message content) in `localStorage`, keyed per character+scene
@@ -41,37 +68,126 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   scene's entry, older entries for the same character are pruned on save.
   Best-effort: any storage error (unavailable, unparsable) is swallowed and
   treated as "nothing stored."
-- **`attention.ts`**: `sessionAttention(session, personaId)` (#2166) — pure,
-  selector-side two-tier attention derivation for one character's session, no
-  new Redux write path. Reuses `getThreadKey`/`countUnread` (exported from
-  `useThreading.ts`) against `threadLastSeen`/`sceneBaselineId`, the same
-  grouping #2165's tab strip badges use. `direct` = unread on `whisper:*`
-  threads plus `target:*` threads that include `personaId` (an @-target,
-  duel challenge, or consent request aimed at that persona specifically);
-  `ambient` = any other thread unread, or the legacy `session.unread` scalar.
-  Requires a resolved `personaId` to route to `direct` at all — before the
-  roster loads, whisper/target unread routes to `ambient` instead, so a
-  session's own echoed whisper never misreads as direct pre-roster-load.
+- **`feedKinds.ts`**: The closed `FeedKind` union (#3856) every feed entry carries,
+  the list the filter chips will offer. `classifyText(kwargs.type)` maps a `text`
+  frame's wire type (`look`, `item`, `error`, `move`, `arrive`; `narrative` and
+  `gemit` both to `ambience`; anything else `system`) and `classifyInteraction(mode)`
+  maps an interaction's mode. A new kind is a deliberate addition here, never an ad
+  hoc string.
+- **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
+kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
+  are the demo's five (Roleplay and Whispers wake; Movement, Ambience, System do
+  not; `system` unowned). Rules: `isKindShown` (All off hides everything; an unowned
+  kind shows), `wakingKinds` (on and wake), `toggleChip` (with All off, a press turns
+  All on with only that chip), `toggleAll`, `setKindOwner` (moves a kind between
+  chips), `renameChip`, `setChipWake`, `addCustomChip` (cap 3), `deleteChip` (its
+  kinds keep showing), `normalizeFeedChips` (repairs a stored layout),
+  `visibleInteractions`/`visibleNotes` (chips plus the viewer's dismissed keys),
+  `feedItemKey` (`i:<id>` / `n:<id>`). The layout lives in `PlayPreferences`
+  (`feedChips`, `feedAll`), per account per browser.
+- **`feedBlockControls.ts`**: The context `FeedBlockFrame` reads: the session's
+  minimised keys and the minimise/restore/dismiss dispatchers `GameWindow` provides;
+  null in a reference view, so history renders without controls.
+- **`feedRows.ts`**: `interleaveNotes(items, notes)` (#3856) sorts an item list and
+  the session's `FeedNote`s into one column by parsed time (server timestamps may
+  lack milliseconds; note timestamps are the client clock at receipt), stable, items
+  first on a tie. Both readers use it; the scene reader feeds it thread groups at
+  their root pose's time in Threads view and the flat pose list in Chronological.
+- **`attention.ts`**: `sessionAttention(session, personaId, sinceId?, options?)` (#2166,
+  extended #3774): pure, selector-side two-tier attention derivation for one
+  character's session, no new Redux write path. Reuses `getThreadKey`/
+  `countUnread` (exported from `useThreading.ts`) against
+  `threadLastSeen`/`sceneBaselineId`, the same grouping #2165's tab strip
+  badges use. `direct` = unread on `whisper:*` threads plus `target:*` threads
+  that include `personaId` (an @-target, duel challenge, or consent request
+  aimed at that persona specifically); `ambient` = any other thread unread, or
+  the legacy `session.unread` scalar. Requires a resolved `personaId` to route
+  to `direct` at all: before the roster loads, whisper/target unread routes
+  to `ambient` instead, so a session's own echoed whisper never misreads as
+  direct pre-roster-load. Since #3774, `sessionAttention`'s result is no
+  longer the whole picture on its own: it is the local-tab DELTA on top of a
+  server-computed baseline. `sinceId` is that server's watermark
+  (`MyRosterEntry.attention_as_of_id`): anything at or below it is dropped, so
+  the caller can add the delta to the server count without double-counting a
+  pose the server already saw. `characterAttention(char, session)` is the
+  combination (server baseline `unread_direct`/`has_ambient_unread` plus
+  this delta), and it is the one callers should reach for; `GameTopBar` and
+  `GameWindow`'s puppet-tab row both call it, so the two can never diverge. A
+  character with no local session in this tab renders the server value alone,
+  which is the fresh-device case #3774 exists for. `AttentionBadge` (the
+  render, capped at `99+` since a server-side count can run to three digits)
+  now lives in its own module, `components/AttentionBadge.tsx`, extracted from
+  byte-identical copies that used to live in `GameTopBar`/`GameWindow`. Since #3856
+  PR 2 both take `AttentionOptions`: `wakingKinds` (from the chips; an interaction
+  under a chip that is off or silent counts for nothing) and `dismissed` (a block
+  the viewer removed cannot keep a badge lit). `chipUnread(session, personaId,
+chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
+  the same threshold rule as `countUnread` read per row.
 
 ### Layout (`components/`)
 
-- **`GameLayout.tsx`**: Three-column responsive grid (left sidebar, center, right sidebar)
+- **`GameLayout.tsx`**: App shell for play — one wide reader/composer column and
+  one contextual sidebar (`PlaySidebar`), not three columns. `sidebar`/
+  `leftSidebar`/`rightSidebar` props exist for caller compatibility, but only
+  one sidebar ever renders; below the `lg` breakpoint (1024px) the user
+  explicitly toggles between Story and Sidebar panes rather than losing either.
+- **`PlaySidebar.tsx`**: The single contextual sidebar — Here / Conversations /
+  History mode tabs sharing one scroll container. All three mode bodies stay
+  mounted (`hidden` attribute, not conditional unmount) so switching modes
+  preserves each one's scroll position and in-flight state (#3759). A 4th
+  "Combat" nav button (#3761) appears only while `hasActiveEncounter` is true
+  and jumps to Here mode's Room tab, where `CombatRail` renders. `mode`/
+  `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
+  internal state) — a future caller must supply both.
+- **`SidebarTabPanel.tsx`**: The Here mode's body (#3856 PR 3, the approved demo's
+  side panel). The room view (`roomPanel`: `FocusPanel` or `DreamspacePanel`) with an
+  "Actions" `<details>` fold at its foot holding the eight reference sections (Who,
+  Stories, Events, Codex, Status, Items, Journal, Travel) as a three-column grid,
+  open by default and folding on its arrow. Pressing a section shows it in place of
+  the room with a "← <room or focused subject>" way back at the top (`roomTabLabel`
+  names it, truncated with the full name in `title`). Replaces the nine-trigger tab
+  row that sat above the room; `activeTab`/`onTabChange` stay controlled by
+  `GamePage` (#3761, `jumpToCombat` sets `'room'`), and each section still mounts
+  lazily on first open. Nothing was dropped: every section keeps its panel and
+  fallback text.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
-  switching. Each alt character's avatar carries a two-tier attention
-  indicator (#2166, `sessionAttention` from `attention.ts`): a red numeric
-  badge for _direct_ attention (an unseen whisper or @-target aimed at that
-  character), else a muted dot for _ambient_ (any other unseen activity in
-  that session), else nothing. The active character is structurally excluded
-  (this bar only ever renders alts) — its own attention lives in
-  `ConversationTabStrip`'s per-tab badges, not here. Also renders (#3412 S4,
+  switching, and the world menu (#3818): the leading button opens a
+  `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Leave the world
+  as <active>", Log out). It was a `<Link to="/">`, and `/` (`GatefoldPage`)
+  redirects an in-world player straight back to `/game`, so it flickered and
+  did nothing; `/hall` is the Hall on a route that never redirects. Navigating
+  away keeps every character tab connected (sessions and sockets live in
+  Redux/module scope, and `GamePage` has no teardown); "Leave the world" is
+  `useGameSocket().disconnect(name)`, which closes that one socket so the
+  server unpuppets the character (nobody stands unpiloted on the grid) and
+  drops the session, while the account stays signed in with its selection
+  intact. `useLogout` already closes every socket. Every non-active
+  character's avatar carries a two-tier attention
+  indicator (#2166, `characterAttention` from `attention.ts` since #3774):
+  a red numeric badge for _direct_ attention (an unseen whisper or @-target
+  aimed at that character), else a muted dot for _ambient_ (any other unseen
+  activity), else nothing; since #3774 this badges every non-active
+  character, not just ones with a local session in this browser tab (a
+  character with no session renders the server's baseline count alone). The
+  active character's own badge row is gated on `active` (a #3774 review
+  fold-in fix: without the gate, with no active character every character's
+  avatar rendered twice, once from this row and once from the named-button
+  row below); its attention lives in `ConversationTabStrip`'s per-tab badges
+  instead, which is the only reason it stays excluded now: the old
+  "this bar only ever renders alts" framing no longer holds, since the bar
+  can render every character when nobody is active. Also renders (#3412 S4,
   ADR-0247), for the active character: an own-sheet link (`/characters/:id`,
   `RosterEntry.id`-keyed, opens in a new tab so the live session is never
   disturbed) and a compact `ClockReadout` (season + paused indicator only,
   full date/time/phase in the title tooltip) reusing the Hall's
   `useClockQuery` directly — deliberately NOT `hh:mm`, since `WeatherWidget`
   (also rendered here) already surfaces `phase + hh:mm` from the same
-  `game_clock` backend and a second hh:mm would just duplicate it.
-- **`ConversationSidebar.tsx`**: Left sidebar. Renders the scene's
+  `game_clock` backend and a second hh:mm would just duplicate it. Also
+  renders `CombatBanner` (#3761), a second full-width strip below the main
+  bar shown while `hasActiveEncounter` is true, that jumps the sidebar to the
+  combat rail on click.
+- **`ConversationSidebar.tsx`**: The Conversations mode body inside
+  `PlaySidebar` (not its own column). Renders the scene's
   `ThreadSidebar` (room/place/whisper/target threads) when `GamePage` passes
   threading state for an active scene; otherwise falls back to a static
   "Room" button. Also owns the per-thread `ThreadFilterModal` (participant
@@ -82,7 +198,30 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   room row, or the "All" button, re-anchors the tab strip back to the room and
   resets the composer; `onShowAll` is `GamePage`'s override of
   `threading.showAll` for exactly that reason (the bare `showAll` only resets
-  the filter/mute state, not the active tab).
+  the filter/mute state, not the active tab). States 'OOC channels unavailable,
+  pending #3299' explicitly (#3761) rather than leaving the gap silent.
+- **`HistoryNavigator.tsx`**: Search (2+ characters, filtered by type — Scenes /
+  Whispers — and date range) plus browse authorized retained conversations
+  (filtered by date range only; type does not scope the browse list, only the
+  search query); the conversation list paginates via a cursor ("Next page" —
+  replaces the current page rather than appending to it, per its own name).
+  An OOC filter option is deliberately not exposed here: `filter_kind`'s
+  `scene_ooc`/`channel` branches can never match today (`InteractionMode` has
+  no ooc/system/tt value until #3299 lands) — see `interaction_filters.py`.
+  Opening a search result or conversation switches the reader into reference
+  mode via `onOpenReference` (#3759).
+  **Conversation drill-down (#3772):** each readable conversation row also carries a
+  `Threads` disclosure; at most one is open at a time, and nothing is fetched until it is
+  opened (a count on every collapsed row would mean querying all thirty visible rows up
+  front). A row the viewer cannot read gets no disclosure.
+- **`ConversationThreadList.tsx`**: One conversation's reply threads, from
+  `GET /api/play/threads/` (#3772). Owns its own cursor, so collapsing a conversation
+  discards it. A row is labelled by the thread's opening line, matching how the reader
+  titles a thread, and falls back to `N poses from <date>` when that line is blanked for
+  a muted persona (#2087) or not comprehended (#2993). The unread pill is
+  `ThreadSidebar`'s, so one badge means one thing in live and historical surfaces.
+  Pressing a row calls `onOpenThread`, which `HistoryNavigator` turns into an
+  `onOpenReference` anchored at the thread's `firstVisible` pose.
 - **`ConversationTabStrip.tsx`**: The open-conversations tab strip rendered
   above the feed in `GameWindow` (#2165) — the room feed as a permanent,
   unclosable anchor tab plus one closable tab per broken-out thread
@@ -92,14 +231,87 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ### Communication (`components/`)
 
-- **`ChatWindow.tsx`**: Legacy raw message log (monospace, black background) —
+- **`ThreadedNarrativeReader.tsx`**: The reader for both the live scene feed and
+  reference-mode historical browsing (fed by `GamePage.tsx`'s `displaySceneFeed`
+  swap — the component itself does not know which source its `interactions`
+  prop came from). Threads view default-collapses all but the most recently
+  active thread; Chronological view is a flat time-ordered alternative sharing
+  the same read/collapse state. Anchors and collapse state persist per
+  conversation via `playPreferences.ts`'s LRU store (#3759). **Save/restore
+  ownership split with `GameWindow.tsx`:** this component owns restoring its
+  own pose-identity anchor (mount, the Return-to-live `readOnly` transition,
+  and font/measure preference changes — the last deferred a tick via
+  `requestAnimationFrame` so it measures AFTER `DisplaySettings.tsx`'s
+  sibling effect has actually applied the changed CSS variable, not before);
+  `GameWindow.tsx` owns its OWN separate, ephemeral per-tab raw-scrollTop
+  memory (#2165) and only steps out of the way for the anchor on the room
+  tab's first visit each session (see its own doc entry above). The Threads-
+  view scroll listener attaches at `document` with `capture: true` rather
+  than resolving a specific ancestor once at mount — this component has no
+  scroll container of its own in that view (GameWindow's own div is the real
+  one), and resolving it just once, at mount, could permanently miss it on a
+  cold load where the scene starts empty. `persistAnchor` (prop, default
+  `true`) must be `false` whenever a non-room conversation tab is the one
+  actually on screen, since `conversationKey` is always scoped to the scene
+  regardless of tab — GameWindow passes `activeConvKey === 'room'`.
+- **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
+  (name, description); below them one `Activity` list of the room's ambient
+  interactions and the session's notes, ordered by time through `feedRows.ts`.
+  An ambient row's body is the server's `line` (#3858) through
+  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
+- **`FeedChipStrip.tsx`**: The strip above the column (#3856 PR 2): one plain label
+  per chip (`aria-pressed` = All and on; a "new" pill from `chipUnread`), `+`
+  while a custom chip can still be added, All at the right end. Left click
+  toggles; right click opens `FeedChipEditor` in a popover anchored to the chip:
+  name (Enter commits and closes), every kind with a checkbox and "(in X)" where
+  another chip carries it, "Wake me when this arrives", Delete chip. Controlled;
+  every change writes through to the preferences at once. No explainer text, by
+  ruling.
+- **`FeedBlockFrame.tsx`**: Wraps any block in the column (#3856 PR 2) with hover
+  or focus controls, minimise and dismiss; a minimised block is a one-line stub
+  ("Nyx · 11:29", "Look results · 11:30") with a reopen press. `PoseReadTarget`
+  carries it for poses in both scene views, `FeedNoteBlock` for notes,
+  `ExplorationReader` for its ambient articles. Outside a provider it renders the
+  block as it is.
+- **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
+  by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
+  prose body), `item` and `system`; the destructive tokens and `role="alert"` for
+  `error`; a bare italic line for `arrive`/`move`; the italic line with a hairline
+  for `ambience`. Every body renders through `EvenniaMessage` in prose
+  presentation, since the server sends Evennia's HTML (colour spans, `<br>`).
+  There is no separate system strip any more: `SystemLane` was removed with
+  #3856, since every text frame is a note in the column now.
+- **`ChatWindow.tsx`**: Retained legacy component for isolated compatibility tests; `/game` now uses `ExplorationReader` —
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
-- **`SystemLane.tsx`**: Muted, collapsible strip for system/channel/error
-  chatter shown alongside the structured scene feed (#2156) — no
-  `bg-black`/`font-mono`, just a quiet compact strip that expands on click.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
-  newline, command history. Optional `speakingAs?: { name, thumbnailUrl }`
+  newline, command history. **The label is the truth (#3857):** `GamePage`'s
+  `effectiveComposerMode` derives Pose for the room anchor whenever no mode is
+  chosen (a fresh connection, the reset on every character or scene change), so a
+  typed line is `pose <line>` and never a raw command by accident; picking a mode
+  works before any was set. A line starting with `/` is the command after the
+  slash, sent as typed whatever the mode (`slashEscape`); `//` poses a literal
+  slash; a typed speech verb or `page` (`KNOWN_COMMANDS`) still passes through,
+  and any other word is prose (`look` on its own is the pose "look"). Staff
+  (`isStaff`, from `account.is_staff` via `GameWindow`) get a Commands entry in
+  `ModeSelector`; in that mode the formatting controls, the companion selector and
+  the scene controls step aside, the box takes the monospace face, and every line
+  goes through `useGameSocket().sendConsole`.
+  **The entrance is a state, not a toggle (#3867):**
+  `isEntrance` is derived from the room state's `scene.viewer_entered === false`; the
+  right slot shows "✨ Entrance" (`data-testid="entrance-state"`) with the
+  technique attachment (#2183) beside it until the first pose lands, which goes
+  out as `pose_kind: 'entry'` (the server marks it either way). The old
+  "Make an entrance" button is gone. **All composer text lives in `useDraftStore`**
+  (#3784): `draft.content` is the textarea's `value` and `setContent` is the
+  only write path — never add a second local string or storage key mirroring
+  it. Clearing on a successful send is `acknowledge(clientRequestId)` alone;
+  it already no-ops when a newer edit has nulled that id, so no extra
+  "is the textarea still showing what was sent" check is needed.
+  `draftScopeSettling` names the conversation a draft belongs to and whether
+  its scope can address that conversation yet (`GameWindow`'s `room:unknown`
+  during entry), so the draft moves with the scope when it settles rather
+  than being stranded — and never moves to a different audience. Optional `speakingAs?: { name, thumbnailUrl }`
   prop (#2166) renders a compact `PersonaAvatar` + name chip at the start of
   `leftSlot`, before `ModeSelector` — a standing "who am I talking as right
   now" identity marker on the composer, shown even for single-character
@@ -110,14 +322,33 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
   S4: no separate combat composer remains; the fold-in already carries
   `speakingAs`).
-- **`EvenniaMessage.tsx`**: Game message display and formatting
+- **`StaffConsole.tsx`**: The staff console (#3857): a Console control in the
+  composer's toolbar (staff only) and the `Sheet` it opens over the play surface,
+  holding `session.consoleLines`: each Commands-mode line echoed (`sent`, muted,
+  after a `›`) above everything the server said back to it, in the terminal face
+  inside the app's own sheet (title, Clear, Close). It opens itself when a line
+  arrives while Commands mode is active and stays closed once closed until the
+  next; the control counts the answers that arrived while it was closed.
+- **`EvenniaMessage.tsx`**: Game message display and formatting for the plain-text
+  frames (look results, command replies, Evennia's own errors). Renders sanitized
+  HTML rather than going through `FormattedContent`, so it carries the feed's
+  `[overflow-wrap:anywhere]` wrap rule itself (#3862; the rule's home is
+  `frontend/src/components/FormattedContent.tsx`).
 
 ### Room Panel (`components/room-panel/`)
 
 - **`RoomPanel.tsx`**: Right sidebar container with room info, scene controls, navigation
 - **`RoomHeader.tsx`**: Room name and scene start/end controls
 - **`RoomDescription.tsx`**: Collapsible room description
-- **`CharactersList.tsx`**: Characters present in the room with avatars
+- **`CharactersList.tsx`**: Characters present in the room with avatars. A row whose
+  `in_scene` is false, and the viewer's own row when `viewerInScene` is false, carries
+  the threshold mark (#3867): an asterisk after the name, `title="Not yet in the
+scene"`, no explainer. Lists the
+  viewer first with a "you" tag (#3856) — the room state's `characters` excludes
+  them, so `RoomPanel` supplies `viewer` from its `character` prop and
+  `FocusPanel` supplies the portrait from the roster entry. Pressing the row sends
+  `look me` (never the name, which could prefix-match another occupant), so what
+  others see when they look at you lands as a look note in the column.
 - **`ExitsList.tsx`**: Clickable exit buttons for navigation
 - **`ObjectsList.tsx`**: Objects visible in the room
 - **`PortalsBlock.tsx`**: Portal-network destinations the active character could
@@ -142,8 +373,13 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 
 ## Key Features
 
-- **Three-column layout**: Conversation sidebar, communication hub, room panel
-- **Responsive**: Sidebars hidden below lg breakpoint, center content fills screen
+- **Single contextual sidebar**: `PlaySidebar` (Here / Conversations / History,
+  plus a 4th Combat mode shown only during an active encounter, #3761) plus
+  one wide reader/composer column — not the legacy three-column layout. Full
+  layout/resize ownership: #3758.
+- **Responsive**: Below the `lg` breakpoint (1024px) the layout shows one pane
+  at a time — Story or Sidebar — via an explicit toggle, not a hidden sidebar;
+  both panes render side by side at `lg` and up.
 - **Multi-character sessions**: Multiple character tabs open simultaneously
 - **Conversation tabs (#2165)**: Keep several threads (room + place/whisper/target)
   open at once per session; the composer's audience locks to whichever tab is

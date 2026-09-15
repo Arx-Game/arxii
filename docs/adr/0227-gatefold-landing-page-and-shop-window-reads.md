@@ -1,6 +1,8 @@
 # ADR-0227: The Gatefold landing page reads existing endpoints, not a new realms API
 
-**Status:** Accepted (2026-08-22) - extends ADR-0224, precedented by ADR-0146.
+**Status:** Accepted (2026-08-22) - extends ADR-0224, precedented by ADR-0146. **Amended by
+ADR-0285 (#3725, 2026-09-08):** a `world/realms` read API now exists, because the realm
+carries content of its own (the testament); the landing page's reads below are unchanged.
 
 The public front page (issue #3305, three prototypes plus a 3-round adversarial
 review and user testing, ApostateCD-approved) is a scroll-through folio ("Gatefold"):

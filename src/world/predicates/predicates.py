@@ -1,9 +1,7 @@
 """Shared predicate evaluator for the Missions engine (Phase 0 + Phase C).
 
 A predicate is an AND/OR/NOT rule tree whose leaves test the *acting
-character's own durable state* (never a target's sheet). The tree mirrors the
-shape of ``world.distinctions.models.DistinctionPrerequisite.rule_json`` — a
-JSONField AND/OR/NOT structure.
+character's own durable state* (never a target's sheet).
 
 The rule tree is the one sanctioned dynamic-JSON case in this codebase, so
 ``evaluate`` accepts a plain ``dict`` *input*. It never returns a bare dict.

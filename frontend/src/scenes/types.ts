@@ -149,6 +149,12 @@ export interface SceneDetail extends SceneListItem {
    * viewer. null when the scene runs no beat or the beat has no clock.
    */
   clock: { size: number; filled: number } | null;
+  /**
+   * The scene's room art (#3556): the room's own thumbnail, falling back to
+   * the nearest ancestor area's art (the #3477 cascade). null when neither
+   * the room nor any ancestor area designates art.
+   */
+  art_url: string | null;
 }
 
 /** #3434 GM story rail - one authored opponent line on an ENCOUNTER beat. */
@@ -402,8 +408,31 @@ export interface DramaticMomentSuggestionSummary {
 
 export interface Interaction {
   id: number;
+  /**
+   * Stable server-assigned thread identity; absent on legacy rows. This is what
+   * the row ANSWERS (#3787), not which pile it sits in, so it differs per level
+   * of a nested exchange; group a whole exchange by `root_thread_id` instead.
+   */
+  thread_id?: string | null;
+  /**
+   * Top of the nesting tree this row's exchange belongs to (#3787). Null when the
+   * row's own thread IS the root, and on a row that answers nothing, so a reader
+   * falls back to `thread_id` there.
+   */
+  root_thread_id?: string | null;
+  /** Explicit parent reference; never inferred from ordering or names. */
+  reply_to?: { id: string; timestamp: string } | null;
+  /** Reader-local state, supplied by the play contract when available. */
+  is_unread?: boolean;
   persona: InteractionPersona;
   content: string;
+  /**
+   * The whole sentence this viewer reads (#3858): the actor in the line, rendered
+   * by the server at display time from `content`, the card's name and `mode`.
+   * Readers show this; threading, muting and targets keep reading `content`.
+   * Absent on rows serialized before it existed.
+   */
+  line?: string;
   mode: string;
   visibility: string;
   timestamp: string;

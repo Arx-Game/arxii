@@ -13,6 +13,13 @@ import {
   setSessionConnectionStatus,
   addSessionMessage,
   clearSessionMessages,
+  addFeedNote,
+  clearFeedNotes,
+  addConsoleLine,
+  clearConsoleLines,
+  minimizeFeedItem,
+  restoreFeedItem,
+  dismissFeedItem,
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
@@ -25,6 +32,8 @@ import {
   hydrateActiveCharacter,
 } from '../gameSlice';
 import type {
+  ConsoleLine,
+  FeedNote,
   GameMessage,
   HubTidings,
   InteractionWsPayload,
@@ -49,11 +58,16 @@ interface RoomData {
   is_owner: boolean;
   hub: HubTidings | null;
   is_public: boolean;
+  viewer_place_id: number | null;
 }
 
 interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
+  notes: FeedNote[];
+  consoleLines: ConsoleLine[];
+  minimizedFeed: string[];
+  dismissedFeed: string[];
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
@@ -74,6 +88,10 @@ interface GameState {
 const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   isConnected: false,
   messages: [],
+  notes: [],
+  consoleLines: [],
+  minimizedFeed: [],
+  dismissedFeed: [],
   unread: 0,
   commands: [],
   room: null,
@@ -113,6 +131,7 @@ const createRoomData = (
   is_owner: false,
   hub: null,
   is_public: false,
+  viewer_place_id: null,
 });
 
 const createRoomStateObject = (
@@ -227,6 +246,10 @@ describe('gameSlice', () => {
         expect(result.sessions['TestCharacter']).toEqual({
           isConnected: false,
           messages: [],
+          notes: [],
+          consoleLines: [],
+          minimizedFeed: [],
+          dismissedFeed: [],
           unread: 0,
           commands: [],
           room: null,
@@ -679,6 +702,194 @@ describe('gameSlice', () => {
 
         expect(result.sessions['TestCharacter'].messages[0].type).toBe(GAME_MESSAGE_TYPE.CHANNEL);
       });
+    });
+  });
+
+  describe('addFeedNote (#3856)', () => {
+    const note = (content: string, kind: FeedNote['kind'] = 'look'): Omit<FeedNote, 'id'> => ({
+      kind,
+      content,
+      timestamp: '2026-09-14T22:00:00.000Z',
+    });
+
+    it('appends the note with a generated id, keeping kind, content and timestamp', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+
+      const result = reducer(
+        initialState,
+        addFeedNote({ character: 'TestCharacter', note: note('A quiet room.') })
+      );
+
+      expect(result.sessions['TestCharacter'].notes).toEqual([
+        {
+          id: expect.stringMatching(/^n\d+$/),
+          kind: 'look',
+          content: 'A quiet room.',
+          timestamp: '2026-09-14T22:00:00.000Z',
+        },
+      ]);
+    });
+
+    it('gives burst frames distinct ids, since the id is a React key', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      state = reducer(state, addFeedNote({ character: 'TestCharacter', note: note('One') }));
+      state = reducer(state, addFeedNote({ character: 'TestCharacter', note: note('Two') }));
+
+      const [first, second] = state.sessions['TestCharacter'].notes;
+      expect(first.id).not.toBe(second.id);
+    });
+
+    it('keeps the subject a look names', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+
+      const result = reducer(
+        initialState,
+        addFeedNote({
+          character: 'TestCharacter',
+          note: { ...note('A tall woman.'), subject: 'Aurelia' },
+        })
+      );
+
+      expect(result.sessions['TestCharacter'].notes[0].subject).toBe('Aurelia');
+    });
+
+    it('counts unread for a character other than the active one, like a message', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'Someone Else');
+
+      const result = reducer(
+        initialState,
+        addFeedNote({ character: 'TestCharacter', note: note('Command not found.', 'error') })
+      );
+
+      expect(result.sessions['TestCharacter'].unread).toBe(1);
+    });
+
+    it('does not count unread for the active character', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+
+      const result = reducer(
+        initialState,
+        addFeedNote({ character: 'TestCharacter', note: note('Command not found.', 'error') })
+      );
+
+      expect(result.sessions['TestCharacter'].unread).toBe(0);
+    });
+
+    it('keeps only the newest two hundred notes', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      for (let index = 0; index < 205; index += 1) {
+        state = reducer(
+          state,
+          addFeedNote({ character: 'TestCharacter', note: note(`line ${index}`) })
+        );
+      }
+
+      const notes = state.sessions['TestCharacter'].notes;
+      expect(notes).toHaveLength(200);
+      expect(notes[0].content).toBe('line 5');
+      expect(notes[199].content).toBe('line 204');
+    });
+
+    it('ignores a note for a session that does not exist', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+
+      const result = reducer(
+        initialState,
+        addFeedNote({ character: 'Nobody', note: note('lost') })
+      );
+
+      expect(result).toEqual(initialState);
+    });
+
+    it("survives a room change, since the feed is the character's own history", () => {
+      let state = createStateWithSession(
+        'TestCharacter',
+        { room: createRoomData(1, 'Old Room') },
+        'TestCharacter'
+      );
+      state = reducer(state, addFeedNote({ character: 'TestCharacter', note: note('Before') }));
+
+      state = reducer(
+        state,
+        setSessionRoom({ character: 'TestCharacter', room: createRoomData(2, 'New Room') })
+      );
+
+      expect(state.sessions['TestCharacter'].notes.map((item) => item.content)).toEqual(['Before']);
+    });
+  });
+
+  describe('console lines (#3857)', () => {
+    it('appends a console line with an id and keeps the newest five hundred', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      for (let index = 0; index < 505; index += 1) {
+        state = reducer(
+          state,
+          addConsoleLine({ character: 'TestCharacter', content: `line ${index}` })
+        );
+      }
+      const lines = state.sessions['TestCharacter'].consoleLines;
+      expect(lines).toHaveLength(500);
+      expect(lines[0].content).toBe('line 5');
+      expect(lines[499].id).toMatch(/^c\d+$/);
+      expect(lines[499].sent).toBeUndefined();
+      state = reducer(
+        state,
+        addConsoleLine({ character: 'TestCharacter', content: '@dig', sent: true })
+      );
+      expect(state.sessions['TestCharacter'].consoleLines[499]).toMatchObject({
+        content: '@dig',
+        sent: true,
+      });
+      // Console output is not feed activity: nothing badges for it.
+      expect(state.sessions['TestCharacter'].unread).toBe(0);
+    });
+
+    it('clears the console lines and nothing else', () => {
+      let state = createStateWithSession('TestCharacter', {
+        messages: [{ ...createGameMessage('kept'), id: 'm1' }],
+      });
+      state = reducer(state, addConsoleLine({ character: 'TestCharacter', content: 'x' }));
+      state = reducer(state, clearConsoleLines('TestCharacter'));
+      expect(state.sessions['TestCharacter'].consoleLines).toEqual([]);
+      expect(state.sessions['TestCharacter'].messages).toHaveLength(1);
+    });
+  });
+
+  describe('minimise and dismiss (#3856)', () => {
+    it('minimises a block once, restores it, and dismissing drops the minimised mark', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual(['i:5']);
+
+      state = reducer(state, restoreFeedItem({ character: 'TestCharacter', key: 'i:5' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+
+      state = reducer(state, minimizeFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      state = reducer(state, dismissFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      state = reducer(state, dismissFeedItem({ character: 'TestCharacter', key: 'n:n1' }));
+      expect(state.sessions['TestCharacter'].minimizedFeed).toEqual([]);
+      expect(state.sessions['TestCharacter'].dismissedFeed).toEqual(['n:n1']);
+    });
+
+    it('ignores a session that does not exist', () => {
+      const initialState = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      const result = reducer(initialState, dismissFeedItem({ character: 'Nobody', key: 'i:1' }));
+      expect(result).toEqual(initialState);
+    });
+  });
+
+  describe('clearFeedNotes (#3856)', () => {
+    it('empties the notes and leaves the messages alone', () => {
+      const initialState = createStateWithSession('TestCharacter', {
+        notes: [{ id: 'n1', kind: 'look', content: 'x', timestamp: 't' }],
+        messages: [{ ...createGameMessage('kept'), id: 'm1' }],
+      });
+
+      const result = reducer(initialState, clearFeedNotes('TestCharacter'));
+
+      expect(result.sessions['TestCharacter'].notes).toEqual([]);
+      expect(result.sessions['TestCharacter'].messages).toHaveLength(1);
     });
   });
 
@@ -1138,6 +1349,10 @@ describe('gameSlice', () => {
               { ...createGameMessage('Msg 1'), id: '1' },
               { ...createGameMessage('Msg 2'), id: '2' },
             ],
+            notes: [],
+            consoleLines: [],
+            minimizedFeed: [],
+            dismissedFeed: [],
             unread: 10,
             commands: [createCommandSpec('attack', 'Attack')],
             room: createRoomData(

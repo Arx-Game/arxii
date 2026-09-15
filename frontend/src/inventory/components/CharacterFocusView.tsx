@@ -15,6 +15,7 @@
  */
 
 import { Skeleton } from '@/components/ui/skeleton';
+import { Link } from 'react-router-dom';
 import { cn } from '@/lib/utils';
 import { humanizeRegion, humanizeRegionLayer } from '../humanizeRegionLayer';
 import { useVisibleMarkings } from '../hooks/useVisibleMarkings';
@@ -65,7 +66,7 @@ export function CharacterFocusView({
             <button
               type="button"
               onClick={() => onItemClick({ id: item.id, name: item.display_name })}
-              className="flex w-full items-baseline justify-between gap-2 rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="flex min-h-11 w-full items-baseline justify-between gap-2 rounded-md p-2 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="truncate text-sm">{item.display_name}</span>
               <span className="shrink-0 text-xs text-muted-foreground">
@@ -81,7 +82,18 @@ export function CharacterFocusView({
   return (
     <div className={cn('flex flex-col gap-4 p-4', className)}>
       <header>
-        <h2 className="text-xl font-bold">{character.name}</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-bold">{character.name}</h2>
+          <Link
+            to={`/characters/${character.id}`}
+            target="_blank"
+            rel="noopener"
+            className="min-h-11 rounded px-2 py-2 text-xs font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={`Open ${character.name} character sheet`}
+          >
+            Character sheet
+          </Link>
+        </div>
       </header>
 
       {/*

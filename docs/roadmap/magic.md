@@ -27,7 +27,7 @@ the one specialization engine, fall/redemption, Covenant of the Court.
 | Resonance / progression feedback | ✅ by design | earned from RP perception (endorsements), **not** from casting — see "By design" below |
 | Distinctions grant/shape resonance (standing + potency) | ✅ built | `#1834` — `DistinctionResonanceGrant` + `reconcile_distinction_resonance_grants`; see `magic-build-history.md` |
 | **A real character actually being able to cast** | ✅ wired | `#1306` — shared template + per-character check; see below |
-| **A player being able to find out what a technique does** | ✅ built | `#2898` — one derived `effect_summary` block (plain-words line + structured effects) on all four surfaces + telnet; see below |
+| **A player being able to find out what a technique does** | ✅ built | `#2898` — one derived `effect_summary` block (plain-words line + structured effects) on all four surfaces + telnet; see below. `#3682` folded in the fifth payload family (treatments — a treatment-only technique used to report no effect at all) and made capability grants read as standing possession ("Knowing it grants X", ADR-0248) rather than as something the cast does |
 | **A player being able to find out which forms of it they can work** | ✅ built | `#2901` — `available_technique_forms`: base + each unlocked variant + one step ahead, on the sheet and the cast list; see below |
 
 The backend cast→pose→log→outcome loop is fully wired and resolves end-to-end (verified
@@ -39,9 +39,37 @@ integration**, not engine mechanics.
 Ordered by priority. These are the gaps between "the engine works" and "a player can do
 magic." Each is a filed issue — work these, not micro-hardening tickets.
 
-1. **✅ #1306 — RESOLVED: every technique is now castable** (`priority:now` → done).
+0. **✅ #3712 — DONE (2026-09-08): the path half of the CG menu became authorable.**
+   `PathGiftGrant` had no admin registration at all, so `get_technique_options`' path pool
+   (76 authored rows) was fixture-loaded and uneditable while its tradition-side sibling
+   had both an inline and a standalone page. Both now exist. `AuraPowerConfig` and
+   `CapabilityPowerConfig` were likewise unregistered while the required-content dashboard
+   reported their missing rows, so staff were told to create a row through a page that did
+   not exist; both are now singleton-guarded admin pages. The `path-gift-starter-pools`
+   sentinel (ADR-0282) reports each `(path, gift)` pair a tradition makes pickable with no
+   path pool behind it — 8 pairs today. Two stale-cache holes closed alongside: a dispel
+   row edited on its own changelist, and a condition delivery-channel edit that changes
+   what every technique applying it is worth.
+
+1. **✅ #1306 — RESOLVED: every technique minted through the builder is castable**
+   (`priority:now` → done).
    `create_technique` defaults `action_template` to the shared **Technique Cast**
-   `ActionTemplate` seeded by `seeds_cast.ensure_technique_cast_content()`. Cast
+   `ActionTemplate` seeded by `seeds_cast.ensure_technique_cast_content()`.
+   **Corrected 2026-09-07 (#3682):** this covers techniques the builder mints, and the
+   authored catalog does not come in that way — content fixtures write rows directly, so
+   all 306 techniques in the live database carry a null `action_template` and are refused
+   by `request_technique_cast` while `get_technique_options` still offers them as valid CG
+   picks. `technique_is_not_castable_standalone` and the `TechniqueAdmin` "No cast
+   template" filter now make that visible to staff; deciding which of them are meant to be
+   active casts (as opposed to standing-capability techniques) and wiring those rows is
+   content work, tracked on #3713. **Ruled 2026-09-08 (#3682 ruling 2):** there is no
+   standing-only category — every technique must be activatable, because it must be
+   amplifiable by pulling threads, must cost anima, and must be able to decide a
+   life-or-death moment. A passive is the latent weaker tier of the *same* technique
+   (`TechniqueCapabilityGrant` is the floor, an applied condition carrying a
+   `ConditionCapabilityEffect` is the activated tier, scaled by `compute_severity` off the
+   `effective_power` a pull raises). So all 306 need a template and no staff judgement
+   picks which — that is #3713's bulk action, not a decision. Cast
    resolution rolls the **caster's own per-character magic check**
    (`ensure_character_magic_check_type` / `get_character_cast_check` in
    `seeds_checks.py` / `services/anima.py`); the same check is used by the anima ritual
@@ -62,6 +90,11 @@ magic." Each is a filed issue — work these, not micro-hardening tickets.
      is now **behavior-based**: hostile → combat; benign + behavior-altering → PENDING
      consent; benign + capability/stat → resolves immediately (including on other PCs).
      `cast_requires_consent` in `targeting.py` implements this predicate.
+     **Corrected 2026-09-07 (#3682, ADR-0281):** the hostile/benign half of that routing
+     was wrong for the whole authored Defense line. `is_technique_hostile` read
+     `EffectType.base_power`, which Defense carries at 10, so all 54 Defense techniques
+     routed as attacks and a self-shield could not name its own caster. Hostility now reads
+     the payload rows only.
    - **AoE expansion:** standalone AREA auto-expands via `resolve_targets` to all eligible
      personas in the scene (relationship-derived: SELF→caster only, ALLY/ENEMY→all others).
      Combat AoE uses the new `CombatRoundActionTarget` join table (`world/combat/models.py`);
@@ -266,8 +299,10 @@ staff-authored catalog content instead:
 - **Tradition is a real mechanical layer.** Every character has exactly one
   Tradition, including the self-taught `Unbound` tradition (no NULL-tradition
   special-casing). `TraditionGiftGrant` (tradition × gift → signature technique
-  extras) drives the CG gift list; `BeginningTradition.required_distinction`
-  hard-gates non-Unbound traditions at tradition selection.
+  extras) drives the CG gift list; there is no selection gate, every tradition a
+  Beginning's slate offers is selectable outright, and `BeginningTradition.state`
+  (#3675, was `required_distinction`) decides which drawback the pick carries into
+  the draft for free (`TraditionStateLine`, see `docs/systems/character_creation.md`).
 - **`PathGiftGrant.starter_techniques`** (unchanged schema) is reinterpreted as
   the CG *availability pool*, not an automatic grant — the same rows
   `grant_path_magic` mints from at the level-3 Durance semi-crossing (ADR-0063,

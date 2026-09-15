@@ -47,7 +47,6 @@ from world.stories.filters import (
     GlobalStoryProgressFilter,
     GroupStoryProgressFilter,
     GroupStoryRequestFilter,
-    PlayerTrustFilter,
     SessionRequestFilter,
     StakeContractActivationFilter,
     StakeFilter,
@@ -80,7 +79,6 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     GroupStoryRequest,
-    PlayerTrust,
     RiskCalibration,
     SessionRequest,
     Stake,
@@ -143,7 +141,6 @@ from world.stories.permissions import (
     IsOfferOffererOrStaff,
     IsOfferRecipientGMOrStaff,
     IsParticipationOwnerOrStoryOwnerOrStaff,
-    IsPlayerTrustOwnerOrStaff,
     IsProtectedSubjectStoryOwnerOrStaff,
     IsReviewerOrStoryOwnerOrStaff,
     IsSessionRequestGMOrStaff,
@@ -209,7 +206,6 @@ from world.stories.serializers import (
     MarkBeatInputSerializer,
     OfferStoryToGMInputSerializer,
     PendingTreasuredSignoffsSerializer,
-    PlayerTrustSerializer,
     PromoteEpisodeInputSerializer,
     RejectClaimInputSerializer,
     RequestClaimInputSerializer,
@@ -1004,42 +1000,6 @@ class EpisodeSceneViewSet(viewsets.ModelViewSet):
     pagination_class = StandardResultsSetPagination
     ordering_fields = ["order"]
     ordering = ["episode", "order"]
-
-
-class PlayerTrustViewSet(viewsets.ModelViewSet):
-    """
-    ViewSet for PlayerTrust model.
-    Manages player trust levels for content and GM activities.
-    """
-
-    queryset = PlayerTrust.objects.all()
-    serializer_class = PlayerTrustSerializer
-    permission_classes = [IsPlayerTrustOwnerOrStaff]
-    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_class = PlayerTrustFilter
-    pagination_class = StandardResultsSetPagination
-    ordering_fields = [
-        "antagonism_trust",
-        "mature_themes_trust",
-        "created_at",
-        "updated_at",
-    ]
-    ordering = ["-updated_at"]
-
-    @action(detail=False, methods=[HTTPMethod.GET])
-    def my_trust(self, request: Request) -> Response:
-        """Get the current user's trust profile"""
-        try:
-            trust_profile = PlayerTrust.objects.get(
-                account=request.user,
-            )
-            serializer = self.get_serializer(trust_profile)
-            return Response(serializer.data)
-        except PlayerTrust.DoesNotExist:
-            return Response(
-                {"error": "Trust profile not found"},
-                status=status.HTTP_404_NOT_FOUND,
-            )
 
 
 class StoryFeedbackViewSet(viewsets.ModelViewSet):

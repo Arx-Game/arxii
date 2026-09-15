@@ -60,7 +60,7 @@ class OutcomeBroadcastTest(TestCase):
             min_success_level=1, multiplier=Decimal("0.50"), label="Partial"
         )
 
-    def _setup_encounter(self):
+    def _setup_encounter(self, *, pc_hit_text: str = "", npc_hit_text: str = ""):
         scene = SceneFactory()
         encounter = CombatEncounterFactory(
             scene=scene,
@@ -68,7 +68,7 @@ class OutcomeBroadcastTest(TestCase):
             round_number=1,
         )
         pool = ThreatPoolFactory()
-        entry = ThreatPoolEntryFactory(pool=pool, base_damage=30)
+        entry = ThreatPoolEntryFactory(pool=pool, base_damage=30, hit_narration=npc_hit_text)
         opponent = CombatOpponentFactory(
             encounter=encounter,
             tier=OpponentTier.MOOK,
@@ -95,6 +95,7 @@ class OutcomeBroadcastTest(TestCase):
             gift=self.gift,
             effect_type=self.effect_attack,
             action_template=ActionTemplateFactory(check_type=CheckTypeFactory()),
+            hit_narration=pc_hit_text,
         )
         CombatRoundAction.objects.create(
             participant=participant,
@@ -123,3 +124,42 @@ class OutcomeBroadcastTest(TestCase):
 
         assert Interaction.objects.filter(mode=InteractionMode.OUTCOME).exists()
         assert broadcast.called
+
+    def test_authored_technique_line_heads_the_pc_outcome(self) -> None:
+        encounter = self._setup_encounter(pc_hit_text="{actor} hurls a spear of rime at {target}")
+
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location"):
+            resolve_round(encounter, offense_check_fn=mock_check_fn)
+
+        lines = list(
+            Interaction.objects.filter(mode=InteractionMode.OUTCOME).values_list(
+                "content", flat=True
+            )
+        )
+        authored = [line for line in lines if "hurls a spear of rime at" in line]
+        assert authored, lines
+        assert "{actor}" not in authored[0]
+        assert "{target}" not in authored[0]
+        assert " damage" in authored[0]
+
+    def test_authored_threat_entry_line_heads_the_npc_outcome(self) -> None:
+        encounter = self._setup_encounter(npc_hit_text="{actor} rakes {target} with its claws")
+
+        def mock_check_fn(*args, **kwargs):  # type: ignore[no-untyped-def]
+            return MagicMock(success_level=2)
+
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location"):
+            resolve_round(encounter, offense_check_fn=mock_check_fn)
+
+        lines = list(
+            Interaction.objects.filter(mode=InteractionMode.OUTCOME).values_list(
+                "content", flat=True
+            )
+        )
+        authored = [line for line in lines if "rakes " in line and " with its claws" in line]
+        assert authored, lines
+        assert "{actor}" not in authored[0]
+        assert "{target}" not in authored[0]

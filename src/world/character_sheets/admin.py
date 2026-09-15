@@ -4,8 +4,10 @@ from django.contrib import admin
 from django.http import HttpRequest
 
 from world.character_sheets.models import (
+    CharacterEnemy,
     CharacterSheet,
     Gender,
+    Heritage,
     MoodOption,
     Profile,
     ProfileTextVersion,
@@ -28,7 +30,9 @@ class ProfileAdmin(admin.ModelAdmin):
         "concept",
         "real_concept",
         "quote",
-        "personality",
+        "never_do",
+        "protect",
+        "fear",
         "background",
         "obituary",
         # Lineage moved to Profile (#1270 slice 3) — edit it here.
@@ -42,7 +46,7 @@ class ProfileAdmin(admin.ModelAdmin):
     def save_model(self, request: HttpRequest, obj: Profile, form: Any, change: bool) -> None:
         """Route versioned prose fields through the snapshot service (#2631).
 
-        Staff edits must never overwrite background/personality silently — the
+        Staff edits must never overwrite versioned prose silently — the
         same history invariant the table-request flow holds. The pre-edit text
         comes from ``form.initial``: the identity map means the instance (and
         any refetch) already holds the new value by the time we get here.
@@ -104,7 +108,7 @@ class MoodOptionAdmin(admin.ModelAdmin):
 
 @admin.register(CharacterSheet)
 class CharacterSheetAdmin(admin.ModelAdmin):
-    autocomplete_fields = ["active_persona", "character", "created_by"]
+    autocomplete_fields = ["active_persona", "character", "created_by", "current_residence"]
     # roster_entry is a reverse OneToOneRel — can't use autocomplete_fields/raw_id_fields
     large_table_widget_exempt = ["roster_entry"]
     list_display = [
@@ -126,7 +130,7 @@ class CharacterSheetAdmin(admin.ModelAdmin):
     ]
     search_fields = ["character__db_key", "true_profile__concept", "true_profile__family__name"]
     readonly_fields = ["created_date", "updated_date", "decay_tier_display"]
-    raw_id_fields = ["true_profile", "current_residence"]
+    raw_id_fields = ["true_profile"]
 
     @admin.display(description="Decay tier (computed)")
     def decay_tier_display(self, obj: CharacterSheet) -> str:
@@ -216,3 +220,56 @@ class CharacterSheetAdmin(admin.ModelAdmin):
 # CharacterDescription admin removed - display data now handled by:
 # - evennia_extensions.ObjectDisplayData for basic display info
 # - world.scenes.Persona for character identities and contextual appearances
+
+
+@admin.register(Heritage)
+class HeritageAdmin(admin.ModelAdmin):
+    """Heritage rows, including the IC date the first of each were born (#3663).
+
+    ``first_appeared_ic`` is the anchor for the CG age ceiling; on production
+    it is set here once (the seed only fills it on an empty database).
+    """
+
+    list_display = ["name", "is_special", "family_known", "first_appeared_ic"]
+    search_fields = ["name"]
+    fields = (
+        "name",
+        "description",
+        "is_special",
+        "family_known",
+        "family_display",
+        "chronological_age_unknown",
+        "first_appeared_ic",
+    )
+
+
+@admin.register(CharacterEnemy)
+class CharacterEnemyAdmin(admin.ModelAdmin):
+    """Who wants a character to fail, priced (#3621).
+
+    Staff place a free-written enemy here: linking a real group (or rating a person)
+    recomputes the price on save and flips the row to placed.
+    """
+
+    list_display = ["character", "kind", "target_name", "degree", "price", "status"]
+    list_filter = ["kind", "degree", "status"]
+    search_fields = ["figure_name", "organization__name", "family__name"]
+    raw_id_fields = ["character", "organization", "family", "secret"]
+    readonly_fields = ["price", "reach", "created_at"]
+
+    def save_model(
+        self, request: HttpRequest, obj: CharacterEnemy, form: Any, change: bool
+    ) -> None:
+        from world.character_creation.enemies import enemy_price  # noqa: PLC0415
+        from world.character_sheets.types import EnemyKind, EnemyStatus  # noqa: PLC0415
+
+        if obj.kind == EnemyKind.GROUP and obj.organization_id is not None:
+            obj.reach = obj.organization.org_type.reach
+            scale = obj.reach
+        elif obj.kind == EnemyKind.PERSON:
+            scale = obj.power_tier
+        else:
+            scale = ""
+        obj.price = enemy_price(obj.kind, scale, obj.degree)
+        obj.status = EnemyStatus.PLACED if scale else EnemyStatus.PENDING
+        super().save_model(request, obj, form, change)

@@ -21,12 +21,14 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from world.checks.models import Consequence
+
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
-    from world.checks.models import Consequence
+    from world.checks.types import CheckResult
 
 
 def should_emit_theater(consequences: list[Consequence]) -> bool:
@@ -59,6 +61,61 @@ def build_roulette_payload(
             for c in consequences
         ],
     }
+
+
+def check_outcome_faces(
+    check_result: CheckResult,
+) -> tuple[list[Consequence], Consequence | None]:
+    """Build success-level wheel faces straight off the check's ResultChart bands.
+
+    One unsaved ``Consequence`` face per ``ResultChartOutcome`` row on
+    ``check_result.chart`` (ordered by ``min_roll``): ``outcome_tier=row.outcome``,
+    ``label=row.outcome.name``, ``weight=row.max_roll - row.min_roll + 1``,
+    ``character_loss=False``. The selected face is the one whose outcome matches
+    ``check_result.outcome`` (compared by pk).
+
+    HARD RULE (#3807 Part B): faces are read ONLY from the chart's authored bands.
+    Never read ``get_rollmod()``, ``effective_roll``, or any outcome-guarantee
+    logic (``perform_check`` step 7, ADR-0152) here — the wheel shows the raw
+    chart and lands on whatever the backend actually resolved, never a
+    rollmod-shaped or guarantee-shaped view of it.
+
+    When ``check_result.outcome`` is not one of the chart's own bands (an outcome
+    guarantee lifted the result off this chart), the guaranteed outcome is
+    appended as its own weight-1 face and selected — the wheel still shows where
+    the roll actually landed even though the chart never authored that band.
+
+    Returns ``([], None)`` when there is no chart or no outcome to build faces from.
+    """
+    chart = check_result.chart
+    outcome = check_result.outcome
+    if chart is None or outcome is None:
+        return [], None
+
+    faces: list[Consequence] = []
+    selected: Consequence | None = None
+    for row in chart.outcomes.order_by("min_roll"):
+        face = Consequence(
+            outcome_tier=row.outcome,
+            label=row.outcome.name,
+            weight=row.max_roll - row.min_roll + 1,
+            character_loss=False,
+        )
+        faces.append(face)
+        if row.outcome_id == outcome.pk:
+            selected = face
+
+    if selected is None:
+        face = Consequence(
+            outcome_tier=outcome,
+            label=outcome.name,
+            weight=1,
+            character_loss=False,
+        )
+        faces.append(face)
+        selected = face
+
+    return faces, selected
 
 
 def maybe_emit_resolution_theater(

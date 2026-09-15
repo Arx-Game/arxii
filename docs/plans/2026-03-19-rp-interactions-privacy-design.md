@@ -49,7 +49,7 @@ stream:
 - Character A poses targeting Character B → Character B replies targeting Character A → thread
 - Untargeted poses stay in the main flow
 - A targeted pose that's public is in the main flow AND groupable as a thread
-- The frontend derives threads from target chains — no thread entity in the database
+- Unthreaded interactions retain frontend audience-pattern grouping; explicit replies use the `InteractionThread` membership added by #3757.
 
 Threads are a UI/filtering concern: collapsible, expandable, ignorable. In a room with 30
 people talking, players can follow just the threads they care about and filter out the rest.

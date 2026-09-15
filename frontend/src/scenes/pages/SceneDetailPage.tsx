@@ -31,15 +31,25 @@ import { PendingActionAttachments } from '../components/PendingActionAttachments
 import { usePendingUnlinkedActions } from '../hooks/usePendingUnlinkedActions';
 import { useBattleForSceneQuery } from '@/battles/queries';
 import { RitualProposedChip } from '@/rituals/components/RitualProposedChip';
-import { useCombatEncounter, useEncounterForScene } from '@/combat/queries';
+import { useEncounterForScene } from '@/combat/queries';
 import { CombatRail } from '@/combat/components/CombatRail';
 import { GMEncounterControls } from '@/combat/sections/GMEncounterControls';
 import { GMStoryRail } from '../components/GMStoryRail';
 import { ScenarioCard } from '../components/ScenarioCard';
 import { LinkedStoriesPanel } from '@/crossover/components/LinkedStoriesPanel';
-import { GMAdjudicationPanel } from '../components/GMAdjudicationPanel';
+import {
+  GMAdjudicationPanel,
+  GM_TOOL_TABS,
+  NON_COMBAT_GM_TOOL_TABS,
+} from '../components/GMAdjudicationPanel';
 import { SelfCheckPanel } from '../components/SelfCheckPanel';
 import { CheckCallPromptCard } from '../components/CheckCallPromptCard';
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from '@/components/ui/accordion';
 
 export function SceneDetailPage() {
   const { id = '' } = useParams();
@@ -52,6 +62,39 @@ export function SceneDetailPage() {
   const isActive = scene?.is_active ?? false;
   const roomName = scene?.name ?? 'Room';
   const activeCharacter = useAppSelector((state) => state.game.active);
+  // #3760 Task 12 review fix — this page previously passed no `ready` prop to
+  // `CommandInput` at all, silently taking its `ready = true` default, which
+  // never changes: there is no `useGameSocket` reference on this page to flip
+  // it. That made a reconnect mid-send invisible here (CommandInput's
+  // markUnknown-on-reconnect effect keys off a `ready` false -> true
+  // transition) even though this composer dispatches say/whisper/tt through
+  // the exact same `executeAction`/`pendingSpeechRef` path `GameWindow` uses.
+  // `state.game.sessions[character].isConnected` is the same global signal
+  // `GameWindow.tsx` reads (`useGameSocket`'s module-level socket/session
+  // bookkeeping and the Redux session state it dispatches into are shared
+  // across the whole app, not owned by whichever page happens to be mounted
+  // — `ConsentAttentionNotifier.tsx` already calls `connect()` from outside
+  // `GamePage` on that same assumption), so reading it here (rather than
+  // duplicating `GameWindow`'s own connection management) is the correct fix.
+  // Deliberately omits `GameWindow`'s extra `Boolean(session.room)` clause —
+  // that gates on the ACTIVE character's freeform room re-entering, which
+  // this page's scene-scoped composer doesn't depend on.
+  //
+  // Final-review Finding 1 fix — a session entry only exists in
+  // `state.game.sessions` AFTER `connect()` has been called somewhere in the
+  // app, and nothing on `/scenes/:id` ever calls it (only
+  // GamePage/GameWindow/GameTopBar do, all mounted only inside `/game`). So
+  // on a fresh load of this page (bookmark, direct link, reload) `session` is
+  // `undefined` — that means "this page isn't using a socket right now," not
+  // "disconnected," and must not permanently disable the composer (it never
+  // recovers, since nothing here ever connects one). Distinguish the two:
+  // no session at all -> the REST/executeAction paths this composer uses
+  // don't depend on the socket being up, so `ready` defaults to `true`; a
+  // session that DOES exist here (e.g. because `GameWindow` is also mounted
+  // for the same account, or a future caller connects one) still gates on
+  // its own `isConnected`, preserving Task 12's reconnect-detection logic.
+  const session = useAppSelector((state) => state.game.sessions?.[activeCharacter ?? '']);
+  const isConnected = session ? session.isConnected : true;
 
   // Combat rail fold-in (#2197): combat now renders inline on the scene page
   // instead of a separate /scenes/:id/combat route — the fight never leaves
@@ -62,16 +105,50 @@ export function SceneDetailPage() {
   const { data: encounterListItem, isLoading: encounterLoading } = useEncounterForScene(sceneIdNum);
   const hasActiveEncounter = !encounterLoading && encounterListItem != null;
   const encounterId = encounterListItem?.id ?? 0;
+  // The scene's active-encounter list poll drops a completed encounter within
+  // 15s (useEncounterForScene), but the outcome banner and aftermath digest
+  // have to outlive that drop until the player dismisses them, otherwise the
+  // rail vanishes out from under whoever is still reading it (#3551).
+  // lingeringEncounterId remembers the last real encounterId and keeps the
+  // rail mounted on it until CombatRail's onDismissOutcome fires.
+  const [lingeringEncounterId, setLingeringEncounterId] = useState(0);
+  // Dismissing the outcome banner before the poll drops the completed encounter
+  // (hasActiveEncounter still true) must hide the rail immediately rather than
+  // waiting up to 15s for the next poll (#3551 minor 4): the rail shows only
+  // while railEncounterId hasn't been dismissed; a new encounter gets a new id,
+  // so it reappears on its own.
+  const [dismissedEncounterId, setDismissedEncounterId] = useState(0);
+  // A route change (e.g. /scenes/1 -> /scenes/2) re-renders SceneDetailPage in
+  // place rather than remounting it (no `key` on the route), so scene 1's
+  // lingering/dismissed encounter state would otherwise survive onto scene 2's
+  // rail (#3551 important 1). One effect, keyed on both scene and encounter id,
+  // so the scene-change reset and the fresh-encounter set can never race: on a
+  // scene change the lingering/dismissed ids reset first, then (same pass) pick
+  // up the new scene's own active encounter if it already has one.
+  const prevSceneIdRef = useRef(sceneIdNum);
+  useEffect(() => {
+    if (prevSceneIdRef.current !== sceneIdNum) {
+      prevSceneIdRef.current = sceneIdNum;
+      setLingeringEncounterId(encounterId > 0 ? encounterId : 0);
+      setDismissedEncounterId(0);
+      return;
+    }
+    if (encounterId > 0) {
+      setLingeringEncounterId(encounterId);
+    }
+  }, [sceneIdNum, encounterId]);
+  const railEncounterId = encounterId || lingeringEncounterId;
+  const showCombatRail = railEncounterId > 0 && railEncounterId !== dismissedEncounterId;
+  const handleDismissOutcome = useCallback(() => {
+    setDismissedEncounterId(railEncounterId);
+    setLingeringEncounterId(0);
+  }, [railEncounterId]);
   // GM story rail fold-in (#3434): shares the right-rail column with the
   // combat rail. Mounted whenever the viewer can GM this scene at all --
   // GMStoryRail itself renders the "no beat running" fallback when
   // scene.running_beat is null, so the grid doesn't collapse the moment a
   // GM's beat finishes.
   const showStoryRail = !!scene?.viewer_can_gm;
-  // Full encounter detail (carries is_gm) for the GM controls panel (#3067) —
-  // shares the combatKeys.encounter(encounterId) cache with CombatTurnPanel's
-  // own useCombatEncounter call inside CombatRail, so this doesn't double-fetch.
-  const { data: gmEncounterDetail } = useCombatEncounter(encounterId);
 
   // Scroll the rail into view the moment an encounter first appears
   // (none -> active transition) so a player mid-pose notices combat starting.
@@ -195,7 +272,60 @@ export function SceneDetailPage() {
     queryFn: () => fetchPlaces(placesRoomId!),
     enabled: !!placesRoomId,
   });
-  const isAtPlace = placesData?.results?.some((place) => place.viewer_is_present) ?? false;
+  // #3760 Task 10 fix — `currentPlace` (not just the boolean) is threaded down to
+  // CommandInput so tt (tabletalk) can dispatch via executeAction with a real
+  // place kwarg, mirroring GamePage.tsx's identical fix.
+  const currentPlace = placesData?.results?.find((place) => place.viewer_is_present);
+  const isAtPlace = !!currentPlace;
+
+  // The foldable part of the header (#3557): rendered inline when idle, inside
+  // the "Scene tools" accordion during an encounter. Same order as before.
+  // Folding remounts the subtree, so a local draft in SelfCheckPanel or
+  // TavernGameWidget is lost at the tick an encounter starts; accepted in
+  // ADR-0272. Prompts that need an answer never fold.
+  const sceneTools = (
+    <>
+      {scene && <SceneLinesAndVeilsCard sceneId={id} />}
+      {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
+      {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
+      {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
+      {/* One map during a fight: the rail's CombatTacticalMap draws the room
+          with bystanders, so the header map unmounts (Set the Stage rides on
+          it and is unavailable mid-fight by design; it returns with the map). */}
+      {!hasActiveEncounter && <SceneTacticalMap sceneId={id} />}
+      <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
+      {/* GM "Start Encounter" affordance (#3067), only while no encounter is
+          active; the active-encounter controls live in the rail's GM tab. */}
+      {!encounterLoading && !hasActiveEncounter && (
+        <GMEncounterControls
+          sceneId={sceneIdNum}
+          encounter={null}
+          viewerCanGm={scene?.viewer_can_gm ?? false}
+        />
+      )}
+      {scene && <LinkedStoriesPanel sceneId={id} />}
+      {/* #3295 scene check invocation. The call-answer prompt keeps this slot
+          when idle; during a fight it renders inline above the accordion. */}
+      {isActive && !hasActiveEncounter && (
+        <div className="mt-2">
+          <CheckCallPromptCard />
+        </div>
+      )}
+      {isActive && (
+        <div className="mt-2">
+          <SelfCheckPanel />
+        </div>
+      )}
+      {scene?.viewer_can_gm && (
+        <div className="mt-2">
+          <GMAdjudicationPanel
+            scene={scene}
+            tabs={hasActiveEncounter ? NON_COMBAT_GM_TOOL_TABS : GM_TOOL_TABS}
+          />
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="flex h-full flex-col">
@@ -226,48 +356,47 @@ export function SceneDetailPage() {
         {isActive && <SoulTetherRescuePrompt />}
         {isActive && <EntryFlourishOfferGate characterSheetId={characterSheetId} />}
         {isActive && <WitnessReactionOfferGate personaId={personaId} />}
-        {scene && <SceneLinesAndVeilsCard sceneId={id} />}
-        {placesRoomId && <PlaceBar sceneId={placesRoomId} />}
-        {placesRoomId && <TavernGameWidget roomId={placesRoomId} />}
-        {placesRoomId && <SpeakerQueueBar roomId={placesRoomId} />}
-        <SceneTacticalMap sceneId={id} />
-        <HighlightReel sceneId={id} canGm={scene?.viewer_can_gm} />
-        {/* GM "Start Encounter" affordance (#3067) — only while no encounter is
-            active; the active-encounter controls mount in the combat rail below. */}
-        {!encounterLoading && !hasActiveEncounter && (
-          <GMEncounterControls
-            sceneId={sceneIdNum}
-            encounter={null}
-            viewerCanGm={scene?.viewer_can_gm ?? false}
-          />
-        )}
-        {scene && <LinkedStoriesPanel sceneId={id} />}
-        {/* #3295 — scene check invocation: self-check picker (any player),
-            pending call-answer prompts, and the GM's Call For Check tab. */}
-        {isActive && (
-          <div className="mt-2">
-            <CheckCallPromptCard />
-          </div>
-        )}
-        {isActive && (
-          <div className="mt-2">
-            <SelfCheckPanel />
-          </div>
-        )}
-        {scene?.viewer_can_gm && (
-          <div className="mt-2">
-            <GMAdjudicationPanel scene={scene} />
-          </div>
+        {/* #3557 combat layout. Everything above this line either needs an
+            answer (consent, sineating, soul-tether, flourish) or is the scene's
+            identity; it stays inline in both shapes. Below: while an encounter
+            is active the header map yields to the rail's map (one map, with
+            bystanders), the pending check-call prompt stays inline, and the
+            rest of the stack folds behind one closed "Scene tools" accordion so
+            the feed and composer sit under the title. Idle renders today's
+            stack unchanged. */}
+        {hasActiveEncounter ? (
+          <>
+            {isActive && (
+              <div className="mt-2">
+                <CheckCallPromptCard />
+              </div>
+            )}
+            <Accordion
+              type="single"
+              collapsible
+              className="mt-2"
+              data-testid="scene-tools-accordion"
+            >
+              <AccordionItem value="scene-tools" className="border-b-0">
+                <AccordionTrigger className="py-2 text-sm" data-testid="scene-tools-trigger">
+                  Scene tools
+                </AccordionTrigger>
+                <AccordionContent>{sceneTools}</AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          </>
+        ) : (
+          sceneTools
         )}
       </div>
 
-      {/* Combat rail fold-in (#2197): a two-column C-frame grid (mirroring the
-          former CombatScenePage) while an active encounter exists; a plain
-          single column otherwise. */}
+      {/* Combat rail fold-in (#2197): a two-column C-frame grid while an active
+          encounter exists (or the GM story rail is shown); single column
+          otherwise. The rail's GM tab (#3557) hosts the encounter controls. */}
       <div
         className={cn(
           'min-h-0 flex-1',
-          hasActiveEncounter || showStoryRail
+          showCombatRail || showStoryRail
             ? 'grid grid-cols-[1fr_360px] gap-4 px-4 pb-4'
             : 'flex flex-col'
         )}
@@ -316,11 +445,13 @@ export function SceneDetailPage() {
                     detachedActionIds={detachedActionIds}
                     onPoseSubmitted={handlePoseSubmitted}
                     isAtPlace={isAtPlace}
+                    currentPlaceId={currentPlace?.id ?? null}
                     speakingAs={
                       activeEntry
                         ? { name: activeEntry.name, thumbnailUrl: activeEntry.profile_picture_url }
                         : undefined
                     }
+                    ready={isConnected}
                   />
                 </>
               )}
@@ -329,24 +460,27 @@ export function SceneDetailPage() {
           )}
         </div>
 
-        {(hasActiveEncounter || showStoryRail) && (
+        {(showCombatRail || showStoryRail) && (
           <div
             ref={railRef}
             className="min-h-0 space-y-3 overflow-y-auto"
             data-testid="scene-detail-combat-rail"
           >
             {showStoryRail && scene && <GMStoryRail scene={scene} />}
-            {hasActiveEncounter && (
-              <>
-                {gmEncounterDetail?.is_gm && (
-                  <GMEncounterControls
-                    sceneId={sceneIdNum}
-                    encounter={gmEncounterDetail}
-                    viewerCanGm={scene?.viewer_can_gm ?? false}
-                  />
-                )}
-                <CombatRail sceneId={sceneIdNum} encounterId={encounterId} />
-              </>
+            {showCombatRail && (
+              /* The rail lingers past the encounter's end so the aftermath digest
+                 and outcome banner stay readable (#3551), but the GM tab's levers
+                 only make sense on a still-active fight -- and once the fight is
+                 over the page-level GMEncounterControls is back, so leaving the tab
+                 on would give those levers two homes (ADR-0272). hasActiveEncounter
+                 gates the tab separately from the rail itself. */
+              <CombatRail
+                sceneId={sceneIdNum}
+                encounterId={railEncounterId}
+                viewerCanGm={hasActiveEncounter && (scene?.viewer_can_gm ?? false)}
+                scene={scene}
+                onDismissOutcome={handleDismissOutcome}
+              />
             )}
           </div>
         )}

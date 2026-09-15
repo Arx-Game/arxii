@@ -130,10 +130,10 @@ function makeQueryResult<T>(data: T | undefined, loading = false): QueryResult<T
   return { data, isLoading: loading, isError: false, error: null };
 }
 
-// Default facet API response
+// Default facet API response — flat vocabulary, no hierarchy (#3776 Task 1).
 const FACET_RESPONSE = [
-  { id: 1, full_path: 'Animals / Wolf', name: 'Wolf' },
-  { id: 2, full_path: 'Elements / Fire', name: 'Fire' },
+  { id: 1, name: 'Wolf', description: 'A wild canine.' },
+  { id: 2, name: 'Fire', description: '' },
 ];
 
 // Default covenant role API response
@@ -303,9 +303,62 @@ describe('WeaveThreadWizard', () => {
       fireEvent.click(screen.getByTestId('kind-button-FACET'));
       await waitFor(() => {
         expect(screen.getByTestId('anchor-list')).toBeInTheDocument();
-        expect(screen.getByText('Animals / Wolf')).toBeInTheDocument();
-        expect(screen.getByText('Elements / Fire')).toBeInTheDocument();
+        expect(screen.getByText('Wolf')).toBeInTheDocument();
+        expect(screen.getByText('Fire')).toBeInTheDocument();
       });
+    });
+
+    it('shows a facet description as a sublabel when present', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => {
+        expect(screen.getByText('A wild canine.')).toBeInTheDocument();
+      });
+    });
+
+    it('filters the facet list by the search box', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      const searchInput = screen.getByTestId('facet-search-input');
+      fireEvent.change(searchInput, { target: { value: 'fire' } });
+
+      expect(screen.queryByText('Wolf')).not.toBeInTheDocument();
+      expect(screen.getByText('Fire')).toBeInTheDocument();
+    });
+
+    it('shows a no-match message when the facet search matches nothing', async () => {
+      const summary = makeSummary({ weaving_eligibility: { FACET: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-FACET'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      fireEvent.change(screen.getByTestId('facet-search-input'), {
+        target: { value: 'nonexistent' },
+      });
+
+      expect(screen.getByTestId('anchor-search-empty')).toBeInTheDocument();
+      expect(screen.queryByTestId('anchor-list')).not.toBeInTheDocument();
+    });
+
+    it('does not show a search box for non-FACET anchor kinds', async () => {
+      const summary = makeSummary({ weaving_eligibility: { COVENANT_ROLE: true } });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+      fireEvent.click(screen.getByTestId('kind-button-COVENANT_ROLE'));
+      await waitFor(() => screen.getByTestId('anchor-list'));
+
+      expect(screen.queryByTestId('facet-search-input')).not.toBeInTheDocument();
     });
 
     it('loads covenant role options after selecting COVENANT_ROLE kind', async () => {
@@ -471,6 +524,70 @@ describe('WeaveThreadWizard', () => {
         expect.any(Object)
       );
     });
+
+    it('does not offer a companion-targeted relationship as a partner (#3575)', async () => {
+      vi.mocked(apiModule.apiFetch).mockImplementation((url: string) => {
+        const urlStr = String(url);
+        if (urlStr.includes('/api/relationships/relationships/?source=')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve([
+                ...RELATIONSHIPS_RESPONSE,
+                {
+                  id: 21,
+                  source: 5,
+                  source_name: 'Me',
+                  target: null,
+                  target_companion: 7,
+                  target_name: 'Ash',
+                  is_active: true,
+                  is_pending: false,
+                  is_soul_tether: false,
+                  soul_tether_role: '',
+                  absolute_value: 10,
+                  developed_absolute_value: 10,
+                  affection: 5,
+                  updated_at: '2025-01-01T00:00:00Z',
+                },
+              ]),
+          } as Response);
+        }
+        if (urlStr.includes('/api/relationships/relationships/20/')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(RELATIONSHIP_DETAIL_RESPONSE),
+          } as Response);
+        }
+        if (urlStr.includes('/api/personas/?character_sheet=9')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve(PERSONA_RESPONSE),
+          } as Response);
+        }
+        // Relationship 21 (companion-targeted) is filtered out before any detail
+        // or persona lookup, so nothing should hit that URL; fall through to a
+        // failure response that would fail the test if it were ever requested.
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({}) } as Response);
+      });
+
+      const summary = makeSummary({
+        weaving_eligibility: { RELATIONSHIP_TRACK: true },
+        weavable_relationship_track_ids: [7],
+      });
+      render(<WeaveThreadWizard {...DEFAULT_PROPS} summary={summary} />, {
+        wrapper: createWrapper(),
+      });
+
+      fireEvent.click(screen.getByTestId('kind-button-RELATIONSHIP_TRACK'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('wizard-step-2-partner')).toBeInTheDocument();
+        expect(screen.getByTestId('partner-option-9')).toHaveTextContent('Aria');
+      });
+      expect(screen.queryByTestId('partner-option-7')).not.toBeInTheDocument();
+      expect(screen.queryByText('Ash')).not.toBeInTheDocument();
+    });
   });
 
   describe('Step 3 — Resonance picker', () => {
@@ -536,7 +653,7 @@ describe('WeaveThreadWizard', () => {
       expect(summary).toBeInTheDocument();
       // KIND_META maps FACET → "Facet" (human label)
       expect(summary.textContent).toContain('Facet');
-      expect(summary.textContent).toContain('Animals / Wolf');
+      expect(summary.textContent).toContain('Wolf');
       expect(summary.textContent).toContain('Bene');
       expect(summary.textContent).toContain('My Test Thread');
     });

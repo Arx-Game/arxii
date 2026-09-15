@@ -5,18 +5,18 @@ from unittest.mock import patch
 from django.test import TestCase
 
 from actions.definitions.progression_rewards import (
-    CastVoteAction,
     ClaimKudosAction,
     ClaimRandomSceneAction,
     ClearPathIntentAction,
-    RemoveVoteAction,
+    NominateAction,
     RerollRandomSceneAction,
     SetPathIntentAction,
+    WithdrawNominationAction,
 )
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.game_clock.week_services import get_current_game_week
-from world.progression.constants import VoteTargetType
+from world.progression.constants import NominationTargetType
 from world.progression.factories import (
     KudosClaimCategoryFactory,
     KudosPointsDataFactory,
@@ -68,35 +68,40 @@ class ClaimKudosActionTests(TestCase):
         self.assertFalse(result.success)
 
 
-class VoteActionTests(TestCase):
-    def test_cast_then_remove(self) -> None:
-        voter, _ = _actor_with_account()
+class NominationActionTests(TestCase):
+    def setUp(self) -> None:
+        from world.game_clock.week_services import get_current_game_week
+
+        get_current_game_week()  # the week must exist before the prose it will contain
+
+    def test_nominate_then_withdraw(self) -> None:
+        nominator, _ = _actor_with_account()
         author_persona = PersonaFactory()
         a_entry = RosterEntryFactory(character_sheet=author_persona.character_sheet)
         RosterTenureFactory(roster_entry=a_entry)
         interaction = InteractionFactory(persona=author_persona)
 
-        cast = CastVoteAction().run(
-            actor=voter,
-            target_type=VoteTargetType.INTERACTION,
+        nominated = NominateAction().run(
+            actor=nominator,
+            target_type=NominationTargetType.INTERACTION,
             target_id=interaction.pk,
         )
-        self.assertTrue(cast.success)
-        removed = RemoveVoteAction().run(
-            actor=voter,
-            target_type=VoteTargetType.INTERACTION,
+        self.assertTrue(nominated.success, nominated.message)
+        self.assertIn("nomination_id", nominated.data)
+        withdrawn = WithdrawNominationAction().run(
+            actor=nominator,
+            target_type=NominationTargetType.INTERACTION,
             target_id=interaction.pk,
         )
-        self.assertTrue(removed.success)
+        self.assertTrue(withdrawn.success)
 
-    def test_self_vote_returns_failure(self) -> None:
-        voter, _account = _actor_with_account()
-        # author == voter → ProgressionError.SELF_VOTE
-        persona = PersonaFactory(character_sheet=voter.sheet_data)
+    def test_self_nomination_returns_failure(self) -> None:
+        nominator, _account = _actor_with_account()
+        persona = PersonaFactory(character_sheet=nominator.sheet_data)
         interaction = InteractionFactory(persona=persona)
-        result = CastVoteAction().run(
-            actor=voter,
-            target_type=VoteTargetType.INTERACTION,
+        result = NominateAction().run(
+            actor=nominator,
+            target_type=NominationTargetType.INTERACTION,
             target_id=interaction.pk,
         )
         self.assertFalse(result.success)

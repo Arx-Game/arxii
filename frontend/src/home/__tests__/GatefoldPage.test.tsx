@@ -73,16 +73,18 @@ const startingAreas: StartingArea[] = [
     name: 'The Ward of the Compact',
     description: 'Where the living still keep their lamps lit.',
     crest_image: null,
-    is_accessible: true,
     realm_theme: 'arx',
+    realm_slug: 'arx',
+    realm_name: 'Arx',
   },
   {
     id: 2,
     name: 'The Undercroft',
     description: 'Shadows and ledgers, in equal measure.',
     crest_image: null,
-    is_accessible: true,
     realm_theme: 'umbros',
+    realm_slug: 'umbros',
+    realm_name: 'Umbros',
   },
 ];
 
@@ -102,6 +104,7 @@ const codexEntries: CodexEntryListItem[] = [
     known_by: [],
     art_url: null,
     perspective_of: null,
+    also_filed_under: [],
   },
 ];
 

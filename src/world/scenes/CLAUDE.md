@@ -76,7 +76,32 @@ the unified Persona identity system, and non-combat scene rounds.
 - **`Interaction`**: Atomic IC interaction record (pose, say, whisper, etc.) with privacy controls
 - **`InteractionFavorite`**: Private bookmarks for cherished RP moments
 - **`InteractionReaction`**: Emoji reactions on interactions
-- **`InteractionTargetPersona`**: Explicit IC targets for thread derivation
+- **`InteractionReadReceipt`** (#3759): private, cross-device per-account read-state marker on a
+  pose. Mirrors `InteractionReaction`'s partition-bridge shape (`interaction` FK with
+  `db_constraint=False` + denormalized `timestamp`, since `Interaction`'s real DB PK is the
+  composite `(id, timestamp)` of its monthly-partitioned table), plus `account` FK and
+  `seen_at` (auto-now-add). Unique per `(interaction, timestamp, account)`. Never serialized to
+  any viewer other than the reading account.
+- **`InteractionTargetPersona`**: Explicit IC targets for a row. Written by the shared
+  `write_target_personas` helper (`interaction_services.py`); drives the reader's
+  involvement mark and `attention.ts`'s `direct` badge tier - NOT reader thread/group
+  derivation (#3787, ADR-0293: targeting and grouping are separate concerns, or a
+  multi-target fight would fragment into one reader group per victim). `create_interaction`
+  validates a player's own tagging against `reachability.persona_can_receive` before
+  writing; combat's own writers (`world.combat.interaction_services`) skip that check
+  deliberately - a resolved action's targets are already governed by the encounter's own
+  targeting rules, and Battle scenes have no location for presence to test against.
+- **`InteractionThread`** (#3787): ANCHORED, not a membership bag. `anchor_interaction`
+  (+ the denormalized `anchor_timestamp` the partitioned interaction table's composite PK
+  forces, both NOT NULL) is the row every member answers; the anchor itself is not a
+  member. So a row's `thread` means "what I am an answer to", not "which pile I am in",
+  and a root pose keeps `thread_id` null. Answering a reply NESTS a thread: `parent` is
+  the enclosing thread, `root` the top of the tree, and readers group by `root`.
+  `unique_thread_per_anchor` is what makes two people answering the same blow share one
+  exchange. The parent chip reads the anchor straight off the thread, gated on the
+  parent's own `visible_to`. There is no `InteractionReply` bridge - a flat container
+  plus an edge table was two mechanisms for one topology. See "Scene Interaction Threads"
+  in `docs/systems/scene-interaction-threads.md` and ADR-0293.
 - **`SceneSummaryRevision`**: Collaborative summary editing for ephemeral scenes
 - **`SceneRound`**: Non-combat round/turn structure anchored to a room. Fields: `mode` (`SceneRoundMode`),
   `advance_quorum_pct`, `max_actions_per_round`, `per_target_repeat_lock`. `mode` and `start_reason` are
@@ -197,6 +222,35 @@ the unified Persona identity system, and non-combat scene rounds.
   `kind` through an explicit per-kind table (`_BOON_ASK_VALIDATORS` / `_BOON_FULFILLERS`) — a kind
   with no table entry raises `ValueError` loudly; the original if/elif chains had an implicit DEED
   fallthrough on an unrecognized kind.
+
+### `interaction_services.py` -- outcome delivery (#3807)
+- **`deliver_outcome_interaction(interaction, *, location)`**: the shared delivery seam for a
+  persisted, system-authored outcome row (a resolved social-check result, a treatment outcome,
+  a cast outcome pose). Registers a `transaction.on_commit` callback that pushes the WebSocket
+  payload via `push_interaction(interaction, location=location)` and sends the same
+  `interaction.content` as plain text to the non-web sessions of exactly the objects the push
+  reached (telnet parity). Every production `create_interaction` call must reach a delivery
+  seam in the same or an enclosing function -- enforced by `tools/lint_undelivered_interaction.py`
+  (the `undelivered-interaction` pre-commit hook) and the `outcome-delivery-reviewer` agent. See
+  "Result delivery" in `docs/systems/scenes.md` and ADR-0297.
+- **`push_interaction(..., *, location=None)`**: gained an optional `location` kwarg (#3807).
+  Omitted, it resolves from the writer persona's own character location, byte-identical to
+  before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's
+  character is never physically placed anywhere.
+
+### `line_rendering.py` (#3858, ADR-0299)
+- **`render_line(name, mode, content, *, language_name=None)`**: the one formatter that puts
+  the actor into a pose or say line, at display time, for the WebSocket payload
+  (`InteractionPayload.line`), the REST row (`InteractionListSerializer.line`) and telnet
+  (`PoseAction` with `{caller}`, whisper, mutter, the companion emote). Pure; `content` is
+  never changed. Tests: `tests/test_line_rendering.py`.
+
+### `participation.py` (#3867, ADR-0300)
+- **`has_entered(scene, character_sheet_id)` / `entered_sheet_ids(scene)`**: who is in a
+  scene, read off its log (`ENTRANCE_MODES`: pose, say, emit). Never stored. Feeds
+  `persona_can_receive`'s room-heard branch, `record_interaction`'s entrance marking and the
+  `room_state` payload's `in_scene`/`viewer_entered`. `SceneParticipation` is the admin and
+  read-membership question, not this one.
 
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /

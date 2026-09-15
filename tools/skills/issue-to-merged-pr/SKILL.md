@@ -121,6 +121,17 @@ Await-approval, and Implementation.
   `pickup-issue.sh` + separate worktree-creation sequence. Skipping it is the #1
   cause of duplicate work (two sessions on the same issue because neither
   assigned it).
+- **`pickup-issue.sh` also auto-applies `review:evidence-required` to any issue
+  carrying the `frontend` label.** This was previously a manual, agent-discretion
+  label — the #3735/#3750 incident shipped a UI that didn't resemble its approved
+  spec despite a subagent visual reviewer being assigned, and the mechanical
+  `open-pr.sh`/`enqueue-pr.sh` evidence gate (Step 5 below) only fires when this
+  label is present. Nothing applied it automatically, so it depended on an agent
+  remembering to self-add it to its own issue — the same "agent must remember"
+  shape CLAUDE.md's Reviewer Agents section flags as the problem, not the fix.
+  Fixed at pickup time instead of left as a self-compulsion. Backend-only issues
+  still get it only by deliberate choice; extend the label check if a similar
+  recurring gap shows up there.
 - After `start-work.sh` succeeds, `cd` into the emitted `worktree_path`. **Do NOT
   use `EnterWorktree` or create another worktree** — `start-work.sh` already ran
   `git worktree add`. Using a native worktree tool on top of it recreates the
@@ -153,6 +164,15 @@ Skip the design step when:
 
 When skipping, go straight to Implementation (claim `status:implementing`).
 
+**Player- or staff-facing work takes the architectural path, always (#3659).**
+If the issue touches anything a player or staff member sees or operates (a React
+surface, a CG stage, a telnet verb, an admin flow), the brainstorm is never
+classified bounded, the questions stage is not skipped, and the design stage
+produces a **demo page** before the spec is posted: use the `demoing-a-feature`
+skill. The spec links the demo at its top, every user story names a screen on it,
+and every open fork is a ruling on it cited by id; the reviewer prompt checks that
+coverage. The demo travels inside `status:spec-review`; there is no extra label.
+
 Otherwise, claim the draft lane (`status:spec-draft`; pickup sets this) and
 invoke `superpowers:brainstorming`. **Override two superpowers substeps:**
 
@@ -181,6 +201,12 @@ states its role and its consequence. **Embed the resulting anti-reinvention
 ledger as a section of the spec in the issue body.** A spec without a
 code-verified ledger is not finalized. (This codifies CLAUDE.md's
 "Anti-Reinvention Pass" into the workflow.)
+
+**MANDATORY whenever the design proposes a new model, table, FK, column, or
+primary-key choice: run the `schema-shape` pass** (skill at
+`tools/skills/schema-shape/`). Answer its six questions for each proposed
+surface and embed the answers in the spec, the same pattern as the
+anti-reinvention ledger — a section of the spec, not a separate artifact.
 
 **This pass covers any "deferred follow-ups" the spec lists, too** — a deferral
 is a proposed future surface, and listing it as "later" is not a waiver. Verify
@@ -264,15 +290,70 @@ On conflict (exit 4):
 
 **This step runs automatically once implementation + task/whole-branch review
 are clean — it is not a separate phase requiring a fresh user request or
-re-invocation.** The only human-only gate anywhere in this skill is
+re-invocation.** The only human-only gate before implementation is
 `spec:approved` (Phase 2); PR-opening, CI-watch, and CI-fix are one
-continuous run from there. Do not write a stopping instruction like "stop
-before opening a PR" into a dispatch to a sub-skill (e.g.
-`subagent-driven-development`) unless the user explicitly asked for that
-checkpoint — that manufactures a gate the skill doesn't have.
+continuous run from there. A second, mechanical pre-PR gate is mandatory:
+`open-pr.sh` marks evidence-required PRs and validates a committed review evidence report against the reviewed code revision (the parent of the evidence commit) before
+it pushes or opens anything. Do not write a stopping instruction like "stop
+before opening a PR" into a dispatch to a sub-skill unless the user explicitly
+asked for that checkpoint.
+
+Before opening, dispatch the local reviewer required by the issue. For a design/demo issue, this is `demo-fidelity-reviewer`; it must render the application, inspect the screenshots with a vision-capable model, complete the visual checklist, and write the report. `open-pr.sh` blocks until that report names a reviewer and has a PASS verdict.
+
+Whichever delivery mechanism is used, the report must record the exact revision,
+build/environment, ordinary user interactions, fixture/live boundaries, visual
+screenshots when a design/demo exists, one verdict per mandatory criterion, and
+an empty unresolved-findings section. A green build or component-presence test
+is not acceptance evidence. **`open-pr.sh` closes the issue by default
+(`Closes #N`)** — leaving an issue open requires a stated reason, not the other
+way around. Set `PR_KEEP_OPEN=1` only when this PR is a deliberate partial step
+toward the issue's scope with more PRs still planned against the *same* issue
+(a multi-PR umbrella spec that a completeness review hasn't yet confirmed in
+full). Genuinely separable remaining scope gets its own issue via
+`file-followup.sh` (below) instead — that does not call for keeping the
+original issue open too.
+
+**The evidence report and its screenshots never belong in `main`'s permanent
+history, and this is enforced.** The `review-evidence-not-committed` CI job
+fails any PR with a tracked file under `docs/reviews/`. Deleting the files
+without doing the rest does not pass either: the `review-evidence` job then has
+no report to validate and fails instead. The two gates only both go green when
+the evidence actually lives in a PR comment.
+
+Do it in this order. It is four steps and skipping any of them turns the build
+red, so do not treat it as cleanup to get to later:
+
+1. **Push once with the report and screenshots still committed**, so their blobs
+   exist on the remote. Note the pushed SHA.
+2. **Post the report as a PR comment**, rewriting every image link to
+   `https://raw.githubusercontent.com/<owner>/<repo>/<pushed-sha>/<path>`. Those
+   URLs keep rendering after the files leave the branch tip, which is the whole
+   trick.
+3. **Point the PR body's `- Report:` line at that comment URL.** The
+   `review-evidence` job reads that line; a stale path there fails it.
+4. **Delete `docs/reviews/` and push again.**
+5. **Before EVERY later push, run
+   `scripts/sync-evidence-revision.sh <pr>`.** It restates the report's
+   `Reviewed revision` to the current `HEAD^1`, prints what changed between the
+   old revision and the new one so you can judge whether the review still
+   stands, and re-validates the comment exactly as CI will. Skipping it is the
+   single most common way this job goes red after a green one.
+
+**The revision gotcha, which bites every time.** Both the gate and
+`open-pr.sh` validate the report against `git rev-parse HEAD^1`, so the report's
+`Reviewed revision` field must name the commit that ends up as the FIRST PARENT
+of the branch tip - not the commit you happened to review. Any push after the
+report is written (a merge from main, the deletion commit itself) moves that
+target, so re-read `HEAD^1` and update the comment before the final push. When
+the intervening commits changed code the review covered, say so in the report
+and state what you re-verified; when they did not, prove it with a diff of the
+reviewed files rather than asserting it.
+
+See `references/evidence-screenshots-not-in-main.md` for the underlying
+technique.
 
 Compose the PR body's substitution values (summary, follow-ups, sync
-summary).
+summary, evidence file).
 
 **Trivial findings never get filed — fix now or drop, no exceptions**
 (CLAUDE.md "Fold In, Don't File"). This applies to task-review and
@@ -301,15 +382,21 @@ rather than a code-verified scope, file it as a `needs-design` **question** that
 states the verified mechanism and labels what exists, not as a `feature`/`chore`
 that reads as ready-to-build. (This is the lesson of #1357/#1358, both filed
 unverified from a spec's deferred list and later closed as should-not-do; the
-genuine question became #1363.) Then:
+genuine question became #1363.) A persisted outcome that nobody ever receives is
+a bug, filed as `bug` with its fix, never as `needs-design`: showing a player
+the result of their own action is never an open design question; the only thing
+that can genuinely be open is who else sees it (#3807). Then:
 
 ```bash
+gh issue comment <issue-N> --body-file <scratch-report-path>   # -> captures the comment URL
+PR_EVIDENCE_URL="<the comment URL above>" \
 PR_SUMMARY="..." PR_RAN_OR_SKIPPED="ran" PR_SYNC_SUMMARY="..." \
   scripts/open-pr.sh <branch> <issue-N> <followup-1> <followup-2> ...
 ```
 
-The PR body references the approved spec via `Closes #<issue>` — the spec lives
-in the issue body, so there is no spec-file link to pass.
+The PR body links the committed report and uses `Closes #<issue>` by default.
+Only a deliberately partial step toward a multi-PR umbrella spec opts into
+`PR_KEEP_OPEN=1`; the ordinary case (this PR is the whole fix) closes.
 
 **Do NOT run `uv run pre-commit run --all-files` (or `just test-affected` /
 `just regression` / any whole-repo suite) as a pre-push precheck.** Running the
@@ -321,6 +408,8 @@ focused checks each task already used (`just test-fast <app>` for a touched app,
 `ruff check <changed files>`). Only if a branch was built with `--no-verify`
 commits (so hooks never ran), scope the catch-up to just the branch's diff —
 `uv run pre-commit run --from-ref origin/main --to-ref HEAD` — never `--all-files`.
+That form clears the worktree while hooks run (#3814), so run it only when no other
+agent has uncommitted work in the worktree.
 
 ### 6. CI watch
 
@@ -341,13 +430,22 @@ commits (so hooks never ran), scope the catch-up to just the branch's diff —
 > ad-hoc poll you author.
 
 Run `scripts/watch-ci.sh <pr-N>`. Outcomes:
-- `OK` (exit 0): enqueue for the merge queue with `scripts/enqueue-pr.sh
-  <pr-N>` (arms squash auto-merge), post a brief status comment, exit the
-  session. **Do NOT re-sync with main or merge by hand.** The merge queue
-  re-tests the PR on top of the latest main and merges it in order once a human
-  approves — that human approval is the only remaining gate. If main moves while
-  the PR waits for approval, the queue handles the re-integration; the agent
-  does nothing further.
+- `OK` (exit 0): run `scripts/enqueue-pr.sh <pr-N>`. It revalidates the committed
+  report against the reviewed code revision, refuses while an open code-scanning
+  alert sits on the PR head ref, and only then arms squash auto-merge. Then post a
+  brief status comment and exit the session. **Do NOT re-sync with main or merge by
+  hand.** The merge queue re-tests the PR on top of the latest main and merges it in
+  order once a human approves - that human approval is the only remaining gate. If
+  main moves while the PR waits for approval, the queue handles the re-integration;
+  the agent does nothing further.
+
+  **Before judging any PR "ready", read
+  [`references/pr-mergeability-checklist.md`](references/pr-mergeability-checklist.md).**
+  It covers what a green rollup does not: a DIRTY PR silently skips `ci.yml` while
+  analysis-only checks stay green; cancelled runs from superseded pushes read as
+  failures; GitHub Advanced Security findings fail no check at all and need the right
+  ref and state filter or they come back empty; and which comments are blocking
+  feedback versus untrusted data on a public repo.
 - `FAIL <check-name>` (exit 5): enter the CI-fix phase.
 - timeout (exit 6): post a diagnostic, exit.
 
@@ -503,6 +601,7 @@ where it stopped, what the human should decide.
 | Open the PR | `scripts/open-pr.sh <branch> <issue> [followups...]` |
 | File a follow-up issue | `scripts/file-followup.sh <title> <body-path> [labels...]` |
 | Comment on an issue | `scripts/comment-on-issue.sh <issue> <body-path>` |
+| Re-point evidence at the checked revision | `scripts/sync-evidence-revision.sh <pr>` |
 | Watch CI | `scripts/watch-ci.sh <pr>` |
 | Enqueue for the merge queue | `scripts/enqueue-pr.sh <pr>` |
 | Read failing log | `scripts/get-ci-failure.sh <pr> <check-name>` |

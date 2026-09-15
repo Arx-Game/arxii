@@ -298,11 +298,26 @@ class DamageEffectSerializer(serializers.Serializer):
 
 
 class CapabilityEffectSerializer(serializers.Serializer):
-    """One Capability a technique grants (#2898)."""
+    """One Capability a technique grants by being KNOWN (#2898, ADR-0248).
+
+    Standing possession, not a cast effect — the summary sentence says so in
+    words ("Knowing it grants ..."), so a client rendering these rows must not
+    file them under what the cast does (#3682).
+    """
 
     name = serializers.CharField(read_only=True)
     description = serializers.CharField(read_only=True)
     base_value = serializers.IntegerField(read_only=True)
+
+
+class TreatmentEffectSerializer(serializers.Serializer):
+    """One treatment a technique performs on cast (#3682)."""
+
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True)
+    treats = serializers.CharField(read_only=True)
+    target_kind = serializers.CharField(read_only=True)
+    minimum_success_level = serializers.IntegerField(read_only=True)
 
 
 class TechniqueEffectSummarySerializer(serializers.Serializer):
@@ -324,6 +339,7 @@ class TechniqueEffectSummarySerializer(serializers.Serializer):
     applies = ConditionEffectSerializer(many=True, read_only=True)
     removes = ConditionEffectSerializer(many=True, read_only=True)
     damage = DamageEffectSerializer(many=True, read_only=True)
+    treatments = TreatmentEffectSerializer(many=True, read_only=True)
     grants = CapabilityEffectSerializer(many=True, read_only=True)
     summary = serializers.CharField(read_only=True)
     is_underspecified = serializers.BooleanField(read_only=True)
@@ -661,31 +677,12 @@ class CharacterAnimaSerializer(serializers.ModelSerializer):
 
 
 class FacetSerializer(serializers.ModelSerializer):
-    """Serializer for Facet model with hierarchy info."""
-
-    depth = serializers.IntegerField(read_only=True)
-    full_path = serializers.CharField(read_only=True)
-    parent_name = serializers.CharField(source="parent.name", read_only=True, allow_null=True)
+    """Serializer for the flat Facet vocabulary."""
 
     class Meta:
         model = Facet
-        fields = ["id", "name", "parent", "parent_name", "description", "depth", "full_path"]
-        read_only_fields = ["id", "depth", "full_path"]
-
-
-class FacetTreeSerializer(serializers.ModelSerializer):
-    """Serializer for Facet with nested children for tree display."""
-
-    children = serializers.SerializerMethodField()
-
-    class Meta:
-        model = Facet
-        fields = ["id", "name", "description", "children"]
-
-    def get_children(self, obj) -> list[dict]:
-        """Recursively serialize children."""
-        children = obj.children.all()
-        return FacetTreeSerializer(children, many=True).data
+        fields = ["id", "name", "description"]
+        read_only_fields = ["id"]
 
 
 # =============================================================================
@@ -697,12 +694,11 @@ class MotifResonanceAssociationSerializer(serializers.ModelSerializer):
     """Serializer for MotifResonanceAssociation records."""
 
     facet_name = serializers.CharField(source="facet.name", read_only=True)
-    facet_path = serializers.CharField(source="facet.full_path", read_only=True)
 
     class Meta:
         model = MotifResonanceAssociation
-        fields = ["id", "facet", "facet_name", "facet_path"]
-        read_only_fields = ["id", "facet_name", "facet_path"]
+        fields = ["id", "facet", "facet_name"]
+        read_only_fields = ["id", "facet_name"]
 
 
 class MotifResonanceStyleSerializer(serializers.ModelSerializer):

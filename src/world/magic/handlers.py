@@ -895,11 +895,20 @@ class CharacterResonanceHandler:
         """Return the CharacterResonance row, creating it lazily if absent."""
         cr = self._by_resonance.get(resonance.pk)
         if cr is None:
-            cr, _ = CharacterResonance.objects.get_or_create(
-                character_sheet=self.character.sheet_data,
+            sheet = self.character.sheet_data
+            # Peek, don't read: sheet.cached_resonances would force a query when
+            # cold (the common case here), defeating the point of this
+            # optimization. A cold cache re-queries correctly on next real
+            # access regardless, so there's nothing to lose by skipping the
+            # mutation when nothing is cached yet.
+            cached = sheet.__dict__.get("cached_resonances")
+            cr, created = CharacterResonance.objects.get_or_create(
+                character_sheet=sheet,
                 resonance=resonance,
                 defaults={"balance": 0, "lifetime_earned": 0},
             )
+            if created and cached is not None:
+                sheet.cached_resonances = [*cached, cr]
             self._by_resonance[resonance.pk] = cr
         return cr
 

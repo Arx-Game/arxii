@@ -26,11 +26,12 @@ class MaturationApiTests(APITestCase):
         MaturationStatCap.objects.create(path_stage=PathStage.PROSPECT, stat_cap=5)
         stat = StatTraitFactory(name="stamina_api_test")
         owner = AccountFactory()
-        sheet = self._owned_sheet(owner, matured=30)  # 4 milestones
+        sheet = self._owned_sheet(owner, matured=30)  # milestones 24, 27, 30 (#3635)
         self.client.force_authenticate(user=owner)
 
         state = self.client.get(f"/api/character-sheets/{sheet.pk}/maturation/").data
-        assert state["available_points"] == 4
+        assert state["available_points"] == 3
+        assert state["next_milestone_year"] == 34
         assert state["stat_cap"] == 5
 
         response = self.client.post(
@@ -39,7 +40,7 @@ class MaturationApiTests(APITestCase):
             format="json",
         )
         assert response.status_code == 200, (response.status_code, response.data)
-        assert response.data["available_points"] == 3
+        assert response.data["available_points"] == 2
 
     def test_spend_without_points_is_a_clean_400(self):
         stat = StatTraitFactory(name="stamina_api_test_2")

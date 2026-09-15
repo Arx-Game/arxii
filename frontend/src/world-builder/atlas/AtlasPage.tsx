@@ -21,8 +21,16 @@
  * `useAtlasState`'s persisted trail — a highlight is a one-shot visual cue,
  * never something worth remembering across a reload) that self-clears after
  * a few seconds.
+ *
+ * Growing the ladder from the crumb (2026-09-09): a ⊕ between two crumb
+ * entries opens `InsertLevelDialog`; confirming dispatches `create_area`
+ * under the upper entry at the lower entry's spot on that map, then moves the
+ * lower entry inside (`staff_move_room` + `staff_place_room` at the origin
+ * for a room, `edit_area` with the new parent for an area). Each step's
+ * result gates the next, so a refused create leaves nothing half-moved.
  */
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -34,13 +42,34 @@ import {
   useMyGrantsQuery,
   useRoomDetailQuery,
   useRoomSearchQuery,
+  useWorldBuilderAction,
   useWorldBuilderAreasQuery,
 } from '../queries';
+import type { WorldBuilderActionKey } from '../types';
+import { useWorldBuilderActor } from '../useWorldBuilderActor';
 import { AreaPage } from './AreaPage';
 import { areaViewKind } from './constants';
 import { FolioCrumb, type FolioCrumbEntry } from './FolioCrumb';
 import { IndexRail } from './IndexRail';
+import { InsertLevelDialog } from './InsertLevelDialog';
 import { useAtlasState, type AtlasView } from './useAtlasState';
+
+/** A crumb entry plus where it sits on its parent's map, for the insert chain. */
+interface PlacedCrumbEntry extends FolioCrumbEntry {
+  grid_x: number | null;
+  grid_y: number | null;
+  floor?: number;
+}
+
+function slugify(value: string): string {
+  const slug = value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-/, '')
+    .replace(/-$/, '');
+  return slug || 'area';
+}
 
 /** How long a search-hit highlight ring stays lit before fading on its own. */
 const HIGHLIGHT_DURATION_MS = 2500;
@@ -93,10 +122,67 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
   const { data: roomDetail } = useRoomDetailQuery(isRoomDoc ? view.id : null);
   const { data: searchResults } = useRoomSearchQuery(searchTerm);
 
-  const crumbEntries: FolioCrumbEntry[] =
+  const crumbEntries: PlacedCrumbEntry[] =
     isRoomDoc && roomDetail
-      ? [...roomDetail.breadcrumb, { id: roomDetail.room.id, name: roomDetail.room.name }]
+      ? [
+          ...roomDetail.breadcrumb,
+          {
+            id: roomDetail.room.id,
+            name: roomDetail.room.name,
+            kind: 'room' as const,
+            grid_x: roomDetail.room.grid_x,
+            grid_y: roomDetail.room.grid_y,
+            floor: roomDetail.room.floor,
+          },
+        ]
       : (manager?.breadcrumb ?? []);
+
+  const characterId = useWorldBuilderActor();
+  const { mutateAsync: runMutation } = useWorldBuilderAction(characterId ?? 0, areaId);
+  const [insertBetween, setInsertBetween] = useState<{
+    upper: PlacedCrumbEntry;
+    lower: PlacedCrumbEntry;
+  } | null>(null);
+
+  const insertLevel = async (name: string, level: number) => {
+    if (!insertBetween) return;
+    const { upper, lower } = insertBetween;
+    if (characterId == null) {
+      toast.error(
+        'Select a character to build as; builder actions dispatch through your played character.'
+      );
+      return;
+    }
+    const run = async (key: WorldBuilderActionKey, kwargs: Record<string, unknown>) => {
+      try {
+        return await runMutation({ key, kwargs });
+      } catch {
+        return undefined;
+      }
+    };
+    const created = await run('create_area', {
+      name,
+      slug: slugify(name),
+      level,
+      parent_id: upper.id,
+      grid_x: lower.grid_x,
+      grid_y: lower.grid_y,
+    });
+    const newAreaId = created?.data?.area_id;
+    if (typeof newAreaId !== 'number') return;
+    if (lower.kind === 'room') {
+      const moved = await run('staff_move_room', { room_id: lower.id, area_id: newAreaId });
+      if (moved?.success === false) return;
+      await run('staff_place_room', {
+        room_id: lower.id,
+        grid_x: 0,
+        grid_y: 0,
+        floor: lower.floor ?? 0,
+      });
+    } else {
+      await run('edit_area', { area_id: lower.id, parent_id: newAreaId, grid_x: 0, grid_y: 0 });
+    }
+  };
 
   const handleSelect = (next: AtlasView, name?: string) => setView(next, name ?? `#${next.id}`);
   /** "Next unpublished"/Compass-neighbor navigation (#3477 Task 6) — a plain
@@ -160,7 +246,13 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
       />
 
       <main className="overflow-y-auto">
-        <FolioCrumb entries={crumbEntries} onSelect={(id) => handleSelect({ kind: 'area', id })}>
+        <FolioCrumb
+          entries={crumbEntries}
+          onSelect={(id) => handleSelect({ kind: 'area', id })}
+          onInsertBetween={(upper, lower) =>
+            setInsertBetween({ upper: upper as PlacedCrumbEntry, lower: lower as PlacedCrumbEntry })
+          }
+        >
           {view && (
             <button
               type="button"
@@ -191,6 +283,12 @@ export function AtlasPage({ lens = 'warrant' }: AtlasPageProps) {
 
         {renderView()}
       </main>
+
+      <InsertLevelDialog
+        between={insertBetween}
+        onClose={() => setInsertBetween(null)}
+        onConfirm={({ name, level }) => void insertLevel(name, level)}
+      />
 
       <Dialog open={searchOpen} onOpenChange={setSearchOpen}>
         <DialogContent className="max-w-md">

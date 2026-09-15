@@ -91,9 +91,11 @@ from world.combat.constants import (
     DEFENSE_REDUCED_THRESHOLD,
     ELEVATION_ADVANTAGE_TARGET_NAME,
     ENEMY_LANE_CAP_PERCENT,
+    ENRAGE_NARRATION,
     ENTITY_TYPE_NPC,
     ENTITY_TYPE_PC,
     FLEE_PARTIAL_SUCCESS_LEVEL,
+    HELD_BACK_NARRATION,
     INTERPOSE_BASE_FATIGUE_COST,
     JOUST_DECISIVE_MARGIN,
     LANCE_UNMOUNTED_PENALTY,
@@ -101,6 +103,7 @@ from world.combat.constants import (
     NPC_SPEED_RANK,
     PACING_FLOOR_ROUND_PADDING,
     PENETRATION_CHECK_TYPE_NAME,
+    PHASE_SHIFT_NARRATION,
     REACTIONS_PER_ROUND,
     SENT_FLYING_IMPACT_FRACTION,
     SUSTAINED_BASE_ABSORPTION,
@@ -155,6 +158,7 @@ from world.combat.models import (
     EncounterAftermathRule,
     EncounterRiskAcknowledgement,
     EngagementLock,
+    EscalationCurve,
     FleeConfig,
     FleeTierModifier,
     PendingOpponentAttack,
@@ -195,6 +199,10 @@ from world.vitals.constants import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Tri-state sentinel for optional "leave unchanged" kwargs (#3552); mirrors
+# world/skills/services.py's _UNSET.
+_UNSET = object()
 
 
 # ---------------------------------------------------------------------------
@@ -1787,24 +1795,28 @@ def maybe_resolve_on_ready(encounter: CombatEncounter) -> RoundResolutionResult 
     return resolve_round(encounter)
 
 
-def update_encounter_settings(
+def update_encounter_settings(  # noqa: PLR0913 - keyword-only tri-state settings kwargs
     encounter: CombatEncounter,
     *,
     stakes_level: str | None = None,
     risk_level: str | None = None,
     pace_mode: str | None = None,
     pace_timer_minutes: int | None = None,
+    escalation_curve: EscalationCurve | None | object = _UNSET,
 ) -> CombatEncounter:
-    """GM-driven mid-encounter settings change (#3383).
+    """GM-driven mid-encounter settings change (#3383, curve #3552).
 
-    Any subset of the four fields may be given; omitted fields are left
-    unchanged. Applies decisions 5-6: entering TIMED while DECLARING resets
+    Any subset of the fields may be given; omitted fields are left unchanged.
+    ``escalation_curve`` is tri-state: omitted (``_UNSET``) leaves it alone,
+    ``None`` clears it and tears down the room spike triggers, a curve sets it
+    (the idempotent install in ``begin_declaration_phase`` picks it up next
+    round). Applies decisions 5-6 of #3383: entering TIMED while DECLARING resets
     round_started_at; every call ends with a maybe_resolve_on_ready check
     (a no-op unless pace_mode is now READY and status is DECLARING).
 
     Stakes/risk changes gate only future opponent spawns and read-live
     call sites (EncounterAftermathRule lookup at completion,
-    StakesEscalationModifier per-tick) — already-spawned CombatOpponent stat
+    StakesEscalationModifier per-tick) - already-spawned CombatOpponent stat
     blocks are never retroactively rescaled (decision 1).
     """
     update_fields = []
@@ -1825,11 +1837,18 @@ def update_encounter_settings(
     if pace_timer_minutes is not None:
         encounter.pace_timer_minutes = pace_timer_minutes
         update_fields.append("pace_timer_minutes")
+    if escalation_curve is not _UNSET:
+        encounter.escalation_curve = escalation_curve
+        update_fields.append("escalation_curve")
     if entering_timed:
         encounter.round_started_at = timezone.now()
         update_fields.append("round_started_at")
     if update_fields:
         encounter.save(update_fields=update_fields)
+    if escalation_curve is None:
+        from world.combat.escalation import remove_escalation_room_triggers  # noqa: PLC0415
+
+        remove_escalation_room_triggers(encounter)
     maybe_resolve_on_ready(encounter)
     return encounter
 
@@ -5408,7 +5427,8 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
     attempt to cap here; not consulted (documented v1 scope, #2638).
 
     Returns the catching Character on fire, or None (no eligible/budget-
-    exhausted guardian — the marker stays for explicit resolution).
+    exhausted guardian (who is told privately, #3574): the marker stays for
+    explicit resolution).
     """
     encounter = participant.encounter
     if encounter.status != RoundStatus.RESOLVING:
@@ -5436,6 +5456,11 @@ def _try_catch_sent_flying(participant: CombatParticipant) -> Character | None:
 
     interposer = action.participant
     if interposer.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(
+            interposer.character_sheet.character,
+            participant.character_sheet.character,
+            cap=False,
+        )
         return None
 
     interposer.reactions_used += 1
@@ -5804,6 +5829,36 @@ def _resolve_opponent_defeat(opponent: CombatOpponent, source_sheet: CharacterSh
     return True
 
 
+def _emit_companion_fall(opponent: CombatOpponent) -> None:
+    """Announce a bonded companion's defeat to the surge engine (#3575).
+
+    Only a companion-backed ALLY opponent (``summoned_by`` set, a live unreleased
+    ``Companion`` owning ``objectdb``) emits; a plain summon, a persona-backed NPC
+    and every ENEMY stay silent as before. Emits CHARACTER_INCAPACITATED, never
+    CHARACTER_KILLED: defeat is not death (#1873 resolves death at encounter end),
+    and the KILLED subscribers (asset loss, death deferral) are for people. Both
+    events reach ``relationship_spike_handler`` and dedup to one ALLY_FALLEN.
+    The "is this ally someone's companion" predicate now lives in
+    ``world.companions.services.resolve_bonded_companion`` (#3652), shared with
+    the encounter/battle defeat hooks so it is not spelled a third time.
+    """
+    from world.companions.services import resolve_bonded_companion  # noqa: PLC0415
+
+    if resolve_bonded_companion(opponent) is None:
+        return
+    room = opponent.encounter.room
+    if room is None:
+        return
+    emit_event(
+        EventName.CHARACTER_INCAPACITATED,
+        CharacterIncapacitatedPayload(
+            character=opponent.objectdb,
+            source_event=EventName.DAMAGE_PRE_APPLY,
+        ),
+        location=room,
+    )
+
+
 def _is_vulnerable(opponent: CombatOpponent) -> bool:
     """Return True if the opponent's break-bar vulnerability window is active."""
     return opponent.vulnerability_rounds_remaining > 0
@@ -6073,6 +6128,9 @@ def apply_damage_to_opponent(  # noqa: PLR0913
         _break_engagement_lock_on_defeat(opponent)
 
     opponent.save(update_fields=["health", "probing_current", "status"])
+
+    if defeated:
+        _emit_companion_fall(opponent)
 
     # Achievement counters: see world.combat.achievement_counters. Wired in
     # a follow-up phase — keeping the source_sheet kwarg in place so the
@@ -7423,6 +7481,9 @@ def check_and_advance_boss_phase(
       opponent's ``probing_threshold``.
     - A dramatic surge fires for every ACTIVE PC (#3445): BOSS_ENRAGE when the
       phase raises damage_multiplier, else BOSS_PHASE.
+    - The room is told (#3552): the phase's authored ``description`` when set,
+      else a generic shift line; an enraging transition adds an enrage line.
+      Not curve-gated, unlike the surge.
 
     Args:
         opponent: The boss opponent to check.
@@ -7447,6 +7508,9 @@ def check_and_advance_boss_phase(
             _apply_phase_transition(opponent, phase)
             _spawn_reinforcements(opponent.encounter, phase)
             _surge_on_phase_transition(opponent, phase, previous_multiplier)
+            _narrate_phase_transition(
+                opponent, phase, enraged=phase.damage_multiplier > previous_multiplier
+            )
             return phase
 
     return None
@@ -7470,6 +7534,28 @@ def _surge_on_phase_transition(
         opponent=opponent,
         enraged=phase.damage_multiplier > previous_multiplier,
     )
+
+
+def _narrate_phase_transition(
+    opponent: CombatOpponent,
+    phase: BossPhase,
+    *,
+    enraged: bool,
+) -> None:
+    """Tell the room a boss just changed phase (#3552).
+
+    The dramatic surge for the same transition is generic (ADR-0098 never names
+    the subject) and curve-gated, so until now a phase change was invisible at
+    the table. ``BossPhase.description`` is authored per phase for exactly this
+    moment (copied from ``CreaturePhaseTemplate`` at spawn) and had no reader.
+    Dual-dispatched so telnet sees the same line.
+    """
+    line = phase.description.strip() or PHASE_SHIFT_NARRATION.format(name=opponent.name)
+    _dual_dispatch_combat_narration(opponent.encounter, line)
+    if enraged:
+        _dual_dispatch_combat_narration(
+            opponent.encounter, ENRAGE_NARRATION.format(name=opponent.name)
+        )
 
 
 def _apply_phase_transition(opponent: CombatOpponent, phase: BossPhase) -> None:
@@ -8280,10 +8366,17 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         render_action_declaration_label,
         render_action_outcome_narration,
         render_unattributed_action_narration,
+        target_persona_for_round_action,
     )
     from world.scenes.interaction_services import push_interaction  # noqa: PLC0415
 
     audience = _resolve_combat_cast_audience(participant, technique)
+
+    # #3787 Task 5 - who this action was about. focused_ally_target's persona
+    # when the declared target was an ally; None for an NPC opponent target (no
+    # Persona behind an NPC - correct, not a gap) or no target at all.
+    target_persona = target_persona_for_round_action(action)
+    target_personas = [target_persona] if target_persona is not None else None
 
     # Only the attack path returns a CombatTechniqueResult (which carries fury);
     # the non-attack path returns a CombatTechniqueResolution with no fury field.
@@ -8295,6 +8388,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         round_number=action.round_number,
         summary_label=render_action_declaration_label(action),
         fury_committed=fury_committed,
+        target_personas=target_personas,
     )
     if interaction is not None:
         action.interaction = interaction
@@ -8331,6 +8425,8 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         power_ledger=combat_result.power_ledger if combat_result is not None else None,
         signature_snippet=signature_snippet,
         interaction_result=interaction_result,
+        hit_text=technique.hit_narration,
+        miss_text=technique.miss_narration,
     )
     # Rendered unconditionally rather than under `if audience.concealed`: it is a pure
     # string build over data already in hand, and branching here would put the
@@ -8343,6 +8439,7 @@ def _record_and_broadcast_pc_action(  # noqa: PLR0913
         narration=narration,
         audience=audience,
         unattributed_narration=unattributed_narration,
+        target_personas=target_personas,
     )
 
 
@@ -8878,7 +8975,14 @@ def _resolve_npc_action(
 
     from world.combat.interaction_services import (  # noqa: PLC0415
         create_npc_action_interaction,
+        personas_for_participants,
     )
+
+    # #3787 Task 5 - who this NPC action struck. Batched once (no queries in a
+    # loop): `targets` may hold several PC participants hit by one NPC action.
+    # `opponent_targets` (the ALLY-summon-vs-NPC path) are NPCs with no Persona,
+    # so they never contribute a target.
+    npc_target_personas = personas_for_participants(targets)
 
     # Lazy factory: mint the ACTION-mode Interaction only when the first
     # survivability tier actually fires (#864). Memoised so all targets of this
@@ -8892,6 +8996,7 @@ def _resolve_npc_action(
                 create_npc_action_interaction(
                     opponent_action=npc_action,
                     target_label=npc_action_label,
+                    target_personas=npc_target_personas,
                 )
             )
         return _npc_interaction_cache[0]
@@ -8943,8 +9048,14 @@ def _resolve_npc_action(
         technique_name=npc_action.threat_entry.name,
         target_label=npc_target_label,
         outcome=outcome,
+        hit_text=npc_action.threat_entry.hit_narration,
+        miss_text=npc_action.threat_entry.miss_narration,
     )
-    broadcast_action_outcome(encounter=opponent.encounter, narration=npc_narration)
+    broadcast_action_outcome(
+        encounter=opponent.encounter,
+        narration=npc_narration,
+        target_personas=npc_target_personas,
+    )
 
     return outcome
 
@@ -8981,6 +9092,30 @@ def _resolve_actions(  # noqa: PLR0913 - resolution needs all check params
                 for npc_action in npc_actions.get(entity.pk, [])
             )
     return outcomes
+
+
+def _narrate_held_back(
+    encounter: CombatEncounter,
+    resolution_order: list[tuple[str, CombatParticipant | CombatOpponent]],
+    pc_actions: dict[int, CombatRoundAction],
+    sustaining_participant_ids: frozenset[int],
+) -> None:
+    """Name every PC the resolve loop skipped for having declared nothing (#3552).
+
+    Only under TIMED and MANUAL pace: READY cannot resolve until every ACTIVE
+    participant has readied a ``CombatRoundAction``, so a silent skip is
+    impossible there. A participant who declared a ``SustainedAction`` this
+    round is committing, not holding back.
+    """
+    if encounter.pace_mode not in (PaceMode.TIMED, PaceMode.MANUAL):
+        return
+    for entity_type, entity in resolution_order:
+        if entity_type != ENTITY_TYPE_PC or not isinstance(entity, CombatParticipant):
+            continue
+        if entity.pk in sustaining_participant_ids or entity.pk in pc_actions:
+            continue
+        name = str(entity.character_sheet.character)
+        _dual_dispatch_combat_narration(encounter, HELD_BACK_NARRATION.format(name=name))
 
 
 def _check_boss_transitions(
@@ -9240,9 +9375,12 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     """Single completion seam for round resolution and the GM end endpoint (#876).
 
     Order: persist flip → Narrator OUTCOME interaction → aftermath (anchored to
-    that interaction, before ephemeral-NPC cleanup) → counters → completion
-    event → cleanup. ABANDONED is administrative closure: skips aftermath and
-    counters but still narrates, emits, and cleans up.
+    that interaction, before ephemeral-NPC cleanup) → opponent aftermath pools
+    → companion defeat resolution (#3652) → counters → completion event →
+    cleanup → acute-peril scene-round hand-off → aftermath digest (#3551).
+    ABANDONED is administrative closure: skips aftermath, opponent pools,
+    companion defeats, and counters, but still narrates, emits, cleans up, and
+    delivers the aftermath digest.
 
     Atomic so a bare caller (the GM end endpoint) cannot strand a COMPLETED
     flip with the aftermath/cleanup tail skipped — the double-completion guard
@@ -9262,6 +9400,7 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     if outcome != EncounterOutcome.ABANDONED:
         _apply_aftermath_rules(encounter, outcome, interaction)
         _apply_opponent_aftermath_pools(encounter, outcome)
+        _resolve_companion_defeats(encounter)
         _increment_completion_counters(encounter, outcome)
 
     from world.combat.beat_wiring import install_encounter_beat_trigger  # noqa: PLC0415
@@ -9270,6 +9409,10 @@ def complete_encounter(encounter: CombatEncounter, *, outcome: EncounterOutcome)
     _emit_encounter_completed(encounter, outcome)
     cleanup_completed_encounter(encounter)
     _hand_off_acute_peril_to_scene_round(encounter)
+
+    from world.combat.aftermath import deliver_aftermath_digests  # noqa: PLC0415
+
+    deliver_aftermath_digests(encounter)
 
 
 def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
@@ -9280,13 +9423,9 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     - Only PC participants (``CombatParticipant``), never NPC opponents.
     - Skip characters who are somehow still in another active encounter (paranoid guard).
     """
-    from world.areas.positioning.constants import PLUMMETING_CONDITION_NAME  # noqa: PLC0415
+    from world.combat.aftermath import has_acute_peril  # noqa: PLC0415
     from world.combat.round_context import resolve_combat_round_context  # noqa: PLC0415
-    from world.conditions.constants import BLEED_OUT_CONDITION_NAME  # noqa: PLC0415
-    from world.conditions.models import ConditionInstance  # noqa: PLC0415
     from world.scenes.round_services import ensure_round_for_acute_condition  # noqa: PLC0415
-
-    acute_condition_names = [BLEED_OUT_CONDITION_NAME, PLUMMETING_CONDITION_NAME]
 
     participants = list(
         CombatParticipant.objects.filter(encounter=encounter).select_related(
@@ -9295,12 +9434,7 @@ def _hand_off_acute_peril_to_scene_round(encounter: CombatEncounter) -> None:
     )
     for participant in participants:
         sheet = participant.character_sheet
-        character = sheet.character
-        has_acute = ConditionInstance.objects.filter(
-            target=character,
-            condition__name__in=acute_condition_names,
-        ).exists()
-        if not has_acute:
+        if not has_acute_peril(sheet):
             continue
         # Paranoid guard: skip if the character is already in another active encounter.
         if resolve_combat_round_context(sheet) is not None:
@@ -9449,6 +9583,39 @@ def _apply_opponent_aftermath_pools(encounter: CombatEncounter, outcome: Encount
             pool=opponent.aftermath_pool,
             context=ResolutionContext(character=character, scene=encounter.scene),
         )
+
+
+def _resolve_companion_defeats(encounter: CombatEncounter) -> None:
+    """Resolve each defeated bonded companion's stakes-gated consequence (#3652).
+
+    #1873 Decision 4 put this at completion rather than at the defeat moment:
+    all round resolution finishes before consequences resolve, and a DEFEATED
+    companion is never re-targeted mid-resolution. Runs before
+    cleanup_completed_encounter because the die outcome destroys the
+    companion's ObjectDB, and the cleanup sweeps read opponent.objectdb.
+
+    Skipped for ABANDONED by its caller: administrative closure is not a fight,
+    and a GM ending a scene must not kill anyone's companion.
+    """
+    from world.companions.services import (  # noqa: PLC0415
+        narrate_companion_loss,
+        resolve_bonded_companion,
+        resolve_companion_defeat,
+    )
+
+    opponents = CombatOpponent.objects.filter(
+        encounter=encounter,
+        status=OpponentStatus.DEFEATED,
+        allegiance=CombatAllegiance.ALLY,
+        summoned_by__isnull=False,
+    ).select_related("objectdb")
+    for opponent in opponents:
+        companion = resolve_bonded_companion(opponent)
+        if companion is None:
+            continue
+        name = companion.name
+        if resolve_companion_defeat(companion, encounter.risk_level):
+            narrate_companion_loss(name, encounter.scene)
 
 
 def _increment_completion_counters(encounter: CombatEncounter, outcome: EncounterOutcome) -> None:
@@ -9898,6 +10065,36 @@ def _try_interpose_for_opponent(
     _dispatch_interpose_action(action, pre_payload.target, pre_payload)
 
 
+def _narrate_reaction_declined(
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: object,
+    *,
+    cap: bool,
+) -> None:
+    """Tell a guardian, privately, why their armed guard did not fire (#3574).
+
+    ``cap=False``: the guardian's own ``REACTIONS_PER_ROUND`` budget is spent.
+    ``cap=True``: ``ABSORPTION_CAP_PER_MOMENT`` interceptors already answered
+    this payload. No room line either way: ADR-0161 chose a silent no-op so the
+    table never learns a guardian's budget, and this keeps that while the
+    guardian themselves stops guessing. ``protected`` is whatever the fire
+    seam holds (a participant character, an ally summon's objectdb, or the
+    Sent Flying victim) and is only ever stringified.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    if cap:
+        text = (
+            f"Enough hands have already answered that blow; your guard over {protected} stays down."
+        )
+    else:
+        text = (
+            f"You have already spent your reaction this round; "
+            f"{protected} takes the blow unguarded."
+        )
+    narrate_privately(interposer, text)
+
+
 def _dispatch_interpose_action(
     action: CombatRoundAction,
     protected: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -9913,17 +10110,20 @@ def _dispatch_interpose_action(
 
     **Reaction economy (#2639), shared fire seam per F-10c:** declines with
     the same "did not fire" no-op shape (no dispatch, no fatigue, pre_payload
-    untouched) when either budget is exhausted — the interposer has already
-    spent their ``REACTIONS_PER_ROUND`` reaction this round, or this specific
-    payload has already been answered by ``ABSORPTION_CAP_PER_MOMENT``
-    interceptors. Both counters increment together on an actual attempt
-    (readiness is free; only firing spends the budget), regardless of whether
-    the guardian's own roll then succeeds.
+    untouched), telling the guardian privately why (#3574), when either
+    budget is exhausted: the interposer has already spent their
+    ``REACTIONS_PER_ROUND`` reaction this round, or this specific payload has
+    already been answered by ``ABSORPTION_CAP_PER_MOMENT`` interceptors. Both
+    counters increment together on an actual attempt (readiness is free; only
+    firing spends the budget), regardless of whether the guardian's own roll
+    then succeeds.
     """
     participant = action.participant
     if participant.reactions_used >= REACTIONS_PER_ROUND:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=False)
         return
     if pre_payload.answers_consumed >= ABSORPTION_CAP_PER_MOMENT:
+        _narrate_reaction_declined(participant.character_sheet.character, protected, cap=True)
         return
 
     participant.reactions_used += 1
@@ -10022,6 +10222,29 @@ def _settle_technique_interpose_cost(  # noqa: PLR0913 - debit + accrue needs al
         )
 
 
+def _narrate_technique_interpose_fizzle(
+    action: CombatRoundAction,
+    interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
+    protected: ObjectDB,  # noqa: OBJECTDB_PARAM
+    technique: Technique,
+) -> None:
+    """Tell the guardian, then the room, that an unpaid protective technique fizzled (#3574).
+
+    Private line carries the why (anima); the room line never carries a number.
+    The mechanical no-op shape is unchanged: no roll, no charge, damage proceeds.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    narrate_privately(
+        interposer,
+        f"Your {technique.name} gutters for want of anima; {protected} takes the blow unguarded.",
+    )
+    _broadcast_commitment_line(
+        action.participant.encounter,
+        f"{interposer} reaches to shield {protected}, and the working fails to catch.",
+    )
+
+
 def _try_technique_interpose(
     action: CombatRoundAction,
     interposer: ObjectDB,  # noqa: OBJECTDB_PARAM
@@ -10042,11 +10265,13 @@ def _try_technique_interpose(
        :func:`~world.magic.services.targeting.protective_condition_and_flavor` —
        the same traversal :func:`~world.magic.services.targeting.protective_flavor`
        walks at declaration time, first protective-flavored template wins). Can't
-       pay -> the reaction fizzles silently: NO roll, NO fatigue, NO anima
-       charged, and damage proceeds unchanged to ``_try_companion_defend`` as
-       today. **Unless** ``action.confirm_soulfray_risk`` (#3573) is set: a
-       consented guardian fires regardless of affordability, running the pool
-       into deficit and accruing Soulfray (point 3 below).
+       pay -> the reaction fizzles: NO roll, NO fatigue, NO anima charged,
+       damage proceeds unchanged to ``_try_companion_defend`` as today, and
+       the guardian and the room are told (#3574,
+       :func:`_narrate_technique_interpose_fizzle`). **Unless**
+       ``action.confirm_soulfray_risk`` (#3573) is set: a consented guardian
+       fires regardless of affordability, running the pool into deficit and
+       accruing Soulfray (point 3 below).
     2. **The roll is the guardian's own cast check**
        (:func:`~world.magic.services.anima.resolve_cast_check_type`), rolled
        against the same authored difficulty as the mundane Interpose challenge
@@ -10120,7 +10345,9 @@ def _try_technique_interpose(
         anima = CharacterAnima.objects.filter(character_id=interposer.pk).first()
         if not _guardian_can_fire_technique_interpose(anima, cost, consented=consented):
             # Fizzle: no pool at all, or unaffordable and unconsented - no roll,
-            # no cost, damage proceeds.
+            # no cost, damage proceeds. Not silent (#3574): the guardian learns
+            # their save did not catch, and the table sees a working fail.
+            _narrate_technique_interpose_fizzle(action, interposer, protected, technique)
             return
 
     severity_template = ChallengeTemplate.objects.filter(name=INTERPOSE_CHALLENGE_NAME).first()
@@ -10844,6 +11071,27 @@ def _fire_round_start(enc: CombatEncounter, round_number: int) -> list[Available
     return detect_available_combos(enc, round_number)
 
 
+def _narrate_upkeep_lapse(inst: ConditionInstance, encounter: CombatEncounter) -> None:
+    """Tell the payer, the bearer (when different) and the room that a ward lapsed (#3574).
+
+    Called immediately before the lapse ``inst.delete()`` so the names are
+    still resolvable. The payer rule is ``drain_reactive_upkeep``'s own:
+    ``source_character`` when set, else the bearer. Room line carries no
+    numbers; the private lines say only that the fee could not be met.
+    """
+    from world.scenes.interaction_services import narrate_privately  # noqa: PLC0415
+
+    bearer = inst.target
+    payer = inst.source_character or bearer
+    ward = inst.condition.name
+    if payer.pk == bearer.pk:
+        narrate_privately(payer, f"You cannot sustain {ward}; it lapses.")
+    else:
+        narrate_privately(payer, f"You cannot sustain {ward} on {bearer}; it lapses.")
+        narrate_privately(bearer, f"{payer}'s {ward} over you lapses.")
+    _broadcast_commitment_line(encounter, f"The {ward} over {bearer} gutters out.")
+
+
 def _debit_ally_paid_upkeep(
     inst: ConditionInstance, cost: int, *, encounter: CombatEncounter
 ) -> None:
@@ -10858,9 +11106,11 @@ def _debit_ally_paid_upkeep(
     payer = inst.source_character
     payer_anima = _get_anima(payer)
     if payer_anima is None:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse — Trigger rows cascade via source_condition FK
         return
     if payer_anima.current < cost and not inst.soulfray_consented:
+        _narrate_upkeep_lapse(inst, encounter)
         inst.delete()  # lapse - Trigger rows cascade via source_condition FK
         return
     _pay_upkeep(payer, payer_anima, cost, inst, encounter)
@@ -10938,6 +11188,7 @@ def _drain_participant_upkeep(
             # instead of clobbering it back to 0 (#3573 review fix).
             remaining = anima.current
         else:
+            _narrate_upkeep_lapse(inst, encounter)
             inst.delete()  # lapse — Trigger rows cascade via source_condition FK
     if remaining != anima.current:
         anima.current = remaining
@@ -10951,7 +11202,8 @@ def drain_reactive_upkeep(encounter: CombatEncounter) -> None:
     condition with ``upkeep_anima_per_round > 0``: spend that anima from the
     condition's payer's ``CharacterAnima`` pool. If the payer cannot pay in
     full, the condition lapses — its ``ConditionInstance`` row is deleted and
-    any ``Trigger`` rows on it cascade.
+    any ``Trigger`` rows on it cascade. The lapse is narrated to the payer, the
+    bearer and the room (#3574, ``_narrate_upkeep_lapse``).
 
     Payer rule (#2208): ``source_character`` pays when set — an ally ward
     strains its caster, never its bearer. Self-cast wards are unchanged
@@ -11419,6 +11671,9 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
          Apply fatigue after each action.
        - For each **NPC**: resolve each targeted PC's defensive check.
          Process knockout/death transitions and apply conditions.
+       - After the resolution pass, a ``{name} holds back.`` line is broadcast
+         for every ACTIVE PC in the order with no declaration this round,
+         under TIMED and MANUAL pace only (#3552).
     4. Post-pass: resolve deferred RoundChallengeDeclarations in initiative
        order (reusing the round's resolution_order). Each participant's
        eligibility is re-validated via get_available_actions; ineligible
@@ -11596,6 +11851,10 @@ def resolve_round(  # noqa: PLR0915 - orchestration function; already at the
         offense_check_fn,
         sustaining_participant_ids=sustaining_participant_ids,
     )
+
+    # --- Held-back line (#3552): a PC in the order with nothing declared was
+    # skipped silently under TIMED/MANUAL. Say so, with the other OUTCOME lines.
+    _narrate_held_back(enc, resolution_order, pc_actions, sustaining_participant_ids)
 
     # --- Combo post-resolution: joint narration + discovery + use-count (#2017) ---
     result.action_outcomes = _process_combo_outcomes(

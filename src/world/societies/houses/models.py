@@ -14,6 +14,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
 from world.contributors.models import CreditedContent
+from world.currency.constants import IncomeStreamKind
 from world.items.constants import MaterialSourceKind
 from world.societies.houses.constants import (
     CRISIS_INCOME_FACTORS,
@@ -153,7 +154,7 @@ class FealtyEdge(SharedMemoryModel):
         return f"{self.vassal} sworn to {self.liege}"
 
 
-class SuccessionLaw(SharedMemoryModel):
+class SuccessionLaw(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """How a house (or one title) passes: candidate derivation + ordering (#1884).
 
     Every realm case from the lore is one row: Umbral matrilineal
@@ -161,9 +162,18 @@ class SuccessionLaw(SharedMemoryModel):
     wedlock with enatic tiebreak; Inferna female-line with consort children
     ennobled; Ariwn chosen-heir; Lycan/Aythirmok most-powerful-Gifted of the
     legitimate.
+
+    Authored content (#2875): the house charter's succession vocabulary is
+    the lore repo's to write, so it carries a natural key and is registered
+    in ``CONTENT_MODELS``. ``description`` is the writer's field: the prose a
+    charter author sets to explain how this law shapes inheritance, and what
+    the backlog/Workbench (`web/admin/authoring`) tracks credit against.
     """
 
     name = models.CharField(max_length=120, unique=True)
+    description = models.TextField(
+        blank=True, help_text="Player-facing: how this law shapes inheritance."
+    )
     derivation = models.CharField(max_length=30, choices=SuccessionDerivation.choices)
     ordering_rule = models.CharField(
         max_length=30,
@@ -186,6 +196,11 @@ class SuccessionLaw(SharedMemoryModel):
         related_name="+",
         help_text="CHOSEN_HEIR derivation: the named heir.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]
@@ -325,18 +340,28 @@ class Domain(SharedMemoryModel):
         return base
 
 
-class HoldingKind(SharedMemoryModel):
-    """Authorable catalog of domain holdings (farmland, mine, port...) (#1884)."""
+class HoldingKind(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """Authorable catalog of domain holdings (farmland, mine, port...) (#1884).
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``.
+    """
 
     name = models.CharField(max_length=80, unique=True)
     description = models.TextField(blank=True)
     stream_kind = models.CharField(
         max_length=20,
+        choices=IncomeStreamKind.choices,
         help_text="currency.IncomeStreamKind value the materialized stream uses.",
     )
     base_gross = models.PositiveBigIntegerField(
         help_text="Default coppers-per-cycle gross for a new holding. PLACEHOLDER.",
     )
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["name"]
@@ -922,13 +947,16 @@ class PactCommitment(SharedMemoryModel):
         return f"{self.get_kind_display()} on pact {self.pact_id}"
 
 
-class HouseTemplate(SharedMemoryModel):
-    """A realm's recipe for CG-defined houses on set-aside titles (#1884 Phase D).
+class HouseTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
+    """A family type: the recipe CG builds a family from (#1884 Phase D, #3648).
 
     The claimable ``Title`` is the slot; the template carries the automated
     thematic gates (name pattern per the realm's naming conventions,
     principle ranges) and the materialization package (society, liege,
     succession law, holdings, starting kin slots). Numbers are PLACEHOLDER.
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``.
     """
 
     name = models.CharField(max_length=120, unique=True)
@@ -950,15 +978,34 @@ class HouseTemplate(SharedMemoryModel):
         related_name="house_templates",
         help_text="The society the materialized org joins.",
     )
+    org_type = models.ForeignKey(
+        "arxii.OrganizationType",
+        on_delete=models.PROTECT,
+        related_name="house_templates",
+        help_text="Organization type a family of this template gets (#3648).",
+    )
+    served_house_choices = models.ManyToManyField(
+        _ORG_FK,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "Staff houses a family on this template may declare it served (#3648); "
+            "empty = the question is not offered. Installation-specific: excluded from export."
+        ),
+    )
     liege = models.ForeignKey(
         _ORG_FK,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="house_templates",
         help_text="The org the new house swears fealty to.",
     )
     default_succession_law = models.ForeignKey(
         SuccessionLaw,
         on_delete=models.PROTECT,
+        null=True,
+        blank=True,
         related_name="house_templates",
     )
     name_pattern = models.CharField(
@@ -1004,8 +1051,33 @@ class HouseTemplate(SharedMemoryModel):
         help_text="Cultural facts stamped on materialized houses (#2079).",
     )
 
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
+
     class Meta:
+        verbose_name = "Family Template"
+        verbose_name_plural = "Family Templates"
         ordering = ["realm", "name"]
+
+    def clean(self) -> None:
+        """Refuse a ``name_pattern`` that does not even compile (#3648 review).
+
+        Without this, a bad regex saved through admin would 500 every later
+        GET/PATCH of any draft on this template - ``validators.py``'s
+        ``_get_named_path_errors`` calls ``re.fullmatch`` on it for every
+        stage-validation pass.
+        """
+        import re  # noqa: PLC0415
+
+        from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+        super().clean()
+        try:
+            re.compile(self.name_pattern)
+        except re.error as exc:
+            raise ValidationError({"name_pattern": f"Not a valid regex: {exc}"}) from exc
 
     def __str__(self) -> str:
         return self.name
@@ -1161,18 +1233,30 @@ class HouseAspectOption(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
         return f"{self.definition.name}: {self.name}"
 
 
-class HouseFeature(SharedMemoryModel):
+class HouseFeature(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """A structural cultural fact about houses of a template (#2079).
 
-    No player input — features orient the founder at CG ("this is how a house
+    No player input - features orient the founder at CG ("this is how a house
     like yours conducts itself") and anchor future systems: a ledger UI checks
     the org has the feature slug ``black-ledger``, never a bespoke code path.
+
+    Authored content (#2875): part of the house charter, so it carries a
+    natural key and is registered in ``CONTENT_MODELS``. The natural key is
+    ``name``, not ``slug`` (the content convention every other charter model
+    follows) - ``slug`` stays the stable code anchor a future system keys off
+    (e.g. ``org.features`` carrying ``black-ledger``), a separate concern from
+    the identity the export/import round trip resolves rows by.
     """
 
     name = models.CharField(max_length=120, unique=True)
     slug = models.SlugField(max_length=60, unique=True, help_text="Stable code anchor.")
     description = models.TextField(help_text="Player-facing: how this shapes play.")
     display_order = models.PositiveSmallIntegerField(default=0)
+
+    objects = NaturalKeyManager()
+
+    class NaturalKeyConfig:
+        fields = ["name"]
 
     class Meta:
         ordering = ["display_order", "name"]

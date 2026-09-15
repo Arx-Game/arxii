@@ -4,7 +4,7 @@ from django.test import TestCase
 from evennia.accounts.models import AccountDB
 from rest_framework.test import APIClient
 
-from world.character_creation.constants import FamilyPath
+from world.character_creation.constants import AnchorSource, FamilyPath, QuestionKind
 from world.character_creation.factories import (
     BeginningsFactory,
     CharacterDraftFactory,
@@ -19,6 +19,7 @@ from world.roster.factories import (
     KinSlotPoolFactory,
     KinspersonFactory,
 )
+from world.societies.factories import OrganizationFactory, VacancyFactory
 
 
 class UpbringingListTest(TestCase):
@@ -28,9 +29,44 @@ class UpbringingListTest(TestCase):
         cls.template = OriginTemplateFactory(cg_point_cost=2, allows_claim_family=True)
         cls.slot = OriginTemplateSlotFactory(template=cls.template, allows_text=False)
         cls.choice = OriginTemplateSlotChoiceFactory(slot=cls.slot, cost_per_influence=3)
-        cls.gated = OriginTemplateFactory(beginning=cls.template.beginning, trust_required=50)
+        cls.inactive = OriginTemplateFactory(beginning=cls.template.beginning, is_active=False)
 
-    def test_list_carries_paths_prompts_and_choices_and_hides_trust_gated(self):
+    def test_a_deleted_question_stops_being_served(self):
+        """Reported from production: deleted questions came back with ``"id": null``.
+
+        The staff Builder deleted them and stopped showing them; the guided flow
+        kept offering them. Django's ``Collector.delete()`` sets ``pk = None`` on
+        the instances it deleted, and on this identity-mapped model those are the
+        shared cached instances - so the zombie rows serialize with a null id.
+
+        They were still reachable because the list view prefetched slots with
+        ``Prefetch(..., to_attr="cached_slots")``. ``to_attr`` writes a plain
+        attribute into the instance ``__dict__``, Django skips a prefetch whose
+        ``to_attr`` is already set, and the identity map hands the same instance
+        to the next request - so the second GET re-serves the first GET's slot
+        list however much the table has changed underneath it (ADR-0263).
+
+        Two GETs with a delete in between is the smallest shape that shows it;
+        one GET alone passes on the broken code.
+        """
+        client = APIClient()
+        client.force_authenticate(self.account)
+        doomed = OriginTemplateSlotFactory(template=self.template, name="Doomed", sort_order=9)
+        url = f"/api/character-creation/origin-templates/?beginning={self.template.beginning_id}"
+
+        first = client.get(url)
+        assert doomed.id in [slot["id"] for slot in first.json()[0]["slots"]]
+
+        doomed.delete()
+
+        rows = client.get(url).json()
+        served = [slot["id"] for slot in rows[0]["slots"]]
+        assert None not in served, (
+            f"a deleted question is still being served, with a null id: {served}"
+        )
+        assert doomed.id not in served, f"the deleted question is still served: {served}"
+
+    def test_list_carries_paths_prompts_and_choices_and_hides_inactive(self):
         client = APIClient()
         client.force_authenticate(self.account)
         res = client.get(
@@ -44,7 +80,6 @@ class UpbringingListTest(TestCase):
         assert row["allows_claim_family"]
         assert row["allows_name_family"]
         assert not row["allows_no_family"]
-        assert row["named_family_kind"] == self.template.named_family_kind_id
         slot = row["slots"][0]
         assert slot["applies_to"] == FamilyPath.ANY
         assert slot["allows_text"] is False
@@ -54,6 +89,7 @@ class UpbringingListTest(TestCase):
             "description": "",
             "cg_point_cost": 0,
             "cost_per_influence": 3,
+            "offers": [],
             "sort_order": self.choice.sort_order,
         }
 
@@ -144,6 +180,14 @@ class DraftUpbringingPatchTest(TestCase):
         res = self.client.patch(self.url, {"selected_origin_template_id": other.id}, format="json")
         assert res.status_code == 400
 
+    def test_patch_refuses_a_malformed_family_aspect_picks(self):
+        """A garbage payload gets a 400, not a 500 (#3648 review)."""
+        res = self.client.patch(
+            self.url, {"draft_data": {"family_aspect_picks": "garbage"}}, format="json"
+        )
+        assert res.status_code == 400
+        assert "family_aspect_picks" in res.json()["draft_data"]
+
     def test_changing_upbringing_clears_downstream_keys(self):
         self.client.patch(
             self.url, {"selected_origin_template_id": self.template.id}, format="json"
@@ -175,6 +219,34 @@ class DraftUpbringingPatchTest(TestCase):
         assert draft.claimed_kin_slot is None
         assert draft.claimed_kin_pool is None
 
+    def test_clearing_the_upbringing_also_clears_the_vacancy_and_served_house(self):
+        """A PATCH that nulls the Upbringing must drop a stale Vacancy pick too (#3648 review).
+
+        Otherwise ``calculate_upbringing_cost()`` keeps pricing a Vacancy the
+        player is no longer tied to any Upbringing for.
+        """
+        self.client.patch(
+            self.url, {"selected_origin_template_id": self.template.id}, format="json"
+        )
+        family = FamilyFactory(influence=5)
+        org = OrganizationFactory(family=family)
+        vacancy = VacancyFactory(organization=org, cg_point_cost=5)
+        draft = CharacterDraft.objects.get(pk=self.draft.pk)
+        draft.selected_vacancy = vacancy
+        draft.served_house = org
+        draft.save(update_fields=["selected_vacancy", "served_house"])
+        assert draft.calculate_upbringing_cost() > 0
+
+        res = self.client.patch(self.url, {"selected_origin_template_id": None}, format="json")
+        assert res.status_code == 200, res.json()
+        assert res.json()["selected_vacancy"] is None
+        assert res.json()["served_house"] is None
+
+        draft.refresh_from_db()
+        assert draft.selected_vacancy is None
+        assert draft.served_house is None
+        assert draft.calculate_upbringing_cost() == 0
+
     def test_patching_the_same_family_path_is_a_noop(self):
         self.client.patch(
             self.url, {"selected_origin_template_id": self.template.id}, format="json"
@@ -191,3 +263,40 @@ class DraftUpbringingPatchTest(TestCase):
         draft.refresh_from_db()
         assert draft.family_path == FamilyPath.CLAIMED
         assert draft.family == family
+
+
+class DraftDerivedAnchorsTest(TestCase):
+    """Ruling L: the draft response carries the resolved org a client can't derive itself."""
+
+    def setUp(self):
+        self.account = AccountDB.objects.create_user(username="derived", password="x")
+        self.family = FamilyFactory(influence=3)
+        self.house = OrganizationFactory(name="Hold", family=self.family)
+        self.template = OriginTemplateFactory(allows_claim_family=True, allows_name_family=False)
+        self.slot = OriginTemplateSlotFactory(
+            template=self.template, kind=QuestionKind.GROUP, anchor_source=AnchorSource.OWN_FAMILY
+        )
+        self.draft = CharacterDraftFactory(
+            account=self.account,
+            selected_area=self.template.beginning.starting_area,
+            selected_beginnings=self.template.beginning,
+            selected_origin_template=self.template,
+            family=self.family,
+        )
+        self.client = APIClient()
+        self.client.force_authenticate(self.account)
+
+    def test_draft_get_carries_derived_anchors_keyed_by_slot_id(self):
+        res = self.client.get(f"/api/character-creation/drafts/{self.draft.pk}/")
+        assert res.status_code == 200, res.json()
+        assert res.json()["derived_anchors"] == {
+            str(self.slot.id): {"id": self.house.id, "name": "Hold", "influence": 3}
+        }
+
+    def test_draft_get_carries_none_when_the_family_has_no_house(self):
+        self.house.family = None
+        self.house.save(update_fields=["family"])
+
+        res = self.client.get(f"/api/character-creation/drafts/{self.draft.pk}/")
+        assert res.status_code == 200, res.json()
+        assert res.json()["derived_anchors"] == {str(self.slot.id): None}

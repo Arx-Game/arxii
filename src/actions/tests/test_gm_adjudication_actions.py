@@ -9,6 +9,7 @@ stat/skill pair, an integer difficulty, or any consequence-pool reference from a
 from __future__ import annotations
 
 from decimal import Decimal
+from unittest import mock
 
 from django.test import TestCase
 
@@ -37,7 +38,11 @@ from world.progression.models import DevelopmentPoints, ExperiencePointsData, Ma
 from world.progression.types import ProgressionReason
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.action_constants import DifficultyChoice
+from world.scenes.constants import InteractionMode, InteractionVisibility
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
+from world.scenes.models import Interaction
+from world.scenes.narrator import NARRATOR_PERSONA_NAME
+from world.scenes.services import active_persona_for_sheet
 from world.societies.factories import OrganizationFactory
 from world.traits.constants import STAT_DISPLAY_DIVISOR
 from world.traits.factories import CheckSystemSetupFactory, TraitFactory
@@ -872,6 +877,163 @@ class GMApplyConditionActionTests(GMAdjudicationActionsTestBase):
             target=self.target, condition=self.condition_template
         )
         self.assertEqual(instance.rounds_remaining, self.condition_template.default_duration_value)
+
+    def test_note_is_broadcast_as_a_narrator_outcome_line(self) -> None:
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
+            result = GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=self.condition_template.name,
+                note="The wine was poisoned.",
+            )
+        self.assertTrue(result.success, result.message)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        self.assertEqual(line.persona.name, NARRATOR_PERSONA_NAME)
+        self.assertEqual(line.scene, self.scene)
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        expected = f"{presenting} is now {self.condition_template.name}. The wine was poisoned."
+        self.assertEqual(line.content, expected)
+        self.assertFalse(line.receivers.exists())
+        self.assertEqual(line.visibility, InteractionVisibility.DEFAULT)
+        broadcast.assert_called_once()
+        self.assertEqual(broadcast.call_args.args[0], self.room)
+        self.assertEqual(broadcast.call_args.args[1]["content"], expected)
+
+    def test_apply_without_note_broadcasts_nothing(self) -> None:
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=self.condition_template.name,
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(Interaction.objects.filter(mode=InteractionMode.OUTCOME).exists())
+
+    def test_hidden_condition_note_reaches_only_the_target(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=self.target,
+            condition_ref=hidden.name,
+            note="A brand only you can feel.",
+        )
+        self.assertTrue(result.success, result.message)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        receiver_ids = list(line.receivers.values_list("persona_id", flat=True))
+        self.assertEqual(receiver_ids, [active_persona_for_sheet(self.target.sheet_data).pk])
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        self.assertEqual(
+            line.content,
+            f"{presenting} is now Adjudication Marked. A brand only you can feel.",
+        )
+        self.assertEqual(line.visibility, InteractionVisibility.PERCEIVED_ONLY)
+
+    def test_hidden_condition_note_is_pushed_to_the_target_only(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        with (
+            mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast,
+            mock.patch("world.scenes.interaction_services._send_to_objects") as send_to,
+        ):
+            result = GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=hidden.name,
+                note="A brand only you can feel.",
+            )
+        self.assertTrue(result.success, result.message)
+        broadcast.assert_not_called()
+        send_to.assert_called_once()
+        self.assertEqual(send_to.call_args.args[0], [self.target])
+
+    def test_note_reaches_room_telnet_clients(self) -> None:
+        with mock.patch.object(self.room, "msg_contents") as msg_contents:
+            GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=self.condition_template.name,
+                note="The wine was poisoned.",
+            )
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        msg_contents.assert_called_once_with(
+            f"{presenting} is now {self.condition_template.name}. The wine was poisoned."
+        )
+
+    def test_hidden_condition_note_is_not_sent_to_the_room(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        with (
+            mock.patch.object(self.room, "msg_contents") as msg_contents,
+            mock.patch.object(self.target, "msg") as target_msg,
+            mock.patch("world.scenes.interaction_services._send_to_objects"),
+        ):
+            GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=self.target,
+                condition_ref=hidden.name,
+                note="A brand only you can feel.",
+            )
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        msg_contents.assert_not_called()
+        target_msg.assert_called_once_with(
+            f"{presenting} is now Adjudication Marked. A brand only you can feel."
+        )
+
+    def test_visible_condition_note_reaches_target_when_gm_actor_has_no_location(self) -> None:
+        # Uses self.staff_actor, not self.gm_actor: IsSceneGMPrerequisite resolves the
+        # acting GM's scene via ``get_active_scene(actor.location)``, so a GM with no
+        # location can never pass it. Staff bypasses that check via is_staff_observer
+        # regardless of location, which is the only way to reach this helper with an
+        # unlocated actor.
+        self.staff_actor.location = None
+        self.staff_actor.save()
+        with (
+            mock.patch.object(self.target, "msg") as target_msg,
+            mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast,
+            mock.patch("world.scenes.interaction_services._send_to_objects") as send_to,
+        ):
+            result = GMApplyConditionAction().run(
+                actor=self.staff_actor,
+                target=self.target,
+                condition_ref=self.condition_template.name,
+                note="The wine was poisoned.",
+            )
+        self.assertTrue(result.success, result.message)
+        presenting = active_persona_for_sheet(self.target.sheet_data).name
+        expected = f"{presenting} is now {self.condition_template.name}. The wine was poisoned."
+        target_msg.assert_called_once_with(expected)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        self.assertIsNone(line.scene)
+        broadcast.assert_not_called()
+        send_to.assert_called_once()
+        self.assertEqual(send_to.call_args.args[0], [self.target])
+
+    def test_visible_condition_on_sheetless_target_is_named_by_key(self) -> None:
+        vase = ObjectDBFactory(db_key="Adjudication Vase", location=self.room)
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
+            result = GMApplyConditionAction().run(
+                actor=self.gm_actor,
+                target=vase,
+                condition_ref=self.condition_template.name,
+                note="It was cracked in the fall.",
+            )
+        self.assertTrue(result.success, result.message)
+        line = Interaction.objects.get(mode=InteractionMode.OUTCOME)
+        self.assertEqual(
+            line.content,
+            f"Adjudication Vase is now {self.condition_template.name}. It was cracked in the fall.",
+        )
+        broadcast.assert_called_once()
+        self.assertEqual(broadcast.call_args.args[0], self.room)
+
+    def test_hidden_condition_on_sheetless_target_records_nothing(self) -> None:
+        hidden = ConditionTemplateFactory(name="Adjudication Marked", is_visible_to_others=False)
+        vase = ObjectDBFactory(db_key="Adjudication Vase", location=self.room)
+        result = GMApplyConditionAction().run(
+            actor=self.gm_actor,
+            target=vase,
+            condition_ref=hidden.name,
+            note="It was cracked in the fall.",
+        )
+        self.assertTrue(result.success, result.message)
+        self.assertFalse(Interaction.objects.filter(mode=InteractionMode.OUTCOME).exists())
 
 
 class GMRemoveConditionActionTests(GMAdjudicationActionsTestBase):

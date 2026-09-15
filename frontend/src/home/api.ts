@@ -2,7 +2,7 @@
  * Landing page (Gatefold) API functions — public "shop-window" reads (#3305).
  *
  * Every endpoint here is deliberately safe for anonymous visitors: content is
- * gated by trust-level filtering / query scoping server-side (see
+ * gated by query scoping server-side (see
  * `StartingAreaViewSet`/`BeginningsViewSet`/`InteractionViewSet.get_permissions`),
  * not by authentication. Types are reused from the modules that already own
  * these shapes (`character-creation`, `scenes`) rather than re-declared here.

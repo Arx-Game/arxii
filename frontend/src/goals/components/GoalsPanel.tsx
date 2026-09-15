@@ -195,8 +195,12 @@ export function GoalsPanel() {
         {goals.length > 0 && (
           <ul className="space-y-1">
             {goals.map((g) => (
-              <li key={g.id} className="flex items-center justify-between text-sm">
-                <span>{g.domain_name}</span>
+              <li key={g.id} className="flex items-center justify-between gap-2 text-sm">
+                <span>
+                  {g.horizon === 'long_term' ? 'Long term' : 'Short term'} {g.ordinal}
+                  {g.notes ? `: ${g.notes}` : ''}{' '}
+                  <span className="text-muted-foreground">{g.domain_name}</span>
+                </span>
                 <Badge variant="outline">{g.points} pts</Badge>
               </li>
             ))}

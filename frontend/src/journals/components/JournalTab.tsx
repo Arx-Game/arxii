@@ -9,18 +9,18 @@
  * "responses to me" count would need a new backend shape; out of scope for
  * this task per the brief (no backend changes).
  *
- * VoteButton gating (#3302): `entries/mine/` is filtered server-side to the
+ * NominateButton gating (#3302, nominations since #3738): `entries/mine/` is filtered server-side to the
  * requesting character's own entries only (`views.py`'s `mine` action), so
  * every row here is always the viewer's own; the same own-entry gate used
  * on `JournalsPage` therefore always evaluates to hidden. Wired anyway (not
  * dead: it's the correctness gate, not a feature) so this list renders
- * VoteButton the moment it ever surfaces someone else's entry.
+ * NominateButton the moment it ever surfaces someone else's entry.
  */
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { PenLine } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { VoteButton } from '@/components/VoteButton';
+import { NominateButton } from '@/components/NominateButton';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
 import { useMyJournalEntries } from '../queries';
 import { JournalComposerDialog } from './JournalComposerDialog';
@@ -46,7 +46,7 @@ export function JournalTab() {
       <ul className="space-y-2">
         {recent.map((entry) => {
           const isOwnEntry = myRosterEntries.some((e) => e.character_id === entry.author);
-          const canVote = entry.is_public && !isOwnEntry;
+          const canNominate = entry.is_public && !isOwnEntry;
           return (
             <li key={entry.id} className="flex items-center gap-1">
               <Link
@@ -58,7 +58,13 @@ export function JournalTab() {
                   {new Date(entry.created_at).toLocaleDateString()}
                 </span>
               </Link>
-              {canVote ? <VoteButton targetType="journal" targetId={entry.id} /> : null}
+              {canNominate ? (
+                <NominateButton
+                  targetType="journal"
+                  targetId={entry.id}
+                  nomineeName={entry.author_name}
+                />
+              ) : null}
             </li>
           );
         })}

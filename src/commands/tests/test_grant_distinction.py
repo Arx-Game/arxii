@@ -119,7 +119,9 @@ class CmdGrantDistinctionTests(TestCase):
         )
         cmd.func()
 
-        self.staff_character.msg.assert_any_call("rank must be a whole number.")
+        self.staff_character.msg.assert_any_call(
+            ("rank must be a whole number.", {"type": "error"})
+        )
         assert not CharacterDistinction.objects.filter(
             character=self.target_character.sheet_data
         ).exists()
@@ -141,7 +143,7 @@ class CmdGrantDistinctionTests(TestCase):
         cmd.func()
 
         self.staff_character.msg.assert_any_call(
-            "Usage: grant_distinction <character>=<distinction slug>[,rank]"
+            ("Usage: grant_distinction <character>=<distinction slug>[,rank]", {"type": "error"})
         )
 
     def test_search_none_does_not_message_twice(self) -> None:
@@ -189,7 +191,7 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
         cmd = _build_cmd(caller, f"{self.target_character.key}=silver-tongue")
         cmd.func()
 
-        caller.msg.assert_called_with("Requires Junior GM or higher.")
+        caller.msg.assert_called_with(("Requires Junior GM or higher.", {"type": "error"}))
         assert not CharacterDistinction.objects.filter(
             character=self.target_character.sheet_data
         ).exists()
@@ -201,7 +203,7 @@ class CmdGrantDistinctionGMTrustTests(TestCase):
         cmd = _build_cmd(caller, f"{self.target_character.key}=silver-tongue")
         cmd.func()
 
-        caller.msg.assert_called_with("GM trust required.")
+        caller.msg.assert_called_with(("GM trust required.", {"type": "error"}))
         assert not CharacterDistinction.objects.filter(
             character=self.target_character.sheet_data
         ).exists()

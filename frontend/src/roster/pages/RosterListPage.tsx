@@ -23,8 +23,9 @@ import {
 } from '@/components/ui/select';
 import { Gender, GENDER_LABELS } from '@/world/character_sheets/types';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAccount } from '@/store/hooks';
+import { useRealms } from '@/realms/queries';
 import { usePageBackgrounds, pageBackgroundStyle } from '@/hooks/usePageBackgrounds';
 import { useCGExplanations } from '@/character-creation/queries';
 
@@ -38,6 +39,11 @@ export function RosterListPage() {
   const [name, setName] = useState('');
   const [charClass, setCharClass] = useState('');
   const [gender, setGender] = useState<Gender | undefined>(undefined);
+  // Realm filter (#3725): a slug in the URL (`/roster?realm=umbros`), the way a realm
+  // page's Characters section hands off to the roster; the select changes the URL.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const realm = searchParams.get('realm') ?? undefined;
+  const { data: realms } = useRealms();
 
   const debouncedName = useDebouncedValue(name);
   const debouncedClass = useDebouncedValue(charClass);
@@ -49,7 +55,7 @@ export function RosterListPage() {
   }, [rosters, activeRoster]);
   useEffect(() => {
     setPage(1);
-  }, [debouncedName, debouncedClass, gender]);
+  }, [debouncedName, debouncedClass, gender, realm]);
 
   const { data: entryPage, isLoading: entriesLoading } = useRosterEntriesQuery(
     activeRoster ? Number(activeRoster) : undefined,
@@ -58,6 +64,7 @@ export function RosterListPage() {
       name: debouncedName,
       char_class: debouncedClass,
       gender,
+      realm,
     }
   );
 
@@ -115,6 +122,24 @@ export function RosterListPage() {
                   {Object.entries(GENDER_LABELS).map(([value, label]) => (
                     <SelectItem key={value} value={value}>
                       {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={realm ?? '__any__'}
+                onValueChange={(v) =>
+                  setSearchParams(v === '__any__' ? {} : { realm: v }, { replace: true })
+                }
+              >
+                <SelectTrigger className="w-full" aria-label="Realm">
+                  <SelectValue placeholder="Realm" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__any__">Any realm</SelectItem>
+                  {realms?.map((r) => (
+                    <SelectItem key={r.slug} value={r.slug}>
+                      {r.name}
                     </SelectItem>
                   ))}
                 </SelectContent>

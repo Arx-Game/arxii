@@ -1,4 +1,4 @@
-Closes #{{issue_number}}
+{{link_verb}} #{{issue_number}}
 
 ## Summary
 
@@ -7,6 +7,12 @@ Closes #{{issue_number}}
 ## Follow-ups filed
 
 {{followup_list}}
+
+{{evidence_marker}}
+
+## Review evidence
+
+{{evidence_status}}
 
 ## Notes
 

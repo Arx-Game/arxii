@@ -75,6 +75,7 @@ export function TechniqueEffectSummaryDisplay({
     summary.applies.length > 0 ||
     summary.removes.length > 0 ||
     summary.damage.length > 0 ||
+    summary.treatments.length > 0 ||
     summary.grants.length > 0;
 
   return (
@@ -106,9 +107,24 @@ export function TechniqueEffectSummaryDisplay({
               {damageEffectLabel(damage)}
             </Badge>
           ))}
+          {summary.treatments.map((treatment) => (
+            <Badge
+              key={`treatments-${treatment.name}`}
+              variant="secondary"
+              title={treatment.description}
+            >
+              Treats {treatment.treats}
+            </Badge>
+          ))}
+          {/*
+            A capability grant is standing possession, not a cast effect
+            (ADR-0248) — knowing the technique is what confers it. The "Known:"
+            prefix is what keeps this chip from reading as one more thing the
+            cast does, which is how it read before #3682.
+          */}
           {summary.grants.map((grant) => (
             <Badge key={`grants-${grant.name}`} variant="default" title={grant.description}>
-              {grant.name}
+              Known: {grant.name}
             </Badge>
           ))}
         </div>

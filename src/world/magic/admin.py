@@ -1,17 +1,32 @@
+from django import forms
 from django.contrib import admin
-from django.db.models import Prefetch
+from django.db.models import Count, Prefetch
+from django.forms.models import BaseInlineFormSet
+from django.utils.html import format_html
 
+from web.admin.authoring.offers import DistinctionOfferFormSetMixin
+from world.admin_utils import describe_reverse_relations
+from world.character_creation.constants import OfferChapter
+from world.character_creation.models import DistinctionOffer
 from world.codex.models import TraditionCodexGrant
+from world.conditions.inspection import inspect_condition_template
 from world.magic.audere import AudereThreshold
 from world.magic.audere_majora import (
     AudereMajoraFaithVariant,
     AudereMajoraFaithVariantAppliedCondition,
+    AudereMajoraThreshold,
 )
+from world.magic.constants import GiftKind
 from world.magic.models import (
     Affinity,
     AffinityInteraction,
+    AnimaConfig,
     AnimaRitualBudgetAward,
     AnimaRitualPerformance,
+    AuraAffinityThreshold,
+    AuraPowerConfig,
+    BeginningsRitualGrant,
+    CapabilityPowerConfig,
     CharacterAnima,
     CharacterAura,
     CharacterGift,
@@ -20,18 +35,23 @@ from world.magic.models import (
     CharacterTechnique,
     CharacterThreadWeavingUnlock,
     CharacterTradition,
+    CodexEntryRitualGrant,
     CompromiseActType,
+    CorruptionConfig,
     CovenantRoleBlendConfig,
     CrossingChoice,
     CrossingOption,
+    DistinctionResonanceGrant,
     DistinctionResonanceRankThreshold,
+    DistinctionRitualGrant,
     EffectType,
     Facet,
+    FuryConfig,
+    FuryTier,
     Gift,
     GiftAcquisitionConfig,
     GiftUnlock,
     GlimpseTag,
-    GlimpseTagDistinctionSuggestion,
     ImbuingProseTemplate,
     IntensityTier,
     LevelPowerConfig,
@@ -40,6 +60,9 @@ from world.magic.models import (
     Motif,
     MotifResonance,
     MotifResonanceStyle,
+    PathGiftGrant,
+    PathRitualGrant,
+    PortalAnchorKind,
     PoseEndorsement,
     Reincarnation,
     RelationshipBondPullTuning,
@@ -47,11 +70,13 @@ from world.magic.models import (
     ResonanceEnvironmentConfig,
     ResonanceGainConfig,
     ResonanceGrant,
+    ResonanceTier,
     Restriction,
     Ritual,
     RitualAnimaContribution,
     RitualCheckConfig,
     RitualComponentRequirement,
+    RitualLiturgy,
     SanctumDissolutionRecoveryAward,
     SanctumHomecomingGainAward,
     SanctumPurgingRetentionAward,
@@ -64,7 +89,11 @@ from world.magic.models import (
     StandingCapBand,
     StyleCapabilityRequirement,
     Technique,
+    TechniqueAppliedCondition,
+    TechniqueBudgetConfig,
     TechniqueCapabilityGrant,
+    TechniqueCapabilityRequirement,
+    TechniqueDamageProfile,
     TechniqueFunctionTag,
     TechniqueGrant,
     TechniqueOutcomeModifier,
@@ -72,6 +101,7 @@ from world.magic.models import (
     TechniqueRemovedCondition,
     TechniqueStyle,
     TechniqueTeachingOffer,
+    TechniqueTierBudget,
     TechniqueTreatment,
     Thread,
     ThreadLevelUnlock,
@@ -84,6 +114,7 @@ from world.magic.models import (
     TouchstoneCastConfig,
     Tradition,
     TraditionGiftGrant,
+    TraditionRitualGrant,
 )
 from world.magic.models.appetites import (
     AppetiteUpkeep,
@@ -95,11 +126,20 @@ from world.magic.models.dramatic_moment import (
     DramaticMomentTag,
     DramaticMomentType,
 )
+from world.magic.models.resonance_environment import ResonanceAlignmentBoonTier
 from world.magic.services.glimpse import refresh_glimpse_state
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     technique_effect_authoring_gaps,
+    technique_is_not_castable_standalone,
+    technique_payload_prefetches,
     technique_relationship_is_ambiguous,
+)
+from world.magic.specialization.models import (
+    TechniqueVariant,
+    TechniqueVariantAppliedCondition,
+    TechniqueVariantCapabilityGrant,
+    TechniqueVariantDamageProfile,
 )
 
 
@@ -111,14 +151,33 @@ class AffinityAdmin(admin.ModelAdmin):
 
 @admin.register(Resonance)
 class ResonanceAdmin(admin.ModelAdmin):
-    list_display = ["name", "affinity", "get_opposite"]
+    """The most cross-referenced model in the app (#3679) — see ``get_connections``."""
+
+    list_display = ["name", "affinity", "get_opposite", "get_gift_count"]
     list_filter = ["affinity"]
     search_fields = ["name"]
     list_select_related = ["affinity", "opposite"]
+    readonly_fields = ["get_gifts", "get_connections"]
 
     @admin.display(description="Opposite")
     def get_opposite(self, obj: Resonance) -> str:
         return obj.opposite.name if obj.opposite else "-"
+
+    @admin.display(description="Gifts (supported set)")
+    def get_gift_count(self, obj):
+        # No prefetch here — Resonance/Gift are identity-mapped SharedMemoryModels,
+        # and a to_attr/prefetch cache written onto a shared instance goes stale
+        # across requests (ADR-0278). This admin list is small (~24 rows); a
+        # per-row query is the correct trade, not a cache with a staleness bug.
+        return obj.gifts.count()
+
+    @admin.display(description="Gifts in supported set")
+    def get_gifts(self, obj):
+        return ", ".join(g.name for g in obj.gifts.all()) or "-"
+
+    @admin.display(description="Other connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj, exclude=frozenset({"gifts"}))
 
 
 @admin.register(AffinityInteraction)
@@ -137,9 +196,21 @@ class AffinityInteractionAdmin(admin.ModelAdmin):
 
 @admin.register(EffectType)
 class EffectTypeAdmin(admin.ModelAdmin):
-    list_display = ["name", "base_power", "base_anima_cost", "has_power_scaling"]
+    list_display = [
+        "name",
+        "base_power",
+        "base_anima_cost",
+        "has_power_scaling",
+        "get_technique_count",
+    ]
     list_filter = ["has_power_scaling"]
     search_fields = ["name"]
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
 
 
 class StyleCapabilityRequirementInline(admin.TabularInline):
@@ -201,9 +272,48 @@ class IntensityTierAdmin(admin.ModelAdmin):
 
 
 class TechniqueCapabilityGrantInline(admin.TabularInline):
+    """Standing possession, NOT a cast effect (ADR-0248).
+
+    Knowing the technique grants the capability; casting it does nothing extra
+    with these rows. A capability boost that should arrive *on cast* is authored
+    as an applied condition carrying a ``ConditionCapabilityEffect`` instead.
+    """
+
     model = TechniqueCapabilityGrant
     extra = 1
     autocomplete_fields = ["capability"]
+    verbose_name = "Capability Grant (standing, from knowing it)"
+    verbose_name_plural = "Capability Grants (standing, from knowing it)"
+
+
+class TechniqueAppliedConditionInline(admin.TabularInline):
+    """Applied-condition payload rows on the Technique admin (#3682).
+
+    The technique's primary cast payload and, until now, the one authorable
+    only by someone willing to write SQL: ``TechniqueAppliedCondition`` carries
+    the ``target_kind`` that ``derive_target_relationship`` reads to decide who
+    a technique may be aimed at, plus the success thresholds and severity
+    scaling that ``compute_severity`` turns into the condition's magnitude.
+    """
+
+    model = TechniqueAppliedCondition
+    extra = 1
+    autocomplete_fields = ["condition"]
+
+
+class TechniqueDamageProfileInline(admin.TabularInline):
+    """Damage payload rows on the Technique admin (#3682).
+
+    Deliberately inline-only: ``TechniqueDamageProfile`` carries no standalone
+    ``@admin.register``, and the authoring-relations panel's neighbour links
+    depend on that (``test_admin_link_omitted_for_unregistered_neighbor_model``).
+    A damage row has no meaning apart from its technique, so the technique page
+    is the whole of its authoring surface.
+    """
+
+    model = TechniqueDamageProfile
+    extra = 1
+    autocomplete_fields = ["damage_type"]
 
 
 @admin.register(TechniqueRemovedCondition)
@@ -220,6 +330,32 @@ class TechniqueRemovedConditionAdmin(admin.ModelAdmin):
     list_filter = ["target_kind", "remove_all_stacks"]
     search_fields = ["technique__name", "condition__name"]
     autocomplete_fields = ["technique", "condition"]
+
+    def save_model(self, request, obj, form, change):
+        """Invalidate the owning technique's caches (#3712).
+
+        The identical edit made through the Technique page's inline invalidates
+        correctly (``TechniqueAdmin.save_related``); made here it did not, so the
+        same change had two different outcomes depending on which page staff
+        used. Techniques are SharedMemoryModels, so the stale ``cached_*``
+        payload lists answer every later read in the process, and the tuning
+        corpus keys on the catalog revision this also bumps.
+        """
+        super().save_model(request, obj, form, change)
+        invalidate_technique_payload_caches(obj.technique)
+
+    def delete_model(self, request, obj):
+        """Removing a dispel row changes the summary as much as adding one."""
+        technique = obj.technique
+        super().delete_model(request, obj)
+        invalidate_technique_payload_caches(technique)
+
+    def delete_queryset(self, request, queryset):
+        """The changelist's bulk-delete action bypasses ``delete_model``."""
+        techniques = list({row.technique for row in queryset.select_related("technique")})
+        super().delete_queryset(request, queryset)
+        for technique in techniques:
+            invalidate_technique_payload_caches(technique)
 
 
 class TechniqueRemovedConditionInline(admin.TabularInline):
@@ -244,9 +380,10 @@ class TechniqueFunctionTagInline(admin.TabularInline):
     extra = 1
 
 
-#: Query-string values for TechniqueAuthoringGapFilter's two gap kinds.
+#: Query-string values for TechniqueAuthoringGapFilter's three gap kinds.
 _GAP_UNDERSPECIFIED = "underspecified"
 _GAP_AMBIGUOUS = "ambiguous"
+_GAP_NOT_CASTABLE = "not_castable"
 
 
 class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
@@ -262,28 +399,71 @@ class TechniqueAuthoringGapFilter(admin.SimpleListFilter):
     title = "authoring gap"
     parameter_name = "authoring_gap"
 
+    #: Which ``TechniqueAuthoringGap`` flag each Python-computed value selects on.
+    _GAP_ATTRS = {
+        _GAP_UNDERSPECIFIED: "is_underspecified",
+        _GAP_AMBIGUOUS: "relationship_is_ambiguous",
+    }
+
     #: Django passes both hook arguments positionally, so the leading underscores
     #: mark them unused without needing a suppression.
     def lookups(self, _request, _model_admin):
         return [
             (_GAP_UNDERSPECIFIED, "No effects authored"),
             (_GAP_AMBIGUOUS, "Mixed targeting (relationship is a guess)"),
+            (_GAP_NOT_CASTABLE, "No cast template (not castable standalone)"),
         ]
 
     def queryset(self, _request, queryset):
         value = self.value()
-        if value not in {_GAP_UNDERSPECIFIED, _GAP_AMBIGUOUS}:
+        # Cast linkage is a column, so it filters in SQL rather than through the
+        # Python sweep (#3682). It is also deliberately not a
+        # ``TechniqueAuthoringGap`` member: cast readiness is its own policy
+        # gate, while the gap audit covers effect-authoring data.
+        if value == _GAP_NOT_CASTABLE:
+            return queryset.filter(action_template__isnull=True)
+        attr = self._GAP_ATTRS.get(value)
+        if attr is None:
             return queryset
         gaps = technique_effect_authoring_gaps()
-        if value == _GAP_UNDERSPECIFIED:
-            pks = [gap.technique_id for gap in gaps if gap.is_underspecified]
-        else:
-            pks = [gap.technique_id for gap in gaps if gap.relationship_is_ambiguous]
+        pks = [gap.technique_id for gap in gaps if getattr(gap, attr)]
         return queryset.filter(pk__in=pks)
+
+
+@admin.action(description="Wire selected techniques to the shared Technique Cast")
+def wire_technique_cast_templates(modeladmin, request, queryset):  # type: ignore[no-untyped-def]
+    """Give selected unfinished techniques the shared standalone cast template.
+
+    Staff choose the rows through the ``No cast template`` filter; the action
+    only updates rows that are still missing a template and invalidates each
+    affected technique's shared-memory payload caches.
+    """
+    from world.magic.seeds_cast import get_standalone_cast_template  # noqa: PLC0415
+
+    techniques = list(queryset.filter(action_template__isnull=True))
+    if not techniques:
+        modeladmin.message_user(request, "No selected techniques need a cast template.")
+        return
+
+    template = get_standalone_cast_template()
+    Technique.objects.filter(pk__in=[technique.pk for technique in techniques]).update(
+        action_template_id=template.pk
+    )
+    for technique in techniques:
+        technique.action_template_id = template.pk
+        invalidate_technique_payload_caches(technique)
+    # Bulk update bypasses Evennia's identity map; discard any other stale
+    # Technique instances that may still carry a null action_template_id.
+    Technique.flush_instance_cache()
+    modeladmin.message_user(
+        request,
+        f"Wired {len(techniques)} technique(s) to the shared Technique Cast template.",
+    )
 
 
 @admin.register(Technique)
 class TechniqueAdmin(admin.ModelAdmin):
+    actions = [wire_technique_cast_templates]
     list_display = [
         "name",
         "gift",
@@ -312,11 +492,29 @@ class TechniqueAdmin(admin.ModelAdmin):
     autocomplete_fields = ["creator", "effect_type", "gift"]
     list_select_related = ["gift", "effect_type"]
     inlines = [
+        TechniqueAppliedConditionInline,
+        TechniqueDamageProfileInline,
         TechniqueCapabilityGrantInline,
         TechniqueRemovedConditionInline,
         TechniqueTreatmentInline,
         TechniqueFunctionTagInline,
     ]
+
+    def get_queryset(self, request):
+        """Prefetch every payload table the Gap/Targets columns read (#3682).
+
+        ``get_authoring_gap`` and ``get_relationship`` both walk the derived
+        effect summary, which reads four payload relations. Without this the
+        changelist paid four queries per row; the ``to_attr`` names are the
+        ``cached_*`` properties those derivations read, so the prefetched rows
+        are what answers them (and cannot go stale against the identity map,
+        #2728).
+        """
+        return (
+            super()
+            .get_queryset(request)
+            .prefetch_related(*technique_payload_prefetches(include_condition_diagnostics=True))
+        )
 
     @admin.display(description="Tier")
     def get_tier(self, obj: Technique) -> int:
@@ -329,12 +527,32 @@ class TechniqueAdmin(admin.ModelAdmin):
 
     @admin.display(description="Gap")
     def get_authoring_gap(self, obj: Technique) -> str:
-        """Flag the two states where the derived effect can't be trusted (#2898)."""
+        """Flag the states where the derived effect can't be trusted (#2898, #3682).
+
+        "no cast template" marks an unfinished technique. Every technique must
+        be activatable; capability grants are standing possession but do not
+        create a standing-only exception to the cast readiness rule.
+        """
         gaps = []
         if obj.cached_effect_summary["is_underspecified"]:
             gaps.append("no effects authored")
         if technique_relationship_is_ambiguous(obj):
             gaps.append("mixed targeting")
+        if technique_is_not_castable_standalone(obj):
+            gaps.append("no cast template")
+
+        # A condition FK proves only that the named template exists. Show each
+        # applied/removed condition here so an empty template is never mistaken
+        # for a fully specified mechanic, while recognized and custom wiring are
+        # kept distinct by the shared inspector (#3715).
+        gaps.extend(
+            f"applies {inspect_condition_template(row.condition).as_text()}"
+            for row in obj.cached_condition_applications
+        )
+        gaps.extend(
+            f"removes {inspect_condition_template(row.condition).as_text()}"
+            for row in obj.cached_removed_conditions
+        )
         return ", ".join(gaps) or "—"
 
     @admin.display(description="What this does")
@@ -377,6 +595,87 @@ class CharacterAuraAdmin(admin.ModelAdmin):
         refresh_glimpse_state(obj)
 
 
+class GlimpseTagOfferFormSet(DistinctionOfferFormSetMixin, BaseInlineFormSet):
+    """Rejects the same distinction offered twice on one tag (#3675 review Important 2/minor 2).
+
+    The check itself is the shared ``DistinctionOfferFormSetMixin``
+    (#3675 Task 10 review, promoted alongside the Upbringing Builder's
+    identical ``_OfferBaseFormSet``) - this class only names the owner noun.
+    """
+
+    owner_noun = "tag"
+
+
+class GlimpseTagOfferForm(forms.ModelForm):
+    """One "what it offers" row on a Glimpse tag's own change form (#3675).
+
+    ``chapter`` is forced to GLIMPSE here and never shown as a select - the
+    row exists because it hangs off this tag, so which chapter it belongs to
+    is not a choice an author makes on this page (mirrors the Distinction
+    Builder's own per-chapter opener, just fixed to one value instead of
+    picked). ``glimpse_tag`` itself needs no forcing here: Django's own
+    ``BaseInlineFormSet._construct_form`` stamps the parent's pk onto a new
+    row's fk attribute before validation runs, the same plumbing every
+    admin inline relies on.
+    """
+
+    class Meta:
+        model = DistinctionOffer
+        fields = ["distinction", "arrives_as", "name", "player_line", "sort_order", "is_active"]
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.instance.chapter = OfferChapter.GLIMPSE
+
+
+class DistinctionOfferInline(admin.TabularInline):
+    """ "What it offers" on a Glimpse tag's own page (#3675): every priced offer
+    this tag opens. A stock admin inline, not a new builder - the tag's own
+    change form already carries this table, matching how a Distinction's
+    Lineage offers are also editable from the Upbringing Builder's own answer
+    row (either side can add one).
+    """
+
+    model = DistinctionOffer
+    fk_name = "glimpse_tag"
+    form = GlimpseTagOfferForm
+    formset = GlimpseTagOfferFormSet
+    fields = [
+        "distinction",
+        "arrives_as",
+        "name",
+        "player_line",
+        "sort_order",
+        "is_active",
+        "builder_link",
+    ]
+    readonly_fields = ["builder_link"]
+    autocomplete_fields = ["distinction"]
+    extra = 1
+    verbose_name = "offer"
+    verbose_name_plural = "What it offers"
+
+    @admin.display(description="")
+    def builder_link(self, obj: DistinctionOffer) -> str:
+        """A saved row's link to its Distinction's own Builder page (#3675 review Important 2).
+
+        ``help_text`` set in ``GlimpseTagOfferForm.__init__`` was tried first and
+        does not reach the page: a ``TabularInline`` renders each column's help
+        text once, off the formset's own ``empty_form`` - a per-instance value
+        set in a bound form's ``__init__`` never shows for a saved row. A
+        ``readonly_fields`` callable column is the admin-native way to render
+        one link per row instead.
+        """
+        if not obj.pk or not obj.distinction_id:
+            return ""
+        from web.admin.authoring.links import builder_url  # noqa: PLC0415
+
+        url = builder_url(obj.distinction)
+        if not url:
+            return ""
+        return format_html('<a href="{}">open</a>', url)
+
+
 @admin.register(GlimpseTag)
 class GlimpseTagAdmin(admin.ModelAdmin):
     """Guided glimpse tag catalog (#2427) — lore-repo content model."""
@@ -387,15 +686,52 @@ class GlimpseTagAdmin(admin.ModelAdmin):
     prepopulated_fields = {"slug": ("name",)}
     filter_horizontal = ["paths"]
     autocomplete_fields = ["affinity"]
+    inlines = [DistinctionOfferInline]
+    change_form_template = "admin/magic/glimpsetag/change_form.html"
 
+    def render_change_form(  # noqa: PLR0913
+        self, request, context, add=False, change=False, form_url="", obj=None
+    ):
+        """Injects the "how it reads to a player" preview (#3675).
 
-@admin.register(GlimpseTagDistinctionSuggestion)
-class GlimpseTagDistinctionSuggestionAdmin(admin.ModelAdmin):
-    """Curated tag→distinction suggestion (#2427) — lore-repo content model."""
+        The six-argument signature matches ``ModelAdmin.render_change_form``'s
+        own (PLR0913 noqa'd rather than trimmed) - overriding it means keeping
+        every parameter Django itself declares.
 
-    list_display = ["tag", "distinction", "sort_order"]
-    list_filter = ["tag__axis"]
-    search_fields = ["tag__name", "distinction__name"]
+        Runs for both add and change so the template's include always has a
+        ``preview`` variable - an unsaved tag has no offers yet, so this is
+        ``None`` on the add page, and the shared fragment already renders its
+        own "add an active offer" line for that case.
+        """
+        from web.admin.authoring.offers import preview_from_offers  # noqa: PLC0415
+
+        preview = None
+        if obj is not None and obj.pk:
+            # obj.offers is a PrunedCachedProperty (ADR-0298) - already
+            # active-only, select_related("distinction"), ordered.
+            preview = preview_from_offers(obj.offers)
+        context["offer_preview"] = preview
+        return super().render_change_form(
+            request, context, add=add, change=change, form_url=form_url, obj=obj
+        )
+
+    def save_formset(self, request, form, formset, change):
+        """Credits every saved offer row (#3675), mirroring the Builder pages' save."""
+        if formset.model is not DistinctionOffer:
+            super().save_formset(request, form, formset, change)
+            return
+        from web.admin.authoring.contributors import current_contributor  # noqa: PLC0415
+        from web.admin.authoring.credit import stamp_written  # noqa: PLC0415
+
+        instances = formset.save(commit=False)
+        for obj in formset.deleted_objects:
+            obj.delete()
+        contributor = current_contributor(request.user)
+        for obj in instances:
+            obj.save()
+            if contributor is not None:
+                stamp_written(obj, contributor)
+        formset.save_m2m()
 
 
 @admin.action(description="Staff grant resonance to this row")
@@ -438,13 +774,66 @@ class CharacterResonanceAdmin(admin.ModelAdmin):
     actions = [grant_resonance_action]
 
 
+class GiftChildInline(admin.TabularInline):
+    """Read-only: gifts hanging beneath this one in the lineage (#2891, ADR-0192)."""
+
+    model = Gift
+    fk_name = "parent"
+    fields = ["name", "kind"]
+    readonly_fields = ["name", "kind"]
+    extra = 0
+    can_delete = False
+    verbose_name = "Child gift (lineage)"
+    verbose_name_plural = "Child gifts (lineage)"
+
+    def has_add_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+    def has_change_permission(self, request, obj=None):  # noqa: ARG002
+        return False
+
+
 @admin.register(Gift)
 class GiftAdmin(admin.ModelAdmin):
     autocomplete_fields = ["creator", "parent"]
-    list_display = ["name", "kind", "parent"]
+    list_display = ["name", "kind", "parent", "get_technique_count"]
     list_filter = ["kind"]
     search_fields = ["name", "description"]
     filter_horizontal = ["resonances"]
+    readonly_fields = ["get_grant_sources"]
+    inlines = [GiftChildInline]
+
+    @admin.display(description="Techniques")
+    def get_technique_count(self, obj):
+        # No prefetch — identity-mapped SharedMemoryModel; see
+        # ResonanceAdmin.get_gift_count for why.
+        return obj.techniques.count()
+
+    @admin.display(description="Grant sources (who grants this gift, and how it's learned)")
+    def get_grant_sources(self, obj: Gift) -> str:
+        if not obj.pk:
+            return "-"
+        paths = ", ".join(g.path.name for g in obj.path_grants.select_related("path"))
+        traditions = ", ".join(
+            g.tradition.name for g in obj.tradition_grants.select_related("tradition")
+        )
+        species = ", ".join(g.species.name for g in obj.species_grants.select_related("species"))
+        parts = []
+        if paths:
+            parts.append(f"Paths: {paths}")
+        if traditions:
+            parts.append(f"Traditions: {traditions}")
+        if species:
+            parts.append(f"Species: {species}")
+        unlock = obj.gift_unlocks.first()
+        if unlock:
+            parts.append(f"GiftUnlock: xp_cost={unlock.xp_cost}")
+        elif obj.kind == GiftKind.MINOR:
+            parts.append(
+                "No GiftUnlock authored — not directly player-learnable; "
+                "reachable only via a Path/Tradition/Species grant above."
+            )
+        return "; ".join(parts) or "No authored grant sources found."
 
 
 @admin.register(CharacterGift)
@@ -462,13 +851,25 @@ class TraditionCodexGrantInline(admin.TabularInline):
     autocomplete_fields = ["entry"]
 
 
+class TraditionGiftGrantInline(admin.TabularInline):
+    """Gifts this tradition grants (sibling of TraditionCodexGrantInline above)."""
+
+    model = TraditionGiftGrant
+    extra = 1
+    autocomplete_fields = ["gift"]
+
+
 @admin.register(Tradition)
 class TraditionAdmin(admin.ModelAdmin):
-    list_display = ["name", "is_active", "sort_order"]
+    list_display = ["name", "is_active", "sort_order", "get_member_count"]
     list_filter = ["is_active"]
     search_fields = ["name", "description"]
     list_editable = ["sort_order", "is_active"]
-    inlines = [TraditionCodexGrantInline]
+    inlines = [TraditionCodexGrantInline, TraditionGiftGrantInline]
+
+    @admin.display(description="Current members")
+    def get_member_count(self, obj):
+        return obj.character_traditions.filter(left_at__isnull=True).count()
 
 
 @admin.register(TraditionGiftGrant)
@@ -477,6 +878,37 @@ class TraditionGiftGrantAdmin(admin.ModelAdmin):
     list_filter = ["tradition", "gift"]
     search_fields = ["tradition__name", "gift__name"]
     filter_horizontal = ["special_techniques"]
+
+
+@admin.register(PathGiftGrant)
+class PathGiftGrantAdmin(admin.ModelAdmin):
+    """The path half of the CG technique menu (#3712).
+
+    ``get_technique_options`` unions this grant's ``starter_techniques`` with the
+    tradition's specials, and only the tradition half had an authoring surface:
+    the 76 authored path pools were fixture-loaded and could not be edited at
+    all. Mirrors ``TraditionGiftGrantAdmin`` above deliberately, so the two
+    halves of one menu are authored the same way.
+
+    ``PathGiftGrant.clean()`` already rejects a starter technique that does not
+    belong to the grant's gift, and the admin runs it on save.
+    """
+
+    list_display = ["path", "gift", "get_technique_count"]
+    list_filter = ["path", "gift"]
+    search_fields = ["path__name", "gift__name"]
+    autocomplete_fields = ["gift"]
+    filter_horizontal = ["starter_techniques"]
+    list_select_related = ["path", "gift"]
+
+    def get_queryset(self, request):
+        """Count the pool in SQL rather than fetching it for a display column."""
+        return super().get_queryset(request).annotate(technique_count=Count("starter_techniques"))
+
+    @admin.display(description="Starter techniques", ordering="technique_count")
+    def get_technique_count(self, obj: PathGiftGrant) -> int:
+        """An empty pool is the gap the required-content sentinel reports (#3682)."""
+        return obj.technique_count
 
 
 @admin.register(CharacterTradition)
@@ -558,21 +990,16 @@ class MotifResonanceAdmin(admin.ModelAdmin):
 
 @admin.register(Facet)
 class FacetAdmin(admin.ModelAdmin):
-    """Admin for hierarchical Facet model."""
+    """Admin for the flat Facet vocabulary."""
 
-    list_display = ["name", "parent", "get_depth", "get_full_path"]
-    list_filter = ["parent"]
+    list_display = ["name", "description"]
     search_fields = ["name", "description"]
-    autocomplete_fields = ["parent"]
-    ordering = ["parent__name", "name"]
+    ordering = ["name"]
+    readonly_fields = ["get_connections"]
 
-    @admin.display(description="Depth")
-    def get_depth(self, obj):
-        return obj.depth
-
-    @admin.display(description="Full Path")
-    def get_full_path(self, obj):
-        return obj.full_path
+    @admin.display(description="Connections")
+    def get_connections(self, obj):
+        return describe_reverse_relations(obj)
 
 
 @admin.register(Reincarnation)
@@ -649,6 +1076,43 @@ class LevelPowerConfigAdmin(admin.ModelAdmin):
 
     def has_add_permission(self, request) -> bool:  # noqa: ARG002
         return not LevelPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(AuraPowerConfig)
+class AuraPowerConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the aura power term (#768, registered #3712).
+
+    Unregistered until now, while the required-content dashboard reported the
+    missing row: staff were told to create a row through a page that did not
+    exist. Both axes default to 0, which disables them, so the row existing is
+    not the same as the term being on.
+    """
+
+    list_display = ("pk", "affinity_alignment_bonus", "resonance_standing_bonus")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not AuraPowerConfig.objects.exists()
+
+    def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
+        return False
+
+
+@admin.register(CapabilityPowerConfig)
+class CapabilityPowerConfigAdmin(admin.ModelAdmin):
+    """Singleton tuning config for the capability power curve (#2708, registered #3712).
+
+    No row means the curve is disabled and every capability consumer falls back
+    to its pre-#2708 additive arithmetic, so the feature is turned on by tuning
+    rather than by deploying. That is the state production is in today.
+    """
+
+    list_display = ("pk", "power_per_doubling")
+
+    def has_add_permission(self, request) -> bool:  # noqa: ARG002
+        return not CapabilityPowerConfig.objects.exists()
 
     def has_delete_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
@@ -1487,3 +1951,367 @@ class FeedingRecordAdmin(admin.ModelAdmin):
 
     def has_change_permission(self, request, obj=None) -> bool:  # noqa: ARG002
         return False
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(FuryTier)
+class FuryTierAdmin(admin.ModelAdmin):
+    """#3831 - authored, player-chosen depth-of-rage catalog (analogous to IntensityTier)."""
+
+    list_display = [
+        "name",
+        "depth",
+        "control_penalty",
+        "intensity_bonus",
+        "lucid_grade_floor",
+        "berserk_severity",
+    ]
+    search_fields = ["name"]
+
+
+@admin.register(FuryConfig)
+class FuryConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton tuning surface for the Fury lever (mirrors StrainConfig)."""
+
+    list_display = [
+        "check_trait",
+        "provocation_cap_per_tier",
+        "bonus_scale_per_cap_point",
+        "cap_ease_per_point",
+        "default_berserk_duration_rounds",
+    ]
+    list_filter = ["check_trait"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not FuryConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(AuraAffinityThreshold)
+class AuraAffinityThresholdAdmin(admin.ModelAdmin):
+    """#3831 - authored affinity-percentage threshold granting an achievement on crossing."""
+
+    list_display = ["affinity", "threshold_percent", "discovery_achievement"]
+    list_filter = ["affinity"]
+    list_select_related = ["discovery_achievement"]
+    autocomplete_fields = ["discovery_achievement"]
+
+
+@admin.register(TechniqueBudgetConfig)
+class TechniqueBudgetConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton power-cost-per-unit knobs for the technique budget builder."""
+
+    list_display = [
+        "intensity_unit_cost",
+        "control_unit_cost",
+        "capability_value_unit_cost",
+        "damage_unit_cost",
+        "condition_severity_unit_cost",
+        "condition_duration_unit_cost",
+        "payload_base_cost",
+        "restriction_refund_multiplier",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not TechniqueBudgetConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(TechniqueTierBudget)
+class TechniqueTierBudgetAdmin(admin.ModelAdmin):
+    """#3831 - per-tier reference power budget + the level techniques at that tier stamp."""
+
+    list_display = ["tier", "power_budget", "representative_level", "label"]
+
+
+@admin.register(AudereMajoraThreshold)
+class AudereMajoraThresholdAdmin(admin.ModelAdmin):
+    """#3831 - one authored Crossing-the-Threshold boundary level (5/10/15/20)."""
+
+    list_display = [
+        "boundary_level",
+        "target_stage",
+        "minimum_intensity_tier",
+        "requires_active_audere",
+        "deed_title",
+        "magnitude",
+        "risk",
+    ]
+    list_filter = ["target_stage", "requires_active_audere", "magnitude", "risk"]
+    list_select_related = ["minimum_intensity_tier", "minimum_warp_stage"]
+    autocomplete_fields = ["minimum_intensity_tier", "minimum_warp_stage"]
+    filter_horizontal = ["archetypes"]
+
+
+@admin.register(AnimaConfig)
+class AnimaConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton anima regen/cap tuning surface (#3001)."""
+
+    list_display = [
+        "daily_regen_amount",
+        "level_zero_maximum",
+        "maximum_per_level",
+        "death_harvest_multiplier",
+    ]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not AnimaConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(CorruptionConfig)
+class CorruptionConfigAdmin(admin.ModelAdmin):
+    """#3831 - the singleton Corruption-foundation coefficient tuning surface."""
+
+    list_display = [
+        "celestial_coefficient",
+        "primal_coefficient",
+        "abyssal_coefficient",
+        "tier_1_coefficient",
+        "tier_2_coefficient",
+        "tier_3_coefficient",
+        "tier_4_coefficient",
+        "tier_5_coefficient",
+        "updated_at",
+    ]
+    readonly_fields = ["updated_at"]
+    raw_id_fields = ["updated_by"]
+
+    def has_add_permission(self, request: object) -> bool:  # noqa: ARG002
+        """Prevent adding a second row; this is a pk=1 singleton."""
+        return not CorruptionConfig.objects.exists()
+
+    def has_delete_permission(
+        self,
+        request: object,  # noqa: ARG002
+        obj: object = None,  # noqa: ARG002
+    ) -> bool:
+        """Prevent deleting the config."""
+        return False
+
+
+@admin.register(ResonanceTier)
+class ResonanceTierAdmin(admin.ModelAdmin):
+    """#3831 - ordered potency tier for resonance-tied items and touchstones."""
+
+    list_display = ["name", "tier_level"]
+    search_fields = ["name"]
+
+
+@admin.register(ResonanceAlignmentBoonTier)
+class ResonanceAlignmentBoonTierAdmin(admin.ModelAdmin):
+    """#3831 - which named buff an ALIGNED affinity pairing grants at a magnitude threshold."""
+
+    list_display = ["affinity_interaction", "min_magnitude", "condition_template"]
+    list_select_related = ["affinity_interaction", "condition_template"]
+    autocomplete_fields = ["condition_template"]
+    raw_id_fields = ["affinity_interaction"]
+
+
+@admin.register(BeginningsRitualGrant)
+class BeginningsRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Beginnings choice."""
+
+    list_display = ["beginnings", "ritual"]
+    list_select_related = ["beginnings", "ritual"]
+    autocomplete_fields = ["beginnings", "ritual"]
+    search_fields = ["beginnings__name", "ritual__name"]
+
+
+@admin.register(PathRitualGrant)
+class PathRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Path choice."""
+
+    list_display = ["path", "ritual"]
+    list_select_related = ["path", "ritual"]
+    autocomplete_fields = ["path", "ritual"]
+    search_fields = ["path__name", "ritual__name"]
+
+
+@admin.register(DistinctionRitualGrant)
+class DistinctionRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Distinction."""
+
+    list_display = ["distinction", "ritual"]
+    list_select_related = ["distinction", "ritual"]
+    autocomplete_fields = ["distinction", "ritual"]
+    search_fields = ["distinction__name", "ritual__name"]
+
+
+@admin.register(TraditionRitualGrant)
+class TraditionRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by a Tradition."""
+
+    list_display = ["tradition", "ritual"]
+    list_select_related = ["tradition", "ritual"]
+    autocomplete_fields = ["tradition", "ritual"]
+    search_fields = ["tradition__name", "ritual__name"]
+
+
+@admin.register(CodexEntryRitualGrant)
+class CodexEntryRitualGrantAdmin(admin.ModelAdmin):
+    """#3831 - rituals granted by learning a Codex entry."""
+
+    list_display = ["codex_entry", "ritual"]
+    list_select_related = ["codex_entry", "ritual"]
+    autocomplete_fields = ["codex_entry", "ritual"]
+    search_fields = ["codex_entry__name", "ritual__name"]
+
+
+@admin.register(DistinctionResonanceGrant)
+class DistinctionResonanceGrantAdmin(admin.ModelAdmin):
+    """#3831 - currency knobs (flat seed + earn-rate bonus) a Distinction grants in a Resonance."""
+
+    list_display = [
+        "distinction",
+        "resonance",
+        "flat_amount_per_rank",
+        "earn_rate_bonus_per_rank",
+    ]
+    list_select_related = ["distinction", "resonance"]
+    autocomplete_fields = ["distinction", "resonance"]
+    search_fields = ["distinction__name", "resonance__name"]
+
+
+@admin.register(RitualLiturgy)
+class RitualLiturgyAdmin(admin.ModelAdmin):
+    """#3831 - the public, non-spoiler officiant's spoken invocation for a Ritual."""
+
+    list_display = ["ritual"]
+    autocomplete_fields = ["ritual"]
+    search_fields = ["ritual__name", "opening_call"]
+
+
+@admin.register(PortalAnchorKind)
+class PortalAnchorKindAdmin(admin.ModelAdmin):
+    """#3831 - staff-authored medium of portal travel (e.g. Mirror, Doorway)."""
+
+    list_display = ["name", "arrival_verb", "departure_verb"]
+    search_fields = ["name", "description"]
+
+
+@admin.register(TechniqueCapabilityRequirement)
+class TechniqueCapabilityRequirementAdmin(admin.ModelAdmin):
+    """#3831 - a capability a character must possess to perform a Technique."""
+
+    list_display = ["technique", "capability", "minimum_value"]
+    list_select_related = ["technique", "capability"]
+    autocomplete_fields = ["technique", "capability"]
+    search_fields = ["technique__name", "capability__name"]
+
+
+class TechniqueVariantCapabilityGrantInline(admin.TabularInline):
+    """#3831 - capability granted by this variant (mirrors TechniqueCapabilityGrantInline)."""
+
+    model = TechniqueVariantCapabilityGrant
+    extra = 1
+    autocomplete_fields = ["capability", "prerequisite"]
+
+
+class TechniqueVariantAppliedConditionInline(admin.TabularInline):
+    """#3831 - applied-condition payload rows on the TechniqueVariant admin."""
+
+    model = TechniqueVariantAppliedCondition
+    extra = 1
+    autocomplete_fields = ["condition"]
+
+
+class TechniqueVariantDamageProfileInline(admin.TabularInline):
+    """#3831 - damage payload rows on the TechniqueVariant admin."""
+
+    model = TechniqueVariantDamageProfile
+    extra = 1
+    autocomplete_fields = ["damage_type"]
+
+
+@admin.register(TechniqueVariant)
+class TechniqueVariantAdmin(admin.ModelAdmin):
+    """#3831 - a resonance-specialized form of a parent Technique (ADR-0055)."""
+
+    list_display = [
+        "parent_technique",
+        "name_override",
+        "resonance",
+        "unlock_thread_level",
+        "intensity_delta",
+        "control_delta",
+    ]
+    list_filter = ["resonance", "unlock_thread_level"]
+    search_fields = ["name_override", "parent_technique__name"]
+    list_select_related = ["parent_technique", "resonance"]
+    autocomplete_fields = [
+        "parent_technique",
+        "resonance",
+        "discovery_achievement",
+        "codex_entry",
+    ]
+    inlines = [
+        TechniqueVariantAppliedConditionInline,
+        TechniqueVariantDamageProfileInline,
+        TechniqueVariantCapabilityGrantInline,
+    ]
+
+
+@admin.register(TechniqueVariantCapabilityGrant)
+class TechniqueVariantCapabilityGrantAdmin(admin.ModelAdmin):
+    """#3831 - capability granted by a TechniqueVariant (mirrors TechniqueCapabilityGrant)."""
+
+    list_display = ["variant", "capability", "base_value", "intensity_multiplier"]
+    list_filter = ["capability"]
+    list_select_related = ["variant", "capability"]
+    autocomplete_fields = ["variant", "capability", "prerequisite"]
+    search_fields = [
+        "variant__name_override",
+        "variant__parent_technique__name",
+        "capability__name",
+    ]
+
+
+@admin.register(TechniqueVariantDamageProfile)
+class TechniqueVariantDamageProfileAdmin(admin.ModelAdmin):
+    """#3831 - damage profile for a TechniqueVariant (mirrors TechniqueDamageProfile)."""
+
+    list_display = ["variant", "damage_type", "base_damage", "damage_per_extra_sl"]
+    list_filter = ["damage_type"]
+    list_select_related = ["variant", "damage_type"]
+    autocomplete_fields = ["variant", "damage_type"]
+    search_fields = ["variant__name_override", "variant__parent_technique__name"]
+
+
+@admin.register(TechniqueVariantAppliedCondition)
+class TechniqueVariantAppliedConditionAdmin(admin.ModelAdmin):
+    """#3831 - applied condition for a TechniqueVariant (mirrors TechniqueAppliedCondition)."""
+
+    list_display = ["variant", "condition", "target_kind", "minimum_success_level"]
+    list_filter = ["target_kind", "condition"]
+    list_select_related = ["variant", "condition"]
+    autocomplete_fields = ["variant", "condition"]
+    search_fields = ["variant__name_override", "variant__parent_technique__name"]

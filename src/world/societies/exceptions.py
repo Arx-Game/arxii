@@ -134,6 +134,13 @@ class CrossOrganizationRankError(OrganizationMembershipError):
     SAFE_MESSAGES = frozenset({"That member is not in the same organization."})
 
 
+class InvalidOrganizationRankError(OrganizationMembershipError):
+    """The rank belongs to a different organization."""
+
+    user_message = "That rank does not belong to this organization."
+    SAFE_MESSAGES = frozenset({"That rank does not belong to this organization."})
+
+
 class NoPendingInvitationError(OrganizationMembershipError):
     user_message = "You have no pending invitation to that organization."
     SAFE_MESSAGES = frozenset({"You have no pending invitation to that organization."})

@@ -78,6 +78,9 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
+          viewer_place_id: null,
         },
       });
       expect(mockDispatch).toHaveBeenCalledTimes(2);
@@ -146,6 +149,41 @@ describe('handleRoomStatePayload', () => {
       expect(setSessionRoom).toHaveBeenCalledWith(
         expect.objectContaining({
           room: expect.objectContaining({ npc_givers: [] }),
+        })
+      );
+    });
+
+    it('maps viewer_place_id through (#3810)', () => {
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#100', 'Market Square'),
+        characters: [],
+        objects: [],
+        exits: [],
+        viewer_place_id: 42,
+      };
+
+      handleRoomStatePayload('Character', payload, mockDispatch);
+
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({ viewer_place_id: 42 }),
+        })
+      );
+    });
+
+    it('defaults viewer_place_id to null when the payload omits it (#3810)', () => {
+      const payload: RoomStatePayload = {
+        room: createRoomStateObject('#100', 'Market Square'),
+        characters: [],
+        objects: [],
+        exits: [],
+      };
+
+      handleRoomStatePayload('Character', payload, mockDispatch);
+
+      expect(setSessionRoom).toHaveBeenCalledWith(
+        expect.objectContaining({
+          room: expect.objectContaining({ viewer_place_id: null }),
         })
       );
     });
@@ -472,6 +510,9 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
+          viewer_place_id: null,
         },
       });
     });
@@ -568,6 +609,9 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
+          viewer_place_id: null,
         },
       });
     });
@@ -657,6 +701,9 @@ describe('handleRoomStatePayload', () => {
           hub: null,
           npc_givers: [],
           has_unseen_presence: false,
+          comfort_level: undefined,
+          decorations: [],
+          viewer_place_id: null,
         },
       });
 

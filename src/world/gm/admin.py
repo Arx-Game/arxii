@@ -128,8 +128,9 @@ class StoryAreaAdmin(admin.ModelAdmin):
 
 @admin.register(StoryRoomGrant)
 class StoryRoomGrantAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["room", "return_location"]  # rooms are searched, never scrolled
     list_display = ("room", "character", "granted_by", "created_at")
-    raw_id_fields = ("room", "character", "granted_by", "return_location")
+    raw_id_fields = ["character", "granted_by"]
 
 
 @admin.register(SituationKind)

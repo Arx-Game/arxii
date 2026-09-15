@@ -1,9 +1,9 @@
 """Motifs: character-level magical aesthetic.
 
-Facets are hierarchical imagery/symbolism (Category > Subcategory > Specific).
-Motif is a character-level container; MotifResonance holds resonances (from
-gifts or optional) and MotifResonanceAssociation links motif resonances to
-facets.
+Facets are a flat vocabulary of imagery/symbolism (2026-09-11 ruling — see the
+``Facet`` docstring below). Motif is a character-level container; MotifResonance
+holds resonances (from gifts or optional) and MotifResonanceAssociation links
+motif resonances to facets.
 """
 
 from django.core.exceptions import ValidationError
@@ -21,27 +21,23 @@ class FacetManager(NaturalKeyManager):
 
 class Facet(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     """
-    Hierarchical imagery/symbolism that players assign to resonances.
+    A single piece of imagery/symbolism players and gods assign to resonances.
 
-    Facets are organized in a tree: Category > Subcategory > Specific.
-    Examples: Creatures > Mammals > Wolf
-              Materials > Textiles > Silk
+    Flat vocabulary, deliberately not a tree (2026-09-11 ruling): a hierarchy makes a
+    node's mechanical reach depend on how deep it sits (picking "Hawk" reaches far
+    fewer matching items than picking "Bird," for the same thematic intent) — a tree
+    trying to be both a picker (wants breadth) and a matcher (wants a small, fair,
+    equal-weight vocabulary) at once. Every facet is now a peer. Examples: Wolf, Silk,
+    Scythe, Red.
 
-    Players assign facets to their resonances to define personal meaning.
-    Items can have facets; matching facets boost resonances.
+    Owner-agnostic: characters bind facets via Motif (this app); WorshippedBeing binds
+    them directly (world.worship.models.BeingFacet) from the same shared pool — see #3776.
     """
 
     name = models.CharField(
         max_length=100,
-        help_text="Facet name (e.g., 'Wolf', 'Silk', 'Creatures').",
-    )
-    parent = models.ForeignKey(
-        "self",
-        on_delete=models.CASCADE,
-        null=True,
-        blank=True,
-        related_name="children",
-        help_text="Parent facet for hierarchy (null = top-level category).",
+        unique=True,
+        help_text="Facet name (e.g., 'Wolf', 'Silk', 'Scythe').",
     )
     description = models.TextField(
         blank=True,
@@ -51,43 +47,15 @@ class Facet(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     objects = FacetManager()
 
     class Meta:
-        unique_together = ["parent", "name"]
+        ordering = ["name"]
         verbose_name = "Facet"
         verbose_name_plural = "Facets"
 
     class NaturalKeyConfig:
-        fields = ["name", "parent"]
-        dependencies = ["arxii.Facet"]
+        fields = ["name"]
 
     def __str__(self) -> str:
-        if self.parent:
-            return f"{self.name} ({self.parent.name})"
         return self.name
-
-    @property
-    def depth(self) -> int:
-        """Return the depth in the hierarchy (0 = top-level)."""
-        depth = 0
-        current = self.parent
-        while current:
-            depth += 1
-            current = current.parent
-        return depth
-
-    @property
-    def full_path(self) -> str:
-        """Return full hierarchy path as string."""
-        parts = [self.name]
-        current = self.parent
-        while current:
-            parts.insert(0, current.name)
-            current = current.parent
-        return " > ".join(parts)
-
-    @property
-    def is_category(self) -> bool:
-        """Return True if this is a top-level category."""
-        return self.parent is None
 
 
 class Motif(SharedMemoryModel):
@@ -191,7 +159,7 @@ class MotifResonanceLink(SharedMemoryModel):
 
 class MotifResonanceAssociation(MotifResonanceLink):
     """
-    Links a motif resonance to a facet (hierarchical imagery/symbolism).
+    Links a motif resonance to a facet (flat shared imagery vocabulary, #3776).
 
     Maximum 5 facets per motif resonance (enforced via MotifResonanceLink).
     """

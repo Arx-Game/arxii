@@ -10,16 +10,16 @@ from world.progression.views import (
     ClaimKudosView,
     DuranceConveneView,
     DuranceStatusView,
+    NominationViewSet,
     PathIntentViewSet,
     PathOptionsView,
     ProgressionUnlockViewSet,
     RandomSceneViewSet,
     SelectPathViewSet,
-    VoteViewSet,
 )
 
 router = DefaultRouter()
-router.register("votes", VoteViewSet, basename="vote")
+router.register("nominations", NominationViewSet, basename="nomination")
 router.register("random-scenes", RandomSceneViewSet, basename="random-scene")
 router.register("unlocks", ProgressionUnlockViewSet, basename="progression-unlock")
 

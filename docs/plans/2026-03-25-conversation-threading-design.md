@@ -13,39 +13,25 @@ audience so players can seamlessly continue conversations.
 
 ## Thread Model
 
-Threads are derived on the frontend from interaction data. No new backend model needed.
-A thread is identified by its **audience pattern**:
+The original design derived all thread groups from audience patterns in the frontend. That remains the fallback for interactions without explicit thread membership. Explicit narrative replies now use the backend contract in #3757:
+
+- `InteractionThread` is a normal model with a UUID identity and immutable scene, place, or fixed-whisper-party holder metadata.
+- `Interaction.thread` is nullable. Existing interactions remain unthreaded and require no backfill.
+- A write-only `reply_to` serializer target selects an existing interaction. It is not stored on `Interaction` and is not a direct parent relationship.
+- The first reply target creates a top-level thread and assigns both the target and new interaction to it. Later replies reuse the target's thread.
+- Thread messages are displayed in existing chronological `(timestamp, id)` order. There is no separate message-order field.
+- `InteractionThread.parent` is nullable and reserved for a future explicit nested-thread operation. The current reply path is flat and always creates top-level threads.
 
 ### Thread Types
 
 | Type | Identified By | Visibility | Example |
 |------|--------------|------------|---------|
-| **Room-wide** | No place, no receivers, no targets | Everyone | Main meeting discussion |
-| **Place** | `place` FK set | People at that place | Tabletalk at a table |
-| **Whisper** | mode=WHISPER, specific receivers | Writer + receivers only | Private aside |
-| **Targeted** | `target_personas` set, visible to room | Everyone (but groupable) | Two people debating |
+| **Scene** | Explicit thread holder with a scene ID | Existing scene visibility | Main scene conversation |
+| **Place** | Explicit thread holder with place and room IDs | Existing pinned place receiver party | Table-talk at a table |
+| **Whisper** | Explicit thread holder with pinned account party | Existing writer/receiver privacy | Private aside |
+| **Unthreaded** | Nullable `Interaction.thread` | Existing interaction visibility | Ordinary room history |
 
-Two interactions are in the same thread if they share the same audience pattern:
-- Same `place` ID, OR
-- Same sorted set of receiver persona IDs (for whispers), OR
-- Same sorted set of target persona IDs (for targeted), OR
-- Both are room-wide (no place, no receivers, no targets)
-
-### Thread State is Client-Side
-
-All threading state is ephemeral — resets on page leave/refresh:
-- Which threads are expanded/collapsed
-- Which thread the composer is targeting
-- Which personas are hidden via filter modal
-- No backend persistence needed
-
-### What Creates a Thread
-
-Threads form ONLY from explicit targeting in the command — selecting recipients in the
-composer, choosing a place, or using whisper mode. Text content mentioning someone's
-name does NOT create a thread. In the default "All" view, targeted interactions are
-visually indistinguishable from the main flow — they only become distinct groupings
-when a player wants to filter.
+The backend never infers explicit membership from names, proximity, targets, or ordering. The frontend can continue to group unthreaded rows with the existing audience fallback while explicit rows use `thread_id`.
 
 ## UI Layout
 

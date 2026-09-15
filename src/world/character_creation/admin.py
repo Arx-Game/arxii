@@ -5,18 +5,25 @@ Character Creation admin configuration.
 from django.contrib import admin
 
 from world.character_creation.models import (
+    AppearanceSection,
+    BeginningEnemyOffer,
     Beginnings,
     BeginningTradition,
     CGExplanation,
+    CGPointBudget,
     CharacterDraft,
     CharacterOriginSlot,
     DraftApplication,
     DraftApplicationComment,
     DraftMarking,
+    EnemyReason,
+    OfferFirstLook,
     OriginTemplate,
     OriginTemplateSlot,
     OriginTemplateSlotChoice,
+    SchoolingLine,
     StartingArea,
+    TraditionStateLine,
 )
 from world.codex.models import BeginningsCodexGrant
 from world.contributors.admin import CREDIT_FIELDSET
@@ -36,12 +43,11 @@ class StartingAreaAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "access_level"]
     search_fields = ["name", "description"]
     ordering = ["sort_order", "name"]
-    raw_id_fields = ["default_starting_room"]
     fieldsets = [
         (None, {"fields": ["realm", "name", "description", "crest_art"]}),
         (
             "Access Control",
-            {"fields": ["is_active", "access_level", "minimum_trust", "sort_order"]},
+            {"fields": ["is_active", "access_level", "sort_order"]},
         ),
         (
             "Game Integration",
@@ -63,7 +69,25 @@ class BeginningsCodexGrantInline(admin.TabularInline):
 class BeginningTraditionInline(admin.TabularInline):
     model = BeginningTradition
     extra = 1
-    raw_id_fields = ["tradition", "required_distinction"]
+    raw_id_fields = ["tradition"]
+
+
+class BeginningEnemyOfferInline(admin.TabularInline):
+    """What the Beginning itself puts in the character's way (#3621)."""
+
+    model = BeginningEnemyOffer
+    extra = 0
+    raw_id_fields = ["organization"]
+    autocomplete_fields = ["reason"]
+    fields = [
+        "organization",
+        "figure_name",
+        "power_tier",
+        "reach_override",
+        "reason",
+        "why",
+        "sort_order",
+    ]
 
 
 @admin.register(Beginnings)
@@ -75,7 +99,6 @@ class BeginningsAdmin(admin.ModelAdmin):
     list_display = [
         "name",
         "starting_area",
-        "trust_required",
         "is_active",
         "grants_species_languages",
         "species_count",
@@ -91,13 +114,13 @@ class BeginningsAdmin(admin.ModelAdmin):
     search_fields = ["name", "description"]
     ordering = ["starting_area__name", "sort_order", "name"]
     filter_horizontal = ["allowed_species", "starting_languages"]
-    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline]
+    inlines = [BeginningTraditionInline, BeginningsCodexGrantInline, BeginningEnemyOfferInline]
 
     fieldsets = [
         (None, {"fields": ["name", "description", "art", "starting_area"]}),
         (
             "Access Control",
-            {"fields": ["trust_required", "is_active", "sort_order"]},
+            {"fields": ["is_active", "sort_order"]},
         ),
         (
             "Species Selection",
@@ -156,8 +179,7 @@ class OriginTemplateAdmin(admin.ModelAdmin):
     list_filter = ["is_active", "beginning__starting_area"]
     search_fields = ["name", "frame_narrative"]
     ordering = ["beginning", "sort_order", "name"]
-    filter_horizontal = ["claimable_kinds"]
-    autocomplete_fields = ["named_family_kind"]
+    filter_horizontal = ["claimable_kinds", "family_templates"]
     inlines = [OriginTemplateSlotInline]
 
 
@@ -177,14 +199,30 @@ class OriginTemplateSlotAdmin(admin.ModelAdmin):
     inlines = [OriginTemplateSlotChoiceInline]
 
 
+@admin.register(OriginTemplateSlotChoice)
+class OriginTemplateSlotChoiceAdmin(admin.ModelAdmin):
+    """Standalone registration so autocomplete widgets elsewhere can search it (#3675).
+
+    Otherwise this model is only reachable through
+    ``OriginTemplateSlotChoiceInline`` above - the Distinction Builder's
+    ``origin_choice`` autocomplete needs a plain ``ModelAdmin`` with its own
+    ``search_fields`` (Django's autocomplete view 404s without one).
+    """
+
+    list_display = ["name", "slot", "cg_point_cost", "is_active"]
+    list_filter = ["is_active", "slot__template"]
+    search_fields = ["name", "slot__name", "slot__template__name"]
+    autocomplete_fields = ["slot"]
+
+
 @admin.register(CharacterOriginSlot)
 class CharacterOriginSlotAdmin(admin.ModelAdmin):
     """Read-only admin for character origin-slot answers (#2478)."""
 
-    list_display = ["sheet", "slot", "value", "choice"]
-    list_filter = ["slot__template__beginning__starting_area"]
-    search_fields = ["value"]
-    readonly_fields = ["sheet", "slot", "value", "choice"]
+    list_display = ["sheet", "slot", "organization", "figure_name", "choice", "value"]
+    list_filter = ["slot__template__beginning__starting_area", "slot__kind", "organization"]
+    search_fields = ["value", "figure_name", "organization__name"]
+    readonly_fields = ["sheet", "slot", "value", "choice", "organization", "figure_name"]
     autocomplete_fields = ["sheet"]
 
 
@@ -283,3 +321,92 @@ class CGExplanationAdmin(admin.ModelAdmin):
         if len(obj.text) > truncate_at:
             return obj.text[:truncate_at] + "..."
         return obj.text
+
+
+@admin.register(EnemyReason)
+class EnemyReasonAdmin(admin.ModelAdmin):
+    """The shared list of why an enemy wants the character to fail (#3709).
+
+    A plain change list: written once for the whole game, filtered by ``fits`` on the
+    leaf, pinned per Beginning enemy offer, and the enemy chapter's opener on the
+    Distinction Builder (its ``enemy_reason`` autocomplete needs ``search_fields``).
+    """
+
+    list_display = ["name", "player_line", "fits", "offers", "sort_order", "is_active"]
+    list_filter = ["fits", "is_active"]
+    search_fields = ["name", "player_line"]
+    fieldsets = [
+        (None, {"fields": ("name", "player_line", "fits", "sort_order", "is_active")}),
+        CREDIT_FIELDSET,
+    ]
+
+    @admin.display(description="Offers")
+    def offers(self, obj: EnemyReason) -> int:
+        return obj.distinction_offers.count()
+
+
+@admin.register(AppearanceSection)
+class AppearanceSectionAdmin(admin.ModelAdmin):
+    """The headings the Appearance chapter groups its offers under (#3709)."""
+
+    list_display = ["name", "player_line", "sort_order"]
+    search_fields = ["name"]
+    fieldsets = [
+        (None, {"fields": ("name", "player_line", "sort_order")}),
+        CREDIT_FIELDSET,
+    ]
+
+
+# ---------------------------------------------------------------------------
+# #3831
+# ---------------------------------------------------------------------------
+
+
+@admin.register(CGPointBudget)
+class CGPointBudgetAdmin(admin.ModelAdmin):
+    """#3831 - the CG point budget configuration (staff-tunable, no code change)."""
+
+    list_display = ["name", "starting_points", "xp_conversion_rate", "is_active"]
+    list_filter = ["is_active"]
+    search_fields = ["name"]
+
+
+@admin.register(OfferFirstLook)
+class OfferFirstLookAdmin(admin.ModelAdmin):
+    """#3831 - one Beginning pinning one offer line into its chapter's first look."""
+
+    list_display = ["beginning", "offer"]
+    list_select_related = ["beginning"]
+    raw_id_fields = ["offer"]
+    autocomplete_fields = ["beginning"]
+    search_fields = ["beginning__name"]
+
+
+@admin.register(TraditionStateLine)
+class TraditionStateLineAdmin(admin.ModelAdmin):
+    """#3831 - the standard words + drawback for one tradition state (#3675).
+
+    Normally authored on the Tradition Slate admin page
+    (``web/admin/tradition_slate/``); this standalone page is the fallback
+    editor for a one-off correction.
+    """
+
+    list_display = ["state", "entry_line", "carries"]
+    list_select_related = ["carries"]
+    autocomplete_fields = ["carries"]
+    search_fields = ["entry_line"]
+
+
+@admin.register(SchoolingLine)
+class SchoolingLineAdmin(admin.ModelAdmin):
+    """#3831 - one line of the standard schooling set under a living tradition (#3675).
+
+    Normally authored on the Tradition Slate admin page
+    (``web/admin/tradition_slate/``); this standalone page is the fallback
+    editor for a one-off correction.
+    """
+
+    list_display = ["rank", "name", "player_line", "grants"]
+    list_select_related = ["grants"]
+    autocomplete_fields = ["grants"]
+    search_fields = ["name", "player_line"]

@@ -122,6 +122,40 @@ class TestModelLabel(TestCase):
         self.assertFalse(probe.participates_in_name_batch())
 
 
+class TestDependencyAdminUrl(TestCase):
+    """Each panel row links to the admin page where its rows are authored (#3831)."""
+
+    @staticmethod
+    def _row(probe: rc.ContentProbe, admin_model: str | None = None) -> rc.DependencyRow:
+        dependency = rc.ContentDependency(
+            key="linked",
+            label="linked dependency",
+            tier=rc.DependencyTier.TUNING,
+            consumer="world/example.py:1 example()",
+            consequence="Example breaks.",
+            probe=probe,
+            admin_model=admin_model,
+        )
+        return rc.DependencyRow(dependency=dependency, result=rc.ProbeResult(present=False))
+
+    def test_links_the_probed_models_changelist(self) -> None:
+        row = self._row(rc.AnyRowProbe(label="LevelPowerConfig"))
+        self.assertEqual(row.admin_url, "/admin/arxii/levelpowerconfig/")
+
+    def test_admin_model_names_the_page_for_a_custom_probe(self) -> None:
+        probe = rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True))
+        row = self._row(probe, admin_model="LevelPowerConfig")
+        self.assertEqual(row.admin_url, "/admin/arxii/levelpowerconfig/")
+
+    def test_no_link_when_the_probe_names_no_model(self) -> None:
+        row = self._row(rc.CustomProbe(fn=lambda: rc.ProbeResult(present=True)))
+        self.assertIsNone(row.admin_url)
+
+    def test_no_link_for_an_unknown_model(self) -> None:
+        row = self._row(rc.AnyRowProbe(label="NoSuchModel"))
+        self.assertIsNone(row.admin_url)
+
+
 class TestFilteredRowProbe(TestCase):
     def test_present_when_the_compound_filter_matches(self) -> None:
         from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
@@ -251,6 +285,27 @@ class TestRealDeclarations(TestCase):
         self.assertFalse(result.present)
         self.assertIn("rc_base_root", result.detail)
 
+    def test_a_repointed_row_with_no_cmdset_is_still_reported(self) -> None:
+        """The old hand repair (#3596) fixed the typeclass path and nothing else: the row
+        passed this probe while having zero commands (#3812). Both symptoms are flagged,
+        and the detail names the heal rather than the ``.update()`` that caused it."""
+        from django.conf import settings
+        from evennia.accounts.models import AccountDB
+
+        dep = next(d for d in rc._declarations() if d.key == "typeclassed-accounts")
+        AccountDB.objects.create_superuser("rc_repointed", "rcrep@example.com", "pw-123456")
+        AccountDB.objects.filter(username="rc_repointed").update(
+            db_typeclass_path=settings.BASE_ACCOUNT_TYPECLASS
+        )
+        AccountDB.flush_instance_cache()
+
+        result = dep.probe.resolve(None)
+
+        self.assertFalse(result.present)
+        self.assertIn("rc_repointed", result.detail)
+        self.assertIn("heal_account_setup", result.detail)
+        self.assertNotIn(".update(", result.detail)
+
     def test_mfa_secrets_key_probe_reports_a_key_that_cannot_decrypt(self) -> None:
         """A rotated-without-re-encrypt key locks every 2FA user out (#3591, ADR-0267)."""
         from allauth.mfa.models import Authenticator
@@ -291,6 +346,18 @@ class TestRealDeclarations(TestCase):
         # Break the invariant and watch the probe say so, then seed and watch it clear.
         self.assertFalse(dep.probe.resolve(None).present)
         GameClockFactory()
+        self.assertTrue(dep.probe.resolve(None).present)
+
+    def test_legend_level_calibration_is_a_required_dependency(self) -> None:
+        """An empty calibration table 500s the Rite of Honors (#3480, #3466)."""
+        from world.societies.factories import LegendLevelCalibrationFactory
+
+        dep = next(d for d in rc._declarations() if d.key == "legend-level-calibration")
+        self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+        self.assertIsInstance(dep.probe, rc.AnyRowProbe)
+        self.assertEqual(dep.probe.model_label(), "LegendLevelCalibration")
+        self.assertFalse(dep.probe.resolve(None).present)
+        LegendLevelCalibrationFactory()
         self.assertTrue(dep.probe.resolve(None).present)
 
     def test_active_beginning_without_upbringing_is_reported(self) -> None:
@@ -778,3 +845,167 @@ class TestRequiredContentPanelRendersDependencyDetail(DeclarationPatchMixin, Tes
             "Nothing missing. Every required content dependency resolved against this database.",
             body,
         )
+
+
+class TestTraditionStandardLinesProbes(TestCase):
+    """Both standard-line tables (#3675): missing rows AND blank text both report.
+
+    The tradition slate page's own GET no longer ``get_or_create``s these rows
+    (#3675 demo-fidelity ruling - that write was a guard by another name), so
+    this sentinel is the only thing that notices an entirely-empty database or
+    a row an author left blank.
+    """
+
+    def test_missing_when_no_rows_exist(self) -> None:
+        state_result = rc._probe_tradition_state_lines()
+        self.assertFalse(state_result.present)
+        self.assertEqual(
+            set(state_result.missing), {"self_taught", "teachers_gone", "living_masters"}
+        )
+
+        schooling_result = rc._probe_schooling_lines()
+        self.assertFalse(schooling_result.present)
+        self.assertEqual(set(schooling_result.missing), {"0", "1", "2"})
+
+    def test_blank_entry_line_or_name_reports_missing_too(self) -> None:
+        from world.character_creation.constants import TraditionState
+        from world.character_creation.factories import (
+            SchoolingLineFactory,
+            TraditionStateLineFactory,
+        )
+
+        for state in TraditionState.values:
+            TraditionStateLineFactory(state=state, entry_line="")
+        for rank in range(3):
+            SchoolingLineFactory(rank=rank, name="")
+
+        state_result = rc._probe_tradition_state_lines()
+        self.assertFalse(state_result.present)
+        self.assertEqual(
+            set(state_result.missing), {"self_taught", "teachers_gone", "living_masters"}
+        )
+
+        schooling_result = rc._probe_schooling_lines()
+        self.assertFalse(schooling_result.present)
+        self.assertEqual(set(schooling_result.missing), {"0", "1", "2"})
+
+    def test_present_when_every_row_exists_with_text(self) -> None:
+        from world.character_creation.constants import TraditionState
+        from world.character_creation.factories import (
+            SchoolingLineFactory,
+            TraditionStateLineFactory,
+        )
+
+        for state in TraditionState.values:
+            TraditionStateLineFactory(state=state, entry_line=f"{state} line")
+        for rank in range(3):
+            SchoolingLineFactory(rank=rank, name=f"Schooling {rank}")
+
+        self.assertTrue(rc._probe_tradition_state_lines().present)
+        self.assertTrue(rc._probe_schooling_lines().present)
+
+    def test_declared_as_required_dependencies(self) -> None:
+        for key in (
+            "character_creation.tradition_state_lines",
+            "character_creation.tradition_schooling_lines",
+        ):
+            dep = next(d for d in rc._declarations() if d.key == key)
+            self.assertEqual(dep.tier, rc.DependencyTier.REQUIRED)
+            self.assertIsInstance(dep.probe, rc.CustomProbe)
+
+
+class TestSavagedConditionDeclaration(TestCase):
+    """`savaged-condition` (#3652): `_apply_savaged()` resolves via `get_by_name`,
+    case-insensitively, so the probe matches that."""
+
+    def test_missing_on_an_empty_database(self) -> None:
+        probe = _probe_for("savaged-condition")
+        result = probe.resolve(frozenset())
+        self.assertFalse(result.present)
+
+    def test_present_once_the_condition_exists(self) -> None:
+        from world.companions.defeat_content import SAVAGED_CONDITION_NAME
+
+        probe = _probe_for("savaged-condition")
+        ConditionTemplateFactory(name=SAVAGED_CONDITION_NAME)
+        result = probe.resolve(frozenset({SAVAGED_CONDITION_NAME}))
+        self.assertTrue(result.present)
+
+
+class TestCompanionDefeatPoolProbe(TestCase):
+    """`companion-defeat-pool` (#3652): a `CustomProbe`, not a name-only probe,
+    because `resolve_companion_defeat` treats an entry-less pool as absent
+    (`if not consequences: return False`) - the exact false-green shape the
+    `Surrounded` composite probe above exists to avoid."""
+
+    def test_missing_on_an_empty_database(self) -> None:
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePool" in m for m in result.missing))
+
+    def test_missing_when_the_pool_exists_but_has_no_entries(self) -> None:
+        """A bare pool row with no ConsequencePoolEntry is a silent no-op, not a
+        working pool - a name-only probe would report this present."""
+        from actions.factories import ConsequencePoolFactory
+        from world.companions.factories_combat import COMPANION_DEFEAT_POOL_NAME
+
+        ConsequencePoolFactory(name=COMPANION_DEFEAT_POOL_NAME)
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+        self.assertTrue(any("ConsequencePoolEntry" in m for m in result.missing))
+
+    def test_missing_when_every_entry_is_excluded(self) -> None:
+        from actions.factories import ConsequencePoolEntryFactory, ConsequencePoolFactory
+        from world.companions.factories_combat import COMPANION_DEFEAT_POOL_NAME
+
+        pool = ConsequencePoolFactory(name=COMPANION_DEFEAT_POOL_NAME)
+        ConsequencePoolEntryFactory(pool=pool, is_excluded=True)
+        result = rc._probe_companion_defeat_pool()
+        self.assertFalse(result.present)
+
+    def test_present_once_the_seeded_pool_exists(self) -> None:
+        from world.companions.factories_combat import create_companion_defeat_pool
+
+        create_companion_defeat_pool()
+        result = rc._probe_companion_defeat_pool()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+
+class TestRiskCalibrationsProbe(TestCase):
+    """`risk-calibrations` (#3831): `risk` is unique on `RiskCalibration`, so
+    partial coverage must report exactly the uncovered levels, not "present" for
+    having at least one row - the same partial-coverage shape
+    `TestEscalationCurveProbe` above guards against."""
+
+    def test_missing_every_level_with_no_rows(self) -> None:
+        from world.societies.constants import RenownRisk
+
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(
+            set(result.missing),
+            {RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME},
+        )
+
+    def test_present_when_all_four_levels_are_covered(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        for risk in (RenownRisk.LOW, RenownRisk.MODERATE, RenownRisk.HIGH, RenownRisk.EXTREME):
+            RiskCalibrationFactory(risk=risk)
+        result = rc._probe_risk_calibrations()
+        self.assertTrue(result.present)
+        self.assertEqual(result.missing, ())
+
+    def test_missing_reports_only_the_uncovered_level(self) -> None:
+        from world.societies.constants import RenownRisk
+        from world.stories.factories import RiskCalibrationFactory
+
+        RiskCalibrationFactory(risk=RenownRisk.LOW)
+        RiskCalibrationFactory(risk=RenownRisk.MODERATE)
+        RiskCalibrationFactory(risk=RenownRisk.HIGH)
+        # RenownRisk.EXTREME deliberately left uncovered.
+        result = rc._probe_risk_calibrations()
+        self.assertFalse(result.present)
+        self.assertEqual(result.missing, (RenownRisk.EXTREME,))

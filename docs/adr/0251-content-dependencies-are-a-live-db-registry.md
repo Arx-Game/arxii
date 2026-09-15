@@ -43,4 +43,16 @@ deliberately to hold the file count down (ruled 2026-08-30) rather than scatter 
 rows across dozens of small files a staff member would have to know to go looking
 for.
 
-> Status: accepted · Source: #3444
+**Addendum (#3831, 2026-09-14): every config table staff set is registered and linked.**
+The registry was opt-in, so config tables older than it were never declared, and many
+had no admin page either: production ran with an empty `DamageSuccessLevelMultiplier`
+table, which silently zeroed all technique damage. Every table whose rows staff set for
+the game to run now has a Django admin page, and each one whose emptiness breaks or
+quietly disables a shipped mechanic (REQUIRED) or leaves a feature on defaults or
+dormant (TUNING) has a declaration here. Each panel row links to that admin page
+(`DependencyRow.admin_url`). When you add or touch a config table, register its admin
+page and declare it in the same PR. Rejected: a test that enumerates models and demands
+a declaration for each (ruled superfluous on 2026-09-13: the failure was missing
+tables, and a complete list of pages to configure fixes that directly).
+
+> Status: accepted · Source: #3444, #3831

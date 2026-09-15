@@ -2,7 +2,7 @@
  * Stage 3: Lineage - Upbringing + Family Selection (#3617)
  *
  * Rebuilt around Upbringings (`OriginTemplate`): a per-beginning catalog row
- * with its own CG cost, trust gate, typed prompts, and choice of family paths
+ * with its own CG cost, typed prompts, and choice of family paths
  * (claim a staff-authored family, name a new one, or none - the tarot naming
  * ritual). See docs/systems/character_creation.md's Lineage step section.
  */
@@ -49,6 +49,8 @@ import type { CharacterDraft, Family, KinSlot, KinSlotPool, TarotCard } from '..
 import { UpbringingPicker } from './lineage/UpbringingPicker';
 import { UpbringingPrompts } from './lineage/UpbringingPrompts';
 import { FamilyPathSection } from './lineage/FamilyPathSection';
+import { FamilyTemplateForm } from './lineage/FamilyTemplateForm';
+import { LineageRecord } from './lineage/LineageRecord';
 
 interface LineageStageProps {
   draft: CharacterDraft;
@@ -149,6 +151,8 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               template={template}
               path={path}
               influence={influence}
+              copy={copy}
+              scope="any"
             />
             <FamilyPathSection
               draft={draft}
@@ -158,6 +162,15 @@ export function LineageStage({ draft, onStageSelect }: LineageStageProps) {
               familiesLoading={familiesLoading}
               copy={copy}
             />
+            <UpbringingPrompts
+              draft={draft}
+              template={template}
+              path={path}
+              influence={influence}
+              copy={copy}
+              scope="path"
+            />
+            <LineageRecord draft={draft} template={template} path={path} />
           </>
         )}
       </div>
@@ -423,18 +436,6 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
       </div>
       {selectedTemplate && (
         <>
-          {selectedTemplate.features.length > 0 && (
-            <div className="space-y-1 rounded-md border bg-muted/30 p-2">
-              <Label className="text-xs font-medium text-muted-foreground">
-                A house of this charter
-              </Label>
-              {selectedTemplate.features.map((feature) => (
-                <p key={feature.id} className="text-xs">
-                  <span className="font-medium">{feature.name}</span>: {feature.description}
-                </p>
-              ))}
-            </div>
-          )}
           <Input
             placeholder="House name (family surname)"
             value={houseName}
@@ -469,42 +470,12 @@ export function HouseFoundingPanel({ draft }: { draft: CharacterDraft }) {
               onChange={(event) => setLands(event.target.value)}
             />
           ) : null}
-          {selectedTemplate.aspect_definitions.map((definition) => {
-            const picked = aspectPicks[definition.id] ?? [];
-            const maxPicks = definition.max_picks ?? 1;
-            return (
-              <div key={definition.id} className="space-y-1">
-                <Label className="text-sm font-medium">
-                  {definition.name}
-                  {maxPicks > 1 && (
-                    <span className="ml-1 text-xs text-muted-foreground">
-                      ({picked.length}/{maxPicks})
-                    </span>
-                  )}
-                </Label>
-                <p className="text-xs text-muted-foreground">{definition.prompt}</p>
-                <div className="grid gap-1 sm:grid-cols-2">
-                  {definition.options.map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => toggleAspectOption(definition.id, option.id, maxPicks)}
-                      className={`rounded-md border p-2 text-left text-xs transition-colors ${
-                        picked.includes(option.id)
-                          ? 'border-primary bg-primary/10'
-                          : 'hover:bg-muted/50'
-                      }`}
-                    >
-                      <span className="font-medium">{option.name}</span>
-                      {option.description && (
-                        <span className="block text-muted-foreground">{option.description}</span>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
+          <FamilyTemplateForm
+            template={selectedTemplate}
+            picks={aspectPicks}
+            onToggle={toggleAspectOption}
+            featuresHeading="A house of this charter"
+          />
           <div className="grid grid-cols-3 gap-2">
             {PRINCIPLE_AXES.map((axis) => (
               <div key={axis}>

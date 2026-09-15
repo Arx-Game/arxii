@@ -298,6 +298,27 @@ moving `ItemInstance.owner` from AccountDB to Persona.
 
 ## Drama & immersion
 
+### What you do, you see (#3807)
+
+A player acts, then sees what happened, live, on whatever transport they are
+connected through, so they can roleplay off of it in the moment rather than
+reconstruct it later from a scene-log reread. This holds for a resolved social
+check's outcome, a treatment's result, a cast's outcome pose, and anything
+shaped like them: the row exists so a player can react to it, not merely so a
+later query can find it.
+
+Whether to deliver a resolved outcome to the person whose action produced it is
+never a design question: it is the core of the game, and treating it as an
+open choice is itself a defect, not a deferred decision. The only question that
+is ever legitimately open is *audience*: who else, besides the actor, should
+see this, and the answer is always the scoping the row was already written
+with (a whisper's receivers, a mutter's fragment vs. its full text, a place's
+presence set, a concealed cast's attribution tier), never wider and never
+narrower. A persisted outcome nobody live receives is a bug, not a stub.
+Enforced by `tools/lint_undelivered_interaction.py` (the `undelivered-interaction`
+pre-commit hook) for the mechanical shape, and the `outcome-delivery-reviewer`
+agent for the audience and transport judgment the linter can't make.
+
 ### Default to the narrative roll
 
 For any IC system, never shy away from a chance for drama. When a mechanic

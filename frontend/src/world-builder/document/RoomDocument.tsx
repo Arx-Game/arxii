@@ -88,6 +88,8 @@ interface PendingExitLink {
   destinationName: string;
   entranceExitName: string;
   exitExitName: string;
+  /** One way (#3860): only the exit from here into the dug room is made. */
+  oneWay: boolean;
   /** Sibling-room ids known at dig time — the freshly dug room is the one
    * whose id was NOT here, so a pre-existing room with the same name (the
    * area already had a "Cellar") can never be linked in its place while the
@@ -153,12 +155,21 @@ function RoomDocumentBody({
         r.name.toLowerCase() === pending.destinationName.toLowerCase()
     );
     if (!newRoom) return;
-    runAction('staff_link_rooms', {
-      room_a_id: newRoom.id,
-      room_b_id: roomId,
-      name_ab: pending.exitExitName,
-      name_ba: pending.entranceExitName,
-    });
+    if (pending.oneWay) {
+      runAction('staff_link_rooms', {
+        room_a_id: roomId,
+        room_b_id: newRoom.id,
+        name_ab: pending.entranceExitName,
+        one_way: true,
+      });
+    } else {
+      runAction('staff_link_rooms', {
+        room_a_id: newRoom.id,
+        room_b_id: roomId,
+        name_ab: pending.exitExitName,
+        name_ba: pending.entranceExitName,
+      });
+    }
     pendingExitLinkRef.current = null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [manager?.rooms]);
@@ -181,7 +192,8 @@ function RoomDocumentBody({
         room_a_id: roomId,
         room_b_id: matchedRoomId,
         name_ab: payload.exitThere,
-        name_ba: payload.exitBack,
+        // One way (#3860): the action needs no return name and makes no return.
+        ...(payload.oneWay ? { one_way: true } : { name_ba: payload.exitBack }),
       });
     } else if (areaId != null) {
       runAction('staff_dig_room', { area_id: areaId, name: payload.name });
@@ -189,6 +201,7 @@ function RoomDocumentBody({
         destinationName: payload.name,
         entranceExitName: payload.exitThere,
         exitExitName: payload.exitBack,
+        oneWay: payload.oneWay,
         knownRoomIds: new Set(siblingRooms.map((r) => r.id)),
       };
     } else {

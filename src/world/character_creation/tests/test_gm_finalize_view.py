@@ -66,7 +66,7 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         from world.roster.models import Family
 
         template = OriginTemplateFactory(beginning=self.beginnings)
-        draft = self._draft(new_family_name="The Cisternwrights")
+        draft = self._draft(new_family_name="Cisternwrights")
         draft.selected_origin_template = template
         draft.draft_data.pop("tarot_card_name", None)
         draft.save()
@@ -78,9 +78,9 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
         )
         self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
         entry = RosterEntry.objects.get(pk=response.data["roster_entry_id"])
-        family = Family.objects.get(name="The Cisternwrights")
+        family = Family.objects.get(name="Cisternwrights")
         character = ObjectDB.objects.get(pk=entry.character_sheet.pk)
-        self.assertEqual(character.db_key, "Aurelius The Cisternwrights")
+        self.assertEqual(character.db_key, "Aurelius Cisternwrights")
         self.assertEqual(entry.character_sheet.family, family)
 
     def test_non_owner_of_the_table_is_forbidden(self) -> None:
@@ -136,7 +136,6 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
-                "traits_complete": True,
                 "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },
@@ -211,3 +210,79 @@ class GMFinalizeViewTests(FinalizationTestMixin, APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST, response.content)
         self.assertEqual(response.data["detail"], "Character creation failed.")
+
+    def test_gm_finalized_draft_gets_enemy_and_bundled_distinctions(self) -> None:
+        """A GM draft folds through the same one-write-path pick list too (#3675, #3621).
+
+        Both folds used to be player-finalize-only (``reconcile_offer_picks`` and the
+        enemy-degree grant were called from ``finalize_character`` alone), so a GM
+        draft with a destroy-degree enemy or a bundled Lineage distinction lost them
+        silently. ``_prepare_draft_entries`` now runs from both ``finalize_character``
+        and ``finalize_gm_character``.
+        """
+        from world.character_creation.constants import OfferArrival, OfferChapter
+        from world.character_creation.factories import (
+            DistinctionOfferFactory,
+            GroupPromptFactory,
+            OriginTemplateFactory,
+            OriginTemplateSlotChoiceFactory,
+        )
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.societies.factories import OrganizationFactory
+
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Hunted"),
+            chapter=OfferChapter.ENEMY,
+            arrives_as=OfferArrival.BUNDLED,
+            enemy_degree="destroy",
+        )
+        bundled = DistinctionFactory(name="GM Bundled Connection")
+        template = OriginTemplateFactory(
+            beginning=self.beginnings, allows_name_family=False, allows_no_family=True
+        )
+        crew = OrganizationFactory(name="the GM Crew")
+        q1 = GroupPromptFactory(template=template, sort_order=0, name="Crew")
+        q1.anchor_orgs.add(crew)
+        courier = OriginTemplateSlotChoiceFactory(slot=q1, name="Courier")
+        DistinctionOfferFactory(
+            distinction=bundled,
+            chapter=OfferChapter.LINEAGE,
+            origin_choice=courier,
+            arrives_as=OfferArrival.BUNDLED,
+        )
+
+        draft = self._draft(
+            origin_anchors={str(q1.id): crew.id},
+            origin_choices={str(q1.id): courier.id},
+            enemy={
+                "kind": "group",
+                "organization_id": None,
+                "name": "",
+                "power_tier": "",
+                "degree": "destroy",
+                "why": "It never forgets a debt.",
+                "public_line": "They are looking for me.",
+            },
+        )
+        draft.selected_origin_template = template
+        draft.save()
+
+        self.client.force_authenticate(user=self.gm.account)
+        response = self.client.post(
+            self._url(draft),
+            {"target_table": self.table.pk, "story_title": "The GM's Own Grudge"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED, response.content)
+        entry = RosterEntry.objects.get(pk=response.data["roster_entry_id"])
+        sheet = entry.character_sheet
+
+        self.assertTrue(
+            CharacterDistinction.objects.filter(
+                character=sheet, distinction__name="Hunted"
+            ).exists()
+        )
+        self.assertTrue(
+            CharacterDistinction.objects.filter(character=sheet, distinction=bundled).exists()
+        )

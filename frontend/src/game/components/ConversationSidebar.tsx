@@ -25,6 +25,7 @@ interface ConversationSidebarProps {
    * marking the active conversation.
    */
   selectedThreadKey?: string;
+  ariaLabel?: string;
 }
 
 export function ConversationSidebar({
@@ -32,6 +33,7 @@ export function ConversationSidebar({
   onThreadClick,
   onShowAll,
   selectedThreadKey,
+  ariaLabel,
 }: ConversationSidebarProps) {
   const [filterThreadKey, setFilterThreadKey] = useState<string | null>(null);
 
@@ -41,6 +43,9 @@ export function ConversationSidebar({
         <div className="border-b px-3 py-2">
           <h3 className="text-xs font-semibold uppercase text-muted-foreground">Conversations</h3>
         </div>
+        <p className="border-b px-3 py-2 text-xs italic text-muted-foreground">
+          OOC channels unavailable, pending #3299.
+        </p>
         <div className="flex-1">
           <button className="flex w-full items-center gap-2 bg-accent px-3 py-2 text-sm">
             <MessageSquare className="h-4 w-4" />
@@ -60,6 +65,9 @@ export function ConversationSidebar({
       <div className="border-b px-3 py-2">
         <h3 className="text-xs font-semibold uppercase text-muted-foreground">Conversations</h3>
       </div>
+      <p className="border-b px-3 py-2 text-xs italic text-muted-foreground">
+        OOC channels unavailable, pending #3299.
+      </p>
       <ThreadSidebar
         threads={threading.threads}
         selectedThreadKey={selectedThreadKey ?? threading.selectedThreadKey}
@@ -68,6 +76,7 @@ export function ConversationSidebar({
         onThreadClick={onThreadClick}
         onShowAll={onShowAll ?? threading.showAll}
         onOpenFilter={setFilterThreadKey}
+        ariaLabel={ariaLabel}
       />
 
       {filterThread && filterThreadKey && (

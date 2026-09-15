@@ -10,22 +10,18 @@ from world.stories.factories import (
     ChapterFactory,
     EpisodeFactory,
     PersonalStoryFactory,
-    PlayerTrustFactory,
     StoryFactory,
     StoryParticipationFactory,
 )
 from world.stories.models import (
     Chapter,
     Episode,
-    PlayerTrustLevel,
-    StoryTrustRequirement,
     TrustCategory,
 )
 from world.stories.types import (
     ParticipationLevel,
     StoryPrivacy,
     StoryStatus,
-    TrustLevel,
 )
 
 
@@ -40,55 +36,6 @@ class StoryModelTestCase(TestCase):
         cls.private_story = StoryFactory(privacy=StoryPrivacy.PRIVATE)
         # PersonalStoryFactory is a CHARACTER-scope story; no legacy fields.
         cls.personal_story = PersonalStoryFactory()
-
-    def test_story_trust_requirements_affect_player_application(self):
-        """Test that trust requirements prevent/allow player applications"""
-
-        # Get or create trust categories (migration may have created them)
-        antagonism_cat, _ = TrustCategory.objects.get_or_create(
-            name="test_antagonism",
-            defaults={"display_name": "Test Antagonism", "description": "Test"},
-        )
-        political_cat, _ = TrustCategory.objects.get_or_create(
-            name="test_political",
-            defaults={"display_name": "Test Political", "description": "Test"},
-        )
-
-        # Add trust requirements to story
-        StoryTrustRequirement.objects.create(
-            story=self.story,
-            trust_category=antagonism_cat,
-            minimum_trust_level=TrustLevel.BASIC,
-        )
-        StoryTrustRequirement.objects.create(
-            story=self.story,
-            trust_category=political_cat,
-            minimum_trust_level=TrustLevel.INTERMEDIATE,
-        )
-
-        # Create a trust profile for the user
-        from world.stories.models import PlayerTrust
-
-        trust_profile, _ = PlayerTrust.objects.get_or_create(account=self.user)
-
-        # User with no trust levels should not be able to apply
-        assert not self.story.can_player_apply(self.user)
-
-        # Give user basic antagonism trust but not political
-        PlayerTrustLevel.objects.create(
-            player_trust=trust_profile,
-            trust_category=antagonism_cat,
-            trust_level=TrustLevel.BASIC,
-        )
-        assert not self.story.can_player_apply(self.user)  # Still missing political
-
-        # Give user intermediate political trust - now they should be able to apply
-        PlayerTrustLevel.objects.create(
-            player_trust=trust_profile,
-            trust_category=political_cat,
-            trust_level=TrustLevel.INTERMEDIATE,
-        )
-        assert self.story.can_player_apply(self.user)
 
     def test_is_active_returns_false_without_gms(self):
         """Test that stories without active GMs are not considered active"""
@@ -191,57 +138,6 @@ class EpisodeModelTestCase(TestCase):
         episodes = Episode.objects.filter(chapter=self.chapter)
 
         assert list(episodes) == [self.episode, episode2]
-
-
-class PlayerTrustModelTestCase(TestCase):
-    """Test PlayerTrust model methods"""
-
-    @classmethod
-    def setUpTestData(cls):
-        """Create test data once for the entire test class"""
-        cls.user = AccountFactory()
-        cls.trust_profile = PlayerTrustFactory(account=cls.user)
-
-    def test_get_trust_level_for_category(self):
-        """Test getting trust level for specific trust categories"""
-
-        # Create a trust category
-        category, _ = TrustCategory.objects.get_or_create(
-            name="test_category_specific",
-            defaults={
-                "display_name": "Test Category",
-                "description": "A test category",
-            },
-        )
-
-        # Create a trust level for this user and category
-        PlayerTrustLevel.objects.create(
-            player_trust=self.trust_profile,
-            trust_category=category,
-            trust_level=TrustLevel.INTERMEDIATE,
-        )
-
-        trust_level = self.trust_profile.get_trust_level_for_category(category)
-        assert trust_level == TrustLevel.INTERMEDIATE
-
-    def test_get_trust_level_for_nonexistent_category(self):
-        """Returns untrusted when category lacks a PlayerTrustLevel."""
-
-        category, _ = TrustCategory.objects.get_or_create(
-            name="nonexistent_category_test",
-            defaults={
-                "display_name": "Nonexistent Category",
-                "description": "A category with no trust level set",
-            },
-        )
-
-        trust_level = self.trust_profile.get_trust_level_for_category(category)
-        assert trust_level == TrustLevel.UNTRUSTED
-
-    def test_trust_profile_defaults(self):
-        """Test that trust profile has correct default values"""
-        assert self.trust_profile.total_positive_feedback == 0
-        assert self.trust_profile.total_negative_feedback == 0
 
 
 class FeedbackRatingSystemTestCase(TestCase):

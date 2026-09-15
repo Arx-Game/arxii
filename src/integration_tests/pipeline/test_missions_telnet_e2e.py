@@ -17,6 +17,7 @@ from unittest.mock import MagicMock
 from django.test import TestCase
 
 from commands.missions import CmdMission
+from commands.tests.message_capture import message_text
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.missions.constants import ConflictMode, MissionStatus, OptionKind, OptionSource
@@ -44,7 +45,8 @@ def _said(caller: object) -> str:
     """Concatenate every positional string the command sent to the caller."""
     chunks: list[str] = []
     for call in caller.msg.call_args_list:
-        chunks.extend(arg for arg in call.args if isinstance(arg, str))
+        # A typed line is the tuple form (text, {"type": kind}) since #3856.
+        chunks.extend(message_text(arg) for arg in call.args if isinstance(arg, (str, tuple)))
     return "\n".join(chunks)
 
 

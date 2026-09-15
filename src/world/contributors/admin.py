@@ -27,10 +27,12 @@ class CreditStatusListFilter(admin.SimpleListFilter):
     """Three-way derived credit state for any CreditedContent changelist (#3020).
 
     Derived from ``written_by``/``reviewed_by`` on every evaluation - no
-    stored enum, per ``CreditedContent``'s docstring. Distinct from
-    ``web.admin.constants.BacklogStatusFilter``, the workbench queue's
-    ``?status=`` vocabulary (placeholder/unwritten/unreviewed): this filter
-    partitions every row into exactly one of unwritten/written/reviewed.
+    stored enum, per ``CreditedContent``'s docstring. This filter partitions
+    every row into exactly one of unwritten/written/reviewed; the workbench
+    queue's ``?status=`` vocabulary (``web.admin.constants.BacklogStatusFilter``)
+    draws the same partition since #3828 - its ``unwritten`` is this filter's
+    "unwritten" and its ``unreviewed`` is this filter's "written" bucket - and
+    adds ``placeholder`` (a prose-text mark, orthogonal to credit) and ``all``.
     Attached to every registered credited-model admin by
     ``web.admin.apps._attach_credit_admin_extras``, never listed by hand.
     """

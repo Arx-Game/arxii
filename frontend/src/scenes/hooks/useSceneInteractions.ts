@@ -13,6 +13,9 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     id: payload.id,
     persona: payload.persona,
     content: payload.content,
+    // The rendered sentence (#3858) travels with the row; a payload from a
+    // server without it leaves the readers on `content`.
+    line: payload.line,
     mode: payload.mode,
     visibility: 'default',
     timestamp: payload.timestamp,
@@ -23,6 +26,9 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     place_name: payload.place_name,
     receiver_persona_ids: payload.receiver_persona_ids ?? [],
     target_persona_ids: payload.target_persona_ids ?? [],
+    thread_id: payload.thread_id ?? null,
+    root_thread_id: payload.root_thread_id ?? null,
+    reply_to: payload.reply_to ?? null,
     attributed_companion:
       payload.attributed_companion_id != null
         ? { id: payload.attributed_companion_id, name: payload.attributed_companion_name ?? '' }

@@ -140,7 +140,14 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
     permission_classes = [IsAuthenticated]
     pagination_class = PageNumberPagination
     filter_backends = [DjangoFilterBackend]
-    filterset_fields = ["source", "target", "is_active", "is_pending", "is_soul_tether"]
+    filterset_fields = [
+        "source",
+        "target",
+        "target_companion",
+        "is_active",
+        "is_pending",
+        "is_soul_tether",
+    ]
 
     def get_queryset(self):  # type: ignore[override]
         """Return relationships the caller may read, with related data prefetched.
@@ -177,6 +184,7 @@ class CharacterRelationshipViewSet(ReadOnlyModelViewSet):
                 "source__character",
                 "target",
                 "target__character",
+                "target_companion",
             )
             .prefetch_related(
                 Prefetch(
@@ -471,6 +479,16 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
             Persona.objects.filter(pk=target_persona_id).select_related("character_sheet").first()
         )
 
+    def _resolve_target_companion(self, target_companion_id: int):
+        """Resolve a bonded, unreleased Companion by pk, or None (#3575)."""
+        from world.companions.models import Companion  # noqa: PLC0415
+
+        return (
+            Companion.objects.filter(pk=target_companion_id, released_at__isnull=True)
+            .select_related("owner")
+            .first()
+        )
+
     def _resolve_actor(self, request):
         """Return the caller's active puppet ObjectDB if they own its sheet."""
         actor = request.user.puppet
@@ -504,6 +522,7 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
         """
         kwargs: dict[str, object] = {
             "target_sheet": data["target_sheet"],
+            "target_companion": data["target_companion"],
             "points": data["points"],
             "title": data["title"],
             "writeup": data["writeup"],
@@ -543,13 +562,25 @@ class RelationshipUpdateViewSet(ListModelMixin, GenericViewSet):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        target_persona = self._resolve_target_sheet(data["target_persona_id"])
-        if target_persona is None:
-            return Response(
-                {"success": False, "message": "Target persona not found."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-        data["target_sheet"] = target_persona.character_sheet
+        target_sheet = None
+        target_companion = None
+        if data.get("target_persona_id") is not None:
+            target_persona = self._resolve_target_sheet(data["target_persona_id"])
+            if target_persona is None:
+                return Response(
+                    {"success": False, "message": "Target persona not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+            target_sheet = target_persona.character_sheet
+        else:
+            target_companion = self._resolve_target_companion(data["target_companion_id"])
+            if target_companion is None:
+                return Response(
+                    {"success": False, "message": "Target companion not found."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+        data["target_sheet"] = target_sheet
+        data["target_companion"] = target_companion
 
         kwargs, err = self._build_kwargs(data)
         if err is not None:

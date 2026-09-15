@@ -48,7 +48,7 @@ class SheetCommandTests(TestCase):
         self.sheet.birthday_month = 3
         self.sheet.birthday_day = 15
         self.sheet.quote = "Honor above all!"
-        self.sheet.personality = "Brave and noble, always stands up for the weak."
+        self.sheet.never_do = "Brave and noble, always stands up for the weak."
         self.sheet.background = "Born into nobility, trained as a knight from childhood."
         self.sheet.save()
 
@@ -147,19 +147,19 @@ class SheetCommandTests(TestCase):
         assert "Full Name: Dame TestHero of Stormwind" in output
         assert "Colored Name: |cTestHero|n" in output
 
-    def test_sheet_command_quote_and_personality(self):
-        """Test that quote and personality are displayed."""
+    def test_sheet_command_quote_and_actor_sheet(self):
+        """Test that quote and the Actor's Sheet answers are displayed (#3621)."""
         cmd, mock_caller = self._create_command_with_caller()
 
         cmd.func()
 
         output = mock_caller.msg.call_args[0][0]
 
-        # Check quote and personality
+        # Check quote and the answers
         assert "Quote" in output
         assert '"Honor above all!"' in output
-        assert "Personality" in output
-        assert "Brave and noble" in output
+        assert "Actor's Sheet" in output
+        assert "Would never: Brave and noble" in output
 
     def test_sheet_command_background_displayed(self):
         """Test that background is displayed."""
@@ -233,11 +233,9 @@ class SheetCommandTests(TestCase):
 
     def test_sheet_command_text_wrapping(self):
         """Test that long text is properly wrapped."""
-        # Create very long personality text
-        long_personality = (
-            "This is a very long personality description that should be wrapped " * 10
-        )
-        self.sheet.personality = long_personality
+        # Create very long answer text
+        long_answer = "This is a very long personality description that should be wrapped " * 10
+        self.sheet.never_do = long_answer
         self.sheet.save()
 
         cmd, mock_caller = self._create_command_with_caller()
@@ -254,10 +252,10 @@ class SheetCommandTests(TestCase):
             assert len(line) <= 80, f"Line too long: {line}"
 
     def test_sheet_command_long_text_truncation(self):
-        """Test that very long personality/background text is truncated."""
+        """Test that very long background text is truncated."""
         # Create text longer than 200 characters
         long_text = "A" * 250
-        self.sheet.personality = long_text
+        self.sheet.background = long_text
         self.sheet.save()
 
         cmd, mock_caller = self._create_command_with_caller()

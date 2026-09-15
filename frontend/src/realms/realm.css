@@ -1,0 +1,362 @@
+/**
+ * Realm pages (#3725): the Realms hub (six cards) and a realm's page (testament +
+ * hub sections). Same grammar as the Gatefold (home.css): Cinzel labels, EB Garamond
+ * body, the leaf grid with a sticky aside, the realm's own palette. Scoped under
+ * `.realms-hub` / `.realm-page` so nothing leaks onto other pages.
+ */
+
+.realms-hub,
+.realm-page {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-size: 1.1875rem;
+  line-height: 1.62;
+  color: hsl(var(--foreground));
+  background: hsl(var(--background));
+}
+.realms-hub a:focus-visible,
+.realm-page a:focus-visible {
+  outline: 2px solid hsl(var(--primary));
+  outline-offset: 3px;
+}
+.realm-eyebrow {
+  display: block;
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.25em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.6rem;
+}
+
+/* ---------- the hub ---------- */
+.realms-hub {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vh, 4rem) clamp(1.25rem, 4vw, 3rem) 5rem;
+}
+.realms-hub h1 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(1.8rem, 3.5vw, 2.4rem);
+  letter-spacing: 0.08em;
+  margin: 0 0 1.6rem;
+  text-wrap: balance;
+}
+.realms-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+  gap: 1rem;
+}
+.realms-hub-card {
+  display: block;
+  padding: 1.1rem 1.2rem 1.2rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 3px;
+  background: hsl(var(--background));
+  color: hsl(var(--foreground));
+  text-decoration: none;
+  box-shadow: 0 1px 0 hsl(var(--border));
+}
+.realms-hub-card:hover {
+  border-color: hsl(var(--primary));
+}
+.realms-hub-card h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: 1.35rem;
+  letter-spacing: 0.08em;
+  margin: 0;
+  color: hsl(var(--foreground));
+}
+.realm-formal {
+  margin: 0.25rem 0 0;
+  font-style: italic;
+  font-size: 0.95rem;
+  color: hsl(var(--muted-foreground));
+}
+.realm-motto {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.05rem;
+  letter-spacing: 0.06em;
+  color: hsl(var(--primary));
+  margin: 1.4rem 0;
+  text-wrap: balance;
+}
+.realms-hub-card .realm-motto {
+  font-size: 0.95rem;
+  margin: 0.7rem 0 0;
+  padding-top: 0.6rem;
+  border-top: 1px solid hsl(var(--border));
+}
+
+/* ---------- the realm page ---------- */
+.realm-page {
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: clamp(2.5rem, 6vh, 4rem) clamp(1.25rem, 4vw, 3rem) 5rem;
+}
+.realm-head {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 1.4rem;
+  align-items: start;
+  margin-bottom: 1rem;
+}
+.realm-crest {
+  width: 5.5rem;
+  height: 6.5rem;
+  border: 1px solid hsl(var(--border));
+  border-radius: 2px;
+  background: linear-gradient(160deg, hsl(var(--primary) / 0.35), hsl(var(--accent) / 0.25));
+  object-fit: cover;
+}
+.realm-head h1 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: clamp(2rem, 5vw, 2.6rem);
+  letter-spacing: 0.08em;
+  line-height: 1.05;
+  margin: 0;
+}
+.realm-threshold {
+  margin: 0.7rem 0 0;
+  font-size: 1rem;
+  color: hsl(var(--muted-foreground));
+}
+.realm-rail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.4rem;
+  padding: 0.6rem 0;
+  margin: 1rem 0 1.6rem;
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  position: sticky;
+  top: 0;
+  background: hsl(var(--background));
+  z-index: 1;
+}
+.realm-rail a {
+  color: hsl(var(--muted-foreground));
+  text-decoration: none;
+}
+.realm-rail a.on,
+.realm-rail a:hover {
+  color: hsl(var(--primary));
+}
+.realm-leaf {
+  display: grid;
+  grid-template-columns: minmax(0, 38rem) minmax(11rem, 15rem);
+  gap: clamp(2rem, 4vw, 3.5rem);
+}
+.realm-leaf > aside {
+  font-size: 0.9375rem;
+  line-height: 1.55;
+  color: hsl(var(--muted-foreground));
+  border-left: 1px solid hsl(var(--border));
+  padding-left: 1.4rem;
+  align-self: start;
+  position: sticky;
+  top: 3.5rem;
+}
+.realm-leaf > aside .realm-note {
+  display: block;
+  margin-bottom: 1.4rem;
+}
+.realm-leaf > aside b {
+  color: hsl(var(--foreground));
+  font-weight: 600;
+}
+.realm-leaf a,
+.realm-more a {
+  color: hsl(var(--primary));
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+@media (max-width: 58rem) {
+  .realm-leaf {
+    grid-template-columns: 1fr;
+  }
+  .realm-leaf > aside {
+    border-left: none;
+    padding: 1.25rem 0;
+    border-top: 1px solid hsl(var(--border));
+    border-bottom: 1px solid hsl(var(--border));
+    position: static;
+  }
+}
+.realm-testament p {
+  margin: 1.1rem 0;
+  text-wrap: pretty;
+}
+.realm-dropcap::first-letter {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  font-size: 4.2em;
+  float: left;
+  line-height: 0.76;
+  padding: 0.08em 0.06em 0 0;
+  color: hsl(var(--primary));
+}
+.realm-section {
+  margin: 2.6rem 0 0;
+  scroll-margin-top: 3.5rem;
+}
+.realm-section h2 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 1.2rem;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.3rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+.realm-section h2 small {
+  font-family: 'EB Garamond', Georgia, serif;
+  font-weight: 400;
+  letter-spacing: 0;
+  font-size: 0.95rem;
+  color: hsl(var(--muted-foreground));
+}
+.realm-empty {
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+  margin: 0.4rem 0 0;
+}
+.realm-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.9rem;
+  margin: 0.8rem 0 0;
+}
+.realm-card {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 0.9rem 1rem;
+  border-radius: 2px;
+  font-size: 0.98rem;
+}
+.realm-card b {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  display: block;
+  margin-bottom: 0.25rem;
+}
+.realm-card .realm-sub {
+  font-size: 0.85rem;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+}
+.realm-card p {
+  margin: 0.4rem 0 0;
+}
+.realm-orgs {
+  margin: 0.6rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+.realm-orgs li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.8rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid hsl(var(--border));
+  font-size: 0.98rem;
+  align-items: baseline;
+}
+.realm-orgs li a {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  font-size: 0.9rem;
+  letter-spacing: 0.05em;
+  color: hsl(var(--foreground));
+  text-decoration: none;
+}
+.realm-orgs li a:hover {
+  color: hsl(var(--primary));
+}
+.realm-orgs .realm-words {
+  font-style: italic;
+  color: hsl(var(--muted-foreground));
+}
+.realm-orgs .realm-kind {
+  font-family: 'Cinzel', Georgia, serif;
+  font-size: 0.72rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: hsl(var(--muted-foreground));
+}
+.realm-boards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1.4rem;
+  margin-top: 0.8rem;
+}
+.realm-board {
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--card));
+  padding: 0.9rem 1rem 1rem;
+}
+.realm-board h3 {
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.realm-board ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-variant-numeric: tabular-nums;
+}
+.realm-board li {
+  display: grid;
+  grid-template-columns: 1.6rem 1fr auto;
+  gap: 0.5rem;
+  padding: 0.28rem 0;
+  border-bottom: 1px dotted hsl(var(--border));
+  font-size: 0.95rem;
+}
+.realm-board li i {
+  color: hsl(var(--muted-foreground));
+  font-style: normal;
+}
+.realm-board li em {
+  color: hsl(var(--primary));
+  font-size: 0.88rem;
+}
+.realm-roster {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.8rem;
+  margin-top: 0.8rem;
+}
+.realm-pc {
+  display: grid;
+  grid-template-columns: 2.6rem 1fr;
+  gap: 0.6rem;
+  align-items: center;
+  font-size: 0.92rem;
+}
+.realm-pc span {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.82rem;
+  display: block;
+}
+.realm-more {
+  margin: 0.9rem 0 0;
+  font-size: 1rem;
+}

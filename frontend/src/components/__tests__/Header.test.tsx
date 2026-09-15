@@ -180,6 +180,8 @@ describe('Header', () => {
     expect(screen.getByRole('link', { name: /crossover/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /codex/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /tidings/i })).toBeInTheDocument();
+    // The Realms hub (#3725): one plain link, no per-realm jumps under it.
+    expect(screen.getByRole('link', { name: /realms/i })).toHaveAttribute('href', '/realms');
   });
 
   // ---------------------------------------------------------------------------
@@ -196,6 +198,9 @@ describe('Header', () => {
       primary_persona_id: 7,
       active_persona_id: 7,
       unread_narrative_count: 0,
+      unread_direct: 0,
+      has_ambient_unread: false,
+      attention_as_of_id: 0,
       lifecycle_state: 'ALIVE',
       roster_type: 'Active',
       character_type: 'PC',

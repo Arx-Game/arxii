@@ -1,7 +1,12 @@
 # Distinctions System
 
 Character advantages and disadvantages that mechanically modify stats, rolls, and abilities.
-Part of CG Stage 6 (Traits).
+No CG stage of its own -- since #3675 each CG chapter (the Gift tradition step, the
+Glimpse, Lineage answers, Appearance, the Actor's Sheet, and since #3709 the enemy)
+offers the distinctions that belong to it, each line hanging off the thing the player is
+answering (a tag, an answer, a schooling line, a question, an enemy reason or degree, an
+Appearance section) with a first look pinned per Beginning; see "CG Integration" below,
+`docs/systems/character_creation.md` and ADR-0282.
 
 **Source:** `src/world/distinctions/`
 **API Base:** `/api/distinctions/`
@@ -37,7 +42,6 @@ from world.distinctions.types import (
 | `DistinctionTag` | Searchable tags | `name`, `slug` |
 | `Distinction` | The advantage/disadvantage definition | `name`, `category`, `cost_per_rank`, `max_rank`, `is_variant_parent`, `allow_other`, `secret_by_default`, `default_secret_level` |
 | `DistinctionEffect` | Mechanical effects | `distinction`, `target` (FK `mechanics.ModifierTarget`), `value_per_rank`, `scaling_values`, `amplifies_sources_by`, `grants_immunity_to_negative`, `description` |
-| `DistinctionPrerequisite` | Requirements (JSON rules) | `distinction`, `rule_json`, `description` |
 
 **Mutual exclusion is not a separate model.** `Distinction.mutually_exclusive_with` is a
 symmetrical self-referential `ManyToManyField` — adding `a.mutually_exclusive_with.add(b)`
@@ -62,13 +66,51 @@ branches on `target.category.name`:
 
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
-| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`) |
+| `CharacterDistinction` | Character's acquired distinctions | `character` (FK → `character_sheets.CharacterSheet`), `distinction`, `rank`, `origin`, `is_temporary`, `notes`, `secret` (→ `secrets.Secret`), `feature_trait` / `feature_marking` (the one feature a per-feature distinction names, #3739 — at most one is ever set) |
 | `CharacterDistinctionOther` | Freeform "Other" entries | `character` (FK → `character_sheets.CharacterSheet`), `parent_distinction`, `freeform_text`, `status`, `staff_mapped_distinction` |
 
 Both `character` FKs point at **`CharacterSheet`**, not `ObjectDB` (#2608 — the first
 re-point in the ObjectDB FK audit). `CharacterSheet.pk ==
 ObjectDB.pk` (primary-key O2O), so the change was a pure `AlterField`. Read
 `character_distinction.character` and get the sheet directly — no `.sheet_data` hop.
+
+Since #3739 a distinction can be held **once per feature** rather than once per
+character (`Distinction.taken_per_feature`). The old
+`unique_together(character, distinction)` is therefore gone, replaced by three
+conditional unique constraints — one plain row per distinction when it names no
+feature, one row per distinction per trait, one per distinction per marking — plus
+a check constraint that a row never names both a trait and a marking. See
+"Distinctive features" below.
+
+---
+
+## Distinctive features — a distinction held per feature (#3739)
+
+Four flags on `Distinction` carry the shape:
+
+| Field | Meaning |
+|-------|---------|
+| `taken_per_feature` | Held once per feature (a trait row or a marking), not once per character. Offered on every feature row of the Appearance chapter, via a `DistinctionOffer` whose opener is `feature_rows` rather than a section. |
+| `opens_feature` | The one-point "Make It Distinctive" pick. Holding it on a feature opens that feature's description, every option of its trait, and the axis rows. |
+| `requires_feature_opened` | May be held on a feature only where an `opens_feature` row is held on the same feature: the Alluring / Menacing / Regal axes. |
+| `cg_max_rank` | The rank ceiling character creation applies when lower than `max_rank` (`Distinction.cg_ceiling`). The axes reach 5 in play and stop at 3 in CG. |
+
+Because a per-feature distinction is held several times over, the draft entry list
+is keyed by **`world.distinctions.types.feature_key`** — `(distinction_id, trait
+name, draft marking id)` — everywhere it used to be keyed by distinction id:
+`offers.offers_for`, `reconcile_offer_picks`, the sync endpoint's merge, the CG
+point preview, and `_create_distinctions` at finalize. A distinction that is not
+per-feature keys as `(id, "", 0)` and behaves exactly as it did before.
+
+Two refunds keep a pick from outliving what it names, both through
+`reconcile_offer_picks` (`offers._drop_vanished_features`): dropping the unlock
+drops the axes bought under it, and deleting a marking drops everything bought on
+it (the draft-marking viewset's `perform_destroy` reconciles, so the budget is
+right immediately rather than at the next sync).
+
+The three axes are the same `ModifierTarget` rows item accents use (#2886), so a
+feature and a garment push on one number. A feature is worth more on purpose: an
+accent rung is +1, a feature tier is +2.
 
 ---
 
@@ -141,8 +183,10 @@ run against a character's **currently-held** distinctions instead of a draft. It
 of a DRF `ValidationError`, since `grant_distinction` has non-HTTP callers (GM action, telnet,
 achievement engine, consequence-effect handler, resonance-threshold check).
 
-**In-play exclusion behavior differs from CG:** at CG time an exclusion conflict blocks the
-draft's Traits stage outright. In play, every calling source catches
+**In-play exclusion behavior differs from CG:** at CG time an exclusion conflict never blocks a
+stage (no stage owns distinctions, #3675) -- `offers.offers_for` marks the conflicting offer
+`is_locked` with a `lock_reason` (`"Cannot be held with {other.name}"`), so only that one choice
+is unpickable; every other offer in the chapter stays open. In play, every calling source catches
 `DistinctionExclusionError` at its own call site and **skips just that grant** — logging it and
 continuing — rather than failing the surrounding operation (an achievement award, a
 consequence-pool resolution, an endorsement's resonance grant). This mirrors
@@ -385,16 +429,42 @@ CharacterDistinction.objects.filter(
 - `draft_id` - Add lock status based on draft's distinctions
 
 ### Draft Distinctions
+
+Every CG add/swap/sync goes through an offer gate (#3675): the request must carry the
+`offer_id` of a `character_creation.DistinctionOffer` row the draft has actually earned
+(`world.character_creation.offers.visible_offers`), naming the same distinction and
+arriving `choice` -- a client can never pick a `bundled`/`carried` offer directly, since
+`reconcile_offer_picks` applies those on its own. An unresolvable `offer_id` is a 400, not
+a silent drop.
+
 - `GET /api/distinctions/drafts/{draft_id}/distinctions/` - List draft's distinctions
-- `POST /api/distinctions/drafts/{draft_id}/distinctions/` - Add distinction
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/` - Add a distinction; body carries
+  `distinction_id`, `rank`, `notes`, and `offer_id`
 - `DELETE /api/distinctions/drafts/{draft_id}/distinctions/{pk}/` - Remove distinction
-- `POST /api/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive
+- `POST /api/distinctions/drafts/{draft_id}/distinctions/swap/` - Swap mutually exclusive;
+  body carries `remove_id`, `add_id`, `offer_id` (for the added distinction), `rank`, `notes`
+- `PUT /api/distinctions/drafts/{draft_id}/distinctions/sync/` - Replace every CHOICE-arrival
+  distinction on the draft in one call; body `{"distinctions": [{"id", "rank", "offer_id"},
+  ...]}`. The chapter mounts (`ChapterOffers`) use this rather than one POST per pick.
+  `reconcile_offer_picks` runs after every one of these four calls, so a `bundled`/`carried`
+  entry the client never sent survives the write.
 
 ---
 
 ## CG Integration
 
-During character creation, distinctions are stored in `CharacterDraft.draft_data["distinctions"]` as a list:
+There is no Distinctions stage (retired #3675). Each CG chapter offers the distinctions
+that belong to it -- a `character_creation.DistinctionOffer` row per (distinction,
+chapter, opener) -- and a chapter's own component (`ChapterOffers`, `GlimpseAxes`, the
+Upbringing answer block, the schooling stances) is where a player picks one. See
+`docs/systems/character_creation.md`'s "CG Stages" table and its `offers` endpoint for
+which chapter shows which offer, and `world.character_creation.offers` for the reader
+module (`offers_for`, `closed_for`, `reconcile_offer_picks`).
+
+During character creation, distinctions are stored in
+`CharacterDraft.draft_data["distinctions"]` as a list; each entry carries offer
+provenance (`world.distinctions.types.DraftDistinctionEntry`) rather than a single
+static cost:
 
 ```python
 draft.draft_data["distinctions"] = [
@@ -406,24 +476,36 @@ draft.draft_data["distinctions"] = [
         "rank": 2,
         "cost": 20,
         "notes": "",
+        # Offer provenance (#3675): one entry per distinction, every offer that put
+        # it there. offer_ids mixes int (a real DistinctionOffer row id) and the
+        # synthetic str key "state:<TraditionState value>" a tradition-state-carried
+        # drawback uses (it has no DistinctionOffer row of its own).
+        "offer_ids": [7],
+        "sources": ["Mark"],       # the opener's label, one per offer_id
+        "arrivals": ["choice"],    # OfferArrival value, one per offer_id
     },
-    # ...
+    # A carried drawback (e.g. the SELF_TAUGHT Unbound pick) instead reads:
+    # {"offer_ids": ["state:self_taught"], "sources": ["Self-taught"],
+    #  "arrivals": ["carried"], "cost": 0, ...}
 ]
 ```
 
-### Stage Completion
+`reconcile_offer_picks(draft)` is the only writer of that provenance: it runs after every
+draft PATCH (`CharacterDraftViewSet.perform_update`), after `select-tradition`, and once
+at the start of every finalize path (`_prepare_draft_entries`, shared by
+`finalize_character`/`finalize_gm_character`). It applies `carried`/`bundled` offers the
+draft's current answers earned, strips an entry's sources whose offer is no longer
+visible (a tradition switch, a route re-picked), drops an entry once its last source is
+gone, and reprices every survivor (`entry_price` -- free when any surviving source
+arrived `bundled`/`carried`, else `distinction.calculate_total_cost(rank)`). A legacy
+entry saved before #3675 (no `offer_ids` key at all -- a pre-offers catalogue pick) is
+left exactly as stored until the player changes it through a path that does carry
+`offer_ids`.
 
-The Traits stage is complete when:
-1. `draft.draft_data["traits_complete"]` is `True` (set by frontend when user makes any selection)
-2. CG points remaining >= 0 (not over budget)
-
-```python
-# In CharacterDraft._is_traits_complete()
-return (
-    self.draft_data.get("traits_complete", False)
-    and self.calculate_cg_points_remaining() >= 0
-)
-```
+Character creation has no per-distinction completion gate of its own: a chapter's own
+stage-completion check covers whatever it offers (e.g. the Gift stage's magic-selection
+gate), and the purse (`calculate_cg_points_remaining() >= 0`) is what actually blocks
+Final Touches/Review when a player is over budget.
 
 ---
 
@@ -465,6 +547,6 @@ removeDistinction.mutate(distinctionId);
 
 All models are registered in Django admin with appropriate filters, search, and inline editing:
 
-- `DistinctionAdmin` - Full editing with effects and prerequisites inline
+- `DistinctionAdmin` - Full editing with effects inline
 - `CharacterDistinctionAdmin` - With `list_select_related` for performance
 - `CharacterDistinctionOtherAdmin` - Bulk approve action for freeform entries

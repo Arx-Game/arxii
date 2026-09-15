@@ -6,6 +6,7 @@ from allauth.account.models import EmailAddress
 from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.test import TestCase
+from evennia.accounts.models import AccountDB
 
 from evennia_extensions.models import PlayerData
 from world.seeds.test_account import seed_test_account
@@ -33,6 +34,20 @@ class SeedTestAccountTests(TestCase):
 
         player_data = PlayerData.objects.get(account=account)
         self.assertIsNotNone(player_data)
+
+    def test_account_can_run_commands(self):
+        """The seeded account has a cmdset, so it can actually run commands (#3789).
+
+        Creating an AccountDB via the bare Django `create_user` manager method
+        instantiates AccountDB directly rather than its typeclass proxy, so
+        Evennia's post_save signal (registered per-proxy-class) never fires
+        at_first_save() and db_cmdset_storage is left empty - the account can
+        log in but every command (even `help`) is rejected.
+        """
+        seed_test_account()
+
+        account = AccountDB.objects.get(username="e2e_test_account")
+        self.assertTrue(account.db_cmdset_storage)
 
     def test_idempotent(self):
         """Re-running on an existing account is a no-op."""

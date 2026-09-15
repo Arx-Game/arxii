@@ -56,12 +56,21 @@ class DeathKudosResult:
 
 
 def _lifetime_xp_spent(dead_character: ObjectDB) -> int:  # noqa: OBJECTDB_PARAM
-    from world.progression.models import CharacterXP  # noqa: PLC0415
+    """What the player actually poured into this character over its life.
 
-    total = CharacterXP.objects.filter(character_id=dead_character.pk).aggregate(
-        total=Sum("total_spent")
-    )["total"]
-    return total or 0
+    Reads progression's own ledger rather than re-aggregating here, so the cap and
+    the sheet's "invested in this character" panel can never disagree. Until #3748
+    only CG-converted points ever reached that ledger, which made this cap the
+    CG-locked amount instead of a lifetime spend.
+    """
+    from world.character_sheets.models import CharacterSheet  # noqa: PLC0415
+    from world.progression.selectors import character_xp_ledger  # noqa: PLC0415
+
+    # pk filter: the caller holds an ObjectDB; CharacterSheet is PK-shared with it.
+    sheet = CharacterSheet.objects.filter(pk=dead_character.pk).first()
+    if sheet is None:
+        return 0
+    return character_xp_ledger(sheet).spent
 
 
 def _giver_tier(

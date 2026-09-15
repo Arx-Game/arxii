@@ -15,6 +15,8 @@ Vitest (frontend tests), FactoryBoy (backend tests)
 
 **Design doc:** `docs/plans/2026-03-25-conversation-threading-design.md`
 
+> **Backend contract update (#3757):** Explicit reply targets now assign interactions to the nullable `Interaction.thread` membership and `InteractionThread` table. This plan's client-side audience grouping remains the fallback for unthreaded rows; it does not define persisted direct-parent topology.
+
 **Key conventions:**
 - Backend: SharedMemoryModel, type annotations, absolute imports, line length 100
 - Frontend: Functional components, React Query, Redux for client state, Radix UI

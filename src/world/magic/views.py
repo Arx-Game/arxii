@@ -116,7 +116,6 @@ from world.magic.serializers import (
     EntryFlourishRespondSerializer,
     EntryFlourishResultSerializer,
     FacetSerializer,
-    FacetTreeSerializer,
     GiftCreateSerializer,
     GiftListSerializer,
     GiftSerializer,
@@ -311,38 +310,14 @@ class RestrictionViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class FacetViewSet(viewsets.ReadOnlyModelViewSet):
-    """
-    ViewSet for Facet records.
+    """Read-only browse of the flat Facet vocabulary."""
 
-    Provides read-only access to the facet hierarchy.
-    Use ?parent=<id> to filter by parent, or ?parent__isnull=true for top-level.
-    """
-
-    queryset = Facet.objects.select_related("parent").order_by("name")
+    queryset = Facet.objects.order_by("name")
     serializer_class = FacetSerializer
     permission_classes = [IsAuthenticated]
     filter_backends = [DjangoFilterBackend, SearchFilter]
-    filterset_fields = {"parent": ["exact", "isnull"]}
     search_fields = ["name", "description"]
-    pagination_class = None  # Facets are browsed as tree
-
-    def get_serializer_class(self):
-        """Use tree serializer for tree action."""
-        if self.action == "tree":
-            return FacetTreeSerializer
-        return FacetSerializer
-
-    @action(detail=False, methods=["get"])
-    def tree(self, request):
-        """Return facets as nested tree structure."""
-        # Only top-level facets, children are nested by serializer.
-        # Bounded recursive prefetch (3 levels deep) — kept as bare string because
-        # nested Prefetch objects for self-referencing tree traversal are unwieldy
-        # and the depth is explicitly bounded.
-        _children_prefetch = "children__children__children"
-        top_level = Facet.objects.filter(parent__isnull=True).prefetch_related(_children_prefetch)
-        serializer = FacetTreeSerializer(top_level, many=True)
-        return Response(serializer.data)
+    pagination_class = None  # Small, flat, fully-browsable vocabulary.
 
 
 class GiftViewSet(viewsets.ModelViewSet):

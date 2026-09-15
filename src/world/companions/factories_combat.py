@@ -9,6 +9,12 @@ from __future__ import annotations
 
 COMPANION_DEFEAT_POOL_NAME = "companion_defeat"
 
+# Consequence label constants - also imported by services.py so both modules
+# key on the same literal instead of retyping it.
+COMPANION_RECOVER_LABEL = "companion_recover"
+COMPANION_STAY_INCAPACITATED_LABEL = "companion_stay_incapacitated"
+COMPANION_DIE_LABEL = "companion_die"
+
 # Outcome-tier label constants (mirrors vitals/factories.py).
 _OUTCOME_FAILURE = "Failure"
 _OUTCOME_PARTIAL = "Partial Success"
@@ -75,9 +81,9 @@ def create_companion_defeat_pool():
     _seed_pool_consequences(
         pool,
         [
-            (success, "companion_recover", 2, False),
-            (partial, "companion_stay_incapacitated", 3, False),
-            (failure, "companion_die", 1, True),
+            (success, COMPANION_RECOVER_LABEL, 2, False),
+            (partial, COMPANION_STAY_INCAPACITATED_LABEL, 3, False),
+            (failure, COMPANION_DIE_LABEL, 1, True),
         ],
     )
 
