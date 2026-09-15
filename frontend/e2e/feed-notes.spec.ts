@@ -172,8 +172,10 @@ test.describe('typed text frames become notes in the column (#3856)', () => {
     await expect(reader.getByText('Nyx leaves, heading east.')).toBeVisible();
 
     expect(await noteKinds(page)).toEqual(['look', 'error', 'item', 'arrive', 'ambience', 'move']);
-    // Nothing untyped, nothing in a strip: there is no System lane any more.
-    await expect(page.getByText('System', { exact: true })).toHaveCount(0);
+    // Nothing untyped, nothing in a strip: there is no System lane any more
+    // (the filter strip's System chip is a different thing, #3856 PR 2).
+    await expect(page.getByTestId('system-lane-count')).toHaveCount(0);
+    await expect(page.getByTestId('system-lane-messages')).toHaveCount(0);
 
     // The Here panel lists you first, tagged "you"; pressing the row asks the
     // server what others see when they look at you.

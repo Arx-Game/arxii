@@ -942,6 +942,7 @@ export function GamePage() {
   const gameWindowProps: ComponentProps<typeof GameWindow> = {
     characters,
     isStaff: account.is_staff,
+    accountId: account.id,
     sceneFeed: displaySceneFeed,
     room: roomData,
     ambientInteractions: activeSession?.ambientInteractions,

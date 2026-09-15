@@ -30,7 +30,14 @@ Core game interface for real-time RPG interaction with WebSocket communication a
   active scene), the center renders the structured chat-bubble feed
   (`ThreadedNarrativeReader`) instead of a terminal transcript; with no scene it
   renders `ExplorationReader`. Both take the session's `notes` (#3856) and show
-  them at their time among the poses; a reference view gets none. Renders
+  them at their time among the poses; a reference view gets none. Owns the feed
+  filter chips (#3856 PR 2): reads them from the per-account preferences (the
+  `accountId` prop from `GamePage`), renders `FeedChipStrip` above the
+  conversation tabs, filters the scene feed, ambient poses and notes through
+  `visibleInteractions`/`visibleNotes` before either reader sees them, shows
+  "Everything is switched off. Press a chip to bring one kind back." while All is
+  off, and provides `FeedBlockControlsContext` from the session's minimised and
+  dismissed keys. A reference view gets neither strip nor filtering. Renders
   `ConversationTabStrip` above the feed when `conversationTabs` is passed
   (#2165), and remembers each conversation tab's scroll offset (`Map<threadKey,
 scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
@@ -67,12 +74,26 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `gemit` both to `ambience`; anything else `system`) and `classifyInteraction(mode)`
   maps an interaction's mode. A new kind is a deliberate addition here, never an ad
   hoc string.
+- **`feedChips.ts`**: The filter chips' pure model (#3856 PR 2). `FeedChip {id, label,
+kinds, on, wake, custom}`; a kind belongs to at most one chip; `DEFAULT_FEED_CHIPS`
+  are the demo's five (Roleplay and Whispers wake; Movement, Ambience, System do
+  not; `system` unowned). Rules: `isKindShown` (All off hides everything; an unowned
+  kind shows), `wakingKinds` (on and wake), `toggleChip` (with All off, a press turns
+  All on with only that chip), `toggleAll`, `setKindOwner` (moves a kind between
+  chips), `renameChip`, `setChipWake`, `addCustomChip` (cap 3), `deleteChip` (its
+  kinds keep showing), `normalizeFeedChips` (repairs a stored layout),
+  `visibleInteractions`/`visibleNotes` (chips plus the viewer's dismissed keys),
+  `feedItemKey` (`i:<id>` / `n:<id>`). The layout lives in `PlayPreferences`
+  (`feedChips`, `feedAll`), per account per browser.
+- **`feedBlockControls.ts`**: The context `FeedBlockFrame` reads: the session's
+  minimised keys and the minimise/restore/dismiss dispatchers `GameWindow` provides;
+  null in a reference view, so history renders without controls.
 - **`feedRows.ts`**: `interleaveNotes(items, notes)` (#3856) sorts an item list and
   the session's `FeedNote`s into one column by parsed time (server timestamps may
   lack milliseconds; note timestamps are the client clock at receipt), stable, items
   first on a tie. Both readers use it; the scene reader feeds it thread groups at
   their root pose's time in Threads view and the flat pose list in Chronological.
-- **`attention.ts`**: `sessionAttention(session, personaId, sinceId?)` (#2166,
+- **`attention.ts`**: `sessionAttention(session, personaId, sinceId?, options?)` (#2166,
   extended #3774): pure, selector-side two-tier attention derivation for one
   character's session, no new Redux write path. Reuses `getThreadKey`/
   `countUnread` (exported from `useThreading.ts`) against
@@ -96,7 +117,12 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   which is the fresh-device case #3774 exists for. `AttentionBadge` (the
   render, capped at `99+` since a server-side count can run to three digits)
   now lives in its own module, `components/AttentionBadge.tsx`, extracted from
-  byte-identical copies that used to live in `GameTopBar`/`GameWindow`.
+  byte-identical copies that used to live in `GameTopBar`/`GameWindow`. Since #3856
+  PR 2 both take `AttentionOptions`: `wakingKinds` (from the chips; an interaction
+  under a chip that is off or silent counts for nothing) and `dismissed` (a block
+  the viewer removed cannot keep a badge lit). `chipUnread(session, personaId,
+chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
+  the same threshold rule as `countUnread` read per row.
 
 ### Layout (`components/`)
 
@@ -113,6 +139,17 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   and jumps to Here mode's Room tab, where `CombatRail` renders. `mode`/
   `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
   internal state) — a future caller must supply both.
+- **`SidebarTabPanel.tsx`**: The Here mode's body (#3856 PR 3, the approved demo's
+  side panel). The room view (`roomPanel`: `FocusPanel` or `DreamspacePanel`) with an
+  "Actions" `<details>` fold at its foot holding the eight reference sections (Who,
+  Stories, Events, Codex, Status, Items, Journal, Travel) as a three-column grid,
+  open by default and folding on its arrow. Pressing a section shows it in place of
+  the room with a "← <room or focused subject>" way back at the top (`roomTabLabel`
+  names it, truncated with the full name in `title`). Replaces the nine-trigger tab
+  row that sat above the room; `activeTab`/`onTabChange` stay controlled by
+  `GamePage` (#3761, `jumpToCombat` sets `'room'`), and each section still mounts
+  lazily on first open. Nothing was dropped: every section keeps its panel and
+  fallback text.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching, and the world menu (#3818): the leading button opens a
   `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Leave the world
@@ -220,6 +257,20 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
+- **`FeedChipStrip.tsx`**: The strip above the column (#3856 PR 2): one plain label
+  per chip (`aria-pressed` = All and on; a "new" pill from `chipUnread`), `+`
+  while a custom chip can still be added, All at the right end. Left click
+  toggles; right click opens `FeedChipEditor` in a popover anchored to the chip:
+  name (Enter commits and closes), every kind with a checkbox and "(in X)" where
+  another chip carries it, "Wake me when this arrives", Delete chip. Controlled;
+  every change writes through to the preferences at once. No explainer text, by
+  ruling.
+- **`FeedBlockFrame.tsx`**: Wraps any block in the column (#3856 PR 2) with hover
+  or focus controls, minimise and dismiss; a minimised block is a one-line stub
+  ("Nyx · 11:29", "Look results · 11:30") with a reopen press. `PoseReadTarget`
+  carries it for poses in both scene views, `FeedNoteBlock` for notes,
+  `ExplorationReader` for its ambient articles. Outside a provider it renders the
+  block as it is.
 - **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
   by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for

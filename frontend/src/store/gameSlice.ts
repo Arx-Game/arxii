@@ -71,6 +71,13 @@ export interface Session {
   notes: FeedNote[];
   /** The staff console's lines (#3857): text frames tagged `console` by the server. Bounded. */
   consoleLines: ConsoleLine[];
+  /**
+   * Feed blocks this viewer folded to a one-line stub or removed from their own
+   * view (#3856), keyed by `feedItemKey`. Per viewer, in memory only; nothing is
+   * deleted for anyone else.
+   */
+  minimizedFeed: string[];
+  dismissedFeed: string[];
   /** Epoch used to reject late interaction frames from the previous room. */
   ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
@@ -130,6 +137,8 @@ export const gameSlice = createSlice({
           messages: [],
           notes: [],
           consoleLines: [],
+          minimizedFeed: [],
+          dismissedFeed: [],
           unread: 0,
           commands: [],
           room: null,
@@ -256,6 +265,35 @@ export const gameSlice = createSlice({
     clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) session.ambientInteractions = [];
+    },
+    minimizeFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session && !session.minimizedFeed.includes(action.payload.key)) {
+        session.minimizedFeed.push(action.payload.key);
+      }
+    },
+    restoreFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) {
+        session.minimizedFeed = session.minimizedFeed.filter((k) => k !== action.payload.key);
+      }
+    },
+    dismissFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      session.minimizedFeed = session.minimizedFeed.filter((k) => k !== action.payload.key);
+      if (!session.dismissedFeed.includes(action.payload.key)) {
+        session.dismissedFeed.push(action.payload.key);
+      }
     },
     addSessionDiagnostic: (
       state,
@@ -520,6 +558,9 @@ export const {
   clearFeedNotes,
   addConsoleLine,
   clearConsoleLines,
+  minimizeFeedItem,
+  restoreFeedItem,
+  dismissFeedItem,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,

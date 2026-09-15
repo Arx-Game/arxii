@@ -1217,7 +1217,14 @@ the active session has a scene; with no active scene it renders `ExplorationRead
 also show the session's typed text lines (`FeedNote`s: look results, item lines,
 errors, arrivals and departures, narrative emits) at their time among the poses,
 rendered by `FeedNoteBlock`; the collapsed `SystemLane` strip that used to hold
-untyped text is gone. This restyle also
+untyped text is gone. Above the column sit the player's filter chips (#3856 PR 2,
+`frontend/src/game/feedChips.ts`, `FeedChipStrip.tsx`): each chip owns a set of
+kinds, a press shows or hides them, All is the master switch, a right-click edits
+the chip (name, kinds, wake, delete), up to three custom chips; a kind no chip owns
+still shows unless All is off. Showing and waking are separate: only kinds under a
+chip set to wake badge the top bar and puppet tabs. Any block minimises to a stub or
+leaves the viewer's own view (`FeedBlockFrame`); nothing is deleted for others. The
+layout persists per account, per browser, in `PlayPreferences`. This restyle also
 closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
 `FormattedContent`, so `RichTextInput`'s markdown output actually displays as
 formatted prose instead of raw text.

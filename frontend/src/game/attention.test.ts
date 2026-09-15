@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { sessionAttention } from './attention';
+import { chipUnread, sessionAttention } from './attention';
+import { DEFAULT_FEED_CHIPS } from './feedChips';
 import type { Session } from '@/store/gameSlice';
 import type { InteractionWsPayload } from '@/hooks/types';
 
@@ -27,6 +28,8 @@ function makeSession(overrides: Partial<Session> = {}): Session {
     messages: [],
     notes: [],
     consoleLines: [],
+    minimizedFeed: [],
+    dismissedFeed: [],
     unread: 0,
     commands: [],
     room: null,
@@ -267,5 +270,59 @@ describe('sessionAttention', () => {
     });
 
     expect(sessionAttention(session, VIEWER_PERSONA_ID, 5).direct).toBe(0);
+  });
+});
+
+describe('wake filtering (#3856)', () => {
+  const roomScroll = (id: number, mode: string) =>
+    makeInteraction({ id, mode, persona: { id: 99, name: 'Other', thumbnail_url: '' } });
+
+  it('an interaction whose kind does not wake counts for nothing', () => {
+    const session = makeSession({ sceneInteractions: [roomScroll(5, 'emit')] });
+
+    expect(sessionAttention(session, VIEWER_PERSONA_ID)).toEqual({ direct: 0, ambient: true });
+    expect(
+      sessionAttention(session, VIEWER_PERSONA_ID, null, { wakingKinds: new Set(['whisper']) })
+    ).toEqual({ direct: 0, ambient: false });
+  });
+
+  it('a dismissed interaction counts for nothing', () => {
+    const session = makeSession({ sceneInteractions: [roomScroll(5, 'pose')] });
+
+    expect(
+      sessionAttention(session, VIEWER_PERSONA_ID, null, { dismissed: new Set(['i:5']) })
+    ).toEqual({ direct: 0, ambient: false });
+  });
+
+  it('chipUnread counts unread interactions per waking chip that is on', () => {
+    const session = makeSession({
+      sceneInteractions: [roomScroll(5, 'pose'), roomScroll(6, 'say'), roomScroll(7, 'emit')],
+    });
+    const chips = DEFAULT_FEED_CHIPS.map((chip) =>
+      chip.id === 'am' ? { ...chip, wake: true } : chip
+    );
+
+    expect(chipUnread(session, VIEWER_PERSONA_ID, chips)).toEqual({ rp: 3 });
+  });
+
+  it('chipUnread skips a chip that is off, one that does not wake, read rows, and my own', () => {
+    const session = makeSession({
+      sceneInteractions: [
+        roomScroll(5, 'pose'),
+        makeInteraction({
+          id: 6,
+          mode: 'pose',
+          persona: { id: VIEWER_PERSONA_ID, name: 'Me', thumbnail_url: '' },
+        }),
+        roomScroll(7, 'action'),
+      ],
+      threadLastSeen: { room: 5 },
+    });
+    const chips = DEFAULT_FEED_CHIPS.map((chip) =>
+      chip.id === 'rp' ? { ...chip, on: false } : chip
+    );
+
+    expect(chipUnread(session, VIEWER_PERSONA_ID, chips)).toEqual({});
+    expect(chipUnread(session, VIEWER_PERSONA_ID, DEFAULT_FEED_CHIPS)).toEqual({});
   });
 });

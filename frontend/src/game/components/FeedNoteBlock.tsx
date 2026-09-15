@@ -1,6 +1,8 @@
 import type { FeedNote } from '@/hooks/types';
 import { EvenniaMessage } from './EvenniaMessage';
 import { cn } from '@/lib/utils';
+import { FeedBlockFrame } from './FeedBlockFrame';
+import { KIND_LABELS, feedItemKey } from '../feedChips';
 
 interface FeedNoteBlockProps {
   note: FeedNote;
@@ -25,11 +27,24 @@ const BOX_GLYPHS: Partial<Record<FeedNote['kind'], string>> = { look: '◎', err
  * (colour spans, `<br>`), and the terminal face would read as a transcript.
  */
 export function FeedNoteBlock({ note }: FeedNoteBlockProps) {
-  const { kind } = note;
   const time = new Date(note.timestamp).toLocaleTimeString([], {
     hour: 'numeric',
     minute: '2-digit',
   });
+  // Any block minimises or dismisses, per viewer (#3856 PR 2); the stub names
+  // the kind and the time, the way a pose's stub names its author.
+  return (
+    <FeedBlockFrame
+      itemKey={feedItemKey('note', note.id)}
+      stub={`${KIND_LABELS[note.kind]} · ${time}`}
+    >
+      <FeedNoteBody note={note} time={time} />
+    </FeedBlockFrame>
+  );
+}
+
+function FeedNoteBody({ note, time }: FeedNoteBlockProps & { time: string }) {
+  const { kind } = note;
 
   if (kind === 'arrive' || kind === 'move' || kind === 'ambience') {
     return (
