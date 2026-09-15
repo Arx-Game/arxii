@@ -39,6 +39,8 @@ export interface GameWindowSceneFeed {
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
+  /** Staff see the composer's Commands mode and the console (#3857). */
+  isStaff?: boolean;
   /** The signed-in account, for the per-account play preferences the chips live in (#3856). */
   accountId?: number | null;
   /** When present, the center column renders the threaded scene reader. */
@@ -475,6 +477,7 @@ function GameWindowFeed({
 
 export function GameWindow({
   characters,
+  isStaff = false,
   accountId = null,
   sceneFeed,
   room,
@@ -842,6 +845,7 @@ export function GameWindow({
             }
             roomName={roomName}
             ready={playReady}
+            isStaff={isStaff}
           />
         )}
       </div>

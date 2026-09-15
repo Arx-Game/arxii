@@ -25,6 +25,10 @@ interface RichTextInputProps {
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
   /** Defaults true for legacy command surfaces; narrative composer opts into Cmd/Ctrl+Enter. */
   submitOnEnter?: boolean;
+  /** Show the bold/italic/strike/link/colour controls (default). Off for a plain command line (#3857). */
+  formatting?: boolean;
+  /** Class for the textarea itself, e.g. a monospace face for a command line (#3857). */
+  textareaClassName?: string;
   disabled?: boolean;
   /** Block delivery while allowing the player to keep writing. */
   submitDisabled?: boolean;
@@ -97,6 +101,8 @@ export function RichTextInput({
   ghostText,
   autocompleteItems,
   submitOnEnter = true,
+  formatting = true,
+  textareaClassName,
   disabled = false,
   submitDisabled = false,
 }: RichTextInputProps) {
@@ -338,48 +344,52 @@ export function RichTextInput({
         aria-label="Formatting toolbar"
       >
         {leftSlot}
-        <button
-          type="button"
-          title="Bold (Ctrl+B)"
-          aria-label="Bold"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('**', '**')}
-        >
-          B
-        </button>
-        <button
-          type="button"
-          title="Italic (Ctrl+I)"
-          aria-label="Italic"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs italic hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('*', '*')}
-        >
-          I
-        </button>
-        <button
-          type="button"
-          title="Strikethrough (Ctrl+Shift+S)"
-          aria-label="Strikethrough"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs line-through hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('~~', '~~')}
-        >
-          S
-        </button>
-        <button
-          type="button"
-          title="Link (Ctrl+K)"
-          aria-label="Link"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={handleLinkInsert}
-        >
-          🔗
-        </button>
-        <div className="mx-1 h-4 w-px bg-border" />
-        <ColorPicker onSelectColor={handleColorSelect} />
+        {formatting && (
+          <>
+            <button
+              type="button"
+              title="Bold (Ctrl+B)"
+              aria-label="Bold"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('**', '**')}
+            >
+              B
+            </button>
+            <button
+              type="button"
+              title="Italic (Ctrl+I)"
+              aria-label="Italic"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs italic hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('*', '*')}
+            >
+              I
+            </button>
+            <button
+              type="button"
+              title="Strikethrough (Ctrl+Shift+S)"
+              aria-label="Strikethrough"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs line-through hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('~~', '~~')}
+            >
+              S
+            </button>
+            <button
+              type="button"
+              title="Link (Ctrl+K)"
+              aria-label="Link"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleLinkInsert}
+            >
+              🔗
+            </button>
+            <div className="mx-1 h-4 w-px bg-border" />
+            <ColorPicker onSelectColor={handleColorSelect} />
+          </>
+        )}
         {rightSlot}
         <button
           type="button"
@@ -407,7 +417,10 @@ export function RichTextInput({
           rows={rows}
           spellCheck={true}
           disabled={disabled}
-          className="relative max-h-[35dvh] w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-base focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+          className={cn(
+            'relative max-h-[35dvh] w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-base focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
+            textareaClassName
+          )}
         />
         {autocompleteItems && (
           <NameAutocomplete

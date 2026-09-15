@@ -1303,7 +1303,13 @@ the room feed. The composer's audience is **derived from the active tab and
 locked**, never stored independently — `tabKeyToComposerMode` (in
 `threadToComposerMode.ts`) translates the active tab's key into a locked
 `ComposerMode` every render, which is the mis-send guard (a stale composer
-audience surviving a tab switch is the failure mode this closes). The open-tab
+audience surviving a tab switch is the failure mode this closes). The room anchor's
+own default is derived the same way (#3857): with no mode chosen it is Pose, so a
+typed line is a pose and never a raw command; a line starting with `/` is the
+command after the slash; staff have a Commands mode whose lines go as typed and
+whose answers land in the staff console (`StaffConsole.tsx`), tagged `console` by
+`server/conf/serversession.py` while `server/conf/inputfuncs.py:text` runs the
+line, never in the player-facing column. The open-tab
 layout is persisted client-locally per character+scene (thread **keys** only,
 never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
 `gameSlice` resets both tab fields whenever the session's scene id actually

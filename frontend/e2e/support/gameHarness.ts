@@ -61,6 +61,8 @@ export interface MockRestRoutesOptions {
    * started," since nothing pushes that over the WebSocket.
    */
   activeEncounterId?: number;
+  /** Sign the fixture account in as staff (#3857): the composer's Commands mode and console. */
+  staff?: boolean;
 }
 
 /**
@@ -88,7 +90,7 @@ export async function mockRestRoutes(
           email_verified: true,
           last_login: null,
           can_create_characters: false,
-          is_staff: false,
+          is_staff: options.staff ?? false,
           is_gm: false,
           available_characters: [],
           pending_applications: [],

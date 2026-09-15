@@ -50,3 +50,15 @@ Evennia server configuration and customization. Contains settings and hooks for 
 - **Flow System**: Configures flow execution environment
 - **Web Interface**: Bridges Evennia and React frontend
 - **Security**: CORS, authentication, and permission configuration
+
+## The staff console's tag (#3857)
+
+`conf/inputfuncs.py:text` reads a `console` keyword off a websocket `text` frame (the
+web composer's Commands mode sends it), marks `session.ndb.console_capture` for the
+duration of Evennia's own handler (cleared in a `finally`), and
+`conf/serversession.py:ServerSession.data_out` (now wired by `SERVER_SESSION_CLASS`)
+merges `{"console": True}` into the options of every `text` frame sent meanwhile,
+coercing a bare string to the tuple form and keeping an option a command already set
+(#3856's `type`). The client routes tagged frames to its console sheet, never the
+column. Output a command schedules for later is not tagged and lands where it always
+did. Tests: `web/tests/test_console_capture.py`.
