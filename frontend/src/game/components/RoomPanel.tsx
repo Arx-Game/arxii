@@ -261,6 +261,7 @@ export function RoomPanel({
         onCharacterClick={onCharacterClick}
         hasUnseenPresence={Boolean(room.has_unseen_presence)}
         viewerPersonaId={viewerPersonaId}
+        viewerInScene={scene?.viewer_entered ?? null}
       />
       <NpcGiversBlock npcGivers={room.npc_givers ?? []} />
       {room.characters.length > 0 && (

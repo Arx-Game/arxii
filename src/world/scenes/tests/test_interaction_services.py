@@ -9,6 +9,7 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.scenes.constants import (
     InteractionMode,
     InteractionVisibility,
+    PoseKind,
     ScenePrivacyMode,
 )
 from world.scenes.factories import (
@@ -39,6 +40,7 @@ from world.scenes.models import (
     SceneSummaryRevision,
 )
 from world.scenes.place_models import InteractionReceiver, PlacePresence
+from world.scenes.reachability import UnreachableError
 from world.scenes.tests.test_target_reachability import _persona_in_room
 
 
@@ -135,6 +137,8 @@ class TestCreateInteraction(TestCase):
         scene = SceneFactory(location=room)
         writer = _persona_in_room(room)
         target = _persona_in_room(room)
+        # The target has entered the scene (#3867): a line of their own is in the log.
+        InteractionFactory(persona=target, scene=scene, content="waits.")
 
         interaction = create_interaction(
             persona=writer,
@@ -145,6 +149,81 @@ class TestCreateInteraction(TestCase):
         )
         assert interaction is not None
         assert target in interaction.target_personas.all()
+
+    def test_a_target_at_the_threshold_is_refused_with_its_own_words(self) -> None:
+        """Present in the room, not yet in the scene (#3867): not addressable room-heard."""
+        room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        scene = SceneFactory(location=room)
+        writer = _persona_in_room(room)
+        reader = _persona_in_room(room)
+
+        with self.assertRaises(UnreachableError) as caught:
+            create_interaction(
+                persona=writer,
+                content="nods to the newcomer.",
+                mode=InteractionMode.POSE,
+                scene=scene,
+                target_personas=[reader],
+            )
+        assert str(caught.exception) == f"{reader.name} has not joined the scene yet."
+        assert "after their first pose" in caught.exception.venue_hint
+        assert not Interaction.objects.filter(persona=writer).exists()
+
+
+class TestEntrance(TestCase):
+    """The entrance is the first room-heard line (#3867): server-marked, windowed once."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        self.scene = SceneFactory(location=self.room)
+        self.character = CharacterFactory(db_key="Alice", location=self.room)
+        self.sheet = CharacterSheetFactory(character=self.character)
+
+    def _windows(self, interaction):
+        from world.scenes.reaction_models import ReactionWindow
+
+        return list(ReactionWindow.objects.filter(interaction_id=interaction.pk))
+
+    def test_the_first_pose_is_the_entrance_and_the_second_is_not(self) -> None:
+        from world.scenes.constants import ReactionWindowKind
+
+        with patch.object(self.room, "_broadcast_room_state") as refresh:
+            first = record_interaction(
+                character=self.character, content="steps in.", mode=InteractionMode.POSE
+            )
+        assert first is not None
+        assert first.pose_kind == PoseKind.ENTRY
+        windows = self._windows(first)
+        assert [w.kind for w in windows] == [ReactionWindowKind.ENTRANCE]
+        # Everyone's Here panel loses the mark at once.
+        refresh.assert_called_once_with()
+
+        with patch.object(self.room, "_broadcast_room_state") as refresh:
+            second = record_interaction(
+                character=self.character,
+                content="sits.",
+                mode=InteractionMode.POSE,
+                pose_kind=PoseKind.ENTRY,
+            )
+        assert second is not None
+        # A client asking for a second entrance gets a standard pose.
+        assert second.pose_kind == PoseKind.STANDARD
+        assert self._windows(second) == []
+        refresh.assert_not_called()
+
+    def test_a_first_say_is_an_entrance_but_a_whisper_is_not(self) -> None:
+        target = CharacterFactory(db_key="Bob", location=self.room)
+        CharacterSheetFactory(character=target)
+        whisper = record_whisper_interaction(
+            character=self.character, target=target, content="psst"
+        )
+        assert whisper is not None
+        assert whisper.pose_kind == PoseKind.STANDARD
+        said = record_interaction(
+            character=self.character, content="Evening.", mode=InteractionMode.SAY
+        )
+        assert said is not None
+        assert said.pose_kind == PoseKind.ENTRY
 
 
 class TestCanViewInteraction(TestCase):

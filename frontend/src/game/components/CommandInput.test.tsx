@@ -82,6 +82,11 @@ let mockRoomCharacters: Array<{
   dbref: string;
   place_id?: number | null;
 }> = [{ name: 'Bob', thumbnail_url: null, dbref: '#501' }];
+// The room's live scene as the store holds it (#3867); tests set `viewer_entered`.
+let mockScene: { id: number; viewer_entered: boolean } | null = null;
+beforeEach(() => {
+  mockScene = null;
+});
 
 vi.mock('@/store/hooks', () => ({
   useAppSelector: (selector: (state: unknown) => unknown) =>
@@ -91,6 +96,7 @@ vi.mock('@/store/hooks', () => ({
         sessions: {
           Alice: {
             room: { characters: mockRoomCharacters },
+            scene: mockScene,
           },
         },
       },
@@ -738,38 +744,37 @@ describe('CommandInput', () => {
   // Entrance technique attachment (#2183)
   // ---------------------------------------------------------------------------
 
-  it('does not render the entrance technique attachment when the entrance toggle is off', () => {
+  // #3867 — the entrance is a state the room reports, never a toggle.
+  it('shows no entrance state and no technique attachment once the viewer has entered', () => {
+    mockScene = { id: 1, viewer_entered: true };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
+    expect(screen.queryByTestId('entrance-state')).toBeNull();
     expect(screen.queryByTestId('entrance-technique-attachment')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Make an entrance' })).toBeNull();
   });
 
-  it('renders the entrance technique attachment once the entrance toggle is on', () => {
+  it('shows the entrance state with the technique attachment before the first pose', () => {
+    mockScene = { id: 1, viewer_entered: false };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
+    expect(screen.getByTestId('entrance-state')).toHaveTextContent('Entrance');
     expect(screen.getByTestId('entrance-technique-attachment')).toBeInTheDocument();
   });
 
-  it('toggling the entrance button back off drops the entrance technique attachment', () => {
+  it('sends the first pose as the entrance', () => {
+    mockScene = { id: 1, viewer_entered: false };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
-    const toggle = screen.getByRole('button', { name: 'Make an entrance' });
-    fireEvent.click(toggle);
-    fireEvent.click(screen.getByTestId('attach-entrance-technique'));
-    expect(screen.getByTestId('entrance-technique-attached')).toHaveTextContent('7');
-
-    fireEvent.click(toggle);
-    expect(screen.queryByTestId('entrance-technique-attachment')).toBeNull();
-
-    // Re-opening shows a clean slate — the attachment was dropped, not preserved.
-    fireEvent.click(toggle);
-    expect(screen.queryByTestId('entrance-technique-attached')).toBeNull();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'steps in from the rain.' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(submitPoseMock).toHaveBeenCalledWith(expect.objectContaining({ pose_kind: 'entry' }));
   });
 
   it('submitting an entrance pose with an attached technique dispatches createActionRequest with the submitPose response id (#2183)', async () => {
     submitPoseMock.mockImplementation(() => Promise.resolve({ id: 123 }));
 
+    mockScene = { id: 1, viewer_entered: false };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
     fireEvent.click(screen.getByTestId('attach-entrance-technique'));
 
     const textarea = screen.getByRole('textbox');
@@ -796,9 +801,9 @@ describe('CommandInput', () => {
   it('plain entrance (no technique attached) sends no action request — regression', async () => {
     submitPoseMock.mockImplementation(() => Promise.resolve({ id: 456 }));
 
+    mockScene = { id: 1, viewer_entered: false };
     render(<CommandInput character="Alice" sceneId="1" personaId={9} />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Make an entrance' }));
     // No technique attached this time.
 
     const textarea = screen.getByRole('textbox');

@@ -48,6 +48,14 @@ _Avoid_: persisting the garbled text on the Interaction (comprehension is always
 The whole sentence a viewer reads for an Interaction, with the actor in it: `Apostate is testing`, `Apostate says, "Test"`. Rendered at display time by `world/scenes/line_rendering.render_line` from the name that viewer sees on the card, the mode and the content that viewer reads; carried as `line` on the WebSocket payload and `InteractionListSerializer`, and spoken the same way on telnet. Never stored; `content` stays what was typed. (The `_Avoid_` "line" under Interaction is about calling the row itself a line; this is the sentence rendered from it.)
 _Avoid_: persisting the rendered line, rendering it on the client from `persona.name` + `mode`, a second formatter per protocol.
 
+**Threshold** (#3867, ADR-0300):
+A character present in a room with a live scene who has no room-heard line of their own in it yet. Listed in the Here panel with a mark (`in_scene: false` on their `room_state` entry), able to see everything, not addressable room-heard (`persona_can_receive`), reachable by whisper. Read off the log by `participation.has_entered`; never stored.
+_Avoid_: lurker, observer (that is #3288's concealed presence), non-participant (they may hold a `SceneParticipation` row for admin reasons).
+
+**Entrance** (#904, #2183, #3867):
+A character's first room-heard line in a scene: the server marks it `pose_kind=ENTRY`, opens the ENTRANCE reaction window on it, and refuses a second. The composer shows it as a state before the first pose, never a control.
+_Avoid_: entry toggle, "make an entrance" as a button, a second entrance.
+
 **Perceived Only** (#2710, ADR-0170):
 An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. The GM exception is a scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff GM is denied on the REST object-access permission (`CanViewInteraction`) and the reaction-witness gate (`can_view_interaction`), both staff-only. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
 _Avoid_: private (ambiguous with `VERY_PRIVATE`), hidden pose.

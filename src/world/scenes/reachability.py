@@ -203,7 +203,13 @@ def persona_can_receive(  # noqa: PLR0913 - one arg per Interaction shape field 
     if visibility != InteractionVisibility.DEFAULT:
         return False
     if scene is not None and scene.location is not None:
-        return scene.has_character_present({persona.character_sheet_id})
+        # Present AND in the scene (#3867): a character at the threshold, in the
+        # room without a line of their own yet, cannot be addressed room-heard.
+        from world.scenes.participation import has_entered  # noqa: PLC0415
+
+        return scene.has_character_present({persona.character_sheet_id}) and has_entered(
+            scene, persona.character_sheet_id
+        )
     # No scene (or a locationless one): fall back to the room the content
     # actually occurred in, if the caller supplied one. Still refuses (rather
     # than guessing) when neither is available.

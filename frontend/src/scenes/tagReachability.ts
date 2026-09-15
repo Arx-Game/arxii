@@ -19,7 +19,17 @@ const REACHABLE: TagRefusal = { reachable: true };
  */
 const TARGET_UNREACHABLE_HINT =
   'Address the room to reach them, or send a whisper. Your draft is kept.';
+// The threshold (#3867): mirrors the server's `_THRESHOLD_HINT` verbatim.
+const THRESHOLD_HINT =
+  'They can be addressed after their first pose, or reached by a whisper. Your draft is kept.';
 
+function describeThresholdTargets(names: string[]): string {
+  if (names.length === 1) {
+    return `${names[0]} has not joined the scene yet.`;
+  }
+  const joined = names.slice(0, -1).join(', ') + ` and ${names[names.length - 1]}`;
+  return `${joined} have not joined the scene yet.`;
+}
 function describeUnreachableTargets(names: string[]): string {
   if (names.length === 1) {
     return `${names[0]} is across the room and will not see table talk.`;
@@ -51,6 +61,20 @@ export function tagReachability(
   const byLowerName = new Map(
     roomCharacters.map((character) => [character.name.toLowerCase(), character])
   );
+
+  // Present in the room but not yet in the scene (#3867): a room-heard address
+  // waits for their first pose. Checked before the place rule below because a
+  // threshold character has no seat in the scene either way.
+  const threshold = targetNames.filter(
+    (name) => byLowerName.get(name.toLowerCase())?.in_scene === false
+  );
+  if (threshold.length > 0) {
+    return {
+      reachable: false,
+      reason: describeThresholdTargets(threshold),
+      hint: THRESHOLD_HINT,
+    };
+  }
 
   const unreachable = targetNames.filter((name) => {
     const character = byLowerName.get(name.toLowerCase());

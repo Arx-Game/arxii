@@ -53,6 +53,10 @@ _ephemeral_counter = itertools.count()
 # is unreachable (place-scoped, receiver-scoped, or whisper): both routes it
 # names (address the room, or whisper) are always available to the writer.
 _TARGET_UNREACHABLE_HINT = "Address the room to reach them, or send a whisper. Your draft is kept."
+# The threshold (#3867): present in the room, not yet in the scene.
+_THRESHOLD_HINT = (
+    "They can be addressed after their first pose, or reached by a whisper. Your draft is kept."
+)
 
 # #3787 Task 8 - telnet parity for the web reader's InvolvementFlag ("This happened
 # to you"). One phrasing for every row kind that carries target_personas (spec
@@ -73,6 +77,15 @@ def _describe_unreachable_targets(personas: list[Persona]) -> str:
         return f"{names[0]} is across the room and will not see table talk."
     joined = ", ".join(names[:-1]) + f" and {names[-1]}"
     return f"{joined} are across the room and will not see table talk."
+
+
+def _describe_threshold_targets(personas: list[Persona]) -> str:
+    """Player-facing detail for a target standing at the threshold (#3867)."""
+    names = [p.name for p in personas]
+    if len(names) == 1:
+        return f"{names[0]} has not joined the scene yet."
+    joined = ", ".join(names[:-1]) + f" and {names[-1]}"
+    return f"{joined} have not joined the scene yet."
 
 
 def get_active_scene(location: ObjectDB | None) -> Scene | None:
@@ -376,6 +389,23 @@ def create_interaction(  # noqa: PLR0913 - atomic creation requires all interact
                 )
             ]
             if unreachable:
+                # A target in the room but not yet in the scene is at the threshold
+                # (#3867); the refusal says so rather than "across the room".
+                threshold = (
+                    [
+                        target
+                        for target in unreachable
+                        if scene.has_character_present({target.character_sheet_id})
+                    ]
+                    if scene is not None and place is None and effective_receivers is None
+                    else []
+                )
+                if threshold and len(threshold) == len(unreachable):
+                    raise UnreachableError(
+                        unreachable,
+                        _THRESHOLD_HINT,
+                        message=_describe_threshold_targets(unreachable),
+                    )
                 raise UnreachableError(
                     unreachable,
                     _TARGET_UNREACHABLE_HINT,
@@ -1432,6 +1462,46 @@ def _resolve_recording_persona(character: ObjectDB, persona: Persona | None) -> 
         return None
 
 
+def _is_entrance(scene: Scene | None, persona: Persona, mode: str) -> bool:
+    """Whether this line is the writer's first room-heard line in ``scene`` (#3867)."""
+    from world.scenes.participation import ENTRANCE_MODES, has_entered  # noqa: PLC0415
+
+    if scene is None or mode not in ENTRANCE_MODES:
+        return False
+    return not has_entered(scene, persona.character_sheet_id)
+
+
+def _entrance_pose_kind(pose_kind: str, *, entrance: bool) -> str:
+    """The server owns ENTRY (#3867): the first line is one whatever the client sent,
+    and no later line is, whatever the client sent."""
+    if entrance:
+        return PoseKind.ENTRY
+    if pose_kind == PoseKind.ENTRY:
+        return PoseKind.STANDARD
+    return pose_kind
+
+
+def _open_entrance(interaction: Interaction, scene: Scene, *, entrance: bool) -> None:
+    """An entrance is a reactable moment (#904) and clears the threshold mark (#3867).
+
+    The window stays open until the scene closes. Every occupant gets a fresh
+    ``room_state`` so the Here panel's mark leaves the entrant's row at once.
+    """
+    from world.scenes.constants import ReactionWindowKind  # noqa: PLC0415
+    from world.scenes.reaction_services import open_reaction_window  # noqa: PLC0415
+
+    if not entrance:
+        return
+    open_reaction_window(interaction=interaction, kind=ReactionWindowKind.ENTRANCE)
+    room = scene.location
+    if room is None:
+        return
+    # The room typeclass's own occupant refresh, as the speaker queue calls it; a
+    # bare ObjectDB (a factory room in a test) has no such hook.
+    with contextlib.suppress(AttributeError):
+        room._broadcast_room_state()  # noqa: SLF001
+
+
 def _record_ephemeral_interaction(  # noqa: PLR0913
     *,
     persona: Persona,
@@ -1528,6 +1598,10 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
         )
         return None
 
+    # The entrance is the first room-heard line (#3867): the server marks it,
+    # whatever the client sent, and opens the acclaim window on it below.
+    entrance = _is_entrance(scene, persona, mode)
+    pose_kind = _entrance_pose_kind(pose_kind, entrance=entrance)
     interaction = create_interaction(
         persona=persona,
         content=content,
@@ -1543,6 +1617,7 @@ def record_interaction(  # noqa: PLR0913 - all fields needed for interaction cre
     )
     if scene is not None:
         _ensure_scene_participation(scene, character)
+        _open_entrance(interaction, scene, entrance=entrance)
     if on_before_push is not None:
         on_before_push(interaction)
     if on_created is not None:

@@ -16,6 +16,7 @@ class ObjectStateSerializer(serializers.Serializer):
     commands = serializers.ListField(child=serializers.CharField())
     is_mission_board = serializers.BooleanField()
     place_id = serializers.IntegerField(allow_null=True)
+    in_scene = serializers.BooleanField(allow_null=True)
 
     def to_representation(self, instance):
         """Convert BaseState instance to dict representation."""
@@ -50,7 +51,17 @@ class ObjectStateSerializer(serializers.Serializer):
             # Batched by the caller (see `_serialize_contents`'s
             # `place_by_character_id`) rather than looked up per row.
             "place_id": (self.context or {}).get("place_by_character_id", {}).get(instance.obj.pk),
+            # #3867 — whether this character has entered the room's live scene; None
+            # with no live scene or for a non-character. Batched by the caller from
+            # `participation.entered_sheet_ids`, one query per payload.
+            "in_scene": self._in_scene(instance),
         }
+
+    def _in_scene(self, instance: BaseState) -> bool | None:
+        entered = (self.context or {}).get("entered_sheet_ids")
+        if entered is None or not (self.context or {}).get("is_character", False):
+            return None
+        return instance.obj.pk in entered
 
     def _resolve_thumbnail_for_viewer(
         self,
@@ -93,6 +104,7 @@ class SceneDataSerializer(serializers.Serializer):
     description = serializers.CharField(allow_blank=True)
     is_owner = serializers.BooleanField()
     has_unseen_observer = serializers.BooleanField()
+    viewer_entered = serializers.BooleanField()
 
     def to_representation(self, instance):
         """Convert scene data to dict representation."""
@@ -135,6 +147,7 @@ class SceneDataSerializer(serializers.Serializer):
         except AttributeError:
             description = ""
 
+        from world.scenes.participation import has_entered  # noqa: PLC0415
         from world.scenes.services import has_unseen_observers  # noqa: PLC0415
 
         return {
@@ -143,6 +156,9 @@ class SceneDataSerializer(serializers.Serializer):
             "description": description,
             "is_owner": is_owner,
             "has_unseen_observer": has_unseen_observers(instance),
+            # #3867 — the viewer's own threshold: False until their first line, which
+            # the composer shows as the entrance state.
+            "viewer_entered": has_entered(instance, caller.obj.pk),
         }
 
 
@@ -278,6 +294,13 @@ class RoomStatePayloadSerializer(serializers.Serializer):
         if self._is_character(caller) and caller.obj.pk not in character_ids_for_places:
             character_ids_for_places.append(caller.obj.pk)
         place_by_character_id = self._batched_place_ids(room, character_ids_for_places)
+        # #3867: who has entered the room's live scene, one query for the whole room.
+        active_scene = self._get_active_scene(room)
+        entered_sheet_ids: set[int] | None = None
+        if active_scene is not None:
+            from world.scenes.participation import entered_sheet_ids as _entered  # noqa: PLC0415
+
+            entered_sheet_ids = _entered(active_scene)
 
         for obj in content_states:
             if obj is caller:
@@ -298,6 +321,8 @@ class RoomStatePayloadSerializer(serializers.Serializer):
                     "looker": caller,
                     "board_target_ids": board_target_ids,
                     "place_by_character_id": place_by_character_id,
+                    "entered_sheet_ids": entered_sheet_ids,
+                    "is_character": is_character,
                 },
             )
             serialized = obj_serializer.data

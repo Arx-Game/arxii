@@ -17,8 +17,38 @@ const vayne: RoomStateObject = {
   place_id: null,
 };
 const room = [serel, vayne];
+const newcomer: RoomStateObject = {
+  dbref: '#4',
+  name: 'Nyx',
+  thumbnail_url: null,
+  commands: [],
+  place_id: null,
+  in_scene: false,
+};
 
 describe('tagReachability', () => {
+  it('refuses a room-heard target at the threshold with its own words (#3867)', () => {
+    const result = tagReachability(['Nyx'], [...room, newcomer], 'pose', {
+      isAtPlace: false,
+      currentPlaceId: null,
+      currentPlaceName: null,
+    });
+    expect(result.reachable).toBe(false);
+    expect(result.reason).toBe('Nyx has not joined the scene yet.');
+    expect(result.hint).toBe(
+      'They can be addressed after their first pose, or reached by a whisper. Your draft is kept.'
+    );
+  });
+
+  it('still reaches the threshold by whisper (#3867)', () => {
+    const result = tagReachability(['Nyx'], [...room, newcomer], 'whisper', {
+      isAtPlace: false,
+      currentPlaceId: null,
+      currentPlaceName: null,
+    });
+    expect(result.reachable).toBe(true);
+  });
+
   it('is reachable for a whisper regardless of location', () => {
     const result = tagReachability(['Vayne'], room, 'whisper', {
       isAtPlace: true,
