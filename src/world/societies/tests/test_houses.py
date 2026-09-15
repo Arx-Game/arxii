@@ -709,7 +709,10 @@ class HousesSeedTests(TestCase):
         title = house.titles.get()
         self.assertIsNotNone(title.holder)
         self.assertEqual(house.domains.count(), 1)
-        holding = house.domains.get().holdings.get()
+        domain = house.domains.get()
+        # Farmland plus the Quarry and Lumber camp material holdings (#696 gap 8).
+        self.assertEqual(domain.holdings.count(), 3)
+        holding = domain.holdings.get(kind__name="Farmland PLACEHOLDER")
         self.assertEqual(holding.income_stream.organization, house)
 
     def test_sample_vacancy_seeded_on_the_placeholder_house(self):
