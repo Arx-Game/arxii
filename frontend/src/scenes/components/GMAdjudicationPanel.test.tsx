@@ -29,9 +29,11 @@ vi.mock('@/roster/queries', () => ({
   })),
 }));
 
+// `useActiveCharacterId` reads this tab's browsing identity (#3479), an entry
+// id the roster mock above resolves to GMChar (character 42).
 vi.mock('@/store/hooks', () => ({
   useAppSelector: vi.fn((selector: (state: unknown) => unknown) =>
-    selector({ game: { active: 'GMChar' }, auth: {} })
+    selector({ game: { active: 'GMChar', browsingEntryId: 1 }, auth: {} })
   ),
 }));
 

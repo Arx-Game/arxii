@@ -25,16 +25,23 @@ export interface TabIdentity {
 }
 
 /**
- * Mints a random id distinguishing this tab from any other. Only needs to be
- * unique within one browser session, never persisted or sent to the server,
- * so `Math.random` is an acceptable fallback where `crypto.randomUUID` is
- * unavailable (older browsers, some test runners).
+ * Mints an id distinguishing this tab from any other. It only needs to be
+ * unique within one browser session and is never sent to the server. Web
+ * Crypto is the source (`randomUUID`, else `getRandomValues`, both older than
+ * any browser the client supports); the clock is the last resort for a
+ * runtime with no `crypto` at all, never `Math.random` (SonarCloud S2245).
  */
 function mintTabId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID();
+  if (typeof crypto !== 'undefined') {
+    if (typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    if (typeof crypto.getRandomValues === 'function') {
+      const words = crypto.getRandomValues(new Uint32Array(2));
+      return `tab-${words[0].toString(36)}${words[1].toString(36)}`;
+    }
   }
-  return `tab-${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return `tab-${Date.now().toString(36)}`;
 }
 
 export function readTabIdentity(): TabIdentity | null {

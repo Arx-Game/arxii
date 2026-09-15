@@ -1,13 +1,14 @@
 // frontend/src/magic/__tests__/MagicProgressionPage.pathIntent.test.tsx
-/** Verifies MagicProgressionPage mounts the PathIntentCard for the active character. */
+/** Verifies MagicProgressionPage mounts the PathIntentCard for this tab's browsing
+ * identity (#3479): the selector yields the entry id, the roster query resolves it. */
 import { render, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { vi } from 'vitest';
 import type { ReactNode } from 'react';
 
-vi.mock('@/store/hooks', () => ({ useAppSelector: () => 'Ariel' }));
+vi.mock('@/store/hooks', () => ({ useAppSelector: () => 1 }));
 vi.mock('@/roster/queries', () => ({
-  useMyRosterEntriesQuery: () => ({ data: [{ name: 'Ariel', character_id: 55 }] }),
+  useMyRosterEntriesQuery: () => ({ data: [{ id: 1, name: 'Ariel', character_id: 55 }] }),
 }));
 vi.mock('../magicProgressionQueries', () => ({
   useMagicProgression: () => ({ data: { stages: [] }, isLoading: false, isError: false }),
