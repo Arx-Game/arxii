@@ -15,6 +15,8 @@ import {
   clearSessionMessages,
   addFeedNote,
   clearFeedNotes,
+  addConsoleLine,
+  clearConsoleLines,
   minimizeFeedItem,
   restoreFeedItem,
   dismissFeedItem,
@@ -30,6 +32,7 @@ import {
   hydrateActiveCharacter,
 } from '../gameSlice';
 import type {
+  ConsoleLine,
   FeedNote,
   GameMessage,
   HubTidings,
@@ -62,6 +65,7 @@ interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   notes: FeedNote[];
+  consoleLines: ConsoleLine[];
   minimizedFeed: string[];
   dismissedFeed: string[];
   unread: number;
@@ -85,6 +89,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   isConnected: false,
   messages: [],
   notes: [],
+  consoleLines: [],
   minimizedFeed: [],
   dismissedFeed: [],
   unread: 0,
@@ -242,6 +247,7 @@ describe('gameSlice', () => {
           isConnected: false,
           messages: [],
           notes: [],
+          consoleLines: [],
           minimizedFeed: [],
           dismissedFeed: [],
           unread: 0,
@@ -812,6 +818,43 @@ describe('gameSlice', () => {
     });
   });
 
+  describe('console lines (#3857)', () => {
+    it('appends a console line with an id and keeps the newest five hundred', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      for (let index = 0; index < 505; index += 1) {
+        state = reducer(
+          state,
+          addConsoleLine({ character: 'TestCharacter', content: `line ${index}` })
+        );
+      }
+      const lines = state.sessions['TestCharacter'].consoleLines;
+      expect(lines).toHaveLength(500);
+      expect(lines[0].content).toBe('line 5');
+      expect(lines[499].id).toMatch(/^c\d+$/);
+      expect(lines[499].sent).toBeUndefined();
+      state = reducer(
+        state,
+        addConsoleLine({ character: 'TestCharacter', content: '@dig', sent: true })
+      );
+      expect(state.sessions['TestCharacter'].consoleLines[499]).toMatchObject({
+        content: '@dig',
+        sent: true,
+      });
+      // Console output is not feed activity: nothing badges for it.
+      expect(state.sessions['TestCharacter'].unread).toBe(0);
+    });
+
+    it('clears the console lines and nothing else', () => {
+      let state = createStateWithSession('TestCharacter', {
+        messages: [{ ...createGameMessage('kept'), id: 'm1' }],
+      });
+      state = reducer(state, addConsoleLine({ character: 'TestCharacter', content: 'x' }));
+      state = reducer(state, clearConsoleLines('TestCharacter'));
+      expect(state.sessions['TestCharacter'].consoleLines).toEqual([]);
+      expect(state.sessions['TestCharacter'].messages).toHaveLength(1);
+    });
+  });
+
   describe('minimise and dismiss (#3856)', () => {
     it('minimises a block once, restores it, and dismissing drops the minimised mark', () => {
       let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
@@ -1307,6 +1350,7 @@ describe('gameSlice', () => {
               { ...createGameMessage('Msg 2'), id: '2' },
             ],
             notes: [],
+            consoleLines: [],
             minimizedFeed: [],
             dismissedFeed: [],
             unread: 10,

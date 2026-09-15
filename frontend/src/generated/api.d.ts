@@ -31460,6 +31460,16 @@ export interface components {
        */
       readonly content: string;
       /**
+       * @description The whole sentence this viewer reads (#3858): the actor in the line.
+       *
+       *     Rendered at display time from the same per-viewer name ``get_persona``
+       *     resolves (a mask stays a mask, #1109), the same per-viewer content
+       *     ``get_content`` produces (a muted row stays blank, a comprehension-graded
+       *     read stays graded), and the mode. A companion pose reads as the companion
+       *     (#3294). Never stored: ``content`` stays what was typed.
+       */
+      readonly line: string;
+      /**
        * @description The type of IC interaction
        *
        *     * `pose` - Pose
@@ -31662,6 +31672,16 @@ export interface components {
        *     full content via the detail endpoint.
        */
       readonly content: string;
+      /**
+       * @description The whole sentence this viewer reads (#3858): the actor in the line.
+       *
+       *     Rendered at display time from the same per-viewer name ``get_persona``
+       *     resolves (a mask stays a mask, #1109), the same per-viewer content
+       *     ``get_content`` produces (a muted row stays blank, a comprehension-graded
+       *     read stays graded), and the mode. A companion pose reads as the companion
+       *     (#3294). Never stored: ``content`` stays what was typed.
+       */
+      readonly line: string;
       /**
        * @description The type of IC interaction
        *

@@ -135,6 +135,33 @@ in-character presence. Being able to react to a scene your character wasn't pres
 is intentional product behavior. Only `react_to_window` (the IC reaction-window system,
 `world/scenes/reaction_services.py`) is perception-gated.
 
+### The actor in the line (#3858, ADR-0299)
+
+A pose or a say reads as a whole sentence with its actor in it on every protocol:
+`Apostate is testing`, `Apostate says, "Test"`. The card above a web bubble is
+metadata and never stands in for the actor. `world/scenes/line_rendering.render_line`
+is the one formatter: a pose opens with the name (semipose glue for `'s`/`,`; a pose
+that already opens with the name is left alone), say/whisper/mutter/shout quote the
+text after their verb and name the language, emit/action/outcome pass through. It
+runs at display time only; `Interaction.content` stays what was typed, and
+threading, muting, comprehension and search keep reading it.
+
+- **Web, live:** `InteractionPayload.line`, built by `_build_interaction_payload`
+  from the display name (the attributed companion's, else the persona's) and rebuilt
+  per object by `_send_to_objects` when a comprehension renderer rewrites the content,
+  so a garbled listener reads a garbled sentence.
+- **Web, REST:** `InteractionListSerializer.line` (`get_line`), from the per-viewer
+  name `get_persona` resolves (#1109) and the per-viewer content `get_content`
+  produces (a muted row stays blank).
+- **Telnet:** `PoseAction` broadcasts `render_line("{caller}", POSE, text)` through
+  `message_location`, whose mapping resolves `{caller}` per looker; whisper, mutter
+  and the companion emote use the formatter too. Say keeps `$You() $conj(say)`
+  (the speaker's second-person echo, #2993 M2).
+- **Readers:** `ActorLine` (`frontend/src/scenes/components/ActorLine.tsx`) renders
+  `line ?? content` as the body in `PoseUnit` and `ExplorationReader`, setting the
+  leading name semibold when the line opens with the card's own name;
+  `ThreadedNarrativeReader`'s collapsed and thread excerpts read the line.
+
 ### Companion pose attribution (#3294)
 
 `Interaction.attributed_companion` — nullable FK -> `companions.Companion`
@@ -631,7 +658,8 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
   `firstVisible` already means. Consumed by `ConversationThreadList` in the History
   navigator's conversation drill-down.
 - `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
-  (`InteractionListSerializer`), cursor-paginated 100/page.
+  (`InteractionListSerializer`, whose `line` field carries the rendered sentence, #3858),
+  cursor-paginated 100/page.
 - `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose
   reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
   page further in either direction without re-deriving the boundary. A missing or unauthorized
@@ -1244,7 +1272,7 @@ no child re-fetches the same scene/roster data.
 
 **Feed presentation:** `PoseUnit` (`frontend/src/scenes/components/PoseUnit.tsx`)
 renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
-`FormattedContent`-rendered prose, and reactions — never monospace/terminal
+the body, and reactions — never monospace/terminal
 styling (ratified presentation bar; terminal-style rendering on the primary feed is
 a defect, not a variant). `GameWindow` renders this structured bubble feed whenever
 the active session has a scene; with no active scene it renders `ExplorationReader`
@@ -1338,7 +1366,13 @@ the room feed. The composer's audience is **derived from the active tab and
 locked**, never stored independently — `tabKeyToComposerMode` (in
 `threadToComposerMode.ts`) translates the active tab's key into a locked
 `ComposerMode` every render, which is the mis-send guard (a stale composer
-audience surviving a tab switch is the failure mode this closes). The open-tab
+audience surviving a tab switch is the failure mode this closes). The room anchor's
+own default is derived the same way (#3857): with no mode chosen it is Pose, so a
+typed line is a pose and never a raw command; a line starting with `/` is the
+command after the slash; staff have a Commands mode whose lines go as typed and
+whose answers land in the staff console (`StaffConsole.tsx`), tagged `console` by
+`server/conf/serversession.py` while `server/conf/inputfuncs.py:text` runs the
+line, never in the player-facing column. The open-tab
 layout is persisted client-locally per character+scene (thread **keys** only,
 never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
 `gameSlice` resets both tab fields whenever the session's scene id actually

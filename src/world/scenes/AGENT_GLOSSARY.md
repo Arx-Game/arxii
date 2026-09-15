@@ -44,6 +44,10 @@ _Avoid_: notification, ping, tag (the mark invites an answer; it never queues on
 `Interaction.language` (nullable FK to `species.Language`) records which tongue a say/whisper/mutter pose was spoken in — null means untagged/universal (poses, emits, pre-#2993 rows). It never changes what got written; it changes how each reader sees it — read-time comprehension (garbled per the reader's fluency, `species.language_services.render_speech`) is recomputed live on every serializer read, not snapshotted, so learning the language later un-garbles old logs. `CharacterSheet.current_language` is the separate sticky default a bare `say` speaks in; a `(tongue) text` prefix on `say` overrides it for one line only. See `species` AGENT_GLOSSARY's Language/Fluency/Garble entries for the trait-backed mechanics.
 _Avoid_: persisting the garbled text on the Interaction (comprehension is always derived, never stored).
 
+**Line** (#3858, ADR-0299):
+The whole sentence a viewer reads for an Interaction, with the actor in it: `Apostate is testing`, `Apostate says, "Test"`. Rendered at display time by `world/scenes/line_rendering.render_line` from the name that viewer sees on the card, the mode and the content that viewer reads; carried as `line` on the WebSocket payload and `InteractionListSerializer`, and spoken the same way on telnet. Never stored; `content` stays what was typed. (The `_Avoid_` "line" under Interaction is about calling the row itself a line; this is the sentence rendered from it.)
+_Avoid_: persisting the rendered line, rendering it on the client from `persona.name` + `mode`, a second formatter per protocol.
+
 **Threshold** (#3867, ADR-0300):
 A character present in a room with a live scene who has no room-heard line of their own in it yet. Listed in the Here panel with a mark (`in_scene: false` on their `room_state` entry), able to see everything, not addressable room-heard (`persona_can_receive`), reachable by whisper. Read off the log by `participation.has_entered`; never stored.
 _Avoid_: lurker, observer (that is #3288's concealed presence), non-participant (they may hold a `SceneParticipation` row for admin reasons).

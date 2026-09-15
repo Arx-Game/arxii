@@ -281,9 +281,13 @@ class PoseActionTests(TestCase):
             location=room,
         )
         action = PoseAction()
-        with patch.object(room, "msg_contents"):
+        with patch.object(room, "msg_contents") as mock_contents:
             result = action.run(actor, text="stretches.")
         assert result.success is True
+        # The actor is in the line on telnet (#3858); msg_contents resolves
+        # ``{caller}`` per looker from message_location's mapping.
+        assert mock_contents.call_args.args[0] == "{caller} stretches."
+        assert mock_contents.call_args.kwargs["mapping"]["caller"].obj is actor
 
 
 class WhisperActionTests(TestCase):
@@ -307,6 +311,8 @@ class WhisperActionTests(TestCase):
             result = action.run(actor, target=target, text="secret")
         assert result.success is True
         mock_msg.assert_called_once()
+        # The whisper reads as a sentence on telnet too (#3858).
+        assert 'Alice whispers, "secret"' in str(mock_msg.call_args)
 
     def test_whisper_without_text_fails(self):
         action = WhisperAction()

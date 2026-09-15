@@ -1,5 +1,6 @@
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import {
+  addConsoleLine,
   addFeedNote,
   addSessionMessage,
   addSessionDiagnostic,
@@ -249,6 +250,12 @@ function dispatchLegacyText(
   if (!LEGACY_TEXT_TYPES.has(msgType)) return false;
   const message = parseGameMessage(parsed);
   if (msgType === WS_MESSAGE_TYPE.TEXT) {
+    // A frame the server tagged for the staff console (#3857) is the answer
+    // to a Commands-mode line; it belongs to the console, never the column.
+    if (kwargs?.console === true) {
+      dispatch(addConsoleLine({ character, content: message.content }));
+      return true;
+    }
     const subject = typeof kwargs?.subject === 'string' ? kwargs.subject : undefined;
     dispatch(
       addFeedNote({
@@ -487,6 +494,23 @@ export function useGameSocket() {
   }, []);
 
   /**
+   * Send a staff Commands-mode line (#3857): the same text frame, flagged so
+   * the server tags everything it says back for the console.
+   */
+  const sendConsole = useCallback(
+    (character: MyRosterEntry['name'], command: string) => {
+      const socket = sockets[character];
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        // The console shows the line above what the server says back to it.
+        dispatch(addConsoleLine({ character, content: command, sent: true }));
+        const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], { console: true }];
+        socket.send(JSON.stringify(message));
+      }
+    },
+    [dispatch]
+  );
+
+  /**
    * Invoke a registered backend action over the websocket.
    *
    * The action dispatcher resolves `action` against the registry, runs the
@@ -514,5 +538,13 @@ export function useGameSocket() {
     []
   );
 
-  return { connect, disconnect, send, disconnectAll, executeAction, currentGeneration };
+  return {
+    connect,
+    disconnect,
+    send,
+    sendConsole,
+    disconnectAll,
+    executeAction,
+    currentGeneration,
+  };
 }

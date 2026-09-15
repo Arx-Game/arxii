@@ -257,6 +257,8 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
 - **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
+  An ambient row's body is the server's `line` (#3858) through
+  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
 - **`FeedChipStrip.tsx`**: The strip above the column (#3856 PR 2): one plain label
   per chip (`aria-pressed` = All and on; a "new" pill from `chipUnread`), `+`
   while a custom chip can still be added, All at the right end. Left click
@@ -283,7 +285,19 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   the fallback center feed when there's no active scene to structure into
   chat bubbles.
 - **`CommandInput.tsx`**: Textarea input with Enter to submit, Shift+Enter for
-  newline, command history. **The entrance is a state, not a toggle (#3867):**
+  newline, command history. **The label is the truth (#3857):** `GamePage`'s
+  `effectiveComposerMode` derives Pose for the room anchor whenever no mode is
+  chosen (a fresh connection, the reset on every character or scene change), so a
+  typed line is `pose <line>` and never a raw command by accident; picking a mode
+  works before any was set. A line starting with `/` is the command after the
+  slash, sent as typed whatever the mode (`slashEscape`); `//` poses a literal
+  slash; a typed speech verb or `page` (`KNOWN_COMMANDS`) still passes through,
+  and any other word is prose (`look` on its own is the pose "look"). Staff
+  (`isStaff`, from `account.is_staff` via `GameWindow`) get a Commands entry in
+  `ModeSelector`; in that mode the formatting controls, the companion selector and
+  the scene controls step aside, the box takes the monospace face, and every line
+  goes through `useGameSocket().sendConsole`.
+  **The entrance is a state, not a toggle (#3867):**
   `isEntrance` is derived from the room state's `scene.viewer_entered === false`; the
   right slot shows "✨ Entrance" (`data-testid="entrance-state"`) with the
   technique attachment (#2183) beside it until the first pose lands, which goes
@@ -308,6 +322,13 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   `CombatScenePage` into `SceneDetailPage`'s single composer (verified #3412
   S4: no separate combat composer remains; the fold-in already carries
   `speakingAs`).
+- **`StaffConsole.tsx`**: The staff console (#3857): a Console control in the
+  composer's toolbar (staff only) and the `Sheet` it opens over the play surface,
+  holding `session.consoleLines`: each Commands-mode line echoed (`sent`, muted,
+  after a `›`) above everything the server said back to it, in the terminal face
+  inside the app's own sheet (title, Clear, Close). It opens itself when a line
+  arrives while Commands mode is active and stays closed once closed until the
+  next; the control counts the answers that arrived while it was closed.
 - **`EvenniaMessage.tsx`**: Game message display and formatting for the plain-text
   frames (look results, command replies, Evennia's own errors). Renders sanitized
   HTML rather than going through `FormattedContent`, so it carries the feed's

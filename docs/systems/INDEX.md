@@ -3157,7 +3157,10 @@ must all pass before `--execute` touches a row; defaults to a dry-run.
 
 ### Scenes
 Roleplay session recording with participant tracking, interaction logging, persona-based identity, social
-action consent flow, and a three-mode non-combat round framework. Who is in a scene is read off its log
+action consent flow, and a three-mode non-combat round framework. Every pose and say line is rendered
+with its actor at display time by `line_rendering.render_line` (#3858, ADR-0299; `line` on the
+WebSocket payload and `InteractionListSerializer`).
+Who is in a scene is read off its log
 (`participation.py`, #3867, ADR-0300): the first room-heard line is the entrance, a present character
 without one stands at the threshold (marked in the Here panel, not addressable room-heard).
 

@@ -17,6 +17,7 @@ from world.scenes.constants import (
     PoseKind,
     ScenePrivacyMode,
 )
+from world.scenes.line_rendering import render_line
 from world.scenes.models import (
     Interaction,
     InteractionTargetPersona,
@@ -545,7 +546,11 @@ def _send_to_objects(
         try:
             obj_payload = payload
             if render_for is not None:
-                obj_payload = cast(InteractionPayload, {**payload, "content": render_for(obj)})
+                content = render_for(obj)
+                obj_payload = cast(
+                    InteractionPayload,
+                    {**payload, "content": content, "line": _line_for(payload, content)},
+                )
             obj.msg(interaction=((), obj_payload))
             if obj.pk in target_character_ids:
                 _send_involvement_mark(obj)
@@ -561,6 +566,18 @@ def _broadcast_to_location(
 ) -> None:
     """Send an interaction payload to all objects in a location via WebSocket."""
     _send_to_objects(location.contents, payload, render_for=render_for)
+
+
+def _line_for(payload: InteractionPayload, content: str) -> str:
+    """The sentence a viewer reads for ``content`` under ``payload``'s actor and mode (#3858).
+
+    A companion pose (#3294) reads as the companion; a language-tagged say names
+    the language. Called once by the builder and again per object when a
+    comprehension renderer rewrites the content, so the garbled read is a
+    garbled sentence, never a bare fragment.
+    """
+    name = payload["attributed_companion_name"] or payload["persona"]["name"]
+    return render_line(name, payload["mode"], content, language_name=payload["language_name"])
 
 
 def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction fields
@@ -592,7 +609,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
     adjudications, ephemeral pushes); ``push_interaction`` is the one builder that
     resolves it. See ``_reply_parent_payload`` for the privacy gate.
     """
-    return InteractionPayload(
+    payload = InteractionPayload(
         id=interaction_id,
         persona=PersonaPayload(
             id=persona.pk,
@@ -600,6 +617,7 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
             thumbnail_url=persona.thumbnail_url or "",
         ),
         content=content,
+        line="",
         mode=mode,
         timestamp=timestamp,
         thread_id=thread_id,
@@ -615,6 +633,8 @@ def _build_interaction_payload(  # noqa: PLR0913 - payload needs all interaction
         attributed_companion_name=attributed_companion_name,
         reply_to=reply_to,
     )
+    payload["line"] = _line_for(payload, content)
+    return payload
 
 
 def _root_thread_id(interaction: Interaction) -> str | None:

@@ -574,8 +574,14 @@ export function GamePage() {
     return threading.interactionsByThread.get(activeThreadTab) ?? [];
   }, [activeThreadTab, threading.filteredInteractions, threading.interactionsByThread]);
 
+  // The label is the truth (#3857): with nothing chosen yet (a fresh connection,
+  // or the reset on every character or scene change) the room anchor's mode is
+  // Pose, so a typed line is a pose and never a raw command by accident. The
+  // default is derived here, never stored, like the tab-locked modes below it.
   const effectiveComposerMode = useMemo(() => {
-    if (activeThreadTab === null) return composerMode;
+    if (activeThreadTab === null) {
+      return composerMode ?? roomComposerMode(threading.threads, roomName);
+    }
     return tabKeyToComposerMode(activeThreadTab, threading.threads, roomName);
   }, [activeThreadTab, threading.threads, roomName, composerMode]);
 
@@ -935,6 +941,7 @@ export function GamePage() {
 
   const gameWindowProps: ComponentProps<typeof GameWindow> = {
     characters,
+    isStaff: account.is_staff,
     accountId: account.id,
     sceneFeed: displaySceneFeed,
     room: roomData,

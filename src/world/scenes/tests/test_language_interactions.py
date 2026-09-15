@@ -204,6 +204,17 @@ class TestInteractionListComprehensionAPI(APITestCase):
         self.assertNotEqual(row_1["content"], self.CONTENT)
         self.assertEqual(row_1["content"], row_2["content"])
 
+    def test_the_line_wraps_what_each_viewer_reads(self) -> None:
+        """The actor is in the line (#3858): a fluent viewer's line quotes the full
+        text and names the language; a zero-fluency viewer's line quotes their own
+        garbled read, never a bare fragment and never the ground truth."""
+        name = self.writer_persona.name
+        fluent = self._get_row(self.fluent_account)
+        self.assertEqual(fluent["line"], f'{name} says in {self.language.name}, "{self.CONTENT}"')
+        zero = self._get_row(self.zero_account)
+        self.assertEqual(zero["line"], f'{name} says in {self.language.name}, "{zero["content"]}"')
+        self.assertNotIn(self.CONTENT, zero["line"])
+
     def test_writer_sees_own_content_full(self) -> None:
         row = self._get_row(self.writer_account)
         self.assertEqual(row["content"], self.CONTENT)

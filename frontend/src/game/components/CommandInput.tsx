@@ -10,7 +10,8 @@ import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftSto
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
-import { ModeSelector } from '@/scenes/components/ModeSelector';
+import { COMMANDS_MODE, ModeSelector } from '@/scenes/components/ModeSelector';
+import { StaffConsole } from './StaffConsole';
 import { LanguageSelector } from './LanguageSelector';
 import { CompanionSelector } from './CompanionSelector';
 import { companionEmote } from '@/companions/api';
@@ -70,12 +71,22 @@ const MAX_POSE_LENGTH = 10_000;
 // `send()` path rather than risk broadcasting room-wide.
 const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
+/** A line that starts with `/` (not `//`) is a command, sent as typed without the slash (#3857). */
+function slashEscape(trimmed: string): string | null {
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
+  return trimmed.slice(1).trim();
+}
+
 /**
  * Builds the full command string for a trimmed input given the active composer
- * mode. When the input already starts with an explicit known command, or there
+ * mode. A `/` line is the command after the slash (#3857); `//` poses a literal
+ * slash. When the input already starts with an explicit known command, or there
  * is no composer mode, the input is sent verbatim.
  */
 function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string {
+  const escaped = slashEscape(trimmed);
+  if (escaped !== null) return escaped;
+  if (trimmed.startsWith('//')) trimmed = trimmed.slice(1);
   if (!composerMode) return trimmed;
 
   const firstWord = trimmed.split(' ')[0].toLowerCase();
@@ -146,6 +157,8 @@ interface CommandInputProps {
    * sends on Cmd/Ctrl+Enter, for any surface that wants that.
    */
   submitOnEnter?: boolean;
+  /** Staff see the Commands mode and the console (#3857). */
+  isStaff?: boolean;
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
   /**
@@ -193,6 +206,7 @@ export function CommandInput({
   draftScope,
   draftScopeSettling,
   roomName,
+  isStaff = false,
   replyTarget,
   onCancelReply,
   ready = true,
@@ -210,7 +224,8 @@ export function CommandInput({
     null
   );
   const submittingRef = useRef(false);
-  const { send, executeAction } = useGameSocket();
+  const { send, sendConsole, executeAction } = useGameSocket();
+  const isCommandsMode = composerMode?.command === COMMANDS_MODE;
 
   const activeCharacter = useAppSelector((state) => state.game.active);
   const roomCharacters = useAppSelector((state) => {
@@ -521,8 +536,26 @@ export function CommandInput({
     // say/whisper/tt AND the player didn't type an explicit different
     // command inline (KNOWN_COMMANDS override stays on the legacy `send()`
     // path unchanged — that's free-text, not a structured dispatch).
+    // Commands mode (#3857, staff): the line goes as typed, flagged so the
+    // server tags its answer for the console. No draft ack: a raw line has
+    // no structured result to wait for, so it clears the way the plain
+    // WebSocket path below does.
+    if (composerMode?.command === COMMANDS_MODE) {
+      sendConsole(character, trimmed);
+      discard();
+      setHistory((prev) => [...prev, trimmed]);
+      setHistoryIndex(-1);
+      return;
+    }
+
     const firstWord = trimmed.split(' ')[0].toLowerCase();
-    const hasExplicitCommandOverride = KNOWN_COMMANDS.has(firstWord);
+    // A `/` line is a command (#3857): never a speech dispatch, whatever the mode.
+    const hasExplicitCommandOverride =
+      KNOWN_COMMANDS.has(firstWord) || slashEscape(trimmed) !== null;
+    // What the line SAYS once the escape is read: `//` is a literal slash
+    // (#3857). The structured dispatches below carry this; history and the
+    // in-flight record keep the line as typed.
+    const spoken = trimmed.startsWith('//') ? trimmed.slice(1) : trimmed;
     const liveSpeechMode: DraftMode | null =
       !hasExplicitCommandOverride &&
       composerMode &&
@@ -574,7 +607,7 @@ export function CommandInput({
     if (asCompanion) {
       const clientRequestId = beginSend(liveSpeechMode);
       pendingSpeechRef.current = { clientRequestId, text: trimmed };
-      companionEmote(asCompanion.id, trimmed, clientRequestId)
+      companionEmote(asCompanion.id, spoken, clientRequestId)
         .then(() => {
           // Finding 5 (#3760 final review) — a newer edit made while this
           // request was in flight survives, because `acknowledge` no-ops
@@ -626,7 +659,7 @@ export function CommandInput({
       case 'say': {
         const clientRequestId = beginSend(liveSpeechMode);
         pendingSpeechRef.current = { clientRequestId, text: trimmed };
-        executeAction(character, 'say', { text: trimmed, client_request_id: clientRequestId });
+        executeAction(character, 'say', { text: spoken, client_request_id: clientRequestId });
         submittingRef.current = false;
         return;
       }
@@ -649,7 +682,7 @@ export function CommandInput({
           const clientRequestId = beginSend(liveSpeechMode);
           pendingSpeechRef.current = { clientRequestId, text: trimmed };
           executeAction(character, 'whisper', {
-            text: trimmed,
+            text: spoken,
             target_id: whisperTargetId,
             client_request_id: clientRequestId,
           });
@@ -673,7 +706,7 @@ export function CommandInput({
           const clientRequestId = beginSend(liveSpeechMode);
           pendingSpeechRef.current = { clientRequestId, text: trimmed };
           executeAction(character, 'pose', {
-            text: trimmed,
+            text: spoken,
             place: currentPlaceId,
             client_request_id: clientRequestId,
           });
@@ -694,7 +727,11 @@ export function CommandInput({
     // as `fullCommand` above — a stored whisper/tt override that fell
     // through the branches above (target/place unresolvable) must never be
     // treated as a pose and REST-submitted to the whole room.
-    const isPose = !dispatchMode || dispatchMode.command === 'pose';
+    // An explicit command (`/look`, or a typed known verb) is never a pose,
+    // whatever the mode: in a scene it goes over the socket as typed, not to
+    // the pose endpoint as prose (#3857).
+    const isPose =
+      !hasExplicitCommandOverride && (!dispatchMode || dispatchMode.command === 'pose');
     const detachedSet = new Set(detachedActionIds ?? []);
     const hasDetachments = detachedSet.size > 0;
     const usesRestSubmit = isPose && sceneId !== undefined && personaId != null;
@@ -723,7 +760,7 @@ export function CommandInput({
       submitPose({
         persona_id: personaId,
         scene_id: Number(sceneId),
-        content: trimmed,
+        content: spoken,
         client_request_id: clientRequestId,
         pose_kind: isEntrance ? 'entry' : undefined,
         ...(composerTargets.length > 0 ? { target_names: composerTargets } : {}),
@@ -815,6 +852,7 @@ export function CommandInput({
     submittingRef.current = false;
   }, [
     character,
+    sendConsole,
     composerMode,
     draft.content,
     draft.status,
@@ -862,11 +900,13 @@ export function CommandInput({
 
   const handleModeChange = useCallback(
     (mode: string) => {
-      if (!onModeChange || !composerMode || composerMode.locked) return;
+      // A mode can be picked with none set yet (#3857): the selector's label is
+      // the truth, so choosing an entry always takes effect.
+      if (!onModeChange || composerMode?.locked) return;
       const label = mode.charAt(0).toUpperCase() + mode.slice(1);
       onModeChange({
         command: mode,
-        targets: composerMode.targets,
+        targets: composerMode?.targets ?? [],
         label,
       });
     },
@@ -896,6 +936,7 @@ export function CommandInput({
       return `\ud83d\udc3e As ${asCompanion.name}`;
     }
     if (!composerMode) return '';
+    if (composerMode.command === COMMANDS_MODE) return 'A staff command, sent as typed';
     const mode = composerMode.command.charAt(0).toUpperCase() + composerMode.command.slice(1);
     let text: string;
     if (composerMode.targets.length > 0) {
@@ -941,6 +982,39 @@ export function CommandInput({
     });
     onTargetConsumed?.();
   }, [targetToAppend, onTargetConsumed, setContent]);
+
+  // The scene's own controls at the right of the toolbar; in Commands mode the
+  // console control stands alone there (#3857).
+  const sceneRightSlot = sceneId ? (
+    <div className="flex items-center gap-1">
+      {isStaff && <StaffConsole character={character} active={false} />}
+      {isEntrance && personaId != null && (
+        <span
+          role="status"
+          title="Your first pose is your entrance; others can acclaim it"
+          data-testid="entrance-state"
+          className="flex min-h-8 items-center gap-1 rounded bg-amber-500/20 px-2 text-xs font-medium text-amber-600 dark:text-amber-400"
+        >
+          ✨ Entrance
+        </span>
+      )}
+      {isEntrance && personaId != null && (
+        <EntranceTechniqueAttachment
+          personaId={personaId}
+          candidates={entranceCandidates}
+          value={entranceTechnique}
+          onChange={setEntranceTechnique}
+        />
+      )}
+      <ActionAttachment
+        sceneId={sceneId}
+        attachment={actionAttachment ?? null}
+        onAttach={(action) => onActionAttach?.(action)}
+        onDetach={() => onActionDetach?.()}
+        targetName={composerMode?.targets[0]}
+      />
+    </div>
+  ) : undefined;
 
   return (
     <div className="play-composer-safe shrink-0 border-t">
@@ -1065,6 +1139,8 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={5}
         submitOnEnter={submitOnEnter}
+        formatting={!isCommandsMode}
+        textareaClassName={isCommandsMode ? 'font-mono text-sm' : undefined}
         submitDisabled={
           !ready ||
           Boolean(replyRefusal && !replyRefusal.reachable) ||
@@ -1091,44 +1167,15 @@ export function CommandInput({
               onModeChange={handleModeChange}
               isAtPlace={isAtPlace ?? false}
               locked={composerMode?.locked ?? false}
+              staff={isStaff}
             />
             {composerMode && SPEECH_COMPOSER_MODES.has(composerMode.command) && (
               <LanguageSelector character={character} />
             )}
-            <CompanionSelector value={asCompanion} onChange={setAsCompanion} />
+            {!isCommandsMode && <CompanionSelector value={asCompanion} onChange={setAsCompanion} />}
           </div>
         }
-        rightSlot={
-          sceneId ? (
-            <div className="flex items-center gap-1">
-              {isEntrance && personaId != null && (
-                <span
-                  role="status"
-                  title="Your first pose is your entrance; others can acclaim it"
-                  data-testid="entrance-state"
-                  className="flex min-h-8 items-center gap-1 rounded bg-amber-500/20 px-2 text-xs font-medium text-amber-600 dark:text-amber-400"
-                >
-                  ✨ Entrance
-                </span>
-              )}
-              {isEntrance && personaId != null && (
-                <EntranceTechniqueAttachment
-                  personaId={personaId}
-                  candidates={entranceCandidates}
-                  value={entranceTechnique}
-                  onChange={setEntranceTechnique}
-                />
-              )}
-              <ActionAttachment
-                sceneId={sceneId}
-                attachment={actionAttachment ?? null}
-                onAttach={(action) => onActionAttach?.(action)}
-                onDetach={() => onActionDetach?.()}
-                targetName={composerMode?.targets[0]}
-              />
-            </div>
-          ) : undefined
-        }
+        rightSlot={isCommandsMode ? <StaffConsole character={character} active /> : sceneRightSlot}
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />

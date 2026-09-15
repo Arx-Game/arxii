@@ -347,5 +347,6 @@ treat those names as hints to confirm, not gospel.
 - [0296 - The commit hook never clears the worktree, so implementers can share one](0296-the-commit-hook-never-clears-the-worktree.md) (#3814; related #3787, #3652)
 - [0297 - Every resolved outcome is delivered, and the wheel shows the raw chart](0297-every-resolved-outcome-is-delivered-and-the-wheel-shows-the-raw-chart.md) (#3807; related ADR-0293)
 - [0298 - `to_attr` onto a genuine `cached_property` is safe; narrows ADR-0263/ADR-0278](0298-to-attr-onto-a-genuine-cached-property-is-safe.md) (#3816; narrows ADR-0263, ADR-0278; related ADR-0008)
+- [0299 - The actor is rendered into the line at display time, by one server formatter](0299-the-actor-is-rendered-into-the-line-at-display-time.md) (#3858; related ADR-0214, #1109, #3294)
 - [0300 - Scene participation is read off the log, and the entrance is the first line](0300-scene-participation-is-read-off-the-log.md) (#3867; related ADR-0293, #904, #2183, #3069)
 - [0112 — Tutorial arc is mission content plus external-act beats](0112-tutorial-arc-is-mission-content-plus-external-act-beats.md)
