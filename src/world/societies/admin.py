@@ -887,6 +887,7 @@ class GangTurfReputationAwardAdmin(admin.ModelAdmin):
 from world.societies.houses.models import (  # noqa: E402
     DomainCrisisType,
     DomainCrisisTypeOption,
+    DomainGarrisonPost,
     EdictKind,
     HoldingKind,
     HouseAspectDefinition,
@@ -1130,3 +1131,19 @@ class NeighborhoodTurfAdmin(admin.ModelAdmin):
     search_fields = ["area__name", "controlling_org__name"]
     raw_id_fields = ["area", "controlling_org"]
     readonly_fields = ["updated_at"]
+
+
+@admin.register(DomainGarrisonPost)
+class DomainGarrisonPostAdmin(admin.ModelAdmin):
+    """Which MilitaryUnit garrisons which domain (#696 gap 5).
+
+    ``domain`` uses ``raw_id_fields`` rather than ``autocomplete_fields``:
+    ``Domain`` carries no ``ModelAdmin`` of its own to autocomplete against
+    (pre-existing - no Domain-sibling model is admin-registered either).
+    """
+
+    list_display = ["domain", "unit", "created_at"]
+    search_fields = ["domain__name", "unit__name"]
+    raw_id_fields = ["domain"]
+    autocomplete_fields = ["unit"]
+    readonly_fields = ["created_at"]

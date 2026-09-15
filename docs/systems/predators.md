@@ -32,6 +32,17 @@ the ladder down, resets the clock; called by `resolve_crisis` when an
 attributed raid is answered (mission/task/pay), and by the
 `sabotage_predator` spy payout. `sabotage_band` is the smaller-knife variant.
 
+### Domain defenses blunt predation (#696 gap 5)
+
+A domain's `effective_defenses` (`houses.services`) reduces the LAWLESSNESS
+unrest tick and the ROBBERY skim percentage: each knocks off
+`effective_defenses // PLACEHOLDER_DEFENSE_STEP` points, floored at 0 (defenses
+blunt predation, never reverse it). A robbed income stream only sees this
+reduction when its `area` resolves to a `Domain` (streams with no area take the
+full base cut). `_ensure_raid_crisis` also now picks the prey's domain with the
+**lowest effective defenses**, not the lowest prosperity - the weakest-DEFENDED
+domain is the one predation actually raids.
+
 ## Afflictions
 
 `DomainCrisisType.ignores_stature` marks Affliction-class types: their spawn

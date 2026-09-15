@@ -29,6 +29,7 @@ from world.predators.constants import (
     DORMANCY_FLOOR,
     DORMANCY_WEEKS,
     LAWLESSNESS_UNREST_TICK,
+    PLACEHOLDER_DEFENSE_STEP,
     RAID_SEVERITY_BY_STAGE,
     ROBBERY_SKIM_PCT,
     SABOTAGE_STRENGTH_BURN,
@@ -39,6 +40,7 @@ from world.predators.constants import (
 from world.predators.models import AfflictionSign, MenaceEvent, PredatorBand, PredatorKind
 
 if TYPE_CHECKING:
+    from world.societies.houses.models import Domain
     from world.societies.models import Organization
 
 # PLACEHOLDER feed lines per stage, pending the content pass.
@@ -129,23 +131,47 @@ def _advance(band: PredatorBand) -> None:
     _record_event(band, escalated=True)
 
 
+def _defense_reduction(domain: Domain) -> int:
+    """How many points defenses knock off a weekly severity step (#696 gap 5)."""
+    from world.societies.houses.services import effective_defenses  # noqa: PLC0415
+
+    return effective_defenses(domain) // PLACEHOLDER_DEFENSE_STEP
+
+
 def _apply_lawlessness(band: PredatorBand) -> None:
     from world.societies.houses.models import Domain  # noqa: PLC0415
 
     for domain in Domain.objects.filter(owner_org=band.prey):
-        new_unrest = min(100, domain.unrest + LAWLESSNESS_UNREST_TICK)
+        tick = max(0, LAWLESSNESS_UNREST_TICK - _defense_reduction(domain))
+        new_unrest = min(100, domain.unrest + tick)
         if new_unrest != domain.unrest:
             domain.unrest = new_unrest
             domain.save(update_fields=["unrest"])
 
 
 def _apply_robbery(band: PredatorBand) -> None:
-    """Skim the prey's uncollected pools into the band's stash."""
-    from world.currency.models import OrgIncomeStream  # noqa: PLC0415
+    """Skim the prey's uncollected pools into the band's stash.
 
+    A stream's ``area`` (when set - not every income stream is domain-linked)
+    resolves to that domain's defenses, which blunt the skim percentage for
+    that stream (#696 gap 5). Streams with no area take the full base cut.
+    """
+    from world.currency.models import OrgIncomeStream  # noqa: PLC0415
+    from world.societies.houses.models import Domain  # noqa: PLC0415
+
+    streams = list(OrgIncomeStream.objects.filter(organization=band.prey, active=True))
+    area_ids = {stream.area_id for stream in streams if stream.area_id is not None}
+    domain_by_area = {
+        domain.area_id: domain for domain in Domain.objects.filter(area_id__in=area_ids)
+    }
     skimmed = 0
-    for stream in OrgIncomeStream.objects.filter(organization=band.prey, active=True):
-        cut = stream.uncollected_pool * ROBBERY_SKIM_PCT // 100
+    for stream in streams:
+        pct = ROBBERY_SKIM_PCT
+        if stream.area_id is not None:
+            domain = domain_by_area.get(stream.area_id)
+            if domain is not None:
+                pct = max(0, ROBBERY_SKIM_PCT - _defense_reduction(domain))
+        cut = stream.uncollected_pool * pct // 100
         if cut <= 0:
             continue
         stream.uncollected_pool -= cut
@@ -164,12 +190,17 @@ def _ensure_raid_crisis(band: PredatorBand, *, rng: random.Random) -> None:
         pick_crisis_type,
     )
     from world.societies.houses.models import Domain  # noqa: PLC0415
+    from world.societies.houses.services import effective_defenses  # noqa: PLC0415
 
     if band.authored_crises.filter(resolved_at__isnull=True).exists():
         return
-    domain = Domain.objects.filter(owner_org=band.prey).order_by("prosperity").first()
-    if domain is None:
+    domains = list(Domain.objects.filter(owner_org=band.prey))
+    if not domains:
         return
+    # Lowest effective defenses, not raw prosperity - the weakest-DEFENDED
+    # domain is the one predation actually targets (#696 gap 5). pk breaks
+    # ties deterministically.
+    domain = min(domains, key=lambda d: (effective_defenses(d), d.pk))
     crisis_type = pick_crisis_type(
         CrisisOrigin.PREDATOR, audiences=[CrisisAudience.DOMAIN], rng=rng
     )

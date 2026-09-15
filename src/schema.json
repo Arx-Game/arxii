@@ -10175,6 +10175,39 @@ paths:
           description: Not a member of the organization.
         '404':
           description: No such organization.
+  /api/currency/org-books/{id}/material-ledger/:
+    get:
+      operationId: currency_org_books_material_ledger_list
+      description: |-
+        GET /org-books/{org_id}/material-ledger/ - the material grant/sale trail (#696).
+
+        Same membership gate and posture as ``vault-events``: visible to any active
+        member, since an audit trail gated behind the stewardship authority it
+        audits couldn't catch that authority's abuse. Newest first (the model's own
+        ``Meta.ordering``), capped at ``_RECENT_ROWS`` like the currency ledger.
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+        required: true
+      tags:
+      - currency
+      security:
+      - cookieAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrgMaterialLedgerEntry'
+          description: ''
+        '403':
+          description: Not a member of the organization.
+        '404':
+          description: No such organization.
   /api/currency/org-books/{id}/vault-events/:
     get:
       operationId: currency_org_books_vault_events_list
@@ -61044,6 +61077,53 @@ components:
       - realm_rank
       - recent_shifts
       - trend
+    OrgMaterialLedgerEntry:
+      type: object
+      description: |-
+        One append-only material-ledger audit row (#696 gap 6) - the ``OrgVaultEvent``
+        analogue for the org's bulk material stock. Read-only; GRANT rows name the
+        recipient, SALE rows have none (the market bought the excess).
+
+        ``counterparty_sheet`` is SET_NULL on delete, so the display field falls back
+        to None rather than raising - a deleted sheet still leaves a legible audit row.
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        kind:
+          allOf:
+          - $ref: '#/components/schemas/OrgMaterialLedgerEntryKindEnum'
+          readOnly: true
+        material_category_name:
+          type: string
+          readOnly: true
+        value:
+          type: integer
+          readOnly: true
+          description: Material value moved (coppers of material value, not sale proceeds).
+        counterparty_name:
+          type: string
+          nullable: true
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - counterparty_name
+      - created_at
+      - id
+      - kind
+      - material_category_name
+      - value
+    OrgMaterialLedgerEntryKindEnum:
+      enum:
+      - grant
+      - sale
+      type: string
+      description: |-
+        * `grant` - Grant
+        * `sale` - Sale
     OrgTask:
       type: object
       description: 'Board row: a live task with its template summary and fulfillment.'

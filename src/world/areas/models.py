@@ -282,6 +282,51 @@ class CleanupTierThreshold(SharedMemoryModel):
         return f"{self.outcome_tier} @ {self.min_progress} (+{self.quality_delta})"
 
 
+class AreaElevationRequirement(SharedMemoryModel):
+    """Authored config: what a declarer must hold/pay to elevate an area (#696 gap 3).
+
+    One row per destination ``AreaLevel``. ``elevation_services.next_level`` finds an
+    area's next level up; ``elevation_services.elevation_eligibility`` looks up the row
+    keyed on that target and checks the declarer's held BUILDING-level descendants (via
+    ``locations.services.effective_owner_for_area``) plus the area's summed ORDER stat
+    (``locations.services.area_stat_total``) against these thresholds. This is the
+    earned, player-declared path; ``EditAreaAction`` (``actions/definitions/
+    world_builder.py``) stays the separate warrant-gated staff/GM override that can set
+    ``area.level`` directly regardless of these thresholds.
+    """
+
+    to_level = models.IntegerField(
+        choices=AreaLevel.choices,
+        unique=True,
+        help_text="The AreaLevel a declaration against this row elevates an area into.",
+    )
+    min_held_buildings = models.PositiveSmallIntegerField(
+        default=0,  # PLACEHOLDER - staff-tunable per level
+        help_text=(
+            "BUILDING-level descendants of the area the declarer must effectively hold "
+            "(own persona, or an organization they can administer)."
+        ),
+    )
+    min_order_stat = models.SmallIntegerField(
+        default=0,  # PLACEHOLDER - staff-tunable per level
+        help_text="Minimum area_stat_total(area, StatKey.ORDER) required to declare.",
+    )
+    cost_coppers = models.PositiveBigIntegerField(
+        default=0,  # PLACEHOLDER - staff-tunable per level
+        help_text="Coin sunk (no destination) on a successful declaration.",
+    )
+
+    class Meta:
+        ordering = ("to_level",)
+
+    def __str__(self) -> str:
+        return (
+            f"Elevate to {self.get_to_level_display()} "
+            f"({self.min_held_buildings} buildings, order >= {self.min_order_stat}, "
+            f"{self.cost_coppers}c)"
+        )
+
+
 def refresh_area_closure() -> None:
     """Refresh the areas_areaclosure materialized view.
 

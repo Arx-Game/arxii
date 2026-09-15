@@ -155,6 +155,7 @@ def seed_houses_demo() -> None:
     )
     from world.societies.houses.models import (  # noqa: PLC0415
         HoldingKind,
+        HoldingMaterialSource,
         HouseRecognitionRule,
         SuccessionLaw,
         Title,
@@ -237,6 +238,9 @@ def seed_houses_demo() -> None:
     if farmland is None:
         return
     add_holding(domain=domain, kind=farmland)
+    _seed_material_holdings(
+        domain=domain, HoldingKind=HoldingKind, source_model=HoldingMaterialSource
+    )
 
     duchess = family.members.filter(name__startswith="Duchess").first()
     Title.objects.get_or_create(
@@ -249,6 +253,42 @@ def seed_houses_demo() -> None:
             "seat_domain": domain,
         },
     )
+
+
+def _seed_material_holdings(*, domain, HoldingKind, source_model) -> None:  # noqa: N803
+    """Quarry and lumber camp beside the farmland (#696 gap 8): the material
+    half of a domain's output, each with one bulk ``HoldingMaterialSource``.
+
+    Categories belong to the crafting seed (``world/seeds/crafting_materials.py``
+    owns ``Stone`` and ``Wood``); this seeder only looks them up and skips the
+    source row when one is absent, so cluster order never matters here.
+    """
+    from world.items.constants import MaterialSourceKind  # noqa: PLC0415
+    from world.items.models import MaterialCategory  # noqa: PLC0415
+    from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
+    from world.societies.houses.services import add_holding  # noqa: PLC0415
+
+    stone = MaterialCategory.objects.filter(name="Stone").first()
+    timber = MaterialCategory.objects.filter(name="Wood").first()
+    for kind_name, description, category in (
+        ("Quarry PLACEHOLDER", "PLACEHOLDER: a hillside cut for building stone.", stone),
+        ("Lumber camp PLACEHOLDER", "PLACEHOLDER: a woodlot worked for timber.", timber),
+    ):
+        kind = authored_or_sample(
+            HoldingKind,
+            {"description": description, "stream_kind": "domain_tax", "base_gross": 400},
+            name=kind_name,
+        )
+        if kind is None:
+            continue
+        holding = domain.holdings.filter(kind=kind).first() or add_holding(domain=domain, kind=kind)
+        if category is None:
+            continue
+        source_model.objects.get_or_create(
+            holding=holding,
+            material_category=category,
+            defaults={"quality": 1, "source_kind": MaterialSourceKind.BULK},
+        )
 
 
 def _seed_house_creator(*, realm, society, org_type, crown, law) -> None:

@@ -1114,7 +1114,8 @@ symmetric.
 - **Models:** `Area` (nullable `grid_x`/`grid_y` parent-local rendering coordinates,
   #2223; `slug` unique `SlugField` + `NaturalKeyMixin` (`NaturalKeyConfig.fields =
   ["slug"]`) + `origin` (`GridOrigin`), #2436/#2448), `AreaClosure` (unmanaged,
-  materialized view)
+  materialized view), `AreaElevationRequirement` (authored config: `to_level` unique
+  `AreaLevel`, `min_held_buildings`, `min_order_stat`, `cost_coppers`, #696 gap 3)
 - **Enums:** `AreaLevel` (low to high: Building, Neighborhood, Ward, City, Region,
   Kingdom, Continent, World, Plane); `GridOrigin` (both `world.areas.constants` —
   AUTHORED/STORY/PLAYER, #2436/#2448): who authored a grid
@@ -1128,6 +1129,16 @@ symmetric.
   `reparent_area()`, `area_grid_path(area) -> list[tuple[int | None, int | None]]`
   (#2223, root->area chain of parent-local `(grid_x, grid_y)` pairs; rendering-hint
   data only, never consulted by `find_route()` or any routing code)
+- **Elevation (#696 gap 3, `elevation_services.py`):** the earned, player-declared
+  sibling of the staff/GM-warrant-gated `EditAreaAction` level edit. `next_level(area)`,
+  `elevation_eligibility(area, declarer=) -> ElevationEligibility` (checks held
+  BUILDING-level descendants via `locations.services.effective_owner_for_area` +
+  `area_stat_total(area, StatKey.ORDER)` against the `AreaElevationRequirement` row for
+  the area's next level), `declare_elevation(area, declarer=, treasury_or_purse=)`
+  (re-checks in a transaction, sinks `cost_coppers` via `currency.services.transfer`
+  with no destination, writes `area.level`). `DeclareElevationAction`
+  (`actions/definitions/areas.py`, key `declare_elevation`) gates on the declarer being
+  the area's own effective owner. See [areas.md](areas.md) "Elevation" section.
 - **Presence & Travel (#1463 + #2163 + #2222 + #2223):** `where_listing()` — public presence
   directory, returns `WhereEntry(persona_name, room_path, room_id)` per online
   character in a publicly-listed room; `find_route(origin_room, destination_room) ->
@@ -1422,11 +1433,11 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 ### Instances
 Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
 
-- **Models:** `InstancedRoom`
+- **Models:** `InstancedRoom` (+ `entrance_exit` FK to `ExitProfile`, the temporary one-way doorway, #696 gap 7)
 - **Enums:** `InstanceStatus` (Active, Completed)
-- **Key Functions:** `spawn_instanced_room()`, `complete_instanced_room()`
+- **Key Functions:** `spawn_instanced_room(anchor_room=, area=)` (area: explicit override, else the anchor's; an anchor mints a one-way entrance gated by the `instance_entrance` behavior package to the run's people and hidden from everyone else by the room-state serializer), `complete_instanced_room()` (also deletes the entrance)
 - **Pattern:** Lifecycle record attached to regular Room via OneToOneField; rooms with scene history are preserved
-- **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description)
+- **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description), areas (`create_exit`, area inheritance), behaviors (`instance_entrance_package`), missions (`MissionOption.instance_area`; resolution anchors the spawn and inherits a fulfilled `OrgTask`'s target-domain Area)
 - **Source:** `src/world/instances/`
 - **Details:** [instances.md](instances.md)
 ### Realms
@@ -1567,14 +1578,14 @@ Social structures, organizations, reputation, and legend tracking.
 Noble/merchant/crime houses as first-class play — a house IS an `Organization`
 (`family` FK → `roster.Family`) on the kinship graph (#2062, ADR-0098).
 
-- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
+- **Models** (`world/societies/houses/`): `NobiliaryParticle`, `HouseRecognitionRule`, `FealtyEdge`, `SuccessionLaw`, `Title`, `Domain`, `DomainGarrisonPost`, `HoldingKind`, `DomainHolding`, `DomainImprovementDetails`, `DomainCrisis`, `CrisisIntel`, `MarriagePact`, `PactCommitment`; plus `Organization.family` / `Organization.default_succession_law`
 - **Enums:** `TitleTier`, `RecognitionRuleKind`, `SuccessionDerivation`, `SuccessionOrdering`, `PactCommitmentKind`, `PactDissolutionReason`, `DomainCrisisSeverity`
 - **Family Kind (#3617):** `NobiliaryParticle.kind` / `HouseTemplate.kind` are FKs to
   `roster.FamilyKind` (replaces the retired `family_type` code list). Authoring recipes
   for family standing, subordination, patronage, and culture-specific facts through this
   layer: [family-authoring-recipes.md](family-authoring-recipes.md) (recipes 4-7 and 9
   use the houses layer); design record: ADR-0268, ADR-0269.
-- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` (+ `particles_for_families`, the batched form the families list uses, #3654) / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`)
+- **Key Services:** `full_display_name` (degree-aware particle naming, #3261) / `resolve_particle` (+ `particles_for_families`, the batched form the families list uses, #3654) / `sync_name_aliases` (derived-name telnet aliases), `recognize_birth` / `acknowledge_into_family`, `derive_succession_candidates` / `pass_title` / `register_gifted_power_rater`, `swear_fealty` / `vassals_of` / `liege_chain_of`, `sign_marriage_pact` / `dissolve_pact` / `handle_death_for_pacts` / `breach_commitment`, `create_domain` / `add_holding`, `start_domain_improvement` (+ `DOMAIN_IMPROVEMENT` `ProjectKind` handler), `is_org_leader` / `can_administer_domain` (#2239 — the in-play domain-management gate: leader OR `domain-steward` office), `sync_house_channel`; `house_feed_for` lives in `world/tidings/services.py`. **In-play surface (#2239):** the CG/seed-only `add_holding`/`start_domain_improvement` are now reachable via `actions/definitions/domains.py` (`add_domain_holding` / `start_domain_improvement` / `appoint_domain_office` / `vacate_domain_office`) + telnet `CmdDomain` (`domain <subverb>`). **Garrison (#696 gap 5):** `effective_defenses(domain)` = `Domain.defenses` + `garrison_term(domain)` (a seam returning 0 until TehomCD's military side wires a real garrison bonus off `DomainGarrisonPost` units); `assign_garrison`/`relieve_garrison` (gated on `can_administer_domain`, unit's `owner_org` must match) are reachable via `AssignGarrisonAction`/`RelieveGarrisonAction` (`actions/definitions/domains.py`, registry keys `assign_garrison`/`relieve_garrison`).
 - **Proclamations & edicts (#2842, ADR-0178):** `StanceArchetype` (sibling of `PhilosophicalArchetype` — positions, not deed-judgments) + `Proclamation` (issuer, optional org voice, stance, display-only prose, stored roll) in societies; `issue_proclamation` applies the renown dot-product per society with asymmetric roll scaling (support earned on success only; provocation mitigated by success, amplified on botch) — `world/societies/proclamations.py`. `EdictKind` (inherent stance + payload: income %, weekly unrest, upkeep) + `DomainEdict` (one active per domain) in houses; `enact_edict` proclaims the stance and persists the payload, read by `accrue_income_stream`, the weekly `edict_weekly_tick` rollover processor, spy `domain_report`, and the PROCLAMATION feed kind. Seeds: `proclamations` cluster (9 stances + 6 edict kinds). API: `/api/societies/proclamations/` (+`proclaim`, #3412 slice 3 — now dispatches through `IssueProclamationAction.run()`, `actions/definitions/organizations.py`, instead of calling the `proclamations` service functions directly; the offscreen-act gate (ADR-0246) now refuses a captured/unconscious/dead issuer before the service layer's own leadership/domain-authority checks ever run).
 - **Threat/opportunity loop (#2837, ADR-0177):** `DomainCrisisType` gains `valence` (threat/opportunity) + `audience` (domain/org/criminal-org); `DomainCrisis` gains a nullable `org` leg (exactly-one-of), `surfaces_at` (generated crises spawn covert for `COVERT_WINDOW_DAYS`; hidden even from their target until surfaced or swept), and `CrisisIntel` (org × crisis early knowledge, minted by spy sweeps). `crisis_generation_tick` (weekly rollover processor) ambient-spawns per domain and per eligible org (active income streams or covert org type); opportunities expire after `OPPORTUNITY_LIFETIME_DAYS`; org-target threats skim stream accrual (`org_crisis_income_factor` in `accrue_income_stream`); MISSION options now actually mint (`choose_crisis_option` → `staff_assign_mission`); `apply_crisis_boon` pays seizure (owner: prosperity; anyone else: treasury coppers). Catalog seeded by the `crisis_types` cluster (`world/seeds/crisis_types.py`). Spy counterplay: `reveal_schemes` / `crisis_severity_delta` / `exploit_crisis` route payouts + `TaskTargetKind.CRISIS` (see tasking).
 - **Civ-stats drive gameplay (#2238):** `Domain.income_multiplier` (prosperity / `DOMAIN_PROSPERITY_BASELINE`) scales a holding's gross in `currency.accrue_income_stream` — prosperity now drives income, not just display. `unrest_crisis_chance` / `maybe_open_unrest_crisis` roll a `DomainCrisis` when unrest is high (called from the weekly `domain_consumption_tick`). Unrest also skims food collection (`agriculture._apply_unrest_skim`) and a well-fed week recovers prosperity/unrest toward equilibrium (`agriculture` recovery drift). Still deferred (own PR): unrest→justice-heat *suppression* + crackdown loop (unrest makes a domain heat-safe until a crackdown spikes heat)
@@ -1591,7 +1602,7 @@ Noble/merchant/crime houses as first-class play — a house IS an `Organization`
   use the same model as a noble charter.
 - **Regional flavor (#2079):** `HouseAspectDefinition`/`HouseAspectOption` (required catalog-only choices per template, ADR-0101), `HouseFeature` (slug-anchored cultural facts), `HouseClaimAspect` picks → `OrganizationAspect`/`OrganizationFeature` facets at materialization; `Organization.words/colors/sigil_description` stylings (all org types); `Domain.description` lands writeup. **The aspect catalog is lore-repo content (#2868)** — both aspect models carry `NaturalKeyMixin` and sit in `CONTENT_MODELS`; `HouseAspectOption.codex_entry` binds an option to its lore write-up (Inferna's House Quiddities), surfaced to CG as `codex_entry_id`
 - **House Stature (#3091, ADR-0209/0210):** perceived-vs-true deterrence for landed orgs. Models: `StatureBand` (authored percentile tiers; `threat_multiplier` scales ambient predation; headline templates), `HouseStature` (components renown/military/economic/allied, `crisis_penalty`, true/perceived totals, band + trend, `prestige_rank`, stored realm rank), `StatureShift` (why-it-moved ledger → tidings), `PrestigeRankBand` (rank-relative benefits → prosperity drift), `OrgPrestigeRank` (unlanded orgs). Services in `stature_services.py`: `recompute_stature` (renown channels: members, head's COURT covenant, kin via `Kinsperson.gifted_rating`, union partners — marriage both-ways full, consorts half/senior-only/landed-title-gated/capped, paramours zero), `converge_perceived`, `apply_death_shock` (vitals seam), `apply_pact_shift`, `crisis_stature_shift` (covert threats hit perceived only after surfacing), `apply_whisper`, `assign_bands`/`assign_realm_ranks`/`recompute_org_prestige_ranks`, `apply_prestige_prosperity_drift` (zero-open-threats gate; ~3x income ceiling via prosperity clamp), `weekly_stature_tick` (rollover processor before crisis generation), `gifted_power_rating` (first live `MOST_POWERFUL_GIFTED` rater), `award_marriage_tier_prestige`. Six-step `TitleTier` (empire/kingdom/duchy/march/county/barony). Surfaces: org API `house.stature` panel, `domain stature` telnet, `FeedItemKind.STATURE` tidings, spy `_stature_lines` + `whisper_stature_delta` payout. Seeds: cluster `stature` (bands, rank bands, consort/paramour `UnionKind` rows — Luxen's non-recognition = no row)
-- **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). Seeds: cluster `predators`. Details: [predators.md](predators.md)
+- **Predator ecology (#3093, ADR-0211):** named NPC antagonists in `world/predators/` (thin dedicated models, never Organizations): `PredatorKind` (authored vocabulary), `PredatorBand` (strength/loot/prey/home region + `MenaceStage` ladder: rumors → lawlessness → robbery → raids → terror, ~10 weekly crons rumor→raid, advancing only while unanswered), `MenaceEvent` (tidings source), `AfflictionSign` (the dread week before an outbreak). Services: `weekly_menace_tick` (spawn/stalk/pressure/escalate; prey = weakest-perceived landed org honoring consort regional peace), `strike_band`/`sabotage_band` (counterplay: burn, knockdown, dormancy, disband; wired into `resolve_crisis` for attributed raids), `weekly_affliction_tick` (SIGNS → deterrence-blind outbreak → capped one-hop spread; `DomainCrisisType.ignores_stature`/`affliction_spreads`, `DomainCrisis.aggressor_band`/`spread_count`, `CrisisOrigin.PREDATOR`/`AFFLICTION`). Espionage: `TaskTargetKind.PREDATOR` + `scout_predator`/`sabotage_predator` payouts. `FeedItemKind.MENACE` tidings. Grand displays: `apply_grand_display` (event PROVISION quality → bounded upward perceived-stature bluff, seamed at `complete_event`). **Defenses resist predation (#696 gap 5):** LAWLESSNESS's unrest tick and ROBBERY's skim percentage are each reduced by `houses.services.effective_defenses(domain) // PLACEHOLDER_DEFENSE_STEP`, floored at 0; `_ensure_raid_crisis` targets the prey's lowest-`effective_defenses` domain, not its lowest-prosperity one. Seeds: cluster `predators`. Details: [predators.md](predators.md)
 - **Org pacts & marriage-in-play (#2999, ADR-0212):** `PactKind` lever catalog + `OrgPact` (propose/ratify by leadership; income tithe mints `OrgObligation`; BETRAYAL is a stamped world event with a permanent prestige cost, auto-flagged when offensive spy tasks hit a pact partner), `Betrothal`/`BetrothalTerm` (25% stature preview; breaking costs standing), `solemnize_wedding` via the WEDDING `CeremonyTypeKey` (union + marriage pact + tier prestige in one rite — first in-play `record_union` caller; #2358 adds officiant-driven dual consent at ceremony start and `initiate_divorce` — unilateral, `Union.ended_at` + `PactDissolutionReason.DIVORCE`, both spouses' prestige hit, initiator steeper). Stature's allied slot reads ratified OrgPacts at their authored share. **Match dossier**: `dossier_services.build_dossier` + `GET .../organizations/{id}/dossier/` + `/orgs/:id/dossier` — any authenticated player; covert crises enriched only via the viewer org's `CrisisIntel`. Telnet `CmdPact`. Seeds: cluster `pacts`. Union membership reads the m2m through table (idmapper corrupts `prefetch_related` grouping — `_union_membership`)
 - **Seeds:** cluster `houses` (rides `kinship`)
 - **Integrates with:** roster kinship (recognition/succession read parentage; RESIDENCY writes `FamilyMembership`), currency (`OrgIncomeStream` holdings, `OrgObligation` subsidies, treasury dowries), projects (`DOMAIN_IMPROVEMENT`), areas (Domain decorates an Area), tidings (house feed), secrets (breach scandal channel)
@@ -3990,11 +4001,16 @@ consumers, not systems.
   nullable `collection_success_level` — set = this route lands the issuing org's
   `currency.collect_org_income` graded at that level via `success_level_override`,
   with the handler as collector; null = no collection, #696 item 2), `OrgTask`
-  (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
+  (status lifecycle, `DiscriminatorMixin` target, nullable `derived_difficulty`:
+  the steward-set target every roll on the task uses via `task_difficulty`, #696
+  gap 8), `TaskFulfillment`
   (`npc_asset` XOR `mission_instance`, stored dispatch check, report),
   `ListenerPost` (buzz meter on a LISTENER `NPCAssignment` + hidden counterplay
   state), `ListenerHarvest` (caught Secret XOR planted red herring)
-- **Services:** `create_task`, `assign_agent` (own or issuing-org agents),
+- **Services:** `create_task` (derives `derived_difficulty` at issue: local order via
+  `locations.services.area_order_difficulty` shifted by the steward's own check,
+  `DIFFICULTY_STEP_PER_LEVEL` per success level; the roll is never stored), `assign_agent`
+  (own or issuing-org agents),
   `resolve_task` (risk via consequence pool with `ResolutionContext.npc_asset`
   scoping per ADR-0092), `resolve_due_tasks` (hourly cron), `accept_task` +
   `resolve_task_for_mission` (PC path, `_finish_terminal` seam),
@@ -4823,22 +4839,42 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   int` (coppers minted to the treasury from the auto-sell leg, 0 when nothing sold)). Both entry
   points append one PLACEHOLDER report line ("raw materials were shared out to N members")
   only when `material_allowance.total_by_category` is non-empty.
-  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2) — the
-  org-level analogue of `market.sell_materials`: for each `OrgMaterialStock` row over the
-  PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells `excess = value - threshold` at the market's
-  `MATERIAL_SALE_RATE_PCT` (imported from its market home, one rate constant, no duplicate) into
-  the treasury; rows read/debited under `select_for_update`, same locking discipline as the
+  `auto_sell_excess_materials(*, organization)` (`world.currency.services`, #2540 slice 2;
+  asking price #696 gap 6) - the org-level analogue of `market.sell_materials`: for each
+  `OrgMaterialStock` row over the PLACEHOLDER `MATERIAL_AUTO_SELL_THRESHOLD`, sells
+  `excess = value - threshold` at the row's house-set `asking_price_pct` (#696 gap 6 - the ONE
+  liquidation path; the field defaults to the old fixed `MATERIAL_SALE_RATE_PCT` via
+  `DEFAULT_ASKING_PRICE_PCT`, so an unpriced stock liquidates exactly as before; 0 means never
+  sell) into the treasury, writing one SALE `OrgMaterialLedgerEntry` per category sold; rows
+  read/debited under `select_for_update`, same locking discipline as the
   allowance leg since both debit the same stock table. A category whose excess rounds to zero
   coppers is left alone; each category liquidates independently. Called ONLY from the end of
   `collect_and_distribute` — never the weekly cron directly (ADR-0081/ADR-0234: automatic gain
   is not automatic).
+- **Steward material grants + asking price (#696 gap 6):** `world.items.services.org_materials` -
+  `grant_material_stock(*, organization, material_category, value, to_sheet, granted_by)` (the
+  discretionary org-to-one-member sibling of the automatic allowance: gated on
+  `houses.services.can_steward_org` [org leader OR `domain-steward` office holder - the org-level
+  half of `can_administer_domain`, factored out], recipient must hold an active membership,
+  stock debited under `select_for_update` [`InsufficientMaterialStock` when short], recipient's
+  `MaterialBucket` credited via `credit_materials`, one GRANT `OrgMaterialLedgerEntry` written)
+  and `set_asking_price(*, organization, material_category, pct, by)` (same gate; pct bounded
+  0..PLACEHOLDER `MAX_ASKING_PRICE_PCT`; creates a zero-value stock row when the category has
+  none yet). `OrgMaterialLedgerEntry` (`world.items.materials_models`: organization,
+  material_category, kind GRANT/SALE, value, nullable `counterparty_sheet`, created_at) is the
+  append-only audit rail - the `OrgVaultEvent` analogue for bulk material. Actions
+  `GrantMaterialAction` (`grant_materials`) / `SetAskingPriceAction` (`set_asking_price`)
+  (`actions/definitions/domains.py`); member-only read at
+  `GET /api/currency/org-books/{org}/material-ledger/`.
 - **Checks (#930):** Tax Collection / Household Command (presence + Leadership + Stewardship) and Domain
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
   Collection check's target difficulty from local order/crime — worst-stop wins: for each
-  stream with an authored `area`, net pressure = area CRIME total − area ORDER total
-  (`world.locations.services.area_stat_total`), and the MAX pressure across an org's streams
-  shifts the base NORMAL difficulty point-for-point (clamped to TRIVIAL..HARROWING).
+  stream with an authored `area`, `world.locations.services.area_order_difficulty(area)`
+  (net pressure = area CRIME total − area ORDER total via `area_stat_total`, shifting the
+  base NORMAL difficulty point-for-point, clamped to TRIVIAL..HARROWING; the derivation
+  the steward's issue-time check shares, #696 gap 8), and the MAX across an org's streams
+  is the run's difficulty.
   PLACEHOLDER tuning — point-for-point shift and worst-stop-wins are first guesses pending
   real turf-war stat magnitudes. `collect_org_income`'s `success_level_override` lets a
   caller that already resolved the run's outcome elsewhere (a mission's terminal grade, via

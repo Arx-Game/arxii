@@ -999,6 +999,44 @@ def effective_owners_for_rooms(
     return result
 
 
+def effective_owner_for_area(area: Area | None) -> LocationOwnership | None:
+    """Cascade-resolve the most-specific active owner of an area itself (#696).
+
+    The area-scoped sibling of ``effective_owner`` (which resolves a room) -
+    for callers that hold an Area and no room, e.g. Task 2's domain
+    eligibility count. Self-first, most-specific-wins: an area's own active
+    LocationOwnership row wins even when an ancestor also has one.
+
+    Walks ``parent`` FKs directly (self-first, cycle-safe), deliberately NOT
+    the ``AreaClosure`` materialized view, so this works identically on the
+    SQLite fast tier - same idiom as ``area_stat_total`` above and
+    ``world.justice.services._chain``.
+
+    Returns the LocationOwnership row, or None if no active ownership row
+    exists anywhere in the chain.
+    """
+    chain: list[Area] = []
+    seen: set[int] = set()
+    node = area
+    while node is not None and node.pk not in seen:
+        chain.append(node)
+        seen.add(node.pk)
+        node = node.parent
+    if not chain:
+        return None
+
+    rows = LocationOwnership.objects.filter(
+        ended_at__isnull=True,
+        area_id__in=[a.pk for a in chain],
+    ).select_related("area", "holder_persona", "holder_organization")
+    by_area_id = {r.area_id: r for r in rows}
+
+    for a in chain:
+        if a.pk in by_area_id:
+            return by_area_id[a.pk]
+    return None
+
+
 def current_tenants(room: DefaultObject) -> QuerySet[LocationTenancy]:
     """Return all currently-active tenancies that apply to a room.
 
@@ -1675,6 +1713,28 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
 
 
 _AREA_ANCESTOR_WALK_CAP = 10  # defensive bound on parent-chain traversal
+
+
+def area_order_difficulty(area: Area | None) -> int:
+    """Check difficulty implied by an area's order versus crime (#696 items 1 and 8).
+
+    The base NORMAL difficulty shifted point for point by net pressure (the
+    area's CRIME total minus its ORDER total, both via ``area_stat_total``),
+    clamped to the authored band range; ``None`` is a quiet area at NORMAL.
+    Shared by the collection run (worst stop wins, ``currency.services``) and
+    the steward's issue-time check (``tasking.services.create_task``).
+    PLACEHOLDER tuning: point-for-point is a first guess.
+    """
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    pressure = 0
+    if area is not None:
+        pressure = area_stat_total(area, StatKey.CRIME) - area_stat_total(area, StatKey.ORDER)
+    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
+    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
+    return max(low, min(high, base + pressure))
 
 
 def area_stat_total(area: Area | None, stat_key: str) -> int:

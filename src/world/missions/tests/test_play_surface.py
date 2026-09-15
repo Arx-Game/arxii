@@ -610,6 +610,36 @@ class InstancedPlayTests(TestCase):
         character.refresh_from_db()
         assert character.location == instance.spawned_room.objectdb
 
+    def test_instance_area_override_spawns_into_that_area(self) -> None:
+        """#696 gap 7: an authored instance_area lands the spawned room in it."""
+        from world.areas.factories import AreaFactory
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, _s, _so, _character, participant = self._spawning_run()
+        override = AreaFactory(name="authored-instance-area")
+        entry_option.instance_area = override
+        entry_option.save(update_fields=["instance_area"])
+
+        resolve_option(instance, entry, entry_option, participant)
+
+        instance.refresh_from_db()
+        assert instance.spawned_room.area_id == override.pk
+
+    def test_spawn_inherits_anchor_room_area(self) -> None:
+        """#696 gap 7: no override, no task target - the doorway room's area wins."""
+        from world.areas.factories import AreaFactory
+        from world.missions.services.resolution import resolve_option
+
+        instance, entry, entry_option, _s, _so, _character, participant = self._spawning_run()
+        hallway_area = AreaFactory(name="hallway-area")
+        self.start_profile.area = hallway_area
+        self.start_profile.save(update_fields=["area"])
+
+        resolve_option(instance, entry, entry_option, participant)
+
+        instance.refresh_from_db()
+        assert instance.spawned_room.area_id == hallway_area.pk
+
     def test_terminal_completion_tears_down_instance(self) -> None:
         from world.instances.constants import InstanceStatus
         from world.instances.models import InstancedRoom

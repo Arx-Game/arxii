@@ -351,3 +351,23 @@ class MaterialSourceKind(models.TextChoices):
 # — mirrors ``COMMON_VALUE_PER_QUALITY`` (`world.items.gems.constants`), the GEM_MINE
 # analogue.
 BULK_YIELD_PER_QUALITY = 100
+
+
+# The default per-category asking price for an org's material stock (#696 gap 6).
+# PLACEHOLDER magnitude: the fixed ``MATERIAL_SALE_RATE_PCT`` (40%,
+# ``world.items.market.services``) the auto-sell used before the asking price
+# existed becomes this default, so a house that never sets a price liquidates
+# exactly as before.
+DEFAULT_ASKING_PRICE_PCT = 40
+
+# Upper bound for ``set_asking_price`` (#696 gap 6). PLACEHOLDER: 100% means "sell
+# at full material value"; no premium-above-value pricing until a demand curve
+# exists to justify one.
+MAX_ASKING_PRICE_PCT = 100
+
+
+class OrgMaterialLedgerKind(models.TextChoices):
+    """Kinds of ``OrgMaterialLedgerEntry`` audit rows (#696 gap 6)."""
+
+    GRANT = "grant", "Grant"
+    SALE = "sale", "Sale"

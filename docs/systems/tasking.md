@@ -40,7 +40,18 @@ Deliberately NOT here: standing "stay here until recalled" postings — those ar
 ## Services (`services.py`)
 
 - `create_task(template, org, issued_by, *, target_...)` — OPEN instance; caller
-  gates leadership.
+  gates leadership. Sets `OrgTask.derived_difficulty` once at issue (#696 gap 8):
+  the local order at the target's area (`locations.services.area_order_difficulty`,
+  CRIME minus ORDER shifting the NORMAL base; a room target reads its profile's
+  area, a domain target its domain's, every other target kind reads as quiet)
+  shifted by the steward's own check against the template's `check_type`,
+  `DIFFICULTY_STEP_PER_LEVEL` (constants.py, 5) per success level, easier on a
+  good roll, clamped to the authored bands. Only the number survives; the roll is
+  never stored. Every roll on the task then reads `task_difficulty(task)` (the
+  derived number, else the template's static `check_difficulty`): the handler's
+  dispatch check, the agent's resolution check, and a PC pickup's AUTHORED CHECKs
+  (`missions.services.resolution._authored_check_difficulty`, replacing the
+  mission template's `risk_tier` for that run).
 - `assign_agent(task, npc_asset, handler)` — validates OPEN task, ACTIVE asset,
   handler owns the asset (phase 1; org-owned rows arrive phase 2), handler is an
   active org member. Rolls the handler's **dispatch check**
@@ -243,8 +254,9 @@ revisit with the prose pass.
 
 **Worked example** (`world/seeds/domain_tasks.py`, `domain_tasks` seed
 cluster): "Collect the Levies" — a DOMAIN-target `TaskTemplate`
-(`check_type=Tax Collection`, `check_difficulty` a static PLACEHOLDER pending
-issue #696 item 8's unbuilt "steward's check sets difficulty" mechanic)
+(`check_type=Tax Collection`; `check_difficulty` is the static PLACEHOLDER fallback,
+overridden per task by the steward-set `OrgTask.derived_difficulty` for NPC and PC
+runs alike, #696 gap 8)
 linked to a single-node CHECK `MissionTemplate` of the same name (RESTRICTED
 visibility, no `availability_rule` — reachable ONLY via `accept_task`'s
 `staff_assign_mission` call, never an open board). Each of the mission's

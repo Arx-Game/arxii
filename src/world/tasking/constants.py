@@ -50,6 +50,11 @@ class TaskTargetKind(models.TextChoices):
 # quality shifts the agent's odds without ever replacing the agent's roll.
 DISPATCH_MARGIN_STEP = 5
 
+# Points of target difficulty a PC run of a task sheds (or gains) per success
+# level of the steward's own check at issue time (#696 gap 8): a well-briefed
+# job is easier to run. PLACEHOLDER calibration, mirrors DISPATCH_MARGIN_STEP.
+DIFFICULTY_STEP_PER_LEVEL = 5
+
 # Listener-loop tuning (#2820 phase 3). PLACEHOLDER calibration: buzz accrues
 # from the room's MECHANICAL residue only (scenes held, secrets minted there)
 # — prose is structurally invisible to the pipeline. A dead room takes many

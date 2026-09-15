@@ -11,6 +11,7 @@ from actions.definitions.accusations import (
 )
 from actions.definitions.alterations import ResolveAlterationAction
 from actions.definitions.appetites import DrainAction, FeedAction
+from actions.definitions.areas import DeclareElevationAction
 from actions.definitions.assets import IntroduceAssetAction
 from actions.definitions.battles import (
     BeginBattleRoundAction,
@@ -128,6 +129,10 @@ from actions.definitions.divorce import InitiateDivorceAction
 from actions.definitions.domains import (
     AddDomainHoldingAction,
     AppointDomainOfficeAction,
+    AssignGarrisonAction,
+    GrantMaterialAction,
+    RelieveGarrisonAction,
+    SetAskingPriceAction,
     StartDomainImprovementAction,
     TransferFoodAction,
     VacateDomainOfficeAction,
@@ -949,6 +954,15 @@ _ALL_ACTIONS: list[Action] = [
     StartDomainImprovementAction(),
     AppointDomainOfficeAction(),
     VacateDomainOfficeAction(),
+    # #696 gap 5 - post/relieve a MilitaryUnit garrisoning a domain.
+    AssignGarrisonAction(),
+    RelieveGarrisonAction(),
+    # #696 gap 6 - steward material grants + the house-set asking price.
+    GrantMaterialAction(),
+    SetAskingPriceAction(),
+    # #696 gap 3 - earned area elevation, the player-facing sibling of the
+    # warrant-gated staff EditAreaAction level edit.
+    DeclareElevationAction(),
     MountCompanionAction(),
     DismountCompanionAction(),
     PromoteSummonAction(),
