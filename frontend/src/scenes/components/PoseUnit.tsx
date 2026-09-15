@@ -22,6 +22,7 @@ import { Badge } from '@/components/ui/badge';
 import { NominateButton } from '@/components/NominateButton';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
+import { ActorLine } from './ActorLine';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
 import { DramaticMomentSuggestionChip } from './DramaticMomentSuggestionChip';
@@ -456,10 +457,14 @@ export function PoseUnit({
         />
       )}
 
-      {/* Prose body */}
+      {/* Prose body: the actor in the line (#3858) */}
       <div className="mt-1">
         <p>
-          <FormattedContent content={interaction.content} />
+          <ActorLine
+            line={interaction.line}
+            content={interaction.content}
+            actorName={interaction.attributed_companion?.name ?? interaction.persona.name}
+          />
         </p>
       </div>
 

@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
 import type { GameLifecycleState } from '@/store/gameSlice';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
-import { FormattedContent } from '@/components/FormattedContent';
+import { ActorLine } from '@/scenes/components/ActorLine';
 import { FeedNoteBlock } from './FeedNoteBlock';
 import { interleaveNotes } from '../feedRows';
 import type { RoomData } from './RoomPanel';
@@ -174,7 +174,11 @@ export function ExplorationReader({
                             })}
                           </time>
                         </header>
-                        <FormattedContent content={row.item.content} />
+                        <ActorLine
+                          line={row.item.line}
+                          content={row.item.content}
+                          actorName={row.item.attributed_companion_name ?? row.item.persona.name}
+                        />
                       </article>
                     </li>
                   )
