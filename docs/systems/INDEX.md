@@ -1433,11 +1433,11 @@ consequence effects for graph mutation and flight), and Rampart living barriers
 ### Instances
 Temporary instanced rooms spawned on demand for missions, GM events, and tutorials.
 
-- **Models:** `InstancedRoom`
+- **Models:** `InstancedRoom` (+ `entrance_exit` FK to `ExitProfile`, the temporary one-way doorway, #696 gap 7)
 - **Enums:** `InstanceStatus` (Active, Completed)
-- **Key Functions:** `spawn_instanced_room()`, `complete_instanced_room()`
+- **Key Functions:** `spawn_instanced_room(anchor_room=, area=)` (area: explicit override, else the anchor's; an anchor mints a one-way entrance gated by the `instance_entrance` behavior package to the run's people and hidden from everyone else by the room-state serializer), `complete_instanced_room()` (also deletes the entrance)
 - **Pattern:** Lifecycle record attached to regular Room via OneToOneField; rooms with scene history are preserved
-- **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description)
+- **Integrates with:** character_sheets (owner FK), scenes (preservation check), evennia_extensions (ObjectDisplayData for description), areas (`create_exit`, area inheritance), behaviors (`instance_entrance_package`), missions (`MissionOption.instance_area`; resolution anchors the spawn and inherits a fulfilled `OrgTask`'s target-domain Area)
 - **Source:** `src/world/instances/`
 - **Details:** [instances.md](instances.md)
 ### Realms
