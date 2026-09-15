@@ -41,7 +41,9 @@ class PersonaSerializer(serializers.ModelSerializer):
     # web authoring dialog can prefill and blank-clears stay safe.
     guise_concept = serializers.SerializerMethodField()
     guise_quote = serializers.SerializerMethodField()
-    guise_personality = serializers.SerializerMethodField()
+    guise_never_do = serializers.SerializerMethodField()
+    guise_protect = serializers.SerializerMethodField()
+    guise_fear = serializers.SerializerMethodField()
     guise_background = serializers.SerializerMethodField()
     # #2378 follow-up (ruling 5) — the fading reputational layer atop a
     # permanent, provenance-free brand; None once HUMILIATION_TERM_DAYS passes.
@@ -64,7 +66,9 @@ class PersonaSerializer(serializers.ModelSerializer):
             "allow_social_actions",
             "guise_concept",
             "guise_quote",
-            "guise_personality",
+            "guise_never_do",
+            "guise_protect",
+            "guise_fear",
             "guise_background",
             "humiliation_mark",
         ]
@@ -95,8 +99,14 @@ class PersonaSerializer(serializers.ModelSerializer):
     def get_guise_quote(self, obj: Persona) -> str:
         return obj.profile.quote if obj.profile_id else ""
 
-    def get_guise_personality(self, obj: Persona) -> str:
-        return obj.profile.personality if obj.profile_id else ""
+    def get_guise_never_do(self, obj: Persona) -> str:
+        return obj.profile.never_do if obj.profile_id else ""
+
+    def get_guise_protect(self, obj: Persona) -> str:
+        return obj.profile.protect if obj.profile_id else ""
+
+    def get_guise_fear(self, obj: Persona) -> str:
+        return obj.profile.fear if obj.profile_id else ""
 
     def get_guise_background(self, obj: Persona) -> str:
         return obj.profile.background if obj.profile_id else ""
@@ -369,6 +379,7 @@ class SceneDetailSerializer(SceneListSerializer):
     active_round = serializers.SerializerMethodField()
     declared_risk = serializers.SerializerMethodField()
     clock = serializers.SerializerMethodField()
+    art_url = serializers.SerializerMethodField()
 
     class Meta(SceneListSerializer.Meta):
         model = Scene
@@ -386,6 +397,7 @@ class SceneDetailSerializer(SceneListSerializer):
             "active_round",
             "declared_risk",
             "clock",
+            "art_url",
         ]
         extra_kwargs = {"name": {"required": False}}
 
@@ -515,6 +527,26 @@ class SceneDetailSerializer(SceneListSerializer):
             return None
         return risk
 
+    @extend_schema_field(serializers.CharField(allow_null=True))
+    def get_art_url(self, obj: Scene) -> str | None:
+        """The scene's room art (#3556): room thumbnail, then area-art cascade.
+
+        Delegates to ``world.locations.services.resolve_area_art`` -- the same
+        read side the world-builder uses (#3477). No separate authoring surface;
+        the cascade already resolves the image. Returns ``None`` when the scene
+        has no location or neither the room nor any ancestor area designates art.
+        """
+        if obj.location is None:
+            return None
+        from evennia_extensions.models import RoomProfile  # noqa: PLC0415
+        from world.locations.services import resolve_area_art  # noqa: PLC0415
+
+        try:
+            room_profile = obj.location.room_profile
+        except RoomProfile.DoesNotExist:
+            return None
+        return resolve_area_art(room_profile)
+
     @staticmethod
     def _resolve_declared_risk(obj: Scene) -> str | None:
         """Delegates the precedence chain to ``world.scenes.beat_selectors``.
@@ -545,12 +577,12 @@ class HighlightReelFeaturedSerializer(serializers.Serializer):
     The collapsed featured card is *fully sealed* — it shows no pose content, type, or
     participants until the viewer expands it, at which point the frontend fetches the
     pose through the existing interaction-detail endpoint (which re-checks visibility).
-    Sending pose content here would defeat the seal, but ``vote_count``/``reaction_count``
-    (#2161) are exposed so the frontend can badge the sealed card.
+    Sending pose content here would defeat the seal, but ``reaction_count`` (#2161)
+    is exposed so the frontend can badge the sealed card. Nominations (#3738) rank
+    the reel but are never counted out loud: a nomination is invisible.
     """
 
     interaction_id = serializers.IntegerField()
-    vote_count = serializers.IntegerField()
     reaction_count = serializers.IntegerField()
 
 
@@ -559,7 +591,6 @@ class HighlightReelEntrySerializer(serializers.Serializer):
 
     interaction_id = serializers.IntegerField()
     rank = serializers.IntegerField()
-    vote_count = serializers.IntegerField()
     reaction_count = serializers.IntegerField()
 
 
@@ -694,7 +725,9 @@ class SetPersonaProfileRequestSerializer(serializers.Serializer):
     persona_id = serializers.IntegerField(min_value=1)
     concept = serializers.CharField(required=False, allow_blank=True, max_length=255)
     quote = serializers.CharField(required=False, allow_blank=True)
-    personality = serializers.CharField(required=False, allow_blank=True)
+    never_do = serializers.CharField(required=False, allow_blank=True)
+    protect = serializers.CharField(required=False, allow_blank=True)
+    fear = serializers.CharField(required=False, allow_blank=True)
     background = serializers.CharField(required=False, allow_blank=True)
 
 

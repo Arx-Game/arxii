@@ -289,6 +289,7 @@ class TestIdentitySection(TestCase):
             "worship",
             "worship_sincere",
             "current_mood",
+            "vacancy",
         }
         assert set(identity.keys()) == expected_keys
 
@@ -1511,7 +1512,9 @@ class TestStorySection(TestCase):
         cls.sheet = CharacterSheetFactory(
             character=cls.character,
             background="Born under a blood moon.",
-            personality="Quiet and calculating.",
+            never_do="Speak first.",
+            protect="The archive.",
+            fear="Open water.",
         )
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
@@ -1531,11 +1534,10 @@ class TestStorySection(TestCase):
         return response.data["story"]
 
     def test_story_has_expected_keys(self) -> None:
-        """Story section contains background, personality, and origin-story fields."""
+        """Story section contains background and origin-story fields."""
         story = self._get_story()
         assert set(story.keys()) == {
             "background",
-            "personality",
             "origin_story_state",
             "origin_slots",
         }
@@ -1545,10 +1547,17 @@ class TestStorySection(TestCase):
         story = self._get_story()
         assert story["background"] == "Born under a blood moon."
 
-    def test_story_personality(self) -> None:
-        """personality comes from CharacterSheet.personality."""
-        story = self._get_story()
-        assert story["personality"] == "Quiet and calculating."
+    def test_actor_sheet_answers(self) -> None:
+        """The three answers come from the presented profile (#3621)."""
+        url = f"/api/character-sheets/{self.character.pk}/"
+        response = self.client.get(url)
+        assert response.status_code == 200
+        block = response.data["actor_sheet"]
+        assert block["never_do"] == "Speak first."
+        assert block["protect"] == "The archive."
+        assert block["fear"] == "Open water."
+        assert block["enemy"] is None
+        assert block["introductions"] == []
 
 
 class TestStoryEmpty(TestCase):
@@ -1561,7 +1570,7 @@ class TestStoryEmpty(TestCase):
         CharacterSheetFactory(
             character=cls.character,
             background="",
-            personality="",
+            never_do="",
         )
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
         RosterTenureFactory(
@@ -1581,7 +1590,7 @@ class TestStoryEmpty(TestCase):
         assert response.status_code == 200
         story = response.data["story"]
         assert story["background"] == ""
-        assert story["personality"] == ""
+        assert response.data["actor_sheet"]["never_do"] == ""
 
 
 class TestGoalsSection(TestCase):
@@ -1628,10 +1637,10 @@ class TestGoalsSection(TestCase):
         assert len(goals) == 2
 
     def test_goal_entry_keys(self) -> None:
-        """Each goal entry has domain, points, notes."""
+        """Each goal entry has domain, horizon, ordinal, points, notes (#3621)."""
         goals = self._get_goals()
         for entry in goals:
-            assert set(entry.keys()) == {"domain", "points", "notes"}
+            assert set(entry.keys()) == {"domain", "horizon", "ordinal", "points", "notes"}
 
     def test_goal_entry_values(self) -> None:
         """Goal entries contain correct values."""
@@ -1967,7 +1976,7 @@ class TestCharacterSheetQueryCount(TestCase):
             true_height_inches=68,
             additional_desc="Fully described.",
             background="Full background.",
-            personality="Full personality.",
+            never_do="Full never.",
         )
 
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)
@@ -2128,24 +2137,35 @@ class TestCharacterSheetQueryCount(TestCase):
                 select_related onto the catalog tag)
          32.   origin_slots prefetch (#2478 — origin-story slot answers for
                 the guided-flow "finish your origin story" affordance)
-        33-36. technique payload prefetches (#2898 — applied conditions, removed
-                conditions, damage profiles, capability grants, each landing on the
-                cached_property name the effect summary reads). Four fixed queries
-                for the whole spellbook, not four per technique: the alternative
-                was showing the player a technique list that says nothing about
-                what any of the techniques do.
-        37.    technique variants prefetch (#2901 — the resonance-specialized forms
+        33-37. technique payload prefetches (#2898, #3682 — applied conditions,
+                removed conditions, damage profiles, capability grants and
+                treatments, each landing on the cached_property name the effect
+                summary reads). Five fixed queries for the whole spellbook, not
+                five per technique: the alternative was showing the player a
+                technique list that says nothing about what any of the techniques
+                do. Treatments joined in #3682 — without the prefetch the summary
+                would fall back to the cached_property and pay one query per
+                technique for the fifth table.
+        38.    technique variants prefetch (#2901 — the resonance-specialized forms
                 each known technique offers, select_related onto the resonance that
                 labels them). One fixed query, and it carries no payload prefetch of
                 its own: each form's effect summary is cached on its TechniqueVariant
                 row, so it is built once per variant for the process rather than once
                 per sheet read.
-        38.    character.threads (CharacterThreadHandler._all, #2901) — which of
+        39.    character.threads (CharacterThreadHandler._all, #2901) — which of
                 those variants this caster has actually unlocked. A per-Character
                 cached handler, so one query however many techniques are known.
+        40.    identity vacancy membership prefetch, #3648 (organization_memberships,
+                nested inside the same personas Prefetch already fetched for #21, not a
+                second top-level lookup): one fixed query for every persona's active,
+                vacancy-bearing membership, not one per persona.
+        41-42. Actor's Sheet prefetches, #3621 (enemy rows; the Introductions, journal
+               entries by kind)
         """
         url = f"/api/character-sheets/{self.character.pk}/"
-        with self.assertNumQueries(38):
+        # +2 (#3621): the Actor's Sheet block prefetches the enemy rows and the
+        # Introductions (journal entries by kind).
+        with self.assertNumQueries(42):
             response = self.client.get(url)
         assert response.status_code == 200
         # Verify all sections are populated
@@ -2202,7 +2222,7 @@ class TestPrefetchCompleteness(TestCase):
             true_height_inches=70,
             additional_desc="Described.",
             background="PF background.",
-            personality="PF personality.",
+            never_do="PF never.",
         )
 
         cls.roster_entry = RosterEntryFactory(character_sheet__character=cls.character)

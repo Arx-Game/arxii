@@ -2,18 +2,33 @@
 
 from __future__ import annotations
 
-from django.test import TestCase
+from unittest import mock
 
+from django.test import TestCase
+from django.utils import timezone
+from evennia.utils.create import create_object
+
+from evennia_extensions.factories import ObjectDBFactory
+from typeclasses.companions import CompanionObject
 from world.character_sheets.factories import CharacterSheetFactory
+from world.combat.constants import CombatAllegiance
+from world.combat.factories import CombatEncounterFactory, CombatOpponentFactory, ThreatPoolFactory
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
 from world.companions.services import (
     NoCompanionThreadError,
     companion_capacity,
+    materialize_companion_as_combat_opponent,
+    narrate_companion_loss,
+    resolve_bonded_companion,
     used_companion_capacity,
 )
 from world.magic.constants import EffectKind, GiftKind, TargetKind
 from world.magic.factories import GiftFactory, ResonanceFactory, ThreadPullEffectFactory
 from world.magic.specialization.services import provision_latent_gift_thread
+from world.scenes.constants import InteractionMode
+from world.scenes.factories import SceneFactory
+from world.scenes.models import Interaction
+from world.scenes.narrator import NARRATOR_PERSONA_NAME
 
 
 class CompanionCapacityTests(TestCase):
@@ -373,3 +388,103 @@ class StablesProgressionTests(TestCase):
         self.assertEqual(instance.level, 3)
         # Same StablesDetails row (get_or_create).
         self.assertEqual(instance.stables_details.pk, details_pk)
+
+
+def _present_companion(**kwargs):
+    """A CompanionFactory instance with a live CompanionObject (#3652)."""
+    companion = CompanionFactory(**kwargs)
+    obj = create_object(CompanionObject, key=companion.name, nohome=True)
+    companion.objectdb = obj
+    companion.save(update_fields=["objectdb"])
+    return companion
+
+
+class ResolveBondedCompanionTests(TestCase):
+    """resolve_bonded_companion (#3652): the shared 'is this ally a companion' predicate."""
+
+    def setUp(self) -> None:
+        self.sheet = CharacterSheetFactory()
+        self.encounter = CombatEncounterFactory()
+
+    def test_ally_backed_by_live_companion_resolves(self) -> None:
+        companion = _present_companion(owner=self.sheet)
+        opponent = materialize_companion_as_combat_opponent(
+            companion, self.encounter, threat_pool=ThreatPoolFactory()
+        )
+        self.assertEqual(resolve_bonded_companion(opponent), companion)
+
+    def test_enemy_opponent_resolves_to_none(self) -> None:
+        opponent = CombatOpponentFactory(encounter=self.encounter)
+        self.assertEqual(opponent.allegiance, CombatAllegiance.ENEMY)
+        self.assertIsNone(resolve_bonded_companion(opponent))
+
+    def test_ally_without_summoned_by_resolves_to_none(self) -> None:
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            allegiance=CombatAllegiance.ALLY,
+            summoned_by=None,
+        )
+        self.assertIsNone(resolve_bonded_companion(opponent))
+
+    def test_ally_without_objectdb_resolves_to_none(self) -> None:
+        opponent = CombatOpponentFactory(
+            encounter=self.encounter,
+            allegiance=CombatAllegiance.ALLY,
+            summoned_by=self.sheet,
+            objectdb_id=None,
+        )
+        self.assertIsNone(resolve_bonded_companion(opponent))
+
+    def test_ally_with_released_companion_resolves_to_none(self) -> None:
+        companion = _present_companion(owner=self.sheet)
+        opponent = materialize_companion_as_combat_opponent(
+            companion, self.encounter, threat_pool=ThreatPoolFactory()
+        )
+        companion.released_at = timezone.now()
+        companion.save(update_fields=["released_at"])
+        self.assertIsNone(resolve_bonded_companion(opponent))
+
+
+class NarrateCompanionLossTests(TestCase):
+    """narrate_companion_loss (#3652): persists and broadcasts a public death line."""
+
+    def test_creates_one_narrator_outcome_interaction(self) -> None:
+        room = ObjectDBFactory(
+            db_key="NarrateCompanionLossRoom",
+            db_typeclass_path="typeclasses.rooms.Room",
+        )
+        scene = SceneFactory(location=room)
+
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
+            narrate_companion_loss("Ash", scene)
+
+        interactions = Interaction.objects.filter(scene=scene, mode=InteractionMode.OUTCOME)
+        self.assertEqual(interactions.count(), 1)
+        interaction = interactions.get()
+        self.assertEqual(interaction.persona.name, NARRATOR_PERSONA_NAME)
+        self.assertIn("Ash", interaction.content)
+        self.assertTrue(broadcast.called)
+        broadcast_room = broadcast.call_args.args[0]
+        self.assertEqual(broadcast_room, room)
+
+    def test_no_location_persists_without_broadcasting(self) -> None:
+        scene = SceneFactory(location=None)
+
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
+            narrate_companion_loss("Ash", scene)
+
+        self.assertTrue(
+            Interaction.objects.filter(scene=scene, mode=InteractionMode.OUTCOME).exists()
+        )
+        self.assertFalse(broadcast.called)
+
+    def test_none_scene_is_a_no_op(self) -> None:
+        with mock.patch("world.scenes.interaction_services._broadcast_to_location") as broadcast:
+            narrate_companion_loss("Ash", None)
+
+        self.assertFalse(broadcast.called)
+        self.assertFalse(
+            Interaction.objects.filter(
+                mode=InteractionMode.OUTCOME, content__icontains="Ash"
+            ).exists()
+        )

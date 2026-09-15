@@ -250,7 +250,7 @@ def broadcast_gemit(  # noqa: PLR0913
         for session in SESSION_HANDLER.get_sessions():
             if reach != GemitReach.GAME_WIDE and not _session_in_audience(session, eligible):
                 continue
-            session.msg(text=(formatted, {}), type="gemit")
+            session.msg(text=(formatted, {"type": "gemit"}))
     except Exception as exc:  # noqa: BLE001 — best-effort broadcast; capture, don't propagate
         from world.player_submissions.services import report_error  # noqa: PLC0415
 
@@ -339,7 +339,7 @@ def _push_to_online_recipient(delivery: NarrativeMessageDelivery) -> None:
     if not sessions:
         return  # offline; leave for catch-up
     formatted = _format_message_for_display(delivery.message)
-    character.msg(formatted, type="narrative")
+    character.msg((formatted, {"type": "narrative"}))
     delivery.delivered_at = timezone.now()
     delivery.save(update_fields=["delivered_at"])
 

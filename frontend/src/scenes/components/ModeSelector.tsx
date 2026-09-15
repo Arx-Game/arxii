@@ -2,6 +2,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { ChevronDown, Lock } from 'lucide-react';
@@ -15,7 +16,11 @@ interface ModeSelectorProps {
    * static label, no dropdown.
    */
   locked?: boolean;
+  /** Staff see a Commands entry after a rule (#3857): every line in it goes to the server as typed. */
+  staff?: boolean;
 }
+
+export const COMMANDS_MODE = 'commands';
 
 const COMMUNICATION_MODES = [
   { key: 'pose', label: 'Pose' },
@@ -26,8 +31,17 @@ const COMMUNICATION_MODES = [
   { key: 'tt', label: 'Tabletalk' },
 ] as const;
 
-export function ModeSelector({ currentMode, onModeChange, isAtPlace, locked }: ModeSelectorProps) {
-  const currentLabel = COMMUNICATION_MODES.find((m) => m.key === currentMode)?.label ?? currentMode;
+export function ModeSelector({
+  currentMode,
+  onModeChange,
+  isAtPlace,
+  locked,
+  staff = false,
+}: ModeSelectorProps) {
+  const currentLabel =
+    currentMode === COMMANDS_MODE
+      ? 'Commands'
+      : (COMMUNICATION_MODES.find((m) => m.key === currentMode)?.label ?? currentMode);
 
   const visibleModes = isAtPlace
     ? COMMUNICATION_MODES
@@ -62,6 +76,14 @@ export function ModeSelector({ currentMode, onModeChange, isAtPlace, locked }: M
             {mode.label}
           </DropdownMenuItem>
         ))}
+        {staff && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => onModeChange(COMMANDS_MODE)}>
+              Commands
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

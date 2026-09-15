@@ -51,6 +51,11 @@ export function ConditionDetailModal({ id }: ConditionDetailModalProps) {
 
       <div className="space-y-2 text-sm" data-testid="condition-modal-body">
         <p className="text-muted-foreground">{condition.description}</p>
+        {condition.source_description && (
+          <p className="text-xs text-muted-foreground" data-testid="condition-modal-source">
+            Source: {condition.source_description}
+          </p>
+        )}
         <dl className="grid grid-cols-2 gap-1 text-xs">
           <dt className="text-muted-foreground">Severity</dt>
           <dd className="text-right font-mono">{condition.severity}</dd>

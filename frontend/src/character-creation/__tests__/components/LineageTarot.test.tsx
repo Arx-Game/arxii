@@ -36,6 +36,15 @@ vi.mock('../../api', () => ({
   // Invented-parents card (#2815)
   getGenders: vi.fn().mockResolvedValue([]),
   getSpecies: vi.fn().mockResolvedValue([]),
+  getVacancies: vi.fn().mockResolvedValue([]),
+  // LineageRecord's CG point tally (#3660).
+  getCGPointBudget: vi.fn().mockResolvedValue({
+    id: 1,
+    name: 'Standard',
+    starting_points: 100,
+    xp_conversion_rate: 1,
+    is_active: true,
+  }),
 }));
 
 // =============================================================================

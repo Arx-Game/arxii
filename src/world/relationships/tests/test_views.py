@@ -1,9 +1,11 @@
 """Tests for relationships API views."""
 
+from types import SimpleNamespace
+
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework import status
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from world.character_sheets.factories import CharacterSheetFactory
 from world.relationships.constants import TrackSign
@@ -16,6 +18,7 @@ from world.relationships.factories import (
     RelationshipTrackFactory,
     RelationshipTrackProgressFactory,
 )
+from world.relationships.views import RelationshipUpdateViewSet
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 
 
@@ -416,3 +419,96 @@ class HybridRelationshipTypeViewSetTests(TestCase):
         track_names = {r["track_name"] for r in reqs}
         assert "TrustH" in track_names
         assert "RespectH" in track_names
+
+
+class CompanionTargetWriteEndpointTests(TestCase):
+    """POST write verbs with target_companion_id (#3575)."""
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.companions.factories import CompanionFactory
+
+        cls.tenure = RosterTenureFactory()
+        cls.user = cls.tenure.player_data.account
+        cls.sheet = cls.tenure.roster_entry.character_sheet
+        cls.companion = CompanionFactory(owner=cls.sheet, name="Ash")
+        cls.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE)
+
+    def setUp(self) -> None:
+        self.client = APIClient()
+        self.client.force_authenticate(user=self.user)
+        self.factory = APIRequestFactory()
+
+    def _actor_user(self):
+        """Fake authenticated user whose ``puppet`` is the tenure-owned character.
+
+        Mirrors ``RelationshipUpdateViewSetTests``'s ``_actor_user`` (#1485): ``pk``
+        matches the character's ``db_account_id`` (unset on a factory-built
+        character) so ``_resolve_actor``'s ownership check passes without wiring a
+        real Evennia puppet session.
+        """
+        character = self.sheet.character
+        return SimpleNamespace(
+            is_authenticated=True,
+            is_staff=False,
+            pk=character.db_account_id,
+            puppet=character,
+        )
+
+    def _post(self, action: str, payload: dict):
+        url = f"/api/relationships/relationship-updates/{action}/"
+        request = self.factory.post(url, payload, format="json")
+        force_authenticate(request, user=self._actor_user())
+        view = RelationshipUpdateViewSet.as_view({"post": action})
+        return view(request)
+
+    def _payload(self, **extra):
+        body = {
+            "target_companion_id": self.companion.pk,
+            "track_id": self.track.pk,
+            "points": 3,
+            "title": "Ash at the gate",
+            "writeup": "It did not flinch.",
+        }
+        body.update(extra)
+        return body
+
+    def test_first_impression_with_companion_id(self) -> None:
+        response = self._post("first_impression", self._payload())
+        assert response.status_code == status.HTTP_200_OK, response.data
+        from world.relationships.models import CharacterRelationship
+
+        rel = CharacterRelationship.objects.get(source=self.sheet, target_companion=self.companion)
+        assert rel.is_pending is False
+
+    def test_both_target_ids_rejected(self) -> None:
+        from world.scenes.services import active_persona_for_sheet
+
+        other = CharacterSheetFactory()
+        response = self._post(
+            "first_impression",
+            self._payload(target_persona_id=active_persona_for_sheet(other).pk),
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_neither_target_id_rejected(self) -> None:
+        body = self._payload()
+        del body["target_companion_id"]
+        response = self._post("first_impression", body)
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+
+    def test_unknown_companion_rejected(self) -> None:
+        response = self._post("first_impression", self._payload(target_companion_id=999999))
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["message"] == "Target companion not found."
+
+    def test_list_row_names_the_companion(self) -> None:
+        CharacterRelationshipFactory(
+            source=self.sheet, target=None, target_companion=self.companion
+        )
+        response = self.client.get(f"/api/relationships/relationships/?source={self.sheet.pk}")
+        assert response.status_code == status.HTTP_200_OK
+        rows = response.data["results"] if isinstance(response.data, dict) else response.data
+        row = next(r for r in rows if r["target_companion"] == self.companion.pk)
+        assert row["target"] is None
+        assert row["target_name"] == "Ash"

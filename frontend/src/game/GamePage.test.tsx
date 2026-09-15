@@ -1,8 +1,12 @@
-import { act, screen, within, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, vi, beforeEach, afterEach, expect } from 'vitest';
+import type { ReactNode } from 'react';
+import { Provider } from 'react-redux';
+import { MemoryRouter } from 'react-router-dom';
 import { GamePage } from './GamePage';
 import { saveThreadTabs, loadThreadTabs } from './threadTabsStorage';
+import { saveConversationAnchor } from './playPreferences';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
 import { setAccount } from '@/store/authSlice';
@@ -10,9 +14,11 @@ import { mockAccount } from '@/test/mocks/account';
 import {
   startSession,
   setActiveSession,
+  setSessionConnectionStatus,
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
+  addFeedNote,
   addSessionMessage,
   setSceneBaseline,
   clearSceneInteractions,
@@ -24,7 +30,10 @@ import type { InteractionWsPayload } from '@/hooks/types';
 import type { DreamState } from '@/dreams/types';
 import { dreamKeys } from '@/dreams/queries';
 import { emitActionResult } from '@/hooks/actionResultBus';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fetchPlayContext } from './playQueries';
+import * as playQueries from './playQueries';
+import type { EncounterDetail } from '@/combat/types';
 
 const ACTIVE_NAME = 'Aria';
 
@@ -43,6 +52,9 @@ const rosterEntry: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 0,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -59,6 +71,9 @@ const rosterEntry2: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -87,10 +102,12 @@ vi.mock('@/roster/queries', () => ({
 // this file opens a real WebSocket; the dedicated describe block below
 // exercises the effect's own contract via `connectMock`.
 const connectMock = vi.fn(() => Promise.resolve());
+const sendMock = vi.fn();
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({
     connect: connectMock,
-    send: vi.fn(),
+    send: sendMock,
+    sendConsole: vi.fn(),
     disconnectAll: vi.fn(),
     executeAction: vi.fn(),
   }),
@@ -110,17 +127,40 @@ vi.mock('@/scenes/queries', async (importOriginal) => {
     postInteractionReaction: vi.fn().mockResolvedValue(null),
     fetchReactionEmojiCatalog: vi.fn().mockResolvedValue([]),
     fetchPendingUnlinkedActions: vi.fn(() => Promise.resolve([])),
+    fetchScene: vi.fn(() => Promise.reject(new Error('fetchScene not mocked for this test'))),
+  };
+});
+
+// ---------------------------------------------------------------------------
+// Historical reference mode's own fetch (GamePage's `play-reference` query) —
+// stubbed so reference-mode tests don't hit the network.
+// ---------------------------------------------------------------------------
+
+vi.mock('@/game/playQueries', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/game/playQueries')>();
+  return {
+    ...actual,
+    fetchPlayContext: vi.fn(() =>
+      Promise.resolve({
+        results: [],
+        before: null,
+        after: null,
+        threadId: null,
+      })
+    ),
   };
 });
 
 // ---------------------------------------------------------------------------
 // Scene toolset (#2156 Task 6): ConsentPrompt/ActionPanel/PendingActionAttachments
 // are self-fetching components with heavy internal query machinery unrelated to
-// this test's concern (toolset mounting + isAtPlace wiring) — stubbed out as
+// this test's concern (toolset mounting + isAtPlace wiring), stubbed out as
 // lightweight divs, mirroring SceneDetailPage.test.tsx's proven pattern. PlaceBar
-// is stubbed too: `isAtPlace` is derived by GamePage's OWN `['scene-places', ...]`
-// query (query-reuse, not a callback prop), so exercising it only requires
-// controlling `fetchPlaces` — it doesn't require PlaceBar's real render tree.
+// is stubbed too. As of #3810, `isAtPlace`/`currentPlaceId` are derived from
+// Redux's `roomData.viewer_place_id`, not from this query. GamePage's OWN
+// `['scene-places', ...]` query is kept only to resolve the current place's
+// display NAME, so `fetchPlaces` is still mocked here to control that name
+// lookup, but it no longer drives whether `isAtPlace` is true.
 // ---------------------------------------------------------------------------
 
 vi.mock('@/scenes/components/ConsentPrompt', () => ({
@@ -174,11 +214,32 @@ vi.mock('@/scenes/actionQueries', async (importOriginal) => {
 
 // PoseUnit → PersonaContextMenu pulls in combat/queries for the duel-challenge
 // affordance; mirrors PoseUnit.test.tsx's mock to keep it from firing real fetches.
+// Separate, module-level mock (mirrors `mockUseDreamState` below) so
+// individual tests can flip its return value mid-test — used by the
+// encounter/aftermath boundary regression guard (#3760 Task 13) to prove
+// `hasActiveEncounter` flipping doesn't unmount the composer/draft tree.
+const mockUseEncounterForScene = vi.fn().mockReturnValue({
+  data: null,
+  isLoading: false,
+  isError: false,
+});
 vi.mock('@/combat/queries', () => ({
   useOutcomeDetails: vi.fn().mockReturnValue({ data: [], isLoading: false }),
   useDispatchPlayerAction: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
-  useEncounterForScene: vi.fn().mockReturnValue({ data: null, isLoading: false, isError: false }),
-  combatKeys: { duelChallengesAll: () => ['combat', 'duel-challenges'] },
+  useEncounterForScene: (...args: [number]) => mockUseEncounterForScene(...args),
+  useCombatEncounter: vi
+    .fn()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false }),
+  useAvailableActions: vi.fn().mockReturnValue({ data: [], isLoading: false, isError: false }),
+  useConsequenceOutcomes: vi
+    .fn()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false }),
+  useJoinMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  useLeaveMutation: vi.fn().mockReturnValue({ mutateAsync: vi.fn(), isPending: false }),
+  combatKeys: {
+    duelChallengesAll: () => ['combat', 'duel-challenges'],
+    encountersForScene: (id: number) => ['combat', 'encounters-for-scene', id],
+  },
 }));
 
 vi.mock('@/battles/queries', () => ({
@@ -265,7 +326,7 @@ function seedWhisperThread() {
 // carry both together (see handleRoomStatePayload.ts), and GamePage derives the
 // Place-bar/isAtPlace room id from `session.room.id`, so the toolset needs a
 // seeded room to mount PlaceBar and derive `isAtPlace` at all.
-function seedActiveSceneWithRoom() {
+function seedActiveSceneWithRoom(viewerPlaceId: number | null = null) {
   store.dispatch(startSession(ACTIVE_NAME));
   store.dispatch(
     setSessionRoom({
@@ -281,6 +342,7 @@ function seedActiveSceneWithRoom() {
         is_owner: false,
         is_public: true,
         hub: null,
+        viewer_place_id: viewerPlaceId,
       },
     })
   );
@@ -304,7 +366,11 @@ describe('GamePage', () => {
     // #2165: the save effect now writes real localStorage during render, so
     // clear between tests to keep them isolated from each other.
     localStorage.clear();
+    // useDraftStore (#3760) persists to sessionStorage; clear between tests
+    // for the same reason.
+    sessionStorage.clear();
     mockUseDreamState.mockReturnValue({ data: undefined, isLoading: false });
+    mockUseEncounterForScene.mockReturnValue({ data: null, isLoading: false, isError: false });
     connectMock.mockClear();
   });
 
@@ -317,6 +383,38 @@ describe('GamePage', () => {
     expect(screen.getByText(/you must be logged in/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /log in/i })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register');
+  });
+
+  it('a fresh connection poses what is typed instead of sending it verbatim (#3857)', async () => {
+    store.dispatch(setAccount(mockAccount));
+    store.dispatch(startSession(ACTIVE_NAME));
+    store.dispatch(
+      setSessionRoom({
+        character: ACTIVE_NAME,
+        room: {
+          id: 2,
+          name: 'Quiet courtyard',
+          description: '',
+          thumbnail_url: null,
+          characters: [],
+          objects: [],
+          exits: [],
+          is_owner: false,
+          is_public: true,
+          hub: null,
+          viewer_place_id: null,
+        },
+      })
+    );
+    store.dispatch(setSessionConnectionStatus({ character: ACTIVE_NAME, status: true }));
+
+    renderWithProviders(<GamePage />);
+
+    expect(screen.getByRole('button', { name: /pose/i })).toBeInTheDocument();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hello everyone' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(sendMock).toHaveBeenCalledWith(ACTIVE_NAME, 'pose hello everyone');
   });
 
   it('shows game interface when authenticated', () => {
@@ -358,8 +456,15 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
+
       // Both interactions show before any thread is selected.
-      expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
       expect(screen.getByText('meet me by the fountain at midnight.')).toBeInTheDocument();
 
       const sidebar = screen.getByLabelText('Thread sidebar');
@@ -389,9 +494,12 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text inside a
+      // collapsed thread; wait on the sidebar itself (always rendered
+      // regardless of collapse state) rather than the pose content — this
+      // test's real assertions are the sidebar unread badges below, not
+      // center-feed content.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
 
       // Baseline: both threads existed at scene load, so neither shows unread yet.
       const roomButton = () =>
@@ -568,7 +676,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are about the tab
+      // filter resetting, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const sidebar = () => screen.getByLabelText('Thread sidebar');
       const whisperButton = () =>
@@ -647,7 +758,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the sidebar's
+      // own unread badges, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const sidebar = () => screen.getByLabelText('Thread sidebar');
       const roomButton = () =>
@@ -786,6 +900,78 @@ describe('GamePage', () => {
   // `sessionAttention` result as GameTopBar's alt-character avatars.
   // ---------------------------------------------------------------------------
 
+  describe('feed filter chips (#3856)', () => {
+    it('shows the strip above the scene feed; All switches the column off, a chip brings one kind back', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      const strip = screen.getByRole('toolbar', { name: 'Feed filters' });
+      expect(within(strip).getByRole('button', { name: 'Roleplay' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      );
+      fireEvent.click(within(strip).getByRole('button', { name: 'All' }));
+      expect(screen.getByTestId('feed-all-off')).toHaveTextContent(
+        'Everything is switched off. Press a chip to bring one kind back.'
+      );
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+
+      fireEvent.click(within(strip).getByRole('button', { name: 'Roleplay' }));
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      expect(within(strip).getByRole('button', { name: 'Whispers' })).toHaveAttribute(
+        'aria-pressed',
+        'false'
+      );
+    });
+
+    it('pressing Roleplay hides the poses while a note keeps showing, and the layout persists per account', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      store.dispatch(
+        addFeedNote({
+          character: ACTIVE_NAME,
+          note: {
+            kind: 'look',
+            content: 'Rain rests on the stones.',
+            timestamp: '2026-01-01T00:00:30.000Z',
+          },
+        })
+      );
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Roleplay' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
+      const stored = JSON.parse(
+        localStorage.getItem(`arx:play-preferences:v2:account:${mockAccount.id}`) ?? '{}'
+      ) as { feedChips: Array<{ id: string; on: boolean }> };
+      expect(stored.feedChips.find((chip) => chip.id === 'rp')?.on).toBe(false);
+    });
+
+    it('minimises a pose to a stub, reopens it, and dismisses it from this view only', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />);
+
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Minimise' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: new RegExp(`^${ACTIVE_NAME} · `) }));
+      expect(await screen.findByTestId('pose-unit')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      expect(screen.queryByTestId('pose-unit')).not.toBeInTheDocument();
+      // Nothing was deleted: the interaction is still in the session and on the server.
+      expect(store.getState().game.sessions[ACTIVE_NAME].sceneInteractions).toHaveLength(1);
+    });
+  });
+
   describe('puppet tab bar attention badge (#2166)', () => {
     it('badges a background puppet tab with a numeric direct count on an unseen whisper', async () => {
       store.dispatch(setAccount(mockAccount));
@@ -909,7 +1095,10 @@ describe('GamePage', () => {
       store.dispatch(setActiveSession(ACTIVE_NAME));
 
       const { container } = renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the puppet tab
+      // bar badges, not center-feed collapse state.
+      await screen.findByLabelText('Thread sidebar');
 
       const tabBar = container.querySelector('.mb-2.flex.gap-2.border-b') as HTMLElement;
       const ariaTab = within(tabBar).getByText(ACTIVE_NAME).closest('button') as HTMLElement;
@@ -956,9 +1145,9 @@ describe('GamePage', () => {
       expect(screen.queryByTestId('pending-action-attachments')).not.toBeInTheDocument();
     });
 
-    it('passes isAtPlace=true to ModeSelector, offering the tt mode, when a place has viewer_is_present:true', async () => {
+    it('passes isAtPlace=true to ModeSelector, offering the tt mode, when roomData.viewer_place_id is set (#3810)', async () => {
       store.dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
+      seedActiveSceneWithRoom(9);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: true }],
       });
@@ -972,9 +1161,9 @@ describe('GamePage', () => {
       expect(await screen.findByText('Tabletalk')).toBeInTheDocument();
     });
 
-    it('does not offer the tt mode when the viewer is not present at any place', async () => {
+    it('does not offer the tt mode when roomData.viewer_place_id is null (#3810)', async () => {
       store.dispatch(setAccount(mockAccount));
-      seedActiveSceneWithRoom();
+      seedActiveSceneWithRoom(null);
       mockFetchPlaces.mockResolvedValue({
         results: [{ id: 9, name: 'The Fountain', description: '', viewer_is_present: false }],
       });
@@ -986,6 +1175,203 @@ describe('GamePage', () => {
       await user.click(trigger);
 
       expect(screen.queryByText('Tabletalk')).not.toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Encounter/aftermath boundary (#3760 Task 13): `hasActiveEncounter`
+  // (derived from `useEncounterForScene`) only ever flows into
+  // `GameRightSidebar` -> `FocusPanel`, a subtree the composer/draft tree
+  // (`GameWindow` -> `CommandInput` -> `useDraftStore`) is never nested
+  // inside or keyed on. This is a regression guard, not a fix: reading
+  // GamePage's render tree (the `center` prop always renders `GameWindow`
+  // unconditionally; `hasActiveEncounter` is only threaded into the
+  // `sidebar` prop's `GameRightSidebar`) confirms flipping the flag cannot
+  // unmount the composer today. The test proves it by simulating a live,
+  // uncommitted draft and flipping the encounter mock mid-test.
+  // ---------------------------------------------------------------------------
+
+  describe('encounter/aftermath boundary (#3760 Task 13)', () => {
+    it('does not reset or unmount the draft-store-owning composer when hasActiveEncounter flips', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      // A single stable provider tree across both render calls: `render`'s
+      // own `rerender` re-renders exactly the element it's given, so
+      // reusing `renderWithProviders` for the second call would swap in a
+      // bare `<GamePage />` with no Provider/QueryClientProvider/Router and
+      // unmount+remount the whole tree — masking the very question this
+      // test asks (same pattern as `SceneDetailPage.test.tsx`'s lingering-
+      // encounter coverage).
+      const queryClient = new QueryClient();
+      function wrap(ui: ReactNode) {
+        return (
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <MemoryRouter>{ui}</MemoryRouter>
+            </QueryClientProvider>
+          </Provider>
+        );
+      }
+
+      const { rerender } = render(wrap(<GamePage />));
+
+      const textarea = (await screen.findByRole('textbox')) as HTMLTextAreaElement;
+      fireEvent.change(textarea, { target: { value: 'An uncommitted draft mid-fight.' } });
+      expect(textarea).toHaveValue('An uncommitted draft mid-fight.');
+
+      // Exactly one draft is persisted, under one storage key, before the
+      // encounter starts.
+      const draftKeysBefore = Object.keys(sessionStorage).filter((k) =>
+        k.startsWith('arx:play-draft:v2:')
+      );
+      expect(draftKeysBefore).toHaveLength(1);
+      const [draftKey] = draftKeysBefore;
+      const storedBefore = sessionStorage.getItem(draftKey);
+      expect(storedBefore).toContain('An uncommitted draft mid-fight.');
+
+      // An encounter starts on the active scene — this is what GamePage's
+      // own `hasActiveEncounter` flag would flip to true on the next poll.
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+      rerender(wrap(<GamePage />));
+
+      // The composer must not have remounted: the same textarea instance
+      // still shows the unsent draft...
+      const textareaAfter = screen.getByRole('textbox') as HTMLTextAreaElement;
+      expect(textareaAfter).toBe(textarea);
+      expect(textareaAfter).toHaveValue('An uncommitted draft mid-fight.');
+
+      // ...and the persisted draft is untouched: same key, same content. A
+      // remount of `useDraftStore` would have re-hydrated from storage (a
+      // no-op here) but a *reset* (unmount with no persist, or a fresh key)
+      // would show up as either a missing/second key or altered content.
+      const draftKeysAfter = Object.keys(sessionStorage).filter((k) =>
+        k.startsWith('arx:play-draft:v2:')
+      );
+      expect(draftKeysAfter).toEqual(draftKeysBefore);
+      expect(sessionStorage.getItem(draftKey)).toBe(storedBefore);
+    });
+
+    it('passes viewerCanGm and scene to CombatRail once the scene detail resolves (#3761)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 5, scene: 42 },
+        isLoading: false,
+        isError: false,
+      });
+      const scenesQueries = await import('@/scenes/queries');
+      vi.mocked(scenesQueries.fetchScene).mockResolvedValue({
+        id: 42,
+        name: 'Test Scene',
+        description: '',
+        date_started: '2026-09-01T00:00:00Z',
+        location: null,
+        participants: [],
+        is_active: true,
+        is_owner: false,
+        viewer_can_gm: true,
+        positions: [],
+        position_adjacency: [],
+        persona_positions: [],
+        active_round: null,
+        position_nodes: [],
+        position_edges: [],
+        running_beat: null,
+        declared_risk: null,
+        clock: null,
+        art_url: null,
+      });
+
+      renderWithProviders(<GamePage />);
+      await waitFor(() => {
+        expect(screen.getByTestId('rail-tab-gm')).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Outcome banner lingering (final-review Finding I1, ported from
+  // SceneDetailPage.tsx's own #3551 pattern): the scene's active-encounter
+  // poll (useEncounterForScene, 15s interval) drops a completed encounter
+  // from its result — without lingeringEncounterId, that would unmount
+  // CombatRail (and its outcome banner) before the player has a chance to
+  // see/dismiss it. This proves the rail survives the drop and only
+  // disappears once the player actually clicks Dismiss.
+  // ---------------------------------------------------------------------------
+
+  describe('outcome banner lingering (final-review Finding I1)', () => {
+    it('keeps CombatRail mounted after the poll drops the encounter, until the player dismisses it', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithRoom();
+
+      mockUseEncounterForScene.mockReturnValue({
+        data: { id: 7 },
+        isLoading: false,
+        isError: false,
+      });
+
+      // The encounter itself has already completed by the time the player
+      // sees it — CombatTurnPanel renders the outcome banner (with a real
+      // Dismiss button) for a `status: 'completed'` encounter.
+      const combatQueries = await import('@/combat/queries');
+      vi.mocked(combatQueries.useCombatEncounter).mockReturnValue({
+        data: {
+          id: 7,
+          scene: 100,
+          round_number: 3,
+          is_participant: true,
+          is_gm: false,
+          status: 'completed',
+          outcome: 'attacker_decisive',
+          participants: [],
+        } as unknown as EncounterDetail,
+        isLoading: false,
+        isError: false,
+      } as ReturnType<typeof combatQueries.useCombatEncounter>);
+
+      // One stable provider tree across both render calls (mirrors the
+      // #3760 Task 13 boundary test above) — `renderWithProviders` on a
+      // second call would remount the whole tree and mask the question.
+      const queryClient = new QueryClient();
+      function wrap(ui: ReactNode) {
+        return (
+          <Provider store={store}>
+            <QueryClientProvider client={queryClient}>
+              <MemoryRouter>{ui}</MemoryRouter>
+            </QueryClientProvider>
+          </Provider>
+        );
+      }
+
+      const { rerender } = render(wrap(<GamePage />));
+
+      expect(await screen.findByTestId('combat-rail')).toBeInTheDocument();
+      expect(await screen.findByTestId('aftermath-dismiss')).toBeInTheDocument();
+
+      // The scene's active-encounter list poll drops the completed encounter
+      // (as it does 15s after completion) WITHOUT the player having clicked
+      // dismiss yet.
+      mockUseEncounterForScene.mockReturnValue({
+        data: null,
+        isLoading: false,
+        isError: false,
+      });
+      rerender(wrap(<GamePage />));
+
+      // The rail (and its outcome banner) must still be mounted — this is
+      // the lingering behavior the fix adds.
+      expect(screen.getByTestId('combat-rail')).toBeInTheDocument();
+      expect(screen.getByTestId('aftermath-dismiss')).toBeInTheDocument();
+
+      // Now the player actually dismisses the outcome.
+      fireEvent.click(screen.getByTestId('aftermath-dismiss'));
+
+      expect(screen.queryByTestId('combat-rail')).not.toBeInTheDocument();
     });
   });
 
@@ -1004,9 +1390,10 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are about tab
+      // narrowing, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
         .getByText(/whisper/i)
         .closest('button') as HTMLElement;
@@ -1056,7 +1443,12 @@ describe('GamePage', () => {
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
 
-      await screen.findByText('stretches languidly.');
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
@@ -1093,9 +1485,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertions are the tab strip's
+      // own unread badges, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = () =>
         within(sidebar)
           .getByText(/whisper/i)
@@ -1153,7 +1546,12 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = () =>
@@ -1185,9 +1583,10 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
-
-      const sidebar = screen.getByLabelText('Thread sidebar');
+      // Task 8's default-collapse can hide the room pose text; wait on the
+      // sidebar itself instead — this test's assertion is that the tab
+      // strip clears on scene change, not center-feed collapse state.
+      const sidebar = await screen.findByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
         .getByText(/whisper/i)
         .closest('button') as HTMLElement;
@@ -1219,7 +1618,12 @@ describe('GamePage', () => {
 
       const user = userEvent.setup();
       renderWithProviders(<GamePage />);
-      await screen.findByText('stretches languidly.');
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need (when
+      // Task 8's default-collapse started the room thread collapsed) is now
+      // a no-op with nothing to click, so it's been removed.
 
       const sidebar = screen.getByLabelText('Thread sidebar');
       const whisperRow = within(sidebar)
@@ -1235,7 +1639,7 @@ describe('GamePage', () => {
       // the room feed AND re-anchor the tab strip to the room tab —
       // `threading.showAll()` alone only resets the filter/mute state, not
       // the active conversation tab.
-      const allButton = within(sidebar).getByRole('button', { name: 'All' });
+      const allButton = within(sidebar).getByRole('button', { name: 'All', hidden: true });
       await user.click(allButton);
 
       expect(await screen.findByText('stretches languidly.')).toBeInTheDocument();
@@ -1550,6 +1954,209 @@ describe('GamePage', () => {
 
       expect(connectMock).not.toHaveBeenCalled();
       expect(store.getState().game.active).toBeNull();
+    });
+  });
+
+  describe('historical reference query identity', () => {
+    it('threads reference.timestamp through to fetchPlayContext, not just the pose id', async () => {
+      store.dispatch(setAccount(mockAccount));
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=room&referenceKey=room&referencePose=42' +
+            '&referenceTimestamp=2026-01-15T10%3A00%3A00.000Z',
+        ],
+      });
+
+      await waitFor(() => {
+        expect(fetchPlayContext).toHaveBeenCalledWith(
+          expect.objectContaining({
+            id: '42',
+            timestamp: '2026-01-15T10:00:00.000Z',
+          })
+        );
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // "Mark conversation read" wiring (#3759 review finding C1)
+  // ---------------------------------------------------------------------------
+
+  describe('mark conversation read wiring (#3759 review finding C1)', () => {
+    it('sends the real server-format conversation ref ("scene:<id>"), not GameWindow\'s bare conversationKey, through the actual GameWindow -> ThreadedNarrativeReader wiring', async () => {
+      // This is the test that would have caught the production bug: it
+      // renders the REAL GameWindow (not a fixture handing the reader a
+      // pre-built prop) and asserts what the wiring actually sends the
+      // service call, not just that the call happened.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      const markSpy = vi
+        .spyOn(playQueries, 'markConversationRead')
+        .mockResolvedValue({ marked: 0 });
+
+      renderWithProviders(<GamePage />);
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('button', { name: /mark conversation read/i }));
+
+      // seedActiveSceneWithPose() sets the active scene's id to 100 --
+      // GameWindow must send "scene:100" (matching _conversation()'s own
+      // format), never the bare "100" it uses for the localStorage
+      // conversationKey.
+      expect(markSpy).toHaveBeenCalledWith('scene:100', expect.any(String));
+
+      markSpy.mockRestore();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Return to live restores the prior live reading position (#3759 Decision #5)
+  // ---------------------------------------------------------------------------
+
+  describe('return to live', () => {
+    it('flips the reader back out of read-only mode on the same instance, not a remount (Decision #5 precondition)', async () => {
+      // The exact pixel-level anchor restoration this depends on is unit-
+      // tested exhaustively in ThreadedNarrativeReader.test.tsx (readOnly
+      // true->false transition). This test proves the WIRING precondition
+      // that makes that mechanism reachable from GamePage: referencing a
+      // pose inside the SAME live scene (scene:100, matching
+      // seedActiveSceneWithPose's scene id) keeps `sceneFeed.sceneId` — and
+      // therefore GameWindow's `key={sceneFeed.sceneId}` — unchanged across
+      // the reference/live boundary, so clicking "Return to live" updates
+      // props on the existing ThreadedNarrativeReader instance instead of
+      // mounting a fresh one.
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=scene&referenceKey=scene:100&referencePose=1' +
+            '&referenceTimestamp=2026-01-01T00%3A00%3A00.000Z',
+        ],
+      });
+
+      // In reference mode: the "Reading history" banner and its "Draft
+      // preserved" composer replacement are up, and Reply (readOnly-gated)
+      // is hidden.
+      await waitFor(() => {
+        expect(screen.getByText(/reading history/i)).toBeInTheDocument();
+      });
+      expect(screen.getByText(/draft preserved for your live conversation/i)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^reply$/i })).not.toBeInTheDocument();
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /return to live/i }));
+
+      // Back in live mode: the live pose is showing again and Reply is back
+      // — readOnly flipped false on GameWindow's ThreadedNarrativeReader,
+      // which is exactly the transition ThreadedNarrativeReader's own
+      // return-to-live effect (Effect B) restores the prior anchor on.
+      await waitFor(() => {
+        expect(screen.queryByText(/reading history/i)).not.toBeInTheDocument();
+      });
+      expect(screen.getByText('stretches languidly.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^reply$/i })).toBeInTheDocument();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // GameWindow.tsx's #2165 per-tab scroll memory vs #3759's anchor bypass
+  // (review findings I2/I5)
+  // ---------------------------------------------------------------------------
+
+  describe('per-tab scroll memory vs anchor bypass (#3759 review findings I2/I5)', () => {
+    it('keeps remembering the room tab scroll position after its first anchor-based visit, instead of being permanently disabled (#3759 review finding I2)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+      seedWhisperThread();
+      // A persisted anchor for this scene, present from the very first
+      // render -- this is what makes GameWindow.tsx's bypass condition
+      // (`activeConvKey === 'room' && no per-tab entry yet && an anchor
+      // exists`) true on this FIRST room visit.
+      saveConversationAnchor('100', {
+        anchors: { threads: { poseId: '1', threadId: null, offsetPx: 0 }, chronological: null },
+        expanded: [],
+      });
+
+      const user = userEvent.setup();
+      renderWithProviders(<GamePage />);
+      // #3759 Wave 9 fix-round-1 re-review: this fixture's poses carry no
+      // `thread_id`, so they all render as un-replied "legacy" poses (I-5) --
+      // plain, always-visible, no per-thread collapse state to fight. The
+      // "Expand loaded threads" setup step this test used to need is now a
+      // no-op with nothing to click, so it's been removed.
+
+      const feedContainer = screen.getByTestId('feed-scroll-container');
+      // jsdom has no layout engine, so scrollHeight/clientHeight default to
+      // 0 -- handleFeedScroll's "is this near the bottom" check
+      // (`scrollHeight - scrollTop - clientHeight < 8`) would then read as
+      // true for ANY scrollTop, spuriously marking the feed "pinned" and
+      // making a later, unrelated re-render snap back to the bottom. Real
+      // dimensions make 300 genuinely NOT near the bottom, matching what a
+      // real browser would compute.
+      Object.defineProperty(feedContainer, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(feedContainer, 'clientHeight', { value: 700, configurable: true });
+      // Simulate the user scrolling the room feed to some specific spot —
+      // handleFeedScroll records this under the 'room' key.
+      feedContainer.scrollTop = 300;
+      fireEvent.scroll(feedContainer);
+
+      const sidebar = screen.getByLabelText('Thread sidebar');
+      const whisperButton = within(sidebar)
+        .getByText(/whisper/i)
+        .closest('button');
+      await user.click(whisperButton as HTMLElement);
+      const roomButton = within(sidebar).getByText('The Grand Ballroom').closest('button');
+      await user.click(roomButton as HTMLElement);
+
+      // On this SECOND visit to the room tab, a `saved` entry now exists
+      // (recorded above), so GameWindow.tsx's normal #2165 per-tab-memory
+      // path applies — not the anchor bypass (scoped to the FIRST visit
+      // only), and not a fresh scroll-to-bottom. A pre-fix, overly broad
+      // bypass ("any anchor exists for this scene" rather than "no `saved`
+      // entry yet") would have ignored the remembered 300 here every time,
+      // permanently disabling #2165's memory for the room tab the moment
+      // any anchor was ever saved.
+      expect(feedContainer.scrollTop).toBe(300);
+    });
+
+    it('never records a raw room-tab scroll position while reading a historical reference, so it cannot corrupt the position restored on Return to live (#3759 review finding I5)', async () => {
+      store.dispatch(setAccount(mockAccount));
+      seedActiveSceneWithPose();
+
+      renderWithProviders(<GamePage />, {
+        initialEntries: [
+          '/game?referenceKind=scene&referenceKey=scene:100&referencePose=1' +
+            '&referenceTimestamp=2026-01-01T00%3A00%3A00.000Z',
+        ],
+      });
+      await waitFor(() => {
+        expect(screen.getByText(/reading history/i)).toBeInTheDocument();
+      });
+
+      // Reference mode falls `activeConvKey` back to 'room' (`conversationTabs`
+      // is undefined while referencing), so a scroll here targets the SAME
+      // per-tab memory key the live room view reads from.
+      const feedContainer = screen.getByTestId('feed-scroll-container');
+      // Real dimensions (jsdom otherwise defaults scrollHeight/clientHeight
+      // to 0, which makes ANY scrollTop spuriously read as "pinned near the
+      // bottom" and would let an unrelated later pin-to-bottom re-render
+      // reset scrollTop to 0 for a reason that has nothing to do with the
+      // read-only guard this test is actually checking).
+      Object.defineProperty(feedContainer, 'scrollHeight', { value: 2000, configurable: true });
+      Object.defineProperty(feedContainer, 'clientHeight', { value: 700, configurable: true });
+      feedContainer.scrollTop = 999;
+      fireEvent.scroll(feedContainer);
+
+      const user = userEvent.setup();
+      await user.click(screen.getByRole('button', { name: /return to live/i }));
+
+      // Without the read-only guard on handleFeedScroll, this 999 would have
+      // been recorded under 'room' while browsing the reference, and
+      // GameWindow's normal per-tab-memory path (no anchor exists in this
+      // test, so its bypass never applies either) would restore exactly that
+      // corrupted value here.
+      expect(feedContainer.scrollTop).not.toBe(999);
     });
   });
 });

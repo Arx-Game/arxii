@@ -1,0 +1,448 @@
+"""Services for assigning persisted interactions to anchored narrative threads."""
+
+from __future__ import annotations
+
+from collections.abc import Iterable
+from dataclasses import dataclass
+from datetime import datetime
+from uuid import UUID
+
+from django.db.models import Min
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
+from evennia.accounts.models import AccountDB
+
+from world.scenes.constants import InteractionMode
+from world.scenes.models import Interaction, InteractionThread
+from world.scenes.place_models import InteractionReceiver, Place
+
+
+class InteractionThreadError(ValueError):
+    """A reply target cannot be used without exposing why to the caller.
+
+    ``venue_hint`` is an optional actionable follow-on line, shared with
+    ``reachability.UnreachableError``'s field of the same name (#3787 decision
+    3). No holder mismatch in this module names one today - the one case that
+    used to (a Place-held draft answering a Scene-held target) was reclassified
+    as reachable, not refused (#3811 / ADR-0293 correction) - but the slot
+    stays for whichever future refusal earns ratified copy next.
+    """
+
+    code = "reply_target_unavailable"
+
+    def __init__(
+        self,
+        message: str = "Cannot reply to that interaction.",
+        *,
+        venue_hint: str | None = None,
+    ) -> None:
+        super().__init__(message)
+        # The player-facing sentence, held explicitly so a view never has to
+        # serialise the exception itself. `str(exc)` on an exception is how a
+        # stack trace or a database message reaches a response body by
+        # accident (CodeQL py/stack-trace-exposure, and the "never str(exc) in
+        # responses" standard in django_notes.md).
+        self.detail = message
+        self.venue_hint = venue_hint
+
+
+@dataclass(frozen=True)
+class ReplyTarget:
+    """The serializer-level reference used to select an interaction thread."""
+
+    interaction_id: int
+    timestamp: datetime
+
+
+def coerce_reply_target(value: object) -> ReplyTarget | None:
+    """Normalize a REST or action-command reply target."""
+    if value is None:
+        return None
+    if isinstance(value, ReplyTarget):
+        return value
+    if not isinstance(value, dict) or set(value) != {"id", "timestamp"}:
+        raise _unavailable()
+    try:
+        interaction_id = int(value["id"])
+        timestamp_value = value["timestamp"]
+    except (TypeError, ValueError):
+        raise _unavailable() from None
+    if interaction_id < 1:
+        raise _unavailable()
+    if isinstance(timestamp_value, datetime):
+        timestamp = timestamp_value
+    elif isinstance(timestamp_value, str):
+        timestamp = parse_datetime(timestamp_value)
+    else:
+        timestamp = None
+    if timestamp is None or not timezone.is_aware(timestamp):
+        raise _unavailable()
+    return ReplyTarget(interaction_id=interaction_id, timestamp=timestamp)
+
+
+@dataclass(frozen=True)
+class HolderSignature:
+    """Persisted holder identity used to keep a thread in one context."""
+
+    kind: str
+    holder_id: int | None = None
+    room_id: int | None = None
+    scene_id: int | None = None
+    party_key: str | None = None
+
+    def as_thread_kwargs(self) -> dict[str, object]:
+        """Return fields suitable for creating an ``InteractionThread``."""
+        return {
+            "holder_kind": self.kind,
+            "holder_id": self.holder_id,
+            "room_id": self.room_id,
+            "scene_id": self.scene_id,
+            "party_key": self.party_key,
+        }
+
+
+def _unavailable(
+    message: str = "Cannot reply to that interaction.",
+    *,
+    venue_hint: str | None = None,
+) -> InteractionThreadError:
+    return InteractionThreadError(message, venue_hint=venue_hint)
+
+
+def _reachable_from_place(
+    interaction_signature: HolderSignature,
+    target_signature: HolderSignature,
+) -> bool:
+    """A Place-held draft can always answer a Scene-held target in the same scene.
+
+    #3811 / ADR-0293 decision 1 correction: a Place declutters room chat, it does
+    not isolate its occupants from it - a player seated at a table is still
+    present in the room and could already read the room-wide (or combat OUTCOME)
+    row being answered, so replying to it is not an audience widening. The
+    direction that stays refused is the reverse: a Scene-drafted reply cannot
+    reach a Place-held target, since that table talk was never visible outside
+    the table.
+    """
+    return (
+        interaction_signature.kind == InteractionThread.HolderKind.PLACE
+        and target_signature.kind == InteractionThread.HolderKind.SCENE
+        and interaction_signature.scene_id is not None
+        and interaction_signature.scene_id == target_signature.scene_id
+    )
+
+
+def _account_party(interaction: Interaction) -> tuple[int, ...]:
+    """Return the pinned account party for a receiver-scoped interaction."""
+    receiver_account_ids = tuple(
+        sorted(
+            account_id
+            for account_id in InteractionReceiver.objects.filter(
+                interaction_id=interaction.pk,
+                timestamp=interaction.timestamp,
+            ).values_list("account_id", flat=True)
+            if account_id is not None
+        )
+    )
+    if (
+        interaction.writer_account_id is None
+        or len(receiver_account_ids)
+        != InteractionReceiver.objects.filter(
+            interaction_id=interaction.pk,
+            timestamp=interaction.timestamp,
+        )
+        .exclude(account_id__isnull=True)
+        .count()
+    ):
+        raise _unavailable()
+    return tuple(sorted((interaction.writer_account_id, *receiver_account_ids)))
+
+
+def holder_signature(interaction: Interaction) -> HolderSignature:
+    """Return the holder identity that can safely contain an interaction."""
+    if interaction.mode == InteractionMode.WHISPER:
+        party = _account_party(interaction)
+        return HolderSignature(
+            kind=InteractionThread.HolderKind.WHISPER, party_key=",".join(map(str, party))
+        )
+
+    if interaction.place_id is not None:
+        try:
+            room_id = Place.objects.values_list("room_id", flat=True).get(pk=interaction.place_id)
+        except Place.DoesNotExist:
+            raise _unavailable() from None
+        if room_id is None:
+            raise _unavailable()
+        return HolderSignature(
+            kind=InteractionThread.HolderKind.PLACE,
+            holder_id=interaction.place_id,
+            room_id=room_id,
+            scene_id=interaction.scene_id,
+        )
+
+    if interaction.scene_id is not None:
+        return HolderSignature(
+            kind=InteractionThread.HolderKind.SCENE,
+            holder_id=interaction.scene_id,
+            scene_id=interaction.scene_id,
+        )
+
+    raise _unavailable()
+
+
+def _receiver_accounts(interaction: Interaction) -> tuple[int, ...]:
+    """Return the pinned receiver-account set for audience-preserving replies."""
+    rows = InteractionReceiver.objects.filter(
+        interaction_id=interaction.pk,
+        timestamp=interaction.timestamp,
+    )
+    account_ids = tuple(sorted(rows.values_list("account_id", flat=True)))
+    if any(account_id is None for account_id in account_ids):
+        raise _unavailable()
+    return account_ids
+
+
+def _same_holder(thread: InteractionThread, signature: HolderSignature) -> bool:
+    return (
+        thread.holder_kind == signature.kind
+        and thread.holder_id == signature.holder_id
+        and thread.room_id == signature.room_id
+        and thread.scene_id == signature.scene_id
+        and thread.party_key == signature.party_key
+    )
+
+
+def thread_anchor_ids(thread_ids: Iterable[object]) -> dict[object, int]:
+    """Map each thread id to its ANCHOR: the id of its first member (#3787).
+
+    ``Interaction.id`` comes from a single sequence (``arxii_interaction_id_seq``,
+    owned by the partitioned table, every partition defaulting from it), so it is
+    globally unique and monotonic across partitions. That is one unambiguous total
+    order, so ``Min("id")`` is the anchor with no tiebreak needed and no
+    denormalized copy of it on the thread row.
+
+    Negative ids cannot reach this ordering. They exist only inside
+    ``push_ephemeral_interaction``'s payload, which never writes a row, and
+    ``coerce_reply_target`` refuses an ``interaction_id`` below 1 outright, so no
+    ephemeral id can be a thread member or even be named as a reply target.
+
+    ONE query for the whole set, and deliberately not ``DISTINCT ON``: that is
+    Postgres-only and would pass CI's parity tier while failing every local
+    ``--sqlite`` run.
+    """
+    ids = [_as_thread_uuid(thread_id) for thread_id in thread_ids if thread_id is not None]
+    if not ids:
+        return {}
+    rows = (
+        Interaction.objects.filter(thread_id__in=ids)
+        .values("thread_id")
+        .annotate(anchor_id=Min("id"))
+    )
+    return {row["thread_id"]: row["anchor_id"] for row in rows}
+
+
+def thread_anchor_id(thread_id: object) -> int | None:
+    """The anchor id for one thread, or ``None`` when it has no members.
+
+    Normalizes the key for the same reason ``thread_roots`` does: a str spelling
+    looked up in a UUID-keyed dict misses silently, and here that ``None`` would
+    read as "not the anchor" and answer with a spurious split and move.
+    """
+    key = _as_thread_uuid(thread_id)
+    return thread_anchor_ids([key]).get(key)
+
+
+def _as_thread_uuid(value: object) -> UUID:
+    """Coerce a thread id to ``UUID`` so str and UUID spellings compare equal."""
+    return value if isinstance(value, UUID) else UUID(str(value))
+
+
+def thread_roots(thread_ids: Iterable[object]) -> dict[object, object]:
+    """Map each thread id to the top of its nesting tree (#3787).
+
+    ``root`` is not stored. It is a walk up ``parent``, which is the only
+    structural link there is, and the approved spec keeps nesting shallow
+    ("shallow thread presentation", acceptance case A05), so the walk is short.
+    Storing it instead cost a real bug on this branch: as a ``SET_NULL`` column it
+    could be cleared while ``parent`` survived, and the two copies of one fact
+    drifted. A derived root cannot.
+
+    Iterative rather than a recursive CTE: at these depths a level-at-a-time walk
+    is simpler, and it is plain ORM, so it behaves identically on the SQLite fast
+    tier and on Postgres. ``DISTINCT ON`` and friends would pass CI's parity tier
+    and fail every local ``--sqlite`` run.
+
+    Query count is one per LEVEL of nesting, not one per row or one per row per
+    level: each pass resolves every thread still unaccounted for across the whole
+    page at once. A flat page costs one query.
+    """
+    # Normalize to UUID first. Callers reach this from both sides of the
+    # serializer boundary - model attributes hand over UUIDs, serialized rows hand
+    # over their string spelling - and a dict keyed by one will silently miss every
+    # lookup made with the other, resolving every thread to itself.
+    ids = {_as_thread_uuid(thread_id) for thread_id in thread_ids if thread_id is not None}
+    if not ids:
+        return {}
+
+    parent_of: dict[object, object | None] = {}
+    pending = set(ids)
+    while pending:
+        rows = InteractionThread.objects.filter(pk__in=pending).values_list("pk", "parent_id")
+        resolved = False
+        for pk, parent_id in rows:
+            parent_of[pk] = parent_id
+            resolved = True
+        if not resolved:
+            break
+        pending = {
+            parent_id
+            for parent_id in parent_of.values()
+            if parent_id is not None and parent_id not in parent_of
+        }
+
+    roots: dict[object, object] = {}
+    for thread_id in ids:
+        current = thread_id
+        # `seen` bounds the walk. A cycle is unreachable by construction (a thread
+        # is created pointing at one that already exists), so this is loop
+        # termination, not a guard against a state the writer can produce.
+        seen = {current}
+        while (parent_id := parent_of.get(current)) is not None and parent_id not in seen:
+            seen.add(parent_id)
+            current = parent_id
+        roots[thread_id] = current
+    return roots
+
+
+def thread_root_id(thread_id: object) -> object | None:
+    """The top of one thread's tree, or ``None`` when the thread IS the root."""
+    key = _as_thread_uuid(thread_id)
+    root = thread_roots([key]).get(key)
+    return None if root == key else root
+
+
+def _thread_for_target(
+    target: Interaction,
+    signature: HolderSignature,
+) -> InteractionThread:
+    """Return the thread *target* should be answered in, moving it when it must.
+
+    Three cases, and the move is the whole point of the shape (#3787):
+
+    - The target belongs to no thread yet. Open one and move the target into it,
+      as its first member and therefore its anchor.
+    - The target is already its thread's anchor, so it has been answered before.
+      The new reply simply joins that thread, which is what makes two people
+      answering the same blow share one exchange.
+    - The target is in a thread but is NOT its anchor, so it is an unanswered
+      reply. Split a child thread off, whose ``parent`` is the thread the target
+      came from, and MOVE the target into it. Its old membership is replaced by
+      the parent link, so provenance survives.
+
+    The holder kwargs always derive from the target's own signature, so a moved
+    row keeps the venue it was written in; a pre-existing thread still has to
+    match that signature before anything is written to it.
+
+    No lock of its own is needed: the caller already holds ``select_for_update``
+    on ``target``, and every reply to that row contends on it.
+
+    The target's CURRENT membership is read straight out of the column rather than
+    off the instance. Evennia's idmapper metaclass returns the process-cached
+    instance and discards the freshly loaded values
+    (``evennia/utils/idmapper/models.py``), so the caller's
+    ``select_for_update().get()`` takes the row lock but can still hand back a
+    ``thread_id`` this process cached earlier. A queryset-level write
+    (``.update()``, ``bulk_update``) changes the row in the database without
+    touching any cached instance, so an instance already held in this process keeps
+    the old value indefinitely, until something reloads it by a route that does not
+    consult the map. A stale ``None`` would make this open a NEW thread and move
+    the target out of a live exchange, re-rooting it.
+
+    ``values_list`` returns raw column data and never consults the identity map,
+    which ``refresh_from_db`` cannot promise: it reloads through the same queryset,
+    so the map can hand it the very instance it is refreshing.
+    """
+    existing_id = (
+        Interaction.objects.filter(pk=target.pk).values_list("thread_id", flat=True).first()
+    )
+    existing = None if existing_id is None else InteractionThread.objects.get(pk=existing_id)
+    if existing is None:
+        thread = InteractionThread.objects.create(**signature.as_thread_kwargs())
+        target.thread = thread
+        target.save(update_fields=["thread"])
+        return thread
+
+    if not _same_holder(existing, signature):
+        raise _unavailable()
+
+    if thread_anchor_id(existing.pk) == target.pk:
+        return existing
+
+    thread = InteractionThread.objects.create(
+        parent_id=existing.pk,
+        **signature.as_thread_kwargs(),
+    )
+    target.thread = thread
+    target.save(update_fields=["thread"])
+    return thread
+
+
+def assign_interaction_thread(
+    *,
+    interaction: Interaction,
+    reply_target: ReplyTarget,
+    account_id: int | None,
+) -> InteractionThread:
+    """Put an interaction in the thread anchored at its reply target (#3787).
+
+    The caller must invoke this while the interaction write is atomic. The target is
+    locked before its visibility, holder, and existing thread are used.
+
+    The target is a MEMBER of the thread, not an edge pointed at from outside it, and
+    answering an unanswered reply MOVES that reply into a new child thread (see
+    ``_thread_for_target``). A pose nobody has answered keeps a null ``thread``.
+
+    Returns the thread it assigned. ``create_interaction`` discards it - the thread is
+    already on ``interaction`` by then - but the telnet and test callers that drive
+    this service directly assert on it, so it is the return value rather than None.
+    """
+    if account_id is None or not timezone.is_aware(reply_target.timestamp):
+        raise _unavailable()
+
+    try:
+        account = AccountDB.objects.get(pk=account_id)
+    except AccountDB.DoesNotExist:
+        raise _unavailable() from None
+
+    target_queryset = (
+        Interaction.objects.visible_to(account)
+        .filter(pk=reply_target.interaction_id, timestamp=reply_target.timestamp)
+        .select_for_update()
+    )
+    try:
+        target = target_queryset.get()
+    except Interaction.DoesNotExist:
+        raise _unavailable() from None
+
+    if target.timestamp >= interaction.timestamp:
+        raise _unavailable()
+
+    target_signature = holder_signature(target)
+    interaction_signature = holder_signature(interaction)
+    if target_signature != interaction_signature and not _reachable_from_place(
+        interaction_signature, target_signature
+    ):
+        raise _unavailable()
+
+    if target.place_id is not None and _receiver_accounts(target) != _receiver_accounts(
+        interaction
+    ):
+        raise _unavailable()
+    if target.mode == InteractionMode.WHISPER and _account_party(target) != _account_party(
+        interaction
+    ):
+        raise _unavailable()
+
+    thread = _thread_for_target(target, target_signature)
+    interaction.thread = thread
+    interaction.save(update_fields=["thread"])
+    return thread

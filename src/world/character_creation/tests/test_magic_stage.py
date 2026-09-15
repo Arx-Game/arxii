@@ -11,8 +11,14 @@ from world.character_creation.constants import (
     SHROUDWATCH_ACADEMY_NAME,
     STARTING_TECHNIQUE_PICKS_TARGET,
     UNBOUND_TRADITION_NAME,
+    OfferChapter,
+    TraditionState,
 )
-from world.character_creation.factories import CharacterDraftFactory
+from world.character_creation.factories import (
+    BeginningTraditionFactory,
+    CharacterDraftFactory,
+    DistinctionOfferFactory,
+)
 from world.character_creation.services import (
     _finalize_academy_entrance_obligation,
     finalize_magic_data,
@@ -22,10 +28,9 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
 from world.distinctions.factories import DistinctionEffectFactory, DistinctionFactory
 from world.fatigue.models import FatiguePool
-from world.magic.constants import GlimpseTagAxis
+from world.magic.constants import GiftKind, GlimpseTagAxis
 from world.magic.factories import (
     GiftFactory,
-    GlimpseTagDistinctionSuggestionFactory,
     GlimpseTagFactory,
     PathGiftGrantFactory,
     ResonanceFactory,
@@ -34,6 +39,7 @@ from world.magic.factories import (
     TraditionGiftGrantFactory,
 )
 from world.magic.models import CharacterAnima
+from world.magic.seeds_cast import get_standalone_cast_template
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
 from world.narrative.constants import NarrativeCategory
 from world.narrative.models import NarrativeMessageDelivery
@@ -41,6 +47,7 @@ from world.skills.factories import SkillFactory
 from world.societies.constants import ObligationOrigin, ObligationState
 from world.societies.factories import OrganizationFactory
 from world.societies.models import OrganizationObligation
+from world.species.factories import SpeciesFactory, SpeciesGiftGrantFactory
 from world.traits.factories import SkillTraitFactory, StatTraitFactory
 
 
@@ -57,16 +64,26 @@ class MagicStageValidationTest(TestCase):
         cls.tradition = TraditionFactory()
         cls.gift = GiftFactory(name="Shadow Majesty")
 
+        cast_template = get_standalone_cast_template()
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
-        path_grant.starter_techniques.set(cls.pool_techniques)
+        cls.pool_techniques = TechniqueFactory.create_batch(
+            2, gift=cls.gift, action_template=cast_template
+        )
+        cls.unready_technique = TechniqueFactory(gift=cls.gift)
+        path_grant.starter_techniques.set([*cls.pool_techniques, cls.unready_technique])
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
 
         # A gift with no TraditionGiftGrant for this tradition — never a valid pick.
         cls.other_gift = GiftFactory(name="Not Granted")
+        cls.species = SpeciesFactory(name="Species Technique Test")
+        cls.species_gift = GiftFactory(name="Species Minor Gift", kind=GiftKind.MINOR)
+        SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(
+            gift=cls.species_gift, action_template=get_standalone_cast_template()
+        )
 
         # A technique belonging to the gift but attached to neither the pool nor
         # the tradition technique set — outside the (path, gift, tradition) availability set.
@@ -79,6 +96,7 @@ class MagicStageValidationTest(TestCase):
         cls.inactive_skill = SkillFactory(is_active=False)
 
     def _draft(self, **draft_data_overrides):
+        selected_species = draft_data_overrides.pop("selected_species", None)
         draft_data = {
             "selected_gift_id": self.gift.id,
             "selected_technique_ids": [self.pool_techniques[0].id],
@@ -90,6 +108,7 @@ class MagicStageValidationTest(TestCase):
         return CharacterDraftFactory(
             selected_path=self.path,
             selected_tradition=self.tradition,
+            selected_species=selected_species,
             draft_data=draft_data,
         )
 
@@ -127,6 +146,21 @@ class MagicStageValidationTest(TestCase):
         draft = self._draft(selected_technique_ids=[self.special_technique.id])
         errors = compute_magic_errors(draft)
         assert errors == []
+
+    def test_species_gift_technique_is_available(self):
+        draft = self._draft(
+            selected_species=self.species,
+            selected_technique_ids=[self.species_technique.id],
+        )
+        errors = compute_magic_errors(draft)
+        assert errors == []
+
+    def test_unready_technique_fails_with_readiness_reason(self):
+        draft = self._draft(selected_technique_ids=[self.unready_technique.id])
+
+        errors = compute_magic_errors(draft)
+
+        self.assertEqual(errors, ["Selected technique is unfinished (no action template)"])
 
     def test_too_many_techniques_fails(self):
         """starting_technique_picks defaults to 1 — picking 2 is over budget."""
@@ -250,17 +284,24 @@ class AcademyEntranceObligationTest(TestCase):
 
     Unbound Prospects (no Tradition sponsor) start OWED to Shroudwatch
     Academy; every other tradition is sponsored and starts SETTLED_BY_SPONSOR.
-    Resolved by name — a defensive, logged skip covers an unseeded Academy.
+    "Unbound" is read via ``tradition_is_self_taught`` (the tradition's slate
+    state, #3675), never its name; a defensive, logged skip covers an unseeded
+    Academy.
     """
 
-    def _make_draft_and_sheet(self, *, tradition_name: str):
+    def _make_draft_and_sheet(self, *, tradition_name: str, self_taught: bool = False):
         sheet = CharacterSheetFactory()
-        draft = CharacterDraftFactory(selected_tradition=TraditionFactory(name=tradition_name))
+        tradition = TraditionFactory(name=tradition_name)
+        if self_taught:
+            BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         return draft, sheet
 
     def test_unbound_tradition_creates_owed_obligation(self):
         academy = OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         finalize_magic_data(draft, sheet)
 
@@ -286,7 +327,9 @@ class AcademyEntranceObligationTest(TestCase):
         )
 
     def test_no_academy_seeded_skips_without_crash(self):
-        draft, sheet = self._make_draft_and_sheet(tradition_name=UNBOUND_TRADITION_NAME)
+        draft, sheet = self._make_draft_and_sheet(
+            tradition_name=UNBOUND_TRADITION_NAME, self_taught=True
+        )
 
         with self.assertLogs("world.character_creation.services", level="WARNING") as logs:
             finalize_magic_data(draft, sheet)
@@ -299,9 +342,9 @@ class AcademyEntranceObligationTest(TestCase):
 
     def test_idempotent_second_call_creates_no_duplicate(self):
         OrganizationFactory(name=SHROUDWATCH_ACADEMY_NAME, tradition=None)
-        draft = CharacterDraftFactory(
-            selected_tradition=TraditionFactory(name=UNBOUND_TRADITION_NAME)
-        )
+        tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
+        BeginningTraditionFactory(tradition=tradition, state=TraditionState.SELF_TAUGHT)
+        draft = CharacterDraftFactory(selected_tradition=tradition)
         sheet = CharacterSheetFactory()
 
         _finalize_academy_entrance_obligation(draft, sheet)
@@ -419,7 +462,13 @@ class CGGiftOptionEndpointTest(TestCase):
 
         cls.available_gift = GiftFactory(name="Shadow Majesty")
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.available_gift)
-        path_grant.starter_techniques.set(TechniqueFactory.create_batch(2, gift=cls.available_gift))
+        path_grant.starter_techniques.set(
+            TechniqueFactory.create_batch(
+                2,
+                gift=cls.available_gift,
+                action_template=get_standalone_cast_template(),
+            )
+        )
         TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.available_gift)
 
         # Authored tradition grant, but neither pool nor signature techniques attached.
@@ -507,12 +556,21 @@ class CGTechniqueOptionEndpointTest(TestCase):
         cls.gift = GiftFactory()
 
         path_grant = PathGiftGrantFactory(path=cls.path, gift=cls.gift)
-        cls.pool_techniques = TechniqueFactory.create_batch(2, gift=cls.gift)
+        cast_template = get_standalone_cast_template()
+        cls.pool_techniques = TechniqueFactory.create_batch(
+            2, gift=cls.gift, action_template=cast_template
+        )
         path_grant.starter_techniques.set(cls.pool_techniques)
 
         tradition_grant = TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
-        cls.special_technique = TechniqueFactory(gift=cls.gift)
+        cls.special_technique = TechniqueFactory(gift=cls.gift, action_template=cast_template)
         tradition_grant.special_techniques.set([cls.special_technique])
+        cls.species = SpeciesFactory(name="Endpoint Species Technique Test")
+        cls.species_gift = GiftFactory(name="Endpoint Species Gift", kind=GiftKind.MINOR)
+        SpeciesGiftGrantFactory(species=cls.species, gift=cls.species_gift)
+        cls.species_technique = TechniqueFactory(
+            gift=cls.species_gift, action_template=get_standalone_cast_template()
+        )
 
     def setUp(self):
         self.client = APIClient()
@@ -544,6 +602,19 @@ class CGTechniqueOptionEndpointTest(TestCase):
         assert by_id[self.special_technique.id]["is_tradition_technique"] is True
         for pool_technique in self.pool_techniques:
             assert by_id[pool_technique.id]["is_tradition_technique"] is False
+
+    def test_species_techniques_are_listed_and_flagged(self):
+        draft = self._draft(selected_species=self.species)
+
+        response = self.client.get(
+            "/api/character-creation/technique-options/",
+            {"draft_id": draft.id, "gift_id": self.gift.id},
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        row = next(row for row in response.data if row["id"] == self.species_technique.id)
+        assert row["is_species_technique"] is True
+        assert row["is_tradition_technique"] is False
 
     def test_category_resolved_from_effect_type(self):
         draft = self._draft()
@@ -648,16 +719,59 @@ class CGGlimpseTagEndpointTest(TestCase):
         # Meta.ordering = ["axis", "sort_order", "name"] — CONSEQUENCE < TONE alphabetically.
         assert slugs == [consequence_a.slug, tone_a.slug, tone_b.slug]
 
-    def test_embeds_suggested_distinctions(self):
+    def test_embeds_offers(self):
         tag = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-x")
         distinction = DistinctionFactory(name="Fated")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=distinction)
+        offer = DistinctionOfferFactory(
+            distinction=distinction,
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag,
+            player_line="A line.",
+        )
 
         response = self.client.get("/api/character-creation/glimpse-tags/")
 
         assert response.status_code == status.HTTP_200_OK
         row = next(r for r in response.data if r["slug"] == "tone-x")
-        assert row["suggested_distinctions"] == [{"id": distinction.id, "name": "Fated"}]
+        assert row["offers"] == [
+            {
+                "offer_id": offer.id,
+                "distinction_id": distinction.id,
+                "name": "Fated",
+                "player_line": "A line.",
+                "cost_per_rank": distinction.cost_per_rank,
+                "max_rank": distinction.max_rank,
+            }
+        ]
+
+    def test_offers_not_cross_contaminated_between_tags(self):
+        """Two tags' offers, fetched in one batched-Prefetch request, land on their
+        OWN tag only - not merged and not swapped (#3816 Task 9 fix round).
+
+        A query-count assertion alone can't catch cross-contamination: it would
+        stay green even if every tag were served every other tag's offers, since
+        the total row/query count is unchanged either way.
+        """
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tag-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="tag-b")
+        offer_a = DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Owned By A"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag_a,
+        )
+        offer_b = DistinctionOfferFactory(
+            distinction=DistinctionFactory(name="Owned By B"),
+            chapter=OfferChapter.GLIMPSE,
+            glimpse_tag=tag_b,
+        )
+
+        response = self.client.get("/api/character-creation/glimpse-tags/")
+
+        assert response.status_code == status.HTTP_200_OK
+        row_a = next(r for r in response.data if r["slug"] == "tag-a")
+        row_b = next(r for r in response.data if r["slug"] == "tag-b")
+        assert [o["offer_id"] for o in row_a["offers"]] == [offer_a.id]
+        assert [o["offer_id"] for o in row_b["offers"]] == [offer_b.id]
 
     def test_axis_filter(self):
         GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="tone-only")
@@ -682,10 +796,10 @@ class CGGlimpseTagEndpointTest(TestCase):
         )
 
     def test_query_count_constant_as_tags_grow(self):
-        """Prefetch guard: same query count with 2 tags (+suggestions) as with 6.
+        """Prefetch guard: same query count with 2 tags (+offers) as with 6.
 
-        ``GlimpseTag``/``GlimpseTagDistinctionSuggestion`` are SharedMemoryModel
-        (idmapper) rows — once an instance is fetched with its prefetch populated,
+        ``GlimpseTag``/``DistinctionOffer`` are SharedMemoryModel (idmapper)
+        rows, once an instance is fetched with its prefetch populated,
         re-fetching the *same* identity-mapped row skips the prefetch query
         entirely (a feature, not a bug: see the ``sharedmemory-model`` skill).
         That would make the second capture look artificially cheaper rather than
@@ -695,7 +809,8 @@ class CGGlimpseTagEndpointTest(TestCase):
         from django.db import connection
         from django.test.utils import CaptureQueriesContext
 
-        from world.magic.models import GlimpseTag, GlimpseTagDistinctionSuggestion
+        from world.character_creation.models import DistinctionOffer
+        from world.magic.models import GlimpseTag
 
         url = "/api/character-creation/glimpse-tags/"
 
@@ -706,8 +821,12 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc-a")
         tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc-b")
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_a, distinction=DistinctionFactory())
-        GlimpseTagDistinctionSuggestionFactory(tag=tag_b, distinction=DistinctionFactory())
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
 
         with CaptureQueriesContext(connection) as small:
             response = self.client.get(url)
@@ -715,16 +834,39 @@ class CGGlimpseTagEndpointTest(TestCase):
 
         for i in range(4):
             tag = GlimpseTagFactory(axis=GlimpseTagAxis.WITNESS, slug=f"qc-extra-{i}")
-            GlimpseTagDistinctionSuggestionFactory(tag=tag, distinction=DistinctionFactory())
+            DistinctionOfferFactory(
+                distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
+            )
 
         GlimpseTag.flush_instance_cache()
-        GlimpseTagDistinctionSuggestion.flush_instance_cache()
+        DistinctionOffer.flush_instance_cache()
 
         with CaptureQueriesContext(connection) as big:
             response = self.client.get(url)
         assert response.status_code == status.HTTP_200_OK
 
         assert len(big.captured_queries) == len(small.captured_queries)
+
+    def test_list_is_three_queries_offers_batched_via_prefetch(self):
+        """Session lookup + tags query + one batched offers query (ADR-0298) -
+        fed via ``get_queryset()``'s ``Prefetch`` onto the ``offers``
+        ``PrunedCachedProperty``, never one query per tag."""
+        url = "/api/character-creation/glimpse-tags/"
+        self.client.get(url)  # warm the session row's first-request INSERT
+
+        tag_a = GlimpseTagFactory(axis=GlimpseTagAxis.TONE, slug="qc3-a")
+        tag_b = GlimpseTagFactory(axis=GlimpseTagAxis.CONSEQUENCE, slug="qc3-b")
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_a
+        )
+        DistinctionOfferFactory(
+            distinction=DistinctionFactory(), chapter=OfferChapter.GLIMPSE, glimpse_tag=tag_b
+        )
+
+        with self.assertNumQueries(3):
+            response = self.client.get(url)
+
+        assert response.status_code == status.HTTP_200_OK
 
     def test_path_filter_excludes_tags_not_on_path(self):
         """Tags with a non-empty paths M2M not containing path_id are excluded."""

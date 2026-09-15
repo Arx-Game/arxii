@@ -3,10 +3,12 @@ Progression services package.
 
 This package organizes progression services into logical modules:
 - awards: Functions for awarding XP and development points
+- xp_ledger: The account pool + the per-character attribution beside it (#3748)
 - cg_conversion: CG-to-XP conversion for character creation
 - spends: Functions for spending XP on unlocks
 - kudos: Functions for awarding and claiming kudos
-- scene_rewards: Scene completion rewards (vote budget bonuses)
+- nominations: Weekly nominations for good RP (#3738)
+- scene_rewards: Scene completion side effects (reaction-window settlement)
 """
 
 # Import key functions from submodules for convenience
@@ -23,6 +25,11 @@ from world.progression.services.kudos import (
     claim_kudos,
     claim_kudos_for_xp,
 )
+from world.progression.services.nominations import (
+    nominate,
+    nominations_by_account,
+    withdraw_nomination,
+)
 from world.progression.services.scene_rewards import on_scene_finished
 from world.progression.services.skill_development import (
     award_check_development,
@@ -34,14 +41,7 @@ from world.progression.services.spends import (
     get_available_unlocks_for_character,
     spend_xp_on_unlock,
 )
-from world.progression.services.voting import (
-    cast_vote,
-    get_or_create_vote_budget,
-    get_vote_state,
-    get_votes_by_voter,
-    increment_scene_bonus,
-    remove_vote,
-)
+from world.progression.services.xp_ledger import spend_xp_for_character
 from world.progression.types import AwardResult, ClaimResult, KudosXPResult
 
 # For backwards compatibility, make key functions available at package level
@@ -57,18 +57,16 @@ __all__ = [
     "award_xp",
     "calculate_check_dev_points",
     "calculate_level_up_requirements",
-    "cast_vote",
     "check_requirements_for_unlock",
     "claim_kudos",
     "claim_kudos_for_xp",
     "get_available_unlocks_for_character",
     "get_development_suggestions_for_character",
-    "get_or_create_vote_budget",
     "get_or_create_xp_tracker",
-    "get_vote_state",
-    "get_votes_by_voter",
-    "increment_scene_bonus",
+    "nominate",
+    "nominations_by_account",
     "on_scene_finished",
-    "remove_vote",
+    "spend_xp_for_character",
     "spend_xp_on_unlock",
+    "withdraw_nomination",
 ]

@@ -29,17 +29,17 @@ class TaskOutcomeRouteAdmin(admin.ModelAdmin):
 
 @admin.register(OrgTask)
 class OrgTaskAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["target_room"]  # rooms are searched, never scrolled
     list_display = ("id", "template", "org", "status", "target_kind", "deadline", "created_at")
     list_filter = ("status", "target_kind")
-    raw_id_fields = (
+    raw_id_fields = [
         "template",
         "org",
         "issued_by",
-        "target_room",
         "target_org",
         "target_domain",
         "target_persona",
-    )
+    ]
 
 
 @admin.register(TaskFulfillment)

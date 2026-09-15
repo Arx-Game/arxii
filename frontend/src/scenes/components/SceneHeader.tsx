@@ -263,60 +263,78 @@ export function SceneHeader({ scene, onRefresh }: Props) {
   }
 
   return (
-    <div>
-      <h1 className="mb-2 text-xl font-bold">{scene.name}</h1>
-      {activeEncounter != null && (
-        // #2197: combat now renders in-scene (CombatRail on this same page),
-        // so this is a plain status indicator, not a navigation link — a
-        // link to this scene from this scene would be self-referential.
-        <Badge
-          variant="destructive"
-          className="mb-2 inline-block text-xs"
-          data-testid="scene-header-combat-badge"
+    <div className="relative overflow-hidden rounded-md" data-testid="scene-header">
+      {scene.art_url && (
+        <div
+          className="absolute inset-0 bg-cover bg-center"
+          style={{ backgroundImage: `url(${scene.art_url})` }}
+          data-testid="scene-header-backdrop"
         >
-          In Combat
-        </Badge>
-      )}
-      <DeclaredRiskBadge risk={scene.declared_risk} sceneId={scene.id} />
-      {scene.clock != null && (
-        <SceneClockPips size={scene.clock.size} filled={scene.clock.filled} className="mb-2 ml-2" />
-      )}
-      <p className="mb-4">{scene.description}</p>
-      {(scene.is_owner || scene.is_active) && (
-        <div className="mb-2 flex gap-2">
-          {scene.is_owner && (
-            <>
-              <Button size="sm" onClick={() => setEditing(true)}>
-                Edit
-              </Button>
-              {scene.is_active && (
-                <SubmitButton
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => end.mutate()}
-                  isLoading={end.isPending}
-                  type="button"
-                >
-                  End Scene
-                </SubmitButton>
-              )}
-            </>
-          )}
-          {scene.is_active && (
-            <Button size="sm" variant="outline" onClick={() => onRefresh?.()}>
-              Refresh
-            </Button>
-          )}
-          <RoundStateBadge activeRound={scene.active_round} />
-          <RoundSettingsDialog scene={scene} />
+          {/* Scrim (#3556): keeps title/badge text legible over the room art
+              without a hardcoded color, fading from the theme background at the
+              bottom (where text sits) to more of the art showing at the top. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-background via-background/85 to-background/40" />
         </div>
       )}
-      {scene.is_owner && scene.is_active && <GrantSceneGMControl />}
-      {scene.is_active && (
-        <p className="mb-4 text-xs text-muted-foreground">
-          Auto-refreshes every minute while active
-        </p>
-      )}
+      <div className={scene.art_url ? 'relative px-3 py-3' : undefined}>
+        <h1 className="mb-2 text-xl font-bold">{scene.name}</h1>
+        {activeEncounter != null && (
+          // #2197: combat now renders in-scene (CombatRail on this same page),
+          // so this is a plain status indicator, not a navigation link — a
+          // link to this scene from this scene would be self-referential.
+          <Badge
+            variant="destructive"
+            className="mb-2 inline-block text-xs"
+            data-testid="scene-header-combat-badge"
+          >
+            In Combat
+          </Badge>
+        )}
+        <DeclaredRiskBadge risk={scene.declared_risk} sceneId={scene.id} />
+        {scene.clock != null && (
+          <SceneClockPips
+            size={scene.clock.size}
+            filled={scene.clock.filled}
+            className="mb-2 ml-2"
+          />
+        )}
+        <p className="mb-4">{scene.description}</p>
+        {(scene.is_owner || scene.is_active) && (
+          <div className="mb-2 flex gap-2">
+            {scene.is_owner && (
+              <>
+                <Button size="sm" onClick={() => setEditing(true)}>
+                  Edit
+                </Button>
+                {scene.is_active && (
+                  <SubmitButton
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => end.mutate()}
+                    isLoading={end.isPending}
+                    type="button"
+                  >
+                    End Scene
+                  </SubmitButton>
+                )}
+              </>
+            )}
+            {scene.is_active && (
+              <Button size="sm" variant="outline" onClick={() => onRefresh?.()}>
+                Refresh
+              </Button>
+            )}
+            <RoundStateBadge activeRound={scene.active_round} />
+            <RoundSettingsDialog scene={scene} />
+          </div>
+        )}
+        {scene.is_owner && scene.is_active && <GrantSceneGMControl />}
+        {scene.is_active && (
+          <p className="mb-4 text-xs text-muted-foreground">
+            Auto-refreshes every minute while active
+          </p>
+        )}
+      </div>
     </div>
   );
 }

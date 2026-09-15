@@ -25,7 +25,7 @@ from world.codex.constants import CodexKnowledgeStatus
 |-------|---------|------------|
 | `CodexCategory` | Top-level lore category (e.g., "Arx Lore", "Umbral Lore") | `name`, `description`, `display_order` |
 | `CodexSubject` | Nestable subject within a category | `category`, `parent` (self-FK, nullable), `name`, `description`, `display_order` |
-| `CodexEntry` | Individual lore entry that can be learned/taught | `subject`, `name`, `summary`, `lore_content`, `mechanics_content`, `prerequisites` (M2M self), `share_cost`, `learn_cost`, `learn_difficulty`, `learn_threshold`, `is_public`, `modifier_target` (OneToOne to `mechanics.ModifierTarget`), `subject_item_template`/`subject_item_instance` (nullable FKs → `items.ItemTemplate`/`ItemInstance`, #2540 exact-pointer ruling — optional "this entry is about an item" pointer, instance narrows template) |
+| `CodexEntry` | Individual lore entry that can be learned/taught | `subject`, `name`, `summary`, `quote` (#3776 Task 10 — optional italic intro line atop the entry's page, blank hides it; general-purpose, not worship-specific; not yet exposed by `CodexEntryListSerializer`/`CodexEntryDetailSerializer`), `lore_content`, `mechanics_content`, `prerequisites` (M2M self), `share_cost`, `learn_cost`, `learn_difficulty`, `learn_threshold`, `is_public`, `modifier_target` (OneToOne to `mechanics.ModifierTarget`), `subject_item_template`/`subject_item_instance` (nullable FKs → `items.ItemTemplate`/`ItemInstance`, #2540 exact-pointer ruling — optional "this entry is about an item" pointer, instance narrows template) |
 
 ### Character Knowledge (models.Model - per-character instances)
 
@@ -54,6 +54,75 @@ Species are the exception: there is no `SpeciesCodexGrant` table. `Species.codex
 is a plain nullable FK on the species row (one entry per species, not many), and
 `_finalize_species_codex` walks `Species.parent` so a subspecies character receives
 its own entry *and* every ancestor's — see `docs/systems/species.md`.
+
+---
+
+## Filing an entry under a second subject (ADR-0275)
+
+`CodexEntry.subject` stays the entry's one canonical home: its detail page lives
+there, and it is the subject `resolve_codex_links` prefers when a wikilink could
+match more than one entry. `CodexEntryFiling(entry, subject, sort_order)` is a
+separate cross-listing: it puts the entry in a second subject's listing without
+moving it or duplicating its `lore_content`/`mechanics_content`. An entry may have
+any number of filings, one per additional subject (unique on `(entry, subject)`);
+`sort_order` controls display position within that subject's listing, mirroring
+`CodexEntry.display_order` for the entry's own subject.
+
+`world.codex.services.file_entry_under(entry, subject, *, sort_order=0)` and
+`unfile_entry(entry, subject)` are the only sanctioned mutation path:
+
+- `file_entry_under` raises `ValidationError` when `subject` is the entry's own
+  `entry.subject`, since that would duplicate the entry's canonical listing rather than add a
+  second one. It is idempotent: filing the same `(entry, subject)` pair twice
+  returns the existing row rather than raising `IntegrityError`.
+- `unfile_entry` removes a filing if one exists and is a no-op otherwise.
+
+Both directions are navigable: `entry.filings` (all of an entry's cross-listings)
+and `subject.filed_entries` (all filings pointing at a subject). Deleting either
+the entry or the subject CASCADEs and removes the filing row.
+
+`CodexEntryFiling` carries `NaturalKeyMixin` on `(entry, subject)` and joins
+`CONTENT_MODELS` (`core_management/content_export.py`) right after
+`codex.codexentry`, so filings round-trip through the content export/import
+pipeline the same as the entries they point at.
+
+### API surface: listings and `also_filed_under`
+
+`CodexEntryViewSet`'s `?subject=<id>` filter (`CodexEntryFilter.filter_subject`,
+`world/codex/filters.py`) returns the union of the subject's canonical entries and
+entries filed under it (`Q(subject_id=value) | Q(filings__subject_id=value)`,
+`.distinct()`), so a filed entry appears once in the filed subject's listing rather
+than being duplicated or missing. Canonical entries sort first; filed entries follow
+in their filing's `sort_order`. Knowledge/visibility gating (`_visible_entry_ids`) is
+applied before the subject filter, so a filing never surfaces an entry the reader
+cannot otherwise see.
+
+Both `CodexEntryListSerializer` and `CodexEntryDetailSerializer` (via
+`EntryKnowledgeMixin`) expose `also_filed_under`, a list of every subject the entry
+is filed under besides its own:
+
+```json
+"also_filed_under": [
+  {"subject_id": 12, "name": "Rites of Passage", "breadcrumb_path": [...]}
+]
+```
+
+`breadcrumb_path` mirrors `subject_path`'s shape (the same `breadcrumb_cache`
+fallback pattern used elsewhere in the serializer). The view builds a flat
+`entry_id -> [CodexEntryFiling]` map in `get_serializer_context` (one query, grouped
+in Python) rather than `prefetch_related`-ing `CodexEntry.filings` directly: `CodexEntry`
+is a `SharedMemoryModel`, and Django's prefetch bookkeeping stamps the result onto the
+instance itself, which would leak one request's filings onto the next request that
+reuses the same idmapper-cached instance under a different filter.
+
+**Frontend rendering.** `EntryDetail.tsx` (`frontend/src/codex/components/`) renders
+`also_filed_under` as a quiet "Also filed under:" line beneath the canonical
+breadcrumb, one link per filing (reusing `BreadcrumbLink`, extracted from
+`Breadcrumb.tsx` for this purpose), absent entirely when the entry carries no
+filings. `EntryGrid.tsx`, which lists a subject's entries, glosses a card with
+"Filed from {subject_name}" whenever the entry's canonical `subject` differs from
+the subject currently being browsed, so a filed entry's browser card discloses its
+real home.
 
 ---
 
@@ -238,7 +307,7 @@ All models registered with filters, search, and inline editing:
 
 - `CodexCategoryAdmin` - With inline subjects, shows subject count
 - `CodexSubjectAdmin` - With inline entries, filterable by category
-- `CodexEntryAdmin` - Full editing with fieldsets for content, costs, learning, prerequisites, and modifier type link; `filter_horizontal` for prerequisites
+- `CodexEntryAdmin` - Full editing with fieldsets for content, costs, learning, prerequisites, and modifier type link; `filter_horizontal` for prerequisites; inline `CodexEntryFilingInline` for the entry's secondary subject listings
 - `CharacterCodexKnowledgeAdmin` - Read-only debugging with status/progress fields
 - `CodexClueAdmin` - Clue management with autocomplete to entries
 - `CharacterClueKnowledgeAdmin` - Read-only debugging for found clues

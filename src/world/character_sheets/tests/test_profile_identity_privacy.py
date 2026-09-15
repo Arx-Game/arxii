@@ -16,6 +16,7 @@ from world.distinctions.services import mint_distinction_secret
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.constants import PersonaType
 from world.scenes.factories import PersonaDiscoveryFactory, PersonaFactory
+from world.societies.factories import OrganizationMembershipFactory, VacancyFactory
 from world.traits.factories import CharacterTraitValueFactory, StatTraitFactory
 
 
@@ -79,6 +80,38 @@ class ProfileIdentityPrivacyTests(APITestCase):
         data = self._get(sheet, staff).data
         assert data["identity"]["concept"] == "A secret villain"
         assert len(data["personas"]) == 3
+
+    def test_non_owner_sees_presumed_importance_but_not_real_importance(self) -> None:
+        """A held vacancy shows what outsiders assume; the family's real reckoning stays
+
+        owner/staff-only, mirroring the age-axes leak-table pattern (#3648).
+        """
+        sheet = self._character_sheet(AccountFactory(), fake_active=False)
+        vacancy = VacancyFactory(name="Low thug", importance=1, presumed_importance=7)
+        OrganizationMembershipFactory(persona=sheet.primary_persona, vacancy=vacancy)
+        viewer = AccountFactory()
+        self._character_sheet(viewer)
+
+        data = self._get(sheet, viewer).data
+        assert data["identity"]["vacancy"]["name"] == "Low thug"
+        assert data["identity"]["vacancy"]["presumed_importance"] == 7
+        assert data["identity"]["vacancy"]["importance"] is None
+
+    def test_owner_sees_the_real_importance_of_their_held_vacancy(self) -> None:
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=False)
+        vacancy = VacancyFactory(name="Low thug", importance=1, presumed_importance=7)
+        OrganizationMembershipFactory(persona=sheet.primary_persona, vacancy=vacancy)
+
+        data = self._get(sheet, owner).data
+        assert data["identity"]["vacancy"]["importance"] == 1
+
+    def test_no_held_vacancy_shows_null(self) -> None:
+        owner = AccountFactory()
+        sheet = self._character_sheet(owner, fake_active=False)
+
+        data = self._get(sheet, owner).data
+        assert data["identity"]["vacancy"] is None
 
     def test_non_owner_of_a_public_named_character_sees_bio_but_not_the_alt_list(self) -> None:
         sheet = self._character_sheet(AccountFactory(), fake_active=False, extra_alt=True)

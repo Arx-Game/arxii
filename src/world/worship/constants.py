@@ -21,3 +21,22 @@ class MiracleTrigger(models.TextChoices):
 
     INCAPACITATED = "incapacitated", "Character Incapacitated"
     NEAR_DEATH = "near_death", "Character Near Death"
+
+
+class BeingResonanceTier(models.TextChoices):
+    """How strongly a being favors a resonance (#3776).
+
+    FAVORED acts done in the being's name pay 2x; ASSOCIATED pays 1x.
+    """
+
+    FAVORED = "favored", "Favored"
+    ASSOCIATED = "associated", "Associated"
+
+
+class BeingRelationshipValence(models.TextChoices):
+    """The public-facing nature of a relationship between two beings (#3776)."""
+
+    ALLY = "ally", "Ally"
+    RIVAL = "rival", "Rival"
+    FEUD = "feud", "Feud"
+    UNKNOWN = "unknown", "Unclear"

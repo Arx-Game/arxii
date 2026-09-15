@@ -18,15 +18,30 @@ from world.magic.factories import (
     TechniqueFactory,
     TechniqueRemovedConditionFactory,
 )
-from world.magic.models.techniques import ConditionTargetKind
+from world.magic.models.techniques import ConditionTargetKind, TechniqueTreatment
 from world.magic.services.targeting import derive_target_relationship
 from world.magic.services.technique_effects import (
     invalidate_technique_payload_caches,
     summarize_technique_effects,
     technique_effect_authoring_gaps,
+    technique_is_not_castable_standalone,
     technique_is_underspecified,
     technique_relationship_is_ambiguous,
 )
+
+
+def _treatment_row(technique, *, target_kind, treats="Bleeding"):
+    """Attach a treatment payload row relieving a named condition."""
+    from world.conditions.factories import TreatmentTemplateFactory
+
+    return TechniqueTreatment.objects.create(
+        technique=technique,
+        treatment_template=TreatmentTemplateFactory(
+            name=f"Mend {treats}",
+            target_condition=ConditionTemplateFactory(name=treats),
+        ),
+        target_kind=target_kind,
+    )
 
 
 def _bare_technique(**kwargs):
@@ -142,7 +157,9 @@ class TechniqueEffectSentenceTests(TestCase):
         summary = summarize_technique_effects(technique)["summary"]
 
         self.assertIn("Deals shadow damage.", summary)
-        self.assertIn("Grants flight.", summary)
+        # "Knowing it grants" — a capability grant is standing possession, not
+        # something the cast produces (ADR-0248, #3682).
+        self.assertIn("Knowing it grants flight.", summary)
         # anima_cost of 0 is not worth a sentence.
         self.assertNotIn("anima", summary)
 
@@ -247,8 +264,9 @@ class TechniqueEffectCacheTests(TestCase):
         )
         invalidate_technique_payload_caches(technique)
 
-        with self.assertNumQueries(4):
-            # One query per payload table on the first build.
+        with self.assertNumQueries(5):
+            # One query per payload table on the first build — five since
+            # treatments joined the summary (#3682).
             first = technique.cached_effect_summary
         with self.assertNumQueries(0):
             second = technique.cached_effect_summary
@@ -287,3 +305,97 @@ class TechniqueEffectCacheTests(TestCase):
             technique.cached_effect_summary["relationship"],
             ConditionTargetKind.ALLY.value,
         )
+
+
+class TechniqueTreatmentPayloadTests(TestCase):
+    """Treatments are the payload family #2898 missed entirely (#3682).
+
+    ``TechniqueTreatment`` has been authorable since #2668 and carries its own
+    ``target_kind``, but no display surface, relationship derivation or
+    authoring-gap check reached it — so a healing technique whose only payload
+    was a treatment described itself as having no effect and, worse, derived
+    SELF and could not name the ally it was written to heal.
+    """
+
+    def test_ally_treatment_alone_is_not_underspecified(self):
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY)
+
+        self.assertFalse(technique_is_underspecified(technique))
+
+    def test_ally_treatment_derives_an_ally_relationship(self):
+        """The gate is what makes this matter: SELF refuses every other target."""
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY)
+
+        self.assertEqual(derive_target_relationship(technique), ConditionTargetKind.ALLY)
+
+    def test_enemy_treatment_derives_enemy_without_being_hostile(self):
+        """Stabilising a downed foe is aimed at an adversary but does no harm."""
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ENEMY)
+
+        summary = summarize_technique_effects(technique)
+
+        self.assertEqual(summary["relationship"], ConditionTargetKind.ENEMY.value)
+        self.assertFalse(summary["hostile"])
+
+    def test_treatment_surfaces_in_the_payload_and_the_sentence(self):
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY, treats="Bleeding")
+
+        summary = summarize_technique_effects(technique)
+
+        self.assertEqual([row["treats"] for row in summary["treatments"]], ["Bleeding"])
+        self.assertIn("Treats Bleeding.", summary["summary"])
+        self.assertNotIn("not yet catalogued", summary["summary"])
+
+    def test_treatment_target_kind_counts_toward_ambiguity(self):
+        technique = _bare_technique()
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY)
+        TechniqueAppliedConditionFactory(
+            technique=technique,
+            condition=ConditionTemplateFactory(name="Burning"),
+            target_kind=ConditionTargetKind.ENEMY,
+        )
+
+        self.assertTrue(technique_relationship_is_ambiguous(technique))
+
+    def test_payload_invalidation_clears_the_treatment_cache(self):
+        technique = _bare_technique()
+        self.assertEqual(technique.cached_treatments, [])
+
+        _treatment_row(technique, target_kind=ConditionTargetKind.ALLY)
+        invalidate_technique_payload_caches(technique)
+
+        self.assertEqual(len(technique.cached_treatments), 1)
+
+
+class TechniqueCastLinkageTests(TestCase):
+    """A technique can be a valid CG pick and never appear in the cast list (#3682)."""
+
+    def test_technique_without_action_template_is_not_castable_standalone(self):
+        """``request_technique_cast`` rejects exactly this, with no other warning."""
+        self.assertTrue(technique_is_not_castable_standalone(_bare_technique()))
+
+    def test_technique_with_action_template_is_castable_standalone(self):
+        from actions.factories import ActionTemplateFactory
+
+        technique = _bare_technique(action_template=ActionTemplateFactory())
+
+        self.assertFalse(technique_is_not_castable_standalone(technique))
+
+    def test_missing_cast_linkage_is_not_an_authoring_gap_row(self):
+        """It is reported as a column and an admin filter, never as a gap.
+
+        Every authored technique lacks a template today, so folding it into the
+        gap audit would make membership mean "every technique" and bury the two
+        gaps that are actually about unreadable authored data.
+        """
+        technique = _bare_technique()
+        TechniqueAppliedConditionFactory(technique=technique, target_kind=ConditionTargetKind.ALLY)
+
+        gap_ids = {gap.technique_id for gap in technique_effect_authoring_gaps()}
+
+        self.assertTrue(technique_is_not_castable_standalone(technique))
+        self.assertNotIn(technique.pk, gap_ids)

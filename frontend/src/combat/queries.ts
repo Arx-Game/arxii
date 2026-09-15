@@ -47,6 +47,8 @@ export const combatKeys = {
 
   creatureTemplates: (search?: string, tier?: api.OpponentTier) =>
     [...combatKeys.all, 'creature-templates', search ?? '', tier ?? ''] as const,
+
+  escalationCurves: () => [...combatKeys.all, 'escalation-curves'] as const,
 };
 
 /**
@@ -545,6 +547,16 @@ export function useCreatureTemplates(search?: string, tier?: api.OpponentTier) {
     queryKey: combatKeys.creatureTemplates(search, tier),
     queryFn: () => api.fetchCreatureTemplates(search, tier),
     staleTime: 60_000,
+  });
+}
+
+/** Escalation curve catalog for the GM settings row (#3552). GM-gated server-side. */
+export function useEscalationCurves(enabled = true) {
+  return useQuery({
+    queryKey: combatKeys.escalationCurves(),
+    queryFn: () => api.fetchEscalationCurves(),
+    staleTime: 60_000,
+    enabled,
   });
 }
 

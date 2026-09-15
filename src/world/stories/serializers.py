@@ -56,8 +56,6 @@ from world.stories.models import (
     GlobalStoryProgress,
     GroupStoryProgress,
     GroupStoryRequest,
-    PlayerTrust,
-    PlayerTrustLevel,
     RiskCalibration,
     SessionRequest,
     Stake,
@@ -73,7 +71,6 @@ from world.stories.models import (
     StoryParticipation,
     StoryProgress,
     StoryProtectedSubject,
-    StoryTrustRequirement,
     TableBulletinPost,
     TableBulletinReply,
     Transition,
@@ -278,7 +275,6 @@ class StoryDetailSerializer(serializers.ModelSerializer):
     tenure_id = serializers.SerializerMethodField()
     primary_table = serializers.PrimaryKeyRelatedField(read_only=True)
     chapters_count = serializers.IntegerField(source="chapters.count", read_only=True)
-    trust_requirements = serializers.SerializerMethodField()
 
     class Meta:
         model = Story
@@ -294,7 +290,6 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "impact_tier",
             "owners",
             "active_gms",
-            "trust_requirements",
             "character_sheet",
             "tenure_id",
             "primary_table",
@@ -308,7 +303,6 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "id",
             "owners",
             "active_gms",
-            "trust_requirements",
             "character_sheet",
             "tenure_id",
             "primary_table",
@@ -317,10 +311,6 @@ class StoryDetailSerializer(serializers.ModelSerializer):
             "updated_at",
             "completed_at",
         ]
-
-    def get_trust_requirements(self, obj):
-        """Get trust requirements for this story"""
-        return obj.get_trust_requirements_summary()
 
     def get_tenure_id(self, obj: Story) -> int | None:
         """The current tenure of this CHARACTER-scope story's character (whoever is
@@ -627,31 +617,6 @@ class EpisodeSceneSerializer(serializers.ModelSerializer):
         ]
 
 
-class PlayerTrustSerializer(serializers.ModelSerializer):
-    """Serializer for player trust profiles"""
-
-    account = serializers.StringRelatedField(read_only=True)
-    total_positive_feedback = serializers.ReadOnlyField()
-    total_negative_feedback = serializers.ReadOnlyField()
-
-    class Meta:
-        model = PlayerTrust
-        fields = [
-            "id",
-            "account",
-            "total_positive_feedback",
-            "total_negative_feedback",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "total_positive_feedback",
-            "total_negative_feedback",
-            "created_at",
-            "updated_at",
-        ]
-
-
 class TrustCategorySerializer(serializers.ModelSerializer):
     """Serializer for trust categories"""
 
@@ -823,60 +788,6 @@ class TrustCategoryCreateSerializer(serializers.ModelSerializer):
                 msg,
             )
         return value.lower()
-
-
-class PlayerTrustLevelSerializer(serializers.ModelSerializer):
-    """Serializer for individual trust levels"""
-
-    player_trust = serializers.StringRelatedField(read_only=True)
-    trust_category = TrustCategorySerializer(read_only=True)
-
-    class Meta:
-        model = PlayerTrustLevel
-        fields = [
-            "id",
-            "player_trust",
-            "trust_category",
-            "trust_level",
-            "positive_feedback_count",
-            "negative_feedback_count",
-            "notes",
-            "created_at",
-            "updated_at",
-        ]
-        read_only_fields = [
-            "positive_feedback_count",
-            "negative_feedback_count",
-            "created_at",
-            "updated_at",
-        ]
-
-
-class StoryTrustRequirementSerializer(serializers.ModelSerializer):
-    """Serializer for story trust requirements"""
-
-    trust_category = TrustCategorySerializer(read_only=True)
-    created_by = serializers.StringRelatedField(read_only=True)
-
-    class Meta:
-        model = StoryTrustRequirement
-        fields = [
-            "id",
-            "trust_category",
-            "minimum_trust_level",
-            "notes",
-            "created_by",
-            "created_at",
-        ]
-        read_only_fields = ["created_at"]
-
-
-class StoryTrustRequirementCreateSerializer(serializers.ModelSerializer):
-    """Serializer for creating story trust requirements"""
-
-    class Meta:
-        model = StoryTrustRequirement
-        fields = ["story", "trust_category", "minimum_trust_level", "notes"]
 
 
 # ---------------------------------------------------------------------------

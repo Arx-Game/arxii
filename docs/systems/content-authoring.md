@@ -90,9 +90,15 @@ Two doors into the same backlog:
 
 - **The Authoring Workbench** (header link, superuser) is the writer's
   door: one worst-first queue across every credited model - placeholder
-  text first, then unwritten, then unreviewed - with per-domain stats and
-  domain/status/text filters. You never need to know which model a piece
-  of prose lives in.
+  text first, then unwritten, then written but unreviewed - with per-domain
+  stats and domain/model/status/text filters. You never need to know which
+  model a piece of prose lives in. The queue opens on **To write** (rows with
+  no author) and the number beside its title is the count under your current
+  filters, so it falls as you credit rows and never counts finished work.
+  **To review** lists written rows awaiting review; **Placeholder** lists rows
+  whose prose still carries the placeholder mark; **All** shows everything.
+  Your filters survive a credit or review stamp and a page reload (they live
+  in the page URL), so a session on one domain never re-picks it.
 - **The stock changelists** (#3020) are the browser's door: every
   registered credited model's changelist carries a **credit status**
   column and filter (`?credit=unwritten|written|reviewed`). When you are
@@ -105,8 +111,14 @@ Two doors into the same backlog:
 
 ## Editing, crediting, reviewing
 
-The workbench editor shows only the row's prose fields as textareas;
-mechanical fields cannot be submitted through it at all. Actions:
+The workbench editor sits at the top of the page, above the queue. Opening a
+row puts its prose textareas first, with the cursor already in the first one;
+the row's mechanical fields and credit columns sit in a collapsed block under
+the form, and cannot be submitted through it at all. A **Next** control beside
+the action buttons opens the row after this one in the queue you are looking
+at (the heading says "Row N of M to write in <domain>"), and keeps pointing at
+that same row after you credit the current one; when a filter runs dry the
+editor says so and offers to widen it. Actions:
 
 - **Save** writes the prose.
 - **Save and credit me** additionally stamps `written_by`/`written_on`

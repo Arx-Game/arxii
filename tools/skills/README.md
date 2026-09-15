@@ -86,10 +86,12 @@ behavior.)
 ### issue-to-merged-pr
 
 Carries a GitHub issue through to a merged PR with minimal human gating:
-brainstorm/spec/plan, implementation, PR, CI watch and fix loop,
-post-merge cleanup. Multi-invocation, GitHub-as-truth. See
-[issue-to-merged-pr/README.md](issue-to-merged-pr/README.md) and the
-[design doc](issue-to-merged-pr/references/design.md).
+brainstorm/spec/plan, implementation, exact-HEAD review evidence, PR, CI watch
+and fix loop, and post-merge cleanup. Multi-invocation, GitHub-as-truth. A PR
+must name a tracked evidence report; partial work uses `Refs` rather than
+silently closing its umbrella issue. See [issue-to-merged-pr/README.md](issue-to-merged-pr/README.md),
+[the design doc](issue-to-merged-pr/references/design.md), and
+[the evidence template](../../tools/skills/issue-to-merged-pr/templates/review-evidence.md).
 
 ### codebase-indexing
 
@@ -112,12 +114,29 @@ two = a real one." Concepts only: it does **not** rename "module" or ban
 "component/service/API". Anchored on the repo's action-dispatch seam; leads with
 the plain principle in user-facing prose.
 
+### schema-shape
+
+Six worked questions to defend a proposed relational-schema shape (new
+model/table, FK, bridge table, denormalized column, primary-key choice)
+before it ships — grounded in #3787's three review rounds. Paired with the
+`schema-shape-reviewer` agent (`tools/agents/`) as a diff-time backstop.
+Wired as a mandatory pre-spec pass in `issue-to-merged-pr`, same as
+`verify-against-code`.
+
 ### architecture-cleanup
 
 Audits a subsystem for shallow modules and leaky seams via Explore subagents and
 the deletion test, then produces a **markdown** report (no HTML/Mermaid — this is
 a headless repo) of candidate refactors ranked Strong / Worth-exploring /
 Speculative. Flags conflicts with recorded ADRs.
+
+### demoing-a-feature
+
+For anything a player or staff member sees or operates: the spec is approved off
+a demo page (screens in order, drawn in the project's own visual grammar, every
+open fork as a control the reviewer answers, the rows finalize writes as the last
+screen), not off prose. Pairs with `review-artifacts` and `verify-against-code`.
+Trialled on #3660 for #3659.
 
 ### domain-glossary-and-adr
 

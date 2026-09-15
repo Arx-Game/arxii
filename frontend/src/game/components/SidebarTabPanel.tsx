@@ -4,13 +4,14 @@ import {
   Backpack,
   BookOpen,
   Calendar,
-  MapPin,
+  ChevronDown,
+  ChevronRight,
   PenLine,
   Scroll,
   Ship,
   Users,
 } from 'lucide-react';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { cn } from '@/lib/utils';
 
 interface SidebarTabPanelProps {
   roomPanel: ReactNode;
@@ -29,15 +30,37 @@ interface SidebarTabPanelProps {
   /** #2352 voyage panel — plan, depart, and track overworld travel. */
   travelPanel?: ReactNode;
   /**
-   * Label for the room tab. Defaults to ``"Room"`` but the parent can
-   * pass the currently-focused subject (a character or item name) so the
-   * tab reflects what the right sidebar is actually showing. Long names
-   * are visually truncated; the full label remains accessible via the
-   * tab's ``title`` tooltip.
+   * What the way back names. Defaults to ``"Room"``; the parent passes the
+   * currently-focused subject (the room, or a character or item drilled
+   * into), so a section's "← <name>" control says where it returns to. Long
+   * names are visually truncated; the full label stays in the ``title``.
    */
   roomTabLabel?: string;
+  /** Controlled by `GamePage` (#3761) so a top-bar banner can jump straight to the room. */
+  activeTab: string;
+  onTabChange: (tab: string) => void;
 }
 
+/** The eight reference sections under the Actions fold, in the demo's order. */
+const SECTIONS: Array<{ key: string; label: string; Icon: typeof Users }> = [
+  { key: 'who', label: 'Who', Icon: Users },
+  { key: 'stories', label: 'Stories', Icon: Scroll },
+  { key: 'events', label: 'Events', Icon: Calendar },
+  { key: 'codex', label: 'Codex', Icon: BookOpen },
+  { key: 'status', label: 'Status', Icon: Activity },
+  { key: 'inventory', label: 'Items', Icon: Backpack },
+  { key: 'journal', label: 'Journal', Icon: PenLine },
+  { key: 'travel', label: 'Travel', Icon: Ship },
+];
+
+/**
+ * The Here panel's body (#3856 PR 3, the approved demo's side panel): the room
+ * view with an "Actions" fold at its foot holding the eight reference sections
+ * as a grid, open by default and folding on its arrow; pressing a section
+ * shows it in place of the room with a "← <room>" way back at its top. It
+ * replaces the nine-trigger tab row that used to sit above the room. Every
+ * section keeps its panel and mounts lazily, on first open, as before.
+ */
 export function SidebarTabPanel({
   roomPanel,
   eventsPanel,
@@ -49,116 +72,146 @@ export function SidebarTabPanel({
   journalPanel,
   travelPanel,
   roomTabLabel,
+  activeTab,
+  onTabChange,
 }: SidebarTabPanelProps) {
-  const [activeTab, setActiveTab] = useState('room');
-  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set(['room']));
+  // Seeded once from the mount-time `activeTab` — safe today because
+  // `GamePage`'s `jumpToCombat` (#3761) only ever sets `activeTab` to 'room'
+  // (this component's own mount default), so it's already activated. A
+  // future caller that drives `activeTab` externally to some OTHER,
+  // never-opened section would need to update `activatedTabs` too, or that
+  // section's panel would never mount.
+  const [activatedTabs, setActivatedTabs] = useState<Set<string>>(new Set([activeTab]));
+  const [foldOpen, setFoldOpen] = useState(true);
 
-  const handleTabChange = useCallback((value: string) => {
-    setActiveTab(value);
-    setActivatedTabs((prev) => {
-      if (prev.has(value)) return prev;
-      const next = new Set(prev);
-      next.add(value);
-      return next;
-    });
-  }, []);
+  const handleTabChange = useCallback(
+    (value: string) => {
+      onTabChange(value);
+      setActivatedTabs((prev) => {
+        if (prev.has(value)) return prev;
+        const next = new Set(prev);
+        next.add(value);
+        return next;
+      });
+    },
+    [onTabChange]
+  );
 
   const label = roomTabLabel ?? 'Room';
 
-  return (
-    <Tabs value={activeTab} onValueChange={handleTabChange} className="flex h-full flex-col">
-      {/*
-        Nine labelled tabs do not fit one row of a ~260px sidebar. A fixed
-        `grid-cols-N` sized every column to width/9 (~28px) while each trigger
-        keeps `px-3` + `whitespace-nowrap`, so the labels overflowed their
-        cells and painted on top of each other. Wrap instead: the row count
-        follows the sidebar's actual width, and `grow` fills each row evenly.
-      */}
-      <TabsList className="mx-2 mt-2 flex h-auto flex-wrap justify-start gap-1">
-        <TabsTrigger value="room" className="grow gap-1 text-xs" title={label}>
-          <MapPin className="h-3 w-3 shrink-0" />
-          <span className="inline-block max-w-[8rem] truncate">{label}</span>
-        </TabsTrigger>
-        <TabsTrigger value="who" className="grow gap-1 text-xs">
-          <Users className="h-3 w-3" />
-          Who
-        </TabsTrigger>
-        <TabsTrigger value="stories" className="grow gap-1 text-xs">
-          <Scroll className="h-3 w-3" />
-          Stories
-        </TabsTrigger>
-        <TabsTrigger value="events" className="grow gap-1 text-xs">
-          <Calendar className="h-3 w-3" />
-          Events
-        </TabsTrigger>
-        <TabsTrigger value="codex" className="grow gap-1 text-xs">
-          <BookOpen className="h-3 w-3" />
-          Codex
-        </TabsTrigger>
-        <TabsTrigger value="status" className="grow gap-1 text-xs">
-          <Activity className="h-3 w-3" />
-          Status
-        </TabsTrigger>
-        <TabsTrigger value="inventory" className="grow gap-1 text-xs">
-          <Backpack className="h-3 w-3" />
-          Items
-        </TabsTrigger>
-        <TabsTrigger value="journal" className="grow gap-1 text-xs">
-          <PenLine className="h-3 w-3" />
-          Journal
-        </TabsTrigger>
-        <TabsTrigger value="travel" className="grow gap-1 text-xs">
-          <Ship className="h-3 w-3" />
-          Travel
-        </TabsTrigger>
-      </TabsList>
-      <TabsContent value="room" className="mt-0 flex-1 overflow-y-auto">
-        {roomPanel}
-      </TabsContent>
-      <TabsContent value="who" className="mt-0 flex-1 overflow-y-auto">
-        {activatedTabs.has('who')
-          ? (presencePanel ?? (
-              <p className="p-3 text-sm text-muted-foreground">No presence to show.</p>
-            ))
-          : null}
-      </TabsContent>
-      <TabsContent value="stories" className="mt-0 flex-1 overflow-y-auto">
-        {activatedTabs.has('stories')
-          ? (storiesPanel ?? (
-              <p className="p-3 text-sm text-muted-foreground">No stories to show.</p>
-            ))
-          : null}
-      </TabsContent>
-      <TabsContent value="events" className="mt-0 flex-1 overflow-hidden">
-        {activatedTabs.has('events') ? eventsPanel : null}
-      </TabsContent>
-      <TabsContent value="codex" className="mt-0 flex-1 overflow-y-auto p-3">
-        {activatedTabs.has('codex')
-          ? (codexPanel ?? <p className="text-sm text-muted-foreground">Codex coming soon.</p>)
-          : null}
-      </TabsContent>
-      <TabsContent value="status" className="mt-0 flex-1 overflow-y-auto p-3">
-        {activatedTabs.has('status')
-          ? (statusPanel ?? <p className="text-sm text-muted-foreground">No status to show.</p>)
-          : null}
-      </TabsContent>
-      <TabsContent value="inventory" className="mt-0 flex-1 overflow-y-auto p-3">
-        {activatedTabs.has('inventory')
-          ? (inventoryPanel ?? <p className="text-sm text-muted-foreground">Nothing carried.</p>)
-          : null}
-      </TabsContent>
-      <TabsContent value="journal" className="mt-0 flex-1 overflow-y-auto">
-        {activatedTabs.has('journal')
-          ? (journalPanel ?? (
-              <p className="p-3 text-sm text-muted-foreground">No journal to show.</p>
-            ))
-          : null}
-      </TabsContent>
-      <TabsContent value="travel" className="mt-0 flex-1 overflow-y-auto">
-        {activatedTabs.has('travel')
-          ? (travelPanel ?? <p className="p-3 text-sm text-muted-foreground">No travel to show.</p>)
-          : null}
-      </TabsContent>
-    </Tabs>
+  // The fold sits under whichever view is open, so a player reads Status and
+  // jumps straight to Journal without going back through the room first (the
+  // demo renders the grid after the room and after a section alike).
+  const actionsFold = (
+    <details
+      open={foldOpen}
+      onToggle={(event) => setFoldOpen((event.target as HTMLDetailsElement).open)}
+      className="border-t bg-muted/40"
+      data-testid="actions-fold"
+    >
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between px-3 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground [&::-webkit-details-marker]:hidden">
+        Actions
+        {foldOpen ? (
+          <ChevronDown aria-hidden="true" className="h-3 w-3" />
+        ) : (
+          <ChevronRight aria-hidden="true" className="h-3 w-3" />
+        )}
+      </summary>
+      <div className="grid grid-cols-3 gap-0.5 px-2 pb-2">
+        {SECTIONS.map(({ key, label: name, Icon }) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={activeTab === key}
+            className={cn(
+              'flex min-h-11 items-center gap-1.5 rounded px-2 text-left text-xs',
+              'hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+              'aria-pressed:bg-accent aria-pressed:font-medium'
+            )}
+            onClick={() => handleTabChange(key)}
+          >
+            <Icon aria-hidden="true" className="h-3 w-3 shrink-0 opacity-60" />
+            {name}
+          </button>
+        ))}
+      </div>
+    </details>
   );
+
+  if (activeTab !== 'room') {
+    return (
+      <div className="flex h-full flex-col">
+        <button
+          type="button"
+          className="flex min-h-11 w-full items-center gap-1 px-3 text-left text-xs text-muted-foreground hover:text-foreground"
+          title={label}
+          onClick={() => handleTabChange('room')}
+        >
+          <span aria-hidden="true">←</span>
+          <span className="truncate">{label}</span>
+        </button>
+        <div className="min-h-0 flex-1">
+          {sectionContent(activeTab, activatedTabs, {
+            eventsPanel,
+            storiesPanel,
+            codexPanel,
+            presencePanel,
+            statusPanel,
+            inventoryPanel,
+            journalPanel,
+            travelPanel,
+          })}
+        </div>
+        {actionsFold}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-full flex-col">
+      <div className="min-h-0 flex-1">{roomPanel}</div>
+      {actionsFold}
+    </div>
+  );
+}
+
+type SectionPanels = Pick<
+  SidebarTabPanelProps,
+  | 'eventsPanel'
+  | 'storiesPanel'
+  | 'codexPanel'
+  | 'presencePanel'
+  | 'statusPanel'
+  | 'inventoryPanel'
+  | 'journalPanel'
+  | 'travelPanel'
+>;
+
+function quiet(text: string, padded = true): ReactNode {
+  return <p className={cn('text-sm text-muted-foreground', padded && 'p-3')}>{text}</p>;
+}
+
+/** One section's panel (or its quiet fallback), mounted only once it has been opened. */
+function sectionContent(tab: string, activated: Set<string>, panels: SectionPanels): ReactNode {
+  if (!activated.has(tab)) return null;
+  switch (tab) {
+    case 'who':
+      return panels.presencePanel ?? quiet('No presence to show.');
+    case 'stories':
+      return panels.storiesPanel ?? quiet('No stories to show.');
+    case 'events':
+      return panels.eventsPanel;
+    case 'codex':
+      return <div className="p-3">{panels.codexPanel ?? quiet('Codex coming soon.', false)}</div>;
+    case 'status':
+      return <div className="p-3">{panels.statusPanel ?? quiet('No status to show.', false)}</div>;
+    case 'inventory':
+      return <div className="p-3">{panels.inventoryPanel ?? quiet('Nothing carried.', false)}</div>;
+    case 'journal':
+      return panels.journalPanel ?? quiet('No journal to show.');
+    case 'travel':
+      return panels.travelPanel ?? quiet('No travel to show.');
+    default:
+      return null;
+  }
 }

@@ -34,3 +34,27 @@ export function childLevelOf(level: number): number {
   if (index <= 0) return BUILDING_LEVEL;
   return ORDERED_LEVELS[index - 1];
 }
+
+/** The shape `insertableLevels` reads: an area entry with its level, or a room entry. */
+export interface LadderNode {
+  level?: number;
+  kind?: 'area' | 'room';
+}
+
+/**
+ * The area levels that fit strictly between `upper` and `lower`, highest
+ * first (the `FolioCrumb` insert point, 2026-09-09). A room sits at any level,
+ * so anything below `upper` down to BUILDING fits above it; an area only
+ * admits the levels between the two.
+ */
+export function insertableLevels(
+  upper: LadderNode,
+  lower: LadderNode
+): { value: number; label: string }[] {
+  if (upper.level == null) return [];
+  const floor = lower.kind === 'room' ? BUILDING_LEVEL : (lower.level ?? BUILDING_LEVEL) + 1;
+  const ceiling = upper.level;
+  return AREA_LEVELS.filter((choice) => choice.value < ceiling && choice.value >= floor).sort(
+    (a, b) => b.value - a.value
+  );
+}

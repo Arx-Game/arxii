@@ -23,6 +23,15 @@ interface RichTextInputProps {
   rightSlot?: React.ReactNode;
   ghostText?: string;
   autocompleteItems?: Array<{ name: string; thumbnail_url?: string | null }>;
+  /** Defaults true for legacy command surfaces; narrative composer opts into Cmd/Ctrl+Enter. */
+  submitOnEnter?: boolean;
+  /** Show the bold/italic/strike/link/colour controls (default). Off for a plain command line (#3857). */
+  formatting?: boolean;
+  /** Class for the textarea itself, e.g. a monospace face for a command line (#3857). */
+  textareaClassName?: string;
+  disabled?: boolean;
+  /** Block delivery while allowing the player to keep writing. */
+  submitDisabled?: boolean;
 }
 
 // M10: Multi-word names (e.g. "Crucible Mundi") can't be typed manually
@@ -91,9 +100,37 @@ export function RichTextInput({
   rightSlot,
   ghostText,
   autocompleteItems,
+  submitOnEnter = true,
+  formatting = true,
+  textareaClassName,
+  disabled = false,
+  submitDisabled = false,
 }: RichTextInputProps) {
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const [autocompleteState, setAutocompleteState] = React.useState<AutocompleteState | null>(null);
+
+  // Keep the five-line starting surface, then grow only within the viewport.
+  // Beyond 35% of the viewport the editor scrolls internally instead of
+  // pushing the reader and Here panel off-screen.
+  React.useLayoutEffect(() => {
+    const resize = () => {
+      const textarea = textareaRef.current;
+      if (!textarea) return;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const maxHeight = Math.floor(viewportHeight * 0.35);
+      textarea.style.height = 'auto';
+      const nextHeight = Math.min(textarea.scrollHeight, maxHeight);
+      textarea.style.height = `${nextHeight}px`;
+      textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    window.visualViewport?.addEventListener('resize', resize);
+    return () => {
+      window.removeEventListener('resize', resize);
+      window.visualViewport?.removeEventListener('resize', resize);
+    };
+  }, [value]);
 
   const filteredItems = React.useMemo(() => {
     if (!autocompleteState?.visible || !autocompleteItems) return [];
@@ -241,16 +278,31 @@ export function RichTextInput({
       if (handleAutocompleteKey(e)) return;
       if (handleFormattingKey(e)) return;
 
-      // Enter to submit, Shift+Enter for newline
-      if (e.key === 'Enter' && !e.shiftKey) {
+      // Enter sends and Shift+Enter breaks the line — the chat-RP convention,
+      // and since #3818 what the narrative composer uses too. A caller that
+      // wants Enter for paragraphs passes submitOnEnter={false} and sends on
+      // Cmd/Ctrl+Enter instead.
+      if (
+        e.key === 'Enter' &&
+        !e.nativeEvent.isComposing &&
+        (submitOnEnter ? !e.shiftKey : e.ctrlKey || e.metaKey)
+      ) {
         e.preventDefault();
-        onSubmit();
+        if (!disabled && !submitDisabled) onSubmit();
         return;
       }
 
       onKeyDown?.(e);
     },
-    [handleAutocompleteKey, handleFormattingKey, onSubmit, onKeyDown]
+    [
+      handleAutocompleteKey,
+      handleFormattingKey,
+      onSubmit,
+      onKeyDown,
+      submitOnEnter,
+      disabled,
+      submitDisabled,
+    ]
   );
 
   const handleChange = React.useCallback(
@@ -287,54 +339,67 @@ export function RichTextInput({
     <div className={cn('overflow-hidden rounded-md border border-input shadow-sm', className)}>
       {/* Toolbar */}
       <div
-        className="flex items-center gap-0.5 border-b border-input bg-muted/50 px-1.5 py-1"
+        className="flex flex-wrap items-center gap-0.5 border-b border-input bg-muted/50 px-1.5 py-1"
         role="toolbar"
         aria-label="Formatting toolbar"
       >
         {leftSlot}
-        <button
-          type="button"
-          title="Bold (Ctrl+B)"
-          aria-label="Bold"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('**', '**')}
-        >
-          B
-        </button>
-        <button
-          type="button"
-          title="Italic (Ctrl+I)"
-          aria-label="Italic"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs italic hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('*', '*')}
-        >
-          I
-        </button>
-        <button
-          type="button"
-          title="Strikethrough (Ctrl+Shift+S)"
-          aria-label="Strikethrough"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs line-through hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => handleWrap('~~', '~~')}
-        >
-          S
-        </button>
-        <button
-          type="button"
-          title="Link (Ctrl+K)"
-          aria-label="Link"
-          className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-accent hover:text-accent-foreground"
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={handleLinkInsert}
-        >
-          🔗
-        </button>
-        <div className="mx-1 h-4 w-px bg-border" />
-        <ColorPicker onSelectColor={handleColorSelect} />
+        {formatting && (
+          <>
+            <button
+              type="button"
+              title="Bold (Ctrl+B)"
+              aria-label="Bold"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs font-bold hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('**', '**')}
+            >
+              B
+            </button>
+            <button
+              type="button"
+              title="Italic (Ctrl+I)"
+              aria-label="Italic"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs italic hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('*', '*')}
+            >
+              I
+            </button>
+            <button
+              type="button"
+              title="Strikethrough (Ctrl+Shift+S)"
+              aria-label="Strikethrough"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs line-through hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handleWrap('~~', '~~')}
+            >
+              S
+            </button>
+            <button
+              type="button"
+              title="Link (Ctrl+K)"
+              aria-label="Link"
+              className="flex h-6 w-6 items-center justify-center rounded text-xs hover:bg-accent hover:text-accent-foreground"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={handleLinkInsert}
+            >
+              🔗
+            </button>
+            <div className="mx-1 h-4 w-px bg-border" />
+            <ColorPicker onSelectColor={handleColorSelect} />
+          </>
+        )}
         {rightSlot}
+        <button
+          type="button"
+          className="ml-auto min-h-11 min-w-11 shrink-0 rounded bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90"
+          onClick={onSubmit}
+          aria-label="Send"
+          disabled={disabled || submitDisabled}
+        >
+          Send
+        </button>
       </div>
 
       {/* Textarea with ghost text and autocomplete */}
@@ -351,7 +416,11 @@ export function RichTextInput({
           onKeyDown={handleKeyDown}
           rows={rows}
           spellCheck={true}
-          className="relative w-full resize-none bg-transparent px-3 py-2 text-base focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm"
+          disabled={disabled}
+          className={cn(
+            'relative max-h-[35dvh] w-full resize-none overflow-y-auto bg-transparent px-3 py-2 text-base focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50 md:text-sm',
+            textareaClassName
+          )}
         />
         {autocompleteItems && (
           <NameAutocomplete

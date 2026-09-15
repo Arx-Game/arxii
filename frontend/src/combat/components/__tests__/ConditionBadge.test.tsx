@@ -90,4 +90,30 @@ describe('ConditionBadge', () => {
     expect(button.style.color).toBe('rgb(0, 170, 0)');
     expect(button.style.borderColor).toBe('rgb(0, 170, 0)');
   });
+
+  it('appends source_description to the tooltip when present', () => {
+    render(
+      <Wrapper>
+        <ConditionBadge
+          condition={makeCondition({ source_description: 'knocked down by the blast' })}
+        />
+      </Wrapper>
+    );
+
+    const button = screen.getByRole('button', { name: /Bleeding Out/i });
+    expect(button).toHaveAttribute('title', 'Bleeding Out\nknocked down by the blast');
+  });
+
+  it('keeps the tooltip to the name when source_description is blank', () => {
+    render(
+      <Wrapper>
+        <ConditionBadge condition={makeCondition({ source_description: '' })} />
+      </Wrapper>
+    );
+
+    expect(screen.getByRole('button', { name: /Bleeding Out/i })).toHaveAttribute(
+      'title',
+      'Bleeding Out'
+    );
+  });
 });

@@ -173,7 +173,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
                 "path_skills_complete": True,
-                "traits_complete": True,
                 "magic_complete": True,
                 # No stats field - attributes stage incomplete
             },
@@ -327,7 +326,6 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
                 "stats": DEFAULT_STATS,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
             },
         )
         # Add required magic data
@@ -393,6 +391,28 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         values = {v.trait.name: v.option.name for v in true_form.values.all()}
         assert values == {"hair_color": "black", "eye_color": "blue"}
 
+    @staticmethod
+    def _make_it_distinctive_entry(trait_name: str) -> dict:
+        """A draft entry buying "Make It Distinctive" on one trait row (#3739).
+
+        The descriptor field is bought, not free: finalize writes a descriptor only
+        for a trait the draft unlocked, so a test about descriptors has to buy one.
+        """
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.types import build_distinction_entry
+
+        distinction = DistinctionFactory(
+            name="Make It Distinctive", taken_per_feature=True, opens_feature=True
+        )
+        # The entry needs a live offer or ``reconcile_offer_picks`` drops it at
+        # finalize as a pick whose last source vanished (``_drop_empty_and_reprice``).
+        offer = DistinctionOfferFactory(
+            distinction=distinction, chapter=OfferChapter.APPEARANCE, feature_rows=True
+        )
+        return build_distinction_entry(distinction, offer=offer, feature_trait=trait_name)
+
     def test_finalize_writes_cg_trait_descriptors(self):
         """CG per-trait flavor text lands on the PRIMARY persona (#2632)."""
         from world.forms.models import PersonaTraitDescriptor
@@ -409,6 +429,7 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
             "nonexistent_trait": "ignored",
             "eye_color": "   ",
         }
+        draft.draft_data["distinctions"] = [self._make_it_distinctive_entry("hair_color")]
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
@@ -417,6 +438,28 @@ class CharacterFinalizationTests(FinalizationTestMixin, TestCase):
         row = PersonaTraitDescriptor.objects.get(persona=persona, trait=hair_trait)
         assert row.text == "onyx shot through with silver streaks"
         assert PersonaTraitDescriptor.objects.filter(persona=persona).count() == 1
+
+    def test_finalize_drops_a_descriptor_for_a_feature_never_made_distinctive(self):
+        """A descriptor is bought with the one-point unlock, never free (#3739).
+
+        Text left in ``draft_data`` for a trait whose unlock was refunded (or that
+        never had one) is dropped at finalize, so the paid field and the written
+        words cannot come apart.
+        """
+        from world.forms.models import PersonaTraitDescriptor
+
+        hair_trait = FormTraitFactory(name="hair_color", display_name="Hair Color")
+        option = FormTraitOptionFactory(trait=hair_trait, name="black", display_name="Black")
+
+        draft = self._create_complete_draft(stats=DEFAULT_STATS)
+        draft.draft_data["form_traits"] = {"hair_color": option.id}
+        draft.draft_data["form_trait_descriptors"] = {"hair_color": "unpaid words"}
+        draft.save()
+
+        character = finalize_character(draft, add_to_roster=True)
+
+        persona = character.character_sheet.primary_persona
+        assert not PersonaTraitDescriptor.objects.filter(persona=persona).exists()
 
     def test_finalize_skips_form_traits_when_empty(self):
         """No true form created when form_traits is empty or missing."""
@@ -748,8 +791,9 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
         assert goals.count() == 1
         assert goals.first().domain == self.standing
 
-    def test_skips_zero_point_goals(self):
-        """Goals with 0 points are skipped."""
+    def test_skips_empty_goals_but_keeps_a_note_to_yourself(self):
+        """A goal with no points but words is kept (a note to yourself, #3621); an empty
+        row is dropped."""
         from world.goals.models import CharacterGoal
 
         draft = self._create_complete_draft()
@@ -757,14 +801,17 @@ class FinalizeCharacterGoalsTests(FinalizationTestMixin, TestCase):
         draft.draft_data["goals"] = [
             {"domain_id": self.standing.id, "notes": "Valid goal", "points": 15},
             {"domain_id": self.drives.id, "notes": "Zero point goal", "points": 0},
+            {"domain_id": self.drives.id, "notes": "", "points": 0},
         ]
         draft.save()
 
         character = finalize_character(draft, add_to_roster=True)
 
-        goals = CharacterGoal.objects.filter(character_id=character.pk)
-        assert goals.count() == 1
-        assert goals.first().domain == self.standing
+        goals = list(CharacterGoal.objects.filter(character_id=character.pk).order_by("ordinal"))
+        assert [(g.domain, g.points, g.ordinal) for g in goals] == [
+            (self.standing, 15, 1),
+            (self.drives, 0, 2),
+        ]
 
 
 class FinalizeCharacterDistinctionsTests(FinalizationTestMixin, TestCase):
@@ -1413,8 +1460,9 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
         from world.seeds.character_creation import seed_beginning_traditions
 
         # Seed the real "Unbound" Tradition + wire it to this test's own Gift, then run
-        # the real seeder to author the BeginningTradition gate (required_distinction=
-        # the real "unbound" drawback, #2442) for this test's own Beginnings row.
+        # the real seeder to author the BeginningTradition's SELF_TAUGHT state (#3675)
+        # for this test's own Beginnings row; the SELF_TAUGHT slate line carries the
+        # real "unbound" drawback (#2442) into the draft via reconcile_offer_picks.
         unbound_tradition = TraditionFactory(name=UNBOUND_TRADITION_NAME)
         TraditionGiftGrantFactory(tradition=unbound_tradition, gift=self.gift)
         seed_beginning_traditions()
@@ -1439,13 +1487,13 @@ class UnboundSurchargeThroughRealCGFinalizeTests(FinalizationTestMixin, TestCase
                 "stats": DEFAULT_STATS,
                 "tarot_card_name": self.tarot_card.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
             },
         )
 
-        # Real select-tradition endpoint — auto-adds the "Unbound" drawback distinction
-        # to the draft (#2442's one deliberate exception; see
-        # TraditionViewSet.select_tradition's docstring).
+        # Real select-tradition endpoint: reconcile_offer_picks carries the "Unbound"
+        # drawback distinction into the draft for free, since the tradition's slate
+        # line reads SELF_TAUGHT (#3675; see TraditionViewSet.select_tradition's
+        # docstring).
         client = APIClient()
         client.force_authenticate(user=self.account)
         response = client.post(
@@ -1676,9 +1724,13 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         assert aura.glimpse_state == GlimpseState.COMPLETE
 
     def test_finalize_links_glimpse_distinctions(self):
-        """Chosen distinctions listed in glimpse_linked_distinction_ids get from_glimpse."""
+        """A picked distinction whose offer_ids name a Glimpse offer gets from_glimpse (#3675)."""
+        from world.character_creation.constants import OfferChapter
+        from world.character_creation.factories import DistinctionOfferFactory
         from world.distinctions.factories import DistinctionCategoryFactory, DistinctionFactory
         from world.distinctions.models import CharacterDistinction
+        from world.distinctions.types import build_distinction_entry
+        from world.magic.factories import GlimpseTagFactory
         from world.magic.models import CharacterAura
 
         category = DistinctionCategoryFactory(name="Glimpse Test Category")
@@ -1689,20 +1741,12 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
             max_rank=1,
             is_active=True,
         )
-        draft = self._create_draft(
-            distinctions=[
-                {
-                    "distinction_id": distinction.id,
-                    "distinction_name": distinction.name,
-                    "distinction_slug": distinction.slug,
-                    "category_slug": category.slug,
-                    "rank": 1,
-                    "cost": 5,
-                    "notes": "",
-                },
-            ],
-            glimpse_linked_distinction_ids=[distinction.pk],
+        tag = GlimpseTagFactory()
+        offer = DistinctionOfferFactory(
+            distinction=distinction, chapter=OfferChapter.GLIMPSE, glimpse_tag=tag
         )
+        entry = build_distinction_entry(distinction, rank=1, offer=offer, source=tag.name)
+        draft = self._create_draft(distinctions=[entry], glimpse_tag_ids=[tag.pk])
         character = finalize_character(draft, add_to_roster=True)
 
         aura = CharacterAura.objects.get(character=character.sheet_data)
@@ -1711,13 +1755,51 @@ class FinalizeMagicAuraTests(FinalizationTestMixin, TestCase):
         )
         assert cd.from_glimpse_id == aura.pk
 
-    def test_finalize_ignores_unknown_linked_distinction_ids(self):
-        """Ids that never materialized as CharacterDistinction rows are skipped."""
+    def test_finalize_drops_an_entry_whose_offers_no_longer_exist(self):
+        """An entry whose offer_ids name only vanished offers is dropped, not linked (#3675).
+
+        finalize_character now calls reconcile_offer_picks before any row is written
+        (review round 1/2): a pick whose last source no longer resolves to a real
+        offer is treated the same as a live-PATCH reconcile would treat it -- its
+        last source is gone, so the entry itself is dropped and no
+        CharacterDistinction is created for it. This must not crash finalize, and
+        every other pick on the same draft still lands (review round 3).
+        """
+        from world.distinctions.factories import DistinctionFactory
+        from world.distinctions.models import CharacterDistinction
+        from world.distinctions.types import build_distinction_entry
         from world.magic.models import CharacterAura
 
-        draft = self._create_draft(glimpse_linked_distinction_ids=[999999])
+        gone = DistinctionFactory(name="Vanished Offer Distinction", cost_per_rank=5, max_rank=1)
+        gone_entry = build_distinction_entry(gone, rank=1)
+        gone_entry["offer_ids"] = [999999]
+        gone_entry["sources"] = ["Stale Opener"]
+        gone_entry["arrivals"] = ["choice"]
+
+        # A legacy-shaped pick (no offer_ids key at all, review round 2 ruling A) --
+        # not what this test is about, but proves finalize keeps processing the rest
+        # of the draft's picks after dropping the one above.
+        kept = DistinctionFactory(name="Legacy Kept Distinction", cost_per_rank=5, max_rank=1)
+        kept_entry = {
+            "distinction_id": kept.id,
+            "distinction_name": kept.name,
+            "distinction_slug": kept.slug,
+            "category_slug": kept.category.slug,
+            "rank": 1,
+            "cost": 5,
+            "notes": "",
+        }
+
+        draft = self._create_draft(distinctions=[gone_entry, kept_entry])
         character = finalize_character(draft, add_to_roster=True)
+
         assert CharacterAura.objects.filter(character=character.sheet_data).exists()
+        assert not CharacterDistinction.objects.filter(
+            character=character.sheet_data, distinction=gone
+        ).exists()
+        assert CharacterDistinction.objects.filter(
+            character=character.sheet_data, distinction=kept
+        ).exists()
 
 
 class FinalizeGMCharacterTests(TestCase):
@@ -2335,24 +2417,22 @@ class CanCreateCharacterMaxCharactersTests(TestCase):
         assert settings.CG_MAX_CHARACTERS == 3
 
 
-class GetAccessibleStartingAreasTrustRequiredTests(TestCase):
-    """get_accessible_starting_areas must not 500 on a TRUST_REQUIRED area (#3046).
+class GetAccessibleStartingAreasStaffOnlyTests(TestCase):
+    """STAFF_ONLY areas are listed to staff and to nobody else (#3726).
 
-    Before the fix, StartingArea.is_accessible_by raised NotImplementedError for
-    any non-staff account on a TRUST_REQUIRED area, and this function did not
-    catch it - one admin flipping an area's access level broke the origin stage
-    for everyone.
+    ``access_level`` is the whole gate now that TRUST_REQUIRED is gone, and it
+    is applied as a queryset filter rather than a per-row predicate, so the
+    same filtered queryset backs both the list read and draft validation.
     """
 
-    def test_trust_required_area_excluded_for_normal_account(self):
+    def test_staff_only_area_excluded_for_normal_account(self):
         from evennia_extensions.factories import AccountFactory
         from world.character_creation.factories import StartingAreaFactory
 
         open_area = StartingAreaFactory(name="Open Area", access_level=StartingArea.AccessLevel.ALL)
         gated_area = StartingAreaFactory(
             name="Gated Area",
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
+            access_level=StartingArea.AccessLevel.STAFF_ONLY,
         )
         account = AccountFactory()
 
@@ -2361,17 +2441,25 @@ class GetAccessibleStartingAreasTrustRequiredTests(TestCase):
         assert open_area in areas
         assert gated_area not in areas
 
-    def test_trust_required_area_included_for_staff(self):
+    def test_staff_only_area_included_for_staff(self):
         from evennia_extensions.factories import AccountFactory
         from world.character_creation.factories import StartingAreaFactory
 
         gated_area = StartingAreaFactory(
             name="Gated Area Staff",
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
+            access_level=StartingArea.AccessLevel.STAFF_ONLY,
         )
         account = AccountFactory(is_staff=True)
 
         areas = get_accessible_starting_areas(account)
 
         assert gated_area in areas
+
+    def test_inactive_area_excluded_for_staff(self):
+        from evennia_extensions.factories import AccountFactory
+        from world.character_creation.factories import StartingAreaFactory
+
+        inactive = StartingAreaFactory(name="Retired Area", is_active=False)
+        account = AccountFactory(is_staff=True)
+
+        assert inactive not in get_accessible_starting_areas(account)

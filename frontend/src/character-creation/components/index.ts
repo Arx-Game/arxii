@@ -1,7 +1,6 @@
 export { ApplicationThread } from './ApplicationThread';
 export { AppearanceStage } from './AppearanceStage';
 export { AttributesStage } from './AttributesStage';
-export { DistinctionsStage } from './DistinctionsStage';
 export { FinalizeForTableDialog } from './FinalizeForTableDialog';
 export { FinalTouchesStage } from './FinalTouchesStage';
 export { GiftStage } from './GiftStage';

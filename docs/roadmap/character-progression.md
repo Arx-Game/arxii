@@ -70,7 +70,7 @@ The central spine connecting every system in the game. Characters develop throug
   write into. See `docs/systems/magic.md`'s "Acquisition provenance" section and
   `docs/systems/INDEX.md`'s Traits entry.
 - **Advancement on web (#3045) — BUILT.** Every SPEND/advance path a level-1 player used
-  had to be reached over telnet, while every EARN path (journals, kudos, votes,
+  had to be reached over telnet, while every EARN path (journals, kudos, nominations,
   endorsements, technique training meters) already had web UI — this closed that half. A
   character-sheet "Advancement" tab (own-sheet + active-puppet gated, mirroring the
   Locations tab's Ships-section precedent for the same puppet-vs-viewed-character
@@ -273,16 +273,20 @@ in `honor_deed` checks life-state.
 - Journal XP: Weekly awards for posts, praise, retorts (already wired)
 - Kudos → XP: `claim_kudos_for_xp()` orchestrates atomic kudos claim + XP award
 - First Impression XP: 3 XP to author, 5 XP to target on first relationship update
-- Vote system: 7+1 weekly budget, toggle votes on interactions/journals/scene personas,
-  weekly cron awards XP on diminishing returns curve (cap 50), Memorable Poses top 3 (3/2/1 XP)
+- Nominations (#3738, replaced the 7+1 weekly vote budget and Memorable Poses 3/2/1 on
+  2026-09-09): one nomination per account per character per week, hung off a pose or journal
+  from this week the nominator could see, no budget, invisible to the nominee; weekly cron
+  settles four paths on one stepped curve (in general from 3 by distinct people; most
+  nominated prose 1; best in scene by scene wins from 1; most nominated journal 1 game-wide).
+  One scene with one friend pays 5; twenty scenes and a hundred people pay 19.
 - Random Scene bounties: 5 weekly targets (strangers + relationships), auto-validated claims
   (5+5 XP, first-time bonus +10), one reroll per week, weekly cron generation
-- Scene completion → vote budget: participants get +1 bonus vote when a scene finishes
+- Scene completion no longer pays a vote bonus (#3738); `on_scene_finished` settles reaction windows only
 - **Telnet surface for progression rewards (#1348) — BUILT.** Seven REGISTRY / `target_type=SELF`
   Actions in `actions/definitions/progression_rewards.py` + four telnet commands
-  (`kudos`, `vote`, `randomscene`/`rscene`, `pathintent`) in `commands/progression_rewards.py`
+  (`kudos`, `nominate` (ex `vote`, #3738), `randomscene`/`rscene`, `pathintent`) in `commands/progression_rewards.py`
   now share the same `action.run()` seam as the web views; closes the ADR-0001 "web bypasses
-  actions" gap for kudos-claim, vote, random-scene, and path-intent capabilities. New service
+  actions" gap for kudos-claim, nominate, random-scene, and path-intent capabilities. New service
   module: `world.progression.services.path_intent` (`set_path_intent` / `clear_path_intent`);
   `get_author_account_for_target` promoted from views to `world.progression.services.voting`.
 
@@ -297,7 +301,7 @@ in `honor_deed` checks life-state.
 - IC dawn fatigue reset cron (~8h real time) with scene deferral
 - Rest command (10 AP, once per IC day, grants Well Rested +50% capacity)
 - Action fatigue pipeline (execute_action_with_fatigue orchestrates full cycle)
-- Vote budget scales by active character count (7 per character)
+- (Vote budget retired in #3738; nominations have none)
 - Frontend: fatigue status display, effort selector with color gradient, rest button
 
 **Fatigue — remaining work:**
@@ -336,7 +340,7 @@ in `honor_deed` checks life-state.
 **Done (GameWeek & unified weekly systems):**
 - GameWeek/GameSeason models — formal week tracking, all weekly systems FK to GameWeek
 - Unified weekly rollover cron — single orchestrator advances week then processes all systems
-- All weekly models migrated: WeeklyVoteBudget, WeeklyVote, WeeklySkillUsage, RandomSceneTarget,
+- All weekly models migrated: Nomination (#3738, ex WeeklyVoteBudget/WeeklyVote), WeeklySkillUsage, RandomSceneTarget,
   WeeklyJournalXP, CharacterRelationship, DevelopmentTransaction
 - Concurrent-safe: partial unique constraint on is_current, select_for_update in advance
 

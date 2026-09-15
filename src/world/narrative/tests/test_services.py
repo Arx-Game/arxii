@@ -73,9 +73,13 @@ class OnlinePushTests(TestCase):
         delivery = msg.deliveries.get(recipient_character_sheet=sheet)
         self.assertIsNotNone(delivery.delivered_at)
         msg_mock.assert_called_once()
-        body_arg = msg_mock.call_args.args[0]
+        # Tuple form (#3856): the dict becomes the websocket text frame's kwargs,
+        # which is where the client reads ``kwargs.type``. A sibling keyword
+        # (``msg(text, type=...)``) leaves as a separate frame and never reaches
+        # the line, which is how the old spelling silently dropped the type.
+        body_arg, options = msg_mock.call_args.args[0]
         self.assertIn("A whisper reaches your ears.", body_arg)
-        self.assertEqual(msg_mock.call_args.kwargs.get("type"), "narrative")
+        self.assertEqual(options, {"type": "narrative"})
 
 
 class DeliverQueuedMessagesTests(TestCase):

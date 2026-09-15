@@ -22,10 +22,10 @@
     <tr>
       <th>{% translate "Domain" %}</th>
       <th>{% translate "Rows" %}</th>
-      <th>{% translate "Unwritten" %}</th>
-      <th>{% translate "Unreviewed" %}</th>
+      <th>{% translate "To write" %}</th>
+      <th>{% translate "To review" %}</th>
       <th>{% translate "Words (total)" %}</th>
-      <th>{% translate "Words (unwritten)" %}</th>
+      <th>{% translate "Words (to write)" %}</th>
     </tr>
   </thead>
   <tbody>
@@ -33,10 +33,10 @@
     <tr>
       <td>{{ domain_stats.domain }}</td>
       <td>{{ domain_stats.rows }}</td>
-      <td>{{ domain_stats.unwritten }}</td>
-      <td>{{ domain_stats.unreviewed }}</td>
+      <td>{{ domain_stats.to_write }}</td>
+      <td>{{ domain_stats.to_review }}</td>
       <td>{{ domain_stats.words_total }}</td>
-      <td>{{ domain_stats.words_unwritten }}</td>
+      <td>{{ domain_stats.words_to_write }}</td>
     </tr>
     {% empty %}
     <tr><td colspan="6">{% translate "No credited content models have any rows yet." %}</td></tr>

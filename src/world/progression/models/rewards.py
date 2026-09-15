@@ -129,7 +129,7 @@ class XPTransaction(SharedMemoryModel):
         null=True,
         blank=True,
         on_delete=models.CASCADE,
-        help_text="Character this XP was spent on (if applicable)",
+        help_text="Character this XP was earned on or spent on (if applicable)",
     )
     gm = models.ForeignKey(
         AccountDB,

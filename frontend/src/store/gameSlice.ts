@@ -1,5 +1,7 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type {
+  ConsoleLine,
+  FeedNote,
   GameMessage,
   HubTidings,
   InteractionWsPayload,
@@ -10,6 +12,16 @@ import type {
 import type { MyRosterEntry } from '@/roster/types';
 import type { CommandSpec } from '@/game/types';
 
+export type GameLifecycleState =
+  | 'entry-idle'
+  | 'entering'
+  | 'entry-error'
+  | 'ready-no-scene'
+  | 'ready-scene'
+  | 'reconnecting'
+  | 'encounter'
+  | 'aftermath';
+
 interface RoomData {
   id: number;
   name: string;
@@ -18,6 +30,8 @@ interface RoomData {
   characters: RoomStateObject[];
   objects: RoomStateObject[];
   exits: RoomStateObject[];
+  decorations?: string[];
+  comfort_level?: number;
   is_owner: boolean;
   is_public: boolean;
   /** Civic-hub tidings block; null when no board/crier stands here (#1450). */
@@ -26,6 +40,8 @@ interface RoomData {
   npc_givers?: NpcGiver[];
   /** #3288 — true when ANY occupant is concealed. Identity-free OOC disclosure. */
   has_unseen_presence?: boolean;
+  /** The viewer's own current Place, if any (#3810); sourced from the room_state push. */
+  viewer_place_id: number | null;
 }
 
 /**
@@ -34,12 +50,36 @@ interface RoomData {
  */
 export interface Session {
   isConnected: boolean;
+  /** Presentation state for entry/reconnect/exploration; server remains authoritative. */
+  lifecycleState?: GameLifecycleState;
   messages: Array<GameMessage & { id: string }>;
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
   scene: SceneSummary | null;
   sceneInteractions: InteractionWsPayload[];
+  /** Structured scene-less interactions for the current room, kept in memory only. */
+  ambientInteractions?: InteractionWsPayload[];
+  /** Connection diagnostics are kept separate from authored/system story text. */
+  diagnostics?: string[];
+  /**
+   * Typed text lines (#3856): look results, item lines, errors, arrivals and
+   * departures, narrative emits. Every `text` frame becomes one, kind from its
+   * `kwargs.type`; both readers render them at their timestamp among the
+   * interactions. Bounded, newest kept.
+   */
+  notes: FeedNote[];
+  /** The staff console's lines (#3857): text frames tagged `console` by the server. Bounded. */
+  consoleLines: ConsoleLine[];
+  /**
+   * Feed blocks this viewer folded to a one-line stub or removed from their own
+   * view (#3856), keyed by `feedItemKey`. Per viewer, in memory only; nothing is
+   * deleted for anyone else.
+   */
+  minimizedFeed: string[];
+  dismissedFeed: string[];
+  /** Epoch used to reject late interaction frames from the previous room. */
+  ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
   threadLastSeen: Record<string, number>;
   /**
@@ -86,6 +126,11 @@ interface GameState {
 
 // Module-scope monotonic id for session messages (see addSessionMessage).
 let nextMessageId = 0;
+// Same for feed notes (#3856): several frames can land in one millisecond.
+let nextNoteId = 0;
+const MAX_NOTES = 200;
+let nextConsoleLineId = 0;
+const MAX_CONSOLE_LINES = 500;
 
 const initialState: GameState = {
   sessions: {},
@@ -104,6 +149,10 @@ export const gameSlice = createSlice({
         state.sessions[name] = {
           isConnected: false,
           messages: [],
+          notes: [],
+          consoleLines: [],
+          minimizedFeed: [],
+          dismissedFeed: [],
           unread: 0,
           commands: [],
           room: null,
@@ -125,6 +174,15 @@ export const gameSlice = createSlice({
         state.sessions[name].unread = 0;
       }
     },
+    /**
+     * Forget one character's session after its socket was closed on purpose
+     * (#3818 "Leave the world"). `active` is left alone: it mirrors the durable
+     * server selection (ADR-0241), and leaving the world does not un-select —
+     * the player is still playing this character, offscreen.
+     */
+    endSession: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      delete state.sessions[action.payload];
+    },
     setSessionConnectionStatus: (
       state,
       action: PayloadAction<{ character: MyRosterEntry['name']; status: boolean }>
@@ -134,6 +192,16 @@ export const gameSlice = createSlice({
       if (session) {
         session.isConnected = status;
       }
+    },
+    setSessionLifecycle: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        lifecycleState: GameLifecycleState;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) session.lifecycleState = action.payload.lifecycleState;
     },
     addSessionMessage: (
       state,
@@ -175,8 +243,133 @@ export const gameSlice = createSlice({
       const { character, room } = action.payload;
       const session = state.sessions[character];
       if (session) {
+        const previousRoomId = session.room?.id ?? null;
+        const nextRoomId = room?.id ?? null;
+        if (previousRoomId !== nextRoomId) {
+          if (session.ambientInteractions) session.ambientInteractions = [];
+          // Notes are deliberately kept (#3856): the feed is the character's own
+          // history, and the look of the room just left, the walk itself, and an
+          // error on the way are still theirs to scroll back to.
+          session.ambientRoomEnteredAt = Date.now();
+        }
         session.room = room;
       }
+    },
+    addAmbientInteraction: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        interaction: InteractionWsPayload;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const frameTime = Date.parse(action.payload.interaction.timestamp);
+      if (
+        session.ambientRoomEnteredAt &&
+        Number.isFinite(frameTime) &&
+        frameTime < session.ambientRoomEnteredAt
+      )
+        return;
+      const ambient = session.ambientInteractions ?? (session.ambientInteractions = []);
+      if (ambient.some((item) => item.id === action.payload.interaction.id)) return;
+      ambient.push(action.payload.interaction);
+      if (ambient.length > 100) session.ambientInteractions = ambient.slice(-100);
+    },
+    clearAmbientInteractions: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.ambientInteractions = [];
+    },
+    minimizeFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session && !session.minimizedFeed.includes(action.payload.key)) {
+        session.minimizedFeed.push(action.payload.key);
+      }
+    },
+    restoreFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (session) {
+        session.minimizedFeed = session.minimizedFeed.filter((k) => k !== action.payload.key);
+      }
+    },
+    dismissFeedItem: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; key: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      session.minimizedFeed = session.minimizedFeed.filter((k) => k !== action.payload.key);
+      if (!session.dismissedFeed.includes(action.payload.key)) {
+        session.dismissedFeed.push(action.payload.key);
+      }
+    },
+    addSessionDiagnostic: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; message: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      const diagnostics = session.diagnostics ?? (session.diagnostics = []);
+      diagnostics.push(action.payload.message);
+      if (diagnostics.length > 20) session.diagnostics = diagnostics.slice(-20);
+    },
+    clearSessionDiagnostics: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.diagnostics = [];
+    },
+    /**
+     * Append one typed text line (#3856). The id is assigned here, not by the
+     * caller, for the same reason as `addSessionMessage`: it is a React key.
+     * Unread counts the way a message does, so a look result or an error
+     * arriving for a character you are not watching still badges that tab.
+     */
+    addFeedNote: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; note: Omit<FeedNote, 'id'> }>
+    ) => {
+      const { character, note } = action.payload;
+      const session = state.sessions[character];
+      if (!session) return;
+      nextNoteId += 1;
+      session.notes.push({ ...note, id: `n${nextNoteId}` });
+      if (session.notes.length > MAX_NOTES) session.notes = session.notes.slice(-MAX_NOTES);
+      if (state.active !== character) session.unread += 1;
+    },
+    clearFeedNotes: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.notes = [];
+    },
+    /** A line the server tagged `console` (#3857): the staff console's, never the column's. */
+    addConsoleLine: (
+      state,
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        content: string;
+        sent?: boolean;
+      }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      nextConsoleLineId += 1;
+      session.consoleLines.push({
+        id: `c${nextConsoleLineId}`,
+        content: action.payload.content,
+        ...(action.payload.sent ? { sent: true } : {}),
+        timestamp: new Date().toISOString(),
+      });
+      if (session.consoleLines.length > MAX_CONSOLE_LINES) {
+        session.consoleLines = session.consoleLines.slice(-MAX_CONSOLE_LINES);
+      }
+    },
+    clearConsoleLines: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.consoleLines = [];
     },
     setSessionScene: (
       state,
@@ -218,6 +411,7 @@ export const gameSlice = createSlice({
       const session = state.sessions[character];
       if (session) {
         const MAX_WS_INTERACTIONS = 200;
+        if (session.sceneInteractions.some((item) => item.id === interaction.id)) return;
         session.sceneInteractions.push(interaction);
         if (session.sceneInteractions.length > MAX_WS_INTERACTIONS) {
           session.sceneInteractions = session.sceneInteractions.slice(-MAX_WS_INTERACTIONS);
@@ -374,12 +568,25 @@ export const gameSlice = createSlice({
 
 export const {
   startSession,
+  endSession,
   setActiveSession,
   setSessionConnectionStatus,
+  setSessionLifecycle,
   addSessionMessage,
   clearSessionMessages,
   setSessionCommands,
   setSessionRoom,
+  addAmbientInteraction,
+  clearAmbientInteractions,
+  addSessionDiagnostic,
+  clearSessionDiagnostics,
+  addFeedNote,
+  clearFeedNotes,
+  addConsoleLine,
+  clearConsoleLines,
+  minimizeFeedItem,
+  restoreFeedItem,
+  dismissFeedItem,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,

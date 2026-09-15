@@ -54,8 +54,11 @@ class ProgressionReason(models.TextChoices):
     CORRECTION = "correction", "GM Correction"
     KUDOS_CLAIM = "kudos_claim", "Kudos Claim"
     FIRST_IMPRESSION = "first_impression", "First Impression"
-    VOTE_REWARD = "vote_reward", "Vote Reward"
-    MEMORABLE_POSE = "memorable_pose", "Memorable Pose"
+    # Reason keys stay within the 20-character reason column.
+    NOMINATION = "nomination", "Nominations"
+    MOST_NOMINATED_PROSE = "top_prose", "Most Nominated Prose"
+    BEST_IN_SCENE = "best_in_scene", "Best in Scene"
+    MOST_NOMINATED_JOURNAL = "top_journal", "Most Nominated Journal"
     RANDOM_SCENE = "random_scene", "Random Scene"
     GM_STORY_REWARD = "gm_story_reward", "GM Story Reward"
     OTHER = "other", "Other"
@@ -117,11 +120,13 @@ class LevelUpRequirements(TypedDict):
 
 
 _PROGRESSION_ERROR_MESSAGES: dict[str, str] = {
-    "SELF_VOTE": "Cannot vote for your own content.",
-    "NO_VOTES_REMAINING": "No votes remaining this week.",
-    "ALREADY_VOTED": "Already voted for this content this week.",
-    "VOTE_NOT_FOUND": "Vote not found for this content this week.",
-    "VOTE_PROCESSED": "Cannot remove a processed vote.",
+    "SELF_NOMINATION": "You cannot nominate your own characters.",
+    "ALREADY_NOMINATED": "You already nominated this piece this week.",
+    "NOMINATION_NOT_FOUND": "No nomination of yours on this piece this week.",
+    "NOMINATION_PROCESSED": "That week has settled; the nomination stands.",
+    "NOT_THIS_WEEK": "Only prose from this week can be nominated.",
+    "NOT_VISIBLE": "You can only nominate what you have seen.",
+    "NO_PLAYER": "Nobody is playing that character to receive it.",
     "NO_AUTHOR": "Could not determine the author of this content.",
     "RS_NOT_FOUND": "Random scene target not found for this slot.",
     "RS_ALREADY_CLAIMED": "This random scene target is already claimed.",
@@ -140,11 +145,13 @@ class ProgressionError(Exception):
     avoid CodeQL "information exposure through exception" warnings.
     """
 
-    SELF_VOTE = _PROGRESSION_ERROR_MESSAGES["SELF_VOTE"]
-    NO_VOTES_REMAINING = _PROGRESSION_ERROR_MESSAGES["NO_VOTES_REMAINING"]
-    ALREADY_VOTED = _PROGRESSION_ERROR_MESSAGES["ALREADY_VOTED"]
-    VOTE_NOT_FOUND = _PROGRESSION_ERROR_MESSAGES["VOTE_NOT_FOUND"]
-    VOTE_PROCESSED = _PROGRESSION_ERROR_MESSAGES["VOTE_PROCESSED"]
+    SELF_NOMINATION = _PROGRESSION_ERROR_MESSAGES["SELF_NOMINATION"]
+    ALREADY_NOMINATED = _PROGRESSION_ERROR_MESSAGES["ALREADY_NOMINATED"]
+    NOMINATION_NOT_FOUND = _PROGRESSION_ERROR_MESSAGES["NOMINATION_NOT_FOUND"]
+    NOMINATION_PROCESSED = _PROGRESSION_ERROR_MESSAGES["NOMINATION_PROCESSED"]
+    NOT_THIS_WEEK = _PROGRESSION_ERROR_MESSAGES["NOT_THIS_WEEK"]
+    NOT_VISIBLE = _PROGRESSION_ERROR_MESSAGES["NOT_VISIBLE"]
+    NO_PLAYER = _PROGRESSION_ERROR_MESSAGES["NO_PLAYER"]
     NO_AUTHOR = _PROGRESSION_ERROR_MESSAGES["NO_AUTHOR"]
     RS_NOT_FOUND = _PROGRESSION_ERROR_MESSAGES["RS_NOT_FOUND"]
     RS_ALREADY_CLAIMED = _PROGRESSION_ERROR_MESSAGES["RS_ALREADY_CLAIMED"]

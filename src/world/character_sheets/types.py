@@ -33,6 +33,19 @@ class PronounsData(TypedDict):
     possessive: str
 
 
+class VacancyRef(TypedDict):
+    """The character's held vacancy, as the identity section presents it (#3648).
+
+    ``importance`` (the family's real reckoning) is owner/staff only, mirroring
+    the age-axes leak-table pattern; ``presumed_importance`` (what outsiders
+    assume) is always shown.
+    """
+
+    name: str
+    presumed_importance: int
+    importance: int | None
+
+
 class IdentitySection(TypedDict):
     """The identity section of the character sheet API response."""
 
@@ -64,6 +77,8 @@ class IdentitySection(TypedDict):
     # #2994 — internal declared mood; owner/staff only, always None for other
     # viewers (never rendered to observers, per the spec's inward-only ruling).
     current_mood: IdNameRef | None
+    # #3648 - the character's held vacancy, if any active membership carries one.
+    vacancy: VacancyRef | None
 
 
 class FormTraitEntry(TypedDict):
@@ -257,26 +272,79 @@ class StorySection(TypedDict):
     """The story section of the character sheet API response."""
 
     background: str
-    personality: str
     origin_story_state: str
     origin_slots: list[OriginSlotEntry]
 
 
 class OriginSlotEntry(TypedDict):
-    """A character's origin-story slot answer (#2478)."""
+    """A character's origin-story slot answer (#2478).
+
+    ``kind``/``connection_kind``/``life_stage`` mirror the prompt (#3660); ``choice_name``/
+    ``choice_description`` are the picked choice's own fields. ``organization_id``/
+    ``organization_name`` are the resolved anchor (a GROUP question's pick, or the group a
+    PERSON question's named figure belongs to). ``figure_name`` is blanked for a non-privileged
+    viewer (the foreign-viewer redaction; #3660) - it never leaves the owner/staff.
+    """
 
     slot_id: int
     slot_name: str
     slot_prompt: str
     value: str
+    kind: str
+    connection_kind: str
+    life_stage: str
+    choice_name: str
+    choice_description: str
+    organization_id: int | None
+    organization_name: str
+    figure_name: str
 
 
 class GoalEntry(TypedDict):
-    """A single goal held by the character."""
+    """A single goal held by the character, numbered within its horizon (#3621)."""
 
     domain: str
+    horizon: str
+    ordinal: int
     points: int
     notes: str
+
+
+class EnemyEntry(TypedDict):
+    """The priced enemy row; owner, staff and assigned GM only (#3621)."""
+
+    kind: str
+    name: str
+    power_tier: str
+    reach: str
+    degree: str
+    price: int
+    why: str
+    public_line: str
+    status: str
+    has_secret: bool
+
+
+class IntroductionEntry(TypedDict):
+    """One of the Introductions, a white journal found by its kind (#3621)."""
+
+    id: int
+    kind: str
+    title: str
+    body: str
+    created_at: str
+
+
+class ActorSheetSection(TypedDict):
+    """The Actor's Sheet block (#3621): three answers, the enemy's public line, the
+    Introductions. ``enemy`` is the full row for a privileged viewer, else None."""
+
+    never_do: str
+    protect: str
+    fear: str
+    enemy_public_line: str
+    enemy: EnemyEntry | None
+    introductions: list[IntroductionEntry]
 
 
 class PersonaEntry(TypedDict):
@@ -301,7 +369,47 @@ class ProfileTextField(models.TextChoices):
     """
 
     BACKGROUND = "background", "Background"
-    PERSONALITY = "personality", "Personality"
+    NEVER_DO = "never_do", "What would you never do?"
+    PROTECT = "protect", "What would you protect at all costs?"
+    FEAR = "fear", "What are you deathly afraid of?"
+
+
+class EnemyKind(models.TextChoices):
+    """Who wants the character to fail: one person, or a group (#3621)."""
+
+    PERSON = "person", "A person"
+    GROUP = "group", "A group"
+
+
+class EnemyPowerTier(models.TextChoices):
+    """A person's power on the Path ladder, with Quiescent for someone with no Gift (#3621).
+
+    Mirrors ``classes.PathStage`` above Quiescent; kept as its own choice set so an enemy
+    who is not a PC needs no Path row.
+    """
+
+    QUIESCENT = "quiescent", "Quiescent"
+    PROSPECT = "prospect", "Prospect"
+    POTENTIAL = "potential", "Potential"
+    PUISSANT = "puissant", "Puissant"
+    TRUE = "true", "True"
+    GRAND = "grand", "Grand"
+
+
+class EnemyDegree(models.TextChoices):
+    """How badly the enemy wants it (#3621). Death is not a tier: ruined includes it."""
+
+    ANNOYED = "annoyed", "They want you annoyed"
+    THWARTED = "thwarted", "They want you thwarted"
+    RUINED = "ruined", "They want you ruined"
+    DESTROY = "destroy", "They will relentlessly try to destroy you"
+
+
+class EnemyStatus(models.TextChoices):
+    """Whether the enemy is linked to a real person or group the world can send (#3621)."""
+
+    PLACED = "placed", "Placed"
+    PENDING = "pending", "Pending staff placement"
 
 
 class PosthumousJournalDisposition(models.TextChoices):

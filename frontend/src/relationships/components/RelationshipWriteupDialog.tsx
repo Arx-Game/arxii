@@ -9,10 +9,11 @@
  * Field shape mirrors the write serializers in `world/relationships/serializers.py`
  * (~L340-410): every mode has track(s) + points + title + writeup + visibility;
  * `coloring` is impression-only; `redistribute` swaps the single track picker for
- * source/target track pickers. `target_persona_id` is always the caller-supplied
- * `targetPersonaId` (a `Persona` pk, e.g. `PoseUnitAvatarClickPersona.id` from the
- * card drawer) — a different identifier space than the `CharacterSheet` pk used to
- * look up an existing relationship, bridged server-side by `_resolve_target_sheet`.
+ * source/target track pickers. The `target` prop (#3575) is a discriminated
+ * `WriteupTarget`: a `Persona` pk (e.g. `PoseUnitAvatarClickPersona.id` from the
+ * card drawer, bridged server-side by `_resolve_target_sheet`) or a bonded
+ * `Companion` pk; `targetPayload` turns it into the write payload's
+ * `target_persona_id` or `target_companion_id`.
  */
 
 import { useState } from 'react';
@@ -48,6 +49,17 @@ import type { components } from '@/generated/api';
 
 export type RelationshipWriteupMode = 'impression' | 'development' | 'capstone' | 'redistribute';
 
+/** Who a writeup is about (#3575): a Persona pk (a character) or a bonded Companion pk. */
+export type WriteupTarget =
+  | { kind: 'persona'; personaId: number }
+  | { kind: 'companion'; companionId: number };
+
+function targetPayload(target: WriteupTarget) {
+  return target.kind === 'persona'
+    ? { target_persona_id: target.personaId }
+    : { target_companion_id: target.companionId };
+}
+
 type ColoringEnum = components['schemas']['ColoringEnum'];
 type VisibilityFdaEnum = components['schemas']['VisibilityFdaEnum'];
 
@@ -82,9 +94,10 @@ export interface RelationshipWriteupDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   mode: RelationshipWriteupMode;
-  /** The target's `Persona` pk — the write payload's `target_persona_id`. */
-  targetPersonaId: number;
+  target: WriteupTarget;
   targetName: string;
+  /** Preselects the track picker (tests, and callers that already know the track). */
+  initialTrackId?: number;
   onSuccess?: () => void;
 }
 
@@ -92,13 +105,14 @@ export function RelationshipWriteupDialog({
   open,
   onOpenChange,
   mode,
-  targetPersonaId,
+  target,
   targetName,
+  initialTrackId,
   onSuccess,
 }: RelationshipWriteupDialogProps) {
   const { data: tracks = [] } = useRelationshipTracks();
 
-  const [trackId, setTrackId] = useState<number | null>(null);
+  const [trackId, setTrackId] = useState<number | null>(initialTrackId ?? null);
   const [sourceTrackId, setSourceTrackId] = useState<number | null>(null);
   const [targetTrackId, setTargetTrackId] = useState<number | null>(null);
   const [points, setPoints] = useState('');
@@ -119,7 +133,7 @@ export function RelationshipWriteupDialog({
     redistributePoints.isPending;
 
   function resetForm() {
-    setTrackId(null);
+    setTrackId(initialTrackId ?? null);
     setSourceTrackId(null);
     setTargetTrackId(null);
     setPoints('');
@@ -163,7 +177,7 @@ export function RelationshipWriteupDialog({
     }
 
     const shared = {
-      target_persona_id: targetPersonaId,
+      ...targetPayload(target),
       points: parsedPoints,
       title: title.trim(),
       writeup: writeup.trim(),

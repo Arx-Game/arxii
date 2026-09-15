@@ -1,7 +1,7 @@
 """Models for the combat system."""
 
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.contenttypes.fields import GenericForeignKey
 from django.core.exceptions import ValidationError
@@ -14,11 +14,13 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from core.managers import ArxSharedMemoryManager
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.achievements.models import DiscoverableContent
 
 if TYPE_CHECKING:
     from world.areas.positioning.models import Position
     from world.combat.handlers import EncounterCombatHandler
+    from world.companions.handlers import CompanionOrderHandler
 
 from world.combat.constants import (
     COMBO_MIN_SLOTS,
@@ -243,6 +245,13 @@ class CombatEncounter(AbstractRound):
         return EncounterCombatHandler(self)
 
     @cached_property
+    def companion_orders_cached(self) -> "CompanionOrderHandler":
+        """Current-round companion directives for this encounter."""
+        from world.companions.handlers import CompanionOrderHandler  # noqa: PLC0415
+
+        return CompanionOrderHandler(self)
+
+    @cached_property
     def is_lethal(self) -> bool:
         """Lethal iff the encounter's risk level is LETHAL. Derived, never stored."""
         return self.risk_level == RiskLevel.LETHAL
@@ -310,6 +319,26 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    hit_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this NPC attack lands on a target (#3554). Use "
+            "{actor} and {target}; both are required. The machine appends the damage "
+            "figure and any wound, knockout or defeat clause after it, so write the blow, "
+            "not the ledger: '{actor} rakes {target} with its claws'. Blank falls back to "
+            "the standard sentence. Plain register."
+        ),
+    )
+    miss_narration = models.TextField(
+        blank=True,
+        default="",
+        help_text=(
+            "Player-facing line for when this NPC attack misses its target (#3554). Use "
+            "{actor} and {target}; both are required. Blank falls back to the standard "
+            "sentence. Plain register."
+        ),
+    )
     attack_category = models.CharField(
         max_length=20,
         choices=ActionCategory.choices,
@@ -484,8 +513,11 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
     )
 
     def clean(self) -> None:
+        """Validate clash prerequisites and the authored outcome lines (#3554)."""
+        from world.magic.narration import validate_outcome_narration  # noqa: PLC0415
+
         super().clean()
-        errors: dict[str, str] = {}
+        errors: dict[str, str | list[str]] = {}
         if self.is_lock_applying and self.clash_break_free_force is None:
             errors["clash_break_free_force"] = (
                 "clash_break_free_force is required when is_lock_applying=True."
@@ -494,6 +526,14 @@ class ThreatPoolEntry(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             errors["sustained_duration_rounds"] = (
                 "sustained_duration_rounds is required when is_sustained_attack=True."
             )
+        try:
+            validate_outcome_narration(self.hit_narration, "hit_narration")
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
+        try:
+            validate_outcome_narration(self.miss_narration, "miss_narration")
+        except ValidationError as exc:
+            errors.update(exc.message_dict)
         if errors:
             raise ValidationError(errors)
 
@@ -1327,8 +1367,28 @@ class CombatParticipant(SharedMemoryModel):
         return f"{self.character_sheet}"
 
 
-class CombatRoundAction(CommittingDeclaration, SharedMemoryModel):
-    """A PC's declared actions for a round."""
+class CombatRoundAction(RelatedCacheClearingMixin, CommittingDeclaration, SharedMemoryModel):
+    """A PC's declared actions for a round.
+
+    ``related_cache_fields = ["interaction"]`` is the PRIMARY invalidation for
+    ``Interaction.cached_round_actions`` — not a fallback behind direct
+    write-site mutation. Combat resolution writes ``interaction``/resolves this
+    row from 16 scattered call sites across ``services.py``/``simulation.py``,
+    too many to mutate individually (#3816 Decision 5), so every save routes
+    through ``RelatedCacheClearingMixin`` instead.
+    """
+
+    related_cache_fields: ClassVar[list[str]] = ["interaction"]
+    #: Interaction.cached_round_actions filters solely via the interaction FK
+    #: (both the view Prefetch and the model fallback) -- safe to skip the
+    #: clear on the ~16 scattered saves that touch round_number/is_ready/etc.
+    #: without touching interaction. The ONE save that legitimately needs the
+    #: clear is the interaction transition itself (None -> set, an UPDATE
+    #: here since interaction is nullable and set later, not at creation) --
+    #: the snapshot-diff mechanism still catches that, since it compares the
+    #: FK's raw id, not whether this is a create (#3816 final review; see the
+    #: flag's docstring on the mixin).
+    skip_related_cache_clear_when_fk_unchanged: ClassVar[bool] = True
 
     confirm_soulfray_risk = models.BooleanField(
         default=False,
@@ -3496,7 +3556,9 @@ class DramaticSurgeRecord(SharedMemoryModel):
     A boss beat (subject_opponent set) dedups differently: on
     ``(encounter, participant, trigger_kind, subject_opponent,
     subject_phase_number)`` instead, so a multi-phase boss surges once per
-    phase rather than once per encounter (#3445).
+    phase rather than once per encounter (#3445). A companion fall
+    (subject_companion set) dedups on (encounter, participant, trigger_kind,
+    subject_companion) (#3575).
     """
 
     encounter = models.ForeignKey(
@@ -3542,6 +3604,19 @@ class DramaticSurgeRecord(SharedMemoryModel):
             "Set exactly when subject_opponent is set."
         ),
     )
+    subject_companion = models.ForeignKey(
+        "arxii.Companion",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="+",
+        help_text=(
+            "The bonded companion whose fall produced this ALLY_FALLEN surge (#3575); "
+            "null for every other subject kind. CASCADE for the same reason as "
+            "subject_opponent: nulling would drop the row into the subject-less slice of "
+            "the unique index. A Companion row is never hard-deleted, so nothing is lost."
+        ),
+    )
     amount = models.PositiveIntegerField()
     round_number = models.PositiveIntegerField()
     reason = models.TextField(
@@ -3567,7 +3642,11 @@ class DramaticSurgeRecord(SharedMemoryModel):
             ),
             models.UniqueConstraint(
                 fields=["encounter", "participant", "trigger_kind"],
-                condition=models.Q(subject_sheet__isnull=True, subject_opponent__isnull=True),
+                condition=models.Q(
+                    subject_sheet__isnull=True,
+                    subject_opponent__isnull=True,
+                    subject_companion__isnull=True,
+                ),
                 name="unique_surge_without_subject",
             ),
             models.UniqueConstraint(
@@ -3581,14 +3660,28 @@ class DramaticSurgeRecord(SharedMemoryModel):
                 condition=models.Q(subject_opponent__isnull=False),
                 name="unique_surge_boss_beat",
             ),
+            models.UniqueConstraint(
+                fields=["encounter", "participant", "trigger_kind", "subject_companion"],
+                condition=models.Q(subject_companion__isnull=False),
+                name="unique_surge_companion_subject",
+            ),
+            # At most one subject kind (#2013 sheet, #3445 opponent, #3575 companion).
             models.CheckConstraint(
-                check=~(
+                condition=~(
                     models.Q(subject_sheet__isnull=False) & models.Q(subject_opponent__isnull=False)
+                )
+                & ~(
+                    models.Q(subject_sheet__isnull=False)
+                    & models.Q(subject_companion__isnull=False)
+                )
+                & ~(
+                    models.Q(subject_opponent__isnull=False)
+                    & models.Q(subject_companion__isnull=False)
                 ),
                 name="surge_subject_sheet_xor_opponent",
             ),
             models.CheckConstraint(
-                check=(
+                condition=(
                     models.Q(subject_opponent__isnull=True, subject_phase_number__isnull=True)
                     | models.Q(subject_opponent__isnull=False, subject_phase_number__isnull=False)
                 ),

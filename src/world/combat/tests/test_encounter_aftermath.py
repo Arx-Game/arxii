@@ -58,9 +58,11 @@ from world.magic.factories import (
 )
 from world.mechanics.factories import CharacterEngagementFactory
 from world.roster.factories import RosterTenureFactory, grant_test_tenure
-from world.scenes.constants import InteractionMode, RoundStatus
+from world.scenes.constants import InteractionMode, InteractionVisibility, RoundStatus
 from world.scenes.factories import SceneFactory, SceneParticipationFactory
 from world.scenes.models import Interaction
+from world.stories.constants import BeatPredicateType, BeatVisibility
+from world.stories.factories import BeatCompletionFactory, BeatFactory
 from world.traits.factories import CheckOutcomeFactory
 from world.vitals.models import CharacterVitals
 
@@ -148,7 +150,16 @@ class _CompletionSeamTestBase(TestCase):
         )
 
     def _outcome_interaction_qs(self, encounter: CombatEncounter):
-        return Interaction.objects.filter(scene=encounter.scene, mode=InteractionMode.OUTCOME)
+        """The room-wide ceremonial OUTCOME line only (#3551 added private,
+
+        PERCEIVED_ONLY per-participant aftermath-digest OUTCOME interactions
+        alongside it, so this narrows back to the one every pre-#3551 test expects).
+        """
+        return Interaction.objects.filter(
+            scene=encounter.scene,
+            mode=InteractionMode.OUTCOME,
+            visibility=InteractionVisibility.DEFAULT,
+        )
 
 
 class ClassifyEncounterOutcomeTests(_CompletionSeamTestBase):
@@ -640,3 +651,173 @@ class EndEncounterApiTests(TestCase):
         item = results[0]
         self.assertIn("outcome", item)
         self.assertIn("completed_at", item)
+
+
+class AftermathSerializerTests(_CompletionSeamTestBase):
+    """Tests for ParticipantSerializer.aftermath (#3551 Task 2)."""
+
+    def setUp(self) -> None:
+        self.owner_account = AccountFactory(username="aftermath_ser_owner")
+        self.owner_character = CharacterFactory(db_key="aftermath_ser_owner_char")
+        self.owner_sheet = CharacterSheetFactory(character=self.owner_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=self.owner_character,
+            player_data__account=self.owner_account,
+        )
+        CharacterVitals.objects.create(character_sheet=self.owner_sheet, health=100, max_health=100)
+
+        self.other_account = AccountFactory(username="aftermath_ser_other")
+        self.other_character = CharacterFactory(db_key="aftermath_ser_other_char")
+        self.other_sheet = CharacterSheetFactory(character=self.other_character)
+        RosterTenureFactory(
+            roster_entry__character_sheet__character=self.other_character,
+            player_data__account=self.other_account,
+        )
+        CharacterVitals.objects.create(character_sheet=self.other_sheet, health=100, max_health=100)
+
+        self.staff_account = AccountFactory(username="aftermath_ser_staff", is_staff=True)
+
+        self.encounter = self._make_encounter()
+        self.owner_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.owner_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.other_participant = CombatParticipantFactory(
+            encounter=self.encounter,
+            character_sheet=self.other_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+
+    def _get_detail(self, account: object) -> dict:
+        client = APIClient()
+        client.force_authenticate(user=account)
+        response = client.get(f"/api/combat/{self.encounter.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+        return response.data
+
+    def test_live_encounter_aftermath_is_none_for_every_participant(self) -> None:
+        """A non-COMPLETED encounter never exposes an aftermath dict."""
+        data = self._get_detail(self.owner_account)
+        self.assertEqual(len(data["participants"]), 2)
+        for row in data["participants"]:
+            self.assertIsNone(row["aftermath"])
+
+    def test_completed_without_completed_at_is_none_for_owner(self) -> None:
+        """A pre-#876 legacy row (COMPLETED but completed_at still null) never builds
+
+        a digest: aftermath_window() raises ValueError on a null completed_at, so
+        the completed_at guard must short-circuit before build_aftermath_digest is
+        called, or the detail endpoint would 500 (#3551 fix).
+        """
+        legacy_encounter = self._make_encounter(status=RoundStatus.COMPLETED)
+        legacy_participant = CombatParticipantFactory(
+            encounter=legacy_encounter,
+            character_sheet=self.owner_sheet,
+            status=ParticipantStatus.ACTIVE,
+        )
+        self.assertIsNone(legacy_encounter.completed_at)
+
+        client = APIClient()
+        client.force_authenticate(user=self.owner_account)
+        response = client.get(f"/api/combat/{legacy_encounter.pk}/")
+        self.assertEqual(response.status_code, http_status.HTTP_200_OK)
+
+        owner_row = next(
+            row for row in response.data["participants"] if row["id"] == legacy_participant.pk
+        )
+        self.assertIsNone(owner_row["aftermath"])
+
+    def test_completed_owner_row_has_digest_other_row_is_none(self) -> None:
+        """Owner sees their own aftermath dict; another player's row is None for them."""
+        tier = CheckOutcomeFactory(name="AftermathSerializerTier", success_level=-1)
+        consequence = ConsequenceFactory(outcome_tier=tier, character_loss=False)
+        pool = ConsequencePoolFactory()
+        ConsequencePoolEntryFactory(pool=pool, consequence=consequence)
+        rule = EncounterAftermathRuleFactory(
+            outcome=EncounterOutcome.DEFEAT,
+            risk_level=self.encounter.risk_level,
+            consequence_pool=pool,
+        )
+        forced = CheckResult(
+            check_type=rule.check_type,
+            outcome=tier,
+            chart=None,
+            roller_rank=None,
+            target_rank=None,
+            rank_difference=0,
+            trait_points=0,
+            aspect_bonus=0,
+            total_points=0,
+        )
+        with patch(
+            "world.checks.consequence_resolution.perform_check",
+            return_value=forced,
+        ):
+            complete_encounter(self.encounter, outcome=EncounterOutcome.DEFEAT)
+
+        data = self._get_detail(self.owner_account)
+        rows = {row["id"]: row for row in data["participants"]}
+
+        owner_row = rows[self.owner_participant.pk]
+        aftermath = owner_row["aftermath"]
+        self.assertIsNotNone(aftermath)
+        self.assertIn("outcome", aftermath)
+        self.assertIn("conditions", aftermath)
+        self.assertIn("legend", aftermath)
+        self.assertIn("peril_round_active", aftermath)
+        self.assertIsNotNone(aftermath["consequence"])
+
+        other_row = rows[self.other_participant.pk]
+        self.assertIsNone(other_row["aftermath"])
+
+    def test_secret_beat_hidden_from_owner_visible_to_staff(self) -> None:
+        """A SECRET beat's completion is withheld from the owning player but shown to staff."""
+        beat = BeatFactory(
+            predicate_type=BeatPredicateType.OUTCOME_TIER, visibility=BeatVisibility.SECRET
+        )
+        self.encounter.story_beat = beat
+        self.encounter.save(update_fields=["story_beat"])
+
+        complete_encounter(self.encounter, outcome=EncounterOutcome.VICTORY)
+        self.encounter.refresh_from_db()
+
+        BeatCompletionFactory(
+            beat=beat,
+            character_sheet=self.owner_sheet,
+            outcome_tier=CheckOutcomeFactory(),
+        )
+
+        owner_data = self._get_detail(self.owner_account)
+        owner_row = next(
+            row for row in owner_data["participants"] if row["id"] == self.owner_participant.pk
+        )
+        self.assertIsNone(owner_row["aftermath"]["beat"])
+
+        staff_data = self._get_detail(self.staff_account)
+        staff_row = next(
+            row for row in staff_data["participants"] if row["id"] == self.owner_participant.pk
+        )
+        self.assertIsNotNone(staff_row["aftermath"]["beat"])
+        self.assertIn("outcome", staff_row["aftermath"]["beat"])
+        self.assertIn("resolution_text", staff_row["aftermath"]["beat"])
+
+    def test_fled_participant_on_completed_encounter_gets_digest_for_owner(self) -> None:
+        """A FLED participant's row (and its aftermath) reaches its owner through the
+
+        real endpoint once the encounter is COMPLETED (#3551 minor 3): the live
+        prefetch stays ACTIVE-only, but a finished fight also lists FLED rows, since
+        deliver_aftermath_digests already sends that participant a digest.
+        """
+        self.owner_participant.status = ParticipantStatus.FLED
+        self.owner_participant.save(update_fields=["status"])
+
+        complete_encounter(self.encounter, outcome=EncounterOutcome.FLED)
+
+        data = self._get_detail(self.owner_account)
+        rows = {row["id"]: row for row in data["participants"]}
+
+        self.assertIn(self.owner_participant.pk, rows)
+        owner_row = rows[self.owner_participant.pk]
+        self.assertEqual(owner_row["status"], ParticipantStatus.FLED)
+        self.assertIsNotNone(owner_row["aftermath"])

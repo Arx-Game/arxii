@@ -29,6 +29,13 @@
  * (only when the viewer's own participant holds it) since #3447 — dispatching
  * combat_engage/combat_disengage through the same generic registry seam.
  *
+ * Opponent state badges (#3552): the public phase/enraged/wall-broken badges
+ * come from state the room has already been narrated for (a phase transition,
+ * an enrage line firing, a break celebration). The GM boss-state chip row
+ * renders only when the GM-gated fields are non-null - the server sends
+ * `null` for those fields to players, and always sends them together, so
+ * `opponent.morale != null` alone gates the whole chip row.
+ *
  * Phase 8, Task 8.3 — unified-combat-ui plan.
  */
 
@@ -144,9 +151,11 @@ interface ParticipantRowProps {
   participant: Participant;
   /** Name of the opponent this PC is engagement-locked to, if any (#3555). */
   lockedToName?: string;
+  /** Names of companions currently ordered to defend this participant (#3576). */
+  guardedByNames?: string[];
 }
 
-function ParticipantRow({ participant, lockedToName }: ParticipantRowProps) {
+function ParticipantRow({ participant, lockedToName, guardedByNames = [] }: ParticipantRowProps) {
   return (
     <div
       className="flex items-center gap-2 rounded p-1.5 hover:bg-accent/30"
@@ -185,6 +194,15 @@ function ParticipantRow({ participant, lockedToName }: ParticipantRowProps) {
               Locked: {lockedToName}
             </span>
           )}
+          {guardedByNames.map((name) => (
+            <span
+              key={name}
+              data-testid="companion-guard-badge"
+              className="shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[10px] text-emerald-700 dark:text-emerald-300"
+            >
+              Guarded by {name}
+            </span>
+          ))}
         </div>
         {/* HP mini-bar */}
         <HpBar health={participant.health} maxHealth={participant.max_health} className="mt-0.5" />
@@ -208,6 +226,16 @@ interface OpponentRowProps {
   lockedToName?: string;
   /** True when the active lock on this opponent belongs to the viewer (#3447). */
   lockedToViewer?: boolean;
+}
+
+/** Label for the GM boss-state morale chip (#3552) - defaults to "Steady". */
+const MORALE_STATE_LABELS: Record<string, string> = {
+  falter: 'Falter',
+  break: 'Break',
+};
+
+function moraleStateLabel(state: string | null | undefined): string {
+  return (state && MORALE_STATE_LABELS[state]) ?? 'Steady';
 }
 
 /** One opponent-targeted maneuver offered by the click-menu (#3381). */
@@ -281,11 +309,70 @@ function OpponentRow({
               Locked: {lockedToName}
             </span>
           )}
+          {(opponent.current_phase ?? 1) > 1 && (
+            <span
+              data-testid="phase-badge"
+              className={cn(
+                'shrink-0 rounded bg-amber-500/15 px-1 py-0.5 text-[10px]',
+                'text-amber-700 dark:text-amber-300'
+              )}
+            >
+              Phase {opponent.current_phase}
+            </span>
+          )}
+          {opponent.is_enraged && (
+            <span
+              data-testid="enraged-badge"
+              className={cn(
+                'shrink-0 rounded bg-destructive/15 px-1 py-0.5 text-[10px]',
+                'text-destructive'
+              )}
+            >
+              Enraged
+            </span>
+          )}
+          {opponent.is_wall_broken && (
+            <span
+              data-testid="wall-broken-badge"
+              className={cn(
+                'shrink-0 rounded bg-emerald-500/15 px-1 py-0.5 text-[10px]',
+                'text-emerald-700 dark:text-emerald-300'
+              )}
+            >
+              Wall broken
+            </span>
+          )}
         </div>
         {/* HP mini-bar */}
         <HpBar health={opponent.health} maxHealth={opponent.max_health} className="mt-0.5" />
         {/* Condition badges — deep-link to the condition-detail modal on click. */}
         <ConditionRow conditions={opponent.active_conditions} />
+        {/* GM boss-state chips (#3552) - the server sends every GM field together,
+         * so `morale != null` alone gates the row. Hidden entirely for players. */}
+        {opponent.morale != null && (
+          <div
+            data-testid="gm-boss-state"
+            className="mt-1 flex flex-wrap gap-1 text-[10px] text-muted-foreground"
+          >
+            {opponent.phase_count != null && (
+              <span className="rounded bg-muted px-1 py-0.5">
+                Phase {opponent.current_phase}/{opponent.phase_count}
+              </span>
+            )}
+            {opponent.damage_multiplier != null && Number(opponent.damage_multiplier) !== 1 && (
+              <span className="rounded bg-muted px-1 py-0.5">x{opponent.damage_multiplier}</span>
+            )}
+            {opponent.break_bar_threshold != null && opponent.break_bar_threshold > 0 && (
+              <span className="rounded bg-muted px-1 py-0.5">
+                Wall {opponent.break_bar_current}/{opponent.break_bar_threshold}
+              </span>
+            )}
+            <span className="rounded bg-muted px-1 py-0.5">
+              Morale {opponent.morale}/{opponent.max_morale}{' '}
+              {moraleStateLabel(opponent.morale_state)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Opponent click-menu (#3381) — Taunt/Demoralize/Parley. A kebab trigger
@@ -359,7 +446,21 @@ export function CombatantsList({
   characterId,
   canDeclareManeuvers = false,
 }: CombatantsListProps) {
-  const { participants, opponents, engagement_locks: engagementLocks } = encounter;
+  const {
+    participants,
+    opponents,
+    engagement_locks: engagementLocks,
+    companion_orders: companionOrders,
+  } = encounter;
+
+  // Map participant id -> companion names currently ordered to defend them (#3576).
+  const guardedByNames = new Map<number, string[]>();
+  for (const order of companionOrders ?? []) {
+    if (order.defending_participant_id === null) continue;
+    const names = guardedByNames.get(order.defending_participant_id) ?? [];
+    names.push(order.companion_name);
+    guardedByNames.set(order.defending_participant_id, names);
+  }
 
   // Map opponent id -> locked PC's display name (#3386, read-only visibility),
   // and participant id -> locked opponent's name for the PC row (#3555).
@@ -427,6 +528,7 @@ export function CombatantsList({
                   key={p.id}
                   participant={p}
                   lockedToName={lockedParticipantNames.get(p.id)}
+                  guardedByNames={guardedByNames.get(p.id)}
                 />
               ))}
             </div>

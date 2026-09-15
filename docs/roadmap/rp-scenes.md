@@ -342,6 +342,108 @@ block/mute) stays entirely the owner's.
 - **Details:** [companions.md](../systems/companions.md#companion-emote-3294),
   [scenes.md](../systems/scenes.md#companion-pose-attribution-3294).
 
+### Narrative Play Delivery: Safe Drafts, Acknowledgements, Retries, Reconnect — DONE (#3760)
+
+The composer no longer trusts a send until the server confirms it: every pose/say/
+whisper/tt dispatch now carries a `client_request_id` through an idempotency ledger,
+so a retry (double-Enter, a reconnect, a reopened tab) replays cleanly instead of
+creating a duplicate row or silently misdelivering to a different audience.
+
+- **Ledger:** `PoseSubmission` (persona, client_request_id, nullable interaction FK)
+  + `idempotent_record_interaction` (`world/scenes/interaction_services.py`) — looks up
+  an existing submission first; a match on `comparison_fields` replays the stored
+  `Interaction` (no re-roll, no duplicate); a genuine mismatch (reused id, different
+  content/target/scene/place) is a `payload_conflict` (409), never a silent misfire.
+  `comparison_fields` accepts a callable per field (`_comparison_fields_match`) for
+  identity that isn't a plain scalar — `target_personas` is M2M, so target-identity
+  comparison closes over the resolved persona-pk set. `PoseAction`/`WhisperAction`
+  (`actions/definitions/communication.py`) and `submit_pose`
+  (`world/scenes/interaction_views.py`) all compare target/scene/place identity, not
+  just content — a content-only comparison would misclassify "same text, different
+  audience" as a legitimate replay and never deliver to the new one.
+- **Status lookup:** `GET /api/play/submissions/<uuid:client_request_id>/`
+  (`PoseSubmissionDetailView`, `world/scenes/play_views.py`) — writer-only,
+  account-scoped; backs the composer's "Check status" affordance after a connection
+  drop leaves a send's outcome unknown.
+- **Frontend draft store:** `useDraftStore` (`frontend/src/game/useDraftStore.ts`) —
+  per-account/persona/conversation draft state (`clean`/`pending`/`rejected`/`unknown`),
+  persisted to `sessionStorage` so a stranded draft survives a reload/reopened tab.
+  It is the composer's **single** source of truth: `draft.content` is the textarea's
+  value, so there is no second local string to keep in step (#3784 retired the
+  `arx:play-draft:v1:<scope>` copy that used to hydrate the textarea while this store
+  held everything else). `CommandInput.tsx`'s composer renders exactly one
+  delivery-state banner at a time (pending "Sending…", rejected with reason, unknown
+  "Check status"/Retry, or stranded "Unsent draft from … / Discard / Resume & retry"),
+  and a newer edit typed while a request is in flight is never clobbered because
+  `setContent` nulls the dispatched `clientRequestId` and `acknowledge(id)` then no-ops
+  — one invariant in the store, rather than a `commandRef.current === trimmed` guard
+  repeated at the REST-pose, WS-ack and companion-emote call sites.
+  - `say`/`whisper`/`tt` dispatch via `executeAction` (structured ack); REST `submit_pose`
+    carries the same `client_request_id`; a whisper/tt whose target/place can't currently
+    be resolved (or an explicit command override) falls through to the legacy raw-WS
+    `send()` path, which now also resets the v2 draft (`draftStore.discard()`) so a
+    fallback dispatch never leaves a stale pending/rejected draft stranding the banner
+    over an emptied textarea.
+- **Reconnect:** `useGameSocket`'s reconnect-open handler reconciles every stored draft
+  (writer-only status lookup) before flipping a session's `isConnected` back to `true`;
+  `CommandInput`'s own `ready` prop tracks a `false -> true` transition to resolve any
+  send this tab was still tracking through `pendingSpeechRef` — `markUnknown()` then an
+  immediate status check, not a stuck "Sending…" forever. `SceneDetailPage.tsx` (the
+  other composer host, alongside `GameWindow.tsx`) derives `ready` from
+  `state.game.sessions[character]` when a session exists there, defaulting to `true`
+  when none does — nothing on `/scenes/:id` ever calls `connect()`, so "no session" must
+  read as "not socket-gated", never as "disconnected forever".
+- **Connection generation:** `useGameSocket` stamps each socket with a generation
+  counter so a stale connection's late message handler can never process a frame
+  addressed to a newer one after a reconnect race.
+
+### Weave Mechanical Actions Into Prose - DONE (#3787)
+
+A pose can now answer a mechanical row (a combat OUTCOME, a failed check, an NPC's
+ACTION) through the same reply mechanism it answers another pose with, and a resolved
+combat action records whom it targeted.
+
+- **Targets on mechanical rows.** `world.combat.interaction_services`'
+  `create_action_interaction_core` and `create_npc_action_interaction` now pass the
+  resolvers' own targets through the shared `write_target_personas` helper
+  (`world/scenes/interaction_services.py`), populated from `focused_opponent_target` /
+  `focused_ally_target` / the check's subject. Concealed tiers still record none
+  (ADR-0170, unchanged).
+- **The involvement mark.** Derived per viewer from `InteractionTargetPersona` rows, no
+  stored flag, one phrasing across all five row kinds. Web renders it as a reader chip;
+  telnet gets the equivalent plain-text line scoped to sessions that don't already get
+  the structured payload (`interaction_services._send_involvement_mark`/
+  `_non_web_sessions`).
+- **Grouping stays whole.** `getThreadKey` (`frontend/src/scenes/hooks/useThreading.ts`)
+  keys `action`/`outcome` rows by scene, never by target, so a multi-target round stays
+  one reader group instead of fragmenting per victim.
+- **The parent edge is the thread's anchor.** `InteractionThread` gained
+  `anchor_interaction` + `anchor_timestamp` (the row every member answers, both required),
+  a written `parent` (the thread the anchor itself belongs to, so answering a reply nests)
+  and a denormalized `root` (the top of the tree). A row's `thread` now means "what I am an
+  answer to"; the answered row is reachable as the anchor and is not a member. So
+  `get_reply_to()` reads the chip's `{id, timestamp}` straight off the joined thread row
+  with no join to the partitioned table and no per-row handler, and the list query budgets
+  went DOWN. Rendered as the reader's parent chip (web only - telnet can only quote). See
+  [`scene-interaction-threads.md`](../systems/scene-interaction-threads.md) and ADR-0293,
+  decision 4, which records the per-reply edge table (`InteractionReply`) that was built
+  and then rejected at review.
+- **Nested exchanges read as one card.** `root_thread_id` is serialized beside `thread_id`,
+  and `ThreadedNarrativeReader` groups by it, pulling the root thread's anchor in as the
+  opening pose so a three-level back-and-forth is one card rather than a standalone pose
+  above a chain of fragments. `useThreading.getThreadKey` prefers it over `thread_id` for
+  the same reason; mechanical rows still key by scene ahead of that branch, so the
+  multi-target combat round stays whole. Server-side, `PlayThreadsView` groups by exchange
+  (`play_views._exchange_keys`, two flat queries per page) and puts the anchor back at the
+  head of its members when the viewer can see it.
+- **Reachability.** `world.scenes.reachability.persona_can_receive` is the one shared
+  predicate behind two refusals: tagging a persona outside the audience
+  (`UnreachableError`) and replying from a venue that cannot reach its target
+  (`InteractionThreadError`, reusing the existing holder-mismatch check with a typed
+  shape and a stated venue hint instead of an opaque string). Both refuse rather than
+  widen the audience, both preserve the writer's draft, and both are telnet-parity
+  (the parent chip alone is web only). See ADR-0293.
+
 ### Relationship Integration
 - RelationshipUpdate has linked_interaction FK and reference_mode
 
@@ -361,7 +463,8 @@ block/mute) stays entirely the owner's.
 > `/game`) is closed. `GamePage` is now the composition root: it derives the active
 > session's scene, composes `useSceneInteractions` + `useThreading` once, and feeds
 > the result to `ConversationSidebar` (thread sidebar, unread badges, filter modal),
-> the center feed (chat-bubble `PoseUnit`s + `SystemLane`), and the scene toolset
+> the center feed (chat-bubble `PoseUnit`s + `SystemLane`, the latter replaced by
+> in-column `FeedNoteBlock`s in #3856), and the scene toolset
 > (actions/places/consent/composer modes incl. tabletalk) — all on `/game`.
 > `/scenes/:id` remains the unchanged record/detail page (`SceneInteractionPanel`).
 > What was built: one-play-surface composition on `/game`; per-thread unread
@@ -402,6 +505,48 @@ block/mute) stays entirely the owner's.
 - **Conversation threading** — DONE. `useThreading`/`ThreadSidebar`/`ThreadFilterModal`
   (grouping by whisper-set/place/target) render on `/game` via `ConversationSidebar`;
   per-thread unread counts are backed by session last-seen, not stubbed to 0
+- **Threaded/chronological reader, read receipts, history browsing, reference
+  mode** — DONE (#3759). `ThreadedNarrativeReader` reads the live scene feed and
+  historical browsing through the same component: Threads view default-collapses
+  all but the most recently active thread (persisted per conversation, stable
+  anchors survive font/measure changes and reload — `InteractionReadReceipt`,
+  `POST /api/play/read/` including a mark-all-before-snapshot bulk path);
+  Chronological view is a flat, windowed (`@tanstack/react-virtual`) alternative
+  sharing the same read/collapse state. `PlaySidebar`'s History mode
+  (`HistoryNavigator`) browses/searches authorized retained conversations
+  (kind/date filters, cursor-paginated `/api/play/conversations/`,
+  `/api/play/search/`, `/api/play/context/`) without leaving `/game`; opening a
+  result switches the reader into reference mode via `GamePage`'s
+  `displaySceneFeed` swap. Dwell-tracked (`IntersectionObserver`) read receipts
+  feed per-thread unread counts in the reader. `GET /api/play/threads/` (paginated
+  `ThreadSummary` per conversation, with real unread counts) is consumed by the History
+  navigator's conversation drill-down (#3772): each readable conversation row carries a
+  `Threads` disclosure that lists the conversation's reply threads (opening line, visible
+  pose count, unread pill), and opening one switches the reader into reference mode
+  anchored at that thread's first visible pose. The endpoint returns reply threads only;
+  poses belonging to no thread are not emitted (#3772). See `docs/systems/scenes.md`
+  for the endpoint list and `frontend/src/game/CLAUDE.md` for the component
+  breakdown. Explicitly out of scope (kept for future work, not silently
+  dropped): per-persona thumbnails in messages, richer history search/filter
+  tooling.
+
+  **Feeding server read state into the account-wide `attention.ts` badges:
+  DONE (#3774).** The gap the previous paragraph flagged (badges stayed
+  session-local, so a character's unread state didn't survive a change of
+  device) is closed: `account_attention()` (`world/scenes/attention_services.py`)
+  computes each of an account's characters' directed-unread count and
+  ambient-unread flag server-side, in five queries total, deliberately without
+  `InteractionQuerySet.visible_to` (see `docs/systems/scenes.md`'s "Cross-device
+  attention counting" section). An open scene attributes to a character by pose
+  authorship OR physical presence in its room, so a character present but
+  silent still gets the ambient badge (Finding 1, #3774 final review).
+  `RosterEntryViewSet.mine` carries the result
+  on `MyRosterEntrySerializer` (`unread_direct`/`has_ambient_unread`/
+  `attention_as_of_id`); the frontend's `characterAttention()`
+  (`frontend/src/game/attention.ts`) adds each session's own live delta on top
+  of that baseline, watermarked by `attention_as_of_id` so nothing double-counts,
+  and `GameTopBar`/`GameWindow` both call it so a badge is correct even for a
+  character with no local session in this browser tab.
 - **~~Scene scheduling and discovery~~** — Split into separate concerns:
   - **Events system** (`world/events`) — scheduled RP gatherings with calendar, invitations, room modifications. See [Events roadmap](events.md) and `docs/plans/2026-03-27-events-system-design.md`
   - **Grid presence** — "who's where" on public rooms for organic RP, future graphical map. Separate feature, not part of scenes or events

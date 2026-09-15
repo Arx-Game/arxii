@@ -12,16 +12,22 @@ import { vi } from 'vitest';
 import { LineageStage } from '../../components/LineageStage';
 import * as api from '../../api';
 import {
+  mockDraftWithFamily,
   mockDraftWithHeritageNoUpbringing,
   mockDraftWithUpbringing,
   mockEmptyDraft,
+  mockFamilyTemplate,
   mockNobleFamily,
   mockNobleFamily2,
   mockStartingArea,
   mockUpbringingClaim,
+  mockUpbringingConnections,
   mockUpbringingMultiPath,
   mockUpbringingNamed,
+  mockUpbringingNamedWithTemplate,
+  mockUpbringingOwnFamilyGroup,
   mockUpbringingUnknown,
+  mockVacancyKin,
   mockCGExplanations,
   createMockDraft,
 } from '../fixtures';
@@ -49,6 +55,10 @@ vi.mock('../../api', () => ({
   // Invented-parents card (#2815)
   getGenders: vi.fn().mockResolvedValue([]),
   getSpecies: vi.fn().mockResolvedValue([]),
+  // FamilyPathSection queries vacancies from Task 9 on (#3648).
+  getVacancies: vi.fn().mockResolvedValue([]),
+  // LineageRecord's CG point tally (#3660).
+  getCGPointBudget: vi.fn(),
 }));
 
 describe('LineageStage', () => {
@@ -65,6 +75,14 @@ describe('LineageStage', () => {
     });
     vi.mocked(api.getFamilySlots).mockResolvedValue({ slots: [], pools: [] });
     vi.mocked(api.getCGExplanations).mockResolvedValue({});
+    vi.mocked(api.getVacancies).mockResolvedValue([]);
+    vi.mocked(api.getCGPointBudget).mockResolvedValue({
+      id: 1,
+      name: 'Standard',
+      starting_points: 100,
+      xp_conversion_rate: 1,
+      is_active: true,
+    });
   });
 
   describe('No Area Selected', () => {
@@ -223,6 +241,24 @@ describe('LineageStage', () => {
       expect(await screen.findByText('Open Positions in This House')).toBeInTheDocument();
     });
 
+    it('claim path shows a kin vacancy card instead of the kin-slot picker when kin vacancies are offered', async () => {
+      vi.mocked(api.getVacancies).mockResolvedValue([mockVacancyKin]);
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={mockDraftWithFamily} onStageSelect={vi.fn()} />,
+        { queryClient }
+      );
+
+      expect(await screen.findByText(mockVacancyKin.name)).toBeInTheDocument();
+      expect(screen.queryByText('Open Positions in This House')).not.toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole('button', { name: new RegExp(mockVacancyKin.name) }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(mockDraftWithFamily.id, {
+        selected_vacancy_id: mockVacancyKin.id,
+      });
+    });
+
     it('none path shows the tarot naming ritual', async () => {
       const draft = createMockDraft({
         ...mockDraftWithHeritageNoUpbringing,
@@ -297,6 +333,11 @@ describe('LineageStage', () => {
         queryClient,
       });
 
+      // Optional and unanswered: starts folded behind an "Add:" button (#3660).
+      await userEvent.click(
+        await screen.findByRole('button', { name: 'Add: What favor does the house show you?' })
+      );
+
       // Flat-cost choice: unaffected by influence.
       expect(await screen.findByText('2 pts')).toBeInTheDocument();
       // Per-influence choice: cost_per_influence (1) x influence (3).
@@ -338,8 +379,241 @@ describe('LineageStage', () => {
         queryClient,
       });
 
-      expect(await screen.findByText('Describe your childhood home.')).toBeInTheDocument();
-      expect(screen.queryByText('What does the house expect of you?')).not.toBeInTheDocument();
+      // Optional and unanswered: shown folded behind its "Add:" button (#3660).
+      expect(
+        await screen.findByRole('button', { name: 'Add: Describe your childhood home.' })
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/What does the house expect of you\?/)).not.toBeInTheDocument();
+    });
+
+    it('renders a path-scoped prompt after the Your Family heading', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingMultiPath,
+        family_path: 'claimed',
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const heading = await screen.findByText('Your Family');
+      // Optional and unanswered: shown folded behind its "Add:" button (#3660).
+      const prompt = await screen.findByRole('button', {
+        name: 'Add: What does the house expect of you?',
+      });
+      expect(
+        heading.compareDocumentPosition(prompt) & Node.DOCUMENT_POSITION_FOLLOWING
+      ).toBeTruthy();
+    });
+  });
+
+  describe('Lineage questions by kind (#3660)', () => {
+    it('renders a group question, hides follow-ups until answered, and branches off an answer', async () => {
+      const user = userEvent.setup();
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingConnections,
+        family_path: 'none',
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('Which Humble house kept you')).toBeInTheDocument();
+      expect(screen.getByText('House Orisant')).toBeInTheDocument();
+      expect(screen.queryByText('Who in the house looked after you')).not.toBeInTheDocument();
+
+      await user.click(screen.getByText('House Orisant'));
+
+      expect(api.updateDraft).toHaveBeenLastCalledWith(
+        draft.id,
+        expect.objectContaining({
+          draft_data: expect.objectContaining({ origin_anchors: { '401': 9001 } }),
+        })
+      );
+    });
+
+    it('shows the person question once the group is chosen and the branch only for the ticked answer', async () => {
+      const baseDraft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingConnections,
+        family_path: 'none',
+        draft_data: { origin_anchors: { '401': 9001 }, origin_choices: { '401': 501 } },
+      });
+      const queryClient = createTestQueryClient();
+      const { unmount } = renderWithCharacterCreationProviders(
+        <LineageStage draft={baseDraft} onStageSelect={vi.fn()} />,
+        { queryClient }
+      );
+
+      expect(await screen.findByText('Who in the house looked after you')).toBeInTheDocument();
+      expect(
+        screen.queryByText('Did your courier runs bring you to the Rouault')
+      ).not.toBeInTheDocument();
+      unmount();
+
+      const branchedDraft = createMockDraft({
+        ...baseDraft,
+        draft_data: { origin_anchors: { '401': 9001 }, origin_choices: { '401': 502 } },
+      });
+      const branchedQueryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(
+        <LineageStage draft={branchedDraft} onStageSelect={vi.fn()} />,
+        { queryClient: branchedQueryClient }
+      );
+
+      expect(
+        await screen.findByText('Did your courier runs bring you to the Rouault')
+      ).toBeInTheDocument();
+    });
+
+    it('renders an own-family group question as a fact when derived_anchors resolves it', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithFamily,
+        selected_origin_template: mockUpbringingOwnFamilyGroup,
+        derived_anchors: { '405': { id: 9010, name: 'House Ostrean', influence: 5 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('What did your house expect of you')).toBeInTheDocument();
+      expect(screen.getByText('House Ostrean')).toBeInTheDocument();
+    });
+
+    it('shows the missing-group hint when an own-family question has nothing to resolve to', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithFamily,
+        selected_origin_template: mockUpbringingOwnFamilyGroup,
+        derived_anchors: { '405': null },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(
+        await screen.findByText('No group was found for your family yet. Tell staff.')
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe('LineageRecord (#3660)', () => {
+    it('shows a plain pick answer as "choice · cost", with no group and no double separator', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithUpbringing,
+        family: mockNobleFamily,
+        draft_data: { origin_choices: { '202': 301 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('A private tutor · 2 pts')).toBeInTheDocument();
+    });
+
+    it('shows a group answer as "choice · group · cost"', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingConnections,
+        family_path: 'none',
+        draft_data: { origin_anchors: { '401': 9001 }, origin_choices: { '401': 502 } },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      expect(await screen.findByText('Courier · House Orisant · 10 pts')).toBeInTheDocument();
+    });
+  });
+
+  describe('Family Template (name path)', () => {
+    it('clicking a Family Template aspect option PATCHes family_aspect_picks', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingNamedWithTemplate,
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const charge = mockFamilyTemplate.aspect_definitions[0];
+      expect(await screen.findByText(charge.prompt)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /Granaries/ }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_aspect_picks: { [charge.id]: [charge.options[0].id] } },
+      });
+    });
+
+    it('offers a Family Template choice row when the Upbringing offers more than one, and PATCHes on pick', async () => {
+      const secondTemplate = { ...mockFamilyTemplate, id: 402, name: 'Alternate Trust' };
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: {
+          ...mockUpbringingNamedWithTemplate,
+          family_templates: [mockFamilyTemplate, secondTemplate],
+        },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const option = await screen.findByRole('button', { name: mockFamilyTemplate.name });
+      expect(screen.getByRole('button', { name: secondTemplate.name })).toBeInTheDocument();
+      await userEvent.click(option);
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_template_id: mockFamilyTemplate.id },
+      });
+    });
+
+    it('choosing an already-chosen Family Template again PATCHes family_template_id with null', async () => {
+      const secondTemplate = { ...mockFamilyTemplate, id: 402, name: 'Alternate Trust' };
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: {
+          ...mockUpbringingNamedWithTemplate,
+          family_templates: [mockFamilyTemplate, secondTemplate],
+        },
+        draft_data: { family_template_id: mockFamilyTemplate.id },
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const option = await screen.findByRole('button', { name: mockFamilyTemplate.name });
+      await userEvent.click(option);
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        draft_data: { family_template_id: null },
+      });
+    });
+
+    it('choosing a served house option PATCHes served_house_id', async () => {
+      const draft = createMockDraft({
+        ...mockDraftWithHeritageNoUpbringing,
+        selected_origin_template: mockUpbringingNamedWithTemplate,
+      });
+      const queryClient = createTestQueryClient();
+      renderWithCharacterCreationProviders(<LineageStage draft={draft} onStageSelect={vi.fn()} />, {
+        queryClient,
+      });
+
+      const houseChoice = mockFamilyTemplate.served_house_choices[0];
+      await userEvent.click(await screen.findByRole('button', { name: houseChoice.name }));
+
+      expect(api.updateDraft).toHaveBeenCalledWith(draft.id, {
+        served_house_id: houseChoice.id,
+      });
     });
   });
 

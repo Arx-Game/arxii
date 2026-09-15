@@ -1,5 +1,8 @@
 """Tests for boss phase transition service."""
 
+from decimal import Decimal
+from unittest.mock import patch
+
 from django.test import TestCase
 
 from world.combat.constants import OpponentTier
@@ -133,3 +136,57 @@ class CheckAndAdvanceBossPhaseTests(TestCase):
         )
         result = check_and_advance_boss_phase(boss)
         self.assertIsNone(result)
+
+    def test_transition_broadcasts_authored_description(self) -> None:
+        """The phase's authored description reaches the room (#3552)."""
+        boss = self._make_boss(health=200)
+        BossPhase.objects.create(
+            opponent=boss,
+            phase_number=2,
+            threat_pool=self.pool_p2,
+            health_trigger_percentage=0.5,
+            description="The dragon's scales blacken with rage.",
+        )
+        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+            check_and_advance_boss_phase(boss)
+        sent = [c.args[0] for c in mock_msg.call_args_list]
+        self.assertIn("The dragon's scales blacken with rage.", sent)
+
+    def test_transition_without_description_uses_generic_line(self) -> None:
+        boss = self._make_boss(health=200)
+        BossPhase.objects.create(
+            opponent=boss,
+            phase_number=2,
+            threat_pool=self.pool_p2,
+            health_trigger_percentage=0.5,
+        )
+        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+            check_and_advance_boss_phase(boss)
+        sent = [c.args[0] for c in mock_msg.call_args_list]
+        self.assertIn("Dragon shifts - the fight changes.", sent)
+
+    def test_enraging_transition_adds_enrage_line(self) -> None:
+        boss = self._make_boss(health=200)
+        BossPhase.objects.create(
+            opponent=boss,
+            phase_number=2,
+            threat_pool=self.pool_p2,
+            health_trigger_percentage=0.5,
+            damage_multiplier=Decimal("1.5"),
+        )
+        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+            check_and_advance_boss_phase(boss)
+        sent = [c.args[0] for c in mock_msg.call_args_list]
+        self.assertIn("Dragon is enraged.", sent)
+
+    def test_no_transition_broadcasts_nothing(self) -> None:
+        boss = self._make_boss(health=400)
+        BossPhase.objects.create(
+            opponent=boss,
+            phase_number=2,
+            threat_pool=self.pool_p2,
+            health_trigger_percentage=0.5,
+        )
+        with patch.object(boss.encounter.room, "msg_contents") as mock_msg:
+            check_and_advance_boss_phase(boss)
+        mock_msg.assert_not_called()

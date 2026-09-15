@@ -49,6 +49,7 @@ function makeEntry(
     id,
     name,
     summary: `${name} summary`,
+    quote: '',
     lore_content: loreContent,
     mechanics_content: null,
     lore_links: links,
@@ -69,6 +70,7 @@ function makeEntry(
     research_progress: null,
     art_url: artUrl,
     perspective_of: perspectiveOf,
+    also_filed_under: [],
   };
 }
 

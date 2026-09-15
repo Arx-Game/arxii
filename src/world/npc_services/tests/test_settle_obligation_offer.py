@@ -220,7 +220,6 @@ class SettleObligationLoopEndToEndTests(TestCase):
             "stats": dict.fromkeys(DEFAULT_STAT_NAMES, 2),
             "tarot_card_name": tarot.name,
             "tarot_reversed": False,
-            "traits_complete": True,
             "selected_gift_id": gift.id,
             "selected_technique_ids": [cg_technique.id],
             "selected_gift_resonance_id": resonance.id,

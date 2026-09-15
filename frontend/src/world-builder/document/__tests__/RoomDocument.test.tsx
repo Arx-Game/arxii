@@ -77,10 +77,26 @@ vi.mock('../../atlas/AddDialog', () => ({
               matchedRoomId: null,
               exitThere: 'down',
               exitBack: 'up',
+              oneWay: false,
             })
           }
         >
           dig it
+        </button>
+        <button
+          data-testid="mock-confirm-exit-one-way"
+          onClick={() =>
+            onConfirm({
+              kind: 'exit',
+              name: 'The Cellar',
+              matchedRoomId: 200,
+              exitThere: 'down',
+              exitBack: '',
+              oneWay: true,
+            })
+          }
+        >
+          one way
         </button>
       </div>
     ) : null,
@@ -147,7 +163,16 @@ function makeDetail(room: WorldBuilderRoom): WorldBuilderRoomDetail {
       starting_areas: [],
       beginnings: [],
     },
-    breadcrumb: [{ id: 5, name: 'The Grand Foyer Building', level_display: 'Building' }],
+    breadcrumb: [
+      {
+        id: 5,
+        name: 'The Grand Foyer Building',
+        level: 10,
+        level_display: 'Building',
+        grid_x: null,
+        grid_y: null,
+      },
+    ],
     exits: [],
     comfort: { level: 0, points: 0, amenity: 0, axes: [] },
     ambient_lines: [],
@@ -382,6 +407,23 @@ describe('RoomDocument', () => {
     expect(runMutation).not.toHaveBeenCalledWith(
       expect.objectContaining({ key: 'staff_dig_room' })
     );
+  });
+
+  it('a one-way link sends one_way and no return name (#3860)', async () => {
+    const current = makeRoom({ id: 100 });
+    mockQueries({
+      room: current,
+      managerRooms: [current, makeRoom({ id: 200, name: 'The Cellar' })],
+    });
+
+    renderWithProviders(<RoomDocument roomId={100} onNavigateRoom={vi.fn()} onDeleted={vi.fn()} />);
+    await userEvent.click(screen.getByTestId('mock-open-add-exit'));
+    await userEvent.click(screen.getByTestId('mock-confirm-exit-one-way'));
+
+    expect(runMutation).toHaveBeenCalledWith({
+      key: 'staff_link_rooms',
+      kwargs: { room_a_id: 100, room_b_id: 200, name_ab: 'down', one_way: true },
+    });
   });
 
   it('exit dig: the pending link resolves the NEW room by known-ids, then wires both ways', async () => {

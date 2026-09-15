@@ -480,6 +480,13 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
 
     Walks the species + ancestor chain so a form trait authored on a parent
     species (e.g. Khati) is visible to its subspecies (e.g. Vulpi).
+
+    A trait's ``unnatural_option`` (#3739) is never in the CG palette, whatever
+    ``allowed_options`` says: it is the umbrella value for a colour no species
+    carries, and it is reachable only on a feature the draft has paid to make
+    distinctive. Every caller that widens the palette on purpose (the form-options
+    view's ``all_options``) reads the trait's options directly instead of coming
+    through here.
     """
     result: dict[FormTrait, list[FormTraitOption]] = {}
 
@@ -505,7 +512,11 @@ def get_cg_form_options(species: Species) -> dict[FormTrait, list[FormTraitOptio
     for species_trait in species_traits:
         trait = species_trait.trait
         # Use the model method to get species-specific options
-        options = list(species_trait.get_available_options())
+        options = [
+            opt
+            for opt in species_trait.get_available_options()
+            if opt.pk != trait.unnatural_option_id
+        ]
         result[trait] = options
 
     return result

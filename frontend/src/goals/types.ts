@@ -13,6 +13,9 @@ export interface CharacterGoal {
   id: number;
   domain: number;
   domain_name: string;
+  /** Short term or long term, numbered within the horizon (#3621). */
+  horizon: 'short_term' | 'long_term';
+  ordinal: number;
   points: number;
   notes: string;
   updated_at: string;

@@ -166,8 +166,11 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
 
     Resolution order:
     1. ENEMY — if the technique is hostile (deals damage or applies ENEMY conditions).
-    2. ALLY — if any condition_application has target_kind=ALLY.
-    3. SELF — fallback (no hostile traits, no ALLY conditions).
+    2. ALLY — if any applied, removed or treatment row has target_kind=ALLY.
+    3. ENEMY — if a treatment row targets an ENEMY (stabilising a downed foe is
+       aimed at an adversary without being hostile, so it cannot be folded into
+       ``is_technique_hostile``).
+    4. SELF — fallback (no hostile traits, no ALLY/ENEMY rows).
 
     Exactly one relationship comes back, so a technique whose payload rows carry
     more than one distinct ``target_kind`` gets an answer that is a guess — see
@@ -191,6 +194,15 @@ def derive_target_relationship(technique: Technique) -> ConditionTargetKind:
         row.target_kind == ConditionTargetKind.ALLY for row in technique.cached_removed_conditions
     ):
         return ConditionTargetKind.ALLY
+    # Treatment rows carry their own target_kind and were read by nothing here
+    # before #3682: a technique whose only payload was an ALLY treatment (an
+    # authored heal) derived SELF, and the SELF branch of ``_check_relationship``
+    # then refused to let it name anyone but the caster.
+    treatment_kinds = {row.target_kind for row in technique.cached_treatments}
+    if ConditionTargetKind.ALLY in treatment_kinds:
+        return ConditionTargetKind.ALLY
+    if ConditionTargetKind.ENEMY in treatment_kinds:
+        return ConditionTargetKind.ENEMY
     return ConditionTargetKind.SELF
 
 

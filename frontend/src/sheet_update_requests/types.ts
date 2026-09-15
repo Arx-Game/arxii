@@ -27,7 +27,9 @@ export const REQUEST_STATUSES = {
 
 export const PROFILE_TEXT_FIELDS = [
   { value: 'background', label: 'Background' },
-  { value: 'personality', label: 'Personality' },
+  { value: 'never_do', label: 'What would you never do?' },
+  { value: 'protect', label: 'What would you protect at all costs?' },
+  { value: 'fear', label: 'What are you deathly afraid of?' },
 ] as const;
 
 export const DISTINCTION_ACTIONS = {

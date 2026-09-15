@@ -22,10 +22,22 @@ class RosterEntryFilterSet(django_filters.FilterSet):
         lookup_expr="icontains",
     )
     roster = django_filters.NumberFilter(field_name="roster_id")
+    realm = django_filters.CharFilter(method="filter_realm")
 
     class Meta:
         model = RosterEntry
-        fields = ["gender", "char_class", "name", "roster"]
+        fields = ["gender", "char_class", "name", "roster", "realm"]
+
+    def filter_realm(
+        self, queryset: QuerySet[RosterEntry], name: str, value: str
+    ) -> QuerySet[RosterEntry]:
+        """Entries whose sheet is from the realm with this slug (#3725); unknown slug, none."""
+        from world.realms.services import realm_by_slug  # noqa: PLC0415
+
+        realm = realm_by_slug(value)
+        if realm is None:
+            return queryset.none()
+        return queryset.filter(character_sheet__true_profile__origin_realm=realm)
 
     def filter_gender(
         self, queryset: QuerySet[RosterEntry], name: str, value: str
@@ -45,7 +57,7 @@ class RosterEntryFilterSet(django_filters.FilterSet):
 class FamilyFilterSet(django_filters.FilterSet):
     """Filter families by open positions and/or starting area."""
 
-    has_open_positions = django_filters.BooleanFilter(method="filter_has_open_positions")
+    has_open_kin_slots = django_filters.BooleanFilter(method="filter_has_open_kin_slots")
     area_id = django_filters.CharFilter(method="filter_by_area")
     kind = django_filters.ModelMultipleChoiceFilter(
         field_name="kind", queryset=FamilyKind.objects.all()
@@ -53,9 +65,9 @@ class FamilyFilterSet(django_filters.FilterSet):
 
     class Meta:
         model = Family
-        fields = ["has_open_positions", "area_id", "kind"]
+        fields = ["has_open_kin_slots", "area_id", "kind"]
 
-    def filter_has_open_positions(
+    def filter_has_open_kin_slots(
         self, queryset: QuerySet[Family], name: str, value: bool
     ) -> QuerySet[Family]:
         if value:

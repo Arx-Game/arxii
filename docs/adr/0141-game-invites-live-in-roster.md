@@ -28,9 +28,11 @@ Game invites live in `world/roster/` as a new model (`GameInvite`) and submodule
   `RosterTenure`, and `PlayerData` are all roster models. Invites are the step
   *before* that lifecycle begins — the inviter is a `PlayerData`, and the invite
   annotates the player's first `DraftApplication`.
-- **Reuses existing infrastructure.** The `PlayerData` FK, trust checks
-  (`PlayerTrust`), and notification patterns (`notify_mail_arrived`) are all
-  roster-local or roster-adjacent.
+- **Reuses existing infrastructure.** The `PlayerData` FK and the notification
+  patterns (`notify_mail_arrived`) are roster-local or roster-adjacent. (This
+  rationale also cited the `PlayerTrust` eligibility check; that gate and its
+  model were removed in #3726 — see ADR-0292. The `PlayerData`/notification
+  half stands, and so does the placement decision.)
 - **ADR-0017 compliance.** New subsystems are submodules, not standalone apps.
   A single model doesn't justify a new app.
 - **Distinct from `GMRosterInvite`.** A token-based invite model already exists

@@ -41,8 +41,8 @@ tier.range_description                       # "+250 to +499"
 | Model | Purpose | Key Fields |
 |-------|---------|------------|
 | `Society` | Socio-political stratum within a Realm | `name`, `realm` (FK to `realms.Realm`), `description`, 6 principle fields (`mercy`, `method`, `status`, `change`, `allegiance`, `power`) |
-| `OrganizationType` | Template with default rank titles for org categories | `name`, `rank_1_title` through `rank_5_title` |
-| `Organization` | Specific group within a Society | `name`, `society`, `org_type`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields |
+| `OrganizationType` | Template with default rank titles for org categories | `name`, `is_covert`, `reach` (`EnemyReach`, #3621: how far a group of this type reaches a character who made an enemy of it; prices the enemy on the group scale), `rank_1_title` through `rank_5_title` |
+| `Organization` | Specific group within a Society | `name`, `society`, `org_type`, 6 `*_override` principle fields, 5 `rank_*_title_override` fields, `patron_nickname` (#3776: nullable FK → `worship.BeingNickname`, SET_NULL — this org's own name for its patron deity, reaching the `WorshippedBeing` transitively via `patron_nickname.being`; never a direct FK to `WorshippedBeing`) |
 
 ### Membership and Reputation (SharedMemoryModel - per-persona instances)
 
@@ -506,6 +506,15 @@ Read-only endpoints under `/api/societies/`:
 | `/events/` | `LegendEventViewSet` (#3466) | Public read of `LegendEvent` rows; `establish` detail action — `POST /events/{id}/establish/` `{honoree_persona, deed_title, journal_title, journal_body}` mints a fresh deed under that event. Both actions dispatch through `PerformRitualAction` against the seeded "Rite of Honors" ritual, never `honor_deed` directly — mirroring `world.magic.views.RitualPerformView`, so telnet and web converge on one action |
 
 All covenant-backed organizations are excluded from the membership/rank/offer endpoints.
+
+**Realm pages (#3725, [realms.md](realms.md)):** `/api/realms/<slug>/organizations/` serves
+a realm's non-covert organizations to anyone through `OrganizationShopWindowSerializer`
+(name, words, colours, sigil, description, kind, society; nothing else), a covert kind
+only to its own members; `/api/realms/<slug>/notables/` serves the realm's two boards
+from `ranking_services.get_realm_renown_top_n` / `get_realm_legend_top_n` (Active-roster
+PRIMARY personas whose sheet is from the realm; renown = `total_prestige` × fame-tier
+multiplier with no society lens; labels from the global `RankingBandLabel` set; the
+value never renders). Diegetic `RankingDisplay` boards are untouched.
 
 ---
 

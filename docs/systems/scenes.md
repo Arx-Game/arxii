@@ -135,6 +135,33 @@ in-character presence. Being able to react to a scene your character wasn't pres
 is intentional product behavior. Only `react_to_window` (the IC reaction-window system,
 `world/scenes/reaction_services.py`) is perception-gated.
 
+### The actor in the line (#3858, ADR-0299)
+
+A pose or a say reads as a whole sentence with its actor in it on every protocol:
+`Apostate is testing`, `Apostate says, "Test"`. The card above a web bubble is
+metadata and never stands in for the actor. `world/scenes/line_rendering.render_line`
+is the one formatter: a pose opens with the name (semipose glue for `'s`/`,`; a pose
+that already opens with the name is left alone), say/whisper/mutter/shout quote the
+text after their verb and name the language, emit/action/outcome pass through. It
+runs at display time only; `Interaction.content` stays what was typed, and
+threading, muting, comprehension and search keep reading it.
+
+- **Web, live:** `InteractionPayload.line`, built by `_build_interaction_payload`
+  from the display name (the attributed companion's, else the persona's) and rebuilt
+  per object by `_send_to_objects` when a comprehension renderer rewrites the content,
+  so a garbled listener reads a garbled sentence.
+- **Web, REST:** `InteractionListSerializer.line` (`get_line`), from the per-viewer
+  name `get_persona` resolves (#1109) and the per-viewer content `get_content`
+  produces (a muted row stays blank).
+- **Telnet:** `PoseAction` broadcasts `render_line("{caller}", POSE, text)` through
+  `message_location`, whose mapping resolves `{caller}` per looker; whisper, mutter
+  and the companion emote use the formatter too. Say keeps `$You() $conj(say)`
+  (the speaker's second-person echo, #2993 M2).
+- **Readers:** `ActorLine` (`frontend/src/scenes/components/ActorLine.tsx`) renders
+  `line ?? content` as the body in `PoseUnit` and `ExplorationReader`, setting the
+  leading name semibold when the line opens with the card's own name;
+  `ThreadedNarrativeReader`'s collapsed and thread excerpts read the line.
+
 ### Companion pose attribution (#3294)
 
 `Interaction.attributed_companion` — nullable FK -> `companions.Companion`
@@ -404,6 +431,26 @@ result = respond_to_action_target(
 the single check-and-fatigue resolution point; `difficulty_override` is the numeric value
 produced by combining the defender's plausibility base with any active-resistance increment.
 
+### Result delivery (#3807)
+
+A resolved request's result row is not only persisted, it is delivered live. The
+targeted/area result row (and, for a MUTTER delivery, the room-heard fragment row) from
+`_create_result_interaction`, a treatment outcome from `_resolve_treatment_request`, and a
+cast outcome pose from `create_cast_outcome_pose` (`cast_services.py`) all call
+`deliver_outcome_interaction(interaction, location=...)` (`interaction_services.py`) once
+the target rows are written, so the live push's involvement mark already carries
+`target_persona_ids`. `deliver_outcome_interaction` registers a `transaction.on_commit`
+callback: it pushes the WebSocket payload via `push_interaction`, then sends the same
+`interaction.content` as plain text to the non-web sessions of exactly the objects the push
+reached (telnet parity). A social-check result additionally schedules the resolution-theater
+success-level wheel to the roller and target; see "Resolution theater" in
+`docs/systems/checks.md`.
+
+`push_interaction` gained an optional `location` kwarg (#3807): when omitted it still
+resolves from the writer persona's own character location, byte-identical to before; a
+caller passes it explicitly for a Narrator-authored row, since the Narrator's character is
+never physically placed anywhere.
+
 ### Good-Sport Kudos Accrual
 
 When a defender accepts an action request, `_accrue_engagement_for_primary` (primary target)
@@ -444,11 +491,12 @@ decision record: `world/scenes/CLAUDE.md` and ADR-0235.
 - `POST /api/scenes/{id}/finish/` - Finish an active scene (owner/GM/staff)
 - `GET /api/scenes/spotlight/` - Active scenes + recently finished (last 7 days)
 - `GET /api/scenes/{id}/highlight-reel/` - Highlight reel (#1241, re-ranked #2161): one
-  **fully sealed** featured moment + a ranked index, ids plus `vote_count`/`reaction_count`.
-  Featured = highest-ranked GM-tagged pose (headlines even at 0 votes/reactions — curation
-  primacy), else the single most-ranked pose; index = remaining poses with ≥1 vote or
-  reaction, ranked by all-time `WeeklyVote` count first (persists past weekly settlement —
-  a pose's standing outlives the week it was posed in), reaction count as tie-break, and
+  **fully sealed** featured moment + a ranked index, ids plus `reaction_count` only.
+  Featured = highest-ranked GM-tagged pose (headlines even at 0 nominations/reactions —
+  curation primacy), else the single most-ranked pose; index = remaining poses with ≥1
+  nomination or reaction, ranked by all-time `Nomination` count first (#3738; persists past
+  weekly settlement — a pose's standing outlives the week it was posed in; never shown,
+  since a nomination is invisible to its nominee), reaction count as tie-break, and
   recency last, capped at 10. Source set is filtered through `Interaction.objects.visible_to`,
   so hidden poses never appear. Reveal a pose via `GET /api/interactions/{id}/`.
 - `GET /api/scenes/{id}/gm-rail/` - GM story rail (#3434): the running beat's authored
@@ -564,7 +612,135 @@ Read-only listing of a player's pending additional-target consent rows (#1177).
 
 `combat_risk_level` is computed from the row's own target persona — mirroring the primary-request field — so additional targets of a hostile AOE cast receive the same combat-risk warning in `ConsentPrompt` as the primary target does (#1259).
 
+### Play API (narrative reader) (#3759)
+
+Reader contracts for the play-history workspace (`src/world/scenes/play_views.py`). All six
+endpoints require authentication (`IsAuthenticated`). Five of the six read from the same
+authorized `Interaction` queryset the scene feed itself uses — `InteractionQuerySet.visible_to`
+(via `InteractionViewSet.get_queryset()`, reused for masking, language comprehension, and
+block/mute rules) — so this surface introduces no separate visibility rule for them.
+`POST /api/play/read/` is the exception: it doesn't gate reads at all — it privately records this
+account's own read state and is never serialized to any other viewer (see its entry below).
+Cursor-paginated endpoints use an opaque base64 `(timestamp, id)` boundary token (`before`/`after`)
+rather than offset pagination.
+
+The reader's per-pose nested data (persona resonances, an endorser's primary persona, endorsements,
+target personas, favorites, receivers, reactions, linked actions and their combat-round rows,
+reaction windows and their reactions, dramatic-moment tags and pending suggestions — 13 distinct
+relations) is batched via `Prefetch(..., to_attr="cached_*")` calls onto `PrunedCachedProperty`
+properties (`world/scenes/models.py`, `world/scenes/reaction_models.py`, and — for
+`cached_resonances` and `cached_primary_persona` — `world/character_sheets/models.py`), not plain
+attributes or `CachedRowsHandler`. `CharacterSheet.cached_primary_persona` is the one fed twice:
+once nested under endorsements on the `Interaction` queryset, once more on the separate
+`SceneEntryEndorsement` queryset built in `get_serializer_context()` — 14 `Prefetch(to_attr=...)`
+calls in total feeding those 13 properties. This is the sanctioned shape (ADR-0298): a genuine
+`cached_property` is the one `to_attr` target Django's own cold-instance freshness check gets right,
+and `PrunedCachedProperty` additionally re-filters any row whose pk has gone falsey (a
+`Collector.delete()` zombie) on every read. It does not by itself keep a cached list fresh across
+writes made elsewhere in the same request or process — most relations' write sites mutate the
+cached list directly or clear it via `related_cache_fields`/`RelatedCacheClearingMixin`;
+`cached_primary_persona` is the one exception, with no write-side invalidation wired at all — a
+PRIMARY persona is effectively immutable once created, so no write site needs to clear it.
+
+- `GET /api/play/conversations/` - Authorized conversation summaries (one row per room/scene/
+  whisper/OOC-channel grouping), cursor-paginated 30/page.
+- `GET /api/play/threads/` (#3759, #3772, #3787) - Server-grouped, cursor-paginated
+  (20/page) exchange summaries for one `conversation`, each carrying a per-account unread
+  count via `read_state_services.has_read`. Returns **exchanges only**: an interaction
+  carries a thread only when it is an explicit reply, so poses nobody answered are not
+  emitted as single-pose groups (#3772; before that fix a 47-pose scene with 3 reply
+  chains reported 47 threads across 3 pages). Grouping is by EXCHANGE, not by thread
+  (#3787): `play_views._exchange_keys` resolves each page's thread ids to
+  `root_id or pk` and each exchange to its root thread's anchor in two flat queries, so a
+  nested back-and-forth is one group, and the answered row is prepended to its members
+  when the viewer can see it (it is the thread's anchor, not one of its members). A viewer
+  who cannot see the anchor simply gets the earliest visible reply leading, which is what
+  `firstVisible` already means. Consumed by `ConversationThreadList` in the History
+  navigator's conversation drill-down.
+- `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
+  (`InteractionListSerializer`, whose `line` field carries the rendered sentence, #3858),
+  cursor-paginated 100/page.
+- `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose
+  reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
+  page further in either direction without re-deriving the boundary. A missing or unauthorized
+  reference returns an identical 404 (`"This pose is no longer available."`) — the two are never
+  distinguished.
+- `GET /api/play/search/` (#3759) - Case-insensitive substring search over authorized,
+  already-rendered content. Requires a 2-200 character query AND at least one of `conversation`/
+  `kind`/`from`/`to`/`until`/`participant` (an unbounded scan is rejected with 400); cursor-paginated
+  30/page.
+- `POST /api/play/read/` (#3759) - Two request-body shapes, both creating private
+  `InteractionReadReceipt` rows for the calling account and both idempotent (already-read poses are
+  silently skipped, not errors). Neither is visibility-gated on its own output (a read receipt is a
+  private per-account marker never serialized to any other viewer):
+  - `{"poses": [{"id", "timestamp"}, ...]}` - Marks up to `MAX_POSES_PER_BATCH` (100) explicit pose
+    references read (`read_state_services.mark_poses_read`); callers are expected to only mark poses
+    they were actually shown.
+  - `{"conversation": "<ref>", "before": "<ISO-8601 timestamp>"}` (mark-all-before-snapshot bulk
+    dismissal, spec section 7) - Marks every interaction the account can see in that conversation with
+    `timestamp <= before` read in one call, without the client enumerating poses. Routes the read
+    through the SAME authorized `_rows()`/`_queryset()` path every other play view uses (never a raw
+    `Interaction.objects.filter(...)`), pushing the `timestamp <= before` bound into the DB query via
+    `_queryset`'s `to` alias before any row is fetched. Capped at `MAX_CONVERSATION_MARK_READ` (5000,
+    `read_state_services.mark_conversation_read`) — keeping the newest poses over cap, since those are
+    likeliest still unread. Frontend: `ThreadedNarrativeReader`'s "Mark conversation read" toolbar
+    button (`playQueries.markConversationRead`), which sends the latest visible pose's timestamp as
+    `before` and optimistically clears local unread badges pending the next natural refetch.
+
+### Cross-device attention counting (#3774)
+
+`account_attention(*, account, entries) -> AccountAttention` (`world/scenes/attention_services.py`)
+answers what is waiting for each of an account's characters (`CharacterAttention.direct`/`.ambient`,
+keyed by `character_sheet_id`) in five queries total, none per character and none per row. It
+deliberately never calls `InteractionQuerySet.visible_to` - that queryset's staff/player branches
+return far more than one account's own waiting attention, which would make a badge meaningless and
+disclose volume - and instead builds the count from rows already scoped to the account (directed
+receipts/targets, and room-heard poses in scenes the account still participates in). An open scene
+is attributed to a specific character two ways, UNIONed: pose authorship, and physical presence in
+the scene's room right now (`ObjectDB.db_location_id`, since `CharacterSheet` shares `ObjectDB`'s
+primary key) - the latter catches a character who has a `SceneParticipation` row from being present
+when the scene opened or from joining a combat encounter (`add_present_as_co_owners`,
+`ensure_scene_participation`) but has never posed there, who would otherwise never see the ambient
+badge that scene produces (Finding 1, #3774 final review). Consumed by
+`RosterEntryViewSet.mine`, which populates `MyRosterEntrySerializer`'s `unread_direct`/
+`has_ambient_unread`/`attention_as_of_id` once per request via serializer context - the frontend's
+`characterAttention()` (`frontend/src/game/attention.ts`) then adds each session's own live delta on
+top of that server baseline.
+
 ---
+
+## Scene participation and the threshold (#3867, ADR-0300)
+
+Where a character stands is presence: the room's contents, the Here panel, the exits.
+Whether they are in the scene is participation, and participation begins with the first
+pose. It is read off the log, never stored: `world/scenes/participation.py`'s
+`has_entered(scene, character_sheet_id)` and `entered_sheet_ids(scene)` answer from the
+scene's own rows in `ENTRANCE_MODES` (pose, say, emit; whispers and mutters are directed
+and enter nothing). A character present in the room without such a line stands at the
+**threshold**: listed in the Here panel with a mark (`in_scene: false` on their
+`room_state` entry; the viewer's own `viewer_entered: false` on the scene block), able to
+see everything, and not addressable room-heard: `persona_can_receive`'s room-heard branch
+requires presence and entry, and the tag refusal names it ("<name> has not joined the
+scene yet."). A whisper, directed by construction, still reaches them. Leaving without
+posing records nothing.
+
+`SceneParticipation` answers a different question (admin co-ownership and read
+membership) and is not consulted here. A scene that formalises around people already
+posing takes their recent room lines in through `capture_prescene_interactions`, so they
+are in at once and nobody silent is. An ephemeral scene keeps no log and has no threshold.
+
+## The entrance (#904, #2183, #3867)
+
+The entrance is the first pose, not a toggle. `record_interaction` marks a writer's first
+room-heard line in a scene `pose_kind=ENTRY` whatever the client sent, demotes any later
+"entry" to standard, opens the ENTRANCE reaction window on it (#904; telnet entrances
+included) and refreshes every occupant's `room_state` so the mark leaves the entrant's
+row. `submit_pose` refuses a second client-sent entry (400). One entrance per character
+per scene makes the acclaim grant's earliest-`ENTRY` lookup correct by construction and
+its per-scene dedupe a real rule (`world/magic/services/gain.py`). The composer shows the
+entrance as a state before the first pose (`CommandInput.tsx`, `isEntrance` derived from
+`viewer_entered`), with the technique attachment (#2183) beside it; the entry flourish
+(`docs/systems/magic.md`) stays the entrant's own follow-up.
 
 ## Scene Administration (#1445)
 
@@ -577,7 +753,9 @@ All characters **present in the room at scene creation** become co-owners (`is_o
 their `SceneParticipation`). Latecomers who join after the scene has started are non-owner
 participants — they cannot inadvertently acquire admin rights by entering a room mid-scene
 (anti-grab rule). A GM or staff character bypasses the ownership check entirely; they can
-administer any scene regardless of participation.
+administer any scene regardless of participation. Co-ownership is the admin question only:
+whether someone is *in* the scene is read off the log (see "Scene participation and the
+threshold", #3867).
 
 ### Permission helper
 
@@ -766,6 +944,29 @@ panel (`data-testid="scene-header-stakes-panel"`) polling `GET /api/scenes/{id}/
 the effective risk - the player-visible half of the contract, at the same opt-in moment
 [stakes.md](stakes.md)'s "Opt-in & Visibility Surfaces" section describes. Branch contents
 (what a WIN/LOSS/WITHDRAWAL actually does) are never part of the payload.
+
+### Room art backdrop (#3556)
+
+`SceneDetailSerializer.art_url` threads the scene room's art onto the scene page. No new
+authoring surface and no model change - it delegates straight to
+`world.locations.services.resolve_area_art` (the room's own `ObjectDisplayData.thumbnail`
+first, else the nearest ancestor area's `Area.art`, #3477), the same read side the
+world-builder already uses. `null` when the scene has no location or neither the room nor
+any ancestor area designates art.
+
+Web surfaces (both render-or-vanish - no image, no backdrop, never a card):
+
+- `SceneHeader.tsx` renders it as a full-bleed banner behind the title/badges
+  (`data-testid="scene-header-backdrop"`), scrimmed by a `bg-gradient-to-t
+  from-background via-background/85 to-background/40` overlay (theme tokens only) so
+  text stays legible over any art.
+- `TacticalMap.tsx` (`frontend/src/areas/components/`) takes an optional `artUrl` prop,
+  rendered as a dimmed backdrop (`data-testid="tactical-map-backdrop"`, `bg-background/70`
+  scrim) behind the node graph; `SceneTacticalMap.tsx` is the only caller that passes it
+  (`scene.art_url`). Position nodes already render on opaque `bg-card` boxes, so their
+  legibility is unaffected either way. The React Flow dot `<Background>` is skipped when a
+  backdrop is present (the dots and the art fought visually) and restored otherwise - so
+  `CombatTacticalMap.tsx`, which never passes `artUrl`, renders byte-identical to before.
 
 ### Lifecycle Actions
 
@@ -1044,8 +1245,13 @@ owning `ObjectDB`'s pk) and sends that id directly as `target`.
   has no participant picker.
 
 **Wire-point:** rendered by `SceneDetailPage.tsx`, gated a second time at the mount
-site (`{scene?.viewer_can_gm && <GMAdjudicationPanel scene={scene} />}`) alongside
-`HighlightReel`.
+site (`{scene?.viewer_can_gm && <GMAdjudicationPanel scene={scene} tabs={...} />}`).
+Since #3557 the panel takes a `tabs` prop (`GM_TOOL_TABS`, `COMBAT_GM_TOOL_TABS`,
+`NON_COMBAT_GM_TOOL_TABS` exported alongside it) and mounts twice while an encounter
+is active: in `CombatRail`'s GM tab (`frontend/src/combat/components/CombatGMTab.tsx`)
+with Condition, Dramatic Beat and Traps, and in the header's folded "Scene tools"
+accordion with the other eight, so every lever has one home mid-fight. Idle, the
+header mounts all eleven. See ADR-0274.
 
 ---
 
@@ -1066,12 +1272,22 @@ no child re-fetches the same scene/roster data.
 
 **Feed presentation:** `PoseUnit` (`frontend/src/scenes/components/PoseUnit.tsx`)
 renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
-`FormattedContent`-rendered prose, and reactions — never monospace/terminal
+the body, and reactions — never monospace/terminal
 styling (ratified presentation bar; terminal-style rendering on the primary feed is
-a defect, not a variant). `GameWindow` renders this structured bubble feed plus
-`SystemLane` (muted, collapsible system/channel/error strip) whenever the active
-session has a scene; with no active scene it falls back to the legacy raw
-`ChatWindow` log (`frontend/src/game/components/ChatWindow.tsx`). This restyle also
+a defect, not a variant). `GameWindow` renders this structured bubble feed whenever
+the active session has a scene; with no active scene it renders `ExplorationReader`
+(`frontend/src/game/components/ExplorationReader.tsx`). Since #3856 both readers
+also show the session's typed text lines (`FeedNote`s: look results, item lines,
+errors, arrivals and departures, narrative emits) at their time among the poses,
+rendered by `FeedNoteBlock`; the collapsed `SystemLane` strip that used to hold
+untyped text is gone. Above the column sit the player's filter chips (#3856 PR 2,
+`frontend/src/game/feedChips.ts`, `FeedChipStrip.tsx`): each chip owns a set of
+kinds, a press shows or hides them, All is the master switch, a right-click edits
+the chip (name, kinds, wake, delete), up to three custom chips; a kind no chip owns
+still shows unless All is off. Showing and waking are separate: only kinds under a
+chip set to wake badge the top bar and puppet tabs. Any block minimises to a stub or
+leaves the viewer's own view (`FeedBlockFrame`); nothing is deleted for others. The
+layout persists per account, per browser, in `PlayPreferences`. This restyle also
 closes the markdown-rendering gap the #2155 audit flagged: the feed now renders
 `FormattedContent`, so `RichTextInput`'s markdown output actually displays as
 formatted prose instead of raw text.
@@ -1150,7 +1366,13 @@ the room feed. The composer's audience is **derived from the active tab and
 locked**, never stored independently — `tabKeyToComposerMode` (in
 `threadToComposerMode.ts`) translates the active tab's key into a locked
 `ComposerMode` every render, which is the mis-send guard (a stale composer
-audience surviving a tab switch is the failure mode this closes). The open-tab
+audience surviving a tab switch is the failure mode this closes). The room anchor's
+own default is derived the same way (#3857): with no mode chosen it is Pose, so a
+typed line is a pose and never a raw command; a line starting with `/` is the
+command after the slash; staff have a Commands mode whose lines go as typed and
+whose answers land in the staff console (`StaffConsole.tsx`), tagged `console` by
+`server/conf/serversession.py` while `server/conf/inputfuncs.py:text` runs the
+line, never in the player-facing column. The open-tab
 layout is persisted client-locally per character+scene (thread **keys** only,
 never message content) via `threadTabsStorage.ts`'s `localStorage` helpers, and
 `gameSlice` resets both tab fields whenever the session's scene id actually
@@ -1339,6 +1561,250 @@ identity resolution into it.
    event out of one viewer's own feed → Axis 3 (existing seams already cover this).
 3. **Does it need a roll?** Any "does the character notice" moment calls
    `resolve_perception_check` — never mint a new check or a flat probability.
+
+---
+
+## Reliable Pose Delivery — Idempotent Submission & Safe Drafts (#3760)
+
+The narrative-play delivery slate closes two gaps in `/game`'s composer: a retried
+send (reconnect, double-click, a client that never saw the ack) could double-post,
+and a stranded draft (tab closed, connection dropped mid-send) could silently vanish
+or bleed into the wrong room/thread on reload. The design spans a backend
+idempotency ledger and a frontend draft-safety contract; both are described here.
+
+### `PoseSubmission` — the idempotency ledger
+
+**Source:** `src/world/scenes/models.py`
+
+```python
+from world.scenes.models import PoseSubmission
+
+# persona (FK, CASCADE) + client_request_id (UUIDField) -> interaction (FK, nullable,
+# db_constraint=False -- Interaction is partitioned). UniqueConstraint
+# "unique_submission_per_persona" on (persona, client_request_id); Index on created_at.
+```
+
+Written only on acceptance, inside the same transaction as the `Interaction` it
+points to — see `idempotent_record_interaction` below. Rejections are never
+recorded here; they are re-validated fresh on every attempt. `interaction` is
+nullable because an ephemeral-scene acceptance never persists an `Interaction` in
+the first place (see "Found + no stored Interaction" below) — the row still records
+that the attempt was accepted. Pruned after 24h by `pose_submission_cleanup_task`
+(see "Cleanup task" below); this table's steady-state size tracks recent
+web-submission volume only, never total historical `Interaction` volume.
+
+### `idempotent_record_interaction` — the wrapper
+
+**Source:** `src/world/scenes/interaction_services.py`
+
+```python
+from world.scenes.interaction_services import (
+    idempotent_record_interaction,
+    IdempotentSubmissionResult,
+)
+
+result = idempotent_record_interaction(
+    persona=persona,
+    client_request_id=client_request_id,   # uuid.UUID, client-minted
+    comparison_fields={
+        "content": text,
+        # A plain (non-callable) value compares via getattr(stored, field) == value.
+        # A callable value is called with the stored Interaction and its truthy/falsy
+        # return IS the match result -- needed when identity isn't a scalar attribute,
+        # e.g. target_personas is M2M (via InteractionTargetPersona):
+        "target": lambda stored: (
+            {p.pk for p in stored.target_personas.all()} == {target_pk}
+        ),
+    },
+    record_fn=record_interaction,   # optional; defaults to record_interaction
+    **record_kwargs,                # forwarded verbatim to record_fn
+) -> IdempotentSubmissionResult  # (interaction: Interaction | None, replayed: bool, conflict: bool)
+```
+
+Looks up an existing `PoseSubmission` for `(persona, client_request_id)` first:
+
+- **Found, no stored `Interaction`** — an ephemeral-scene acceptance (`record_fn`
+  returns `None` there; nothing was ever persisted to compare against). A clean
+  replay (`replayed=True, conflict=False`), never a conflict — there is nothing to
+  recompute either way.
+- **Found, `comparison_fields` match the stored `Interaction`** (`_comparison_fields_match`)
+  — returns that `Interaction`, `replayed=True`. Nothing is recomputed: no re-roll,
+  no duplicate row, no second broadcast.
+- **Found, any field differs** — a `payload_conflict` (`replayed=False, conflict=True`):
+  the caller reused a request id for genuinely different content/target/place, a
+  client bug rather than a legitimate retry. Callers surface this as a failure
+  `ActionResult` ("This request id was already used for different text.").
+- **Not found** — runs the real work via `record_fn` inside a transaction. A
+  concurrent duplicate insert (two near-simultaneous retries) raises
+  `IntegrityError`, caught by re-reading and returning the winner's row
+  (`replayed=True`) rather than erroring — this is what makes the check
+  race-safe.
+
+**The `PoseSubmission` row is written from inside `record_fn`, before its first
+delivery push, not after `record_fn` returns (#3783 fix).** `record_interaction`
+and `record_whisper_interaction` accept an `on_before_push` callback and invoke it
+immediately before their first real-time push on every branch (ephemeral and
+persisted); `idempotent_record_interaction` passes a closure that writes the
+ledger row. This makes the race decided by Postgres's unique-index insert
+ordering: the losing retry's `IntegrityError` fires from inside `record_fn`,
+before it ever reaches its own push call. Writing the ledger row only after
+`record_fn` returned (the pre-#3783 shape) let both racing retries clear their
+own push before either's ledger insert could block the other — the persisted row
+stayed unique, but a visible duplicate pose could still reach the room in that
+narrow window. Any `record_fn` substituted here must accept `on_before_push` and
+invoke it the same way.
+
+**Callers gate the broadcast on `not result.replayed`** — a retry must never
+double-broadcast even though the DB side is already deduped. `PoseAction`, `SayAction`
+(both `src/actions/definitions/communication.py`), `CompanionEmoteAction`
+(`src/actions/definitions/companions.py`, #3782) and `InteractionViewSet.submit_pose`
+(`interaction_views.py`) all follow this pattern when a `client_request_id`
+kwarg is present; the plain non-idempotent path (`record_interaction` called
+directly) still runs unchanged for callers that pass no `client_request_id`
+(telnet, and any caller predating #3760/#3782).
+
+**`record_fn` generalization (#3760, discovered during implementation — not in the
+original design):** `record_fn` lets a caller substitute a differently-shaped
+recorder for the default `record_interaction`. `WhisperAction` passes
+`record_fn=record_whisper_interaction`: `record_whisper_interaction`'s
+ephemeral-scene branch scopes the real-time push to `recipients=[character, target]`
+instead of `record_interaction`'s room-wide broadcast — reusing `record_interaction`
+for a whisper would leak the whisper's content to the whole ephemeral scene. This is
+a real privacy-preserving generalization, not part of the plan's original
+single-`record_interaction` design — any future caller whose delivery shape differs
+from the default (another receiver-scoped mode, say) should pass its own `record_fn`
+rather than special-casing inside `idempotent_record_interaction` itself.
+
+### Writer-only submission lookup
+
+**Source:** `src/world/scenes/play_views.py` (`PoseSubmissionDetailView`)
+
+```
+GET /api/play/submissions/{client_request_id}/
+```
+
+A plain `APIView` (**not** a ViewSet under `/api/scenes/...` — the plan's original
+sketch — corrected mid-implementation to match this codebase's existing `/api/play/`
+convention, see the `PlayConversationsView`/`PlayPosesView`/`PlayContextView`/
+`PlaySearchView` siblings in the same file). Writer-only: scoped to the requesting
+account's own personas via `get_account_personas` — the same account-scoping seam
+`InteractionViewSet` uses. A non-owner's lookup 404s rather than 403ing: a resend
+attempt is not proof of authorship, and a 403 would still confirm the row exists.
+Returns `{"interaction_id": ..., "replayed": true}` on a hit — every row this
+endpoint can return already represents an accepted, persisted submission, so a
+found row is always a replay from the caller's perspective; 404 on a miss. This is
+the reconciliation channel the frontend's `reconcileStoredDrafts` (see below) and
+`CommandInput`'s "Check status"/"Resume & retry" affordances call.
+
+### Cleanup task
+
+**Source:** `src/world/scenes/tasks.py`
+
+```python
+from world.scenes.tasks import pose_submission_cleanup_task
+
+# Prunes PoseSubmission rows with created_at older than 24h. Registered as
+# "scenes.pose_submission_cleanup" via world.game_clock.task_registry.register_task
+# (CronDefinition, hourly, FrequencyType.REAL, CronPhase.CLEANUP) in register_all_tasks().
+```
+
+`tasks.py` already existed for `block_finalize_task` (#1278); `pose_submission_cleanup_task`
+was added alongside it rather than starting a new module. Both are registered
+through `world.game_clock.task_registry`, the shared cron seam every periodic app
+task in this codebase uses.
+
+### Place-presence authorization for tabletalk
+
+**Source:** `_resolve_pose_place`, `src/actions/definitions/communication.py`
+
+Telnet's `CmdTabletalk` always resolves the caller's own current place server-side
+and never accepts a place by id from the client. The web composer has no
+command-layer resolution step, so `PoseAction`/`_resolve_pose_place` mirrors the
+established `_resolve_room()` REST/WS-dispatch pattern: an already-resolved `Place`
+instance passes through unchanged (telnet/legacy call shape), and a raw int pk (the
+WS dispatch shape) is resolved here. Unlike `_resolve_room()`, this also requires
+the actor's active persona to have a genuine `PlacePresence` at the resolved place —
+a plain pk lookup alone would let a client assert presence at an arbitrary table by
+guessing its id, which the telnet path never allows. Not-found and not-present
+collapse to the same message ("You are not at that place.") — no existence probe
+that would let a client distinguish a wrong table id from a table it isn't seated at.
+
+### Frontend draft-safety contract
+
+**Source:** `frontend/src/game/useDraftStore.ts`, `frontend/src/hooks/useGameSocket.ts`,
+`frontend/src/game/components/GameWindow.tsx` / `GamePage.tsx`
+
+`useDraftStore(key: DraftKey)` persists one draft per `(accountId, personaId,
+conversationKey)` to `sessionStorage` (`draftStorageKey`), surviving a reload or a
+closed-then-reopened tab. Key points:
+
+- **Mode preservation (#3760 Task 11 critical fix, closes a real privacy leak).**
+  `Draft.mode` (`{command, targets}`) is captured at `beginSend()` time and persisted
+  alongside `clientRequestId`. `beginSend(liveMode)`'s `contentUnchanged` check (same
+  content as `lastSentContentRef`, same stored `clientRequestId`) decides which mode
+  wins: an **unmodified retry** reuses the stored `mode` from the original attempt,
+  ignoring whatever mode is live right now; a **genuine content edit** (via
+  `setContent`, which always clears `clientRequestId`/`status`/`mode`) is a new
+  attempt free to capture `liveMode` fresh. Without this, a stranded whisper draft
+  reloaded mid-send had nothing distinguishing it from a pose/say once the
+  composer's live mode had moved on — Retry, "Resume & retry", or even a plain Send
+  on an untouched `rejected`/`unknown` draft, would silently redispatch a private
+  whisper as a public say/pose. Callers must treat `Draft.mode` as the single source
+  of truth for "what mode this send actually goes out under" once a
+  `pending`/`rejected`/`unknown` draft exists — never read a live mode prop
+  separately at dispatch time.
+- **Single source of truth for composer text (#3784).** `draft.content` IS the
+  textarea's value in `CommandInput.tsx` — the composer holds no parallel local
+  string and no `arx:play-draft:v1:<scope>` row. Everything that clears or restores
+  text goes through the store (`setContent` / `acknowledge` / `discard`), so
+  "don't clobber a newer, unsent edit" is one invariant (`acknowledge` no-ops once
+  `setContent` has nulled the dispatched `clientRequestId`) rather than a guard
+  repeated at each dispatch branch. `setContent` also takes an updater
+  (`(previous) => string`) for callers appending to the current draft, such as the
+  composer's `@target` append.
+- **Settling scopes (#3784).** `useDraftStore(key, settling)` takes a
+  `DraftScopeSettling`: a `conversation` identity that stays stable while that
+  conversation's key settles, plus `provisional` for a key that cannot name it yet —
+  `GameWindow`'s room-anchor scope carries a `room:unknown` placeholder during
+  "Entering world", before the first `room_state` identifies the room. A key change
+  carries the live draft across only when BOTH hold: the key left behind was
+  provisional AND it named the same conversation. Every other change hydrates
+  normally — walking through an exit, or a conversation tab becoming active, is a
+  different audience and keeps its own draft, which is what keying on the room is
+  *for*. The two conditions are a union type rather than two optional fields because
+  carrying on `provisional` alone would move a room pose into a whisper composer when
+  a tab opens mid-entry: text reaching the wrong people, not a lost draft. Where the
+  carry does apply, the carried text wins over an older stored draft for that same
+  conversation (it is what the player is looking at). Without any of this, a draft
+  typed during entry was stranded under the placeholder while the composer
+  re-hydrated an empty row; `e2e/game-entry.spec.ts` is the regression guard.
+- **`reconcileStoredDrafts(lookup)`** (exported, non-hook) is the reconnect-time
+  reconciliation entry point called from `useGameSocket.ts`'s socket `open` handler,
+  outside React entirely (module scope, no live composer to resend through). It
+  scans every `sessionStorage` draft left `pending`/`rejected`/`unknown` and
+  resolves each against `lookup` — `fetchPoseSubmission`, the
+  `GET /api/play/submissions/{client_request_id}/` client (`frontend/src/scenes/queries.ts`).
+  A found record clears the stored draft (the send landed while nobody was
+  watching); a miss or lookup failure leaves it for the composer's own
+  ack/reject/stranded UI to resolve later.
+- **Connection-generation discard (`useGameSocket.ts`).** A per-character monotonic
+  `connectionGenerations` counter increments on every connect, including automatic
+  reconnects; each connection's message handler and its `reconcileStoredDrafts(...).finally(...)`
+  callback close over the generation they were created with and discard themselves
+  (`if (generation !== connectionGenerations[character]) return;`) if a newer
+  reconnect has already superseded them by the time they run — a belated frame or a
+  belated "ready" flip from a stale connection can otherwise corrupt state from a
+  connection that's already gone.
+- **Room-identity draft scoping (#3760 Task 14 fix — closes the bug the issue was
+  filed for).** `GameWindow`'s `draftScope` prop for the default room-anchor
+  composer tab is `` `${draftScopePrefix}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}` ``,
+  where `roomId` is `GamePage`'s `roomData?.id` — the character's actual physical
+  room id, freshly derived on every `room_state` broadcast (the same value already
+  threaded to `CeremonyRoomCard`/`StoryTray`/the places query) — **not** the
+  constant string `'room'` the composer used before this fix. A player's room-anchor
+  draft is now scoped to the room they are actually standing in, so walking through
+  an exit into a different room no longer silently carries typed-but-unsent text
+  into the new room's composer.
 
 ---
 

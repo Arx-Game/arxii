@@ -29,6 +29,10 @@ import { StatPointPanel } from '@/character_sheets/components/StatPointPanel';
 import { MechanicsSection } from '@/character_sheets/components/MechanicsSection';
 import { LanguagesSection } from '@/character_sheets/components/LanguagesSection';
 import { OriginStoryEditorDialog } from '@/character_sheets/components/OriginStoryEditorDialog';
+import { OriginsSection } from '@/character_sheets/components/OriginsSection';
+import { ActorSheetSection } from '@/character_sheets/components/ActorSheetSection';
+
+type ActorSheetGoal = Parameters<typeof ActorSheetSection>[0]['goals'][number];
 import { useCharacterSheetQuery } from '@/character_sheets/queries';
 import { DistinctionsTab } from '@/distinctions/components/DistinctionsTab';
 import { UpdatesTab } from '@/sheet_update_requests/components/UpdatesTab';
@@ -37,6 +41,7 @@ import { LocationsTab } from '@/locations/components/LocationsTab';
 import { AgreementsPanel } from '@/estates/components/AgreementsPanel';
 import { KinshipPanel } from '@/kinship/components/KinshipPanel';
 import { AdvancementTab } from '@/progression/components/advancement/AdvancementTab';
+import { XpLedgerCard } from '@/progression/components/advancement/XpLedgerCard';
 
 export function CharacterSheetPage() {
   const { id } = useParams();
@@ -158,7 +163,21 @@ export function CharacterSheetPage() {
               <p>{entry.description}</p>
             </section>
           )}
-          <BackgroundSection background={entry.character.background} />
+          {sheetPayload && (
+            <ActorSheetSection
+              block={sheetPayload.actor_sheet}
+              goals={sheetPayload.goals as ActorSheetGoal[]}
+            />
+          )}
+          {sheetPayload && sheetPayload.story.origin_slots.length > 0 ? (
+            <OriginsSection
+              story={sheetPayload.story}
+              background={entry.character.background}
+              isMyCharacter={isMyCharacter}
+            />
+          ) : (
+            <BackgroundSection background={entry.character.background} />
+          )}
           {isMyCharacter && sheetPayload && (
             <OriginStoryEditorDialog characterId={entry.character.id} sheet={sheetPayload} />
           )}
@@ -247,6 +266,9 @@ export function CharacterSheetPage() {
                 isActiveCharacter inside the tab — the backend views resolve the acting
                 character via the account's puppeted character, not this page's id, the
                 same constraint the Locations tab's Ships section already handles. */}
+            {/* Read-only and keyed by sheet id, so it stands outside the
+                isActiveCharacter gate the spend cards sit behind (#3748). */}
+            <XpLedgerCard sheetId={entry.character.id} />
             <AdvancementTab
               characterId={entry.character.id}
               isActiveCharacter={isActiveCharacter}

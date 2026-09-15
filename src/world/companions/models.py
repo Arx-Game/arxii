@@ -13,6 +13,7 @@ from evennia.utils.idmapper.models import SharedMemoryModel
 
 from actions.constants import ActionCategory
 from core.natural_keys import NaturalKeyManager, NaturalKeyMixin
+from evennia_extensions.mixins import RelatedCacheClearingMixin
 from world.combat.constants import OpponentTier
 from world.companions.constants import CompanionAbilityKind, CompanionDomain, CompanionOrderKind
 from world.magic.constants import TechniqueFunction
@@ -308,12 +309,14 @@ class CompanionDeployment(SharedMemoryModel):
         return f"Deployment of companion {self.companion_id} into battle {self.battle_id}"
 
 
-class CompanionOrder(SharedMemoryModel):
+class CompanionOrder(RelatedCacheClearingMixin, SharedMemoryModel):
     """Round-scoped directive linking a companion to its order (#1921).
 
     One order per companion per round per scale (duel/battle).
     The round-tick reads this to override auto-selected behavior.
     """
+
+    related_cache_fields = ["encounter"]
 
     companion = models.ForeignKey(
         Companion,

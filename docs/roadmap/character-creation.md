@@ -1,5 +1,150 @@
 # Character Creation & Identity
 
+## Built (2026-09-10, #3739: distinctive physical features)
+
+A feature is any trait row or any marking, species-required markers included.
+One CG point on "Make It Distinctive" opens that feature's description, widens
+its palette to every option the trait carries (including a new off-species
+"Unnatural" umbrella on hair, eyes and skin), and puts Alluring, Menacing and
+Regal up for sale on it at 2 a tier for +2 a tier, up to three tiers in
+character creation and five in play. A marking's name and description stay free,
+so the point buys only its axes. Mechanically a distinction can now be held once
+per feature (`taken_per_feature`), so `CharacterDistinction` names the feature and
+every draft-entry reader keys by `(distinction, feature)`. Regal is bound at last,
+to a newly seeded Command check (presence + Leadership), which also wakes the item
+accent that has been dormant since #2886. A bonus travels with visibility: a
+marking-bound modifier drops out while the worn layers cover its region. "In your
+own words" is gone. Migration 0117. See ADR-0287,
+[distinctions.md](../systems/distinctions.md)'s "Distinctive features" and
+[forms.md](../systems/forms.md)'s "Distinctive features".
+
+**Still open:** the axis magnitudes and the four rows' prose are PLACEHOLDER,
+authored over by the reviewer's own catalogue pass; and in-play enhancement above
+tier 3 has a ceiling (`max_rank` 5) but no purchase path yet.
+
+## Built (2026-09-08, #3709: offers hang off the question and the reason)
+
+Every chapter's offer line now names what opens it, and the leaf groups by it:
+the Actor's Sheet mounts one block per question (Rules, Devotions, Fears), the
+enemy asks why from an authored reason list (`EnemyReason`) before the own words
+and the picked reason opens its offers, the two worst degrees bundle their marks
+as offer lines (the `ENEMY_DEGREE_DISTINCTION_NAMES` constant is gone), and
+Appearance renders one block per authored section (`AppearanceSection`). A
+Beginning pins a first look per line (`OfferFirstLook`); `ChapterOffers` folds
+the rest under "See N more", prints a held distinction as held, carries the
+compact `+X; -Y` effect line, and reads "Awards N" in green against costs in the
+realm ink. The Distinction Builder shows the openers and a "First look for"
+column, two change lists hold the reasons and sections, and "Add from a table"
+lands scores of new distinctions at once, additions only. Migration 0114. The
+catalogue itself (rewriting the 29 rows and adding the rest) is the reviewer's
+own later content pass, in the reviewer's voice; nothing is seeded. See
+ADR-0282, [character_creation.md](../systems/character_creation.md)'s
+"Distinction offers" and "The Actor's Sheet", and `src/web/admin/CLAUDE.md`'s
+"Distinction Builder".
+
+## Built (2026-09-07, #3675: retire the Distinctions stage)
+
+The standalone Distinctions stage is gone; each CG chapter now offers the
+distinctions that belong to it, priced and explained at the moment of choice. What
+was built: (1) `character_creation.DistinctionOffer` (distinction, chapter, how it
+arrives -- choice/bundled/carried, an opener FK scoped to its chapter) replaces the
+three separate couplings that used to link a chapter to a distinction
+(`BeginningTradition.required_distinction`, `GlimpseTagDistinctionSuggestion`,
+`OriginTemplateSlotChoice.grants_distinction`), read by the one module
+`world.character_creation.offers`; (2) a tradition's slate line
+(`BeginningTradition.state`: self-taught/teachers-gone/living-masters) prints one of
+three staff-authored standard lines (`TraditionStateLine`, per-tradition
+`own_wording`, never its own price) and, for a living tradition, offers the standard
+schooling set (`SchoolingLine`, rank 0-2); (3) `OriginTemplate.closed_distinctions`/
+`closed_reason` closes distinctions by field, never by name; (4) the Gift tradition
+step, the Glimpse (`GlimpseAxes`, one offer sub-block per chosen tag), Lineage
+answers, Appearance and the Actor's Sheet each mount `ChapterOffers` against
+`GET .../drafts/{id}/offers/?chapter=`; (5) four staff admin builders (Distinction
+Builder, the tradition slate page, the Upbringing Builder's per-answer offers +
+route closes, a `GlimpseTag` change-form inline) author this surface, reachable
+from a Builders panel on the Authoring Workbench dashboard, one click from the row
+each edits. Migrations 0109-0111 expand, backfill, then drop the three retired
+couplings and the unused `DistinctionPrerequisite` model (0 rows in production,
+never wired to a live check). See ADR-0280,
+[distinctions.md](../systems/distinctions.md)'s "CG Integration" and
+[character_creation.md](../systems/character_creation.md)'s "Distinction offers"
+section.
+
+## Built (2026-09-07, #3621: the Actor's Sheet)
+
+Final Touches replaced the free-text personality field with the Actor's Sheet: three
+questions ("What would you never do?", "What would you protect at all costs?", "What are
+you deathly afraid of?") on the profile as versioned prose; goals numbered within short and
+long term, any number per domain; one enemy, a person priced by power or a group by reach at
+one of four degrees, awarding CG points into the shared purse and collected at finalize
+through the group's opinion, a Distinction at the worst two degrees and pinned pursuit heat
+(ADR-0279); and The Introductions, three white journals in the character's voice (First
+Journal on an Arx start, Application, Whispers), the Whispers' lines seeded as Level-1
+secrets with gossip heat. The sheet shows the block above Origins, the enemy as its public
+line. Later: institution reading rooms for the First Journal and the Application, and
+writing a First Journal at the Archive in play.
+
+## Built (2026-09-06, #3663: Misbegotten CG age ceiling grows with IC time)
+
+`Heritage.first_appeared_ic` (Misbegotten: 980 AS) anchors a computed CG age ceiling:
+`character_creation.services.age_bounds` composes the general cap, eternal youth and the
+whole IC years since the anchor (floor 18) against `get_ic_now()`; the serializer validates
+against it, the draft payload carries `age_min`/`age_max`, and the Appearance stage clamps
+to the payload and states "The first Misbegotten were born in 980 AS." A `HeritageAdmin`
+sets the date on production. The stage's hard-coded age constants are gone.
+
+## Built (2026-09-06, #3660: formative connections)
+
+Upbringing prompts now carry entity-linked, life-stage-tagged connections instead of
+prose alone. What was built: (1) `OriginTemplateSlot.kind` (`QuestionKind`: text, pick,
+"pick a group", "name a person") and, on a group question, `connection_kind` (what the
+tie was) and `life_stage` (when); (2) `AnchorSource` resolves who a group question
+offers: a pool of matching Organizations, a named list, the same group an earlier
+question resolved to, the served house, or the character's own family, evaluated in
+one place (`questionnaire.py`) shared by validation, pricing, and finalize; (3) a
+question may show only after an earlier one, and only for certain answers to it
+(`follow_up_to`, `shown_for_choices`); (4) an answer may grant a Distinction bundled
+free (`grants_distinction`) and seed the anchor's opinion at finalize
+(`reputation_seed`, via `bump_organization_reputation`); a named person on a PERSON
+question becomes the granted Distinction's spawned NPC's display name; (5) staff
+author a whole route (Upbringing, questions, answers) on one page, the Upbringing
+Builder (`src/web/admin/upbringing_builder/`), credited to the operator on save, with
+a live right rail (matched groups, placeholder counts, open Vacancy count, authoring
+checks, cost spread) and a player-view preview; (6) the character sheet's Origins
+panel (`OriginsSection.tsx`) shows each connection: the linked group, its tags, the
+viewer's own standing with it, and any named figures. See ADR-0277,
+[character_creation.md](../systems/character_creation.md)'s "Question kinds and
+connections" subsection, and [family-authoring-recipes.md](../systems/family-authoring-recipes.md)
+recipes 13-15.
+
+Deferred: authored stance sets and a shared prompt library both need design work before
+they're worth building (repeating the same GROUP/PERSON shape by hand across
+Upbringings today); the granted NPC asset has no player-facing surface yet beyond the
+sheet's Origins panel; a Vacancy still cannot carry answers from its own connection
+questions; and Organization influence stays the only lever a connection's cost reads
+from (no separate "how much this group values you" axis).
+
+## Built (2026-09-05, #3648: Family Templates and Vacancies)
+
+Generalized the noble house-template pipeline to every family kind and gave a
+character a recorded place in a staff family. What was built: (1) `HouseTemplate`
+("Family Template") gains a required `org_type` and blank `served_house_choices`,
+with `liege`/`default_succession_law` now nullable, so a Caretaker household, a
+crime family, an Infernal noble house and a Reaver crew all author through the same
+model (`OriginTemplate.family_templates` M2M replaces the retired
+`named_family_kind`); (2) `Vacancy` (`world/societies/models.py`), a staff-authored
+opening on a family's org with two authored axes (`importance`,
+`presumed_importance`), flat-plus-per-influence pricing (ADR-0269 extended), and a
+blank `count_remaining` for a standing vacancy; kin versus retainer is derived from
+whether it links a `KinSlotPool`/`Kinsperson`; (3) the Lineage stage's family block
+resolves a Family Template on the name path (aspect picks, served house) and offers
+reachable Vacancies on any path via `GET .../vacancies/?draft=`, bound at finalize by
+`_bind_vacancy` before the kinship bind; (4) `build_family_org` is now the one
+builder both the noble title-claim path and the CG name path share. See ADR-0273,
+[character_creation.md](../systems/character_creation.md)'s Lineage step section,
+and [family-authoring-recipes.md](../systems/family-authoring-recipes.md) recipes
+10-12.
+
 ## Built (2026-09-04, #3540: character creation gets the Folio treatment)
 
 Folio treatment (#3540): interview shell, Origin / Attributes & Skills / Review
@@ -79,15 +224,18 @@ empty catalog, so this stage is exercisable before any lore-repo content is auth
 - **Models** (`world/magic/models/glimpse.py`): `GlimpseTag` (content model, lore-repo
   authored, no factory-seeded catalog) + `CharacterGlimpseTag` (instance data, never
   exported) + `GlimpseTagDistinctionSuggestion` (content model, grants nothing — a
-  suggestion surface only). `CharacterAura.glimpse_state` (`GlimpseState`:
+  suggestion surface only; retired #3675, replaced by `character_creation
+  .DistinctionOffer` rows opened by the tag). `CharacterAura.glimpse_state` (`GlimpseState`:
   NOT_STARTED/TAGS_ONLY/COMPLETE) is a cache maintained exclusively by
   `world.magic.services.glimpse`; `CharacterDistinction.from_glimpse` (nullable FK,
   SET_NULL) records provenance — both mirror the `.secret` FK-presence-is-state pattern.
-- **Finalize wiring:** `finalize_magic_data` consumes three new `draft_data` keys
-  (`glimpse_tag_ids`, `glimpse_story`, `glimpse_linked_distinction_ids`) through the
-  glimpse services, so `glimpse_state` is always consistent post-CG.
+- **Finalize wiring:** `finalize_magic_data` consumes two `draft_data` keys
+  (`glimpse_tag_ids`, `glimpse_story`) through the glimpse services, so `glimpse_state`
+  is always consistent post-CG; distinction-to-Glimpse provenance links through the
+  offers system instead of a separate `glimpse_linked_distinction_ids` key (#3675).
 - **APIs:** CG catalog `GET /api/character-creation/glimpse-tags/`
-  (`CGGlimpseTagViewSet`, embeds `suggested_distinctions`) + four
+  (`CGGlimpseTagViewSet`, embeds `offers` per tag as of #3675, was
+  `suggested_distinctions`) + four
   `CharacterAuraViewSet` actions (`set-glimpse-tags` / `set-glimpse-prose` /
   `link-glimpse-distinction` / `unlink-glimpse-distinction`) that also power the
   post-CG editor. Sheet payload: `AuraData.glimpse_story`/`.glimpse_state`/
@@ -134,9 +282,11 @@ literally spent a Hare on their behalf (a lore-recorded deed-coin transaction, n
 item at CG time). `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
 `Organization` by name (`world.seeds.character_creation.ensure_shroudwatch_academy`,
 `tradition=None`) and is `get_or_create`-idempotent. Orphaned Traditions (no living trainer)
-carry an "Orphaned Tradition" drawback `Distinction` via `BeginningTradition
-.required_distinction` — the same authored-data mechanism as the Unbound drawback — so a
-recovery quest restoring a tradition's teachers is a staff row edit, not a code change. Paying
+read `state=TraditionState.TEACHERS_GONE` on their `BeginningTradition` row (#3675, was a
+`required_distinction` FK pre-#3675); the TEACHERS_GONE `TraditionStateLine` carries the
+"Orphaned Tradition" drawback `Distinction`, the same mechanism the Unbound drawback uses
+(SELF_TAUGHT), so a recovery quest restoring a tradition's teachers is a staff row edit
+(`state=LIVING_MASTERS`), not a code change. Paying
 down the obligation, in-play tradition switching, and the in-play technique-training loop that
 consumes it are built in `world/magic` and `world/npc_services` — see
 `docs/roadmap/magic.md`'s "Tradition sponsorship, Academy training, and the in-play loop"
@@ -193,6 +343,14 @@ section for the full #2428/#2440/#2441/#2442 build record.
   stable `db_key`) for any hand-built `StartingArea`/`Beginnings` combo that's missing a
   room — a freshly approved character never spawns with `location=None`; the prior
   "valid for early testing" silent-`None` behavior is retired.
+- **2026-09-13, #3818:** the fallback room is found by its `RoomProfile.fixture_key`
+  (`arx/fallback-starting-room`) through
+  `world.character_creation.services.resolve_fallback_starting_room`, with the seeded
+  name only as a last resort for a room seeded before fixture keys existed. Staff
+  renamed the room "City Center" on production and the by-name lookup missed it, so
+  Apostate landed nowhere. The seeder reuses the renamed room instead of minting a
+  second one, and `Character.at_pre_puppet` sends a character with no location and no
+  home there too, so entry always completes.
 
 ## Built (2026-07-07, #2062 — kinship graph; ADR-0097)
 
@@ -234,7 +392,7 @@ The 11-stage character creation flow that takes a player from concept to approve
 - Points budget system configurable via admin
 
 ## What Exists
-- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning gate, `required_distinction`)
+- **Models:** Full stage models, CharacterDraft with stage tracking, DraftApplication with review workflow, CGExplanation KV store, CGPointBudget, `BeginningTradition` (tradition-per-beginning slate row, `state`/`own_wording`, #3675), `TraditionStateLine`, `SchoolingLine`, `DistinctionOffer`
 - **APIs:** Complete viewsets and serializers for all stages, including the Gift-stage catalog reads (`gifts`, `technique-options`, #2426)
 - **Frontend:** Full React components for all 11 stages — OriginStage, HeritageStage, LineageStage, DistinctionsStage, PathStage, GiftStage, AttributesStage, AppearanceStage, IdentityStage, FinalTouchesStage, ReviewStage. GiftStage runs the Tradition → Gift → Technique → Resonance → Anima Check funnel; CG Points widget, Species cards, Tarot selection
 - CG perspective panels (#3281): see the codex roadmap for what was built.

@@ -175,17 +175,16 @@ class CharacterGoalUpdateSerializerTests(TestCase):
         serializer = CharacterGoalUpdateSerializer(data=data)
         assert serializer.is_valid()
 
-    def test_rejects_duplicate_domains(self):
-        """Rejects goals with duplicate domain IDs."""
+    def test_accepts_many_goals_in_one_domain(self):
+        """Any number of goals may share a domain (#3621)."""
         data = {
             "goals": [
-                {"domain": self.standing.id, "points": 10},
-                {"domain": self.standing.id, "points": 5},
+                {"domain": self.standing.id, "points": 10, "horizon": "short_term"},
+                {"domain": self.standing.id, "points": 5, "horizon": "long_term"},
             ]
         }
         serializer = CharacterGoalUpdateSerializer(data=data)
-        assert not serializer.is_valid()
-        assert "Duplicate domains" in str(serializer.errors["goals"])
+        assert serializer.is_valid(), serializer.errors
 
 
 class GoalJournalSerializerTests(TestCase):

@@ -15,6 +15,7 @@ from world.roster.models import Roster, RosterEntry, RosterTenure
 from world.roster.models.choices import RosterType
 from world.roster.seeds import ensure_rosters
 from world.roster.services.staff_characters import StaffMintError, mint_gm_character
+from world.seeds.character_creation import ensure_canonical_fallback_room
 
 
 class MintStaffCharacterServiceTests(TestCase):
@@ -28,6 +29,9 @@ class MintStaffCharacterServiceTests(TestCase):
         tenure = RosterTenure.objects.get(roster_entry=entry)
         assert tenure.player_data.account_id == account.pk
         assert tenure.approved_date is not None
+        starting_room = ensure_canonical_fallback_room()
+        assert character.location == starting_room
+        assert character.home == starting_room
 
     def test_duplicate_name_refused(self) -> None:
         # Two distinct accounts (#3478 added a one-GM-character-per-account

@@ -44,18 +44,6 @@ class ParticipationLevel(models.TextChoices):
     OPTIONAL = "optional", "Optional"  # Character can drop in/out without major impact
 
 
-class TrustLevel(models.IntegerChoices):
-    UNTRUSTED = 0, "Untrusted"
-    BASIC = 1, "Basic"
-    INTERMEDIATE = 2, "Intermediate"
-    ADVANCED = 3, "Advanced"
-    EXPERT = 4, "Expert"
-
-
-# ContentElement removed - trust categories are now dynamic database entities
-# See TrustCategory model in models.py
-
-
 class ConnectionType(models.TextChoices):
     THEREFORE = "therefore", "Therefore"
     BUT = "but", "But"

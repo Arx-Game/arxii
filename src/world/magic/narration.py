@@ -138,3 +138,33 @@ def _environment_clause(power_ledger: PowerLedger) -> str:
         if entry.stage == PowerStage.ENVIRONMENT and entry.op == LedgerOp.ADD and entry.amount > 0:
             return "— the place's resonance swells the working"
     return ""
+
+
+#: Placeholders every authored outcome line must carry (#3554). Substituted by literal
+#: replacement, never ``str.format``, so a stray brace in staff prose cannot raise.
+OUTCOME_NARRATION_PLACEHOLDERS: tuple[str, ...] = ("{actor}", "{target}")
+
+
+def fill_narration_placeholders(text: str, *, actor: str, target: str) -> str:
+    """Substitute ``{actor}`` and ``{target}`` in an authored outcome line. Pure.
+
+    Only those two literal substrings are replaced; anything else in braces is left
+    alone (the same rule as ``EscalationCurve.surge_narration``).
+    """
+    return text.replace("{actor}", actor).replace("{target}", target)
+
+
+def validate_outcome_narration(value: str, field_name: str) -> None:
+    """Reject a non-blank authored outcome line that omits ``{actor}`` or ``{target}``.
+
+    An OUTCOME line is the fair record of who did what to whom, so both names must
+    appear. Blank is always valid: it means "use the default sentence".
+    """
+    from django.core.exceptions import ValidationError  # noqa: PLC0415
+
+    if not value:
+        return
+    missing = [p for p in OUTCOME_NARRATION_PLACEHOLDERS if p not in value]
+    if missing:
+        msg = f"Must contain {' and '.join(missing)} so the line names both parties."
+        raise ValidationError({field_name: msg})

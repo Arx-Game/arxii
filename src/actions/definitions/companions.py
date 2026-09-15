@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 from actions.base import Action
 from actions.constants import ActionCategory
 from actions.prerequisites import (
+    CompanionFitToFightPrerequisite,
     CompanionPresentPrerequisite,
     HasCompanionCapacityPrerequisite,
     Prerequisite,
@@ -101,6 +102,9 @@ class CompanionFightAction(Action):
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
 
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CompanionFitToFightPrerequisite()]
+
     def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.combat.constants import ParticipantStatus  # noqa: PLC0415
         from world.combat.models import CombatParticipant  # noqa: PLC0415
@@ -145,6 +149,9 @@ class DeployCompanionAction(Action):
     category: str = "companions"
     action_category: ActionCategory = ActionCategory.PHYSICAL
     target_type: TargetType = TargetType.SELF
+
+    def get_prerequisites(self) -> list[Prerequisite]:
+        return [CompanionFitToFightPrerequisite()]
 
     def execute(self, actor, context=None, **kwargs) -> ActionResult:
         from world.battles.constants import BattleParticipantStatus  # noqa: PLC0415
@@ -542,7 +549,11 @@ class CompanionEmoteAction(Action):
         from flows.scene_data_manager import SceneDataManager  # noqa: PLC0415
         from flows.service_functions.communication import message_location  # noqa: PLC0415
         from world.scenes.constants import InteractionMode  # noqa: PLC0415
-        from world.scenes.interaction_services import record_interaction  # noqa: PLC0415
+        from world.scenes.interaction_services import (  # noqa: PLC0415
+            idempotent_record_interaction,
+            record_interaction,
+        )
+        from world.scenes.line_rendering import render_line  # noqa: PLC0415
 
         text = kwargs.get("text", "")
         if not text:
@@ -559,16 +570,48 @@ class CompanionEmoteAction(Action):
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
 
-        # Broadcast raw text, same convention as PoseAction — the player writes
-        # the companion's own name into the pose text.
-        message_location(caller_state, text)
-        # Record + push: the interaction's `persona` stays the owner's worn face
-        # (authorship, block/mute, consent); `attributed_companion` is cosmetic.
-        record_interaction(
-            character=actor,
-            content=text,
-            mode=InteractionMode.POSE,
-            attributed_companion=companion,
-        )
+        def _broadcast() -> None:
+            # The companion is the actor in the line (#3858); a pose the player
+            # already opened with the companion's name is left alone.
+            message_location(caller_state, render_line(companion.name, InteractionMode.POSE, text))
+
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+            persona = active_persona_for_sheet(actor.character_sheet)
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={
+                    "content": text,
+                    "attributed_companion": lambda stored: stored.attributed_companion_id
+                    == companion.pk,
+                },
+                character=actor,
+                content=text,
+                mode=InteractionMode.POSE,
+                attributed_companion=companion,
+            )
+            if result.conflict:
+                return ActionResult(
+                    success=False, message="This request id was already used for different text."
+                )
+            # Broadcast AFTER recording, gated on `not result.replayed` -- same
+            # fix as PoseAction/submit_pose (#3760): a retry must not
+            # double-broadcast even though the DB side is correctly deduped.
+            if not result.replayed:
+                _broadcast()
+        else:
+            # Record + push: the interaction's `persona` stays the owner's worn
+            # face (authorship, block/mute, consent); `attributed_companion` is
+            # cosmetic.
+            _broadcast()
+            record_interaction(
+                character=actor,
+                content=text,
+                mode=InteractionMode.POSE,
+                attributed_companion=companion,
+            )
 
         return ActionResult(success=True)

@@ -569,6 +569,36 @@ class UpdateEncounterSettingsActionTests(GMCombatActionTestBase):
         result = UpdateEncounterSettingsAction().run(self.gm_actor, stakes_level=StakesLevel.WORLD)
         self.assertFalse(result.success)
 
+    def test_gm_can_set_curve_by_name(self) -> None:
+        curve = EscalationCurveFactory(name="Slow Burn")
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, escalation_curve="slow burn")
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.escalation_curve_id, curve.pk)
+
+    def test_gm_can_clear_curve_with_none(self) -> None:
+        curve = EscalationCurveFactory(name="Slow Burn")
+        self.encounter.escalation_curve = curve
+        self.encounter.save(update_fields=["escalation_curve"])
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, escalation_curve="none")
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertIsNone(self.encounter.escalation_curve_id)
+
+    def test_unknown_curve_name_rejected(self) -> None:
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, escalation_curve="nope")
+        self.assertFalse(result.success)
+        self.assertIn("No escalation curve named", result.message)
+
+    def test_omitting_curve_leaves_it_alone(self) -> None:
+        curve = EscalationCurveFactory(name="Slow Burn")
+        self.encounter.escalation_curve = curve
+        self.encounter.save(update_fields=["escalation_curve"])
+        result = UpdateEncounterSettingsAction().run(self.gm_actor, pace_mode=PaceMode.MANUAL)
+        self.assertTrue(result.success, result.message)
+        self.encounter.refresh_from_db()
+        self.assertEqual(self.encounter.escalation_curve_id, curve.pk)
+
 
 class EndEncounterActionTests(GMCombatActionTestBase):
     """EndEncounterAction completes the encounter as ABANDONED."""

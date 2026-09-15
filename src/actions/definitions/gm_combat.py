@@ -34,6 +34,7 @@ if TYPE_CHECKING:
         CombatOpponent,
         CombatParticipant,
         CreatureTemplate,
+        EscalationCurve,
     )
     from world.combat.scaling import OpponentStatBlock
     from world.scenes.models import Scene
@@ -621,56 +622,98 @@ class PauseEncounterAction(Action):
         return ActionResult(success=True, message="Encounter resumed.")
 
 
+def _validate_encounter_levels(kwargs: dict[str, Any]) -> ActionResult | None:
+    """Validate the enum-valued encounter settings."""
+    from world.combat.constants import PaceMode, RiskLevel, StakesLevel  # noqa: PLC0415
+
+    settings = (
+        ("stakes_level", StakesLevel.values, "Invalid stakes level."),
+        ("risk_level", RiskLevel.values, "Invalid risk level."),
+        ("pace_mode", PaceMode.values, "Invalid pace mode."),
+    )
+    for name, valid_values, message in settings:
+        value = kwargs.get(name)
+        if value is not None and value not in valid_values:
+            return ActionResult(success=False, message=message)
+    return None
+
+
+def _parse_encounter_timer(value: Any) -> int | None | ActionResult:
+    """Parse and validate the optional encounter timer."""
+    if value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return ActionResult(success=False, message="Timer minutes must be a whole number.")
+    if parsed < 1:
+        return ActionResult(success=False, message="Timer minutes must be at least 1.")
+    return parsed
+
+
+def _resolve_encounter_curve(curve_arg: Any) -> EscalationCurve | None | object | ActionResult:
+    """Resolve an optional escalation curve name, preserving the unset sentinel."""
+    from world.combat.models import EscalationCurve  # noqa: PLC0415
+    from world.combat.services import _UNSET  # noqa: PLC0415
+
+    if curve_arg is None:
+        return _UNSET
+    curve_name = str(curve_arg).strip()
+    if curve_name.lower() == "none":  # noqa: STRING_LITERAL - telnet keyword, not an enum
+        return None
+    resolved_curve = EscalationCurve.objects.filter(name__iexact=curve_name).first()
+    if resolved_curve is None:
+        return ActionResult(success=False, message=f"No escalation curve named '{curve_name}'.")
+    return resolved_curve
+
+
 def _validate_encounter_settings_kwargs(
     kwargs: dict[str, Any],
 ) -> dict[str, Any] | ActionResult:
     """Validate + coerce ``UpdateEncounterSettingsAction`` kwargs.
 
     Returns the validated kwargs dict (``stakes_level``/``risk_level``/
-    ``pace_mode``/parsed-int ``pace_timer_minutes``) on success, or the
-    failure ``ActionResult`` to return immediately. Extracted from
-    ``execute()`` to keep its own argument/return-statement counts low
-    (PLR0913/PLR0911), mirroring ``_resolve_add_opponent_inputs``.
+    ``pace_mode``/parsed-int ``pace_timer_minutes``/resolved
+    ``escalation_curve``) on success, or the failure ``ActionResult`` to
+    return immediately. Extracted from ``execute()`` to keep its own
+    argument/return-statement counts low (PLR0913/PLR0911), mirroring
+    ``_resolve_add_opponent_inputs``.
+
+    ``escalation_curve`` is tri-state at the telnet/action boundary: a curve
+    name resolves case-insensitively to an ``EscalationCurve``, the literal
+    ``"none"`` resolves to ``None`` (clears it), and omitting the kwarg
+    passes ``update_encounter_settings``'s own ``_UNSET`` sentinel through
+    unchanged so the service leaves the field alone.
     """
-    from world.combat.constants import PaceMode, RiskLevel, StakesLevel  # noqa: PLC0415
+    level_error = _validate_encounter_levels(kwargs)
+    if level_error is not None:
+        return level_error
 
-    stakes_level = kwargs.get("stakes_level")
-    risk_level = kwargs.get("risk_level")
-    pace_mode = kwargs.get("pace_mode")
-    pace_timer_minutes = kwargs.get("pace_timer_minutes")
+    parsed_timer = _parse_encounter_timer(kwargs.get("pace_timer_minutes"))
+    if isinstance(parsed_timer, ActionResult):
+        return parsed_timer
 
-    if stakes_level is not None and stakes_level not in StakesLevel.values:
-        return ActionResult(success=False, message="Invalid stakes level.")
-    if risk_level is not None and risk_level not in RiskLevel.values:
-        return ActionResult(success=False, message="Invalid risk level.")
-    if pace_mode is not None and pace_mode not in PaceMode.values:
-        return ActionResult(success=False, message="Invalid pace mode.")
-
-    parsed_timer: int | None = None
-    if pace_timer_minutes is not None:
-        try:
-            parsed_timer = int(pace_timer_minutes)
-        except (TypeError, ValueError):
-            return ActionResult(success=False, message="Timer minutes must be a whole number.")
-        if parsed_timer < 1:
-            return ActionResult(success=False, message="Timer minutes must be at least 1.")
+    resolved_curve = _resolve_encounter_curve(kwargs.get("escalation_curve"))
+    if isinstance(resolved_curve, ActionResult):
+        return resolved_curve
 
     return {
-        "stakes_level": stakes_level,
-        "risk_level": risk_level,
-        "pace_mode": pace_mode,
+        "stakes_level": kwargs.get("stakes_level"),
+        "risk_level": kwargs.get("risk_level"),
+        "pace_mode": kwargs.get("pace_mode"),
         "pace_timer_minutes": parsed_timer,
+        "escalation_curve": resolved_curve,
     }
 
 
 @dataclass
 class UpdateEncounterSettingsAction(Action):
-    """GM: change stakes/risk/pace/timer on a live encounter (#3383).
+    """GM: change stakes/risk/pace/timer/curve on a live encounter (#3383, #3552).
 
     Mirrors ``PauseEncounterAction``'s shape: resolve the active encounter via
     ``_active_encounter_for_gm``, then call ``update_encounter_settings`` with
-    whichever of the four kwargs was supplied. Telnet's four subverbs
-    (``stakes``/``risk``/``pace``/``timer``) each supply exactly one.
+    whichever of the five kwargs was supplied. Telnet's five subverbs
+    (``stakes``/``risk``/``pace``/``timer``/``curve``) each supply exactly one.
     """
 
     key: str = "update_encounter_settings"

@@ -152,7 +152,6 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
             name="ProvisionCheck Beginnings",
             description="Test",
             starting_area=area,
-            trust_required=0,
             is_active=True,
         )
         beginnings.allowed_species.add(species)
@@ -237,7 +236,6 @@ class ProvisionUsesPerCharacterCheckTests(TestCase):
                 "stats": _PROVISION_STATS,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,
@@ -300,7 +298,6 @@ class GetCharacterCastCheckTests(TestCase):
             name="CastCheck Beginnings",
             description="Test",
             starting_area=area,
-            trust_required=0,
             is_active=True,
         )
         beginnings.allowed_species.add(species)
@@ -389,7 +386,6 @@ class GetCharacterCastCheckTests(TestCase):
                 "stats": _PROVISION_STATS,
                 "tarot_card_name": self.tarot.name,
                 "tarot_reversed": False,
-                "traits_complete": True,
                 "selected_gift_id": self.gift.id,
                 "selected_technique_ids": [self.technique.id],
                 "selected_gift_resonance_id": self.resonance.id,

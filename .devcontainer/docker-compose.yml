@@ -32,6 +32,16 @@ services:
       # ~/.local/share/polytoken (XDG). Verify the session dir at first dc-build.
       - arxii-polytoken-config:/home/vscode/.config/polytoken
       - arxii-polytoken-data:/home/vscode/.local/share/polytoken
+      # Persist Prime Agent's OAuth credentials (~/.prime/agent/auth.json) and
+      # session history (~/.prime/agent/sessions/) across rebuilds, same
+      # rationale as arxii-claude-home/arxii-polytoken-* above — without this,
+      # every dc-build forces re-auth, and its OAuth login is a real chore in
+      # this devcontainer (localhost callback server, no browser reachable
+      # inside the container without a port-forward workaround). Does NOT
+      # persist the `prime-agent` binary itself (that's a global npm install
+      # under mise's node dir, not under ~/.prime) — reinstalling that after a
+      # rebuild is a cheap one-line `curl | sh`, unlike redoing auth.
+      - arxii-prime-agent-home:/home/vscode/.prime
       # Shell history, same rationale as the volumes above: /home/vscode is
       # image state, so without these every rebuild starts from an empty
       # history. HISTFILE is pointed at the first path by shell-extras.sh; the
@@ -164,5 +174,6 @@ volumes:
   arxii-claude-home:
   arxii-polytoken-config:
   arxii-polytoken-data:
+  arxii-prime-agent-home:
   arxii-shell-history:
   arxii-atuin:

@@ -9,6 +9,7 @@ from typeclasses.companions import CompanionObject
 from world.character_sheets.factories import CharacterSheetFactory
 from world.combat.constants import RiskLevel
 from world.companions.factories import CompanionArchetypeFactory, CompanionFactory
+from world.companions.factories_combat import create_companion_defeat_pool
 from world.companions.models import Companion
 from world.companions.mount_content import (
     MOUNTED_CONDITION_NAME,
@@ -36,6 +37,7 @@ def _present_companion(**kwargs) -> Companion:
 class MountDismountTests(TestCase):
     def setUp(self) -> None:
         ensure_mount_conditions()
+        create_companion_defeat_pool()
         self.sheet = CharacterSheetFactory()
         self.mount_archetype = CompanionArchetypeFactory(is_mount=True)
         self.companion = _present_companion(owner=self.sheet, archetype=self.mount_archetype)

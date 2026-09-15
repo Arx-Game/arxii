@@ -29,12 +29,32 @@ _Avoid_: "countdown timer", "deadline" (the wall-clock `Beat.deadline` is a diff
 "world clock" (the calendar in `world.game_clock`).
 
 **Pose**:
-A single IC contribution recorded within a scene — the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas for thread derivation.
+A single IC contribution recorded within a scene - the atomic unit of RP (pose, say, whisper, emit), modelled by `Interaction`. It carries its own privacy tier and target personas that drive the involvement mark and the `direct` attention tier - NOT reader thread/group derivation, which mechanical rows key by scene instead (#3787, ADR-0293: targeting and grouping are separate concerns).
 _Avoid_: message, post, line, Interaction (at player surfaces)
+
+**Reachability** (#3787, ADR-0293):
+Whether a persona can receive content of a given audience shape right now - a live spatial-presence question (`world.scenes.reachability.persona_can_receive`), distinct from `InteractionQuerySet.visible_to`'s read-access/privacy-tier question over already-recorded history. Governs two player-facing refusals sharing one rule: tagging an unreachable persona (`UnreachableError`) and replying from a venue that cannot reach its target (`InteractionThreadError`). Both refuse rather than widen the audience, and both preserve the writer's draft. Deliberately does not govern system-authored rows (a resolved combat action's targets), which record what happened rather than address someone.
+_Avoid_: presence check, addressability (the model's own name is `persona_can_receive`)
+
+**Involvement mark** (#3787):
+The per-viewer "this happened to you" signal on a row naming the viewer's own persona in `target_persona_ids` - derived at read time from `InteractionTargetPersona` rows, never a stored flag. One neutral phrasing across all row kinds (pose, say, combat ACTION/OUTCOME, NPC action); web renders it as a reader chip, telnet gets the equivalent plain-text line scoped away from any session that already gets the structured payload.
+_Avoid_: notification, ping, tag (the mark invites an answer; it never queues one)
 
 **Spoken language** (#2993, ADR-0214):
 `Interaction.language` (nullable FK to `species.Language`) records which tongue a say/whisper/mutter pose was spoken in — null means untagged/universal (poses, emits, pre-#2993 rows). It never changes what got written; it changes how each reader sees it — read-time comprehension (garbled per the reader's fluency, `species.language_services.render_speech`) is recomputed live on every serializer read, not snapshotted, so learning the language later un-garbles old logs. `CharacterSheet.current_language` is the separate sticky default a bare `say` speaks in; a `(tongue) text` prefix on `say` overrides it for one line only. See `species` AGENT_GLOSSARY's Language/Fluency/Garble entries for the trait-backed mechanics.
 _Avoid_: persisting the garbled text on the Interaction (comprehension is always derived, never stored).
+
+**Line** (#3858, ADR-0299):
+The whole sentence a viewer reads for an Interaction, with the actor in it: `Apostate is testing`, `Apostate says, "Test"`. Rendered at display time by `world/scenes/line_rendering.render_line` from the name that viewer sees on the card, the mode and the content that viewer reads; carried as `line` on the WebSocket payload and `InteractionListSerializer`, and spoken the same way on telnet. Never stored; `content` stays what was typed. (The `_Avoid_` "line" under Interaction is about calling the row itself a line; this is the sentence rendered from it.)
+_Avoid_: persisting the rendered line, rendering it on the client from `persona.name` + `mode`, a second formatter per protocol.
+
+**Threshold** (#3867, ADR-0300):
+A character present in a room with a live scene who has no room-heard line of their own in it yet. Listed in the Here panel with a mark (`in_scene: false` on their `room_state` entry), able to see everything, not addressable room-heard (`persona_can_receive`), reachable by whisper. Read off the log by `participation.has_entered`; never stored.
+_Avoid_: lurker, observer (that is #3288's concealed presence), non-participant (they may hold a `SceneParticipation` row for admin reasons).
+
+**Entrance** (#904, #2183, #3867):
+A character's first room-heard line in a scene: the server marks it `pose_kind=ENTRY`, opens the ENTRANCE reaction window on it, and refuses a second. The composer shows it as a state before the first pose, never a control.
+_Avoid_: entry toggle, "make an entrance" as a button, a second entrance.
 
 **Perceived Only** (#2710, ADR-0170):
 An `InteractionVisibility` tier restricting an interaction to its writer and the personas recorded as `InteractionReceiver` rows — the characters who actually perceived the event — while still admitting staff and the scene's GM, so a scene stays runnable. The GM exception is a scene-log read guarantee only (`InteractionQuerySet.visible_to`'s `gm_visible` branch); a non-staff GM is denied on the REST object-access permission (`CanViewInteraction`) and the reaction-witness gate (`can_view_interaction`), both staff-only. Introduced for concealed casts (magic AGENT_GLOSSARY: "Cast Audience"), but the tier itself is a general scenes primitive, not magic-specific. Distinct from `VERY_PRIVATE`, which admits no exception, staff included — the two are not interchangeable.
@@ -49,7 +69,7 @@ The defender's authored plausibility band (`DifficultyChoice`: trivial / easy / 
 _Avoid_: difficulty rating, target number (for the player-facing choice)
 
 **Highlight reel**:
-A read-only curated digest of a scene: one fully-sealed featured moment (highest-ranked GM-tagged pose, else most-ranked pose) plus a ranked index of remaining voted-or-reacted poses, capped at ten. Ranked by all-time `progression.WeeklyVote` count first (the popularity axis, persists past weekly XP settlement), `InteractionReaction` count as tie-break, recency last (#2161 — previously reaction-count-only). Filtered through interaction read-visibility so it can never surface a pose the viewer cannot see. Each pose carries a `VoteButton` (see `progression/AGENT_GLOSSARY.md`'s Weekly Vote entry) so applause and reel ranking are driven by the same click.
+A read-only curated digest of a scene: one fully-sealed featured moment (highest-ranked GM-tagged pose, else most-ranked pose) plus a ranked index of remaining nominated-or-reacted poses, capped at ten. Ranked by all-time `progression.Nomination` count first (the popularity axis, persists past weekly XP settlement; never shown, a nomination is invisible, #3738), `InteractionReaction` count as tie-break, recency last (#2161 — previously reaction-count-only). Filtered through interaction read-visibility so it can never surface a pose the viewer cannot see. Each pose carries a `NominateButton` (see `progression/AGENT_GLOSSARY.md`'s Nomination entry) so applause and reel ranking are driven by the same click.
 _Avoid_: feed, recap, summary, spotlight
 
 **Co-owner**:
@@ -109,3 +129,15 @@ _Avoid_: material request, bulk gift (Material Boon specifically names this kind
 **Standing-Gap Shift** (Audacity Shift, #2540 slice 3):
 The additional NPC-only difficulty tier(s) a Boon ask picks up when the asker's standing sits well below the target's (`npc_boon_tier_shift`'s rank-gap term, banded via `RANK_GAP_TIER_BANDS`) — asking a much higher-standing NPC for a boon is harder than asking a peer or someone beneath you; punching down never adds a tier. Applies to dial 2's NPC band only — a piloted (player-controlled) target's own chosen difficulty is never band-shifted by the asker's standing.
 _Avoid_: standing penalty, rank check (the shift only ever adds difficulty tiers on NPC-target boon asks; it is not a general standing gate)
+
+**PoseSubmission** (idempotency ledger, #3760):
+The (persona, `client_request_id`) ledger row `idempotent_record_interaction` reads and writes before recording a pose/say/whisper — a retry that reuses the id replays the stored result instead of creating a duplicate; a reused id against genuinely different content/target/scene/place is a `payload_conflict`, not a silent replay. `interaction` is nullable: an ephemeral-scene acceptance never persists an `Interaction`, so the ledger row alone is what makes that case idempotent too.
+_Avoid_: submission log, dedup table (the term names the specific ledger model, not a general write-log concept)
+
+**client_request_id** (#3760):
+The client-minted UUID that correlates one composer dispatch to its server-side outcome — threaded through `executeAction`'s structured WS ack, REST `submit_pose`, and the `PoseSubmission` ledger row it keys. The same id reused unedited (a retry, "Resume & retry", a reconnect-mid-send resolution) is a replay by construction; a fresh id is minted only when the draft's content actually changes (`useDraftStore.beginSend`).
+_Avoid_: request id, idempotency key (client_request_id is the specific field/concept name throughout this ledger; do not shorten in code or docs)
+
+**Connection generation** (#3760):
+A monotonic counter `useGameSocket` stamps onto each WebSocket connection it opens, so a stale connection's message handler — still running after a reconnect replaces it — can tell it belongs to a superseded generation and no-op instead of processing a frame meant for the new connection. Distinct from `PoseSubmission`/`client_request_id` (which dedupe a *dispatch*, not a *connection*); the two mechanisms compose: a reconnect flips generation, then the stored-draft reconciliation pass resolves whatever the old generation left pending.
+_Avoid_: session generation, socket epoch (generation is the term this codebase's reconnect logic already uses)

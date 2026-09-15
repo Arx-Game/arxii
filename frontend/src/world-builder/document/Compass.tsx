@@ -173,7 +173,8 @@ export function Compass({ areaId, currentRoom, rooms, onOpenRoom, runAction }: C
           className="mb-2 font-body text-xs italic text-muted-foreground"
           data-testid="compass-unplaced-note"
         >
-          this room isn't placed on the grid yet — place it to build around it
+          this room isn't placed on the grid yet: on its area's map, click a planned square and type
+          this room's name to place it
         </p>
       )}
       <div className="grid grid-cols-3 gap-0.5" data-testid="compass-grid">

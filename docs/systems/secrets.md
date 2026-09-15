@@ -85,7 +85,10 @@ widen the `PLAYER_FLAVOR` caps to catch it.
   hasn't discovered yet), excluded from the subject's own-secrets shelf until a
   `SecretKnowledge` grants it.
 - `author_player_flavor_secret(...)` — the only *free* path a player may write: Level-1 flavor,
-  attributed to their persona.
+  attributed to their persona. CG's Whispers (#3621) use the same shape through
+  `author_secret(provenance=PLAYER_FLAVOR, level=1)`: each line the player wrote becomes one
+  such secret with a `SecretGossip` row seeded in the start region, so the built gossip tier
+  carries "rumors about the character" and no rumor model exists beside it.
 - `mint_accusation(*, accuser_persona, subject_sheet, content, level=1, ...)` (#1825) — the
   frame-job author path; thin over `author_secret` with `ACCUSATION` provenance. The first mint
   where subject ≠ actor; rejects self-framing, clamps to `ACCUSATION_MAX_LEVEL` (PLACEHOLDER).

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
@@ -20,11 +21,30 @@ from flows.service_functions.communication import message_location, send_message
 from world.gm.constants import GMLevel
 from world.scenes.constants import InteractionMode
 from world.scenes.interaction_services import record_interaction, record_whisper_interaction
+from world.scenes.line_rendering import render_line
+from world.scenes.thread_services import (
+    InteractionThreadError,
+    ReplyTarget,
+    coerce_reply_target,
+)
+
+
+def _parse_reply_target(kwargs: dict[str, Any]) -> tuple[ReplyTarget | None, ActionResult | None]:
+    """Parse the optional serializer-shaped target used by communication actions."""
+    try:
+        return coerce_reply_target(kwargs.get("reply_to")), None
+    except InteractionThreadError:
+        return None, ActionResult(
+            success=False,
+            message="Cannot reply to that interaction.",
+        )
+
 
 if TYPE_CHECKING:
     from evennia.objects.models import ObjectDB
 
     from world.scenes.models import Persona, Scene
+    from world.scenes.place_models import Place
     from world.species.language_constants import Fluency
     from world.species.models import Language
 
@@ -87,6 +107,47 @@ def _active_scene_for(actor: ObjectDB) -> Scene | None:
     from world.scenes.interaction_services import get_active_scene  # noqa: PLC0415
 
     return get_active_scene(actor.location)
+
+
+def _resolve_pose_place(actor: ObjectDB, place: object) -> tuple[Place | None, ActionResult | None]:
+    """Resolve the `place` kwarg for a pose/tabletalk dispatch (#3760 Task 10).
+
+    Telnet's `CmdTabletalk` always resolves the CALLER'S OWN current place
+    server-side (`_get_current_place`, `commands/evennia_overrides/
+    communication.py`) -- it never accepts a place by id from the client. The
+    web composer has no equivalent command-layer resolution step
+    (`execute_action`'s generic `_resolve_registry_kwargs`,
+    `server/conf/inputfuncs.py`, only resolves ObjectDB `<field>_id` kwargs;
+    `Place` isn't an ObjectDB), so this mirrors the established
+    `_resolve_room()` REST/WS-dispatch pattern (`actions/definitions/
+    locations.py`, see `src/actions/CLAUDE.md`): an already-resolved `Place`
+    instance (the telnet/legacy call shape) passes through unchanged, and a
+    raw int pk (the WS dispatch shape) is resolved here.
+
+    Unlike `_resolve_room()`, this ALSO requires the actor's active persona to
+    have a genuine `PlacePresence` at the resolved place -- a plain pk lookup
+    alone would let a client assert presence at an arbitrary table by
+    guessing its id, which the telnet path never allows (it only ever
+    resolves wherever the caller actually is). Returns `(place, None)` on
+    success, or `(None, error_result)` on any failure -- not-found and
+    not-present collapse to the same message, mirroring
+    `_resolve_registry_kwargs`'s "Object not found" collapse for ObjectDB
+    targets (no existence probe).
+    """
+    if place is None or hasattr(place, "pk"):
+        return place, None  # type: ignore[return-value]
+
+    from world.scenes.place_models import Place, PlacePresence  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    persona = active_persona_for_sheet(actor.character_sheet)
+    resolved = Place.objects.filter(pk=place).first()
+    if (
+        resolved is None
+        or not PlacePresence.objects.filter(place=resolved, persona=persona).exists()
+    ):
+        return None, ActionResult(success=False, message="You are not at that place.")
+    return resolved, None
 
 
 def _resolve_spoken_language(
@@ -234,6 +295,101 @@ def _deliver_language_tagged_say(
         _deliver_say_to_object(obj, actor, text, language, speaker_band, excluded_ids, sdm)
 
 
+def _record_say_submission(  # noqa: PLR0913
+    actor: ObjectDB,
+    *,
+    text: str,
+    language: Language | None,
+    target_personas: list[Persona] | None,
+    reply_to: ReplyTarget | None,
+    broadcast: Callable[[], None],
+    client_request_id: object,
+) -> ActionResult | None:
+    """Record an idempotent say and broadcast only on first acceptance."""
+    from world.scenes.interaction_services import idempotent_record_interaction  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    result = idempotent_record_interaction(
+        persona=active_persona_for_sheet(actor.character_sheet),
+        client_request_id=client_request_id,
+        comparison_fields={"content": text},
+        character=actor,
+        content=text,
+        mode=InteractionMode.SAY,
+        target_personas=target_personas,
+        language=language,
+        reply_to=reply_to,
+    )
+    if result.conflict:
+        return ActionResult(
+            success=False, message="This request id was already used for different text."
+        )
+    if not result.replayed:
+        broadcast()
+    return None
+
+
+def _record_pose_submission(  # noqa: PLR0913
+    actor: ObjectDB,
+    *,
+    text: str,
+    place: Place | None,
+    target_personas: list[Persona] | None,
+    reply_to: ReplyTarget | None,
+    broadcast: Callable[[], None],
+    client_request_id: object,
+) -> ActionResult | None:
+    """Record an idempotent pose and broadcast only on first acceptance."""
+    from world.scenes.interaction_services import idempotent_record_interaction  # noqa: PLC0415
+    from world.scenes.services import active_persona_for_sheet  # noqa: PLC0415
+
+    target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+    result = idempotent_record_interaction(
+        persona=active_persona_for_sheet(actor.character_sheet),
+        client_request_id=client_request_id,
+        comparison_fields={
+            "content": text,
+            "place_id": place.pk if place is not None else None,
+            "target": lambda stored: (
+                frozenset(p.pk for p in stored.target_personas.all()) == target_pks
+            ),
+        },
+        character=actor,
+        content=text,
+        mode=InteractionMode.POSE,
+        target_personas=target_personas,
+        place=place,
+        reply_to=reply_to,
+    )
+    if result.conflict:
+        return ActionResult(
+            success=False, message="This request id was already used for different text."
+        )
+    if not result.replayed:
+        broadcast()
+    return None
+
+
+def _deliver_mutter(
+    actor: ObjectDB, receivers: list[ObjectDB], *, text: str, fragment: str, sdm: SceneDataManager
+) -> None:
+    """Deliver full mutter text to receivers and a fragment to bystanders."""
+    receiver_ids = {receiver.pk for receiver in receivers}
+    for receiver in receivers:
+        receiver_state = sdm.initialize_state_for_object(receiver)
+        send_message(receiver_state, render_line(actor.key, InteractionMode.MUTTER, text))
+    location = actor.location
+    if location is None:
+        return
+    for obj in location.contents:
+        if obj.pk in receiver_ids or obj.pk == actor.pk:
+            continue
+        if not hasattr(obj, "msg"):
+            continue
+        bystander_state = sdm.initialize_state_for_object(obj)
+        send_message(bystander_state, render_line(actor.key, InteractionMode.MUTTER, fragment))
+
+
 @dataclass
 class SayAction(Action):
     """Say something to the room."""
@@ -252,45 +408,50 @@ class SayAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
-        targets: list[ObjectDB] = kwargs.get("targets", [])
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         if not text:
             return ActionResult(success=False, message="Say what?")
-
         language, error = _resolve_spoken_language(actor, kwargs)
         if error is not None:
             return error
-
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
-
+        targets: list[ObjectDB] = kwargs.get("targets", [])
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        if language is None or language.is_universal:
-            # Broadcast: raw text via Evennia msg_contents for telnet clients and
-            # non-character objects. Web clients receive this as a TEXT message
-            # but should prefer the structured INTERACTION payload from push_interaction.
-            message_location(
-                caller_state,
-                f'$You() $conj(say) "{text}"',
-            )
-        else:
-            _deliver_language_tagged_say(actor, text, language, sdm)
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_interaction(
-            character=actor,
-            content=text,
-            mode=InteractionMode.SAY,
-            target_personas=target_personas,
-            language=language,
-        )
+        def _broadcast() -> None:
+            if language is None or language.is_universal:
+                message_location(caller_state, f'$You() $conj(say) "{text}"')
+            else:
+                _deliver_language_tagged_say(actor, text, language, sdm)
 
-        # #1278/#2088 — flag circumvention: a blocked player directing a say at the
-        # blocker via another identity. Room-wide says (no targets) are already
-        # handled by the visibility filter; only directed says are contact attempts.
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            failure = _record_say_submission(
+                actor,
+                text=text,
+                language=language,
+                target_personas=target_personas,
+                reply_to=reply_to,
+                broadcast=_broadcast,
+                client_request_id=client_request_id,
+            )
+            if failure is not None:
+                return failure
+        else:
+            _broadcast()
+            record_interaction(
+                character=actor,
+                content=text,
+                mode=InteractionMode.SAY,
+                target_personas=target_personas,
+                language=language,
+                reply_to=reply_to,
+            )
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
-
         return ActionResult(success=True)
 
 
@@ -316,36 +477,50 @@ class PoseAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
-        place = kwargs.get("place")
+        place, place_error = _resolve_pose_place(actor, kwargs.get("place"))
+        if place_error is not None:
+            return place_error
         if not text:
             return ActionResult(success=False, message="Pose what?")
-
         sdm = context.scene_data if context else SceneDataManager()
         caller_state = sdm.initialize_state_for_object(actor)
-
         target_personas = _characters_to_active_personas(targets) if targets else None
 
-        # Broadcast: raw text via Evennia msg_contents for telnet clients and
-        # non-character objects. Web clients receive this as a TEXT message
-        # but should prefer the structured INTERACTION payload from push_interaction.
-        message_location(caller_state, text)
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_interaction(
-            character=actor,
-            content=text,
-            mode=InteractionMode.POSE,
-            target_personas=target_personas,
-            place=place,
-        )
+        def _broadcast() -> None:
+            # The actor is in the line on telnet too (#3858): ``{caller}`` is
+            # resolved per looker by message_location's mapping, so a disguise
+            # reads as whatever that looker sees.
+            message_location(caller_state, render_line("{caller}", InteractionMode.POSE, text))
 
-        # #1278/#2088 — flag circumvention: a blocked player directing a pose at the
-        # blocker via another identity. Room-wide poses (no targets) are already
-        # handled by the visibility filter; only directed poses are contact attempts.
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            failure = _record_pose_submission(
+                actor,
+                text=text,
+                place=place,
+                target_personas=target_personas,
+                reply_to=reply_to,
+                broadcast=_broadcast,
+                client_request_id=client_request_id,
+            )
+            if failure is not None:
+                return failure
+        else:
+            _broadcast()
+            record_interaction(
+                character=actor,
+                content=text,
+                mode=InteractionMode.POSE,
+                target_personas=target_personas,
+                place=place,
+                reply_to=reply_to,
+            )
         if targets:
             _flag_blocked_contact_for_targets(actor, targets, scene=_active_scene_for(actor))
-
         return ActionResult(success=True)
 
 
@@ -377,6 +552,9 @@ class EmitAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         targets: list[ObjectDB] = kwargs.get("targets", [])
         place = kwargs.get("place")
         if not text:
@@ -395,6 +573,7 @@ class EmitAction(Action):
             mode=InteractionMode.EMIT,
             target_personas=target_personas,
             place=place,
+            reply_to=reply_to,
         )
 
         return ActionResult(success=True)
@@ -429,38 +608,32 @@ class MutterAction(Action):
         )
 
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
             return ActionResult(success=False, message="Mutter what?")
         if not receivers:
             return ActionResult(success=False, message="Mutter to whom?")
-
         language, error = _resolve_spoken_language(actor, kwargs)
         if error is not None:
             return error
-
         sdm = context.scene_data if context else SceneDataManager()
-
-        fragment = mutter_fragment(text)
-        receiver_ids = {receiver.pk for receiver in receivers}
-        # Telnet delivery: full text to receivers, fragment to the rest.
-        for receiver in receivers:
-            receiver_state = sdm.initialize_state_for_object(receiver)
-            send_message(receiver_state, f'{actor.key} mutters, "{text}"')
-        location = actor.location
-        if location is not None:
-            for obj in location.contents:
-                if obj.pk in receiver_ids or obj.pk == actor.pk:
-                    continue
-                if not hasattr(obj, "msg"):
-                    continue
-                bystander_state = sdm.initialize_state_for_object(obj)
-                send_message(bystander_state, f'{actor.key} mutters, "{fragment}"')
-
-        record_mutter_interaction(
-            character=actor, receivers=receivers, content=text, language=language
+        _deliver_mutter(
+            actor,
+            receivers,
+            text=text,
+            fragment=mutter_fragment(text),
+            sdm=sdm,
         )
-
+        record_mutter_interaction(
+            character=actor,
+            receivers=receivers,
+            content=text,
+            language=language,
+            reply_to=reply_to,
+        )
         return ActionResult(success=True)
 
 
@@ -497,6 +670,9 @@ class PemitAction(Action):
         **kwargs: Any,
     ) -> ActionResult:
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         receivers: list[ObjectDB] = kwargs.get("receivers", [])
         if not text:
             return ActionResult(success=False, message="Pemit what?")
@@ -519,6 +695,7 @@ class PemitAction(Action):
             content=text,
             mode=InteractionMode.EMIT,
             receivers=receiver_personas,
+            reply_to=reply_to,
         )
 
         return ActionResult(success=True)
@@ -547,6 +724,9 @@ class WhisperAction(Action):
     ) -> ActionResult:
         target = kwargs.get("target")
         text = kwargs.get("text", "")
+        reply_to, reply_error = _parse_reply_target(kwargs)
+        if reply_error is not None:
+            return reply_error
         if target is None or not text:
             return ActionResult(success=False, message="Whisper what to whom?")
 
@@ -558,17 +738,83 @@ class WhisperAction(Action):
         caller_state = sdm.initialize_state_for_object(actor)
         target_state = sdm.initialize_state_for_object(target)
 
-        # Direct message: Evennia msg() to the target only, for telnet clients.
-        # Web clients receive this as a TEXT message but should prefer the
-        # structured INTERACTION payload from push_interaction. Receiver-scoped
-        # trust (#2993): the chosen audience always gets the full text, never garbled.
-        send_message(
-            target_state,
-            f'{caller_state.get_display_name(looker=target_state)} whispers "{text}"',
-        )
-        # Record + push: creates DB record and sends structured WebSocket payload.
-        # Web clients use this for the scene feed display.
-        record_whisper_interaction(character=actor, target=target, content=text, language=language)
+        def _broadcast() -> None:
+            # Direct message: Evennia msg() to the target only, for telnet clients.
+            # Web clients receive this as a TEXT message but should prefer the
+            # structured INTERACTION payload from push_interaction. Receiver-scoped
+            # trust (#2993): the chosen audience always gets the full text, never garbled.
+            send_message(
+                target_state,
+                render_line(
+                    caller_state.get_display_name(looker=target_state),
+                    InteractionMode.WHISPER,
+                    text,
+                    language_name=None
+                    if language is None or language.is_universal
+                    else language.name,
+                ),
+            )
+
+        client_request_id = kwargs.get("client_request_id")
+        if client_request_id is not None:
+            from world.scenes.interaction_services import (  # noqa: PLC0415
+                idempotent_record_interaction,
+            )
+
+            # Whisper authorship is the primary persona, never the active/worn face
+            # (mirrors record_whisper_interaction's own resolution -- #981's
+            # active-persona substitution is not applied here, unlike say/pose).
+            persona = actor.sheet_data.primary_persona
+            # Target identity (#3760 review fix): a plain content-only comparison
+            # silently misclassified "same text, different target" as a
+            # legitimate replay -- nothing (re-)delivered to the new intended
+            # target, caller told it succeeded. target_personas is M2M (via
+            # InteractionTargetPersona), so it can't be a plain
+            # getattr(stored, field) == value comparison; see
+            # idempotent_record_interaction's _comparison_fields_match.
+            target_persona_pk = target.sheet_data.primary_persona.pk
+            result = idempotent_record_interaction(
+                persona=persona,
+                client_request_id=client_request_id,
+                comparison_fields={
+                    "content": text,
+                    "target": lambda stored: (
+                        frozenset(p.pk for p in stored.target_personas.all()) == {target_persona_pk}
+                    ),
+                },
+                # record_whisper_interaction, not record_interaction: its
+                # ephemeral-scene branch scopes the real-time push to
+                # [character, target] rather than broadcasting to the whole
+                # scene, which record_interaction would do (a privacy leak
+                # for a whisper) -- see idempotent_record_interaction's
+                # record_fn docstring.
+                record_fn=record_whisper_interaction,
+                character=actor,
+                target=target,
+                content=text,
+                language=language,
+                reply_to=reply_to,
+            )
+            if result.conflict:
+                return ActionResult(
+                    success=False, message="This request id was already used for different text."
+                )
+            # Broadcast AFTER recording, gated on `not result.replayed` -- same
+            # fix as submit_pose (#3760): a retry must not double-deliver even
+            # though the DB side is correctly deduped.
+            if not result.replayed:
+                _broadcast()
+        else:
+            # Record + push: creates DB record and sends structured WebSocket payload.
+            # Web clients use this for the scene feed display.
+            _broadcast()
+            record_whisper_interaction(
+                character=actor,
+                target=target,
+                content=text,
+                language=language,
+                reply_to=reply_to,
+            )
 
         # #1278/#2088 — flag circumvention attempts: a blocked player whispering the
         # blocker via another identity. No-op when no active block exists.

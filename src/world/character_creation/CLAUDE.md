@@ -9,10 +9,12 @@ Character creation is a multi-stage process that guides players through creating
 1. **Origin** - Select starting area (city), which gates heritage options
 2. **Heritage** - Special heritage (Sleeper/Misbegotten) or normal → Species → Gender/Pronouns → Age
 3. **Lineage** - Choose an Upbringing (`OriginTemplate`) for the beginning, then its
-   family path: claim a staff-authored family, name a new one, or none (tarot
-   surname ritual); typed prompts with costed pick-list choices priced by the
-   claimed family's influence (#3617, see `docs/systems/character_creation.md`'s
-   Lineage step section). Plus kin-slot claim/mint/defer and invented parents
+   family path: claim a staff-authored family (entering through a kin Vacancy when
+   one is offered), name a new one from a Family Template, or none (tarot surname
+   ritual); typed prompts with costed pick-list choices priced by the claimed
+   family's influence, plus a Service panel offering any reachable retainer Vacancy
+   on any path (#3617, #3648; see `docs/systems/character_creation.md`'s Lineage
+   step section and ADR-0273). Plus kin-slot claim/mint/defer and invented parents
    (#2815: names/genders in draft_data, `second_parent_species` for a
    cross-species parent, unlocks that line's colors in Appearance; finalize
    creates the nodes and pins back-inference)
@@ -22,9 +24,14 @@ Character creation is a multi-stage process that guides players through creating
    stat/skill (renders the `GiftStage` funnel component; #2426 Task 10)
 7. **Attributes & Skills** - Primary stat allocation (cap-aware with distinction/species
    bonuses) plus skill point allocation (moved in from Path, #2426 Task 9)
-8. **Appearance** - Height, build, form traits (hair/eye color, etc.)
-9. **Identity** - Name, description, personality, background
-10. **Final Touches** - Goals (optional)
+8. **Appearance** - Height, build, form traits (hair/eye color, etc.); its offered
+   distinctions in authored sections (`AppearanceSection`, #3709)
+9. **Identity** - Name, description, background
+10. **Final Touches** - The Actor's Sheet (#3621): three questions, each with the
+    distinctions that answer it under it (#3709), numbered goals, one priced enemy whose
+    why is picked from the authored `EnemyReason` list before the own words and whose
+    reason and degree open offers, The Introductions; all optional (see
+    `docs/systems/character_creation.md`'s "The Actor's Sheet", ADR-0279, ADR-0282)
 11. **Review** - Final review and submission
 
 ## Key Models
@@ -33,7 +40,9 @@ Character creation is a multi-stage process that guides players through creating
 - Selectable origin locations with crest images
 - Gates which heritage options, species, and families are available
 - Maps to an Evennia room for character starting location
-- Access control: all players, trust-required, or staff-only
+- Access control (`access_level`): all players, or staff-only. Applied as a queryset
+  filter in `get_accessible_starting_areas`; there is no per-row accessibility flag
+  on the serializer, so an area a reader is served is one they may pick (ADR-0292)
 
 ### Beginnings
 - Worldbuilding paths for each starting area (Arx: Caretaker, Sleeper, Misbegotten -
@@ -42,16 +51,23 @@ Character creation is a multi-stage process that guides players through creating
 - Family paths are gated per-Upbringing instead, on `OriginTemplate` (#3617); Beginnings
   itself carries no family-known flag
 - Can override starting room (e.g., Sleeper Wake Room)
-- Has CG point cost and trust requirements
+- Has a CG point cost; `is_active` is its only gate
 
-### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617)
+### OriginTemplate / OriginTemplateSlot / OriginTemplateSlotChoice (#2478, #3617, #3648, #3660)
 Full model shape, family-path resolution, pricing, and the authoring recipes live in
 `docs/systems/character_creation.md`'s Lineage step section and
 `docs/systems/family-authoring-recipes.md`. In brief: `OriginTemplate` ("Upbringing" in
 CG copy) is the authored content row a player picks within a Beginning, carrying a CG
-point cost, a trust gate, and which family paths it allows (claim/name/none);
+point cost and which family paths it allows (claim/name/none);
 `OriginTemplateSlot` is an authored prompt scoped to a path (`applies_to`), and
 `OriginTemplateSlotChoice` is a priced pick-list answer (`cost_for(influence)`).
+`OriginTemplate.family_templates` (M2M `HouseTemplate`, related_name `upbringings`,
+#3648) names which Family Template(s) the name path offers; `named_family_kind` is
+retired; `draft.resolve_family_template()` resolves the sole offered template or the
+player's `draft_data.family_template_id` pick. Entry into a staff family is a
+`societies.Vacancy` (`CharacterDraft.selected_vacancy`, `served_house`); see ADR-0273
+and the Lineage step section for the family-block page order, pricing, and finalize
+order (`_materialize_named_family` -> `_bind_vacancy` -> `_bind_kinship_node`).
 `CharacterOriginSlot` is instance data (FK->`CharacterSheet`, FK->`OriginTemplateSlot`,
 nullable FK->`OriginTemplateSlotChoice`); at CG finalize its answers assemble into
 `Profile.background` prose via `assemble_origin_prose()` (pure concatenation, no LLM).
@@ -59,6 +75,38 @@ Not required at CG submit (mirrors #2427 Glimpse); finish-later via
 `OriginStoryEditorDialog` (`set-origin-slot`/`clear-origin-slot` sheet API actions -
 `choice_id` there is staff-only, since a costed pick is set at character creation).
 `CharacterSheet.origin_story_state` caches NOT_STARTED/SLOTS_ONLY/COMPLETE.
+
+**Formative connections (#3660).** `OriginTemplateSlot.kind` (`QuestionKind`) adds two
+kinds to the original TEXT/PICK shapes: GROUP (`anchor_source` resolves which real
+`societies.Organization`s the answer may name: a pool, a named list, the same group an
+earlier GROUP question resolved to, the served house, or the character's own family)
+and PERSON (a free-text figure, optionally scoped to a GROUP question via
+`same_anchor_as`). `questionnaire.py` is the one seam every caller evaluates the
+questionnaire through - which questions show (`visible_slot_ids`/`is_shown`), which
+groups a question offers (`resolve_groups`), which organization an answer is about
+(`anchor_for`), what influence prices it (`question_influences`), which
+Distinctions the picked answers bundle (`bundled_distinctions`), and - for the two
+GROUP sources with no stored answer to read, OWN_FAMILY/SERVED_HOUSE - what each
+resolved to right now, or `None` when it has nothing to resolve to yet
+(`derived_anchors`, exposed on `CharacterDraftSerializer` since the frontend cannot
+derive either on its own; #3660 fix round 2, controller ruling L). `models.py`,
+`validators.py`, `serializers.py`, and `services.py` all read through it rather than
+re-deriving any of these rules, so they cannot drift apart. Bundled connection grants
+have no dedicated finalize hook as of #3675: `reconcile_offer_picks`
+(`world.character_creation.offers`) already folds a picked answer's bundled
+`DistinctionOffer` into `draft.draft_data["distinctions"]` at cost 0, so the ordinary
+picked-Distinction path (`_create_distinctions`) creates it. `_connection_asset_names`
+(`services.py`) is the piece still specific to connections: names the granted
+`NPCAsset` after a PERSON question's figure when one is anchored to the granting group,
+feeding `_create_distinction_modifiers_bulk`'s `asset_names`. `_seed_connection_reputation`
+(each picked GROUP answer's non-zero `reputation_seed` bumps the resolved anchor's
+`OrganizationReputation`) is unchanged.
+`set_origin_slot(sheet, slot, value, choice, *, organization=_KEEP, figure_name=_KEEP)`
+defaults `organization`/`figure_name` to a `_KEEP` sentinel, not `None`/`""`: a caller
+that only edits `value` (the post-CG write-in editor) leaves an existing tie/figure
+alone rather than silently clearing it; finalize always passes both explicitly. Staff
+author a whole route (Upbringing, questions, answers) on one page, the Upbringing
+Builder - see `src/web/admin/CLAUDE.md`'s "Upbringing Builder" section.
 
 ### CGExplanation
 - Key-value table: each row has `key`, `text`, and `help_text` fields
@@ -154,17 +202,19 @@ for the five-branch validation gate this data must satisfy before submission.
   `_finalize_academy_entrance_obligation` resolves the "Shroudwatch Academy"
   `Organization` by name (seeded by `world.seeds.character_creation.
   ensure_shroudwatch_academy`) and creates a `societies.OrganizationObligation`:
-  `OWED` when `draft.selected_tradition.name == "Unbound"`, else
-  `SETTLED_BY_SPONSOR` (`settled_at` stamped, `settled_by_token` left `NULL` —
-  the sponsor's Hare is lore-recorded, not minted at CG time). Defensive logged
-  skip if the Academy isn't seeded (mirrors `seed_beginning_traditions`'s
-  Unbound-tradition skip); `get_or_create`-idempotent.
+  `OWED` when `world.character_creation.offers.tradition_is_self_taught(draft
+  .selected_tradition)` (#3675, reads `BeginningTradition.state ==
+  TraditionState.SELF_TAUGHT`; was a `draft.selected_tradition.name == "Unbound"`
+  name match pre-#3675), else `SETTLED_BY_SPONSOR` (`settled_at` stamped,
+  `settled_by_token` left `NULL`, the sponsor's Hare is lore-recorded, not minted
+  at CG time). Defensive logged skip if the Academy isn't seeded (mirrors
+  `seed_beginning_traditions`'s Unbound-tradition skip); `get_or_create`-idempotent.
 
 ### `get_accessible_starting_areas(account)`
 Returns StartingArea queryset filtered by account access level.
 
 ### `can_create_character(account)`
-Checks if account can create characters (verified, positive trust, under limit).
+Checks if account can create characters (email verified, under the character limit).
 
 ## Gender & Pronouns
 

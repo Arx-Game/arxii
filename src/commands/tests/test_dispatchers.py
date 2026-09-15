@@ -67,7 +67,7 @@ class CmdLookTests(TestCase):
         with patch.object(cmd.action, "run", return_value=result) as mock_run:
             cmd.func()
             mock_run.assert_called_once_with(actor=caller, target=room)
-        caller.msg.assert_called_with("A room")
+        caller.msg.assert_called_with(("A room", {"type": "look"}))
 
     def test_look_at_object(self):
         room = ObjectDBFactory(
@@ -438,7 +438,11 @@ class CmdLookMessageParityTests(TestCase):
         absent_cmd.func()
         absent_message = caller.msg.call_args_list[0][0][0]
 
-        assert concealed_message == absent_message == f"Could not find '{probe}'."
+        # Both are CommandError lines, so both ride the typed tuple form (#3856);
+        # the parity under test is the text, and the type must match too.
+        assert (
+            concealed_message == absent_message == (f"Could not find '{probe}'.", {"type": "error"})
+        )
 
 
 class CmdInventoryTests(TestCase):

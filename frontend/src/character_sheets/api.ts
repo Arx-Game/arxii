@@ -145,18 +145,65 @@ export interface CharacterSheetSkill {
  * `world.character_sheets.types._build_stats`/`SkillEntry`); `distinctions` and `magic` in
  * Tasks 9 & 10.
  */
+/**
+ * Mirrors `world.character_sheets.types.OriginSlotEntry`. `kind`/`connection_kind`/`life_stage`
+ * mirror the prompt (#3660); `choice_name`/`choice_description` are the picked choice's own
+ * fields. `organization_id`/`organization_name` are the resolved anchor (a GROUP question's
+ * pick, or the group a PERSON question's named figure belongs to). `figure_name` is blanked
+ * for a non-privileged (foreign) viewer.
+ */
 export interface CharacterSheetOriginSlot {
   slot_id: number;
   slot_name: string;
   slot_prompt: string;
   value: string;
+  kind: string;
+  connection_kind: string;
+  life_stage: string;
+  choice_name: string;
+  choice_description: string;
+  organization_id: number | null;
+  organization_name: string;
+  figure_name: string;
 }
 
 export interface CharacterSheetStory {
   background: string;
-  personality: string;
   origin_story_state: string;
   origin_slots: CharacterSheetOriginSlot[];
+}
+
+/** Mirrors `world.character_sheets.types.EnemyEntry` (#3621); owner, staff and GM only. */
+export interface CharacterSheetEnemy {
+  kind: 'person' | 'group';
+  name: string;
+  power_tier: string;
+  reach: string;
+  degree: string;
+  price: number;
+  why: string;
+  public_line: string;
+  status: string;
+  has_secret: boolean;
+}
+
+/** Mirrors `world.character_sheets.types.IntroductionEntry` (#3621). */
+export interface CharacterSheetIntroduction {
+  id: number;
+  kind: 'first_journal' | 'application' | 'whispers';
+  title: string;
+  body: string;
+  created_at: string;
+}
+
+/** Mirrors `world.character_sheets.types.ActorSheetSection` (#3621). */
+export interface CharacterSheetActorSheet {
+  never_do: string;
+  protect: string;
+  fear: string;
+  enemy_public_line: string;
+  enemy: CharacterSheetEnemy | null;
+  introductions: CharacterSheetIntroduction[];
 }
 
 /**
@@ -183,6 +230,7 @@ export interface CharacterSheetPayload {
   distinctions: CharacterSheetDistinction[];
   magic: CharacterSheetMagic | null;
   story: CharacterSheetStory;
+  actor_sheet: CharacterSheetActorSheet;
   goals: unknown[];
   personas: CharacterSheetPersona[];
   theming: Record<string, unknown>;

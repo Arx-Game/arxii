@@ -282,7 +282,7 @@ describe('ItemDetailPanel', () => {
     } as unknown as ReturnType<typeof itemFacetsHooks.useItemFacets>);
 
     vi.mocked(characterCreationQueries.useFacets).mockReturnValue({
-      data: [{ id: 3, name: 'Wolf', full_path: 'Creatures / Wolf', description: '' }],
+      data: [{ id: 3, name: 'Wolf', description: '' }],
       isLoading: false,
       isError: false,
       error: null,
@@ -297,7 +297,7 @@ describe('ItemDetailPanel', () => {
 
     render(<ItemDetailPanel item={makeItem()} open={true} onOpenChange={vi.fn()} />);
 
-    expect(screen.getByText('Creatures / Wolf')).toBeInTheDocument();
+    expect(screen.getByText('Wolf')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /remove facet 3/i })).toBeInTheDocument();
   });
 

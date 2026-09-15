@@ -41,10 +41,10 @@ class EventGrandeurContributionInline(admin.TabularInline):
 
 @admin.register(Event)
 class EventAdmin(admin.ModelAdmin):
+    autocomplete_fields = ["location"]  # rooms are searched, never scrolled
     list_display = ["name", "status", "is_public", "scheduled_real_time", "location"]
     list_filter = ["status", "is_public", "time_phase"]
     search_fields = ["name", "description"]
-    raw_id_fields = ["location"]
     inlines = [
         EventHostInline,
         EventInvitationInline,

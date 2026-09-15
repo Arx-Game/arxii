@@ -9,20 +9,20 @@
  * Phase 9, Task 9.2.
  */
 
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
-import { useAppSelector } from '@/store/hooks';
-import { actingPersonaId } from '@/roster/persona';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useViewerPersonaId } from '@/roster/persona';
+import { excerptOf } from '@/lib/formatParser';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
 import { FormattedContent } from '@/components/FormattedContent';
 import { Badge } from '@/components/ui/badge';
-import { VoteButton } from '@/components/VoteButton';
+import { NominateButton } from '@/components/NominateButton';
 import { PersonaContextMenu } from './PersonaContextMenu';
 import { ActionResult } from './ActionResult';
+import { ActorLine } from './ActorLine';
 import { ReactionStrip } from './ReactionStrip';
 import { DramaticMomentTagDialog } from './DramaticMomentTagDialog';
 import { DramaticMomentSuggestionChip } from './DramaticMomentSuggestionChip';
@@ -200,6 +200,58 @@ function ReactionsFooter({ interaction, sceneId }: ReactionsFooterProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Parent-reply chip (#3787 demo Screen 2)
+// ---------------------------------------------------------------------------
+
+/**
+ * "Answering "<excerpt>"" -- the parent chip. Replaces the placeholder
+ * `Replying to pose {id}` now that `interaction.reply_to` carries real data
+ * (#3787 Tasks 1-2). Clicking it reveals the parent's content in place,
+ * matching the demo's "reveal-in-place" affordance.
+ *
+ * The chip NEVER re-derives an actor: both the quoted excerpt and the
+ * revealed block below show only `parent.content` (already the exact,
+ * per-viewer-rendered text the reader elsewhere shows for that row), never
+ * `parent.persona.name`. That is what keeps it safe on a concealed working --
+ * the line stays exactly as unattributed as it already was.
+ */
+function ParentChip({
+  replyTo,
+  parent,
+}: {
+  replyTo: { id: string; timestamp: string };
+  parent: Interaction | undefined;
+}) {
+  const [revealed, setRevealed] = useState(false);
+  return (
+    <div className="mt-1" data-testid="parent-reference">
+      <button
+        type="button"
+        className="block w-full rounded-r border-l-2 border-primary/50 px-2 py-1 text-left text-xs text-muted-foreground transition-colors hover:text-primary"
+        onClick={() => setRevealed((v) => !v)}
+        aria-expanded={revealed}
+        data-testid={`parent-chip-${replyTo.id}`}
+      >
+        Answering{' '}
+        {parent ? (
+          <span className="italic text-foreground">&ldquo;{excerptOf(parent.content)}&rdquo;</span>
+        ) : (
+          <span className="italic">a pose not currently loaded</span>
+        )}
+      </button>
+      {revealed && parent && (
+        <div
+          className="ml-2 mt-1 rounded border border-dashed px-2 py-1 text-xs"
+          data-testid={`parent-reveal-${replyTo.id}`}
+        >
+          <FormattedContent content={parent.content} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // PoseUnit
 // ---------------------------------------------------------------------------
 
@@ -224,6 +276,18 @@ export interface PoseUnitProps {
    * PersonaContextMenu remains the action surface either way.
    */
   onAvatarClick?: (persona: PoseUnitAvatarClickPersona) => void;
+  /** Historical readers must not mount mutation controls. */
+  readOnly?: boolean;
+  /**
+   * Lookup for resolving `interaction.reply_to` to its parent Interaction
+   * (#3787) -- `reply_to` itself carries only `{id, timestamp}` (a thread
+   * selector, not the parent's content), so the parent chip's quoted
+   * excerpt needs the full row. Built once by the caller that already holds
+   * every loaded interaction (`ThreadedNarrativeReader.tsx`) rather than
+   * fetched per-pose. Absent/a miss (the parent isn't in the currently
+   * loaded window) degrades to a chip with no quote, never a fetch.
+   */
+  interactionsById?: ReadonlyMap<number, Interaction>;
 }
 
 /** Why a reaction chip nudges your regard, shown on hover. */
@@ -240,6 +304,8 @@ export function PoseUnit({
   onAttachAction,
   canGm = false,
   onAvatarClick,
+  readOnly = false,
+  interactionsById,
 }: PoseUnitProps) {
   const isAction = interaction.mode === 'action';
   const actionLinks = interaction.action_links ?? [];
@@ -256,16 +322,14 @@ export function PoseUnit({
 
   // Resolve the viewer's active persona to detect self-pose — mirrors
   // EndorsementControl's self-endorsement guard (same signal, same source).
-  // VoteButton has no self-guard of its own (the backend rejects self-votes;
-  // this gate is UX only), so PoseUnit computes it and decides whether to mount.
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const viewerPersonaId = useMemo(
-    () => actingPersonaId(myRosterEntries.find((e) => e.name === activeCharacterName)),
-    [myRosterEntries, activeCharacterName]
-  );
+  // NominateButton has no self-guard of its own (the backend refuses your own
+  // characters; this gate is UX only), so PoseUnit computes it and decides
+  // whether to mount (#3738). #3787: this is now `useViewerPersonaId()`, the
+  // single extracted source of truth also used by `ThreadedNarrativeReader`'s
+  // involvement mark -- do not add a second inline computation here.
+  const viewerPersonaId = useViewerPersonaId();
   const isSelfPose = viewerPersonaId != null && interaction.persona.id === viewerPersonaId;
-  const canVote = Boolean(sceneId) && !isSelfPose;
+  const canNominate = Boolean(sceneId) && !isSelfPose;
 
   // -------------------------------------------------------------------------
   // State 3: standalone ACTION (not linked to any pose)
@@ -313,16 +377,26 @@ export function PoseUnit({
         </button>
         {expanded && <PoseUnitDetailPanel actionInteractionIds={[interaction.id]} />}
         <div className="flex items-center gap-1">
-          <ReactionsFooter interaction={interaction} sceneId={sceneId} />
-          {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+          {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
+          {!readOnly && canNominate && (
+            <NominateButton
+              targetType="interaction"
+              targetId={interaction.id}
+              nomineeName={interaction.persona.name}
+            />
+          )}
         </div>
         {/* Standalone ACTION rows are authored content (claimed resonances) and
             are endorsable per spec — this is intentional, not a slip. */}
-        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
-        {interaction.pose_kind === 'entry' && (
+        {!readOnly && (
+          <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
+        )}
+        {interaction.pose_kind === 'entry' && !readOnly && (
           <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
         )}
-        <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+        {!readOnly && (
+          <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+        )}
       </div>
     );
   }
@@ -350,14 +424,18 @@ export function PoseUnit({
       {/* Header: avatar + name + timestamp */}
       <div className="flex items-center gap-2">
         <PoseUnitAvatar interaction={interaction} onAvatarClick={onAvatarClick} />
-        <PersonaContextMenu
-          personaId={interaction.persona.id}
-          personaName={interaction.persona.name}
-          sceneId={sceneId}
-          onAttachAction={onAttachAction}
-        >
-          <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
-        </PersonaContextMenu>
+        {readOnly ? (
+          <PoseUnitActorLabel interaction={interaction} />
+        ) : (
+          <PersonaContextMenu
+            personaId={interaction.persona.id}
+            personaName={interaction.persona.name}
+            sceneId={sceneId}
+            onAttachAction={onAttachAction}
+          >
+            <PoseUnitActorLabel interaction={interaction} onAddTarget={onAddTarget} />
+          </PersonaContextMenu>
+        )}
         <span className="text-xs text-muted-foreground">
           {new Date(interaction.timestamp).toLocaleString()}
         </span>
@@ -372,10 +450,21 @@ export function PoseUnit({
         </div>
       )}
 
-      {/* Prose body */}
+      {interaction.reply_to && (
+        <ParentChip
+          replyTo={interaction.reply_to}
+          parent={interactionsById?.get(Number(interaction.reply_to.id))}
+        />
+      )}
+
+      {/* Prose body: the actor in the line (#3858) */}
       <div className="mt-1">
         <p>
-          <FormattedContent content={interaction.content} />
+          <ActorLine
+            line={interaction.line}
+            content={interaction.content}
+            actorName={interaction.attributed_companion?.name ?? interaction.persona.name}
+          />
         </p>
       </div>
 
@@ -384,11 +473,13 @@ export function PoseUnit({
         <PoseUnitDetailPanel actionInteractionIds={actionInteractionIds} />
       )}
 
-      <ReactionStrip
-        windows={interaction.reaction_windows ?? []}
-        sceneId={sceneId}
-        interactionId={interaction.id}
-      />
+      {!readOnly && (
+        <ReactionStrip
+          windows={interaction.reaction_windows ?? []}
+          sceneId={sceneId}
+          interactionId={interaction.id}
+        />
+      )}
 
       {/* Dramatic-moment tag badges (#1139) */}
       {dramaticTags.length > 0 && (
@@ -406,7 +497,7 @@ export function PoseUnit({
       )}
 
       {/* GM control: tag a dramatic moment (#1139) */}
-      {canGm && (
+      {canGm && !readOnly && (
         <div className="mt-1">
           <button
             type="button"
@@ -426,19 +517,25 @@ export function PoseUnit({
       )}
 
       {/* GM confirm/dismiss inbox: technique-driven dramatic-moment suggestions (#2183) */}
-      {canGm && (
+      {canGm && !readOnly && (
         <DramaticMomentSuggestionChip suggestions={dramaticSuggestions} sceneId={sceneId} />
       )}
 
       <div className="flex items-center gap-1">
-        <ReactionsFooter interaction={interaction} sceneId={sceneId} />
-        {canVote && <VoteButton targetType="interaction" targetId={interaction.id} />}
+        {!readOnly && <ReactionsFooter interaction={interaction} sceneId={sceneId} />}
+        {!readOnly && canNominate && (
+          <NominateButton
+            targetType="interaction"
+            targetId={interaction.id}
+            nomineeName={interaction.persona.name}
+          />
+        )}
       </div>
-      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />
-      {interaction.pose_kind === 'entry' && (
+      {!readOnly && <EndorsementControl interaction={interaction} sceneId={sceneId} kind="pose" />}
+      {interaction.pose_kind === 'entry' && !readOnly && (
         <EndorsementControl interaction={interaction} sceneId={sceneId} kind="entry" />
       )}
-      <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />
+      {!readOnly && <EndorsementControl interaction={interaction} sceneId={sceneId} kind="style" />}
     </div>
   );
 }

@@ -14,8 +14,10 @@ from typing import Any
 from unittest.mock import patch
 
 from django.core.cache import cache
+from django.template.defaultfilters import date as date_filter
 from django.test import TestCase
 from django.urls import reverse
+from django.utils import timezone
 from evennia.accounts.models import AccountDB
 
 from web.admin.tuning.technique_analytics import (
@@ -74,6 +76,7 @@ def _canned_panel(**overrides: Any) -> TechniquePanelData:
         "reference": ReferenceFrame(
             outgoing_dpr=9.5, incoming_dpr=9.5, source_label="median-attack estimate"
         ),
+        "evaluated_at": timezone.now(),
     }
     defaults.update(overrides)
     return TechniquePanelData(**defaults)
@@ -120,7 +123,58 @@ class TestTechniqueFragmentView(TestCase):
         self.assertEqual(resp.status_code, 200)
         body = resp.content.decode()
         self.assertIn('id="panel-techniques-form"', body)
+        self.assertIn('id="panel-techniques-refresh"', body)
+        self.assertIn("Starting kits", body)
         self.assertIn("No evaluation has been run yet", body)
+        self.assertIn("Tradition (this Beginning", body)
+        self.assertIn("Species (optional)", body)
+        self.assertIn("Extra picks from distinctions", body)
+        self.assertIn('hx-trigger="load"', body)
+        self.assertIn(f'hx-get="{reverse("admin_tuning_techniques")}?scan=fails_floor"', body)
+
+    @patch(_PATCH_TARGET)
+    def test_evaluated_at_renders_next_to_the_refresh_note(self, mock_build: Any) -> None:
+        when = timezone.now()
+        mock_build.return_value = _canned_panel(evaluated_at=when)
+        self.client.force_login(self.super)
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f"Evaluated {date_filter(when, 'Y-m-d H:i')}.", body)
+
+    @patch(_PATCH_TARGET)
+    def test_evaluated_readout_omitted_when_evaluated_at_is_unset(self, mock_build: Any) -> None:
+        mock_build.return_value = _canned_panel(evaluated_at=None)
+        self.client.force_login(self.super)
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Evaluated", resp.content.decode())
+
+    @patch(_PATCH_TARGET)
+    def test_get_prefills_the_catalog_form_from_the_cached_panels_own_params(
+        self, mock_build: Any
+    ) -> None:
+        mock_build.return_value = _canned_panel(
+            params=TechniqueAnalyticsParams(
+                level=17,
+                thread_level=4,
+                roller_points=30,
+                target_difficulty=28,
+                roll_modifier=2,
+                sort="name",
+            )
+        )
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+
+        resp = self.client.get(reverse("admin_tuning_techniques"))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["form"].initial["level"], 17)
+        self.assertEqual(resp.context["form"].initial["thread_level"], 4)
+        self.assertEqual(resp.context["form"].initial["roller_points"], 30)
+        self.assertEqual(resp.context["form"].initial["target_difficulty"], 28)
+        self.assertEqual(resp.context["form"].initial["roll_modifier"], 2)
+        self.assertEqual(resp.context["form"].initial["sort"], "name")
 
     @patch(_PATCH_TARGET)
     def test_post_valid_superuser_builds_panel_and_renders_rows(self, mock_build: Any) -> None:
@@ -247,3 +301,356 @@ class TestTechniqueFragmentView(TestCase):
         body = resp.content.decode()
         self.assertIn("Inert Placeholder", body)
         self.assertIn("INERT_PAYLOAD", body)
+
+
+class TestTechniquePanelCatalogRevision(TestCase):
+    """An authoring edit must invalidate both cache layers (#3682).
+
+    Both the corpus cache (24h, keyed on the numeric knobs) and the rendered
+    panel cache were keyed on parameters alone, so re-submitting the same
+    parameters after editing a technique served the pre-edit corpus: staff tuned
+    against the numbers they had just changed and saw no movement.
+    """
+
+    @classmethod
+    def setUpTestData(cls) -> None:
+        cls.super = AccountDB.objects.create_superuser(
+            "revtechadmin", "revtech@example.com", "pw-123456"
+        )
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def _post_data(self) -> dict[str, Any]:
+        return {
+            "level": 10,
+            "thread_level": 3,
+            "roller_points": 25,
+            "target_difficulty": 25,
+            "roll_modifier": 0,
+            "sort": "baseline_de",
+        }
+
+    @patch(_PATCH_TARGET)
+    def test_authoring_edit_forces_a_rebuild_on_identical_params(self, mock_build: Any) -> None:
+        from world.magic.factories import BinaryEffectTypeFactory, TechniqueFactory
+        from world.magic.services.technique_effects import invalidate_technique_payload_caches
+
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(mock_build.call_count, 1)
+
+        # The one seam every authoring write already passes through.
+        technique = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        invalidate_technique_payload_caches(technique)
+
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+        self.assertEqual(mock_build.call_count, 2)
+
+    @patch(_PATCH_TARGET)
+    def test_get_after_an_edit_does_not_re_render_the_stale_panel(self, mock_build: Any) -> None:
+        """The last-key pointer is revision-scoped, so GET shows nothing stale."""
+        from world.magic.factories import BinaryEffectTypeFactory, TechniqueFactory
+        from world.magic.services.technique_effects import invalidate_technique_payload_caches
+
+        mock_build.return_value = _canned_panel()
+        self.client.force_login(self.super)
+        self.client.post(reverse("admin_tuning_techniques"), self._post_data())
+
+        technique = TechniqueFactory(effect_type=BinaryEffectTypeFactory(), damage_profile=False)
+        invalidate_technique_payload_caches(technique)
+
+        resp = self.client.get(reverse("admin_tuning_techniques"))
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertNotIn("Distinctive Firebolt", resp.content.decode())
+
+
+class TestTechniqueCatalogRevision(TestCase):
+    """The revision counter itself (#3682)."""
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+
+    def test_revision_starts_at_zero_and_rises_on_each_bump(self) -> None:
+        from world.magic.services.technique_effects import (
+            bump_technique_catalog_revision,
+            technique_catalog_revision,
+        )
+
+        self.assertEqual(technique_catalog_revision(), 0)
+        bump_technique_catalog_revision()
+        self.assertEqual(technique_catalog_revision(), 1)
+        bump_technique_catalog_revision()
+        self.assertEqual(technique_catalog_revision(), 2)
+
+    def test_corpus_cache_key_changes_with_the_revision(self) -> None:
+        from web.admin.tuning.technique_analytics import _corpus_cache_key
+        from world.magic.services.technique_effects import bump_technique_catalog_revision
+
+        params = TechniqueAnalyticsParams()
+        before = _corpus_cache_key(params)
+        bump_technique_catalog_revision()
+
+        self.assertNotEqual(before, _corpus_cache_key(params))
+
+
+_KIT_TARGET = "web.admin.tuning.technique_analytics.build_starting_kit_report"
+_SCAN_TARGET = "web.admin.tuning.technique_analytics.build_pool_scan"
+_CLEAR_TARGET = "web.admin.tuning.technique_analytics.clear_corpus_cache"
+
+
+class TestTechniquePanelStartingKits(TestCase):
+    @classmethod
+    def setUpTestData(cls) -> None:
+        from world.character_creation.factories import (
+            BeginningsFactory,
+            BeginningTraditionFactory,
+        )
+        from world.classes.factories import PathFactory
+        from world.magic.factories import GiftFactory, TraditionFactory, TraditionGiftGrantFactory
+        from world.species.factories import SpeciesFactory
+
+        cls.super = AccountDB.objects.create_superuser("kitadmin", "kit@example.com", "pw-123456")
+        cls.beginning = BeginningsFactory()
+        cls.tradition = TraditionFactory()
+        cls.other_tradition = TraditionFactory()
+        BeginningTraditionFactory(beginning=cls.beginning, tradition=cls.tradition)
+        cls.path = PathFactory()
+        cls.gift = GiftFactory()
+        TraditionGiftGrantFactory(tradition=cls.tradition, gift=cls.gift)
+        cls.other_gift = GiftFactory()
+        cls.other_species = SpeciesFactory()
+
+    def setUp(self) -> None:
+        cache.clear()
+        self.addCleanup(cache.clear)
+        self.client.force_login(self.super)
+
+    def _kit_data(self, **overrides: Any) -> dict[str, Any]:
+        from world.character_creation.constants import REQUIRED_STATS
+
+        data: dict[str, Any] = {
+            "intent": "kit",
+            "beginning": self.beginning.pk,
+            "tradition": self.tradition.pk,
+            "path": self.path.pk,
+            "gift": self.gift.pk,
+            "species": "",
+            "extra_picks": 1,
+        }
+        data.update(dict.fromkeys(REQUIRED_STATS, 2))
+        data.update(overrides)
+        return data
+
+    def _empty_kit(self) -> Any:
+        from web.admin.tuning import technique_analytics as ta
+
+        params = ta.StartingKitParams(
+            beginning=self.beginning, tradition=self.tradition, path=self.path, gift=self.gift
+        )
+        return ta.StartingKitReport(
+            params=params,
+            roller_points=25,
+            pick_budget=2,
+            rows=(),
+            kit_baseline_de=0.0,
+            kit_formula_de=0.0,
+            kit_estimate_de=0.0,
+            castable_count=0,
+            floor=ta.FloorResult(has_damage=False, has_protection=False),
+        )
+
+    @patch(_KIT_TARGET)
+    def test_kit_post_builds_the_report_from_the_form(self, mock_kit: Any) -> None:
+        mock_kit.return_value = self._empty_kit()
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data())
+        self.assertEqual(resp.status_code, 200)
+        mock_kit.assert_called_once()
+        params = mock_kit.call_args.args[0]
+        self.assertEqual((params.path, params.gift, params.extra_picks), (self.path, self.gift, 1))
+        self.assertIsNone(params.species)
+        body = resp.content.decode()
+        self.assertIn('id="panel-techniques-kit"', body)
+        self.assertNotIn("Options ()", body)
+
+    @patch(_KIT_TARGET)
+    def test_invalid_stat_field_opens_the_stats_details(self, mock_kit: Any) -> None:
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data(strength=99))
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("errorlist", body)
+        self.assertIn('<details class="kit-stats" open>', body)
+        mock_kit.assert_not_called()
+
+    @patch(_PATCH_TARGET)
+    @patch(_KIT_TARGET)
+    def test_kit_post_prefills_the_catalog_form_from_the_cached_panel(
+        self, mock_kit: Any, mock_build: Any
+    ) -> None:
+        mock_build.return_value = _canned_panel(
+            params=TechniqueAnalyticsParams(
+                level=19,
+                thread_level=6,
+                roller_points=33,
+                target_difficulty=27,
+                roll_modifier=1,
+                sort="level",
+            )
+        )
+        self.client.post(
+            reverse("admin_tuning_techniques"),
+            {
+                "level": 19,
+                "thread_level": 6,
+                "roller_points": 33,
+                "target_difficulty": 27,
+                "roll_modifier": 1,
+                "sort": "level",
+            },
+        )
+        mock_kit.return_value = self._empty_kit()
+
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data())
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.context["form"].initial["level"], 19)
+        self.assertEqual(resp.context["form"].initial["sort"], "level")
+
+    @patch(_KIT_TARGET)
+    def test_kit_result_renders_option_rows_and_tiles(self, mock_kit: Any) -> None:
+        from web.admin.tuning import technique_analytics as ta
+
+        report = _canned_report(
+            technique_id=99,
+            name="Champions Charge",
+            baseline_de=11.2,
+            formula_baseline_de=9.8,
+            estimated_baseline_de=1.4,
+            flags=(ta.FLAG_NOT_CASTABLE_STANDALONE, "underspecified"),
+        )
+        params = ta.StartingKitParams(
+            beginning=self.beginning,
+            tradition=self.tradition,
+            path=self.path,
+            gift=self.gift,
+            extra_picks=1,
+        )
+        row = ta.KitOptionRow(
+            report=report,
+            source=ta.OptionSource.PATH,
+            castable=False,
+            mostly_estimate=False,
+            anchor_de=38.5,
+            in_kit=True,
+        )
+        mock_kit.return_value = ta.StartingKitReport(
+            params=params,
+            roller_points=25,
+            pick_budget=2,
+            rows=(row,),
+            kit_baseline_de=11.2,
+            kit_formula_de=9.8,
+            kit_estimate_de=1.4,
+            castable_count=0,
+            floor=ta.FloorResult(has_damage=True, has_protection=True),
+        )
+        resp = self.client.post(reverse("admin_tuning_techniques"), self._kit_data())
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn("Champions Charge", body)
+        self.assertIn("kit-row-in-kit", body)
+        self.assertIn('class="stat-value pass">Met', body)
+        self.assertIn("Picks (1 base, 1 from distinctions)", body)
+        self.assertIn("Options (1 path)", body)
+        self.assertIn("not castable", body)
+        self.assertIn("underspecified", body)
+        self.assertNotIn("not_castable_standalone", body)
+        self.assertIn("38.5", body)
+        self.assertIn("damage", body)
+
+    @patch(_KIT_TARGET)
+    def test_tradition_not_offered_by_the_beginning_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(tradition=self.other_tradition.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("errorlist", resp.content.decode())
+        mock_kit.assert_not_called()
+
+    @patch(_KIT_TARGET)
+    def test_gift_not_granted_by_the_tradition_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(gift=self.other_gift.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("errorlist", resp.content.decode())
+        mock_kit.assert_not_called()
+
+    @patch(_KIT_TARGET)
+    def test_species_not_offered_by_the_beginning_is_a_form_error(self, mock_kit: Any) -> None:
+        resp = self.client.post(
+            reverse("admin_tuning_techniques"),
+            self._kit_data(species=self.other_species.pk),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("errorlist", resp.content.decode())
+        mock_kit.assert_not_called()
+
+    @patch(_PATCH_TARGET)
+    @patch(_CLEAR_TARGET)
+    def test_refresh_clears_the_corpus_and_rebuilds(self, mock_clear: Any, mock_build: Any) -> None:
+        mock_build.return_value = _canned_panel()
+        data = {
+            "intent": "refresh",
+            "level": 10,
+            "thread_level": 3,
+            "roller_points": 25,
+            "target_difficulty": 25,
+            "roll_modifier": 0,
+            "sort": "baseline_de",
+        }
+        resp = self.client.post(reverse("admin_tuning_techniques"), data)
+        self.assertEqual(resp.status_code, 200)
+        mock_clear.assert_called_once()
+        mock_build.assert_called_once()
+
+    @patch(_SCAN_TARGET)
+    def test_scan_get_renders_the_filtered_pool_scan(self, mock_scan: Any) -> None:
+        from web.admin.tuning import technique_analytics as ta
+
+        mock_scan.return_value = (
+            ta.PoolScanRow(
+                path_id=self.path.pk,
+                path_name="Distinctive Path",
+                gift_id=self.gift.pk,
+                gift_name="Distinctive Gift",
+                option_count=4,
+                castable_count=0,
+                floor=ta.FloorResult(has_damage=False, has_protection=True),
+                best_single_de=3.1,
+            ),
+        )
+        resp = self.client.get(reverse("admin_tuning_techniques"), {"scan": "fails_floor"})
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn('id="panel-techniques-pool-scan"', body)
+        self.assertIn("Distinctive Path", body)
+        self.assertIn(f"kit_path={self.path.pk}", body)
+        self.assertIn("One row per path and gift pairing", body)
+        self.assertIn("All pools", body)
+        self.assertNotIn("All pools (", body)
+
+    def test_price_kit_link_prefills_path_and_gift(self) -> None:
+        resp = self.client.get(
+            reverse("admin_tuning_techniques"),
+            {"kit_path": self.path.pk, "kit_gift": self.gift.pk},
+        )
+        self.assertEqual(resp.status_code, 200)
+        body = resp.content.decode()
+        self.assertIn(f'value="{self.path.pk}" selected', body)

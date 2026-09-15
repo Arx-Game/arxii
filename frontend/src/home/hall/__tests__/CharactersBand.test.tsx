@@ -8,7 +8,12 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CharactersBand } from '../CharactersBand';
 import { renderWithProviders } from '@/test/utils/renderWithProviders';
 import { store } from '@/store/store';
-import { setBrowsingIdentity, resetGame } from '@/store/gameSlice';
+import {
+  resetGame,
+  setBrowsingIdentity,
+  setSessionConnectionStatus,
+  startSession,
+} from '@/store/gameSlice';
 import { readTabIdentity } from '@/store/browsingIdentity';
 import type { MyRosterEntry } from '@/roster/types';
 
@@ -34,6 +39,9 @@ const aria: MyRosterEntry = {
   primary_persona_id: 7,
   active_persona_id: 7,
   unread_narrative_count: 4,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -47,6 +55,9 @@ const bianca: MyRosterEntry = {
   primary_persona_id: 8,
   active_persona_id: 8,
   unread_narrative_count: 0,
+  unread_direct: 0,
+  has_ambient_unread: false,
+  attention_as_of_id: 0,
   lifecycle_state: 'ALIVE',
   roster_type: 'Active',
   character_type: 'PC',
@@ -76,32 +87,45 @@ describe('CharactersBand', () => {
     expect(screen.queryByTitle(/tidings waiting/)).not.toBeInTheDocument();
   });
 
-  it('marks the docked card distinct and shows the offscreen meta line', () => {
+  it('marks the docked card distinct and shows the presence meta line', () => {
     store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<CharactersBand characters={[aria, bianca]} />);
 
-    expect(screen.getByText('Playing: Currently Offscreen')).toBeInTheDocument();
+    expect(screen.getByText('Not in the world')).toBeInTheDocument();
   });
 
-  it('shows no offscreen meta on an undocked card', () => {
+  it('shows no presence meta on an undocked card', () => {
     renderWithProviders(<CharactersBand characters={[aria]} />);
-    expect(screen.queryByText('Playing: Currently Offscreen')).not.toBeInTheDocument();
+    expect(screen.queryByText('Not in the world')).not.toBeInTheDocument();
   });
 
-  it('shows "Currently Offscreen" for a docked ALIVE character', () => {
+  it('shows "Not in the world" for a docked ALIVE character with no session', () => {
     store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<CharactersBand characters={[aria]} />);
 
-    expect(screen.getByText('Playing: Currently Offscreen')).toBeInTheDocument();
+    expect(screen.getByText('Not in the world')).toBeInTheDocument();
+    expect(screen.queryByText(/Currently Offscreen/)).not.toBeInTheDocument();
   });
 
-  it('shows a degraded state label instead of "Currently Offscreen" for a docked CAPTURED character (#3412 review IMPORTANT-1)', () => {
+  // #3859: a player who opened the Hall from inside the world still has a live
+  // socket (ADR-0295); the card must say so rather than claim they are away.
+  it('shows "In the world" for a docked character with a live session', () => {
+    store.dispatch(setBrowsingIdentity(1));
+    store.dispatch(startSession('Aria'));
+    store.dispatch(setSessionConnectionStatus({ character: 'Aria', status: true }));
+    renderWithProviders(<CharactersBand characters={[aria]} />);
+
+    expect(screen.getByText('In the world')).toBeInTheDocument();
+    expect(screen.queryByText('Not in the world')).not.toBeInTheDocument();
+  });
+
+  it('shows a degraded state label instead of a presence claim for a docked CAPTURED character (#3412 review IMPORTANT-1)', () => {
     const captured: MyRosterEntry = { ...aria, lifecycle_state: 'CAPTURED' };
     store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<CharactersBand characters={[captured]} />);
 
-    expect(screen.getByText('Playing: Held captive')).toBeInTheDocument();
-    expect(screen.queryByText('Playing: Currently Offscreen')).not.toBeInTheDocument();
+    expect(screen.getByText('Held captive')).toBeInTheDocument();
+    expect(screen.queryByText('Not in the world')).not.toBeInTheDocument();
   });
 
   it.each([
@@ -113,7 +137,7 @@ describe('CharactersBand', () => {
     store.dispatch(setBrowsingIdentity(1));
     renderWithProviders(<CharactersBand characters={[entry]} />);
 
-    expect(screen.getByText(`Playing: ${label}`)).toBeInTheDocument();
+    expect(screen.getByText(label)).toBeInTheDocument();
   });
 
   it('selecting a card dispatches the local hydrate and fires the select mutation', async () => {

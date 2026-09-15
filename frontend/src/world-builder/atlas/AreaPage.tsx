@@ -114,15 +114,22 @@ export function AreaPage({
       : Math.max(...myGrants.grants.map((grant) => grant.max_level));
 
   const characterId = useWorldBuilderActor();
-  const { mutate: runMutation } = useWorldBuilderAction(characterId ?? 0, areaId);
-  const runAction = (key: string, kwargs: Record<string, unknown>) => {
+  const { mutateAsync: runMutation } = useWorldBuilderAction(characterId ?? 0, areaId);
+  // Resolves to the dispatch result (its `data` carries a created row's id so
+  // the Lattice can chain a link or a dig) or to nothing when the dispatch was
+  // refused outright; the mutation's own onError has already toasted.
+  const runAction = async (key: string, kwargs: Record<string, unknown>) => {
     if (characterId == null) {
       toast.error(
         'Select a character to build as; builder actions dispatch through your played character.'
       );
-      return;
+      return undefined;
     }
-    runMutation({ key: key as WorldBuilderActionKey, kwargs });
+    try {
+      return await runMutation({ key: key as WorldBuilderActionKey, kwargs });
+    } catch {
+      return undefined;
+    }
   };
 
   if (isLoading || !area) {

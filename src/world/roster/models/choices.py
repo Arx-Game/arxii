@@ -98,7 +98,6 @@ class ValidationErrorCodes:
     # Policy validation errors
     RESTRICTED_REQUIRES_REVIEW = "restricted_requires_review"
     INACTIVE_ROSTER = "inactive_roster"
-    INSUFFICIENT_TRUST_LEVEL = "insufficient_trust_level"
     STORY_CONFLICT = "story_conflict"
     ROSTER_PERMISSION_DENIED = "roster_permission_denied"
     APPLICATION_LIMIT_EXCEEDED = "application_limit_exceeded"
@@ -114,9 +113,8 @@ class ValidationMessages:
     DUPLICATE_PENDING_APPLICATION = "You already have a pending application for this character"
 
     # Policy validation messages
-    RESTRICTED_REQUIRES_REVIEW = "Character requires special approval and trust evaluation"
+    RESTRICTED_REQUIRES_REVIEW = "Character requires special approval"
     INACTIVE_ROSTER = "Character is in an inactive roster"
-    INSUFFICIENT_TRUST_LEVEL = "Character requires higher trust level"
     STORY_CONFLICT = "Player involved in conflicting storylines"
     ROSTER_PERMISSION_DENIED = "Player not allowed to apply to this roster type"
     APPLICATION_LIMIT_EXCEEDED = "Too many pending applications"

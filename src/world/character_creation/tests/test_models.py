@@ -66,6 +66,34 @@ class GetStartingRoomFallbackTests(TestCase):
 
         self.assertIsNone(draft.get_starting_room())
 
+    def test_fallback_survives_a_staff_rename_of_the_room(self) -> None:
+        """Found by the reserved fixture identity, not the seeded name (#3818).
+
+        The reviewer renamed the seeded room "City Center" in the Atlas; a
+        by-name lookup then missed and every unwired draft spawned nowhere.
+        """
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        fallback_room = ensure_canonical_fallback_room()
+        fallback_room.key = "City Center"
+        fallback_room.save()
+        area = StartingAreaFactory(default_starting_room=None)
+        draft = CharacterDraftFactory(selected_area=area, selected_beginnings=None)
+
+        self.assertEqual(draft.get_starting_room(), fallback_room)
+
+    def test_resolver_falls_back_to_the_seeded_name_for_a_room_without_the_key(self) -> None:
+        """A room seeded before the fixture key existed is still found by name."""
+        from evennia.utils import create as evennia_create
+
+        from world.character_creation.constants import FALLBACK_STARTING_ROOM_KEY
+        from world.character_creation.services import resolve_fallback_starting_room
+
+        room = evennia_create.create_object(
+            typeclass="typeclasses.rooms.Room", key=FALLBACK_STARTING_ROOM_KEY, nohome=True
+        )
+        self.assertEqual(resolve_fallback_starting_room(), room)
+
     def test_default_starting_room_is_room_profile_and_resolves_to_objectdb(self) -> None:
         """StartingArea.default_starting_room is a RoomProfile FK (#2448); resolves to ObjectDB."""
         from evennia.utils import create as evennia_create
@@ -90,6 +118,23 @@ class EnsureCanonicalFallbackRoomAuthoredTests(TestCase):
         profile = room.room_profile
         self.assertEqual(profile.origin, GridOrigin.AUTHORED)
         self.assertEqual(profile.fixture_key, FALLBACK_STARTING_ROOM_FIXTURE_KEY)
+
+    def test_rerun_reuses_a_renamed_room_instead_of_minting_another(self) -> None:
+        """The seeder finds its room by fixture identity, so a rename is not a miss (#3818)."""
+        from evennia.objects.models import ObjectDB
+
+        from world.character_creation.constants import FALLBACK_STARTING_ROOM_KEY
+        from world.seeds.character_creation import ensure_canonical_fallback_room
+
+        room = ensure_canonical_fallback_room()
+        room.key = "City Center"
+        room.save()
+
+        again = ensure_canonical_fallback_room()
+
+        self.assertEqual(again.pk, room.pk)
+        self.assertEqual(again.key, "City Center")
+        self.assertFalse(ObjectDB.objects.filter(db_key=FALLBACK_STARTING_ROOM_KEY).exists())
 
     def test_never_clobbers_staff_edited_fixture_key(self) -> None:
         """A staff-edited fixture_key is never overwritten on re-run."""
@@ -344,6 +389,21 @@ class CharacterDraftStatsValidationTests(TestCase):
         assert CharacterDraft.Stage.ATTRIBUTES in stage_completion
         assert stage_completion[CharacterDraft.Stage.ATTRIBUTES] is True
 
+    def test_stage_completion_has_no_distinctions_stage(self):
+        """The Distinctions stage is retired (#3675): 4 is not a Stage member any more."""
+        stage_completion = self.draft.get_stage_completion()
+        assert 4 not in stage_completion
+
+    def test_over_budget_shows_on_final_touches(self):
+        """Final Touches is the purse check now: over budget blocks it (#3675)."""
+        self.draft.draft_data = {
+            "distinctions": [{"distinction_name": "Extravagant Claim", "cost": 500}]
+        }
+        self.draft.save()
+        assert self.draft.calculate_cg_points_remaining() < 0
+        stage_completion = self.draft.get_stage_completion()
+        assert stage_completion[CharacterDraft.Stage.FINAL_TOUCHES] is False
+
     # --- calculate_final_stats ---
 
     def test_calculate_final_stats_returns_allocated_values(self):
@@ -370,34 +430,6 @@ class CharacterDraftStatsValidationTests(TestCase):
             assert final[name] == STAT_DEFAULT_VALUE
 
 
-class StartingAreaTrustRequiredAccessTests(TestCase):
-    """TRUST_REQUIRED areas must fail closed, not raise (#3046).
-
-    The trust system isn't implemented yet, so a non-staff account has no
-    ``.trust`` attribute. Before #3046 this raised ``NotImplementedError``
-    from ``is_accessible_by`` (a latent 500 the moment any area was flipped to
-    TRUST_REQUIRED); it must now simply be inaccessible.
-    """
-
-    def test_trust_required_area_denies_non_staff_without_raising(self):
-        """A non-staff account without .trust is denied, not a 500."""
-        area = StartingAreaFactory(
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
-        )
-        account = AccountFactory()
-        assert area.is_accessible_by(account) is False
-
-    def test_trust_required_area_allows_staff(self):
-        """Staff bypass the trust gate entirely, matching existing staff behavior."""
-        area = StartingAreaFactory(
-            access_level=StartingArea.AccessLevel.TRUST_REQUIRED,
-            minimum_trust=5,
-        )
-        account = AccountFactory(is_staff=True)
-        assert area.is_accessible_by(account) is True
-
-
 class BeginningsModelTests(TestCase):
     """Test Beginnings model."""
 
@@ -415,7 +447,6 @@ class BeginningsModelTests(TestCase):
         )
         assert beginnings.name == "Normal Upbringing"
         assert beginnings.starting_area == self.area
-        assert beginnings.trust_required == 0
         assert beginnings.is_active is True
         assert beginnings.grants_species_languages is True
         assert beginnings.social_rank == 0
@@ -434,45 +465,6 @@ class BeginningsModelTests(TestCase):
             grants_species_languages=False,
         )
         assert beginnings.grants_species_languages is False
-
-    def test_is_accessible_by_inactive_returns_false(self):
-        """Inactive beginnings are not accessible to anyone."""
-        beginnings = BeginningsFactory(starting_area=self.area, is_active=False)
-        account = AccountFactory()
-        assert beginnings.is_accessible_by(account) is False
-
-    def test_is_accessible_by_staff_always_true(self):
-        """Staff can access all active beginnings."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
-        account = AccountFactory(is_staff=True)
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_no_trust_required(self):
-        """Anyone can access beginnings with trust_required=0."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=0)
-        account = AccountFactory()
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_trust_required_no_trust_attr(self):
-        """Account without trust attribute cannot access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
-        account = AccountFactory()
-        # Account has no .trust attribute, so should be denied
-        assert beginnings.is_accessible_by(account) is False
-
-    def test_is_accessible_by_sufficient_trust(self):
-        """Account with sufficient trust can access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=5)
-        account = AccountFactory()
-        account.trust = 10  # Mock trust attribute
-        assert beginnings.is_accessible_by(account) is True
-
-    def test_is_accessible_by_insufficient_trust(self):
-        """Account with insufficient trust cannot access trust-gated options."""
-        beginnings = BeginningsFactory(starting_area=self.area, trust_required=10)
-        account = AccountFactory()
-        account.trust = 5  # Mock trust attribute (below required)
-        assert beginnings.is_accessible_by(account) is False
 
     def test_str_representation(self):
         """Test __str__ returns name and area."""
@@ -766,6 +758,20 @@ class CGPointsCalculationTests(TestCase):
         draft.save(update_fields=["draft_data"])
         assert draft.calculate_cg_points_spent() == 30
 
+    def test_starting_under_twenty_one_costs_one_point(self):
+        """A starting age below 21 buys youth with one CG point (#3635)."""
+        draft = CharacterDraftFactory(selected_beginnings=None, age=18)
+        assert draft.calculate_cg_points_spent() == 1
+        entry = draft.calculate_cg_points_breakdown()[0]
+        assert entry["category"] == "age"
+        assert entry["cost"] == 1
+
+    def test_starting_at_twenty_one_or_older_costs_nothing(self):
+        """The under-21 cost lifts at 21 exactly (#3635)."""
+        for age in (21, 40):
+            draft = CharacterDraftFactory(selected_beginnings=None, age=age)
+            assert draft.calculate_cg_points_spent() == 0
+
     def test_remaining_accounts_for_spent(self):
         """Remaining = budget - spent."""
         from world.character_creation.models import CGPointBudget
@@ -801,3 +807,21 @@ class CharacterDraftGMFieldsTest(TestCase):
         assert draft.target_table == table
         assert draft.story_title == "The Blade's Edge"
         assert draft.story_description == "A tale of..."
+
+
+class OriginTemplateCleanTest(TestCase):
+    def test_clean_does_not_refuse_a_name_path_over_its_saved_family_templates(self):
+        """The rule moved to the form, because here it read the wrong state (#3673).
+
+        ``clean()`` can only see ``self.family_templates`` as the database has
+        it, and a ModelForm calls ``full_clean()`` before ``save_m2m()`` - so
+        this check rejected every save that turned the name path on, including
+        the ones that were selecting a Family Template in the same POST.
+        ``UpbringingForm.clean()`` asks the submitted value instead; the Builder
+        rail flags a saved route that still has none.
+        """
+        from world.character_creation.factories import OriginTemplateFactory
+
+        template = OriginTemplateFactory(allows_name_family=True, family_templates=[])
+        template.family_templates.clear()
+        template.clean()

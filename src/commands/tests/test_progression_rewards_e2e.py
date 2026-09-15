@@ -1,4 +1,4 @@
-"""Full telnet journey (#1348): a player claims kudos, votes, claims a random
+"""Full telnet journey (#1348): a player claims kudos, nominates, claims a random
 scene, declares a path intent, and rests — all via telnet commands converging on
 action.run(), the same seam the web uses."""
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 
 from commands.fatigue import CmdRest
-from commands.progression_rewards import CmdKudos, CmdPathIntent, CmdRandomScene, CmdVote
+from commands.progression_rewards import CmdKudos, CmdNominate, CmdPathIntent, CmdRandomScene
 from world.action_points.models import ActionPointPool
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import PathFactory
@@ -18,7 +18,7 @@ from world.progression.factories import (
     KudosPointsDataFactory,
     RandomSceneTargetFactory,
 )
-from world.progression.models import KudosPointsData, RandomSceneTarget, WeeklyVote
+from world.progression.models import KudosPointsData, Nomination, RandomSceneTarget
 from world.progression.models.path_intent import PathIntent
 from world.roster.factories import RosterEntryFactory, RosterTenureFactory
 from world.scenes.factories import InteractionFactory
@@ -36,7 +36,7 @@ class ProgressionRewardsJourneyTest(TestCase):
         for model in (
             KudosPointsData,
             RandomSceneTarget,
-            WeeklyVote,
+            Nomination,
             PathIntent,
             FatiguePool,
             ActionPointPool,
@@ -67,11 +67,15 @@ class ProgressionRewardsJourneyTest(TestCase):
         self.account.refresh_from_db()
         self.assertEqual(KudosPointsData.objects.get(account=self.account).total_claimed, 50)
 
-        # 2. Cast a vote on the other player's pose
+        # 2. Nominate the other player for their pose (#3738); the week must exist
+        # before the pose it will contain.
+        from world.game_clock.week_services import get_current_game_week
+
+        get_current_game_week()
         interaction = InteractionFactory(persona=self.other_sheet.primary_persona)
-        self._run(CmdVote, f"interaction {interaction.pk}")
+        self._run(CmdNominate, f"pose {interaction.pk}")
         self.assertTrue(
-            WeeklyVote.objects.filter(voter=self.account, target_id=interaction.pk).exists()
+            Nomination.objects.filter(nominator=self.account, target_id=interaction.pk).exists()
         )
 
         # 3. Claim a random scene (patch the shared-scene evidence check)

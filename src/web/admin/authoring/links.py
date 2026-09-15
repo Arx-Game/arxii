@@ -13,6 +13,38 @@ from django.contrib import admin
 from django.urls import NoReverseMatch, reverse
 
 from core.app_domains import resolve_model_by_name
+from world.character_creation.models import Beginnings, OriginTemplate
+from world.distinctions.models import Distinction
+
+
+def builder_url(obj: object) -> str:
+    """The custom-admin-page builder route for ``obj``, or "" when it has none.
+
+    Generalised from ``upbringing_builder_tags.builder_url`` (#3660) so the
+    Beginnings change form's "Open the tradition slate" object tool (#3675)
+    shares the same lookup rather than re-deriving it. ``OriginTemplate``
+    opens on the Upbringing Builder; ``Beginnings`` opens on the tradition
+    slate page keyed by its own pk; ``Distinction`` opens on the Distinction
+    Builder (#3675 Task 8).
+    """
+    if isinstance(obj, OriginTemplate) and obj.pk:
+        return reverse("admin_upbringing_builder", args=[obj.pk])
+    if isinstance(obj, Beginnings) and obj.pk:
+        return reverse("admin_tradition_slate", args=[obj.pk])
+    if isinstance(obj, Distinction) and obj.pk:
+        return reverse("admin_distinction_builder", args=[obj.pk])
+    return ""
+
+
+def builder_label(obj: object) -> str:
+    """The object-tool link text for ``builder_url(obj)``; "" when it has no builder page."""
+    if isinstance(obj, OriginTemplate):
+        return "Open in Upbringing Builder"
+    if isinstance(obj, Beginnings):
+        return "Open the tradition slate"
+    if isinstance(obj, Distinction):
+        return "Open in Distinction Builder"
+    return ""
 
 
 def workbench_editor_url(model_label: str, pk: object) -> str:
@@ -33,9 +65,9 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     exposes a row's prose fields, so this is the link an author follows to
     reach everything else on the row (sort orders, flags, foreign keys).
 
-    Not every credited model has a registered ``ModelAdmin`` - three
-    (``NPCRole``, ``BuildingKind``, ``DecorationKind``) were never
-    ``@admin.register``ed - so checking ``admin.site._registry`` first keeps
+    Not every credited model has a registered ``ModelAdmin`` (inline-only
+    payload rows such as ``ConsequenceEffect`` never get one) - so checking
+    ``admin.site._registry`` first keeps
     an unregistered model from ever reaching ``reverse()``. The
     ``NoReverseMatch`` catch is defense in depth for any other reason
     ``admin:<app_label>_<model_name>_change`` might not resolve. Callers
@@ -46,6 +78,27 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     way - the ``(model_label, pk)`` signature both ``RelatedEntry`` and
     ``BacklogRow`` can satisfy, since neither carries the model class itself.
     """
+    return _registered_admin_reverse(model_label, "change", args=(pk,))
+
+
+def admin_changelist_url(model_label: str) -> str | None:
+    """Stock-admin changelist link for a whole model, or ``None`` when it has no ``ModelAdmin``.
+
+    The table-level sibling of ``admin_change_url``. The Required content panel
+    (#3831) links every dependency to the page where staff author its rows, and a
+    model with no registered admin renders no link rather than a dead one.
+    """
+    return _registered_admin_reverse(model_label, "changelist")
+
+
+def _registered_admin_reverse(
+    model_label: str, view: str, *, args: tuple[object, ...] = ()
+) -> str | None:
+    """Reverse ``admin:<app>_<model>_<view>`` only for a model registered in ``admin.site``.
+
+    Checking the registry first keeps an unregistered model from ever reaching
+    ``reverse()``; the ``NoReverseMatch`` catch is defense in depth.
+    """
     try:
         model = resolve_model_by_name(model_label)
     except LookupError:
@@ -55,6 +108,6 @@ def admin_change_url(model_label: str, pk: object) -> str | None:
     app_label = model._meta.app_label  # noqa: SLF001
     model_name = model._meta.model_name  # noqa: SLF001
     try:
-        return reverse(f"admin:{app_label}_{model_name}_change", args=[pk])
+        return reverse(f"admin:{app_label}_{model_name}_{view}", args=args)
     except NoReverseMatch:
         return None

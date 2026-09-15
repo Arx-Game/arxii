@@ -305,6 +305,23 @@ class CmdEncounterSubverbTests(TestCase):
             f"Expected usage error; got {messages}",
         )
 
+    @patch("actions.definitions.gm_combat.UpdateEncounterSettingsAction.run")
+    def test_curve_dispatches_curve_name_with_spaces(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = ActionResult(success=True, message="Encounter settings updated.")
+        messages = self._run("curve Slow Burn")
+        mock_run.assert_called_once()
+        kwargs = mock_run.call_args.kwargs
+        self.assertEqual(kwargs["actor"], self.caller)
+        self.assertEqual(kwargs["escalation_curve"], "Slow Burn")
+        self.assertIn("Encounter settings updated.", messages)
+
+    def test_curve_requires_an_argument(self) -> None:
+        messages = self._run("curve")
+        self.assertTrue(
+            any("Usage" in m for m in messages),
+            f"Expected usage error; got {messages}",
+        )
+
 
 class CmdEncounterPermissionDenialTests(TestCase):
     """Permission-denial results from the action surface to the caller."""

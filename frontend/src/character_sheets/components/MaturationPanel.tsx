@@ -15,7 +15,7 @@ interface MaturationState {
   available_points: number;
   stat_cap: number | null;
   matured_years: number;
-  next_milestone_year: number;
+  next_milestone_year: number | null;
   stats: SpendableStat[];
 }
 
@@ -39,6 +39,12 @@ async function spendPoint(sheetId: number, traitId: number): Promise<MaturationS
 
 interface MaturationPanelProps {
   sheetId: number;
+}
+
+/** The idle line: the next milestone, or none once the last (75) is behind the character (#3635). */
+function waitingLine(nextMilestoneYear: number | null): string {
+  if (nextMilestoneYear === null) return 'No points waiting, and no milestones remain.';
+  return `No points waiting. The next milestone arrives at age ${nextMilestoneYear}.`;
 }
 
 export function MaturationPanel({ sheetId }: MaturationPanelProps) {
@@ -69,7 +75,7 @@ export function MaturationPanel({ sheetId }: MaturationPanelProps) {
       <p className="text-sm text-muted-foreground">
         {data.available_points > 0
           ? `${data.available_points} ${pointNoun} earned by the years; spend them below.`
-          : `No points waiting. The next milestone arrives at age ${data.next_milestone_year}.`}
+          : waitingLine(data.next_milestone_year)}
       </p>
       {error && <p className="mt-1 text-sm text-destructive">{error}</p>}
       {data.available_points > 0 && (

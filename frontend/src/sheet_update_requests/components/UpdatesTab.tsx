@@ -213,7 +213,7 @@ function SubmitRequestForm({ characterId }: { characterId: number }) {
   const currentText =
     field === 'background'
       ? (sheetPayload?.story?.background ?? '')
-      : (sheetPayload?.story?.personality ?? '');
+      : (sheetPayload?.actor_sheet?.[field as 'never_do' | 'protect' | 'fear'] ?? '');
 
   if (myMemberships.length === 0) {
     return (

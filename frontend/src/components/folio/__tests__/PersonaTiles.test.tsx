@@ -36,7 +36,9 @@ function persona(
     thumbnail_media_url: thumbnailMediaUrl,
     guise_concept: '',
     guise_quote: '',
-    guise_personality: '',
+    guise_never_do: '',
+    guise_protect: '',
+    guise_fear: '',
     guise_background: '',
   };
 }

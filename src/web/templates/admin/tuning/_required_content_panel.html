@@ -33,7 +33,7 @@
   <tbody>
     {% for row in snapshot.missing_required %}
     <tr class="required-content-row--missing">
-      <td>{{ row.dependency.label }}</td>
+      <td>{% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.dependency.label }}</a>{% else %}{{ row.dependency.label }}{% endif %}</td>
       <td>{{ row.dependency.consumer }}</td>
       <td>{{ row.dependency.consequence }}</td>
       <td>
@@ -70,7 +70,7 @@
   <tbody>
     {% for row in snapshot.missing_tuning %}
     <tr class="required-content-row--missing">
-      <td>{{ row.dependency.label }}</td>
+      <td>{% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.dependency.label }}</a>{% else %}{{ row.dependency.label }}{% endif %}</td>
       <td>{{ row.dependency.consumer }}</td>
       <td>{{ row.dependency.consequence }}</td>
       <td>
@@ -109,14 +109,14 @@
     <tbody>
       {% for row in snapshot.present_required %}
       <tr>
-        <td>{{ row.dependency.label }}</td>
+        <td>{% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.dependency.label }}</a>{% else %}{{ row.dependency.label }}{% endif %}</td>
         <td>{% translate "Required" %}</td>
         <td>{{ row.dependency.consumer }}</td>
       </tr>
       {% endfor %}
       {% for row in snapshot.present_tuning %}
       <tr>
-        <td>{{ row.dependency.label }}</td>
+        <td>{% if row.admin_url %}<a href="{{ row.admin_url }}">{{ row.dependency.label }}</a>{% else %}{{ row.dependency.label }}{% endif %}</td>
         <td>{% translate "Tuning" %}</td>
         <td>{{ row.dependency.consumer }}</td>
       </tr>

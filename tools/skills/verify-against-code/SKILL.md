@@ -29,6 +29,16 @@ Before proposing any new surface, also check `docs/adr/` for a recorded decision
 3. **Find a live caller.** Grep for real usages outside tests/migrations. This is *supporting evidence for the role claim*, never the claim itself — see "Caller-count is not evidence" below.
 4. **Label it** — exactly one:
    - **`[BUILT & WIRED]`** — exists AND has a live caller. *Quote the caller* `file:line`. → reuse it; do not build.
+     **A path is only WIRED if you traced the VALUE across every boundary, not the endpoints.** Naming the
+     control at one end and the function at the other proves neither end is missing; it does not prove they
+     are connected. For anything crossing a transport or layer boundary (UI → request → view → service,
+     action → service → model, WS payload → reader), the Evidence column names the field at EACH crossing:
+     the key in the request body, the kwarg the view passes, the column or bridge row the service writes.
+     If you cannot name the field in the payload, the correct label is `[BUILT, NOT WIRED]`.
+     *Worked example (#3787):* a Reply button, a `reply_to` serializer field and `assign_interaction_thread`
+     all existed and were all quoted, so the ledger said WIRED. The composer never put `reply_to` in the
+     request body, so the feature could not work end to end and the true label was NOT WIRED. One grep for
+     the field name in the submit path would have caught it.
    - **`[BUILT, NOT WIRED]`** — exists, no live consumer (model/stub only). → wire/extend it; do not duplicate. **A "not wired" surface is a yellow flag, not a to-do — and the Role column (step 2) is how you discharge it:** before wiring it, run the capability check (step 5) — if the same user goal is already `[BUILT & WIRED]` elsewhere, wiring this stub creates a *parallel implementation*; **remove the stub instead.** Before deciding it's a safe-to-ignore stub vs. real unfinished work, run the `intent-provenance` skill's investigation procedure — a surface with no caller can be superseded, abandoned, unfinished, or never designed, and only the first two are safe to write off without checking.
    - **`[ABSENT]`** — grep + read confirm it genuinely isn't there. → legitimately new.
 5. **Capability check (for user-facing actions).** When the surface performs a *user goal* (a button, command, endpoint, or flow — "commit to a clash", "edit a profile", "lend resources"), restate it as that goal and grep for the goal *already being achievable in another surface* — not just whether this component/type exists. **Two surfaces that accomplish the same user goal are a parallel implementation even when neither's code is literally duplicated.** This is the check that catches a *proposed* duplicate before it's built.

@@ -1,0 +1,252 @@
+{% comment %}
+The Upbringing Builder's own stylesheet (#3667).
+
+The page is a custom admin page, so its structure comes from Django admin's own
+CSS contract - `fieldset.module.aligned`, `div.form-row`, `div.help`,
+`.submit-row`, `.module h2` - and this sheet adds only what admin has no class
+for: the two-column shell, the question header chips, the live lines, the
+checks list and the rail's stat rows. #3660 shipped the page with none of this
+and no admin classes either, so every field fell back to browser defaults.
+
+Every colour is an admin CSS variable, or a token defined against admin's own
+light/dark selectors below, so the page follows the theme toggle.
+{% endcomment %}
+<style>
+  #upbringing-builder-root {
+    --ub-ok: #2f7a3f;
+    --ub-warn: #b4541b;
+  }
+  @media (prefers-color-scheme: dark) {
+    #upbringing-builder-root { --ub-ok: #8fb89a; --ub-warn: #d8a06a; }
+  }
+  html[data-theme="light"] #upbringing-builder-root { --ub-ok: #2f7a3f; --ub-warn: #b4541b; }
+  html[data-theme="dark"] #upbringing-builder-root { --ub-ok: #8fb89a; --ub-warn: #d8a06a; }
+
+  /* The shell: the route on the left, the live rail on the right. The rail is
+     a sibling of the form, not a child of it - it carries its own "Mark
+     reviewed" form and nested forms are invalid HTML. */
+  #upbringing-builder-root .ub-columns {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 18rem;
+    gap: 1.25rem;
+    align-items: start;
+  }
+  @media (max-width: 1100px) {
+    #upbringing-builder-root .ub-columns { grid-template-columns: minmax(0, 1fr); }
+  }
+  #upbringing-builder-root .ub-main { min-width: 0; }
+
+  /* A question is one admin panel: its own h2 header bar, then the field rows
+     admin's fieldset template renders. The nested fieldsets exist to group
+     those rows under subheadings, so they contribute no second panel. */
+  #upbringing-builder-root .question-module > fieldset.module {
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+  #upbringing-builder-root .question-module > fieldset.module:last-child .form-row:last-child {
+    border-bottom: none;
+  }
+  /* The header bar puts the title left and the chip pair right, in the order
+     they are written. Floating each chip on its own reverses that pair (#3667
+     demo-fidelity review). */
+  #upbringing-builder-root .question-module > h2 {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+    align-items: baseline;
+  }
+  #upbringing-builder-root .kind-chips {
+    display: inline-flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+  }
+  #upbringing-builder-root .kind-chip {
+    display: inline-block;
+    padding: 0.05rem 0.45rem;
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.18);
+    font-size: 0.6875rem;
+    letter-spacing: 0.03em;
+    text-transform: none;
+    white-space: nowrap;
+  }
+
+  /* Answers sit inside their question's panel as a tabular block, the way an
+     admin inline does. */
+  #upbringing-builder-root .answers-wrapper { padding: 10px; }
+  #upbringing-builder-root .answers-wrapper h3 { margin-top: 0; padding-left: 0; }
+  #upbringing-builder-root .answers-table { width: 100%; }
+  #upbringing-builder-root .answers-table th {
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--body-quiet-color);
+  }
+  #upbringing-builder-root .answers-table td input[type="text"],
+  #upbringing-builder-root .answers-table td input[type="number"] {
+    width: 100%;
+    min-width: 4rem;
+    box-sizing: border-box;
+  }
+  #upbringing-builder-root .answers-table td { vertical-align: top; }
+
+  /* An answer's own "Offers" cell (#3675): a mini offers table nested inside
+     the outer answers table's cell, mirroring the Distinction Builder's own
+     offers table at a smaller scale. */
+  #upbringing-builder-root .ub-offers-cell { min-width: 14rem; }
+  #upbringing-builder-root .ub-offers-cell .help { margin: 0; font-size: 0.6875rem; }
+  #upbringing-builder-root .ub-offer-table { width: 100%; }
+  #upbringing-builder-root .ub-offer-table th {
+    font-size: 0.625rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--body-quiet-color);
+    text-align: left;
+  }
+  #upbringing-builder-root .ub-offer-table td { vertical-align: top; padding: 0.15rem 0; }
+  #upbringing-builder-root .ub-offer-table td select,
+  #upbringing-builder-root .ub-offer-table td input[type="number"] {
+    width: 100%;
+    min-width: 3rem;
+    box-sizing: border-box;
+  }
+  #upbringing-builder-root .ub-offer-link { margin-left: 0.3rem; font-size: 0.6875rem; }
+
+  /* "Closes" always points at the route-level "This route closes" module
+     below - a static line, never edited per-answer (#3675). */
+  #upbringing-builder-root .ub-closes-pointer { color: var(--body-quiet-color); }
+  #upbringing-builder-root .ub-closes-pointer a { color: inherit; }
+
+  /* "This route closes" module (#3675): the FilteredSelectMultiple widget's
+     own two-list layout comes from admin/css/widgets.css; this only spaces
+     it and the reason line the way the rest of the page's modules space
+     their own field rows. */
+  #upbringing-builder-root .ub-closed-distinctions { padding: 0.5rem 0; }
+  #upbringing-builder-root .ub-closed-distinctions label {
+    display: block;
+    margin-bottom: 0.3rem;
+    font-weight: 600;
+  }
+  #upbringing-builder-root .ub-closed-reason {
+    padding: 0.5rem 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+  #upbringing-builder-root .ub-closed-reason input[type="text"] { width: 100%; max-width: 30rem; }
+
+  /* A live line is computed by the page from the rows it is editing - how many
+     groups a rule matches today, how many of those are placeholders - never
+     authored copy. It reads as a distinct kind of small text so an author does
+     not mistake it for help. */
+  #upbringing-builder-root .live-line {
+    margin: 0.25rem 0 0;
+    padding-left: 0;
+    font-size: 0.75rem;
+    color: var(--ub-ok);
+  }
+  #upbringing-builder-root .live-line::before {
+    content: "\25CF  live";
+    margin-right: 0.4rem;
+    font-size: 0.625rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    opacity: 0.75;
+  }
+  #upbringing-builder-root .live-line a { color: inherit; }
+
+  /* A note that belongs to the fieldset above it, not to any one field in it:
+     admin's own .help sits inside a form row, so it needs the row's padding
+     back. */
+  #upbringing-builder-root .ub-fieldset-note {
+    padding: 0 10px 10px;
+    margin-top: 0;
+  }
+
+  /* The rail */
+  #upbringing-builder-root .ub-rail .module { margin-bottom: 1rem; }
+  #upbringing-builder-root .ub-stat {
+    display: flex;
+    justify-content: space-between;
+    gap: 0.6rem;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #upbringing-builder-root .ub-stat:last-child { border-bottom: none; }
+  #upbringing-builder-root .ub-stat b {
+    color: var(--link-fg);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+  #upbringing-builder-root .upbringing-checks {
+    margin: 0;
+    padding: 8px 10px 8px 10px;
+    list-style: none;
+  }
+  #upbringing-builder-root .upbringing-check {
+    margin: 0 0 0.35rem;
+    padding-left: 0.6rem;
+    border-left: 2px solid var(--hairline-color);
+    font-size: 0.75rem;
+  }
+  #upbringing-builder-root .upbringing-check:last-child { margin-bottom: 0; }
+  #upbringing-builder-root .upbringing-check--ok { border-left-color: var(--ub-ok); }
+  #upbringing-builder-root .upbringing-check--warn {
+    border-left-color: var(--ub-warn);
+    color: var(--ub-warn);
+  }
+  #upbringing-builder-root .ub-rail p { font-size: 0.75rem; }
+  #upbringing-builder-root .ub-rail .submit-row { margin: 10px; }
+
+  /* Field widths. Admin's own widths were drawn for a narrow change form. This
+     page runs a ~1050px main column beside the rail and every input sat at its
+     default inside it: a 170px Name that truncates the natural key it is part
+     of, a 309px Card text for the longest prose on the page, a 90px Claimable
+     kinds. A field fills the column it is in, capped so a line of prose stays a
+     readable measure rather than running the full width (#3673). */
+  #upbringing-builder-root .form-row .flex-container > input[type="text"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 38rem;
+  }
+  /* Plain multi-selects only: an autocomplete's own select element is hidden and
+     sized by select2 from its container, so widening it here would do nothing on
+     the page and fight the widget off it. (No angle-bracketed tag names anywhere
+     in this file, comments included: it is a .html template, so SonarCloud's Web
+     analyzer parses one in a CSS comment as a real form control and fails the
+     gate with "add an id attribute to this input field" - #3674.) */
+  #upbringing-builder-root .form-row .flex-container > select[multiple]:not(.admin-autocomplete) {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 32rem;
+  }
+  #upbringing-builder-root .form-row .flex-container > textarea {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 52rem;
+  }
+  /* The frame prose every character with this beginning shares is the longest
+     thing anyone writes here, and it is written once for the whole route. */
+  #upbringing-builder-root .form-row.field-frame_narrative .flex-container > textarea {
+    min-height: 15rem;
+  }
+
+  /* A row holding two or three fields lays them out as real columns, each with
+     its own help line beneath it. Admin sizes those boxes to their content and
+     separates them with a right margin, which at this width put Point cost's
+     help line directly above the Trust required label it belongs nowhere near,
+     and ran the three family-path help lines together into one sentence
+     (#3673). A flex basis and a column gap give each field a column instead. */
+  #upbringing-builder-root .form-row .form-multiline {
+    gap: 0 2rem;
+  }
+  #upbringing-builder-root .form-row .form-multiline > div {
+    flex: 1 1 14rem;
+    min-width: 0;
+  }
+  #upbringing-builder-root .form-row .form-multiline .fieldBox {
+    margin-right: 0;
+  }
+</style>

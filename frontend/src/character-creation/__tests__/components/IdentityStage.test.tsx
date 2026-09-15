@@ -1,7 +1,7 @@
 /**
  * IdentityStage Component Tests
  *
- * Tests for name, concept, quote, personality, and background fields.
+ * Tests for name, concept, quote, and background fields.
  */
 
 import { screen } from '@testing-library/react';
@@ -87,27 +87,14 @@ describe('IdentityStage', () => {
     });
   });
 
-  describe('Personality Section', () => {
-    it('displays personality textarea', () => {
-      const queryClient = createTestQueryClient();
+  it("has no personality field: the Actor's Sheet asks its questions instead (#3621)", () => {
+    const queryClient = createTestQueryClient();
 
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockDraftWithFamily} />, {
-        queryClient,
-      });
-
-      expect(screen.getByLabelText(/personality traits/i)).toBeInTheDocument();
+    renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
+      queryClient,
     });
 
-    it('shows current personality value', () => {
-      const queryClient = createTestQueryClient();
-
-      renderWithCharacterCreationProviders(<IdentityStage draft={mockCompleteDraft} />, {
-        queryClient,
-      });
-
-      const textarea = screen.getByLabelText(/personality traits/i) as HTMLTextAreaElement;
-      expect(textarea.value).toBe('Bold and adventurous.');
-    });
+    expect(screen.queryByLabelText(/personality/i)).toBeNull();
   });
 
   describe('Concept Section', () => {
@@ -199,12 +186,7 @@ describe('IdentityStage', () => {
       // Sentence case (#3630): interface chrome is plain, and only the first
       // word is capitalised. The other blocks in this file query the same
       // labels case-insensitively, so they are unaffected.
-      for (const label of [
-        'First name',
-        'Character concept',
-        'Character quote',
-        'Personality traits',
-      ]) {
+      for (const label of ['First name', 'Character concept', 'Character quote']) {
         expect(screen.getByLabelText(label).closest('.field')).not.toBeNull();
       }
       expect(screen.getByRole('heading', { name: 'Your choices so far' })).toBeInTheDocument();

@@ -1,11 +1,13 @@
 import re as _re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.utils import timezone
 from rest_framework import serializers
 
-from world.scenes.constants import InteractionMode, PoseKind
+from world.scenes.constants import InteractionMode, PoseKind, ScenePrivacyMode
 from world.scenes.interaction_permissions import get_account_personas
+from world.scenes.line_rendering import render_line
 from world.scenes.models import (
     Interaction,
     InteractionAction,
@@ -16,6 +18,7 @@ from world.scenes.models import (
     Scene,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.thread_services import thread_anchor_ids, thread_roots
 from world.scenes.types import PersonaPayload, ReactionAggregation
 
 if TYPE_CHECKING:
@@ -24,10 +27,18 @@ if TYPE_CHECKING:
 
 _MAX_POSE_LENGTH = 10_000
 
+
 _DANGEROUS_LINK_RE = _re.compile(
     r"\[[^\]]*\]\((?!https?://)",
     _re.IGNORECASE,
 )
+
+
+TEMPORARY_AVAILABILITY = "temporary"
+RETAINED_AVAILABILITY = "retained"
+_UNKNOWN_REPLY_TARGET_FIELDS = "Unknown reply target fields."
+_REPLY_TARGET_TIMEZONE_ERROR = "Reply target timestamp must include a timezone."
+_RFC3339_OFFSET_RE = _re.compile(r"(?:Z|[+-]\d{2}:?\d{2})$")
 
 
 class InlineActionInteractionSerializer(serializers.ModelSerializer):
@@ -66,12 +77,10 @@ class InteractionActionLinkSerializer(serializers.ModelSerializer):
         action_interaction = obj.action_interaction
         if action_interaction is None:
             return False
-        # cached_round_actions is a Prefetch(to_attr=...) attribute set by the
-        # interaction_views queryset; getattr with a default keeps serialization
-        # safe if this serializer is ever used without that prefetch.
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        round_actions = getattr(action_interaction, "cached_round_actions", [])  # noqa: GETATTR_LITERAL
+        # cached_round_actions is now a PrunedCachedProperty on Interaction (#3816
+        # Task 7) — it always exists and self-heals via related_cache_fields, so a
+        # bare read replaces the old getattr-with-default guard.
+        round_actions = action_interaction.cached_round_actions
         for round_action in round_actions:
             opponent = round_action.focused_opponent_target
             if opponent is not None and opponent.status == OpponentStatus.DEFEATED:
@@ -114,15 +123,31 @@ class InteractionListSerializer(serializers.ModelSerializer):
     language_id = serializers.IntegerField(read_only=True, allow_null=True)
     language_name = serializers.SerializerMethodField()
     attributed_companion = serializers.SerializerMethodField()
+    line = serializers.SerializerMethodField()
+    # Additive narrative-play contract fields. Unthreaded rows deliberately expose
+    # no inferred parent; play readers keep their existing holder fallback.
+    thread_id = serializers.SerializerMethodField()
+    root_thread_id = serializers.SerializerMethodField()
+    reply_to = serializers.SerializerMethodField()
+    conversation = serializers.SerializerMethodField()
+    availability = serializers.SerializerMethodField()
+    is_unread = serializers.SerializerMethodField()
 
     class Meta:
         model = Interaction
         fields = [
             "id",
+            "thread_id",
+            "root_thread_id",
+            "reply_to",
+            "conversation",
+            "availability",
+            "is_unread",
             "persona",
             "scene",
             "place",
             "content",
+            "line",
             "mode",
             "visibility",
             "timestamp",
@@ -147,6 +172,187 @@ class InteractionListSerializer(serializers.ModelSerializer):
             "entry_endorsers",
             "entry_endorsed_by_me",
         ]
+
+    def get_thread_id(self, obj: Interaction) -> str | None:
+        """Return only explicit topology; unthreaded rows remain standalone."""
+        try:
+            value = obj.thread_id
+        except AttributeError:
+            return None
+        return None if value is None else str(value)
+
+    def get_root_thread_id(self, obj: Interaction) -> str | None:
+        """The top of the nesting tree this row's exchange belongs to (#3787).
+
+        A row's ``thread_id`` is what it ANSWERS, so a back-and-forth is several
+        nested threads by construction. This is the one key every row of a single
+        exchange shares, so a reader groups the whole of it into one card without
+        walking parents. Null when the row's own thread IS the root, and for a row
+        that answers nothing: the reader falls back to ``thread_id`` there, exactly
+        as ``InteractionThread.root`` is null on a root thread. Costs no query -
+        ``get_queryset`` joins ``thread`` in for the parent chip already.
+        """
+        thread = obj.thread
+        if thread is None:
+            return None
+        root_id = self._thread_roots().get(thread.pk)
+        if root_id is None or root_id == thread.pk:
+            return None
+        return str(root_id)
+
+    def get_reply_to(self, obj: Interaction) -> dict[str, Any] | None:
+        """The interaction this one answered, when the viewer may also read it.
+
+        Gated on the PARENT's own visibility, not on this row's membership: a reply
+        stays readable to everyone who can see it, but its chip appears only for a
+        viewer who could already read what it answered. Never infers a parent from
+        neighboring interactions.
+        """
+        parent_id = self._parent_id_for(obj)
+        if parent_id is None:
+            return None
+        timestamp = self._visible_parents().get(parent_id)
+        if timestamp is None:
+            return None
+        return {"id": str(parent_id), "timestamp": timestamp.isoformat()}
+
+    def _parent_id_for(self, obj: Interaction) -> int | None:
+        """Which interaction ``obj`` answered, before any visibility gate (#3787).
+
+        A thread's ANCHOR is its first member, and every later member answers it.
+        The anchor itself answers whatever the thread was split off from, which is
+        the anchor of ``thread.parent`` - null on a root thread, whose anchor is an
+        opening pose that answers nothing.
+        """
+        thread = obj.thread
+        if thread is None:
+            return None
+        anchors = self._thread_anchors()
+        anchor_id = anchors.get(thread.pk)
+        if anchor_id is None:
+            return None
+        if obj.pk != anchor_id:
+            return anchor_id
+        if thread.parent_id is None:
+            return None
+        return anchors.get(thread.parent_id)
+
+    def _page_rows(self) -> list[Interaction]:
+        """The rows this serializer is rendering, list or single instance alike."""
+        if self.parent is not None:
+            return list(self.parent.instance or [])
+        if self.instance is not None:
+            return [self.instance]
+        return []
+
+    def _thread_anchors(self) -> dict[object, int]:
+        """Anchor id per thread on this page, plus each thread's parent (#3787).
+
+        One query for the whole page, cached on the shared serializer context the
+        way ``_read_interaction_ids`` below caches its own batch. The parent threads
+        are resolved in the same pass because a row that IS its thread's anchor
+        needs its parent thread's anchor to name what it answered.
+
+        ``thread`` itself costs nothing to read: ``InteractionViewSet.get_queryset``
+        joins it in with ``select_related``.
+        """
+        cache_key = "_thread_anchors_cache"
+        if cache_key not in self.context:
+            thread_ids: set[object] = set()
+            for row in self._page_rows():
+                thread = row.thread
+                if thread is None:
+                    continue
+                thread_ids.add(thread.pk)
+                if thread.parent_id is not None:
+                    thread_ids.add(thread.parent_id)
+            self.context[cache_key] = thread_anchor_ids(thread_ids)
+        return self.context[cache_key]
+
+    def _thread_roots(self) -> dict[object, object]:
+        """Top-of-tree per thread on this page, derived and cached once (#3787).
+
+        ``root`` is not a column; it is a walk up ``parent``. Resolved for the whole
+        page in one pass per nesting level (see ``thread_services.thread_roots``),
+        cached on the shared serializer context the way the batches around it are.
+        """
+        cache_key = "_thread_roots_cache"
+        if cache_key not in self.context:
+            thread_ids = {row.thread_id for row in self._page_rows() if row.thread_id}
+            self.context[cache_key] = thread_roots(thread_ids)
+        return self.context[cache_key]
+
+    def _visible_parents(self) -> dict[int, Any]:
+        """Reply-parent id -> timestamp, for the parents this viewer may read.
+
+        One query per page, not per row. Fails closed: a parent the viewer cannot
+        read is simply absent, so its chip is withheld while the reply itself still
+        serializes. Returns the timestamp too, so the chip's ``{id, timestamp}``
+        payload needs no second lookup.
+        """
+        cache_key = "_visible_parents_cache"
+        if cache_key not in self.context:
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            parent_ids = {
+                parent_id
+                for row in self._page_rows()
+                if (parent_id := self._parent_id_for(row)) is not None
+            }
+            if parent_ids:
+                self.context[cache_key] = dict(
+                    Interaction.objects.visible_to(user)
+                    .filter(pk__in=parent_ids)
+                    .values_list("pk", "timestamp")
+                )
+            else:
+                self.context[cache_key] = {}
+        return self.context[cache_key]
+
+    def get_conversation(self, obj: Interaction) -> dict[str, str]:
+        """Expose a non-authorizing context identity for reader grouping."""
+        if obj.scene_id is not None:
+            return {"kind": "room", "key": f"scene:{obj.scene_id}"}
+        return {"kind": "room", "key": "room"}
+
+    def get_availability(self, obj: Interaction) -> str:
+        """Classify temporary scene rows without changing retention behavior."""
+        try:
+            if obj.scene is not None and obj.scene.privacy_mode == ScenePrivacyMode.EPHEMERAL:
+                return TEMPORARY_AVAILABILITY
+        except AttributeError:
+            pass
+        return RETAINED_AVAILABILITY
+
+    def get_is_unread(self, obj: Interaction) -> bool:
+        """True when the read-receipt table has no row for this viewer+pose (#3759)."""
+        return obj.id not in self._read_interaction_ids()
+
+    def _read_interaction_ids(self) -> set[int]:
+        """Batch-resolve which of this page's interactions the viewer has read.
+
+        Cached on the shared serializer context (one query per page, not per row),
+        mirroring ``_muted_persona_ids``'s lazy cache-on-context pattern; the
+        page-wide row batching mirrors ``_persona_display_map``.
+        """
+        cache_key = "_read_interaction_ids_cache"
+        if cache_key not in self.context:
+            from world.scenes.read_state_services import has_read  # noqa: PLC0415
+
+            request = self.context.get("request")
+            user = request.user if request is not None else None
+            if self.parent is not None:
+                rows = list(self.parent.instance or [])
+            elif self.instance is not None:
+                rows = [self.instance]
+            else:
+                rows = []
+            ids = [row.id for row in rows if row is not None]
+            if user and user.is_authenticated and ids:
+                self.context[cache_key] = has_read(account=user, interaction_ids=ids)
+            else:
+                self.context[cache_key] = set()
+        return self.context[cache_key]
 
     def get_persona(self, obj: Interaction) -> PersonaPayload:
         # Per-viewer name resolution (#1109): own faces and named-public faces render real;
@@ -379,6 +585,24 @@ class InteractionListSerializer(serializers.ModelSerializer):
     def get_language_name(self, obj: Interaction) -> str | None:
         return obj.language.name if obj.language_id else None
 
+    def get_line(self, obj: Interaction) -> str:
+        """The whole sentence this viewer reads (#3858): the actor in the line.
+
+        Rendered at display time from the same per-viewer name ``get_persona``
+        resolves (a mask stays a mask, #1109), the same per-viewer content
+        ``get_content`` produces (a muted row stays blank, a comprehension-graded
+        read stays graded), and the mode. A companion pose reads as the companion
+        (#3294). Never stored: ``content`` stays what was typed.
+        """
+        content = self.get_content(obj)
+        if not content:
+            return ""
+        if obj.attributed_companion_id is not None:
+            name = obj.attributed_companion.name
+        else:
+            name = self.get_persona(obj)["name"]
+        return render_line(name, obj.mode, content, language_name=self.get_language_name(obj))
+
     def get_attributed_companion(self, obj: Interaction) -> dict | None:
         """Cosmetic companion pose attribution (#3294): ``{id, name}`` or ``None``.
 
@@ -477,18 +701,14 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         from world.scenes.reaction_services import get_reaction_kind  # noqa: PLC0415
 
-        windows = getattr(obj, "cached_reaction_windows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if windows is None:
-            windows = list(obj.reaction_windows.all())
+        windows = obj.cached_reaction_windows
         if not windows:
             return []
 
         viewer_persona_ids: set[int] = self.context.get("persona_ids", set())
         payloads: list[dict] = []
         for window in windows:
-            rows = getattr(window, "cached_reaction_rows", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-            if rows is None:
-                rows = list(window.reactions.select_related("reactor_persona"))
+            rows = window.cached_reaction_rows
             try:
                 config = get_reaction_kind(window.kind)
             except DjangoValidationError:
@@ -560,9 +780,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         otherwise ``character_sheet_id`` is ``None`` and the row (moment_type_label + tag)
         still renders, since the moment itself is public.
         """
-        tags = getattr(obj, "cached_dramatic_moment_tags", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if tags is None:
-            return []
+        tags = obj.cached_dramatic_moment_tags
         is_staff = bool(self.context.get("is_staff", False))
         viewer_sheet_ids: set[int] = set(self.context.get("viewer_sheet_ids", set()))
         revealed_sheet_ids = self._revealed_sheet_ids()
@@ -649,9 +867,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         """
         if not self._viewer_can_gm_scene(obj.scene):
             return []
-        suggestions = getattr(obj, "cached_dramatic_moment_suggestions", None)  # noqa: GETATTR_LITERAL - Prefetch(to_attr=...) sets this
-        if suggestions is None:
-            return []
+        suggestions = obj.cached_dramatic_moment_suggestions
         return [
             {
                 "id": s.pk,
@@ -664,35 +880,32 @@ class InteractionListSerializer(serializers.ModelSerializer):
             for s in suggestions
         ]
 
+    # Reads `CharacterSheet.cached_resonances` (a `PrunedCachedProperty`,
+    # #3816 Task 3) -- fed by the prefetched
+    # `persona__character_sheet__resonances` path (set up in
+    # `interaction_views.get_queryset`) when available, and a live query on
+    # first read otherwise (e.g. serializer used outside the view's
+    # queryset pipeline). The property always exists now, so there is no
+    # fallback branch to maintain here.
     def get_endorsable_resonances(self, obj: Interaction) -> list[dict]:
-        """List of resonances claimed by the endorsee (pose author).
-
-        Reads from the prefetched ``persona__character_sheet__resonances``
-        path (set up in ``interaction_views.get_queryset``) via the
-        ``cached_resonances`` to_attr. Falls back to a live query if the attr
-        is absent (e.g. serializer used outside the view's queryset pipeline).
-        """
+        """List of resonances claimed by the endorsee (pose author)."""
         sheet = obj.persona.character_sheet
         if sheet is None:
             return []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        resonances = getattr(sheet, "cached_resonances", None)  # noqa: GETATTR_LITERAL
-        if resonances is None:
-            resonances = list(sheet.resonances.select_related("resonance"))
-        return [{"id": cr.resonance_id, "name": cr.resonance.name} for cr in resonances]
+        return [
+            {"id": cr.resonance_id, "name": cr.resonance.name} for cr in sheet.cached_resonances
+        ]
 
+    # Reads `Interaction.cached_endorsements` (a `PrunedCachedProperty`,
+    # #3816 Task 4) -- fed by the view queryset's Prefetch when available,
+    # and a live query on first read otherwise. Each endorser's primary
+    # persona is similarly read via `CharacterSheet.cached_primary_persona`.
+    # Both properties always exist now, so there is no fallback branch to
+    # maintain here.
     def get_pose_endorsers(self, obj: Interaction) -> list[dict]:
-        """List of peers who endorsed this pose, with persona info.
-
-        Reads ``obj.cached_endorsements`` (Prefetch(to_attr=...) set by the
-        view queryset). Each endorser's primary persona is pre-loaded via
-        ``cached_primary_persona`` (another nested Prefetch).
-        """
+        """List of peers who endorsed this pose, with persona info."""
         out = []
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             persona = next(iter(e.endorser_sheet.cached_primary_persona), None)
             if persona is None:
                 continue
@@ -713,9 +926,7 @@ class InteractionListSerializer(serializers.ModelSerializer):
         each cached endorsement's ``endorser_sheet_id``.
         """
         sheet_ids: set[int] = self.context.get("character_sheet_ids", set())
-        # Suppression justified: mutable social prefetch on identity-mapped row; property+setter
-        # pattern (see Interaction.cached_receivers) is the sanctioned conversion.
-        for e in getattr(obj, "cached_endorsements", []):  # noqa: GETATTR_LITERAL
+        for e in obj.cached_endorsements:
             if e.endorser_sheet_id in sheet_ids:
                 return {
                     "id": e.pk,
@@ -804,12 +1015,39 @@ class ReactionEmojiSerializer(serializers.ModelSerializer):
         fields = ["emoji", "valence", "sort_order"]
 
 
+class ReplyTargetSerializer(serializers.Serializer):
+    """Write-only interaction reference used to select a flat thread."""
+
+    id = serializers.IntegerField(min_value=1)
+    timestamp = serializers.DateTimeField()
+
+    def to_internal_value(self, data: Any) -> dict[str, Any]:
+        """Reject unknown members and naive timestamps before DRF normalizes them."""
+        if not isinstance(data, dict):
+            raise serializers.ValidationError(_UNKNOWN_REPLY_TARGET_FIELDS)
+        unknown = set(data) - {"id", "timestamp"}
+        if unknown:
+            raise serializers.ValidationError(_UNKNOWN_REPLY_TARGET_FIELDS)
+        raw_timestamp = data.get("timestamp")
+        if not isinstance(raw_timestamp, str) or not _RFC3339_OFFSET_RE.search(raw_timestamp):
+            raise serializers.ValidationError(_REPLY_TARGET_TIMEZONE_ERROR)
+        return super().to_internal_value(data)
+
+    def validate(self, attrs: dict[str, Any]) -> dict[str, Any]:
+        """Require the normalized timestamp to remain timezone-aware."""
+        if not timezone.is_aware(attrs["timestamp"]):
+            raise serializers.ValidationError(_REPLY_TARGET_TIMEZONE_ERROR)
+        return attrs
+
+
 class PoseSubmitSerializer(serializers.Serializer):
     """Write serializer for submitting a POSE-mode Interaction from the web frontend.
 
     Validates persona ownership and action_link_ids integrity before the view
     creates the Interaction and wires the auto-link service.
     """
+
+    reply_to = ReplyTargetSerializer(required=False, allow_null=True, write_only=True)
 
     persona_id = serializers.IntegerField(
         help_text="PK of the Persona the requesting user is posing as.",
@@ -853,6 +1091,13 @@ class PoseSubmitSerializer(serializers.Serializer):
             "writer's room with the same case-insensitive exact-match semantics as "
             "the WS/telnet '@Name' prefix parser — an unresolvable name is silently "
             "skipped, not an error."
+        ),
+    )
+
+    client_request_id = serializers.UUIDField(
+        help_text=(
+            "Client-minted id for this send attempt. Reused verbatim on retry of "
+            "the same content/context; a content change gets a new id."
         ),
     )
 

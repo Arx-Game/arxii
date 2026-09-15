@@ -12,6 +12,8 @@ from web.admin.services import (
     analyze_fixture,
     execute_import,
 )
+from world.codex.factories import CodexCategoryFactory, CodexSubjectFactory
+from world.codex.models import CodexSubject
 from world.magic.factories import FacetFactory
 from world.magic.models import Facet
 from world.mechanics.factories import ModifierCategoryFactory, ModifierTargetFactory
@@ -521,83 +523,103 @@ class AnalyzeFixtureFKNaturalKeyTests(TestCase):
 
 
 class SelfReferentialNaturalKeyTests(TestCase):
-    """Tests for models with self-referential FK in their natural key (e.g. Facet)."""
+    """Tests for models with self-referential FK in their natural key (e.g. CodexSubject).
+
+    Facet used to be this suite's example model (a Category > Subcategory > Specific
+    tree), but was flattened to a plain unique-name vocabulary (2026-09-11 ruling,
+    #3776) and no longer has a self-referential FK. CodexSubject (category > parent >
+    name, `world/codex/models.py`) is the codebase's remaining self-referential
+    natural-key model and now carries this coverage instead.
+    """
 
     def test_count_natural_key_args_no_recursion(self):
         """count_natural_key_args handles self-referential FK without infinite recursion."""
-        result = count_natural_key_args(Facet)
-        # Facet has fields = ["name", "parent"] — name=1, parent=1 (nested)
-        self.assertEqual(result, 2)
+        result = count_natural_key_args(CodexSubject)
+        # CodexSubject has fields = ["category", "parent", "name"] — category=1
+        # (flattens CodexCategory's own single-field key), parent=1 (self, nested), name=1
+        self.assertEqual(result, 3)
 
-    def test_natural_key_root_facet(self):
-        """Root facet (parent=None) produces correct natural key."""
-        root = FacetFactory(name="Creatures", parent=None)
+    def test_natural_key_root_subject(self):
+        """Root subject (parent=None) produces correct natural key."""
+        category = CodexCategoryFactory(name="Lore")
+        root = CodexSubjectFactory(name="Creatures", category=category, parent=None)
         nk = root.natural_key()
-        self.assertEqual(nk, ("Creatures", None))
+        self.assertEqual(nk, ("Lore", None, "Creatures"))
 
-    def test_natural_key_nested_facet(self):
-        """Nested facet produces correct natural key with parent nested."""
-        root = FacetFactory(name="Creatures", parent=None)
-        child = FacetFactory(name="Mammals", parent=root)
+    def test_natural_key_nested_subject(self):
+        """Nested subject produces correct natural key with parent nested."""
+        category = CodexCategoryFactory(name="Lore")
+        root = CodexSubjectFactory(name="Creatures", category=category, parent=None)
+        child = CodexSubjectFactory(name="Mammals", category=category, parent=root)
         nk = child.natural_key()
-        self.assertEqual(nk, ("Mammals", ["Creatures", None]))
+        self.assertEqual(nk, ("Lore", ["Lore", None, "Creatures"], "Mammals"))
 
     def test_natural_key_deep_nesting(self):
         """Three-level nesting produces correctly nested natural key."""
-        root = FacetFactory(name="Creatures", parent=None)
-        mid = FacetFactory(name="Mammals", parent=root)
-        leaf = FacetFactory(name="Wolf", parent=mid)
+        category = CodexCategoryFactory(name="Lore")
+        root = CodexSubjectFactory(name="Creatures", category=category, parent=None)
+        mid = CodexSubjectFactory(name="Mammals", category=category, parent=root)
+        leaf = CodexSubjectFactory(name="Wolf", category=category, parent=mid)
         nk = leaf.natural_key()
-        self.assertEqual(nk, ("Wolf", ["Mammals", ["Creatures", None]]))
+        self.assertEqual(
+            nk,
+            ("Lore", ["Lore", ["Lore", None, "Creatures"], "Mammals"], "Wolf"),
+        )
 
     def test_get_by_natural_key_root(self):
-        """get_by_natural_key resolves root facets."""
-        root = FacetFactory(name="Creatures", parent=None)
-        found = Facet.objects.get_by_natural_key("Creatures", None)
+        """get_by_natural_key resolves root subjects."""
+        category = CodexCategoryFactory(name="Lore")
+        root = CodexSubjectFactory(name="Creatures", category=category, parent=None)
+        found = CodexSubject.objects.get_by_natural_key("Lore", None, "Creatures")
         self.assertEqual(found.pk, root.pk)
 
     def test_get_by_natural_key_nested(self):
-        """get_by_natural_key resolves nested facets via nested list."""
-        root = FacetFactory(name="Creatures", parent=None)
-        child = FacetFactory(name="Mammals", parent=root)
-        found = Facet.objects.get_by_natural_key("Mammals", ["Creatures", None])
+        """get_by_natural_key resolves nested subjects via nested list."""
+        category = CodexCategoryFactory(name="Lore")
+        root = CodexSubjectFactory(name="Creatures", category=category, parent=None)
+        child = CodexSubjectFactory(name="Mammals", category=category, parent=root)
+        found = CodexSubject.objects.get_by_natural_key(
+            "Lore", ["Lore", None, "Creatures"], "Mammals"
+        )
         self.assertEqual(found.pk, child.pk)
 
     def test_merge_import_self_ref(self):
         """Merge import works for self-referential natural keys (existing records)."""
-        root = FacetFactory(name="MergeCreatures", parent=None)
-        mid = FacetFactory(name="MergeMammals", parent=root)
-        leaf = FacetFactory(name="MergeWolf", parent=mid)
+        category = CodexCategoryFactory(name="MergeLore")
+        root = CodexSubjectFactory(name="MergeCreatures", category=category, parent=None)
+        mid = CodexSubjectFactory(name="MergeMammals", category=category, parent=root)
+        leaf = CodexSubjectFactory(name="MergeWolf", category=category, parent=mid)
 
-        fixture_data = _serialize_objects([root, mid, leaf])
+        fixture_data = _serialize_objects([category, root, mid, leaf])
 
         # Modify a field so merge has something to update
-        Facet.objects.filter(name="MergeWolf").update(description="Modified")
+        CodexSubject.objects.filter(name="MergeWolf").update(description="Modified")
 
-        result = execute_import(fixture_data, {"arxii.facet": ImportAction.MERGE})
+        result = execute_import(fixture_data, {"arxii.codexsubject": ImportAction.MERGE})
 
         self.assertTrue(result.success, f"Import failed: {result.error_message}")
         # Verify hierarchy is intact
-        imported_leaf = Facet.objects.get(name="MergeWolf")
+        imported_leaf = CodexSubject.objects.get(name="MergeWolf")
         self.assertEqual(imported_leaf.parent.name, "MergeMammals")
         self.assertEqual(imported_leaf.parent.parent.name, "MergeCreatures")
         self.assertIsNone(imported_leaf.parent.parent.parent)
 
     def test_analyze_self_ref_no_recursion(self):
         """analyze_fixture handles self-referential models without recursion."""
-        root = FacetFactory(name="AnalyzeRoot", parent=None)
-        child = FacetFactory(name="AnalyzeChild", parent=root)
-        fixture_data = _serialize_objects([root, child])
+        category = CodexCategoryFactory(name="AnalyzeLore")
+        root = CodexSubjectFactory(name="AnalyzeRoot", category=category, parent=None)
+        child = CodexSubjectFactory(name="AnalyzeChild", category=category, parent=root)
+        fixture_data = _serialize_objects([category, root, child])
 
         analysis = analyze_fixture(fixture_data)
 
-        facet_model = None
+        subject_model = None
         for ma in analysis.models:
-            if ma.app_label == "arxii" and ma.model_name == "facet":
-                facet_model = ma
+            if ma.app_label == "arxii" and ma.model_name == "codexsubject":
+                subject_model = ma
                 break
-        self.assertIsNotNone(facet_model)
-        self.assertGreaterEqual(facet_model.unchanged_count, 2)
+        self.assertIsNotNone(subject_model)
+        self.assertGreaterEqual(subject_model.unchanged_count, 2)
 
 
 class StaleLabelImportTests(TestCase):

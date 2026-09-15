@@ -33,6 +33,7 @@ enumeration over the same tables — see that function's docstring.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -48,7 +49,13 @@ from world.magic.services.power_terms import (
     get_covenant_role_blend_config,
     specialty_power_contribution,
 )
+from world.magic.services.technique_effects import (
+    technique_is_not_castable_standalone,
+    technique_is_underspecified,
+)
 from world.magic.types.technique_power import (
+    FLAG_NOT_CASTABLE_STANDALONE,
+    FLAG_UNDERSPECIFIED,
     EvalContext,
     PayloadValuation,
     ReferenceFrame,
@@ -678,6 +685,39 @@ def _effective_anima(technique: Technique) -> int:
     return result.effective_cost
 
 
+#: Provenances whose value is a measured contribution - defined positively (#3716 fix
+#: round 2) so a future provenance value defaults to NOT counting as measured, rather
+#: than a by-exclusion set silently treating it as formula-grade.
+_FORMULA_PROVENANCES = frozenset({ValuationProvenance.FORMULA, ValuationProvenance.PARSED})
+
+
+def provenance_split(valuations: Sequence[PayloadValuation]) -> tuple[float, float]:
+    """Return ``(formula_or_parsed_total, estimate_total)`` for one valuation list (#3716).
+
+    Kept apart so a total never makes an estimate read as measured. FORMULA and PARSED
+    land together; ESTIMATE is its own total; the zero buckets (UNPRICED_DISPEL,
+    UNPRICEABLE, INERT_PAYLOAD) count for neither.
+    """
+    formula = sum(v.value for v in valuations if v.provenance in _FORMULA_PROVENANCES)
+    estimate = sum(v.value for v in valuations if v.provenance == ValuationProvenance.ESTIMATE)
+    return formula, estimate
+
+
+def _readiness_and_profile_flags(technique: Technique) -> list[str]:
+    """Return the not-castable/underspecified/weapon_scaled/execute_ramp flags (#3716)."""
+    flags: list[str] = []
+    if technique_is_not_castable_standalone(technique):
+        flags.append(FLAG_NOT_CASTABLE_STANDALONE)
+    if technique_is_underspecified(technique):
+        flags.append(FLAG_UNDERSPECIFIED)
+    damage_profiles = technique.cached_damage_profiles
+    if any(row.uses_equipped_weapon for row in damage_profiles):
+        flags.append("weapon_scaled")
+    if any(row.execute_missing_health_multiplier for row in damage_profiles):
+        flags.append("execute_ramp")
+    return flags
+
+
 def evaluate_technique(
     technique: Technique,
     context: EvalContext,
@@ -709,6 +749,7 @@ def evaluate_technique(
     effective_anima = _effective_anima(technique)
 
     if not _bands:
+        flags = ["no_result_charts", *_readiness_and_profile_flags(technique)]
         return TechniquePowerReport(
             technique_id=technique.pk,
             name=technique.name,
@@ -723,7 +764,7 @@ def evaluate_technique(
             valuations=(),
             effective_anima=effective_anima,
             de_per_anima=0.0,
-            flags=("no_result_charts",),
+            flags=tuple(flags),
         )
 
     valuations = _all_payload_valuations(
@@ -745,17 +786,19 @@ def evaluate_technique(
     baseline_de = sum(v.value for v in valuations)
     amplified_de = sum(v.value for v in amplified_valuations)
 
-    flags: list[str] = []
-    damage_profiles = technique.cached_damage_profiles
-    if any(row.uses_equipped_weapon for row in damage_profiles):
-        flags.append("weapon_scaled")
-    if any(row.execute_missing_health_multiplier for row in damage_profiles):
-        flags.append("execute_ramp")
+    formula_baseline_de, estimated_baseline_de = provenance_split(valuations)
+    formula_amplified_de, estimated_amplified_de = provenance_split(amplified_valuations)
 
+    flags: list[str] = _readiness_and_profile_flags(technique)
+
+    divisor = 1 + technique.windup_rounds if technique.windup_rounds > 0 else 1
     if technique.windup_rounds > 0:
-        divisor = 1 + technique.windup_rounds
         baseline_de /= divisor
         amplified_de /= divisor
+        formula_baseline_de /= divisor
+        estimated_baseline_de /= divisor
+        formula_amplified_de /= divisor
+        estimated_amplified_de /= divisor
         flags.append(f"windup:{technique.windup_rounds}")
 
     de_per_anima = baseline_de / max(1, effective_anima)
@@ -775,6 +818,10 @@ def evaluate_technique(
         effective_anima=effective_anima,
         de_per_anima=de_per_anima,
         flags=tuple(flags),
+        formula_baseline_de=formula_baseline_de,
+        estimated_baseline_de=estimated_baseline_de,
+        formula_amplified_de=formula_amplified_de,
+        estimated_amplified_de=estimated_amplified_de,
     )
 
 

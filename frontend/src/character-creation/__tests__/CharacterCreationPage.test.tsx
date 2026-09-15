@@ -59,6 +59,15 @@ vi.mock('../api', () => ({
   // not that step is the one currently open.
   getStatDefinitions: vi.fn().mockResolvedValue([]),
   getSkillsWithSpecializations: vi.fn().mockResolvedValue([]),
+  // GiftStage's CG points row calls useCGPointBudget() unconditionally, same
+  // as the two catalogs above.
+  getCGPointBudget: vi.fn().mockResolvedValue({
+    id: 1,
+    name: 'Standard',
+    starting_points: 100,
+    xp_conversion_rate: 1,
+    is_active: true,
+  }),
 }));
 
 describe('CharacterCreationPage', () => {
@@ -328,6 +337,59 @@ describe('CharacterCreationPage', () => {
       const funnel = screen.getByRole('list', { name: 'Gift steps' });
       expect(within(funnel).getByText('Tradition')).toBeInTheDocument();
       expect(within(funnel).getByText('Techniques')).toBeInTheDocument();
+    });
+  });
+
+  describe('Retired Distinctions Stage (#3675)', () => {
+    it('falls through to the default chapter for a stage 4 draft, not the retired stage', async () => {
+      const queryClient = createTestQueryClient();
+      // Stage 4 no longer exists on the Stage enum (the gap left by the
+      // retired Distinctions stage); a lingering draft carrying the old
+      // numeric value must not crash or render the deleted stage.
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: { ...mockEmptyDraft, current_stage: 4 as Stage },
+        startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      await waitFor(() => {
+        expect(screen.getByText('Where does the story begin?')).toBeInTheDocument();
+      });
+
+      expect(screen.queryByText('Your Distinctions')).not.toBeInTheDocument();
+      // The fallback chapter is Origin, so its own record rail ledger reads
+      // "Stage 1 of 10" - stageEyebrow's clamp (fix round 1) keeps this in
+      // agreement with the page's own default-arm fallback rather than a
+      // "Stage 0 of 10" mismatch. Scoped to the ledger's own class: the
+      // contents rail's summary line names the same stage in different markup.
+      expect(screen.getByText('Stage 1 of 10', { selector: '.rail-ledger' })).toBeInTheDocument();
+    });
+
+    it("lands Lineage's Next control on Path, the stage that follows it now", async () => {
+      const queryClient = createTestQueryClient();
+      seedCharacterCreationQueries(queryClient, {
+        canCreate: mockCanCreateYes,
+        draft: { ...mockDraftWithArea, current_stage: Stage.LINEAGE },
+        startingAreas: mockStartingAreas,
+        explanations: mockCGExplanations,
+      });
+
+      renderWithCharacterCreationProviders(<CharacterCreationPage />, {
+        queryClient,
+        account: mockPlayerAccount,
+      });
+
+      const nextDoor = await screen.findByRole('button', { name: /^next:/i });
+      expect(nextDoor).toHaveTextContent('Path');
+
+      const nav = screen.getByRole('navigation', { name: /character creation stages/i });
+      expect(within(nav).queryByText('Distinctions')).not.toBeInTheDocument();
     });
   });
 

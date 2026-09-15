@@ -33,13 +33,13 @@ class UpdateProfileTextTests(TestCase):
         assert self.profile.background == "Reforged by the siege."
 
     def test_empty_original_creates_single_version(self):
-        self.profile.personality = ""
-        self.profile.save(update_fields=["personality"])
+        self.profile.fear = ""
+        self.profile.save(update_fields=["fear"])
 
-        update_profile_text(self.profile, ProfileTextField.PERSONALITY, "Newly warm.")
+        update_profile_text(self.profile, ProfileTextField.FEAR, "Newly warm.")
 
         count = ProfileTextVersion.objects.filter(
-            profile=self.profile, field=ProfileTextField.PERSONALITY
+            profile=self.profile, field=ProfileTextField.FEAR
         ).count()
         assert count == 1
 

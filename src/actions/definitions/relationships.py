@@ -36,22 +36,36 @@ class BaseRelationshipAction(Action):
     def _sheet(self, actor: ObjectDB) -> Any:
         return resolve_actor_sheet(actor)
 
-    def _active_scene_for(self, actor: ObjectDB, target_sheet: Any) -> Any:
+    def _active_scene_for(
+        self, actor: ObjectDB, target_sheet: Any, target_companion: Any = None
+    ) -> Any:
         from world.scenes.models import Scene  # noqa: PLC0415
 
         if actor.location is None:
             return None
-        try:
-            character = target_sheet.character
-        except (AttributeError, ObjectDoesNotExist):
-            return None
+        if target_companion is not None:
+            # objectdb is None when the live object was destroyed outside
+            # release_companion (#3575); no scene link then, the write still proceeds.
+            character = target_companion.objectdb
+        else:
+            try:
+                character = target_sheet.character
+            except (AttributeError, ObjectDoesNotExist):
+                return None
         if character is None or character.location_id != actor.location.id:
             return None
         return Scene.objects.active_for_room(actor.location).first()
 
-    def _relationship(self, source: Any, target: Any) -> Any:
+    def _relationship(self, source: Any, target: Any, target_companion: Any = None) -> Any:
         from world.relationships.models import CharacterRelationship  # noqa: PLC0415
 
+        if target_companion is not None:
+            relationship, _ = CharacterRelationship.objects.get_or_create(
+                source=source,
+                target_companion=target_companion,
+                defaults={"is_pending": False},
+            )
+            return relationship
         relationship, _ = CharacterRelationship.objects.get_or_create(
             source=source,
             target=target,
@@ -59,7 +73,9 @@ class BaseRelationshipAction(Action):
         )
         return relationship
 
-    def _target_name(self, target_sheet: Any) -> str | None:
+    def _target_name(self, target_sheet: Any, target_companion: Any = None) -> str | None:
+        if target_companion is not None:
+            return target_companion.name
         try:
             return target_sheet.character.db_key
         except (AttributeError, ObjectDoesNotExist):
@@ -110,19 +126,27 @@ class BaseRelationshipAction(Action):
             msg = "Writeup not found."
             raise WriteupFeedbackError(msg) from None
 
-    def _preflight_error(self, sheet: Any, target_sheet: Any, **required: Any) -> str:
+    def _preflight_error(
+        self, sheet: Any, target_sheet: Any, target_companion: Any = None, **required: Any
+    ) -> str:
         """Return the first preflight error for a relationship verb, else "".
 
-        Consolidates the no-sheet / missing-required-kwarg / self-target checks
-        into a single message so each ``execute()`` needs one early return
-        (keeps PLR0911 under the limit). ``required`` maps kwarg label → value;
-        the first ``None`` value yields a "No <label> selected." message.
+        Consolidates the no-sheet / missing-required-kwarg / self-target / companion-
+        ownership checks into a single message so each ``execute()`` needs one early
+        return (keeps PLR0911 under the limit). ``required`` maps kwarg label to value;
+        the first ``None`` value yields a "No <label> selected." message. A companion
+        target (#3575) swaps the self-target check for ``companion_target_error``
+        (owner-only, not released).
         """
         if sheet is None:
             return "No active character."
         for label, value in required.items():
             if value is None:
                 return f"No {label} selected."
+        if target_companion is not None:
+            from world.relationships.services import companion_target_error  # noqa: PLC0415
+
+            return companion_target_error(sheet, target_companion)
         return self._self_target_error(sheet, target_sheet)
 
 
@@ -149,8 +173,15 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
+        target_companion = kwargs.get("target_companion")
         track = kwargs.get("track")
-        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        err = self._preflight_error(
+            sheet,
+            target_sheet,
+            target_companion,
+            target=target_sheet if target_sheet is not None else target_companion,
+            track=track,
+        )
         if err:
             return ActionResult(success=False, message=err)
 
@@ -159,20 +190,21 @@ class CreateFirstImpressionAction(BaseRelationshipAction):
             relationship = create_first_impression(
                 source=sheet,
                 target=target_sheet,
+                target_companion=target_companion,
                 title=kwargs.get("title", ""),
                 writeup=kwargs.get("writeup", ""),
                 track=track,
                 points=points,
                 coloring=kwargs.get("coloring", FirstImpressionColoring.NEUTRAL),
                 visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
-                linked_scene=self._active_scene_for(actor, target_sheet),
+                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
             )
         except (TypeError, ValueError):
             return ActionResult(success=False, message=_MSG_INVALID_POINTS)
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        target_name = self._target_name(target_sheet)
+        target_name = self._target_name(target_sheet, target_companion)
         return ActionResult(
             success=True,
             message=(
@@ -204,12 +236,19 @@ class CreateDevelopmentAction(BaseRelationshipAction):
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
+        target_companion = kwargs.get("target_companion")
         track = kwargs.get("track")
-        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        err = self._preflight_error(
+            sheet,
+            target_sheet,
+            target_companion,
+            target=target_sheet if target_sheet is not None else target_companion,
+            track=track,
+        )
         if err:
             return ActionResult(success=False, message=err)
 
-        relationship = self._relationship(sheet, target_sheet)
+        relationship = self._relationship(sheet, target_sheet, target_companion)
 
         try:
             points = int(kwargs.get("points", 0))
@@ -231,12 +270,12 @@ class CreateDevelopmentAction(BaseRelationshipAction):
                 points=points,
                 xp_awarded=xp_awarded,
                 visibility=kwargs.get("visibility", UpdateVisibility.PRIVATE),
-                linked_scene=self._active_scene_for(actor, target_sheet),
+                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
             )
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        target_name = self._target_name(target_sheet)
+        target_name = self._target_name(target_sheet, target_companion)
         return ActionResult(
             success=True,
             message=(
@@ -270,12 +309,19 @@ class CreateCapstoneAction(BaseRelationshipAction):
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
+        target_companion = kwargs.get("target_companion")
         track = kwargs.get("track")
-        err = self._preflight_error(sheet, target_sheet, target=target_sheet, track=track)
+        err = self._preflight_error(
+            sheet,
+            target_sheet,
+            target_companion,
+            target=target_sheet if target_sheet is not None else target_companion,
+            track=track,
+        )
         if err:
             return ActionResult(success=False, message=err)
 
-        relationship = self._relationship(sheet, target_sheet)
+        relationship = self._relationship(sheet, target_sheet, target_companion)
 
         try:
             points = int(kwargs.get("points", 0))
@@ -291,12 +337,12 @@ class CreateCapstoneAction(BaseRelationshipAction):
                 track=track,
                 points=points,
                 visibility=kwargs.get("visibility", UpdateVisibility.SHARED),
-                linked_scene=self._active_scene_for(actor, target_sheet),
+                linked_scene=self._active_scene_for(actor, target_sheet, target_companion),
             )
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        target_name = self._target_name(target_sheet)
+        target_name = self._target_name(target_sheet, target_companion)
         return ActionResult(
             success=True,
             message=(
@@ -328,18 +374,20 @@ class RedistributePointsAction(BaseRelationshipAction):
 
         sheet = self._sheet(actor)
         target_sheet = kwargs.get("target_sheet")
+        target_companion = kwargs.get("target_companion")
         source_track = kwargs.get("source_track")
         target_track = kwargs.get("target_track")
         err = self._preflight_error(
             sheet,
             target_sheet,
-            target=target_sheet,
+            target_companion,
+            target=target_sheet if target_sheet is not None else target_companion,
             **{"source track": source_track, "target track": target_track},
         )
         if err:
             return ActionResult(success=False, message=err)
 
-        relationship = self._relationship(sheet, target_sheet)
+        relationship = self._relationship(sheet, target_sheet, target_companion)
 
         try:
             points = int(kwargs.get("points", 0))
@@ -360,7 +408,7 @@ class RedistributePointsAction(BaseRelationshipAction):
         except ValidationError as exc:
             return ActionResult(success=False, message=str(exc))
 
-        target_name = self._target_name(target_sheet)
+        target_name = self._target_name(target_sheet, target_companion)
         return ActionResult(
             success=True,
             message=(

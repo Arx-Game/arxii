@@ -488,6 +488,17 @@ class ItemTemplate(NaturalKeyMixin, CreditedContent, SharedMemoryModel):
             "Plain items = 0 or 1; fine items = 2-3; ceremonial = 4-5."
         ),
     )
+    inherent_facets = models.ManyToManyField(
+        FACET_MODEL,
+        blank=True,
+        related_name="inherent_on_templates",
+        help_text=(
+            "Facets this archetype always carries (the 'IS the thing' case — a Scythe "
+            "template always carries the Scythe facet). Auto-stamped onto every "
+            "instance at creation (see ItemInstance.save()); does not consume that "
+            "instance's own facet_capacity."
+        ),
+    )
     style_capacity = models.PositiveSmallIntegerField(
         default=0,
         help_text=(
@@ -1000,6 +1011,20 @@ class ItemInstance(SharedMemoryModel):
             models.Index(fields=["template"]),
             models.Index(fields=["holder_character_sheet"]),
         ]
+
+    def save(self, *args: object, **kwargs: object) -> None:
+        """Auto-stamp the template's inherent facets onto a brand-new instance.
+
+        Explicit override (not a signal, per ADR-0009) — the deferred import
+        avoids a module-level circular import with services/facets.py, which
+        itself imports ItemInstance from this module.
+        """
+        is_new = self._state.adding
+        super().save(*args, **kwargs)
+        if is_new:
+            from world.items.services.facets import stamp_inherent_facets  # noqa: PLC0415
+
+            stamp_inherent_facets(self)
 
     def __str__(self) -> str:
         return self.display_name
@@ -1540,6 +1565,14 @@ class ItemFacet(ItemAttachment):
         FACET_MODEL,
         on_delete=models.PROTECT,
         related_name="item_attachments",
+    )
+    is_inherent = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when this facet came from the template's inherent_facets at creation "
+            "time, not a crafter's own attach_facet_to_item call. Does not count "
+            "against the instance's facet_capacity."
+        ),
     )
 
     class Meta:

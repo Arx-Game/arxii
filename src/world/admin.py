@@ -21,9 +21,11 @@ is imported here. If a sub-package is ever missing from this file, its
 admin registrations silently vanish — add the missing import here rather
 than suppressing the test.
 
-Sub-packages with no ``admin`` module at all (as of 2026-08-29:
-``missions``, ``predicates``, ``staff_inbox``, ``tidings``) are intentionally
-absent. ``npc_services`` gained one in #3428 (``ClueRevealOfferDetails`` only
+Sub-packages with no ``admin`` module at all (as of 2026-09-13:
+``predicates``, ``staff_inbox``, ``tidings``) are intentionally
+absent. ``missions`` gained one in #3831 (see that module's docstring for why
+runtime/play-state models stay unregistered). ``npc_services`` gained one in
+#3428 (``ClueRevealOfferDetails`` only
 — see that module's docstring for why the rest of ``NPCServiceOffer``'s kinds
 still have none).
 """
@@ -70,9 +72,11 @@ import world.locations.admin
 import world.magic.admin
 import world.mechanics.admin
 import world.military.admin
+import world.missions.admin
 import world.narrative.admin
 import world.npc_services.admin
 import world.player_submissions.admin
+import world.predators.admin
 import world.progression.admin
 import world.projects.admin
 import world.realms.admin

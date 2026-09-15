@@ -31,6 +31,7 @@ class CmdDeposit(ArxCommand):
     key = "deposit"
     locks = _DEFAULT_LOCKS
     action = DepositCoinsAction()
+    feed_kind = "item"
 
     def resolve_action_args(self) -> dict[str, Any]:
         name = self.require_args("Deposit what?")

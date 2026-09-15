@@ -6,6 +6,7 @@ human-readable error messages. An empty list means the stage is complete.
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
 from rest_framework import serializers
@@ -14,13 +15,22 @@ from world.character_creation.constants import (
     REQUIRED_STATS,
     STAT_MAX_VALUE,
     STAT_MIN_VALUE,
+    AnchorSource,
     FamilyPath,
+    QuestionKind,
     Stage,
 )
 from world.character_creation.types import StageValidationErrors
 
 if TYPE_CHECKING:
-    from world.character_creation.models import CharacterDraft, OriginTemplate
+    from world.character_creation.models import (
+        CharacterDraft,
+        OriginTemplate,
+        OriginTemplateSlot,
+        OriginTemplateSlotChoice,
+    )
+    from world.character_creation.questionnaire import DraftAnswers
+    from world.societies.houses.models import HouseTemplate
 
 
 def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
@@ -33,13 +43,12 @@ def get_all_stage_errors(draft: CharacterDraft) -> StageValidationErrors:
         Stage.ORIGIN: get_origin_errors(draft),
         Stage.HERITAGE: get_heritage_errors(draft),
         Stage.LINEAGE: get_lineage_errors(draft),
-        Stage.DISTINCTIONS: get_distinctions_errors(draft),
         Stage.PATH: get_path_errors(draft),
         Stage.GIFT: compute_magic_errors(draft),
         Stage.ATTRIBUTES: get_attributes_errors(draft),
         Stage.APPEARANCE: get_appearance_errors(draft),
         Stage.IDENTITY: get_identity_errors(draft),
-        Stage.FINAL_TOUCHES: [],
+        Stage.FINAL_TOUCHES: get_purse_errors(draft),
     }
 
 
@@ -163,32 +172,26 @@ def get_lineage_errors(draft: CharacterDraft) -> list[str]:
     if wrong_beginning:
         errors.append("Your upbringing does not belong to your beginning")
         return errors
-    if not template.is_accessible_by(draft.account):
+    if not template.is_active:
         errors.append("That upbringing is not available to you")
     path = draft.resolve_family_path()
     if not path:
         errors.append("Choose how your family fits your upbringing")
         return errors
     errors.extend(_get_family_path_errors(draft, path))
-    errors.extend(_get_prompt_errors(draft, template, path))
+    errors.extend(_get_vacancy_errors(draft, path))
+    errors.extend(_get_prompt_errors(draft, template))
     return errors
 
 
 def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
-    from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
-
     template = draft.selected_origin_template
     if path == FamilyPath.NONE:
         if draft.draft_data.get("tarot_card_name"):
             return []
         return ["Select a tarot card for your surname"]
     if path == FamilyPath.NAMED:
-        name = str(draft.draft_data.get("new_family_name", "")).strip()
-        if not name:
-            return ["Name your family"]
-        if family_name_is_taken(name):
-            return ["A family by that name already exists"]
-        return []
+        return _get_named_path_errors(draft)
     family = draft.family
     if family is None:
         return ["Select a family"]
@@ -208,45 +211,105 @@ def _get_family_path_errors(draft: CharacterDraft, path: str) -> list[str]:
     return []
 
 
-def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate, path: str) -> list[str]:
-    from collections import defaultdict  # noqa: PLC0415
-
-    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+def _get_named_path_errors(draft: CharacterDraft) -> list[str]:
+    """Family Template pick, its naming pattern/aspect fence, and the served house (#3648)."""
+    from world.character_creation.services import family_name_is_taken  # noqa: PLC0415
 
     errors: list[str] = []
-    texts = draft.draft_data.get("origin_slots") or {}
-    picks = draft.draft_data.get("origin_choices") or {}
-    slots = list(template.slots.order_by("sort_order"))
-    choices_by_slot: dict[int, list] = defaultdict(list)
-    for choice in OriginTemplateSlotChoice.objects.filter(slot__template=template, is_active=True):
-        choices_by_slot[choice.slot_id].append(choice)
-    for slot in slots:
-        if slot.applies_to not in (FamilyPath.ANY, path):
-            continue
-        active_choices = choices_by_slot.get(slot.id, [])
-        choice_id = picks.get(str(slot.id))
-        text = str(texts.get(str(slot.id), "")).strip()
-        picked = None
-        if choice_id is not None:
-            picked = next((c for c in active_choices if c.id == int(choice_id)), None)
-            if picked is None:
-                errors.append(f"Invalid choice for {slot.name}")
-                continue
-        answered = picked is not None or (slot.allows_text and bool(text))
-        if slot.is_required and not answered:
-            errors.append(f"{slot.name} is required")
+    family_template = draft.resolve_family_template()
+    if family_template is None:
+        return ["Choose a family template"]
+    name = str(draft.draft_data.get("new_family_name", "")).strip()
+    if not name:
+        errors.append("Name your family")
+    else:
+        try:
+            fits_pattern = re.fullmatch(family_template.name_pattern, name)
+        except re.error:
+            errors.append("This family template's naming rule is misconfigured; tell staff")
+        else:
+            if not fits_pattern:
+                errors.append("That name does not fit this family's naming conventions")
+            elif family_name_is_taken(name):
+                errors.append("A family by that name already exists")
+    errors.extend(_get_aspect_pick_errors(draft, family_template))
+    if (
+        draft.served_house_id is not None
+        and not family_template.served_house_choices.filter(pk=draft.served_house_id).exists()
+    ):
+        errors.append("That house is not one your family could have served")
     return errors
 
 
-def get_distinctions_errors(draft: CharacterDraft) -> list[str]:
-    """Return validation errors for the Distinctions stage."""
-    errors: list[str] = []
-    if not draft.draft_data.get("traits_complete", False):
-        errors.append("Confirm your distinction selections")
+def _slot_prompt_error(
+    slot: OriginTemplateSlot,
+    draft: CharacterDraft,
+    answers: DraftAnswers,
+    choices_by_slot: dict[int, dict[int, OriginTemplateSlotChoice]],
+    choice_ids_by_slot: dict[int, set[int]],
+) -> str | None:
+    """The single blocking error for one shown question, or ``None`` (#3617, #3660)."""
+    from world.character_creation.questionnaire import (  # noqa: PLC0415
+        is_answered,
+        resolve_groups,
+    )
+
+    picked_id = answers.picks.get(slot.id)
+    if picked_id is not None and choices_by_slot.get(slot.id, {}).get(picked_id) is None:
+        return f"Invalid choice for {slot.name}"
+    offered_sources = (AnchorSource.POOL, AnchorSource.LISTED, AnchorSource.SAME_AS)
+    if (
+        slot.kind == QuestionKind.GROUP
+        and slot.anchor_source in offered_sources
+        and slot.id in answers.anchors
+    ):
+        offered = {org.pk for org in resolve_groups(slot, draft, answers)}
+        if answers.anchors[slot.id] not in offered:
+            return f"That group is not offered for {slot.name}"
+    if slot.is_required and not is_answered(slot, draft, answers, choice_ids_by_slot):
+        return f"{slot.name} is required"
+    return None
+
+
+def _get_prompt_errors(draft: CharacterDraft, template: OriginTemplate) -> list[str]:
+    """Every shown question answered as its kind requires (#3617, #3660).
+
+    ``visible_slot_ids`` resolves the draft's family path itself, so this needs no
+    ``path`` argument the way ``_get_family_path_errors``/``_get_vacancy_errors`` do.
+    """
+    from world.character_creation.models import OriginTemplateSlotChoice  # noqa: PLC0415
+    from world.character_creation.questionnaire import (  # noqa: PLC0415
+        DraftAnswers,
+        visible_slot_ids,
+    )
+
+    answers = DraftAnswers.from_draft(draft)
+    shown = visible_slot_ids(draft)
+    slots = [s for s in template.questions if s.id in shown]
+    choices_by_slot: dict[int, dict[int, OriginTemplateSlotChoice]] = {}
+    for choice in OriginTemplateSlotChoice.objects.filter(slot__template=template, is_active=True):
+        choices_by_slot.setdefault(choice.slot_id, {})[choice.id] = choice
+    choice_ids_by_slot = {sid: set(cs) for sid, cs in choices_by_slot.items()}
+    return [
+        error
+        for slot in slots
+        if (error := _slot_prompt_error(slot, draft, answers, choices_by_slot, choice_ids_by_slot))
+        is not None
+    ]
+
+
+def get_purse_errors(draft: CharacterDraft) -> list[str]:
+    """Return validation errors for the Final Touches stage.
+
+    Distinctions are offered by CG chapter now (#3675), not picked as their own
+    stage, so completion here is purely the purse: every prior stage already
+    checks its own CG-point cost as it is spent, and this is the final check
+    that the running total is still in balance.
+    """
     remaining = draft.calculate_cg_points_remaining()
     if remaining < 0:
-        errors.append(f"CG points over budget by {abs(remaining)}")
-    return errors
+        return [f"CG points over budget by {abs(remaining)}"]
+    return []
 
 
 def get_path_errors(draft: CharacterDraft) -> list[str]:
@@ -316,7 +379,14 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
     Every ``is_required`` trait for the species needs a selection, and every
     selected option must sit in the species' own palette or among the
     inherited options a cross-species parent makes legal (pinned-aware).
+
+    A trait the draft has made distinctive (#3739) is exempt from the palette
+    check: the point the player spent buys exactly that, every option the trait
+    carries including the Unnatural umbrella, on the standing assumption that
+    an off-species colour has a magical explanation. The required-trait check
+    still applies — a distinctive trait is still a trait you have to choose.
     """
+    from world.character_creation.offers import opened_feature_traits  # noqa: PLC0415
     from world.forms.models import SpeciesFormTrait  # noqa: PLC0415
     from world.roster.services.heredity import (  # noqa: PLC0415
         base_trait_options,
@@ -357,9 +427,10 @@ def _get_form_trait_errors(draft: CharacterDraft) -> list[str]:
                 opt.pk for opt in entry.options
             )
     trait_names = {trait.name: trait.display_name for trait in base_palette}
+    opened = opened_feature_traits(draft.draft_data)
     for trait_name, option_id in selections.items():
         legal = legal_by_trait.get(trait_name)
-        if legal is None:
+        if legal is None or trait_name in opened:
             continue
         if isinstance(option_id, int) and option_id not in legal:
             display = trait_names.get(trait_name, trait_name)
@@ -404,8 +475,9 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     2. Must have selected_gift_id, and it must be one of the gifts available for
        the draft's (tradition, path) per ``cg_catalog.get_gift_options``.
     3. Must have >=1 selected_technique_ids, each drawn from the chosen gift's
-       pool ∪ signature availability set, and no more than
-       ``draft.starting_technique_picks``.
+       ready pool ∪ signature availability set ∪ the selected species' gift
+       techniques, and no more than ``draft.starting_technique_picks``. An
+       available technique without an action template is rejected as unfinished.
     4. Must have selected_gift_resonance_id (anchors the latent GIFT thread, #1620).
     5. Must have a valid anima_check_stat_id (a Trait with trait_type=STAT) and a
        valid anima_check_skill_id (an active Skill) — the character's Anima Check.
@@ -413,6 +485,7 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     from world.magic.models import Resonance  # noqa: PLC0415
     from world.magic.services.cg_catalog import (  # noqa: PLC0415
         get_gift_options,
+        get_species_technique_options,
         get_technique_options,
     )
     from world.skills.models import Skill  # noqa: PLC0415
@@ -434,12 +507,26 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
     if not technique_ids:
         return ["Select at least one technique"]
 
-    technique_options = get_technique_options(draft.selected_path, gift, draft.selected_tradition)
-    available_ids = {t.id for t in technique_options.pool} | {
-        t.id for t in technique_options.tradition
-    }
-    if any(technique_id not in available_ids for technique_id in technique_ids):
+    technique_options = get_technique_options(
+        draft.selected_path,
+        gift,
+        draft.selected_tradition,
+        include_unready=True,
+    )
+    available_techniques = [
+        *technique_options.pool,
+        *technique_options.tradition,
+        *get_species_technique_options(draft.selected_species, include_unready=True),
+    ]
+    available_ids = {technique.id for technique in available_techniques}
+    selected_ids = set(technique_ids)
+    if selected_ids - available_ids:
         return ["Selected technique is not available"]
+    unfinished_ids = {
+        technique.id for technique in available_techniques if not technique.action_template_id
+    }
+    if selected_ids & unfinished_ids:
+        return ["Selected technique is unfinished (no action template)"]
 
     picks = draft.starting_technique_picks
     if len(technique_ids) > picks:
@@ -463,3 +550,104 @@ def compute_magic_errors(draft: CharacterDraft) -> list[str]:
         return ["Choose the stat and skill your magic rolls (your Anima Check)"]
 
     return []
+
+
+def _get_aspect_pick_errors(draft: CharacterDraft, family_template: HouseTemplate) -> list[str]:
+    from world.societies.houses.creator import _validate_aspect_picks  # noqa: PLC0415
+    from world.societies.houses.services import HousesServiceError  # noqa: PLC0415
+
+    raw = draft.draft_data.get("family_aspect_picks") or {}
+    if not isinstance(raw, dict) or any(not isinstance(values, list) for values in raw.values()):
+        return ["Your family's choices could not be read"]
+    try:
+        picks = {int(key): [int(value) for value in values] for key, values in raw.items()}
+    except (TypeError, ValueError):
+        return ["Your family's choices could not be read"]
+    try:
+        _validate_aspect_picks(template=family_template, aspect_picks=picks)
+    except HousesServiceError as exc:
+        return [exc.user_message]
+    return []
+
+
+def _own_family_organization_id(draft: CharacterDraft, path: str) -> int | None:
+    if path != FamilyPath.CLAIMED or draft.family_id is None:
+        return None
+    from world.societies.houses.services import house_for_family  # noqa: PLC0415
+
+    own_org = house_for_family(draft.family)
+    return own_org.pk if own_org is not None else None
+
+
+def _kin_vacancy_error(
+    draft: CharacterDraft,
+    reachable: object,
+    own_org_id: int | None,
+) -> str | None:
+    from world.societies.constants import VACANCY_BASIS_KIN  # noqa: PLC0415
+
+    if own_org_id is None:
+        return None
+    kin_offered = (
+        reachable.filter(organization_id=own_org_id)
+        .exclude(kin_pool__isnull=True, kin_node__isnull=True)
+        .exists()
+    )
+    vacancy = draft.selected_vacancy
+    if kin_offered and (
+        vacancy is None
+        or vacancy.organization_id != own_org_id
+        or vacancy.basis != VACANCY_BASIS_KIN
+    ):
+        return "Choose your place in the family"
+    return None
+
+
+def _vacancy_gate_errors(
+    draft: CharacterDraft,
+    path: str,
+    vacancy: object,
+    reachable_any_state: object,
+    own_org_id: int | None,
+) -> list[str]:
+    from world.societies.constants import (  # noqa: PLC0415
+        VACANCY_BASIS_KIN,
+        VACANCY_BASIS_RETAINER,
+    )
+
+    errors: list[str] = []
+    if not reachable_any_state.filter(pk=vacancy.pk).exists():
+        errors.append("That opening is not available to you")
+    if vacancy.basis == VACANCY_BASIS_KIN and (
+        path != FamilyPath.CLAIMED or vacancy.organization.family_id != draft.family_id
+    ):
+        errors.append("That place belongs to a family you are not joining")
+    if (
+        vacancy.basis == VACANCY_BASIS_RETAINER
+        and own_org_id is not None
+        and vacancy.organization_id == own_org_id
+    ):
+        errors.append("Choose your place in the family")
+    if vacancy.basis == VACANCY_BASIS_KIN and (
+        draft.claimed_kin_slot_id or draft.claimed_kin_pool_id
+    ):
+        errors.append("Your place in the family already covers your kin slot")
+    return errors
+
+
+def _get_vacancy_errors(draft: CharacterDraft, path: str) -> list[str]:
+    from world.societies.vacancy_services import (  # noqa: PLC0415
+        _open_filter,
+        reachable_vacancies,
+    )
+
+    reachable_any_state = reachable_vacancies(draft, require_open=False)
+    reachable = reachable_any_state.filter(_open_filter())
+    own_org_id = _own_family_organization_id(draft, path)
+    kin_error = _kin_vacancy_error(draft, reachable, own_org_id)
+    if kin_error is not None:
+        return [kin_error]
+    vacancy = draft.selected_vacancy
+    if vacancy is None:
+        return []
+    return _vacancy_gate_errors(draft, path, vacancy, reachable_any_state, own_org_id)

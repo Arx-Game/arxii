@@ -229,6 +229,7 @@ class CompanionViewSet(PuppetActorMixin, viewsets.ReadOnlyModelViewSet):
             actor=actor,
             companion_id=companion.pk,
             text=serializer.validated_data["text"],
+            client_request_id=serializer.validated_data.get("client_request_id"),
         )
         if not result.success:
             return Response({"detail": result.message}, status=status.HTTP_400_BAD_REQUEST)

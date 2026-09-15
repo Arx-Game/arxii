@@ -78,20 +78,20 @@ class ProseFieldDeclarationOrderTests(SimpleTestCase):
     """`prose_fields_for` returns field-declaration order, not alphabetical (#3019).
 
     CodexEntry is the multi-prose-field case the Task 1 review flagged as
-    untested: `summary`, `lore_content`, `mechanics_content` are declared in
-    that order on the model (`world/codex/models.py`) but sort
-    alphabetically as `lore_content`, `mechanics_content`, `summary` - a
-    regression that silently reordered fields would pass every other guard
-    in this module while still breaking the authoring workbench's editor,
-    which renders one textarea per name in exactly this order (see
-    `web.admin.tests.test_authoring_editor
+    untested: `summary`, `quote`, `lore_content`, `mechanics_content` are
+    declared in that order on the model (`world/codex/models.py`) but sort
+    alphabetically as `lore_content`, `mechanics_content`, `quote`,
+    `summary` - a regression that silently reordered fields would pass
+    every other guard in this module while still breaking the authoring
+    workbench's editor, which renders one textarea per name in exactly this
+    order (see `web.admin.tests.test_authoring_editor
     .TestAuthoringEditorGet.test_textareas_render_in_declaration_order`).
     """
 
     def test_codex_entry_prose_fields_are_in_declaration_order(self):
         self.assertEqual(
             prose_fields_for(CodexEntry),
-            ["summary", "lore_content", "mechanics_content"],
+            ["summary", "quote", "lore_content", "mechanics_content"],
         )
 
 

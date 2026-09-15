@@ -19,17 +19,20 @@ from world.character_sheets.factories import CharacterSheetFactory
 from world.checks.factories import CheckTypeFactory
 from world.checks.test_helpers import force_check_outcome
 from world.items.crafting.constants import CraftingRecipeKind
-from world.items.exceptions import FacetAlreadyAttached
+from world.items.exceptions import FacetAlreadyAttached, InherentFacetNotRemovable
 from world.items.factories import (
     CraftingRecipeFactory,
     GemGradeFactory,
     GemInstanceDetailsFactory,
+    ItemFacetFactory,
     ItemInstanceFactory,
     ItemTemplateFactory,
+    QualityTierFactory,
 )
 from world.items.gems.constants import GemAxis
-from world.items.models import ItemInstance
+from world.items.models import ItemFacet, ItemInstance
 from world.items.types import FacetCraftResult, StyleCraftResult
+from world.magic.factories import FacetFactory
 from world.roster.factories import PlayerDataFactory, RosterEntryFactory, RosterTenureFactory
 from world.traits.factories import CheckOutcomeFactory
 
@@ -194,6 +197,38 @@ class DetachFacetActionTests(TestCase):
             action_result = DetachFacetAction().run(actor=actor, item_facet=item_facet)
         assert action_result.success
         mocked.assert_called_once_with(item_facet=item_facet)
+
+    def test_detach_inherent_facet_fails_with_player_message(self):
+        """An inherent facet (#3776) is refused with the exception's user_message.
+
+        Uses the real service (no patch) so the guard, not the mock, is what
+        decides — the row survives and the player is told why.
+        """
+        room = ObjectDBFactory(
+            db_key="DetachFacetRoom3", db_typeclass_path="typeclasses.rooms.Room"
+        )
+        account = AccountFactory(username="detach_facet_account_3")
+        actor = CharacterFactory(db_key="DetachFacetCarol", location=room)
+        sheet = CharacterSheetFactory(character=actor)
+        roster_entry = RosterEntryFactory(character_sheet=sheet)
+        RosterTenureFactory(
+            roster_entry=roster_entry,
+            player_data=PlayerDataFactory(account=account),
+        )
+        template = ItemTemplateFactory(name="DetachFacetScythe")
+        instance = ItemInstanceFactory(template=template, holder_character_sheet=sheet)
+        inherent_row = ItemFacetFactory(
+            item_instance=instance,
+            facet=FacetFactory(name="DetachActionInherentScythe"),
+            attachment_quality_tier=QualityTierFactory(),
+            is_inherent=True,
+        )
+
+        action_result = DetachFacetAction().run(actor=actor, item_facet=inherent_row)
+
+        assert not action_result.success
+        assert action_result.message == InherentFacetNotRemovable.user_message
+        assert ItemFacet.objects.filter(pk=inherent_row.pk).exists()
 
 
 class CutGemActionTests(TestCase):

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from collections.abc import Callable, Sequence
 from http import HTTPMethod
 from typing import Any
+from uuid import UUID
 
-from django.db import transaction
 from django.db.models import Prefetch, Q, QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import mixins, status, viewsets
@@ -22,7 +23,6 @@ from world.scenes.constants import (
     InteractionMode,
     PersonaType,
     PoseKind,
-    ReactionWindowKind,
 )
 from world.scenes.interaction_filters import (
     InteractionFavoriteFilter,
@@ -46,9 +46,9 @@ from world.scenes.interaction_serializers import (
 )
 from world.scenes.interaction_services import (
     delete_interaction,
+    idempotent_record_interaction,
     mark_very_private,
     personas_for_characters,
-    record_interaction,
     resolve_characters_by_name,
 )
 from world.scenes.models import (
@@ -62,13 +62,135 @@ from world.scenes.models import (
     SceneParticipation,
 )
 from world.scenes.place_models import InteractionReceiver
+from world.scenes.reachability import UnreachableError
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
-from world.scenes.reaction_services import open_reaction_window
 from world.scenes.reaction_toggle_services import (
     toggle_interaction_favorite,
     toggle_interaction_reaction,
 )
 from world.scenes.services import active_persona_for_sheet
+from world.scenes.thread_services import InteractionThreadError, ReplyTarget
+
+
+def _refusal_response(*, code: str, field: str, detail: str, hint: str | None) -> Response:
+    """Shared 400 body shape for a typed submit-pose refusal.
+
+    Both ``InteractionThreadError`` (reply refusal) and ``UnreachableError``
+    (#3787 Task 4 tagging refusal) translate through this one shape --
+    ``hint`` is omitted rather than sent as ``null`` when the refusal carries
+    none (``InteractionThreadError`` only sets it for the Place-to-Scene reply
+    mismatch; every ``UnreachableError`` carries one).
+    """
+    body: dict[str, str] = {"code": code, "field": field, "detail": detail}
+    if hint is not None:
+        body["hint"] = hint
+    return Response(body, status=status.HTTP_400_BAD_REQUEST)
+
+
+def _link_explicit_action_ids(created: Interaction, action_link_ids: list[int]) -> None:
+    """Explicit override for ``submit_pose``: create exactly the supplied links in
+    order, skipping auto-link entirely (empty list = caller opted out).
+
+    Appends the created rows onto ``created.cached_action_links`` (#3816) so the
+    response serializes the real state without an extra query.
+
+    Peeks at the existing cached list BEFORE the ``bulk_create`` instead of reading
+    the property -- reading it (rather than peeking) would force a query on a cold
+    cache (nothing in ``__dict__`` yet) on a freshly-created pose, and reading it
+    AFTER the write would re-query the DB, which now includes the rows just
+    inserted; appending them again would double the list, and (per
+    ``SharedMemoryModelBase``'s identity map, plus Task 1's Prefetch freshness
+    fix) that doubled list would stick for every later read of this same
+    cached pk in this worker process. A cold cache is simply left alone -- there
+    is nothing to double-count, and the next real read queries fresh.
+    """
+    existing = created.__dict__.get("cached_action_links")
+    created_links = InteractionAction.objects.bulk_create(
+        [
+            InteractionAction(pose=created, action_interaction_id=aid, ordering=i)
+            for i, aid in enumerate(action_link_ids)
+        ]
+    )
+    if existing is not None:
+        created.cached_action_links = [*existing, *created_links]
+
+
+def _seed_fresh_pose_caches(
+    interaction: Interaction, *, target_personas: list[Persona] | None, replayed: bool
+) -> None:
+    """Seed ``submit_pose``'s response interaction with its cached_* defaults.
+
+    The interaction has not been through ``get_queryset()``'s Prefetch pipeline —
+    freshly created, or (on replay) fetched via ``idempotent_record_interaction``'s
+    bare ``select_related`` lookup — so the ``cached_*`` to_attr attributes used by
+    ``InteractionListSerializer`` do not exist yet.
+
+    On a genuine (non-replayed) creation this call path (``submit_pose`` never
+    passes ``receivers=``/``place=``) guarantees a brand-new interaction has no
+    receivers, favorites, reactions, endorsements, dramatic-moment tags, or
+    dramatic-moment suggestions yet, so seeding ``[]`` is correct and avoids a
+    live query on serialization (dramatic-moment tags/suggestions require a
+    technique-entrance cast or the GM tag endpoint — an entirely separate
+    pipeline `_on_created` below never touches). ``cached_action_links`` is
+    the one exception even here: ``_on_created`` already populated it via direct
+    write-site mutation (#3816) with whatever ``InteractionAction`` rows were
+    just linked — stomping it would silently drop them from the response even
+    though the rows are in the database.
+
+    On a REPLAY, ``interaction`` is the OLD row fetched from the ledger — it may
+    have accumulated real favorites/reactions/receivers/action-links/endorsements/
+    dramatic-moment tags/suggestions from other requests since it was first
+    created, so stamping any of them to ``[]`` here would be a permanent lie:
+    ``PrunedCachedProperty`` treats an assigned value (``[]`` included) as
+    already fetched, so every later read of this identity-mapped instance in
+    this worker process would report zero forever. ``del`` instead, so the next
+    real read recomputes fresh from the DB (``PrunedCachedProperty.__delete__``
+    pops the entry and is a no-op if it was never set).
+
+    ``cached_reaction_windows`` gets ``del`` in BOTH branches, unlike its five
+    siblings above: an ENTRY pose's ``_on_created`` callback opens a
+    ``ReactionWindow`` on ``interaction`` (see ``open_reaction_window``) before
+    this function ever runs, and at that point the window's own write-site
+    mutation finds nothing cached yet on a brand-new interaction (this call
+    path never prefetches reaction windows) — so the mutation is skipped and
+    the freshly-opened window is never appended to any cached list here.
+    Stamping ``[]`` for a non-replayed ENTRY pose would therefore silently
+    drop that just-opened window from the response even though the row is in
+    the database — the same bug the docstring above calls out for
+    ``cached_action_links``. ``del`` (recompute fresh from the DB) is correct
+    for every pose kind, not just ENTRY: a STANDARD pose has no window either
+    way, so the recompute is a cheap empty-list query. (#3816 Task 5 — this
+    used to be an unconditional ``interaction.cached_reaction_windows = None``
+    outside the branching, which crashed ``PrunedCachedProperty.__get__``'s
+    ``all(row.pk for row in rows)`` the first time this code path ran after
+    the property conversion, since ``None`` is not iterable.)
+    """
+    if replayed:
+        del interaction.cached_receivers
+        del interaction.cached_favorites
+        del interaction.cached_reactions
+        del interaction.cached_action_links
+        del interaction.cached_endorsements
+        del interaction.cached_reaction_windows
+        del interaction.cached_dramatic_moment_tags
+        del interaction.cached_dramatic_moment_suggestions
+    else:
+        interaction.cached_receivers = []
+        interaction.cached_favorites = []
+        interaction.cached_reactions = []
+        # cached_action_links already populated by `_on_created` -- see above.
+        interaction.cached_endorsements = []
+        del interaction.cached_reaction_windows
+        # Neither dramatic-moment tags nor suggestions are ever created by
+        # `_on_created` above -- both require a technique-entrance cast or the
+        # GM tag endpoint, an entirely separate pipeline from plain pose
+        # submission -- so a brand-new interaction genuinely has none yet.
+        interaction.cached_dramatic_moment_tags = []
+        interaction.cached_dramatic_moment_suggestions = []
+    # The replay-matching `comparison_fields["target"]` check guarantees the
+    # freshly-resolved `target_personas` here is identical to the stored row's
+    # real set on a replay too, so this assignment is safe in both branches.
+    interaction.cached_target_personas = target_personas or []
 
 
 class InteractionCursorPagination(CursorPagination):
@@ -76,6 +198,69 @@ class InteractionCursorPagination(CursorPagination):
     ordering = "-timestamp"
     cursor_query_param = "cursor"
     cursor_query_description = "The pagination cursor value."
+
+
+def _record_submitted_pose(  # noqa: PLR0913
+    *,
+    persona: Persona,
+    character: Any,
+    client_request_id: UUID,
+    content: str,
+    pose_kind: str,
+    scene: Scene | None,
+    target_personas: list[Persona] | None,
+    reply_target: ReplyTarget | None,
+    on_created: Callable[[Interaction], None] | None,
+    serializer_context: dict[str, object],
+) -> Response:
+    """Record, broadcast, and serialize a submitted pose."""
+    target_pks = frozenset(p.pk for p in target_personas) if target_personas else frozenset()
+    try:
+        result = idempotent_record_interaction(
+            persona=persona,
+            client_request_id=client_request_id,
+            # `pose_kind` is deliberately not compared (#3867): the server owns ENTRY
+            # (a first line is one whatever the client sent), so a retry of a
+            # standard-marked first pose must replay against its ENTRY row, not conflict.
+            comparison_fields={
+                "content": content,
+                "scene_id": scene.pk if scene is not None else None,
+                "target": lambda stored: frozenset(p.pk for p in stored.target_personas.all())
+                == target_pks,
+            },
+            character=character,
+            content=content,
+            mode=InteractionMode.POSE,
+            scene=scene,
+            pose_kind=pose_kind,
+            target_personas=target_personas,
+            reply_to=reply_target,
+            on_created=on_created,
+        )
+    except InteractionThreadError as exc:
+        return _refusal_response(
+            code=exc.code, field="reply_to", detail=exc.detail, hint=exc.venue_hint
+        )
+    except UnreachableError as exc:
+        return _refusal_response(
+            code=exc.code, field="target_names", detail=exc.detail, hint=exc.venue_hint
+        )
+    if result.conflict:
+        return Response(
+            {"detail": "This request id was already used for different content."},
+            status=status.HTTP_409_CONFLICT,
+        )
+    if not result.replayed:
+        caller_state = SceneDataManager().initialize_state_for_object(character)
+        message_location(caller_state, content)
+
+    response_status = status.HTTP_200_OK if result.replayed else status.HTTP_201_CREATED
+    interaction = result.interaction
+    if interaction is None:
+        return Response({"ephemeral": True, "replayed": result.replayed}, status=response_status)
+    _seed_fresh_pose_caches(interaction, target_personas=target_personas, replayed=result.replayed)
+    output = InteractionListSerializer(interaction, context=serializer_context)
+    return Response({**output.data, "replayed": result.replayed}, status=response_status)
 
 
 class InteractionViewSet(
@@ -169,6 +354,10 @@ class InteractionViewSet(
             "place",
             "language",  # #2993: read-time comprehension needs is_universal/trait_id inline
             "attributed_companion",  # #3294: N+1-safe companion-attribution rendering
+            # #3787: the thread IS the reply parent edge (it is anchored on the row it
+            # answers), so joining it here serves get_reply_to for the whole page with
+            # no extra query and no per-row handler.
+            "thread",
         ).prefetch_related(
             Prefetch(
                 "persona__character_sheet__resonances",
@@ -254,7 +443,7 @@ class InteractionViewSet(
         # (#1241) shares the exact same gate — no parallel privacy implementation.
         user = self.request.user
         persona_ids = get_account_personas(self.request) if user.is_authenticated else []
-        since = self.request.query_params.get("since")  # noqa: USE_FILTERSET
+        since = self.request.query_params.get("since") or self.request.query_params.get("from")  # noqa: USE_FILTERSET
         qs = base_qs.visible_to(user, persona_ids=persona_ids, since=since)
         # #1278 — hide personas the viewer can't see (Block, enforced, staff bypass).
         # Muted personas (#2087) are NOT excluded here — their interactions stay in the
@@ -266,6 +455,28 @@ class InteractionViewSet(
             qs = qs.exclude(persona_id__in=exclude_persona_ids)
         return qs
 
+    # Behaviorally equivalent to the inherited `mixins.ListModelMixin.list()` --
+    # same filtering, pagination, and permission behavior (materializes the
+    # queryset into a concrete list on the unpaginated path instead of passing
+    # it through unevaluated, but the serialized output is identical either
+    # way). Originally added (#3816 Task 12) to host a nested-relation batch
+    # fetch; that fetch was removed once investigation found no consumer of the
+    # relation it warmed (see that commit's message). Left as an explicit
+    # override rather than reverted, since it is behavior-neutral and this
+    # class had no `list()` of its own before. A docstring here would win over
+    # the class docstring as this operation's public API description
+    # (drf-spectacular resolves `action_doc or view_doc`) and leak this
+    # internal changelog into the published OpenAPI schema -- keep this
+    # explanation as a comment, never a docstring, on this method.
+    def list(self, request: Request, *args: Any, **kwargs: Any) -> Response:
+        queryset = self.filter_queryset(self.get_queryset())
+        page = self.paginate_queryset(queryset)
+        interactions = page if page is not None else list(queryset)
+        serializer = self.get_serializer(interactions, many=True)
+        if page is not None:
+            return self.get_paginated_response(serializer.data)
+        return Response(serializer.data)
+
     def get_serializer_class(
         self,
     ) -> type[BaseSerializer[Interaction]]:
@@ -273,7 +484,10 @@ class InteractionViewSet(
             return InteractionDetailSerializer
         return InteractionListSerializer
 
-    def get_permissions(self) -> list[BasePermission]:
+    def get_permissions(self) -> Sequence[BasePermission]:
+        # Sequence, not list: this class also defines a `list()` action method
+        # (above), and a bare `list[...]` annotation elsewhere in the same class
+        # body resolves against that method rather than the builtin.
         if self.action == "list":
             # Public shop-window read (#3305): landing-page scene excerpt.
             # Scoping lives in InteractionQuerySet.visible_to's anonymous
@@ -376,73 +590,45 @@ class InteractionViewSet(
 
         action_link_ids: list[int] | None = data.get("action_link_ids")
 
-        def _on_created(created: Interaction) -> None:
-            if pose_kind == PoseKind.ENTRY and created.scene_id is not None:
-                # #904 — an entrance is a reactable moment; the window stays
-                # open (and reactable) until the scene closes.
-                open_reaction_window(interaction=created, kind=ReactionWindowKind.ENTRANCE)
+        # The entrance is the first line (#3867): the service marks it and opens its
+        # window; a client asking for a second one is refused.
+        if pose_kind == PoseKind.ENTRY and scene is not None:
+            from world.scenes.participation import has_entered  # noqa: PLC0415
 
-            if action_link_ids is not None:
-                # Explicit override: create exactly the supplied links in order,
-                # skipping auto-link entirely (empty list = caller opted out).
-                InteractionAction.objects.bulk_create(
-                    [
-                        InteractionAction(
-                            pose=created,
-                            action_interaction_id=aid,
-                            ordering=i,
-                        )
-                        for i, aid in enumerate(action_link_ids)
-                    ]
+            if has_entered(scene, persona.character_sheet_id):
+                return Response(
+                    {"detail": "You have already made your entrance in this scene."},
+                    status=status.HTTP_400_BAD_REQUEST,
                 )
+
+        def _on_created(created: Interaction) -> None:
+            if action_link_ids is not None:
+                _link_explicit_action_ids(created, action_link_ids)
             else:
                 auto_link_pose_to_actions(created)
 
-        # Broadcast raw text for telnet clients (WS parity — mirrors
-        # PoseAction.execute's message_location call, which fires unconditionally
-        # before persistence, ephemeral scenes included).
-        sdm = SceneDataManager()
-        caller_state = sdm.initialize_state_for_object(character)
-        message_location(caller_state, content)
-
-        with transaction.atomic():
-            interaction = record_interaction(
-                character=character,
-                content=content,
-                mode=InteractionMode.POSE,
-                scene=scene,
-                persona=persona,
-                pose_kind=pose_kind,
-                target_personas=target_personas,
-                on_created=_on_created,
+        client_request_id = data["client_request_id"]
+        reply_data = data.get("reply_to")
+        reply_target = (
+            ReplyTarget(
+                interaction_id=reply_data["id"],
+                timestamp=reply_data["timestamp"],
             )
-
-        if interaction is None:
-            # Ephemeral scene: record_interaction already pushed the real-time
-            # payload (push_ephemeral_interaction) and deliberately never persists
-            # an Interaction row — there is nothing to serialize as a resource.
-            return Response({"ephemeral": True}, status=status.HTTP_201_CREATED)
-
-        # The freshly-created interaction has not been through get_queryset()'s
-        # Prefetch pipeline, so the cached_* to_attr attributes used by
-        # InteractionListSerializer do not exist yet. Set them to empty lists
-        # to avoid AttributeError on serialization; a new pose has no receivers,
-        # favorites, or reactions (target personas are whatever we just resolved).
-        interaction.cached_receivers = []
-        interaction.cached_target_personas = target_personas or []
-        interaction.cached_favorites = []
-        interaction.cached_reactions = []
-        interaction.cached_action_links = []
-        interaction.cached_dramatic_moment_tags = []
-        interaction.cached_dramatic_moment_suggestions = []
-        interaction.cached_endorsements = []
-        # ENTRY poses opened a window above; let the serializer query it (no
-        # cached attr) so the fresh response includes the reactable strip.
-        interaction.cached_reaction_windows = None
-        out_serializer = InteractionListSerializer(
-            interaction, context=self.get_serializer_context()
+            if reply_data is not None
+            else None
         )
-        return Response(out_serializer.data, status=status.HTTP_201_CREATED)
+        return _record_submitted_pose(
+            persona=persona,
+            character=character,
+            client_request_id=client_request_id,
+            content=content,
+            pose_kind=pose_kind,
+            scene=scene,
+            target_personas=target_personas,
+            reply_target=reply_target,
+            on_created=_on_created,
+            serializer_context=self.get_serializer_context(),
+        )
 
 
 class InteractionFavoritePagination(PageNumberPagination):

@@ -11,7 +11,9 @@ Command reference for working on Arx II. The load-bearing *rules* live in
 
 - `uv sync` — Install Python dependencies
 - `uv venv` — Create virtual environment
-- `pre-commit install` — Install pre-commit hooks
+- `just install-git-hooks` - Install the git hooks: a pre-commit hook that never
+  clears the worktree (#3814), plus pre-commit's pre-push hook. Not
+  `pre-commit install`, which would put back pre-commit's own worktree-clearing hook
 - **Sandboxed devcontainer** (for `--dangerously-skip-permissions`): see `docs/devcontainer-setup.md`
 
 ## Common Development Commands
@@ -83,6 +85,8 @@ Django-only command that doesn't fully initialize Evennia.
 - `pre-commit run --all-files` — Run all pre-commit hooks (uses ruff). **Heavy —
   whole-repo; can crash the devcontainer. Not for pre-push prechecks (see caution
   below); prefer the diff-scoped `--from-ref origin/main --to-ref HEAD` form.**
+  That form clears the worktree while hooks run (only `--files` and `--all-files`
+  do not), so use it only when nobody else has uncommitted work in the worktree.
 
 **Always commit with hooks — never `--no-verify`.** `--no-verify` skips this
 repo's **custom linters** (`getattr-literal`, `string-literal`, `objectdb-param`,
@@ -93,7 +97,8 @@ type checker) and `ruff-format` (a separate hook from `ruff check`), so running
 just `ty check` + `ruff check` by hand afterward is not equivalent to the real
 hook set. If a branch was ever built via `--no-verify` commits, run the
 **diff-scoped** catch-up `uv run pre-commit run --from-ref origin/main --to-ref
-HEAD` before push and confirm every hook passes.
+HEAD` before push and confirm every hook passes (with no other agent's
+uncommitted work in the worktree: that form clears it while hooks run, #3814).
 
 **Avoid `pre-commit run --all-files` as a pre-push precheck.** The whole-repo
 pass (ty/ruff over thousands of files) can crash this devcontainer — a real

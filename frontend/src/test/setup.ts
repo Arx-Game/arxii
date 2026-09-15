@@ -1,4 +1,4 @@
-import '@testing-library/jest-dom';
+import '@testing-library/jest-dom/vitest';
 import { vi } from 'vitest';
 import React from 'react';
 
@@ -18,6 +18,29 @@ globalThis.ResizeObserver ??= class ResizeObserver {
     return undefined;
   }
 };
+
+// Polyfill IntersectionObserver — not available in jsdom but constructed by
+// usePoseReadTracking.ts (dwell-tracked read state) whenever a component that
+// uses it mounts in a test (e.g. ThreadedNarrativeReader.tsx). A no-op stub is
+// correct here: jsdom never fires real intersection callbacks, so tests that
+// need to exercise dwell-tracking stub this global themselves
+// (usePoseReadTracking.test.ts) — this default only prevents unrelated tests
+// from throwing "IntersectionObserver is not defined".
+globalThis.IntersectionObserver ??= class IntersectionObserver {
+  // Intentional no-op stub: jsdom fires no real intersection events.
+  observe(): void {
+    return undefined;
+  }
+  unobserve(): void {
+    return undefined;
+  }
+  disconnect(): void {
+    return undefined;
+  }
+  takeRecords(): IntersectionObserverEntry[] {
+    return [];
+  }
+} as unknown as typeof IntersectionObserver;
 
 // Polyfill hasPointerCapture / setPointerCapture / releasePointerCapture — not available
 // in jsdom but required by Radix UI Select pointer-event handling (select.tsx:323).

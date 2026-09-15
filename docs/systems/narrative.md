@@ -116,7 +116,7 @@ def send_narrative_message(
 ) -> NarrativeMessage
 ```
 
-Creates a `NarrativeMessage` and one `NarrativeMessageDelivery` per recipient in a single transaction. After commit, real-time pushes the message to each recipient's puppeted session (if online) via `character.msg()` with the `|R[NARRATIVE]|n` color tag and `type="narrative"`. Offline recipients' delivery rows stay queued (`delivered_at=None`) until the next login triggers `deliver_queued_messages`.
+Creates a `NarrativeMessage` and one `NarrativeMessageDelivery` per recipient in a single transaction. After commit, real-time pushes the message to each recipient's puppeted session (if online) via `character.msg((text, {"type": "narrative"}))` with the `|R[NARRATIVE]|n` color tag. The type rides Evennia's tuple form, whose dict becomes the `text` frame's kwargs on the web (#3856); the earlier `msg(text, type=...)` keyword left as a separate frame the client never attached to the line, which is why the web's ambience lane could only ever be exercised by fixtures. `broadcast_gemit` types its frames `gemit` the same way; the client files both as `ambience` notes. Offline recipients' delivery rows stay queued (`delivered_at=None`) until the next login triggers `deliver_queued_messages`.
 
 One message can fan out to many recipients (GM sends covenant message to 5 of 8 members → one message, five delivery rows).
 

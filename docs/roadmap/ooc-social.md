@@ -14,7 +14,7 @@ The out-of-character social infrastructure that keeps the game community healthy
 - **Consent groups:** OOC visibility groups for player-controlled content sharing — decide who can see what about your character and activity
 - **Finding RP:** Making it trivially easy to find active scenes, available players, and slip into RP. The game should feel alive and accessible the moment you log in
 - **Anti-pressure design:** Nothing should make a player feel obligated. If someone's having a bad day, they should be able to engage at whatever level feels comfortable
-- **Voting/recognition:** Players can vote on things like best pose in a scene, flattering writing — creating positive reinforcement loops
+- **Nominations/recognition:** Players nominate someone for good RP off a pose or journal they read; best pose in a scene and the most nominated journal are settled weekly — positive reinforcement without a budget to spend or lose (#3738)
 - **New player onboarding:** Reducing the barrier for people unfamiliar with MUSH conventions. Modern web UX, helpful prompts, mentorship rewards
 
 ## What Exists
@@ -235,9 +235,10 @@ Details: ADR-0227, `docs/systems/realms.md`.
 - Visibility control UI — managing who can see you, your status, your activity
 - Consent group management UI — creating, joining, managing content visibility groups
 - Kudos expansion — more categories of positive behavior to reward
-- Voting system — pose-of-the-scene, writing awards, community recognition. `WeeklyVote` +
-  `VoteButton`/`VotesPanel` are built but unwired; reconciling the three applause axes
-  (kudos/reactions/votes) is #2161
+- Nominations — ✅ **shipped (#3738)**: pose-of-the-scene (best in scene), most nominated
+  journal, and per-person nominations, invisible to the nominee, settled weekly on one stepped
+  curve. Replaced the budgeted `WeeklyVote` of #2161; the three applause axes
+  (kudos/reactions/nominations) stay separate (ADR-0115, amended by ADR-0286)
 - New player onboarding flow — ✅ **chain shipped (#1035, ADR-0112)**: a seeded seven-mission
   tutorial chain (`docs/roadmap/missions.md`'s "Tutorial arc / External-Act Beats" entry) walks
   a fresh character through the level-1 loops (room-trigger/examine grants, a crafted-power

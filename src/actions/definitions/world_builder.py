@@ -328,6 +328,15 @@ def _apply_area_plain_fields(area: Any, kwargs: dict[str, Any]) -> str | None:
             options = ", ".join(PermitEligibility.values)
             return f"No '{value}' permit eligibility. Options: {options}."
         area.permit_eligibility = value
+    return _apply_area_grid(area, kwargs)
+
+
+def _apply_area_grid(area: Any, kwargs: dict[str, Any]) -> str | None:
+    """Apply parent-local ``grid_x``/``grid_y`` kwargs to ``area``, pre-save.
+
+    Absent keys leave the coordinate untouched; an explicit ``None`` unplaces
+    it. Shared by ``create_area`` and ``edit_area``.
+    """
     for coord in ("grid_x", "grid_y"):
         if coord not in kwargs:
             continue
@@ -567,7 +576,11 @@ class _WorldBuilderAction(Action):
 class CreateAreaAction(_WorldBuilderAction):
     """Create a new AUTHORED area.
 
-    Kwargs: ``name``, ``slug``, ``level`` (int), optional ``parent_id``.
+    Kwargs: ``name``, ``slug``, ``level`` (int), optional ``parent_id`` and
+    ``grid_x``/``grid_y`` (parent-local placement, so a square planned on the
+    parent's map lands where it was planned instead of unplaced). The result's
+    ``data`` carries ``area_id`` so a caller can chain a follow-up (move a room
+    inside, dig its first room) without waiting for a refetch to reveal the id.
     """
 
     key: str = "create_area"
@@ -606,11 +619,18 @@ class CreateAreaAction(_WorldBuilderAction):
             parent=parent,
             origin=GridOrigin.AUTHORED,
         )
+        grid_error = _apply_area_grid(area, kwargs)
+        if grid_error is not None:
+            return ActionResult(success=False, message=grid_error)
         try:
             area.save()
         except ValidationError as exc:
             return ActionResult(success=False, message="; ".join(exc.messages))
-        return ActionResult(success=True, message=f"{area.name} created (area #{area.pk}).")
+        return ActionResult(
+            success=True,
+            message=f"{area.name} created (area #{area.pk}).",
+            data={"area_id": area.pk},
+        )
 
 
 @dataclass
@@ -764,6 +784,7 @@ class StaffDigRoomAction(_WorldBuilderAction):
         return ActionResult(
             success=True,
             message=f"{profile.objectdb.db_key} dug (#{profile.pk}).{link_note}{unplaced_note}",
+            data={"room_id": profile.pk},
         )
 
 
@@ -862,7 +883,9 @@ class StaffPublishRoomAction(_WorldBuilderAction):
 class StaffLinkRoomsAction(_WorldBuilderAction):
     """Link two world rooms with a named exit pair — cross-area allowed.
 
-    Kwargs: ``room_a_id``, ``room_b_id``, ``name_ab``, ``name_ba``.
+    Kwargs: ``room_a_id``, ``room_b_id``, ``name_ab``, ``name_ba``, and ``one_way``
+    (#3860): with it, only the exit from A to B is made and ``name_ba`` is not
+    needed. Two-way stays the default; one-way is the staff's deliberate choice.
     """
 
     key: str = "staff_link_rooms"
@@ -879,7 +902,7 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
         context: ActionContext | None = None,
         **kwargs: Any,
     ) -> ActionResult:
-        from world.areas.grid_services import create_exit_pair  # noqa: PLC0415
+        from world.areas.grid_services import create_exit, create_exit_pair  # noqa: PLC0415
 
         room_a = _resolve_room_profile(kwargs.get("room_a_id"))
         room_b = _resolve_room_profile(kwargs.get("room_b_id"))
@@ -887,6 +910,17 @@ class StaffLinkRoomsAction(_WorldBuilderAction):
             return ActionResult(success=False, message=_NO_SUCH_ROOM_MSG)
         name_ab = (kwargs.get("name_ab") or "").strip()
         name_ba = (kwargs.get("name_ba") or "").strip()
+        one_way = bool(kwargs.get("one_way", False))
+        if one_way:
+            if not name_ab:
+                return ActionResult(success=False, message="The exit needs a name.")
+            create_exit(
+                name=name_ab, aliases=(), source=room_a.objectdb, destination=room_b.objectdb
+            )
+            return ActionResult(
+                success=True,
+                message=(f"Linked {room_a.objectdb.db_key} -> {room_b.objectdb.db_key} (one way)."),
+            )
         if not name_ab or not name_ba:
             return ActionResult(
                 success=False, message="Both exit names are needed (one for each direction)."

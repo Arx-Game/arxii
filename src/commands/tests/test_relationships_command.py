@@ -565,3 +565,51 @@ class CmdRelationshipBumpTests(TestCase):
     def test_plus_requires_a_name(self) -> None:
         _make_cmd(self.caller, "plus").func()
         self.assertIn("Usage: relationship plus", _capture(self.caller))
+
+
+class CmdRelationshipCompanionTargetTests(TestCase):
+    """``relationship impression <companion>`` resolves the room-present companion (#3575)."""
+
+    def setUp(self) -> None:
+        from evennia.utils.create import create_object
+        from evennia.utils.idmapper.models import flush_cache
+
+        from typeclasses.companions import CompanionObject
+        from world.companions.factories import CompanionFactory
+
+        flush_cache()
+        self.caller = CharacterFactory()
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.caller.msg = MagicMock()
+        self.caller.search = MagicMock()
+        self.companion = CompanionFactory(owner=self.caller_sheet, name="Ash")
+        self.companion_obj = create_object(CompanionObject, key="Ash", nohome=True)
+        self.companion.objectdb = self.companion_obj
+        self.companion.save(update_fields=["objectdb"])
+        self.caller.search.side_effect = _search_returns(self.companion_obj)
+        self.track = RelationshipTrackFactory(sign=TrackSign.POSITIVE, name="Loyalty")
+
+    def test_impression_toward_companion(self) -> None:
+        cmd = _make_cmd(
+            self.caller,
+            "impression Ash track=Loyalty points=3 title=At the gate writeup=It did not flinch.",
+        )
+        cmd.func()
+        rel = CharacterRelationship.objects.get(
+            source=self.caller_sheet, target_companion=self.companion
+        )
+        self.assertFalse(rel.is_pending)
+        self.assertIn("Ash", _capture(self.caller))
+
+    def test_list_and_show_render_the_companion_row(self) -> None:
+        rel = CharacterRelationshipFactory(
+            source=self.caller_sheet, target=None, target_companion=self.companion
+        )
+        _make_cmd(self.caller, "list").func()
+        self.assertIn("Ash", _capture(self.caller))
+        self.caller.msg.reset_mock()
+        _make_cmd(self.caller, f"show {rel.pk}").func()
+        self.assertIn("Ash", _capture(self.caller))
+        self.caller.msg.reset_mock()
+        _make_cmd(self.caller, "show Ash").func()
+        self.assertIn(f"#{rel.pk}", _capture(self.caller))

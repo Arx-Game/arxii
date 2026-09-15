@@ -28,6 +28,16 @@ SCENE_ADAPTIVE backend.
   - `action`: The Action instance this command delegates to
   - `resolve_action_args()`: Override to parse telnet text into action kwargs
   - `func()`: Calls `resolve_action_args()` → `action.run()` → sends result to caller
+  - `feed_kind` / `send_result()` (#3856): a command that declares `feed_kind = "look"`
+    or `"item"` sends its result through Evennia's tuple form,
+    `msg((text, {"type": kind}))`, whose dict becomes the `text` frame's kwargs on the
+    web; the client's `classifyText` sorts notes by it. A failed result and every
+    `CommandError` are typed `error` whatever the kind (the concealed-target and
+    absent-target refusals must stay indistinguishable on the wire, type included);
+    `command_error` still goes out as its own structured frame. A command with no
+    kind sends the plain line it always did. Never `msg(text, type=kind)`: the
+    session handler emits every top-level keyword as a separate frame the client
+    cannot attach to the line. Telnet ignores the option.
 - **`DispatchCommand(ArxCommand)`**: Base class for commands that ride the player-action dispatcher
   - `resolve_action_ref()`: Override to return an `ActionRef` (backend + params)
   - `resolve_action_args()`: Override to return extra kwargs passed alongside the ref
@@ -47,7 +57,13 @@ Both bases stay thin: no business logic in commands — all behavior lives in
 actions, backends, and service functions.
 
 ### Command Files
-- **`evennia_overrides/perception.py`**: `CmdLook`, `CmdInventory`
+- **`evennia_overrides/perception.py`**: `CmdLook` (`feed_kind = "look"`; its own
+  `_execute` routes through `send_result`, #3856), `CmdInventory`
+- **`evennia_overrides/system.py`**: `CmdNoMatch` (#3856) — the `CMD_NOMATCH` system
+  command in `CharacterCmdSet`. Evennia's own no-match reply is an untyped `text`
+  frame the web client could not place, so it was silent there; this reproduces
+  Evennia's wording (near-miss suggestions via `string_suggestions`, double-quoted,
+  joined with "or") and sends it typed `error`. Telnet output is byte-identical.
 - **`evennia_overrides/communication.py`**: `CmdSay`, `CmdWhisper`, `CmdPose`, `CmdPage`,
   `CmdPemit` (`pemit <name>[,<name>...]=<text>`, `cmd:all()`, #906/#2117 — private GM narration to
   specific characters via `PemitAction`, gated on `MinimumGMLevelPrerequisite(GMLevel.STARTING)`,
@@ -175,13 +191,16 @@ actions, backends, and service functions.
   `CmdPosition` uses (`commands/utils/gm_resolution.py`) and forwarded as `position_id` to
   `AddOpponentAction`, closing telnet's gap with the web `AddOpponentDialog`'s position
   picker (#2005).
-  `encounter stakes|risk|pace|timer <value>` (#3383) all dispatch the single
-  `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying exactly
-  one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes` — the telnet face of the
-  web `CombatEncounterViewSet.update_settings` PATCH action (`PATCH
-  /api/combat/{id}/settings/`); both converge on
-  `world.combat.services.update_encounter_settings`. Four small subverbs rather than one
-  combined settings grammar, matching every other subverb here taking one positional value.
+  `encounter stakes|risk|pace|timer|curve <value>` (#3383, `curve` #3552) all dispatch the
+  single `UpdateEncounterSettingsAction` (key `update_encounter_settings`), each supplying
+  exactly one of `stakes_level`/`risk_level`/`pace_mode`/`pace_timer_minutes`/
+  `escalation_curve` - the telnet face of the web `CombatEncounterViewSet.update_settings`
+  PATCH action (`PATCH /api/combat/{id}/settings/`); both converge on
+  `world.combat.services.update_encounter_settings`. `curve <name|none>` passes the raw name
+  (or the literal `none`) through as `escalation_curve`; the action layer resolves it
+  case-insensitively to an `EscalationCurve` (or `None` to clear it), rejecting an unknown
+  name before the service ever runs. Five small subverbs rather than one combined settings
+  grammar, matching every other subverb here taking one positional value.
   `encounter duel <character> <name> <tier> <pool>` (#3068) is the odd one out — it dispatches
   `ProposeLethalDuelAction` (`actions/definitions/duels.py`), gated on the current *scene's*
   GM/owner-or-staff standing (not "an active encounter here" — a lethal duel is its own

@@ -77,6 +77,7 @@ from evennia.utils.idmapper import models as idmapper_models
 
 from actions.definitions.npc_services import resolve_npc_offer, start_npc_interaction
 from commands.missions import CmdMission
+from commands.tests.message_capture import message_text
 from evennia_extensions.factories import CharacterFactory
 from world.character_sheets.factories import CharacterSheetFactory
 from world.classes.factories import CharacterClassLevelFactory
@@ -129,7 +130,8 @@ def _said(caller: object) -> str:
     """Concatenate every positional string the command sent to the caller."""
     chunks: list[str] = []
     for call in caller.msg.call_args_list:
-        chunks.extend(arg for arg in call.args if isinstance(arg, str))
+        # A typed line is the tuple form (text, {"type": kind}) since #3856.
+        chunks.extend(message_text(arg) for arg in call.args if isinstance(arg, (str, tuple)))
     return "\n".join(chunks)
 
 

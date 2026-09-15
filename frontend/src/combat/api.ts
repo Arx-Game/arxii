@@ -193,6 +193,22 @@ export async function fetchCreatureTemplates(
   return data.results ?? [];
 }
 
+/** One row of the GM-gated escalation curve catalog (#3552). */
+export interface EscalationCurveSummary {
+  id: number;
+  name: string;
+  description: string;
+  start_round: number;
+}
+
+/** GET /api/combat/escalation-curves/ (GM/staff only, #3552). */
+export async function fetchEscalationCurves(): Promise<EscalationCurveSummary[]> {
+  const res = await apiFetch('/api/combat/escalation-curves/');
+  if (!res.ok) throw new Error('Failed to load escalation curves');
+  const data = (await res.json()) as { results?: EscalationCurveSummary[] };
+  return data.results ?? [];
+}
+
 /** Body for postAddOpponent — mirrors AddOpponentSerializer. */
 export interface AddOpponentPayload {
   name: string;
@@ -342,6 +358,8 @@ export interface EncounterSettingsPayload {
   riskLevel?: RiskLevel;
   paceMode?: PaceMode;
   paceTimerMinutes?: number;
+  /** Escalation curve id; `null` clears it (#3552). Omit to leave unchanged. */
+  escalationCurve?: number | null;
 }
 
 /**
@@ -361,6 +379,9 @@ export async function patchEncounterSettings(
       ...(payload.paceMode !== undefined ? { pace_mode: payload.paceMode } : {}),
       ...(payload.paceTimerMinutes !== undefined
         ? { pace_timer_minutes: payload.paceTimerMinutes }
+        : {}),
+      ...(payload.escalationCurve !== undefined
+        ? { escalation_curve: payload.escalationCurve }
         : {}),
     }),
   });

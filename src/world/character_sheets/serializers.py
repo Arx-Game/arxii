@@ -20,21 +20,28 @@ from rest_framework import serializers
 from rest_framework.request import Request
 
 from world.character_creation.models import CharacterOriginSlot
-from world.character_sheets.models import CharacterSheet, Profile, ProfileTextVersion
+from world.character_sheets.models import (
+    CharacterSheet,
+    Profile,
+    ProfileTextVersion,
+)
 from world.character_sheets.services import can_edit_character_sheet
 from world.character_sheets.types import (
     SHEET_VISIBILITY_RANK,
+    ActorSheetSection,
     AnimaRitualSection,
     AppearanceSection,
     AuraData,
     AuraThemingData,
     DistinctionEntry,
+    EnemyEntry,
     FormTraitEntry,
     GiftEntry,
     GlimpseTagEntry,
     GoalEntry,
     IdentitySection,
     IdNameRef,
+    IntroductionEntry,
     MagicSection,
     MotifResonanceEntry,
     MotifSection,
@@ -51,6 +58,7 @@ from world.character_sheets.types import (
     StorySection,
     TechniqueEntry,
     ThemingSection,
+    VacancyRef,
 )
 from world.classes.models import PathStage
 from world.conditions.models import ConditionInstance
@@ -73,12 +81,9 @@ from world.magic.models import (
     MotifResonanceAssociation,
     MotifResonanceStyle,
     Ritual,
-    TechniqueAppliedCondition,
-    TechniqueCapabilityGrant,
-    TechniqueDamageProfile,
-    TechniqueRemovedCondition,
     TechniqueVariant,
 )
+from world.magic.services.technique_effects import technique_payload_prefetches
 from world.magic.services.technique_forms import (
     available_technique_forms,
     technique_signature_payload,
@@ -89,6 +94,7 @@ from world.scenes.constants import PersonaType
 from world.scenes.models import Persona
 from world.skills.models import CharacterSkillValue, CharacterSpecializationValue
 from world.skills.services import is_skill_at_xp_boundary
+from world.societies.models import OrganizationMembership
 from world.traits.models import STAT_DISPLAY_DIVISOR, CharacterTraitValue, TraitType
 
 
@@ -127,8 +133,21 @@ class MaturationStateSerializer(serializers.Serializer):
     available_points = serializers.IntegerField()
     stat_cap = serializers.IntegerField(allow_null=True)
     matured_years = serializers.IntegerField()
-    next_milestone_year = serializers.IntegerField()
+    # Null once the last milestone (75) is behind the character (#3635).
+    next_milestone_year = serializers.IntegerField(allow_null=True)
     stats = MaturationStatEntrySerializer(many=True)
+
+
+class CharacterXPLedgerSerializer(serializers.Serializer):
+    """Response for CharacterSheetViewSet.xp-ledger (#3748): what this character cost.
+
+    XP is spent by the account, so these are attribution totals, not a balance —
+    ``spent`` can exceed ``earned`` when a player invests XP earned elsewhere.
+    """
+
+    earned = serializers.IntegerField()
+    spent = serializers.IntegerField()
+    locked = serializers.IntegerField()
 
 
 class StatPointStateSerializer(serializers.Serializer):
@@ -282,6 +301,47 @@ def _resolve_birthday(sheet: CharacterSheet) -> str | None:
     return None
 
 
+def _resolve_vacancy(sheet: CharacterSheet, *, privileged: bool) -> VacancyRef | None:
+    """The held vacancy from the primary persona's active membership (#3648).
+
+    ``importance`` (the family's real reckoning) is withheld from a
+    non-privileged viewer, mirroring the age-axes leak-table pattern;
+    ``presumed_importance`` (what outsiders assume) always shows.
+
+    Reads ``cached_vacancy_memberships`` (the nested Prefetch inside
+    ``_PERSONAS_PREFETCH_RELATED``'s own ``personas`` queryset) off each of the
+    sheet's prefetched personas when the viewset queryset ran - zero extra
+    queries. ``cached_vacancy_memberships`` is always set alongside
+    ``cached_personas`` (same Prefetch, same query), so once the latter is
+    present the former is guaranteed too. A nested or non-viewset caller that
+    built its own sheet without that prefetch (``cached_personas`` absent)
+    falls back to the direct query below.
+    """
+    if hasattr(sheet, "cached_personas"):
+        memberships = [
+            membership
+            for persona in sheet.cached_personas
+            for membership in persona.cached_vacancy_memberships
+        ]
+        membership = memberships[0] if memberships else None
+    else:
+        membership = (
+            OrganizationMembership.objects.filter(
+                persona__character_sheet=sheet, vacancy__isnull=False, left_at__isnull=True
+            )
+            .select_related("vacancy")
+            .first()
+        )
+    if membership is None:
+        return None
+    vacancy = membership.vacancy
+    return VacancyRef(
+        name=vacancy.name,
+        presumed_importance=vacancy.presumed_importance,
+        importance=vacancy.importance if privileged else None,
+    )
+
+
 def _build_identity(
     sheet: CharacterSheet,
     *,
@@ -338,6 +398,7 @@ def _build_identity(
         worship_sincere=worship_sincere,
         # #2994 — INTERNAL; owner/staff only, mirrors the age-axes leak-table pattern.
         current_mood=_id_name_or_null(sheet.current_mood) if privileged else None,
+        vacancy=_resolve_vacancy(sheet, privileged=privileged),
     )
 
 
@@ -744,35 +805,18 @@ _MAGIC_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     ),
     Prefetch(
         "character_techniques",
-        # effect_type is select_related because is_technique_hostile reads its
-        # base_power; the three payload prefetches land on the cached_property
-        # names summarize_technique_effects reads, so building the effect summary
-        # for the whole spellbook stays inside this section's zero-extra-query
-        # guarantee (#2898).
+        # effect_type is select_related for the serializer's own display of it;
+        # is_technique_hostile stopped reading its base_power in #3682 (ADR-0278).
+        # technique_payload_prefetches() lands every payload table on the
+        # cached_property name summarize_technique_effects reads, so building the
+        # effect summary for the whole spellbook stays inside this section's
+        # zero-extra-query guarantee (#2898). It is shared with the cast list so
+        # the two cannot drift apart on which tables they cover (#3682).
         queryset=CharacterTechnique.objects.select_related(
             "technique__gift",
             "technique__effect_type",
         ).prefetch_related(
-            Prefetch(
-                "technique__condition_applications",
-                queryset=TechniqueAppliedCondition.objects.select_related("condition"),
-                to_attr="cached_condition_applications",
-            ),
-            Prefetch(
-                "technique__removed_conditions",
-                queryset=TechniqueRemovedCondition.objects.select_related("condition"),
-                to_attr="cached_removed_conditions",
-            ),
-            Prefetch(
-                "technique__damage_profiles",
-                queryset=TechniqueDamageProfile.objects.select_related("damage_type"),
-                to_attr="cached_damage_profiles",
-            ),
-            Prefetch(
-                "technique__capability_grants",
-                queryset=TechniqueCapabilityGrant.objects.select_related("capability"),
-                to_attr="cached_capability_grants",
-            ),
+            *technique_payload_prefetches(prefix="technique__"),
             # #2901: the per-caster form list walks the technique's variants.
             # select_related("resonance") because each form is labelled by the
             # resonance a player passes to `cast ... variant=<resonance>`; the
@@ -1018,27 +1062,31 @@ def _build_magic(sheet: CharacterSheet, *, privileged: bool = False) -> MagicSec
     )
 
 
-_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background/personality
+_STORY_SELECT_RELATED: tuple[str, ...] = ("true_profile",)  # #1270 — background
 _STORY_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
     Prefetch(
         "origin_slots",
-        queryset=CharacterOriginSlot.objects.select_related("slot"),
+        queryset=CharacterOriginSlot.objects.select_related("slot", "choice", "organization"),
         to_attr="cached_origin_slots",
     ),
 )
 
 
-def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -> StorySection:
+def _build_story(
+    *, sheet: CharacterSheet, bio_profile: Profile | None = None, privileged: bool = False
+) -> StorySection:
     """Build the story section from the presented face's bio profile (#1270).
 
     ``bio_profile`` is the real ``true_profile`` for a revealed identity, a cover persona's own
     (fabricated) profile when presenting one, or None (empty story) — so a cover shows its own
     story and a bare anonymous figure shows nothing.
+
+    ``privileged`` gates ``figure_name`` (#3660): a named figure is the owner/staff's business,
+    never a foreign viewer's; a stranger sees the tie's kind/tag/group but not the name.
     """
     if bio_profile is None:
         return StorySection(
             background="",
-            personality="",
             origin_story_state=sheet.origin_story_state,
             origin_slots=[],
         )
@@ -1049,7 +1097,7 @@ def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -
     raw_slots = (
         sheet.cached_origin_slots
         if hasattr(sheet, "cached_origin_slots")
-        else sheet.origin_slots.select_related("slot")
+        else sheet.origin_slots.select_related("slot", "choice", "organization")
     )
     origin_slots = [
         OriginSlotEntry(
@@ -1057,12 +1105,19 @@ def _build_story(*, sheet: CharacterSheet, bio_profile: Profile | None = None) -
             slot_name=row.slot.name,
             slot_prompt=row.slot.prompt,
             value=row.value,
+            kind=row.slot.kind,
+            connection_kind=row.slot.connection_kind,
+            life_stage=row.slot.life_stage,
+            choice_name=row.choice.name if row.choice_id else "",
+            choice_description=row.choice.description if row.choice_id else "",
+            organization_id=row.organization_id,
+            organization_name=row.organization.name if row.organization_id else "",
+            figure_name=row.figure_name if privileged else "",
         )
         for row in raw_slots
     ]
     return StorySection(
         background=bio_profile.background,
-        personality=bio_profile.personality,
         origin_story_state=sheet.origin_story_state,
         origin_slots=origin_slots,
     )
@@ -1083,11 +1138,73 @@ def _build_goals(sheet: CharacterSheet) -> list[GoalEntry]:
     return [
         GoalEntry(
             domain=goal.domain.name,
+            horizon=goal.horizon,
+            ordinal=goal.ordinal,
             points=goal.points,
             notes=goal.notes,
         )
         for goal in sheet.cached_goals
     ]
+
+
+# The enemy rows and the Introductions are cached lists on the sheet (ADR-0278/ADR-0298):
+# ``sheet.enemy_rows`` and ``sheet.introductions`` each load once per sheet and are
+# cleared by their children's saves and deletes, so nothing is prefetched here.
+_ACTOR_SHEET_SELECT_RELATED: tuple[str, ...] = ()
+_ACTOR_SHEET_PREFETCH_RELATED: tuple[str | Prefetch, ...] = ()
+
+
+def _build_actor_sheet(
+    sheet: CharacterSheet,
+    *,
+    bio_profile: Profile | None,
+    reveal_identity: bool,
+    privileged: bool,
+) -> ActorSheetSection:
+    """The Actor's Sheet block (#3621).
+
+    The three answers read from the presented face's profile, so a cover persona shows
+    its own. The enemy and the Introductions are the real sheet's: the public line and
+    the entries show only when the presented identity is revealed (a mask must not leak
+    them), and the full enemy row only to the owner, staff and the assigned GM.
+    """
+    enemies = sheet.enemy_rows
+    enemy = enemies[0] if enemies else None
+    entries = sheet.introductions
+    return ActorSheetSection(
+        never_do=bio_profile.never_do if bio_profile is not None else "",
+        protect=bio_profile.protect if bio_profile is not None else "",
+        fear=bio_profile.fear if bio_profile is not None else "",
+        enemy_public_line=enemy.public_line if enemy is not None and reveal_identity else "",
+        enemy=(
+            EnemyEntry(
+                kind=enemy.kind,
+                name=enemy.target_name,
+                power_tier=enemy.power_tier,
+                reach=enemy.reach,
+                degree=enemy.degree,
+                price=enemy.price,
+                why=enemy.why,
+                public_line=enemy.public_line,
+                status=enemy.status,
+                has_secret=enemy.secret_id is not None,
+            )
+            if enemy is not None and privileged
+            else None
+        ),
+        introductions=[
+            IntroductionEntry(
+                id=entry.pk,
+                kind=entry.kind,
+                title=entry.title,
+                body=entry.body,
+                created_at=entry.created_at.isoformat(),
+            )
+            for entry in entries
+        ]
+        if reveal_identity
+        else [],
+    )
 
 
 _PERSONAS_SELECT_RELATED: tuple[str, ...] = ()
@@ -1110,7 +1227,22 @@ _PERSONAS_PREFETCH_RELATED: tuple[str | Prefetch, ...] = (
                 "trait_descriptors",
                 queryset=PersonaTraitDescriptor.objects.select_related("trait"),
                 to_attr="cached_trait_descriptors",
-            )
+            ),
+            # #3648 - the identity section's held-vacancy read (_resolve_vacancy).
+            # Nested here, inside the SAME "personas" Prefetch's own queryset,
+            # rather than as a second top-level ``personas__organization_memberships``
+            # lookup: a second top-level lookup through "personas" can't reuse this
+            # Prefetch's already-to_attr'd fetch (its ``prefetch_to`` is the bare
+            # attr name, not the "personas" path), so Django would run a second,
+            # unfiltered persona query just to redescend - one extra query instead
+            # of zero. Nesting here costs exactly the one query this adds.
+            Prefetch(
+                "organization_memberships",
+                queryset=OrganizationMembership.objects.filter(
+                    left_at__isnull=True, vacancy__isnull=False
+                ).select_related("vacancy"),
+                to_attr="cached_vacancy_memberships",
+            ),
         ),
         to_attr="cached_personas",
     ),
@@ -1255,6 +1387,7 @@ _ALL_SECTIONS: tuple[tuple[tuple[str, ...], tuple[str | Prefetch, ...]], ...] = 
     (_MAGIC_SELECT_RELATED, _MAGIC_PREFETCH_RELATED),
     (_STORY_SELECT_RELATED, _STORY_PREFETCH_RELATED),
     (_GOALS_SELECT_RELATED, _GOALS_PREFETCH_RELATED),
+    (_ACTOR_SHEET_SELECT_RELATED, _ACTOR_SHEET_PREFETCH_RELATED),
     (_PERSONAS_SELECT_RELATED, _PERSONAS_PREFETCH_RELATED),
     (_THEMING_SELECT_RELATED, _THEMING_PREFETCH_RELATED),
     (_PROFILE_PICTURE_SELECT_RELATED, _PROFILE_PICTURE_PREFETCH_RELATED),
@@ -1366,8 +1499,14 @@ class CharacterSheetSerializer(serializers.Serializer):
             "distinctions": _build_distinctions(sheet, privileged=privileged),
             "magic": _build_magic(sheet, privileged=privileged) if show_magic else None,
             # Story reads from the presented face's profile (cover identities show their own).
-            "story": _build_story(sheet=sheet, bio_profile=bio_profile),
+            "story": _build_story(sheet=sheet, bio_profile=bio_profile, privileged=privileged),
             "goals": _build_goals(sheet) if show_goals else [],
+            "actor_sheet": _build_actor_sheet(
+                sheet,
+                bio_profile=bio_profile,
+                reveal_identity=reveal_identity,
+                privileged=privileged,
+            ),
             "personas": _build_personas(
                 sheet,
                 privileged=privileged,

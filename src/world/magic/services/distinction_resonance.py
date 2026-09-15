@@ -93,11 +93,23 @@ def reconcile_distinction_resonance_grants(character_distinction: CharacterDisti
 
     grants = DistinctionResonanceGrant.objects.filter(distinction=character_distinction.distinction)
     for grant in grants:
-        CharacterResonance.objects.get_or_create(
+        # Peek, don't read: sheet.cached_resonances would force a query when
+        # cold (the common case here), defeating the point of this
+        # optimization -- a cold cache re-queries correctly on next real
+        # access regardless. Peeking also sidesteps the double-count trap:
+        # get_or_create's own Model.save() (via RelatedCacheClearingMixin)
+        # clears sheet.cached_resonances as a side effect of its OWN write when
+        # it creates a row -- reading the property again afterward would
+        # silently re-query (already including the just-created row) and
+        # double-count it on append.
+        cached = sheet.__dict__.get("cached_resonances")
+        cr, created = CharacterResonance.objects.get_or_create(
             character_sheet=sheet,
             resonance=grant.resonance,
             defaults={"balance": 0, "lifetime_earned": 0},
         )
+        if created and cached is not None:
+            sheet.cached_resonances = [*cached, cr]
 
         target = grant.flat_amount_per_rank * character_distinction.rank
         already = (
