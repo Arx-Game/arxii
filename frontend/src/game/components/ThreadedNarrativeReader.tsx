@@ -19,6 +19,8 @@ import { useViewerPersonaId } from '@/roster/persona';
 import { replyReachability, type ViewerVenue } from '@/scenes/replyReachability';
 import type { FeedNote } from '@/hooks/types';
 import { FeedNoteBlock } from './FeedNoteBlock';
+import { FeedBlockFrame } from './FeedBlockFrame';
+import { feedItemKey } from '../feedChips';
 import { interleaveNotes } from '../feedRows';
 
 // #3759 Wave 9 (demo-fidelity review F1/F2): was `INITIAL_PAGE_SIZE`, a flat
@@ -234,7 +236,7 @@ function PoseReadTarget({
   highlighted,
   children,
 }: {
-  pose: { id: number; timestamp: string };
+  pose: { id: number; timestamp: string; name?: string };
   observe: (element: HTMLElement, pose: { id: number; timestamp: string }) => () => void;
   /** True for ~2s right after this pose was scrolled to as a deep-link target (#3759 C2). */
   highlighted?: boolean;
@@ -271,7 +273,16 @@ function PoseReadTarget({
           : undefined
       }
     >
-      {children}
+      {/* Any block minimises or dismisses, per viewer (#3856 PR 2). */}
+      <FeedBlockFrame
+        itemKey={feedItemKey('interaction', pose.id)}
+        stub={`${pose.name ?? 'Pose'} · ${new Date(pose.timestamp).toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+        })}`}
+      >
+        {children}
+      </FeedBlockFrame>
     </div>
   );
 }
@@ -1373,7 +1384,7 @@ export function ThreadedNarrativeReader({
                       }}
                     >
                       <PoseReadTarget
-                        pose={{ id: item.id, timestamp: item.timestamp }}
+                        pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
                         observe={observe}
                         highlighted={String(item.id) === highlightedPoseId}
                       >
@@ -1472,7 +1483,7 @@ export function ThreadedNarrativeReader({
                 return (
                   <div key={group.key} data-thread-id={group.key}>
                     <PoseReadTarget
-                      pose={{ id: item.id, timestamp: item.timestamp }}
+                      pose={{ id: item.id, timestamp: item.timestamp, name: item.persona.name }}
                       observe={observe}
                       highlighted={String(item.id) === highlightedPoseId}
                     >
@@ -1642,7 +1653,11 @@ export function ThreadedNarrativeReader({
                         return (
                           <PoseReadTarget
                             key={`pose-${item.id}`}
-                            pose={{ id: item.id, timestamp: item.timestamp }}
+                            pose={{
+                              id: item.id,
+                              timestamp: item.timestamp,
+                              name: item.persona.name,
+                            }}
                             observe={observe}
                             highlighted={String(item.id) === highlightedPoseId}
                           >

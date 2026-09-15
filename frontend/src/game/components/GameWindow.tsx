@@ -1,5 +1,5 @@
 import type { ReactNode, RefObject } from 'react';
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { ExplorationReader } from './ExplorationReader';
 import type { GameLifecycleState, Session } from '@/store/gameSlice';
 import type { FeedNote, InteractionWsPayload } from '@/hooks/types';
@@ -12,12 +12,20 @@ import type { PoseUnitAvatarClickPersona } from '@/scenes/components/PoseUnit';
 import type { Interaction } from '@/scenes/types';
 import type { ActionAttachmentInfo } from '@/scenes/actionTypes';
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setActiveSession } from '@/store/gameSlice';
+import {
+  dismissFeedItem,
+  minimizeFeedItem,
+  restoreFeedItem,
+  setActiveSession,
+} from '@/store/gameSlice';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
 import type { MyRosterEntry } from '@/roster/types';
-import { characterAttention } from '@/game/attention';
+import { characterAttention, chipUnread, type AttentionOptions } from '@/game/attention';
+import { visibleInteractions, visibleNotes, wakingKinds } from '../feedChips';
+import { FeedChipStrip } from './FeedChipStrip';
+import { FeedBlockControlsContext, type FeedBlockControls } from '../feedBlockControls';
 import { AttentionBadge } from '@/game/components/AttentionBadge';
 import { loadConversationAnchor, usePlayPreferences } from '../playPreferences';
 
@@ -31,6 +39,8 @@ export interface GameWindowSceneFeed {
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
+  /** The signed-in account, for the per-account play preferences the chips live in (#3856). */
+  accountId?: number | null;
   /** When present, the center column renders the threaded scene reader. */
   sceneFeed?: GameWindowSceneFeed;
   /** Structured quiet-room data; absent only while entry is pending. */
@@ -165,6 +175,8 @@ interface GameWindowStatusProps {
   active: string | null;
   sessions: Record<string, Session>;
   onTabClick: (name: MyRosterEntry['name']) => void;
+  /** What the player's chips say should badge a puppet tab (#3856). */
+  attentionOptionsFor: (name: string) => AttentionOptions;
 }
 
 function GameWindowStatus({
@@ -179,6 +191,7 @@ function GameWindowStatus({
   active,
   sessions,
   onTabClick,
+  attentionOptionsFor,
 }: GameWindowStatusProps) {
   return (
     <>
@@ -234,6 +247,7 @@ function GameWindowStatus({
         active={active}
         sessions={sessions}
         onTabClick={onTabClick}
+        attentionOptionsFor={attentionOptionsFor}
       />
     </>
   );
@@ -245,16 +259,17 @@ function CharacterTabs({
   active,
   sessions,
   onTabClick,
+  attentionOptionsFor,
 }: Pick<
   GameWindowStatusProps,
-  'sessionNames' | 'characters' | 'active' | 'sessions' | 'onTabClick'
+  'sessionNames' | 'characters' | 'active' | 'sessions' | 'onTabClick' | 'attentionOptionsFor'
 >) {
   if (sessionNames.length < 2) return null;
   return (
     <div className="mb-2 flex gap-2 border-b">
       {sessionNames.map((name) => {
         const char = characters.find((c) => c.name === name);
-        const attention = characterAttention(char, sessions[name]);
+        const attention = characterAttention(char, sessions[name], attentionOptionsFor(name));
         return (
           <button
             key={name}
@@ -298,6 +313,10 @@ type GameWindowFeedProps = Pick<
 > & {
   activeConvKey: string;
   feedScrollRef: RefObject<HTMLDivElement>;
+  /** The chip strip above the column (#3856); absent in a reference view. */
+  chipStrip?: ReactNode;
+  /** True while the All switch is off: the column shows one line instead of a reader. */
+  allOff?: boolean;
   onFeedScroll: () => void;
   session: Session;
   effectiveLifecycle?: GameLifecycleState;
@@ -317,6 +336,8 @@ function GameWindowFeed({
   activeConvKey,
   feedScrollRef,
   onFeedScroll,
+  chipStrip,
+  allOff = false,
   session,
   room,
   ambientInteractions,
@@ -333,8 +354,24 @@ function GameWindowFeed({
   currentPlaceId,
   currentPlaceName,
 }: GameWindowFeedProps) {
+  if (allOff) {
+    return (
+      <>
+        {chipStrip}
+        {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
+        <div
+          className="min-h-0 flex-1 overflow-y-auto px-6 py-8 text-sm italic text-muted-foreground"
+          data-testid="feed-all-off"
+        >
+          Everything is switched off. Press a chip to bring one kind back.
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
+      {chipStrip}
       {sceneFeed && conversationTabs && <ConversationTabStrip {...conversationTabs} />}
       {sceneFeed ? (
         <>
@@ -438,6 +475,7 @@ function GameWindowFeed({
 
 export function GameWindow({
   characters,
+  accountId = null,
   sceneFeed,
   room,
   ambientInteractions,
@@ -505,6 +543,60 @@ export function GameWindow({
   // active, not a single shared `anchor` field that no longer exists.
   const { preferences } = usePlayPreferences();
   const activeModeAnchor = preferences.readerMode === 'chronological' ? 'chronological' : 'threads';
+  // The chips (#3856) live in the per-account preferences, the store
+  // DisplaySettings writes; the readerMode read above predates that and keeps
+  // its own key. Every hook here runs before the early returns below.
+  const { preferences: chipPreferences, update: updateChipPreferences } =
+    usePlayPreferences(accountId);
+  const chipState = useMemo(
+    () => ({ chips: chipPreferences.feedChips, all: chipPreferences.feedAll }),
+    [chipPreferences.feedChips, chipPreferences.feedAll]
+  );
+  const waking = useMemo(() => wakingKinds(chipState.chips), [chipState.chips]);
+  const activeSessionForFeed = active ? sessions[active] : undefined;
+  const dismissedKeys = useMemo(
+    () => new Set(activeSessionForFeed?.dismissedFeed ?? []),
+    [activeSessionForFeed?.dismissedFeed]
+  );
+  const minimizedKeys = useMemo(
+    () => new Set(activeSessionForFeed?.minimizedFeed ?? []),
+    [activeSessionForFeed?.minimizedFeed]
+  );
+  // A reference view reads history as it was; chips and dismissals apply to
+  // the live column only.
+  const visibleSceneFeed = useMemo(() => {
+    if (!sceneFeed || reference) return sceneFeed;
+    const interactions = visibleInteractions(sceneFeed.interactions, chipState, dismissedKeys);
+    return interactions === sceneFeed.interactions ? sceneFeed : { ...sceneFeed, interactions };
+  }, [sceneFeed, reference, chipState, dismissedKeys]);
+  const visibleAmbient = useMemo(() => {
+    const items = ambientInteractions ?? activeSessionForFeed?.ambientInteractions ?? [];
+    return visibleInteractions(items, chipState, dismissedKeys);
+  }, [ambientInteractions, activeSessionForFeed?.ambientInteractions, chipState, dismissedKeys]);
+  const visibleNoteList = useMemo(() => {
+    const items = notes ?? activeSessionForFeed?.notes ?? [];
+    return visibleNotes(items, chipState, dismissedKeys);
+  }, [notes, activeSessionForFeed?.notes, chipState, dismissedKeys]);
+  const newCounts = useMemo(
+    () =>
+      activeSessionForFeed
+        ? chipUnread(activeSessionForFeed, personaId, chipState.chips, dismissedKeys)
+        : {},
+    [activeSessionForFeed, personaId, chipState.chips, dismissedKeys]
+  );
+  const blockControls = useMemo<FeedBlockControls>(
+    () => ({
+      minimized: minimizedKeys,
+      minimize: (key) => active && dispatch(minimizeFeedItem({ character: active, key })),
+      restore: (key) => active && dispatch(restoreFeedItem({ character: active, key })),
+      dismiss: (key) => active && dispatch(dismissFeedItem({ character: active, key })),
+    }),
+    [minimizedKeys, active, dispatch]
+  );
+  const attentionOptionsFor = (name: string): AttentionOptions => ({
+    wakingKinds: waking,
+    dismissed: new Set(sessions[name]?.dismissedFeed ?? []),
+  });
 
   useEffect(() => {
     const el = feedScrollRef.current;
@@ -638,106 +730,121 @@ export function GameWindow({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <GameWindowStatus
-        reference={reference}
-        onReturnToLive={onReturnToLive}
-        awaitingRoom={awaitingRoom}
-        effectiveLifecycle={effectiveLifecycle}
-        session={session}
-        visibleDiagnostics={visibleDiagnostics}
-        sessionNames={sessionNames}
-        characters={characters}
-        active={active}
-        sessions={sessions}
-        onTabClick={handleTabClick}
-      />
-      <GameWindowFeed
-        sceneFeed={sceneFeed}
-        conversationTabs={conversationTabs}
-        reference={reference}
-        referenceLoading={referenceLoading}
-        referenceUnavailable={referenceUnavailable}
-        referenceRetryable={referenceRetryable}
-        onReturnToLive={onReturnToLive}
-        onRetryReference={onRetryReference}
-        activeConvKey={activeConvKey}
-        feedScrollRef={feedScrollRef}
-        onFeedScroll={handleFeedScroll}
-        session={session}
-        room={room}
-        ambientInteractions={ambientInteractions}
-        notes={notes}
-        effectiveLifecycle={effectiveLifecycle}
-        active={active}
-        connect={connect}
-        onAvatarClick={onAvatarClick}
-        onAddTarget={onAddTarget}
-        onAttachAction={onAttachAction}
-        onReply={onReply}
-        targetPoseId={targetPoseId}
-        isAtPlace={isAtPlace}
-        currentPlaceId={currentPlaceId}
-        currentPlaceName={currentPlaceName}
-      />
-      {placeBar}
-      {tavernGameWidget}
-      {speakerQueueBar}
-      {pendingAttachments}
-      {reference ? (
-        <div className="shrink-0 border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground">
-          Draft preserved for your live conversation
-        </div>
-      ) : (
-        <CommandInput
-          character={active}
-          sceneId={sceneFeed?.sceneId}
-          personaId={personaId}
-          composerMode={composerMode}
-          onModeChange={onModeChange}
-          targetToAppend={targetToAppend}
-          onTargetConsumed={onTargetConsumed}
-          actionAttachment={actionAttachment}
-          onActionAttach={onActionAttach}
-          onActionDetach={onActionDetach}
-          onSubmitAction={onSubmitAction}
-          pendingActionIds={pendingActionIds}
-          detachedActionIds={detachedActionIds}
-          onPoseSubmitted={onPoseSubmitted}
+    <FeedBlockControlsContext.Provider value={reference ? null : blockControls}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <GameWindowStatus
+          reference={reference}
+          onReturnToLive={onReturnToLive}
+          awaitingRoom={awaitingRoom}
+          effectiveLifecycle={effectiveLifecycle}
+          session={session}
+          visibleDiagnostics={visibleDiagnostics}
+          sessionNames={sessionNames}
+          characters={characters}
+          active={active}
+          sessions={sessions}
+          onTabClick={handleTabClick}
+          attentionOptionsFor={attentionOptionsFor}
+        />
+        <GameWindowFeed
+          sceneFeed={visibleSceneFeed}
+          chipStrip={
+            !reference && (
+              <FeedChipStrip
+                state={chipState}
+                onChange={(next) =>
+                  updateChipPreferences({ feedChips: next.chips, feedAll: next.all })
+                }
+                newCounts={newCounts}
+              />
+            )
+          }
+          allOff={!reference && !chipState.all}
+          conversationTabs={conversationTabs}
+          reference={reference}
+          referenceLoading={referenceLoading}
+          referenceUnavailable={referenceUnavailable}
+          referenceRetryable={referenceRetryable}
+          onReturnToLive={onReturnToLive}
+          onRetryReference={onRetryReference}
+          activeConvKey={activeConvKey}
+          feedScrollRef={feedScrollRef}
+          onFeedScroll={handleFeedScroll}
+          session={session}
+          room={room}
+          ambientInteractions={visibleAmbient}
+          notes={visibleNoteList}
+          effectiveLifecycle={effectiveLifecycle}
+          active={active}
+          connect={connect}
+          onAvatarClick={onAvatarClick}
+          onAddTarget={onAddTarget}
+          onAttachAction={onAttachAction}
+          onReply={onReply}
+          targetPoseId={targetPoseId}
           isAtPlace={isAtPlace}
           currentPlaceId={currentPlaceId}
           currentPlaceName={currentPlaceName}
-          speakingAs={speakingAs}
-          replyTarget={replyTarget}
-          onCancelReply={onCancelReply}
-          // Enter sends, Shift+Enter breaks the line (#3818) — the convention
-          // of every chat RP interface; the reviewer found Enter-as-newline
-          // and a reach for the Send button slower than typing. This was
-          // `submitOnEnter={false}` (Cmd/Ctrl+Enter to send) since the
-          // narrative composer landed. Ctrl/Cmd+Enter still sends too.
-          draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
-          // #3784 — the `room:unknown` placeholder above is not a room, it is
-          // "the room we're standing in, not yet named": during entry the
-          // client has no `room_state` yet. Saying so lets the draft move with
-          // the scope when the id lands, instead of being stranded under the
-          // placeholder while the composer re-hydrates an empty row
-          // (`e2e/game-entry.spec.ts`). Naming the conversation alongside it is
-          // what keeps the move within one audience: a tab opening before
-          // `room_state` arrives changes the conversation, so the room pose
-          // stays put instead of following into the whisper composer. (It does
-          // then stay stranded under the placeholder for as long as that tab is
-          // the active one -- no composer is mounted on the room anchor to carry
-          // it -- which is the same outcome as before #3784 for that narrow
-          // path, not a new loss.)
-          draftScopeSettling={
-            conversationTabs?.activeKey == null && roomId == null
-              ? { provisional: true, conversation: draftConversation }
-              : { conversation: draftConversation }
-          }
-          roomName={roomName}
-          ready={playReady}
         />
-      )}
-    </div>
+        {placeBar}
+        {tavernGameWidget}
+        {speakerQueueBar}
+        {pendingAttachments}
+        {reference ? (
+          <div className="shrink-0 border-t bg-card px-4 py-3 text-center text-xs text-muted-foreground">
+            Draft preserved for your live conversation
+          </div>
+        ) : (
+          <CommandInput
+            character={active}
+            sceneId={sceneFeed?.sceneId}
+            personaId={personaId}
+            composerMode={composerMode}
+            onModeChange={onModeChange}
+            targetToAppend={targetToAppend}
+            onTargetConsumed={onTargetConsumed}
+            actionAttachment={actionAttachment}
+            onActionAttach={onActionAttach}
+            onActionDetach={onActionDetach}
+            onSubmitAction={onSubmitAction}
+            pendingActionIds={pendingActionIds}
+            detachedActionIds={detachedActionIds}
+            onPoseSubmitted={onPoseSubmitted}
+            isAtPlace={isAtPlace}
+            currentPlaceId={currentPlaceId}
+            currentPlaceName={currentPlaceName}
+            speakingAs={speakingAs}
+            replyTarget={replyTarget}
+            onCancelReply={onCancelReply}
+            // Enter sends, Shift+Enter breaks the line (#3818) — the convention
+            // of every chat RP interface; the reviewer found Enter-as-newline
+            // and a reach for the Send button slower than typing. This was
+            // `submitOnEnter={false}` (Cmd/Ctrl+Enter to send) since the
+            // narrative composer landed. Ctrl/Cmd+Enter still sends too.
+            draftScope={`${draftScopePrefix ?? 'account'}:${active}:${conversationTabs?.activeKey ?? `room:${roomId ?? 'unknown'}`}`}
+            // #3784 — the `room:unknown` placeholder above is not a room, it is
+            // "the room we're standing in, not yet named": during entry the
+            // client has no `room_state` yet. Saying so lets the draft move with
+            // the scope when the id lands, instead of being stranded under the
+            // placeholder while the composer re-hydrates an empty row
+            // (`e2e/game-entry.spec.ts`). Naming the conversation alongside it is
+            // what keeps the move within one audience: a tab opening before
+            // `room_state` arrives changes the conversation, so the room pose
+            // stays put instead of following into the whisper composer. (It does
+            // then stay stranded under the placeholder for as long as that tab is
+            // the active one -- no composer is mounted on the room anchor to carry
+            // it -- which is the same outcome as before #3784 for that narrow
+            // path, not a new loss.)
+            draftScopeSettling={
+              conversationTabs?.activeKey == null && roomId == null
+                ? { provisional: true, conversation: draftConversation }
+                : { conversation: draftConversation }
+            }
+            roomName={roomName}
+            ready={playReady}
+          />
+        )}
+      </div>
+    </FeedBlockControlsContext.Provider>
   );
 }

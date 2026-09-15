@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { DEFAULT_FEED_CHIPS, normalizeFeedChips, type FeedChip } from './feedChips';
 
 export type SidebarSide = 'left' | 'right';
 export type PlayDensity = 'compact' | 'comfortable';
@@ -12,6 +13,10 @@ export interface PlayPreferences {
   sidebarSide: SidebarSide;
   density: PlayDensity;
   readerMode: ReaderMode;
+  /** The feed's filter chips (#3856), the player's own layout; per account, per browser. */
+  feedChips: FeedChip[];
+  /** The All switch above the feed; off hides every kind. */
+  feedAll: boolean;
 }
 
 export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
@@ -22,6 +27,8 @@ export const DEFAULT_PLAY_PREFERENCES: PlayPreferences = {
   sidebarSide: 'right',
   density: 'compact',
   readerMode: 'threads',
+  feedChips: DEFAULT_FEED_CHIPS.map((chip) => ({ ...chip })),
+  feedAll: true,
 };
 
 const STORAGE_KEY = 'arx:play-preferences:v2';
@@ -51,6 +58,8 @@ export function loadPlayPreferences(accountId?: number | null): PlayPreferences 
       sidebarSide: value.sidebarSide === 'left' ? 'left' : 'right',
       density: value.density === 'comfortable' ? 'comfortable' : 'compact',
       readerMode: value.readerMode === 'chronological' ? 'chronological' : 'threads',
+      feedChips: normalizeFeedChips(value.feedChips),
+      feedAll: value.feedAll !== false,
     };
     if (accountId != null && !window.localStorage.getItem(playPreferencesKey(accountId))) {
       window.localStorage.setItem(playPreferencesKey(accountId), JSON.stringify(normalized));

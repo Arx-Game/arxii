@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { Link, useNavigate } from 'react-router-dom';
 import { Menu, ScrollText, Swords, X } from 'lucide-react';
@@ -21,6 +21,8 @@ import type { MyRosterEntry } from '@/roster/types';
 import { WeatherWidget } from '@/weather/components/WeatherWidget';
 import { ComfortWidget } from '@/comfort/components/ComfortWidget';
 import { characterAttention } from '@/game/attention';
+import { wakingKinds } from '@/game/feedChips';
+import { usePlayPreferences } from '@/game/playPreferences';
 import { AttentionBadge } from '@/game/components/AttentionBadge';
 // #3412 S4 — reused from the Hall (frontend/src/home/hall/queries.ts), not
 // duplicated: no import-boundary lint rule exists between home/ and game/
@@ -138,6 +140,11 @@ export function GameTopBar({
   const dispatch = useAppDispatch();
   const { connect, disconnect } = useGameSocket();
   const { sessions, active } = useAppSelector((state) => state.game);
+  // The chips decide what wakes (#3856): a kind under a chip that is off or
+  // silent never badges an avatar here either.
+  const accountId = useAppSelector((state) => state.auth.account?.id ?? null);
+  const { preferences } = usePlayPreferences(accountId);
+  const waking = useMemo(() => wakingKinds(preferences.feedChips), [preferences.feedChips]);
   const selectCharacter = useSelectCharacterMutation();
   const queryClient = useQueryClient();
   const logout = useLogout();
@@ -298,7 +305,10 @@ export function GameTopBar({
         {active &&
           otherCharacters.map((char) => {
             const session = sessions[char.name];
-            const attention = characterAttention(char, session);
+            const attention = characterAttention(char, session, {
+              wakingKinds: waking,
+              dismissed: new Set(session?.dismissedFeed ?? []),
+            });
             // Ruling B (#3774 demo) -- a character with nothing waiting and no
             // local session stays in the dimmest tier; anything waiting, or a
             // live session, steps it up. A badge on a 40%-opacity avatar reads

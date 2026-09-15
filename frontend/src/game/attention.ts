@@ -4,6 +4,25 @@ import { getThreadKey, countUnread } from '@/scenes/hooks/useThreading';
 import { wsPayloadToInteraction } from '@/scenes/hooks/useSceneInteractions';
 import type { MyRosterEntry } from '@/roster/types';
 import { actingPersonaId } from '@/roster/persona';
+import { classifyInteraction, type FeedKind } from './feedKinds';
+import { feedItemKey, type FeedChip } from './feedChips';
+
+/**
+ * What the player's chips say should count (#3856): only interactions whose
+ * kind sits under a chip that is on and set to wake, and never one the player
+ * dismissed from their own view. Omitted, everything counts (the pre-chips
+ * behaviour and what a caller with no preferences wants).
+ */
+export interface AttentionOptions {
+  wakingKinds?: ReadonlySet<FeedKind>;
+  dismissed?: ReadonlySet<string>;
+}
+
+function passesOptions(interaction: Interaction, options?: AttentionOptions): boolean {
+  if (!options) return true;
+  if (options.dismissed?.has(feedItemKey('interaction', interaction.id))) return false;
+  return !options.wakingKinds || options.wakingKinds.has(classifyInteraction(interaction.mode));
+}
 
 export interface SessionAttention {
   /** Total unread across whisper threads + target threads aimed at `personaId`. */
@@ -61,11 +80,13 @@ export interface SessionAttention {
 export function sessionAttention(
   session: Session,
   personaId: number | null,
-  sinceId?: number | null
+  sinceId?: number | null,
+  options?: AttentionOptions
 ): SessionAttention {
   const interactions: Interaction[] = session.sceneInteractions
     .map(wsPayloadToInteraction)
-    .filter((interaction) => sinceId == null || Number(interaction.id) > sinceId);
+    .filter((interaction) => sinceId == null || Number(interaction.id) > sinceId)
+    .filter((interaction) => passesOptions(interaction, options));
   const byThread = new Map<string, Interaction[]>();
   for (const interaction of interactions) {
     const key = getThreadKey(interaction);
@@ -139,13 +160,54 @@ export function sessionAttention(
  */
 export function characterAttention(
   char: MyRosterEntry | undefined,
-  session: Session | undefined
+  session: Session | undefined,
+  options?: AttentionOptions
 ): SessionAttention {
   const serverDirect = char?.unread_direct ?? 0;
   const serverAmbient = char?.has_ambient_unread ?? false;
   if (!session) {
     return { direct: serverDirect, ambient: serverAmbient };
   }
-  const delta = sessionAttention(session, actingPersonaId(char), char?.attention_as_of_id ?? 0);
+  const delta = sessionAttention(
+    session,
+    actingPersonaId(char),
+    char?.attention_as_of_id ?? 0,
+    options
+  );
   return { direct: serverDirect + delta.direct, ambient: serverAmbient || delta.ambient };
+}
+
+/**
+ * The "new" pill on each chip (#3856): how many unread interactions sit under a
+ * chip that is on and set to wake, keyed by chip id; chips with nothing new are
+ * absent. Unread follows the same rule as `countUnread` (past the thread's
+ * last-seen id, or the scene baseline when the thread has none; never the
+ * viewer's own rows), applied per row rather than per thread so the count can
+ * be split by kind. Dismissed rows never count.
+ */
+export function chipUnread(
+  session: Session,
+  personaId: number | null,
+  chips: readonly FeedChip[],
+  dismissed?: ReadonlySet<string>
+): Record<string, number> {
+  const counts: Record<string, number> = {};
+  const owners = new Map<FeedKind, FeedChip>();
+  for (const chip of chips) {
+    if (chip.on && chip.wake) for (const kind of chip.kinds) owners.set(kind, chip);
+  }
+  if (owners.size === 0) return counts;
+  for (const payload of session.sceneInteractions) {
+    const interaction = wsPayloadToInteraction(payload);
+    if (dismissed?.has(feedItemKey('interaction', interaction.id))) continue;
+    if (personaId != null && interaction.persona.id === personaId) continue;
+    const chip = owners.get(classifyInteraction(interaction.mode));
+    if (!chip) continue;
+    const key = getThreadKey(interaction);
+    const threshold = session.threadLastSeen[key] ?? session.sceneBaselineId;
+    if (threshold === undefined || threshold === null) continue;
+    if (Number(interaction.id) <= threshold) continue;
+    counts[chip.id] = (counts[chip.id] ?? 0) + 1;
+  }
+  return counts;
 }
