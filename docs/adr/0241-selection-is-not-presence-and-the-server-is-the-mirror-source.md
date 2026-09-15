@@ -9,7 +9,14 @@ ADR-0235/0236, resolving the in-flight collision this branch was warned about.
 re-verify at enqueue in case another PR claimed it in the meantime.
 -->
 
-**Status:** Accepted (2026-08-27, #3412 slice 1); amended by ADR-0294 (#3812).
+**Status:** Accepted (2026-08-27, #3412 slice 1); amended by ADR-0294 (#3812) and
+ADR-0302 (#3479).
+
+**Amendment (#3479, ADR-0302):** the mirror is seeded, not rehydrated. Each browser
+tab keeps its own browsing identity in `sessionStorage`; the account column is the
+default a tab seeds from when it has none, and an account refetch never overwrites a
+tab that has one. "Hydrated on every account fetch" below no longer holds; the
+durable-default half of this decision stands.
 
 **Amendment (#3812, ADR-0294):** the guarantee below runs one way. Setting or clearing the
 selection still triggers zero puppeting side effects. But *puppeting* now records the
