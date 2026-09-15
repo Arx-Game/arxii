@@ -139,6 +139,17 @@ chips, dismissed?)` counts unread per waking chip for the strip's "new" pills,
   and jumps to Here mode's Room tab, where `CombatRail` renders. `mode`/
   `onModeChange` are REQUIRED controlled props owned by `GamePage` (not
   internal state) — a future caller must supply both.
+- **`SidebarTabPanel.tsx`**: The Here mode's body (#3856 PR 3, the approved demo's
+  side panel). The room view (`roomPanel`: `FocusPanel` or `DreamspacePanel`) with an
+  "Actions" `<details>` fold at its foot holding the eight reference sections (Who,
+  Stories, Events, Codex, Status, Items, Journal, Travel) as a three-column grid,
+  open by default and folding on its arrow. Pressing a section shows it in place of
+  the room with a "← <room or focused subject>" way back at the top (`roomTabLabel`
+  names it, truncated with the full name in `title`). Replaces the nine-trigger tab
+  row that sat above the room; `activeTab`/`onTabChange` stay controlled by
+  `GamePage` (#3761, `jumpToCombat` sets `'room'`), and each section still mounts
+  lazily on first open. Nothing was dropped: every section keeps its panel and
+  fallback text.
 - **`GameTopBar.tsx`**: Character avatars, connection status, character
   switching, and the world menu (#3818): the leading button opens a
   `DropdownMenu` (Your characters → `/hall`, Roster, Settings, "Leave the world
