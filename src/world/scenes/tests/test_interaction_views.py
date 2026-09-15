@@ -648,10 +648,56 @@ class PoseSubmitViewTests(APITestCase):
             "ENTRY pose response must carry its reactable strip"
         )
 
+    def test_the_first_standard_pose_is_the_entrance(self) -> None:
+        """The server owns ENTRY (#3867): a first line is one whatever the client sent."""
+        from world.scenes.constants import PoseKind, ReactionWindowKind
+        from world.scenes.models import Interaction
+        from world.scenes.reaction_models import ReactionWindow
+
+        scene = SceneFactory()
+        response = self.client.post(
+            self.url,
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "steps in from the rain.",
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_201_CREATED
+        interaction = Interaction.objects.get(pk=response.data["id"])
+        assert interaction.pose_kind == PoseKind.ENTRY
+        assert (
+            ReactionWindow.objects.get(interaction=interaction).kind == ReactionWindowKind.ENTRANCE
+        )
+        assert response.data["reaction_windows"]
+
+    def test_a_second_entrance_is_refused(self) -> None:
+        from world.scenes.constants import PoseKind
+
+        scene = SceneFactory()
+        InteractionFactory(persona=self.persona, scene=scene, content="is here.")
+        response = self.client.post(
+            self.url,
+            {
+                "client_request_id": str(uuid.uuid4()),
+                "persona_id": self.persona.pk,
+                "scene_id": scene.pk,
+                "content": "sweeps in again.",
+                "pose_kind": PoseKind.ENTRY.value,
+            },
+            format="json",
+        )
+        assert response.status_code == status.HTTP_400_BAD_REQUEST
+        assert response.data["detail"] == "You have already made your entrance in this scene."
+
     def test_submit_standard_pose_opens_no_window(self) -> None:
         from world.scenes.reaction_models import ReactionWindow
 
         scene = SceneFactory()
+        # Already in the scene (#3867): only the first line is an entrance.
+        InteractionFactory(persona=self.persona, scene=scene, content="is here.")
         response = self.client.post(
             self.url,
             {

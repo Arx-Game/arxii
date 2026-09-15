@@ -455,3 +455,60 @@ class RoomStatePlaceAssignmentTests(TestCase):
         # Rebuild the payload from the elsewhere (vayne) character's own point of view.
         payload = build_room_state_payload(self.elsewhere_state, self.room_state)
         assert payload["viewer_place_id"] is None
+
+
+class RoomStateThresholdTests(TestCase):
+    """#3867 - `in_scene` per present character and `viewer_entered` on the scene block."""
+
+    def setUp(self):
+        from world.scenes.factories import SceneFactory
+
+        self.room = ObjectDBFactory(db_key="courtyard", db_typeclass_path="typeclasses.rooms.Room")
+        self.caller = ObjectDBFactory(
+            db_key="hero", db_typeclass_path="typeclasses.characters.Character", location=self.room
+        )
+        self.other = ObjectDBFactory(
+            db_key="ally", db_typeclass_path="typeclasses.characters.Character", location=self.room
+        )
+        self.caller_sheet = CharacterSheetFactory(character=self.caller)
+        self.other_sheet = CharacterSheetFactory(character=self.other)
+        self.scene = SceneFactory(location=self.room)
+        # The room's live scene is the ndb cache the scene services keep (Room.active_scene).
+        self.room.active_scene = self.scene
+        self.context = SceneDataManagerFactory()
+        self.room_state = self.context.initialize_state_for_object(self.room)
+        self.caller_state = self.context.initialize_state_for_object(self.caller)
+
+    def _payload(self):
+        with patch(
+            "flows.service_functions.serializers.room_state.RoomStatePayloadSerializer._is_character",
+            return_value=True,
+        ):
+            return build_room_state_payload(self.caller_state, self.room_state)
+
+    def test_a_present_character_is_marked_until_their_first_line(self):
+        from world.scenes.factories import InteractionFactory
+
+        payload = self._payload()
+        ally = next(c for c in payload["characters"] if c["name"] == "ally")
+        assert ally["in_scene"] is False
+        assert payload["scene"]["viewer_entered"] is False
+
+        InteractionFactory(
+            persona=self.other_sheet.primary_persona, scene=self.scene, content="waves."
+        )
+        InteractionFactory(
+            persona=self.caller_sheet.primary_persona, scene=self.scene, content="nods."
+        )
+        payload = self._payload()
+        ally = next(c for c in payload["characters"] if c["name"] == "ally")
+        assert ally["in_scene"] is True
+        assert payload["scene"]["viewer_entered"] is True
+
+    def test_no_live_scene_means_no_mark(self):
+        # The scene services clear the room's cache when a scene ends.
+        self.room.active_scene = None
+        payload = self._payload()
+        ally = next(c for c in payload["characters"] if c["name"] == "ally")
+        assert ally["in_scene"] is None
+        assert payload["scene"] is None

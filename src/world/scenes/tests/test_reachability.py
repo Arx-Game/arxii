@@ -35,13 +35,22 @@ def _persona_at(room) -> object:
     return PersonaFactory(character_sheet=sheet)
 
 
+def _persona_in(room, scene) -> object:
+    """A present persona who has entered ``scene`` (#3867): a line of theirs is in it."""
+    from world.scenes.factories import InteractionFactory
+
+    persona = _persona_at(room)
+    InteractionFactory(persona=persona, scene=scene, content="is here.")
+    return persona
+
+
 class TestPersonaCanReceiveRoomHeard(TestCase):
     """Room-heard shape: no place, no receivers, not a whisper."""
 
     def test_persona_present_in_room_is_reachable(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         scene = SceneFactory(location=room)
-        persona = _persona_at(room)
+        persona = _persona_in(room, scene)
 
         assert persona_can_receive(
             persona,
@@ -123,6 +132,48 @@ class TestPersonaCanReceiveRoomHeard(TestCase):
             receivers=None,
             mode=InteractionMode.POSE,
             visibility=InteractionVisibility.PERCEIVED_ONLY,
+        )
+
+
+class TestThreshold(TestCase):
+    """Present in the room, not yet in the scene (#3867)."""
+
+    def setUp(self) -> None:
+        self.room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
+        self.scene = SceneFactory(location=self.room)
+        self.reader = _persona_at(self.room)
+
+    def test_a_threshold_persona_is_not_reachable_room_heard(self) -> None:
+        assert not persona_can_receive(
+            self.reader,
+            scene=self.scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_a_whisper_still_reaches_the_threshold(self) -> None:
+        assert persona_can_receive(
+            self.reader,
+            scene=self.scene,
+            place=None,
+            receivers=[self.reader],
+            mode=InteractionMode.WHISPER,
+            visibility=InteractionVisibility.DEFAULT,
+        )
+
+    def test_the_first_line_makes_them_reachable(self) -> None:
+        from world.scenes.factories import InteractionFactory
+
+        InteractionFactory(persona=self.reader, scene=self.scene, content="steps in.")
+        assert persona_can_receive(
+            self.reader,
+            scene=self.scene,
+            place=None,
+            receivers=None,
+            mode=InteractionMode.POSE,
+            visibility=InteractionVisibility.DEFAULT,
         )
 
 
@@ -307,7 +358,7 @@ class TestEmptyReceiversMeansNoExplicitReceivers(TestCase):
     def test_room_heard_persona_is_reachable_with_an_empty_receiver_list(self) -> None:
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         scene = SceneFactory(location=room)
-        persona = _persona_at(room)
+        persona = _persona_in(room, scene)
 
         assert persona_can_receive(
             persona,
@@ -386,7 +437,9 @@ class TestAgreesWithVisibleTo(TestCase):
     def _present_persona_and_scene(self):
         room = ObjectDBFactory(db_key="Hall", db_typeclass_path="typeclasses.rooms.Room")
         scene = SceneFactory(location=room)
-        persona = _persona_at(room)
+        # Present AND in the scene: the two predicates only agree once the viewer
+        # has entered (#3867); the threshold is the one case they part on purpose.
+        persona = _persona_in(room, scene)
         return persona, scene
 
     def test_default_room_heard_pose_agrees(self) -> None:
