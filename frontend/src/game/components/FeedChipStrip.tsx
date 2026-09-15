@@ -26,10 +26,15 @@ interface FeedChipStripProps {
   newCounts?: Record<string, number>;
 }
 
+// A pressed chip is filled with the primary token and an unpressed one is an
+// outline in muted text: the demo tints a pressed chip with its accent, and
+// this theme's primary is near-black, so a 10% tint read as plain grey and
+// the on/off state was invisible (demo-fidelity review). Solid fill is the
+// same token language the app's other pressed controls use.
 const chipClass =
   'inline-flex min-h-8 items-center gap-1.5 rounded-full border px-2.5 text-xs transition-colors ' +
-  'aria-pressed:border-primary/60 aria-pressed:bg-primary/10 aria-pressed:text-foreground ' +
-  'text-muted-foreground hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
+  'aria-pressed:border-primary aria-pressed:bg-primary aria-pressed:text-primary-foreground ' +
+  'text-muted-foreground hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring';
 
 /**
  * The filter chips above the feed (#3856): one plain label per chip, `+` while
@@ -83,7 +88,7 @@ export function FeedChipStrip({ state, onChange, newCounts = {} }: FeedChipStrip
             >
               {chip.label}
               {(newCounts[chip.id] ?? 0) > 0 && (
-                <span className="rounded-full bg-primary px-1.5 text-[10px] tracking-wide text-primary-foreground">
+                <span className="rounded-full bg-background px-1.5 text-[10px] tracking-wide text-foreground">
                   new
                 </span>
               )}
@@ -144,9 +149,20 @@ function FeedChipEditor({ chip, state, selectName, onChange, onClose }: FeedChip
   };
 
   return (
-    // The popover focuses its first control, the name, on open; a chip just
-    // added gets its placeholder name selected so typing replaces it.
-    <PopoverContent align="start" className="w-72 space-y-1.5 p-3 text-xs">
+    // Focus the name on open. Radix's own auto-focus selects an input's text,
+    // which the demo reserves for a chip just added (so typing replaces the
+    // placeholder); a right-click open leaves the name unselected.
+    <PopoverContent
+      align="start"
+      className="w-72 space-y-1.5 p-3 text-xs"
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        const input = nameRef.current;
+        if (!input) return;
+        input.focus({ preventScroll: true });
+        if (selectName) input.select();
+      }}
+    >
       <input
         ref={nameRef}
         aria-label="Chip name"
@@ -154,9 +170,6 @@ function FeedChipEditor({ chip, state, selectName, onChange, onClose }: FeedChip
         value={name}
         maxLength={MAX_CHIP_LABEL}
         onChange={(event) => setName(event.target.value)}
-        onFocus={() => {
-          if (selectName) nameRef.current?.select();
-        }}
         onBlur={commitName}
         onKeyDown={(event) => {
           if (event.key === 'Enter') {
