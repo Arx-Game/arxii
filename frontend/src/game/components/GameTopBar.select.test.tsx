@@ -7,6 +7,10 @@
  * corrects it. The local session switch stays immediate; only the connect
  * waits. A failed select never blocks: the socket still opens and its
  * `@ic <name>` still carries the intent.
+ *
+ * #3479 (ADR-0302) narrows WHEN the select fires: only when the switch opens
+ * a socket. A focus switch between two already-connected sessions is
+ * tab-local and writes nothing durable (puppeting already recorded both).
  */
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -103,7 +107,7 @@ describe('GameTopBar character switch ordering (#3812)', () => {
     expect(mockConnect).toHaveBeenCalledWith('Bianca');
   });
 
-  it('does not reconnect a session that is already connected', async () => {
+  it('switches focus to an already-connected session without a select or a reconnect', async () => {
     store.dispatch(startSession('Bianca'));
     store.dispatch(setSessionConnectionStatus({ character: 'Bianca', status: true }));
     store.dispatch(setActiveSession('Aria')); // startSession may have made Bianca active
@@ -111,7 +115,7 @@ describe('GameTopBar character switch ordering (#3812)', () => {
 
     await userEvent.click(screen.getByTitle('Switch to Bianca'));
 
-    expect(mockMutateAsync).toHaveBeenCalledWith(2);
+    expect(mockMutateAsync).not.toHaveBeenCalled();
     expect(mockConnect).not.toHaveBeenCalled();
     expect(store.getState().game.active).toBe('Bianca');
   });

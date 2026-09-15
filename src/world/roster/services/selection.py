@@ -1,9 +1,16 @@
-"""Durable server-side character selection — state 2.5 substrate (#3412).
+"""Durable server-side character selection (#3412) and per-request identity (#3479).
 
 Selection is NOT presence: ``set_selected_entry`` performs zero lifecycle,
 session, or puppeting side effects. It is a plain fact the web client persists
 so "who am I browsing as" survives a page reload before any presence step
 (login, puppet) occurs. The sole mutator of ``PlayerData.selected_entry``.
+
+Telnet independence (#3479 decision 10): this module is web-only substrate.
+Telnet binds identity through Evennia session puppeting and never reads
+``PlayerData.selected_entry`` or anything here (zero references under
+``src/commands`` and ``src/server``); changing selection can never move a
+telnet session, and no telnet change is needed when web identity semantics
+change.
 """
 
 from __future__ import annotations
@@ -15,6 +22,7 @@ from world.roster.models import RosterEntry
 if TYPE_CHECKING:
     from django.contrib.auth.models import AbstractBaseUser, AnonymousUser
     from evennia.objects.models import ObjectDB
+    from rest_framework.request import Request
 
     from evennia_extensions.models import PlayerData
 
@@ -53,6 +61,41 @@ def selected_character(account: AbstractBaseUser | AnonymousUser) -> ObjectDB | 
     entry = player_data.selected_entry if player_data is not None else None
     if entry is None:
         return None
+    return entry.character_sheet.character
+
+
+def character_for_request(request: Request, *, entry_id: int | None) -> ObjectDB | None:
+    """The character this request acts as (#3479 per-tab browsing identity).
+
+    ``entry_id`` is the tab's explicit identity: it must name one of
+    ``request.user``'s OWN current roster entries (the same population
+    ``set_selected_entry`` accepts) and wins over the account column.
+    ``None`` falls back to the durable selection (``selected_character``),
+    which is how a fresh tab behaves before it has an identity of its own.
+
+    Raises DRF ``PermissionDenied`` for any ``entry_id`` that does not
+    resolve to an own entry. The owned list is the player's cached active
+    tenures (``get_available_roster_entries``), so the lookup adds no query
+    of its own and a foreign id and an unknown id are indistinguishable: the
+    fixed message never leaks whether the entry exists at all.
+    """
+    from rest_framework.exceptions import PermissionDenied  # noqa: PLC0415
+
+    from evennia_extensions.models import PlayerData  # noqa: PLC0415
+
+    if entry_id is None:
+        return selected_character(request.user)
+    if not request.user.is_authenticated:
+        raise PermissionDenied(SelectionError.user_message)
+    player_data = PlayerData.objects.filter(account=request.user).first()
+    if player_data is None:
+        raise PermissionDenied(SelectionError.user_message)
+    entry = next(
+        (owned for owned in player_data.get_available_roster_entries() if owned.pk == entry_id),
+        None,
+    )
+    if entry is None:
+        raise PermissionDenied(SelectionError.user_message)
     return entry.character_sheet.character
 
 

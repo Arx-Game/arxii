@@ -8,7 +8,8 @@ side effects.
 
 from __future__ import annotations
 
-from django.test import TestCase
+from django.test import RequestFactory, TestCase
+from rest_framework.exceptions import PermissionDenied
 
 from evennia_extensions.factories import CharacterFactory
 from evennia_extensions.models import PlayerData
@@ -19,7 +20,11 @@ from world.roster.factories import (
     RosterTenureFactory,
 )
 from world.roster.models import RosterTenure
-from world.roster.services.selection import SelectionError, set_selected_entry
+from world.roster.services.selection import (
+    SelectionError,
+    character_for_request,
+    set_selected_entry,
+)
 
 
 def _entry_for(player_data):
@@ -93,3 +98,44 @@ class SetSelectedEntryTests(TestCase):
         # No session/puppet state exists at all for this player's account —
         # selection required none to succeed.
         self.assertFalse(self.player.account.sessions.all())
+
+
+class CharacterForRequestTests(TestCase):
+    """#3479 per-tab browsing identity: an explicit own entry_id wins;
+    a foreign or unknown one is a uniform PermissionDenied."""
+
+    def setUp(self):
+        self.player = PlayerDataFactory()
+        self.entry = _entry_for(self.player)
+        self.request = RequestFactory().get("/")
+        self.request.user = self.player.account
+
+    def test_explicit_owned_entry_id_returns_that_character(self):
+        # The durable selection points elsewhere; the explicit id wins.
+        other_entry = _entry_for(self.player)
+        set_selected_entry(self.player, self.entry)
+        character = character_for_request(self.request, entry_id=other_entry.pk)
+        self.assertEqual(character, other_entry.character_sheet.character)
+
+    def test_foreign_entry_id_raises_permission_denied(self):
+        foreign_entry = _entry_for(PlayerDataFactory())
+        with self.assertRaises(PermissionDenied):
+            character_for_request(self.request, entry_id=foreign_entry.pk)
+
+    def test_unknown_entry_id_matches_the_foreign_message(self):
+        # Existence must not leak: unknown id and foreign id are
+        # indistinguishable, detail for detail.
+        foreign_entry = _entry_for(PlayerDataFactory())
+        with self.assertRaises(PermissionDenied) as foreign_ctx:
+            character_for_request(self.request, entry_id=foreign_entry.pk)
+        with self.assertRaises(PermissionDenied) as unknown_ctx:
+            character_for_request(self.request, entry_id=99999999)
+        self.assertEqual(foreign_ctx.exception.detail, unknown_ctx.exception.detail)
+
+    def test_absent_entry_id_falls_back_to_durable_selection(self):
+        set_selected_entry(self.player, self.entry)
+        character = character_for_request(self.request, entry_id=None)
+        self.assertEqual(character, self.entry.character_sheet.character)
+
+    def test_absent_entry_id_with_no_selection_is_none(self):
+        self.assertIsNone(character_for_request(self.request, entry_id=None))

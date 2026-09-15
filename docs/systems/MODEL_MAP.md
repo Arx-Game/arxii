@@ -1921,6 +1921,7 @@
   - capture_captor_organization -> societies.Organization [FK] (nullable)
   - capture_captive_template -> missions.MissionTemplate [FK] (nullable)
   - capture_rescue_template -> missions.MissionTemplate [FK] (nullable)
+  - crime_kinds -> justice.CrimeKind [M2M]
 **Pointed to by:**
   - affection_shifts <- relationships.AffectionShift
 
@@ -4920,6 +4921,7 @@
 
 ### CrimeKind
 **Pointed to by:**
+  - consequence_effects <- checks.ConsequenceEffect
   - laws <- justice.AreaLaw
   - deed_tags <- justice.DeedCrimeTag
   - accusation_claims <- justice.AccusationCrimeClaim
@@ -4998,6 +5000,11 @@
 **Foreign Keys:**
   - society -> societies.Society [FK]
 
+### WitnessReactionTarget
+**Foreign Keys:**
+  - window -> scenes.ReactionWindow [OneToOne]
+  - legend_entry -> societies.LegendEntry [FK]
+
 ### Service Functions
 - `accrue_accusation_heat(*, secret: 'Secret', area: 'Area | None', scale: 'int' = 1) -> 'PersonaHeat | None' - Mint pursuit heat on an accusation's subject, where the allegation landed.`
 - `accrue_for_deed_knowledge(*, deed: 'LegendEntry', room: 'ObjectDB', new_knower_count: 'int') -> 'None' - The deed-knowledge accrual writer: word landed at ``room`` for ``new_knower_count`` ears.`
@@ -5010,6 +5017,7 @@
 - `heat_for(persona: 'Persona', room: 'ObjectDB', *, include_sources: 'bool' = False) -> 'HeatReading' - The pursuit picture for ``persona`` standing in ``room`` — the one read seam.`
 - `law_for(area: 'Area | None', crime_kind: 'CrimeKind') -> 'AreaLaw | None' - The law governing ``crime_kind`` at ``area`` — most-specific-wins.`
 - `record_accusation_crime(*, secret: 'Secret', crime_kind: 'CrimeKind', real_deed: 'LegendEntry | None' = None) -> 'AccusationCrimeClaim' - Attach the alleged crime to an accusation secret — the heat bridge's data.`
+- `report_witnessed_crime(*, persona: 'Persona', crime_kind: 'CrimeKind', room: 'ObjectDB') -> 'PersonaHeat | None' - Mint one report's worth of consequence for ``crime_kind`` at ``room`` (#1765, #2987).`
 - `tag_deed_crimes(deed: 'LegendEntry', crime_kinds: 'Iterable[CrimeKind]') -> 'int' - Idempotently mark ``deed`` as an instance of each crime kind; returns rows created.`
 - `tier_for_value(value: int) -> world.justice.constants.HeatTier - Map a summed heat value onto its display tier.`
 
@@ -8451,6 +8459,7 @@
   - scene -> scenes.Scene [FK]
 **Pointed to by:**
   - spread_assist_target <- societies.SpreadAssistTarget
+  - witness_target <- justice.WitnessReactionTarget
   - reactions <- scenes.WindowReaction
 
 ### Rivalry
@@ -9106,6 +9115,7 @@
   - heat_sources <- justice.HeatSource
   - frame_claims <- justice.AccusationCrimeClaim
   - crime_evidence <- justice.CrimeEvidence
+  - witness_targets <- justice.WitnessReactionTarget
   - mission_deeds <- missions.MissionDeedRecord
   - spread_action_requests <- scenes.SceneActionRequest
   - explaining_secrets <- secrets.Secret
@@ -9506,8 +9516,8 @@
   - memberships <- societies.OrganizationMembership
 
 ### Service Functions
-- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
-- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
+- `create_legend_event(title: 'str', source_type: 'LegendSourceType', base_value: 'int', personas: 'list[Persona]', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, created_by: 'AccountDB | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, stations_by_persona: 'dict[int, int] | None' = None, interaction: 'Interaction | None' = None) -> 'tuple[LegendEvent, list[LegendEntry]]' - Create a shared event and individual deeds for each participant.`
+- `create_solo_deed(persona: 'Persona', title: 'str', source_type: 'LegendSourceType', base_value: 'int', *, description: 'str' = '', scene: 'Scene | None' = None, story: 'Story | None' = None, crime_kinds: 'list | None' = None, archetypes: 'list | None' = None, concealed: 'bool' = False, containment_approach: 'str | None' = None, earned_at_level: 'int' = 0, event: 'LegendEvent | None' = None, interaction: 'Interaction | None' = None) -> 'LegendEntry' - Create a solo legend deed, optionally anchored to a shared event's ceiling.`
 - `credit_engaged_covenants(*, entry: 'LegendEntry') -> 'list[CovenantLegendCredit]' - Snapshot the persona's currently-engaged covenants and create credit rows.`
 - `get_character_legend_total(character: 'ObjectDB') -> 'int' - Fast lookup of a character's total legend from materialized view.`
 - `get_character_role_legend(*, character_sheet: 'CharacterSheet', role: 'CovenantRole', covenant_ids: 'list[int] | None' = None) -> 'int' - Sum the legend this character earned that was credited to covenants where they held ``role``.`

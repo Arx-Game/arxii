@@ -17,7 +17,9 @@ import {
   minimizeFeedItem,
   restoreFeedItem,
   setActiveSession,
+  setBrowsingIdentity,
 } from '@/store/gameSlice';
+import { writeTabIdentity } from '@/store/browsingIdentity';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { Link } from 'react-router-dom';
@@ -530,8 +532,8 @@ export function GameWindow({
   const draftConversation = conversationTabs?.activeKey ?? ROOM_ANCHOR_CONVERSATION;
   const dispatch = useAppDispatch();
   const { connect } = useGameSocket();
-  const { sessions, active } = useAppSelector((state) => state.game);
   const selectCharacter = useSelectCharacterMutation();
+  const { sessions, active } = useAppSelector((state) => state.game);
 
   // #2165 per-tab scroll: remember each tab's scroll offset, restore on
   // switch, and stick to bottom while the reader is already at the bottom
@@ -719,15 +721,29 @@ export function GameWindow({
     (!effectiveLifecycle ||
       ['ready-no-scene', 'ready-scene', 'encounter', 'aftermath'].includes(effectiveLifecycle));
 
-  const handleTabClick = (name: MyRosterEntry['name']) => {
-    // #3412 — persist the selection server-side ALONGSIDE the existing
-    // puppeting behavior below, never replacing it.
+  const handleTabClick = async (name: MyRosterEntry['name']) => {
+    // #3479 decision 4: a puppet-tab switch is tab-local. It writes THIS
+    // tab's browsing identity (sessionStorage + the gameSlice mirror) and
+    // touches no other tab. The durable account selection is written only
+    // when the switch opens a socket, and before it: login puppets the
+    // server's durable selection as the socket authenticates (#3812,
+    // ADR-0294), and puppeting records the selection anyway, so this is the
+    // same fact landed a moment earlier. GameTopBar.handleSelectCharacter
+    // carries the long form of this rule.
     const entryId = characters.find((c) => c.name === name)?.id;
     if (entryId !== undefined) {
-      selectCharacter.mutate(entryId);
+      writeTabIdentity(entryId);
+      dispatch(setBrowsingIdentity(entryId));
     }
     dispatch(setActiveSession(name));
     if (!sessions[name].isConnected) {
+      if (entryId !== undefined) {
+        try {
+          await selectCharacter.mutateAsync(entryId);
+        } catch {
+          // onError already toasted; the connect below still carries the intent.
+        }
+      }
       connect(name);
     }
   };

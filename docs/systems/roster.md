@@ -376,6 +376,14 @@ RosterTenure.objects.for_player(player_data)                 # For specific play
   `Account.puppet_object` also calls, so puppeting records the selection and login
   puppets it (#3812, ADR-0294; the guarantee runs one way). Response
   mirrors the `/api/user/` payload fragment (`selected_entry_id` + `selected_entry`).
+  **Reads take an explicit id (#3479, ADR-0302):** the player-scoped read sites
+  (`missions` journal/invites/opportunities/beats, `npc_services` interaction
+  start/resolve/end, `weather` conditions) accept an optional `entry_id` (query
+  param on GET, body field on POST) resolved by
+  `selection.character_for_request(request, entry_id=...)`: it must be one of the
+  caller's own current entries (the `set_selected_entry` population; a foreign id is
+  a uniform `PermissionDenied`) and wins over the column; `None` falls back to
+  `selected_character()`. The column is the default, not the only identity.
 
 **Filters:** `RosterEntryFilterSet` via DjangoFilterBackend — `gender`, `char_class`, `name`,
 `roster`, and `realm` (#3725: a realm slug, matched on the sheet's true profile
@@ -471,18 +479,33 @@ shelf, not new player-made characters going through CG.
 
 ---
 
-## Frontend: Selection Chrome (#3412 slice 1, ADR-0241)
+## Frontend: Selection Chrome (#3412 slice 1, ADR-0241; per-tab identity #3479, ADR-0302)
 
 Web-only; no telnet surface (selection is a web-first state substrate, not a
-command). Client state mirrors the server; nothing here is a source of truth.
+command). The account column is the default; each tab's browsing identity is
+the tab's own.
 
+- **Per-tab browsing identity (#3479, ADR-0302).**
+  `frontend/src/store/browsingIdentity.ts` keeps `{ entryId, tabId }` in
+  `sessionStorage` (per tab by the browser's contract: a reload keeps it, a new
+  tab starts empty; every read and write sits in try/catch). `gameSlice.browsingEntryId`
+  mirrors it; `useBrowsingIdentity()` (`frontend/src/roster/useBrowsingIdentity.ts`)
+  returns `{ entryId, entry, name }` for the ambient pages (Hall, tidings, journal,
+  wardrobe, magic, missions, NPC interactions, weather), which pass `entryId` as
+  `entry_id` on their reads. `useAccountQuery`'s hydration effect SEEDS the tab from
+  the column only when the tab has no identity or its stored entry is no longer one
+  of the account's; later refetches leave it alone, so one tab's switch never moves
+  another's. `active`/`sessions` stay the live-session fields (ADR-0247's Gatefold
+  redirect and every in-game component read those). Writers: the Hall picker
+  (`CharactersBand`) writes the tab identity and the column; the in-game switches
+  (`GameTopBar` avatars, `GameWindow` puppet tabs) write the tab identity always and
+  the column only when the switch opens a socket, just before the connect (login
+  puppets the column, ADR-0294).
 - **`gameSlice`** (`frontend/src/store/gameSlice.ts`) mirrors
-  `PlayerData.selected_entry_id`/`selected_entry` alongside the existing
-  `active`/`activeEntryId` puppeting fields — hydrated from `useAccountQuery`'s
-  `GET /api/user/` response on every fetch, so a hard reload or a second device
-  reproduces the same selection. **Known wart:** the slice keys by character
+  `PlayerData.selected_entry_id`/`selected_entry` as `active`/`activeEntryId`
+  beside `browsingEntryId`. **Known wart:** the slice keys sessions by character
   *name*, not `RosterEntry` id, a pre-existing shape deliberately not refactored
-  here (25-surface change, out of slice scope — see the #3412 roadmap entry's
+  (25-surface change, out of slice scope; see the #3412 roadmap entry's
   "known seams").
 - **`SelectedCharacterChip`** (`frontend/src/components/SelectedCharacterChip.tsx`)
   — docked-portrait chip in `Header`, rendered app-wide (not just inside

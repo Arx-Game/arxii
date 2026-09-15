@@ -26,6 +26,7 @@ import { getGifts } from '@/character-creation/api';
 import type { components } from '@/generated/api';
 import { useDamageTypes } from '@/conditions/queries';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { TechniqueBuilderForm } from '../components/TechniqueBuilderForm';
 import { CharacterAuthorSelect } from '../components/CharacterAuthorSelect';
 import type { CapabilityType } from '../components/TechniquePayloadEditors';
@@ -60,11 +61,16 @@ export function TechniqueBuilderPage() {
   const account = useAccount();
   const isStaff = account?.is_staff ?? false;
 
-  // Acting character (#774): multi-alt accounts pick which character authors;
-  // single-character accounts fall through to the backend's auto-resolution.
+  // Acting character (#774): multi-alt accounts pick which character authors.
+  // The default is this tab's browsing identity (#3479, the character the
+  // tab is already acting as), then the first roster entry, and TechniqueViewSet
+  // auto-resolves single-character accounts when neither yields an id. The
+  // explicit picker always wins.
   const { data: rosterEntries = [] } = useMyRosterEntriesQuery();
+  const { entry: browsingEntry } = useBrowsingIdentity();
   const [pickedCharacterId, setPickedCharacterId] = useState<number | null>(null);
-  const effectiveCharacterId = pickedCharacterId ?? rosterEntries[0]?.character_id;
+  const effectiveCharacterId =
+    pickedCharacterId ?? browsingEntry?.character_id ?? rosterEntries[0]?.character_id;
 
   // Lookup lists
   const { data: giftsData = [], isLoading: giftsLoading } = useQuery({

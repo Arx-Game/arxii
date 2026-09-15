@@ -31,7 +31,12 @@ if TYPE_CHECKING:
 
 from django.db.models import QuerySet
 from django_filters.rest_framework import DjangoFilterBackend
-from drf_spectacular.utils import OpenApiResponse, extend_schema, inline_serializer
+from drf_spectacular.utils import (
+    OpenApiParameter,
+    OpenApiResponse,
+    extend_schema,
+    inline_serializer,
+)
 from rest_framework import serializers, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied
@@ -596,20 +601,48 @@ def _journal_paginated_response() -> serializers.Serializer:
     )
 
 
+# Shared query parameter for every acting-character endpoint below (#3479):
+# the class-level ``extend_schema`` on the two player-facing viewsets
+# advertises it on each of their operations.
+_ENTRY_ID_PARAM = OpenApiParameter(
+    name="entry_id",
+    type=int,
+    required=False,
+    description="RosterEntry id of one of the caller's own characters to act as, instead "
+    "of the account's durable selection (per-tab browsing identity, #3479). 403 for an "
+    "id that is not the caller's own.",
+)
+
+
+def _entry_id_param(request: Request) -> int | None:
+    """The optional ``entry_id`` query parameter (#3479), or 400 on a non-integer."""
+    from rest_framework.exceptions import ValidationError  # noqa: PLC0415
+
+    raw = request.query_params.get("entry_id")
+    if raw is None:
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValidationError({"entry_id": "A valid integer is required."}) from exc
+
+
 def _acting_character(request: Request) -> "ObjectDB":
     """Return the character the caller is acting as, or 400.
 
-    Resolved from the account's durable selection (``PlayerData.selected_entry``,
-    #3412) via ``selected_character`` rather than ``request.user.puppet``:
-    under ``MULTISESSION_MODE = 2`` that property is a list (empty with no
-    session, never ``None``) and it does not exist on the base ``AccountDB``
-    at all, which is how the journal 500'd in production (Sentry ARX2-7).
+    An explicit ``entry_id`` query parameter names the tab's browsing
+    identity (#3479); otherwise the account's durable selection
+    (``PlayerData.selected_entry``, #3412) answers. Never
+    ``request.user.puppet``: under ``MULTISESSION_MODE = 2`` that property
+    is a list (empty with no session, never ``None``) and it does not exist
+    on the base ``AccountDB`` at all, which is how the journal 500'd in
+    production (Sentry ARX2-7).
     """
     from rest_framework.exceptions import ValidationError  # noqa: PLC0415
 
-    from world.roster.services.selection import selected_character  # noqa: PLC0415
+    from world.roster.services.selection import character_for_request  # noqa: PLC0415
 
-    character = selected_character(request.user)
+    character = character_for_request(request, entry_id=_entry_id_param(request))
     if character is None:
         msg = "Select a character before using the journal."
         raise ValidationError(msg)
@@ -626,6 +659,7 @@ def _resolve_character_sheet(character_id: int) -> "CharacterSheet | None":
     return CharacterSheet.objects.filter(pk=character_id).first()
 
 
+@extend_schema(parameters=[_ENTRY_ID_PARAM])
 class MissionJournalViewSet(viewsets.ViewSet):
     """#885 — the player's mission journal + beat play loop.
 
@@ -1069,6 +1103,7 @@ class MissionJournalViewSet(viewsets.ViewSet):
         return Response(serializer.data)
 
 
+@extend_schema(parameters=[_ENTRY_ID_PARAM])
 class MissionBoardViewSet(viewsets.ViewSet):
     """Player-scoped board surface (#2044).
 

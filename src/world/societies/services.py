@@ -15,7 +15,7 @@ from evennia.accounts.models import AccountDB
 from evennia.objects.models import ObjectDB
 
 from world.covenants.models import Covenant
-from world.scenes.models import Persona, Scene
+from world.scenes.models import Interaction, Persona, Scene
 from world.skills.models import Skill
 from world.societies.constants import DeedKnowledgeSource
 from world.societies.models import (
@@ -54,6 +54,38 @@ def _shed_witnesses_if_concealed(
     return reduce_witnesses_by_stealth(characters, personas, witnesses)
 
 
+def _maybe_open_witness_window(
+    *, interaction: Interaction | None, entry: LegendEntry, scene: Scene
+) -> None:
+    """Open a WITNESS reaction window for bystanders (#2987).
+
+    Only when all three hold: the caller already has an ``interaction`` to
+    anchor the window to (a combat or action outcome deed; a social-pose solo
+    deed passes None and this is a silent no-op), the deed's room is publicly
+    listed, and the deed carries at least one ``DeedCrimeTag``. Untagged or
+    private deeds never open a window.
+
+    One window per interaction, and its target keeps the FIRST entry it was
+    opened for (``open_witness_window`` is idempotent per interaction). A
+    shared event with several tagged participants therefore exposes only the
+    first deed to a report today; the only wired producer (combat aftermath)
+    awards one persona, so this is a documented limit, not a live bug. A
+    group-crime producer needs a target per deed before it ships.
+    """
+    if interaction is None or scene.location is None:
+        return
+    from evennia_extensions.models import room_is_publicly_listed  # noqa: PLC0415
+    from world.justice.models import DeedCrimeTag  # noqa: PLC0415
+
+    if not room_is_publicly_listed(scene.location):
+        return
+    if not DeedCrimeTag.objects.filter(deed=entry).exists():
+        return
+    from world.justice.reaction_kinds import open_witness_window  # noqa: PLC0415
+
+    open_witness_window(interaction=interaction, entry=entry)
+
+
 @transaction.atomic
 def create_solo_deed(  # noqa: PLR0913
     persona: Persona,
@@ -70,6 +102,7 @@ def create_solo_deed(  # noqa: PLR0913
     containment_approach: str | None = None,
     earned_at_level: int = 0,
     event: LegendEvent | None = None,
+    interaction: Interaction | None = None,
 ) -> LegendEntry:
     """Create a solo legend deed, optionally anchored to a shared event's ceiling.
 
@@ -103,6 +136,12 @@ def create_solo_deed(  # noqa: PLR0913
         event: #3466 — the shared event this solo deed came out of, when there
             is one - a standout's anchor, and the ceiling any honor is clamped
             to. None for a deed with no shared origin.
+        interaction: #2987 - the ``Interaction`` this deed's act was recorded
+            against, when the caller already has one (a combat or action
+            outcome deed). Passed through to open a WITNESS reaction window
+            for bystanders when the deed also turns out public and
+            crime-tagged. None for a social-pose solo deed with no interaction
+            anchor, which never opens a window.
 
     Returns:
         The created LegendEntry.
@@ -152,6 +191,7 @@ def create_solo_deed(  # noqa: PLR0913
             containment_approach=containment_approach,
             fully_concealed=fully_concealed,
         )
+        _maybe_open_witness_window(interaction=interaction, entry=entry, scene=scene)
     new_credits = credit_engaged_covenants(entry=entry)
     refresh_legend_views()
     entry.persona.clear_cached_properties()
@@ -178,6 +218,7 @@ def create_legend_event(  # noqa: PLR0913, C901
     concealed: bool = False,
     containment_approach: str | None = None,
     stations_by_persona: dict[int, int] | None = None,
+    interaction: Interaction | None = None,
 ) -> tuple[LegendEvent, list[LegendEntry]]:
     """Create a shared event and individual deeds for each participant.
 
@@ -209,6 +250,12 @@ def create_legend_event(  # noqa: PLR0913, C901
             ``LegendRequirement``. Omit and every entry is stamped station 0,
             meaning "won outside a perilous stakes contract": still real legend
             for fame, murmur and spread, but qualifying no advancement.
+        interaction: #2987 - the ``Interaction`` this shared act was recorded
+            against, when the caller already has one (a combat or action
+            outcome deed). Passed through to open a WITNESS reaction window
+            for bystanders on each participant's entry that also turns out
+            public and crime-tagged. None for an event with no interaction
+            anchor, which never opens a window.
 
     Returns:
         Tuple of (LegendEvent, list of LegendEntry instances).
@@ -280,6 +327,7 @@ def create_legend_event(  # noqa: PLR0913, C901
                 containment_approach=containment_approach,
                 fully_concealed=fully_concealed,
             )
+            _maybe_open_witness_window(interaction=interaction, entry=e, scene=scene)
     all_credits: list[CovenantLegendCredit] = []
     for e in entries:
         all_credits.extend(credit_engaged_covenants(entry=e))

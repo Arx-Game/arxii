@@ -1,7 +1,8 @@
 /**
- * UnreadNarrativeBadge tests (#3412 hygiene fold-in) — the badge now routes to the
- * SELECTED character's sheet (gameSlice.active) rather than always the first roster
- * entry, and no longer appends the dead `#messages` fragment.
+ * UnreadNarrativeBadge tests (#3412 hygiene fold-in; #3479 retarget): the
+ * badge routes to this tab's browsing-identity character's sheet
+ * (gameSlice.browsingEntryId) rather than always the first roster entry, and
+ * no longer appends the dead `#messages` fragment.
  */
 
 import { render, screen } from '@testing-library/react';
@@ -23,10 +24,10 @@ vi.mock('@/roster/queries', () => ({
   useMyRosterEntriesQuery: () => mockRosterEntries(),
 }));
 
-function makeStore(active: string | null = null) {
+function makeStore(entryId: number | null = null) {
   const store = configureStore({ reducer: { game: gameSlice.reducer } });
-  if (active) {
-    store.dispatch(gameSlice.actions.hydrateActiveCharacter({ name: active, entryId: 1 }));
+  if (entryId != null) {
+    store.dispatch(gameSlice.actions.setBrowsingIdentity(entryId));
   }
   return store;
 }
@@ -60,14 +61,14 @@ describe('UnreadNarrativeBadge', () => {
 
   it('routes to the SELECTED character, not the first roster entry', () => {
     mockUnreadCount.mockReturnValue(3);
-    renderBadge(makeStore('SecondChar'));
+    renderBadge(makeStore(2));
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/characters/2');
   });
 
   it('drops the dead #messages fragment', () => {
     mockUnreadCount.mockReturnValue(1);
-    renderBadge(makeStore('FirstChar'));
+    renderBadge(makeStore(1));
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/characters/1');
   });

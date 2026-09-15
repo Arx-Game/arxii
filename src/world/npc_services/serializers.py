@@ -162,10 +162,20 @@ class MissionOfferDetailsSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 
 
+_ENTRY_ID_HELP = (
+    "Optional (#3479): RosterEntry id of one of the caller's own characters to "
+    "act as, instead of the account's durable selection. 403 for an id that is "
+    "not the caller's own."
+)
+
+
 class InteractionStartRequestSerializer(serializers.Serializer):
     """POST /api/npc-services/interactions/start/ body."""
 
     role_id = serializers.IntegerField(min_value=1)
+    entry_id = serializers.IntegerField(
+        min_value=1, required=False, allow_null=True, help_text=_ENTRY_ID_HELP
+    )
     npc_persona_id = serializers.IntegerField(
         min_value=1,
         required=False,
@@ -209,6 +219,17 @@ class InteractionResolveRequestSerializer(serializers.Serializer):
     # #1770 PR4: phase two of the risky-mission opt-in — re-send with True
     # after the gate's informed-consent prompt to accept the danger.
     acknowledge_risk = serializers.BooleanField(default=False)
+    entry_id = serializers.IntegerField(
+        min_value=1, required=False, allow_null=True, help_text=_ENTRY_ID_HELP
+    )
+
+
+class InteractionEndRequestSerializer(serializers.Serializer):
+    """POST /api/npc-services/interactions/end/ body (#3479)."""
+
+    entry_id = serializers.IntegerField(
+        min_value=1, required=False, allow_null=True, help_text=_ENTRY_ID_HELP
+    )
 
 
 # ---------------------------------------------------------------------------

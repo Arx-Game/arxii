@@ -374,6 +374,15 @@ vi.mock('../../components/ConsentPrompt', () => ({
   ConsentPrompt: () => <div data-testid="consent-prompt-stub">ConsentPrompt</div>,
 }));
 
+// #2987: the witness gate polls /api/reaction-windows/pending/ while the scene
+// is active; stubbed like the other answer-needing prompts so this suite never
+// opens a real fetch (jsdom has no origin to resolve the relative URL against).
+vi.mock('@/justice/components/WitnessReactionOfferGate', () => ({
+  WitnessReactionOfferGate: () => (
+    <div data-testid="witness-reaction-gate-stub">WitnessReactionOfferGate</div>
+  ),
+}));
+
 vi.mock('@/boundaries/components/SceneLinesAndVeilsCard', () => ({
   SceneLinesAndVeilsCard: () => (
     <div data-testid="lines-and-veils-card">SceneLinesAndVeilsCard</div>

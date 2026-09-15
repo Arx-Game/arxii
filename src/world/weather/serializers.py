@@ -11,10 +11,13 @@ class ConditionsRequestSerializer(serializers.Serializer):
     """Query-param validation for the conditions read.
 
     ``room_id`` optional since the Hall's Time plate (#3539): omitted, the view
-    resolves the caller's selected character's current room instead.
+    resolves the acting character's current room instead. ``entry_id`` names
+    which of the caller's own roster entries that is (per-tab browsing
+    identity, #3479); omitted, the account's durable selection is used.
     """
 
     room_id = serializers.IntegerField(required=False)
+    entry_id = serializers.IntegerField(required=False)
 
 
 class ConditionsSerializer(serializers.Serializer):

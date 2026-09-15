@@ -952,6 +952,17 @@ def _resolve_action_against_persona(
     character = action_request.initiator_persona.character_sheet.character
     target_character = target_persona.character_sheet.character
     context = ResolutionContext(character=character, target=target_character)
+    # GAP (#2987): this context never sets participants, so a LEGEND_AWARD
+    # consequence effect cannot fire from a scene action today regardless
+    # (_legend_award raises on an empty participants list) - and even if it
+    # did, ResolutionContext.interaction could not be set here yet, because
+    # this pipeline's Interaction (_create_result_interaction, below) is not
+    # created until AFTER start_action_resolution/apply_resolution has already
+    # run. Wiring this path would need both a participants source and a
+    # reordering of interaction creation ahead of effect application; combat's
+    # per-round OUTCOME interaction already exists before its aftermath pool
+    # fires, which is why that path (world.combat.services._apply_aftermath_rules)
+    # is the one wired in this change.
 
     # Effort is a check-roll modifier (not a difficulty delta) applied on BOTH the
     # technique-enhanced and plain branches (#1293). It is orthogonal to the

@@ -37,3 +37,21 @@ class JournalActorResolutionTests(APITestCase):
         response = self.client.get("/api/missions/journal/")
         self.assertEqual(response.status_code, status.HTTP_200_OK, response.content[:300])
         self.assertEqual(response.data["results"], [])
+
+    def test_entry_id_query_param_names_the_acting_character(self) -> None:
+        """#3479 per-tab browsing identity: an explicit own entry_id acts with
+        no durable selection at all; a foreign one is a uniform 403."""
+        sheet = CharacterSheetFactory()
+        tenure = RosterTenureFactory(
+            roster_entry__character_sheet__character=sheet.character,
+            player_data__account=self.account,
+        )
+        response = self.client.get("/api/missions/journal/", {"entry_id": tenure.roster_entry.pk})
+        self.assertEqual(response.status_code, status.HTTP_200_OK, response.content[:300])
+        self.assertEqual(response.data["results"], [])
+
+        foreign_tenure = RosterTenureFactory()
+        response = self.client.get(
+            "/api/missions/journal/", {"entry_id": foreign_tenure.roster_entry.pk}
+        )
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN, response.content[:300])

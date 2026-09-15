@@ -425,12 +425,25 @@ export async function resolveMissionGiverTarget(
 // (everything above is staff-only).
 // ---------------------------------------------------------------------------
 
-export async function listJournal(): Promise<PaginatedResponse<JournalEntry>> {
+/**
+ * Query string carrying the tab's browsing identity (#3479). The backend
+ * reads `entry_id` as a query parameter on every MissionJournalViewSet /
+ * MissionBoardViewSet operation (POSTs included), so this is appended to the
+ * URL, never the body. Null/undefined means "omitted": the server falls back
+ * to the account's durable selection. Never send an empty string (400).
+ */
+function entryIdQuery(entryId: number | null | undefined): string {
+  return entryId != null ? `?entry_id=${entryId}` : '';
+}
+
+export async function listJournal(
+  entryId?: number | null
+): Promise<PaginatedResponse<JournalEntry>> {
   // Follow every page (2026-07 audit): the journal paginates at 25 and
   // concluded runs accumulate forever — older entries (and, depending on
   // ordering, active stories in the StoryTray) silently vanished past page 1.
   const results = await fetchAllPages<JournalEntry>(
-    `${BASE_URL}/journal/`,
+    `${BASE_URL}/journal/${entryIdQuery(entryId)}`,
     'Failed to load your journal'
   );
   return { count: results.length, next: null, previous: null, results };
@@ -441,14 +454,17 @@ export async function listJournal(): Promise<PaginatedResponse<JournalEntry>> {
  * A brand-new character with zero missions has an empty journal, so invites
  * are read from a dedicated endpoint rather than journal entry 0.
  */
-export async function listPendingInvites(): Promise<PendingMissionInvite[]> {
-  const res = await apiFetch(`${BASE_URL}/journal/pending-invites/`);
+export async function listPendingInvites(entryId?: number | null): Promise<PendingMissionInvite[]> {
+  const res = await apiFetch(`${BASE_URL}/journal/pending-invites/${entryIdQuery(entryId)}`);
   if (!res.ok) throw new Error('Failed to load your mission invites');
   return res.json() as Promise<PendingMissionInvite[]>;
 }
 
-export async function getBeat(instanceId: number): Promise<BeatView | null> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/beat/`);
+export async function getBeat(
+  instanceId: number,
+  entryId?: number | null
+): Promise<BeatView | null> {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/beat/${entryIdQuery(entryId)}`);
   if (res.status === 404) return null; // concluded run — journal shows the epilogue
   if (!res.ok) throw new Error('Failed to load the current beat');
   return res.json();
@@ -456,9 +472,10 @@ export async function getBeat(instanceId: number): Promise<BeatView | null> {
 
 export async function resolveBeat(
   instanceId: number,
-  body: { option_id: number; approach_id?: number | null }
+  body: { option_id: number; approach_id?: number | null },
+  entryId?: number | null
 ): Promise<ResolvedBeat> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/resolve/`, {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/resolve/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -476,9 +493,10 @@ export async function resolveBeat(
 
 export async function tellTale(
   instanceId: number,
-  text: string
+  text: string,
+  entryId?: number | null
 ): Promise<{ id: number; tale: string }> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/tale/`, {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/tale/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ text }),
@@ -504,9 +522,10 @@ export async function tellTale(
  */
 export async function reportMission(
   instanceId: number,
-  style: ReportStyle
+  style: ReportStyle,
+  entryId?: number | null
 ): Promise<MissionReportResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/report/`, {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/report/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ style }),
@@ -522,8 +541,13 @@ export async function reportMission(
 // #1036 group beat + #887 invite surface (#2049 frontend).
 // ---------------------------------------------------------------------------
 
-export async function getGroupBeat(instanceId: number): Promise<GroupBeatResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-beat/`);
+export async function getGroupBeat(
+  instanceId: number,
+  entryId?: number | null
+): Promise<GroupBeatResult> {
+  const res = await apiFetch(
+    `${BASE_URL}/journal/${instanceId}/group-beat/${entryIdQuery(entryId)}`
+  );
   if (res.status === 404) return { group_beat: null, resolved: null };
   if (!res.ok) throw new Error('Failed to load the group beat');
   return res.json();
@@ -531,13 +555,17 @@ export async function getGroupBeat(instanceId: number): Promise<GroupBeatResult>
 
 export async function submitGroupPick(
   instanceId: number,
-  body: { option_id: number; approach_id?: number | null }
+  body: { option_id: number; approach_id?: number | null },
+  entryId?: number | null
 ): Promise<GroupBeatResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-pick/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await apiFetch(
+    `${BASE_URL}/journal/${instanceId}/group-pick/${entryIdQuery(entryId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
   if (res.status === 400) throw new ApiValidationError(await res.json());
   if (!res.ok) throw new Error('Failed to submit your pick');
   return res.json();
@@ -545,13 +573,17 @@ export async function submitGroupPick(
 
 export async function castGroupVote(
   instanceId: number,
-  body: { option_id: number }
+  body: { option_id: number },
+  entryId?: number | null
 ): Promise<GroupBeatResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/group-vote/`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const res = await apiFetch(
+    `${BASE_URL}/journal/${instanceId}/group-vote/${entryIdQuery(entryId)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }
+  );
   if (res.status === 400) throw new ApiValidationError(await res.json());
   if (!res.ok) throw new Error('Failed to submit your vote');
   return res.json();
@@ -559,9 +591,10 @@ export async function castGroupVote(
 
 export async function inviteToMission(
   instanceId: number,
-  body: { invitee_character_id: number }
+  body: { invitee_character_id: number },
+  entryId?: number | null
 ): Promise<MissionInviteResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/invite/`, {
+  const res = await apiFetch(`${BASE_URL}/journal/${instanceId}/invite/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -571,11 +604,14 @@ export async function inviteToMission(
   return res.json();
 }
 
-export async function respondToMissionInvite(body: {
-  invite_id: number;
-  response: 'accept' | 'decline';
-}): Promise<MissionInviteResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/respond/`, {
+export async function respondToMissionInvite(
+  body: {
+    invite_id: number;
+    response: 'accept' | 'decline';
+  },
+  entryId?: number | null
+): Promise<MissionInviteResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/respond/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -609,8 +645,8 @@ export interface OpportunitiesResult {
   your_organizations: OpportunityRow[];
 }
 
-export async function getOpportunities(): Promise<OpportunitiesResult> {
-  const res = await apiFetch(`${BASE_URL}/journal/opportunities/`);
+export async function getOpportunities(entryId?: number | null): Promise<OpportunitiesResult> {
+  const res = await apiFetch(`${BASE_URL}/journal/opportunities/${entryIdQuery(entryId)}`);
   if (!res.ok) throw new Error('Failed to load opportunities');
   return res.json();
 }
@@ -622,18 +658,22 @@ export interface BoardPosting {
 }
 
 export async function getBoardPostings(
-  boardObjectId: number
+  boardObjectId: number,
+  entryId?: number | null
 ): Promise<{ count: number; results: BoardPosting[] }> {
-  const res = await apiFetch(`${BASE_URL}/boards/${boardObjectId}/postings/`);
+  const res = await apiFetch(
+    `${BASE_URL}/boards/${boardObjectId}/postings/${entryIdQuery(entryId)}`
+  );
   if (!res.ok) throw new Error('Failed to load board postings');
   return res.json();
 }
 
 export async function takeBoardPosting(
   boardObjectId: number,
-  templateId: number
+  templateId: number,
+  entryId?: number | null
 ): Promise<{ instance_id: number; template_id: number }> {
-  const res = await apiFetch(`${BASE_URL}/boards/${boardObjectId}/take/`, {
+  const res = await apiFetch(`${BASE_URL}/boards/${boardObjectId}/take/${entryIdQuery(entryId)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ template_id: templateId }),

@@ -1950,14 +1950,21 @@ only via pardon/exoneration (ratified #2378 follow-up, ADR-0235).
   record + the authorship secret), `DenounceRecord` (once-only backfire guard),
   `ExileDecree` (persona × area × society banishment; `ends_at` null = permanent,
   #2378), `SentenceLadderRung` (per-society escalation step keyed on
-  `(society, level)`, matched against `failed_outs - 1`, #2378); `JusticeCase`
+  `(society, level)`, matched against `failed_outs - 1`, #2378),
+  `WitnessReactionTarget` (`scenes.ReactionWindow` O2O sidecar for the WITNESS reaction
+  kind, `legend_entry` FK to the public act bystanders react to, #2987;
+  `checks.ConsequenceEffect.crime_kinds` is the authored M2M that makes a
+  `LEGEND_AWARD` deed born crime-tagged, the seam that opens the window); `JusticeCase`
   gains `sentence_ends_at`/`terminal_due_at`/`terminal_carried_out_at` (#2378) and
   `humiliation_prestige_hit` (#2378 follow-up — the exact restorable hit);
   `areas.Area` gains `exile_destination` (RoomProfile the banished are ejected to,
   #2378)
 - **Key functions (`world/justice/services.py`):** `law_for`, `enforcing_society_for`,
   `accrue_heat`, `accrue_for_deed_knowledge` (evidence-disposal dampener), `heat_for`,
-  `associate_heat`, `tag_deed_crimes` (+ evidence generation), `heat_decay_tick`
+  `associate_heat`, `report_witnessed_crime` (the shared report core: `accrue_heat` +
+  a reputation sting; called by both `crime_watch.flag_crime` and the WITNESS
+  reaction handler's "report" choice, #2987), `tag_deed_crimes` (+ evidence
+  generation), `heat_decay_tick`
   (daily cron); accusation bridge (#1825): `record_accusation_crime`,
   `accrue_accusation_heat` (skips retracted claims), `file_criminal_accusation`
   (composes `secrets.mint_accusation` + claim + heat — justice→secrets, ADR-0010);
@@ -2516,9 +2523,15 @@ Character lifecycle management with web-first applications and player anonymity.
   (missions journal, NPC interactions; ADR-0260 says why not `request.user.puppet`);
   `POST /api/roster/entries/select/` + `selected_entry`/`selected_entry_id` on
   `GET /api/user/`. Zero lifecycle/session/puppeting side effects — selection is not
-  presence. Frontend mirrors it in `gameSlice` (hydrated from the account query, reload-
-  and cross-device-durable) and surfaces it as `SelectedCharacterChip` in `Header` — see
-  [roster.md](roster.md)'s "Frontend: Selection Chrome" section for the full detail.
+  presence. Frontend mirrors it in `gameSlice` and surfaces it as `SelectedCharacterChip`
+  in `Header` — see [roster.md](roster.md)'s "Frontend: Selection Chrome" section for
+  the full detail. **Per-tab browsing identity (#3479, ADR-0302):** the column is the
+  default, not the only identity. Each browser tab keeps its own `RosterEntry` id in
+  `sessionStorage` (`frontend/src/store/browsingIdentity.ts`, mirrored as
+  `gameSlice.browsingEntryId`, read through `useBrowsingIdentity()`); the account
+  refetch seeds an empty tab and never overwrites one. Player-scoped reads (missions,
+  NPC interactions, weather) take an explicit `entry_id` resolved by
+  `selection.character_for_request` (own entries only; `None` falls back to the column).
 - **The Hall — logged-in home surface (#3412 slice 2, ADR-0245):** `GET
   /api/roster/entries/mine/` annotates `unread_narrative_count` per character (one
   aggregated JOIN/GROUP BY over unacknowledged `NarrativeMessageDelivery` rows, not
@@ -3406,6 +3419,49 @@ without one stands at the threshold (marked in the Here panel, not addressable r
   GM/owner/staff-gated (`viewer_can_gm && is_active`) dialog for setting round mode and knobs;
   consumes `active_round` from the scene detail and dispatches `useSetRoundMode` →
   `POST /api/scenes/{id}/set-round-mode/`. Wired into `SceneHeader.tsx`.
+- **Reaction windows (#904):** `ReactionWindow`/`WindowReaction` (`reaction_models.py`):
+  a timed window on a scene event that a kind-specific choice vocabulary + effect handlers
+  attach to (`ReactionKindConfig`, registered per kind via
+  `reaction_services.register_reaction_kind`, usually from the owning app's `AppConfig.ready()`).
+  `ReactionWindowKind` (`world.scenes.constants`): `ENTRANCE` (Make an Entrance), `KUDOS`
+  (`react-to-interaction`'s lazy-open kind, #911), `SPREAD_ASSIST` (Acclaim the Telling, sidecar
+  `societies.SpreadAssistTarget` boosting a `LegendEntry`'s spread, #915), `WITNESS` (Witness a
+  Public Act, sidecar `justice.WitnessReactionTarget` linking to the `LegendEntry` bystanders
+  react to, #2987, hidden/`public=False` so reports stay anonymous; handler
+  `justice.reaction_kinds.WITNESS_KIND` resolves "report" immediately, on reaction,
+  as one `justice.report_witnessed_crime` call per `DeedCrimeTag` on the deed against
+  the deed-time actor persona; "intervene"/"ignore" have no mechanical effect). A
+  WITNESS window opens from the deed-creation call sites themselves:
+  `societies.services.create_solo_deed`/`create_legend_event` take an
+  `interaction` keyword and call `justice.reaction_kinds.open_witness_window`
+  right after the deed's #1464 reach fork when the caller passed an
+  `interaction`, the deed's room is publicly listed, and the deed carries a
+  `justice.DeedCrimeTag`; a social-pose solo deed with no interaction opens
+  none. Bystanders learn a WITNESS window exists via
+  `GET /api/reaction-windows/pending/` (`ReactionWindowViewSet.pending`,
+  `reaction_views.py`, #2987 Task 4) rather than the interaction feed a
+  hidden kind never surfaces on: `?kind=` defaults to `witness`, scoped to
+  the caller's active persona (`active_persona_for_sheet`, never
+  `primary_persona`) via the same eligibility `react_to_window` enforces
+  (scene participation + `can_view_interaction`), excluding the persona's
+  own deed, already-reacted windows, and settled windows. Each item carries
+  `id`/`interaction_id`/`scene_id`/`kind`/`choices` only, never a reactor
+  list, keeping report anonymity intact on the read side too. Today only
+  combat-aftermath deeds reach this: `world.combat.services
+  ._apply_aftermath_rules` sets `ResolutionContext.interaction`
+  (`world.checks.types`) to the encounter's already-created OUTCOME
+  interaction before its consequence pool fires `_legend_award`, which
+  forwards it through. The generic scene-action pipeline is a named gap
+  (see the comment at `world.scenes.action_services` line 931,
+  `_resolve_action_against_persona`): its result interaction is created
+  after `apply_resolution` runs, and its `ResolutionContext` never sets
+  `participants`, so a `LEGEND_AWARD` effect cannot fire there at all today.
+  Also unwired: no authored `LEGEND_AWARD` `ConsequenceEffect` carries crime
+  kinds, so the first live producer of a public, crime-tagged,
+  interaction-anchored deed needs that content authored. A kind needing
+  per-window data beyond the generic `ReactionWindow` row carries a 1:1
+  sidecar model (the `SceneEntryEndorsement` pattern) rather than widening
+  `ReactionWindow` itself.
 - **Places (#1866):** `Place`/`PlacePresence` (`place_models.py`) — a named sub-location
   within a room. `JoinPlaceAction`/`LeavePlaceAction` (`actions/definitions/places.py`)
   are the seam both `PlaceViewSet` (`place_views.py`) and telnet `CmdPlaces` (`places`,
