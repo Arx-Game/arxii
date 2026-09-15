@@ -303,7 +303,7 @@ describe('AddDialog — exit mode (Leads-to implicit dig/link fork)', () => {
     await userEvent.type(screen.getByTestId('add-dialog-name'), 'the kitchen');
     expect(screen.getByTestId('add-dialog-submit')).toHaveTextContent('Link it');
     expect(screen.getByTestId('add-dialog-exit-note')).toHaveTextContent(
-      'joins two rooms that already exist'
+      'links to The Kitchen, and The Kitchen back to here'
     );
 
     await userEvent.type(screen.getByTestId('add-dialog-exit-there'), 'north');

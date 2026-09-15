@@ -174,9 +174,10 @@ function exitNote(
 ): string {
   if (trimmedDestination === '') return 'name the room this exit leads to';
   if (matched) {
+    // Both rooms exist, so the note says what will and will not lead back (#3860).
     return oneWay
-      ? `joins two rooms that already exist — nothing leads back to here`
-      : 'joins two rooms that already exist — nothing new is made';
+      ? `links to ${matched.name}; nothing leads back to here`
+      : `links to ${matched.name}, and ${matched.name} back to here`;
   }
   return oneWay
     ? 'dug as a placeholder for the writing pass — nothing leads back to here'
