@@ -107,6 +107,7 @@ if TYPE_CHECKING:
         MissionParticipant,
     )
     from world.stories.constants import BeatOutcome
+    from world.tasking.models import OrgTask
 
 _ERR_CHECK_NO_TYPE = (
     "OptionKind.CHECK option {option_pk} has no authored_check_type — "
@@ -537,12 +538,8 @@ def _spawn_mission_instance_room(
     character.move_to(room, quiet=True)
 
 
-def _task_target_area(instance: MissionInstance) -> Area | None:
-    """The fulfilled OrgTask's target-domain Area, or None (#696 gap 7).
-
-    A run picked up off the mission board to handle a domain job spawns its
-    interior inside that domain, even when the doorway is elsewhere.
-    """
+def _fulfilled_task(instance: MissionInstance) -> OrgTask | None:
+    """The OrgTask this run fulfills (#2820 phase 5), or None for an ordinary run."""
     from world.tasking.models import TaskFulfillment  # noqa: PLC0415
 
     fulfillment = (
@@ -550,9 +547,32 @@ def _task_target_area(instance: MissionInstance) -> Area | None:
         .select_related("task__target_domain")
         .first()
     )
-    if fulfillment is None or fulfillment.task.target_domain is None:
+    return fulfillment.task if fulfillment is not None else None
+
+
+def _task_target_area(instance: MissionInstance) -> Area | None:
+    """The fulfilled OrgTask's target-domain Area, or None (#696 gap 7).
+
+    A run picked up off the mission board to handle a domain job spawns its
+    interior inside that domain, even when the doorway is elsewhere.
+    """
+    task = _fulfilled_task(instance)
+    if task is None or task.target_domain is None:
         return None
-    return fulfillment.task.target_domain.area
+    return task.target_domain.area
+
+
+def _authored_check_difficulty(instance: MissionInstance) -> int:
+    """Target difficulty for an AUTHORED CHECK in this run.
+
+    A run fulfilling an OrgTask whose steward set ``derived_difficulty`` at
+    issue rolls against that number (#696 gap 8); every other run rolls at
+    the template's ``risk_tier``.
+    """
+    task = _fulfilled_task(instance)
+    if task is not None and task.derived_difficulty is not None:
+        return task.derived_difficulty
+    return instance.template.risk_tier
 
 
 def _teardown_spawned_room(instance: MissionInstance) -> None:
@@ -641,7 +661,9 @@ def resolve_option(  # noqa: PLR0913
     BRANCH options route the graph with no dice. CHECK options either:
 
       * AUTHORED — roll ``perform_check`` at
-        ``instance.template.risk_tier``.
+        ``instance.template.risk_tier``, or at the fulfilled OrgTask's
+        steward-set ``derived_difficulty`` when the run is a task pickup
+        (#696 gap 8, ``_authored_check_difficulty``).
       * CHALLENGE — resolve via the player's ``chosen_approach``: run
         ``perform_check`` at the challenge's ``severity`` (or, when the
         approach is ``auto_succeeds``, synthesize a top-tier outcome with
@@ -699,7 +721,7 @@ def resolve_option(  # noqa: PLR0913
         )
     else:
         check_type = _resolve_check_type(option)
-        target_difficulty = instance.template.risk_tier
+        target_difficulty = _authored_check_difficulty(instance)
         if option.option_kind == OptionKind.CONTEST:
             target_difficulty += _contest_opposition(option)
         result = perform_check(

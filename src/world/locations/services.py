@@ -1715,6 +1715,28 @@ def set_room_display_data(  # noqa: PLR0913 — staff bypass adds one flag to th
 _AREA_ANCESTOR_WALK_CAP = 10  # defensive bound on parent-chain traversal
 
 
+def area_order_difficulty(area: Area | None) -> int:
+    """Check difficulty implied by an area's order versus crime (#696 items 1 and 8).
+
+    The base NORMAL difficulty shifted point for point by net pressure (the
+    area's CRIME total minus its ORDER total, both via ``area_stat_total``),
+    clamped to the authored band range; ``None`` is a quiet area at NORMAL.
+    Shared by the collection run (worst stop wins, ``currency.services``) and
+    the steward's issue-time check (``tasking.services.create_task``).
+    PLACEHOLDER tuning: point-for-point is a first guess.
+    """
+    from world.locations.constants import StatKey  # noqa: PLC0415
+    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+
+    base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
+    pressure = 0
+    if area is not None:
+        pressure = area_stat_total(area, StatKey.CRIME) - area_stat_total(area, StatKey.ORDER)
+    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
+    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
+    return max(low, min(high, base + pressure))
+
+
 def area_stat_total(area: Area | None, stat_key: str) -> int:
     """Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).
 

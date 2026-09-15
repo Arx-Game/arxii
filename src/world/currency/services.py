@@ -621,20 +621,15 @@ def _collection_target_difficulty(streams: list[OrgIncomeStream]) -> int:
     PLACEHOLDER tuning: point-for-point shift and worst-stop-wins are first
     guesses — revisit with real turf-war stat magnitudes.
     """
-    from world.locations.constants import StatKey  # noqa: PLC0415
-    from world.locations.services import area_stat_total  # noqa: PLC0415
-    from world.scenes.action_constants import DIFFICULTY_VALUES, DifficultyChoice  # noqa: PLC0415
+    from world.locations.services import area_order_difficulty  # noqa: PLC0415
 
-    base = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
-    pressures = [
-        area_stat_total(stream.area, StatKey.CRIME) - area_stat_total(stream.area, StatKey.ORDER)
-        for stream in streams
-        if stream.area_id is not None
+    # area_order_difficulty clamps monotonically, so the worst stop's difficulty
+    # is the max of the per-stop difficulties; a run with no located stop is a
+    # quiet run at NORMAL (#696 gap 8 factored the derivation out).
+    difficulties = [
+        area_order_difficulty(stream.area) for stream in streams if stream.area_id is not None
     ]
-    worst = max(pressures, default=0)
-    low = DIFFICULTY_VALUES[DifficultyChoice.TRIVIAL]
-    high = DIFFICULTY_VALUES[DifficultyChoice.HARROWING]
-    return max(low, min(high, base + worst))
+    return max(difficulties, default=area_order_difficulty(None))
 
 
 @transaction.atomic
