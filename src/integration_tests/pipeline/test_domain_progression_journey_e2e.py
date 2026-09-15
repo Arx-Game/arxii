@@ -17,6 +17,7 @@ from django.test import TestCase
 from evennia.objects.models import ObjectDB
 
 from evennia_extensions.factories import CharacterFactory, ObjectDBFactory
+from evennia_extensions.models import RoomProfile
 from flows.factories import SceneDataManagerFactory
 from flows.service_functions.serializers.room_state import RoomStatePayloadSerializer
 from world.areas.constants import AreaLevel
@@ -32,7 +33,7 @@ from world.currency.services import (
     get_or_create_purse,
     get_or_create_treasury,
 )
-from world.instances.services import spawn_instanced_room
+from world.instances.services import complete_instanced_room, spawn_instanced_room
 from world.items.constants import OrgMaterialLedgerKind
 from world.items.factories import MaterialCategoryFactory
 from world.items.gems.buckets import material_value
@@ -240,6 +241,10 @@ class EntranceJourneyTests(TestCase):
 
     def test_entrance_traversal_and_hiding(self) -> None:
         anchor = _room("Inn Hallway")
+        hallway_area = AreaFactory(name="Inn District")
+        anchor_profile, _ = RoomProfile.objects.get_or_create(objectdb=anchor)
+        anchor_profile.area = hallway_area
+        anchor_profile.save(update_fields=["area"])
         owner = _pc(anchor)
         participant = _pc(anchor)
         bystander = _pc(anchor)
@@ -274,6 +279,11 @@ class EntranceJourneyTests(TestCase):
             self.assertTrue(visible_to(admitted))
         self.assertFalse(exit_state.can_traverse(context.get_state_by_pk(bystander.pk)))
         self.assertFalse(visible_to(bystander))
+
+        # The interior inherits the doorway's area, and teardown takes the doorway with it.
+        self.assertEqual(spawned.room_profile.area_id, hallway_area.pk)
+        complete_instanced_room(spawned)
+        self.assertFalse(ObjectDB.objects.filter(pk=entrance.pk).exists())
 
 
 class IssueDifficultyJourneyTests(TestCase):

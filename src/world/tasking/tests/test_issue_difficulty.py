@@ -13,7 +13,7 @@ from world.societies.houses.services import create_domain
 from world.tasking.constants import DIFFICULTY_STEP_PER_LEVEL, TaskTargetKind
 from world.tasking.factories import TaskTemplateFactory
 from world.tasking.models import OrgTask
-from world.tasking.services import create_task
+from world.tasking.services import assign_agent, create_task, task_difficulty
 from world.traits.factories import CheckOutcomeFactory
 
 NORMAL = DIFFICULTY_VALUES[DifficultyChoice.NORMAL]
@@ -55,6 +55,25 @@ class IssueDifficultyTests(TestCase):
 
         derive.assert_called_once_with(area)
         self.assertEqual(task.derived_difficulty, 60 - 2 * DIFFICULTY_STEP_PER_LEVEL)
+
+    def test_npc_dispatch_rolls_at_the_derived_difficulty(self) -> None:
+        from world.assets.factories import NPCAssetFactory
+        from world.societies.factories import OrganizationMembershipFactory
+
+        OrganizationMembershipFactory(organization=self.org, persona=self.steward)
+        with force_check_outcome(self.good):
+            task = create_task(self.template, self.org, self.steward)
+        self.assertEqual(task_difficulty(task), task.derived_difficulty)
+
+        asset = NPCAssetFactory(promoter_persona=self.steward)
+        with force_check_outcome(self.good) as capture:
+            assign_agent(task, asset, self.steward)
+
+        self.assertEqual(capture.target_difficulty, task.derived_difficulty)
+
+    def test_task_difficulty_falls_back_to_the_template(self) -> None:
+        task = OrgTask(template=self.template, org=self.org, issued_by=self.steward)
+        self.assertEqual(task_difficulty(task), self.template.check_difficulty)
 
     def test_the_roll_itself_is_not_stored(self) -> None:
         with force_check_outcome(self.good):

@@ -4002,7 +4002,8 @@ consumers, not systems.
   `currency.collect_org_income` graded at that level via `success_level_override`,
   with the handler as collector; null = no collection, #696 item 2), `OrgTask`
   (status lifecycle, `DiscriminatorMixin` target, nullable `derived_difficulty`:
-  the steward-set target a PC run rolls against, #696 gap 8), `TaskFulfillment`
+  the steward-set target every roll on the task uses via `task_difficulty`, #696
+  gap 8), `TaskFulfillment`
   (`npc_asset` XOR `mission_instance`, stored dispatch check, report),
   `ListenerPost` (buzz meter on a LISTENER `NPCAssignment` + hidden counterplay
   state), `ListenerHarvest` (caught Secret XOR planted red herring)

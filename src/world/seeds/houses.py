@@ -259,25 +259,17 @@ def _seed_material_holdings(*, domain, HoldingKind, source_model) -> None:  # no
     """Quarry and lumber camp beside the farmland (#696 gap 8): the material
     half of a domain's output, each with one bulk ``HoldingMaterialSource``.
 
-    Timber lands in the crafting seed's ``Wood`` category when it exists;
-    stone has no crafting category yet, so a PLACEHOLDER one is sampled here
-    (authored content: skipped when sampling is off, like every other row).
+    Categories belong to the crafting seed (``world/seeds/crafting_materials.py``
+    owns ``Stone`` and ``Wood``); this seeder only looks them up and skips the
+    source row when one is absent, so cluster order never matters here.
     """
     from world.items.constants import MaterialSourceKind  # noqa: PLC0415
     from world.items.models import MaterialCategory  # noqa: PLC0415
     from world.seeds.sample_content import authored_or_sample  # noqa: PLC0415
     from world.societies.houses.services import add_holding  # noqa: PLC0415
 
-    stone = authored_or_sample(
-        MaterialCategory,
-        {"description": "PLACEHOLDER: quarried building stone.", "sort_order": 90},
-        name="Stone PLACEHOLDER",
-    )
-    timber = MaterialCategory.objects.filter(name="Wood").first() or authored_or_sample(
-        MaterialCategory,
-        {"description": "PLACEHOLDER: felled timber.", "sort_order": 91},
-        name="Wood",
-    )
+    stone = MaterialCategory.objects.filter(name="Stone").first()
+    timber = MaterialCategory.objects.filter(name="Wood").first()
     for kind_name, description, category in (
         ("Quarry PLACEHOLDER", "PLACEHOLDER: a hillside cut for building stone.", stone),
         ("Lumber camp PLACEHOLDER", "PLACEHOLDER: a woodlot worked for timber.", timber),

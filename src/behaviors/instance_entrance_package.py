@@ -79,11 +79,23 @@ def entrance_refuses(destination: "ObjectDB | None", actor_obj: "ObjectDB") -> b
     """True when ``destination`` is an instanced room that refuses ``actor_obj``.
 
     The serializer-side twin of :func:`restrict_to_run`: a non-instance
-    destination refuses nobody, so ordinary exits are untouched.
+    destination refuses nobody, so ordinary exits are untouched. One lookup
+    per call; a caller with many exits batches the lookup itself and uses
+    :func:`instance_refuses` (the room-state serializer does).
     """
     instance = _instance_for_room(destination)
     if instance is None:
         return False
+    return not _admits(instance, actor_obj)
+
+
+def instance_refuses(instance: "InstancedRoom", actor_obj: "ObjectDB") -> bool:
+    """True when the run behind ``instance`` does not admit ``actor_obj``.
+
+    The batched form of :func:`entrance_refuses`: the caller already resolved
+    the lifecycle record (one ``InstancedRoom`` query for a whole room's
+    exits), so only the admission check runs here.
+    """
     return not _admits(instance, actor_obj)
 
 

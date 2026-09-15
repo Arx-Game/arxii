@@ -178,6 +178,19 @@ def create_task(  # noqa: PLR0913 - the five target kwargs are co-equal discrimi
     return task
 
 
+def task_difficulty(task: OrgTask) -> int:
+    """The target difficulty every roll on ``task`` uses (#696 gap 8).
+
+    The steward-set ``derived_difficulty`` when it exists, else the template's
+    static ``check_difficulty``: the handler's dispatch check, the agent's
+    resolution check and a PC pickup's AUTHORED CHECKs all read this one
+    number, so a well-briefed job is easier however it is run.
+    """
+    if task.derived_difficulty is not None:
+        return task.derived_difficulty
+    return task.template.check_difficulty
+
+
 def _target_area(task: OrgTask) -> Area | None:
     """The Area a task's target sits in, for the local-order read (#696 gap 8).
 
@@ -247,7 +260,7 @@ def assign_agent(task: OrgTask, npc_asset: NPCAsset, handler: Persona) -> TaskFu
     dispatch_result = perform_check_with_modifiers(
         handler_character,
         task.template.check_type,
-        target_difficulty=task.template.check_difficulty,
+        target_difficulty=task_difficulty(task),
     )
     fulfillment = TaskFulfillment(
         task=task,
@@ -434,7 +447,7 @@ def resolve_task(task: OrgTask) -> TaskFulfillment:
     check_result = perform_check(
         agent_character,
         task.template.check_type,
-        task.template.check_difficulty,
+        task_difficulty(task),
         extra_modifiers=(
             fulfillment.handler_margin
             + APTITUDE_STEP * aptitude_band(agent_persona, task.template.category)

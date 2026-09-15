@@ -19,7 +19,9 @@ def spawn_instanced_room(  # noqa: PLR0913 — one owner-kind arg per caller (pl
     return_location: ObjectDB | None,  # noqa: OBJECTDB_PARAM — see InstancedRoom.return_location
     source_key: str = "",
     gm_owner: GMProfile | None = None,
-    anchor_room: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM - sibling of return_location
+    # noqa: OBJECTDB_PARAM - callers pass character.location, a bare ObjectDB that
+    # may have no RoomProfile yet; the service resolves room_profile_or_none itself.
+    anchor_room: ObjectDB | None = None,  # noqa: OBJECTDB_PARAM
     area: Area | None = None,
 ) -> ObjectDB:
     """Create a temporary instanced room, its RoomProfile, and lifecycle record.
