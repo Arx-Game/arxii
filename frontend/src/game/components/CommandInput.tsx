@@ -10,7 +10,8 @@ import type { DraftKey, DraftMode, DraftScopeSettling } from '@/game/useDraftSto
 import { dbrefToId } from '@/lib/dbref';
 import { RichTextInput } from '@/components/RichTextInput';
 import { PersonaAvatar } from '@/components/PersonaAvatar';
-import { ModeSelector } from '@/scenes/components/ModeSelector';
+import { COMMANDS_MODE, ModeSelector } from '@/scenes/components/ModeSelector';
+import { StaffConsole } from './StaffConsole';
 import { LanguageSelector } from './LanguageSelector';
 import { CompanionSelector } from './CompanionSelector';
 import { companionEmote } from '@/companions/api';
@@ -70,12 +71,22 @@ const MAX_POSE_LENGTH = 10_000;
 // `send()` path rather than risk broadcasting room-wide.
 const EXECUTE_ACTION_SPEECH_MODES = new Set(['say', 'whisper', 'tt']);
 
+/** A line that starts with `/` (not `//`) is a command, sent as typed without the slash (#3857). */
+function slashEscape(trimmed: string): string | null {
+  if (!trimmed.startsWith('/') || trimmed.startsWith('//')) return null;
+  return trimmed.slice(1).trim();
+}
+
 /**
  * Builds the full command string for a trimmed input given the active composer
- * mode. When the input already starts with an explicit known command, or there
+ * mode. A `/` line is the command after the slash (#3857); `//` poses a literal
+ * slash. When the input already starts with an explicit known command, or there
  * is no composer mode, the input is sent verbatim.
  */
 function buildFullCommand(trimmed: string, composerMode?: ComposerMode): string {
+  const escaped = slashEscape(trimmed);
+  if (escaped !== null) return escaped;
+  if (trimmed.startsWith('//')) trimmed = trimmed.slice(1);
   if (!composerMode) return trimmed;
 
   const firstWord = trimmed.split(' ')[0].toLowerCase();
@@ -146,6 +157,8 @@ interface CommandInputProps {
    * sends on Cmd/Ctrl+Enter, for any surface that wants that.
    */
   submitOnEnter?: boolean;
+  /** Staff see the Commands mode and the console (#3857). */
+  isStaff?: boolean;
   /** Account/context-scoped draft key. Drafts remain per-tab and never contain received text. */
   draftScope?: string;
   /**
@@ -193,6 +206,7 @@ export function CommandInput({
   draftScope,
   draftScopeSettling,
   roomName,
+  isStaff = false,
   replyTarget,
   onCancelReply,
   ready = true,
@@ -212,7 +226,8 @@ export function CommandInput({
     null
   );
   const submittingRef = useRef(false);
-  const { send, executeAction } = useGameSocket();
+  const { send, sendConsole, executeAction } = useGameSocket();
+  const isCommandsMode = composerMode?.command === COMMANDS_MODE;
 
   const activeCharacter = useAppSelector((state) => state.game.active);
   const roomCharacters = useAppSelector((state) => {
@@ -514,8 +529,22 @@ export function CommandInput({
     // say/whisper/tt AND the player didn't type an explicit different
     // command inline (KNOWN_COMMANDS override stays on the legacy `send()`
     // path unchanged — that's free-text, not a structured dispatch).
+    // Commands mode (#3857, staff): the line goes as typed, flagged so the
+    // server tags its answer for the console. No draft ack: a raw line has
+    // no structured result to wait for, so it clears the way the plain
+    // WebSocket path below does.
+    if (composerMode?.command === COMMANDS_MODE) {
+      sendConsole(character, trimmed);
+      discard();
+      setHistory((prev) => [...prev, trimmed]);
+      setHistoryIndex(-1);
+      return;
+    }
+
     const firstWord = trimmed.split(' ')[0].toLowerCase();
-    const hasExplicitCommandOverride = KNOWN_COMMANDS.has(firstWord);
+    // A `/` line is a command (#3857): never a speech dispatch, whatever the mode.
+    const hasExplicitCommandOverride =
+      KNOWN_COMMANDS.has(firstWord) || slashEscape(trimmed) !== null;
     const liveSpeechMode: DraftMode | null =
       !hasExplicitCommandOverride &&
       composerMode &&
@@ -809,6 +838,7 @@ export function CommandInput({
     submittingRef.current = false;
   }, [
     character,
+    sendConsole,
     composerMode,
     draft.content,
     draft.status,
@@ -861,11 +891,13 @@ export function CommandInput({
 
   const handleModeChange = useCallback(
     (mode: string) => {
-      if (!onModeChange || !composerMode || composerMode.locked) return;
+      // A mode can be picked with none set yet (#3857): the selector's label is
+      // the truth, so choosing an entry always takes effect.
+      if (!onModeChange || composerMode?.locked) return;
       const label = mode.charAt(0).toUpperCase() + mode.slice(1);
       onModeChange({
         command: mode,
-        targets: composerMode.targets,
+        targets: composerMode?.targets ?? [],
         label,
       });
     },
@@ -895,6 +927,7 @@ export function CommandInput({
       return `\ud83d\udc3e As ${asCompanion.name}`;
     }
     if (!composerMode) return '';
+    if (composerMode.command === COMMANDS_MODE) return 'A staff command, sent as typed';
     const mode = composerMode.command.charAt(0).toUpperCase() + composerMode.command.slice(1);
     let text: string;
     if (composerMode.targets.length > 0) {
@@ -940,6 +973,43 @@ export function CommandInput({
     });
     onTargetConsumed?.();
   }, [targetToAppend, onTargetConsumed, setContent]);
+
+  // The scene's own controls at the right of the toolbar; in Commands mode the
+  // console control stands alone there (#3857).
+  const sceneRightSlot = sceneId ? (
+    <div className="flex items-center gap-1">
+      {isStaff && <StaffConsole character={character} active={false} />}
+      {personaId != null && (
+        <button
+          type="button"
+          aria-label="Make an entrance"
+          title="Make an entrance: your next pose announces your arrival and others can acclaim it"
+          aria-pressed={isEntrance}
+          onClick={handleToggleEntrance}
+          className={`rounded px-1 text-sm transition-colors ${
+            isEntrance ? 'bg-amber-500/20 text-amber-500' : 'text-muted-foreground'
+          }`}
+        >
+          ✨
+        </button>
+      )}
+      {isEntrance && personaId != null && (
+        <EntranceTechniqueAttachment
+          personaId={personaId}
+          candidates={entranceCandidates}
+          value={entranceTechnique}
+          onChange={setEntranceTechnique}
+        />
+      )}
+      <ActionAttachment
+        sceneId={sceneId}
+        attachment={actionAttachment ?? null}
+        onAttach={(action) => onActionAttach?.(action)}
+        onDetach={() => onActionDetach?.()}
+        targetName={composerMode?.targets[0]}
+      />
+    </div>
+  ) : undefined;
 
   return (
     <div className="play-composer-safe shrink-0 border-t">
@@ -1064,6 +1134,8 @@ export function CommandInput({
         onKeyDown={handleKeyDown}
         rows={5}
         submitOnEnter={submitOnEnter}
+        formatting={!isCommandsMode}
+        textareaClassName={isCommandsMode ? 'font-mono text-sm' : undefined}
         submitDisabled={
           !ready ||
           Boolean(replyRefusal && !replyRefusal.reachable) ||
@@ -1090,48 +1162,15 @@ export function CommandInput({
               onModeChange={handleModeChange}
               isAtPlace={isAtPlace ?? false}
               locked={composerMode?.locked ?? false}
+              staff={isStaff}
             />
             {composerMode && SPEECH_COMPOSER_MODES.has(composerMode.command) && (
               <LanguageSelector character={character} />
             )}
-            <CompanionSelector value={asCompanion} onChange={setAsCompanion} />
+            {!isCommandsMode && <CompanionSelector value={asCompanion} onChange={setAsCompanion} />}
           </div>
         }
-        rightSlot={
-          sceneId ? (
-            <div className="flex items-center gap-1">
-              {personaId != null && (
-                <button
-                  type="button"
-                  aria-label="Make an entrance"
-                  title="Make an entrance: your next pose announces your arrival and others can acclaim it"
-                  aria-pressed={isEntrance}
-                  onClick={handleToggleEntrance}
-                  className={`rounded px-1 text-sm transition-colors ${
-                    isEntrance ? 'bg-amber-500/20 text-amber-500' : 'text-muted-foreground'
-                  }`}
-                >
-                  ✨
-                </button>
-              )}
-              {isEntrance && personaId != null && (
-                <EntranceTechniqueAttachment
-                  personaId={personaId}
-                  candidates={entranceCandidates}
-                  value={entranceTechnique}
-                  onChange={setEntranceTechnique}
-                />
-              )}
-              <ActionAttachment
-                sceneId={sceneId}
-                attachment={actionAttachment ?? null}
-                onAttach={(action) => onActionAttach?.(action)}
-                onDetach={() => onActionDetach?.()}
-                targetName={composerMode?.targets[0]}
-              />
-            </div>
-          ) : undefined
-        }
+        rightSlot={isCommandsMode ? <StaffConsole character={character} active /> : sceneRightSlot}
         ghostText={ghostText}
         autocompleteItems={autocompleteItems}
       />

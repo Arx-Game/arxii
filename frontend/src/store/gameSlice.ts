@@ -1,5 +1,6 @@
 import { createSlice, PayloadAction } from '@reduxjs/toolkit';
 import type {
+  ConsoleLine,
   FeedNote,
   GameMessage,
   HubTidings,
@@ -68,6 +69,8 @@ export interface Session {
    * interactions. Bounded, newest kept.
    */
   notes: FeedNote[];
+  /** The staff console's lines (#3857): text frames tagged `console` by the server. Bounded. */
+  consoleLines: ConsoleLine[];
   /** Epoch used to reject late interaction frames from the previous room. */
   ambientRoomEnteredAt?: number;
   /** Highest interaction id seen per thread key (#2156 per-thread unread badges). */
@@ -106,6 +109,8 @@ let nextMessageId = 0;
 // Same for feed notes (#3856): several frames can land in one millisecond.
 let nextNoteId = 0;
 const MAX_NOTES = 200;
+let nextConsoleLineId = 0;
+const MAX_CONSOLE_LINES = 500;
 
 const initialState: GameState = {
   sessions: {},
@@ -124,6 +129,7 @@ export const gameSlice = createSlice({
           isConnected: false,
           messages: [],
           notes: [],
+          consoleLines: [],
           unread: 0,
           commands: [],
           room: null,
@@ -286,6 +292,27 @@ export const gameSlice = createSlice({
     clearFeedNotes: (state, action: PayloadAction<MyRosterEntry['name']>) => {
       const session = state.sessions[action.payload];
       if (session) session.notes = [];
+    },
+    /** A line the server tagged `console` (#3857): the staff console's, never the column's. */
+    addConsoleLine: (
+      state,
+      action: PayloadAction<{ character: MyRosterEntry['name']; content: string }>
+    ) => {
+      const session = state.sessions[action.payload.character];
+      if (!session) return;
+      nextConsoleLineId += 1;
+      session.consoleLines.push({
+        id: `c${nextConsoleLineId}`,
+        content: action.payload.content,
+        timestamp: new Date().toISOString(),
+      });
+      if (session.consoleLines.length > MAX_CONSOLE_LINES) {
+        session.consoleLines = session.consoleLines.slice(-MAX_CONSOLE_LINES);
+      }
+    },
+    clearConsoleLines: (state, action: PayloadAction<MyRosterEntry['name']>) => {
+      const session = state.sessions[action.payload];
+      if (session) session.consoleLines = [];
     },
     setSessionScene: (
       state,
@@ -486,6 +513,8 @@ export const {
   clearSessionDiagnostics,
   addFeedNote,
   clearFeedNotes,
+  addConsoleLine,
+  clearConsoleLines,
   setSessionScene,
   addSceneInteraction,
   clearSceneInteractions,

@@ -31,6 +31,8 @@ export interface GameWindowSceneFeed {
 
 interface GameWindowProps {
   characters: MyRosterEntry[];
+  /** Staff see the composer's Commands mode and the console (#3857). */
+  isStaff?: boolean;
   /** When present, the center column renders the threaded scene reader. */
   sceneFeed?: GameWindowSceneFeed;
   /** Structured quiet-room data; absent only while entry is pending. */
@@ -438,6 +440,7 @@ function GameWindowFeed({
 
 export function GameWindow({
   characters,
+  isStaff = false,
   sceneFeed,
   room,
   ambientInteractions,
@@ -736,6 +739,7 @@ export function GameWindow({
           }
           roomName={roomName}
           ready={playReady}
+          isStaff={isStaff}
         />
       )}
     </div>

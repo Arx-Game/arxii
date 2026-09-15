@@ -14,6 +14,7 @@ import { mockAccount } from '@/test/mocks/account';
 import {
   startSession,
   setActiveSession,
+  setSessionConnectionStatus,
   setSessionRoom,
   setSessionScene,
   addSceneInteraction,
@@ -99,10 +100,12 @@ vi.mock('@/roster/queries', () => ({
 // this file opens a real WebSocket; the dedicated describe block below
 // exercises the effect's own contract via `connectMock`.
 const connectMock = vi.fn(() => Promise.resolve());
+const sendMock = vi.fn();
 vi.mock('@/hooks/useGameSocket', () => ({
   useGameSocket: () => ({
     connect: connectMock,
-    send: vi.fn(),
+    send: sendMock,
+    sendConsole: vi.fn(),
     disconnectAll: vi.fn(),
     executeAction: vi.fn(),
   }),
@@ -378,6 +381,38 @@ describe('GamePage', () => {
     expect(screen.getByText(/you must be logged in/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /log in/i })).toHaveAttribute('href', '/login');
     expect(screen.getByRole('link', { name: /register/i })).toHaveAttribute('href', '/register');
+  });
+
+  it('a fresh connection poses what is typed instead of sending it verbatim (#3857)', async () => {
+    store.dispatch(setAccount(mockAccount));
+    store.dispatch(startSession(ACTIVE_NAME));
+    store.dispatch(
+      setSessionRoom({
+        character: ACTIVE_NAME,
+        room: {
+          id: 2,
+          name: 'Quiet courtyard',
+          description: '',
+          thumbnail_url: null,
+          characters: [],
+          objects: [],
+          exits: [],
+          is_owner: false,
+          is_public: true,
+          hub: null,
+          viewer_place_id: null,
+        },
+      })
+    );
+    store.dispatch(setSessionConnectionStatus({ character: ACTIVE_NAME, status: true }));
+
+    renderWithProviders(<GamePage />);
+
+    expect(screen.getByRole('button', { name: /pose/i })).toBeInTheDocument();
+    const textarea = screen.getByRole('textbox');
+    fireEvent.change(textarea, { target: { value: 'hello everyone' } });
+    fireEvent.keyDown(textarea, { key: 'Enter' });
+    expect(sendMock).toHaveBeenCalledWith(ACTIVE_NAME, 'pose hello everyone');
   });
 
   it('shows game interface when authenticated', () => {

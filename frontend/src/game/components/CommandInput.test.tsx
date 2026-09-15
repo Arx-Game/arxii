@@ -32,6 +32,7 @@ function lastDispatchedRequestId(): string {
 }
 
 const sendMock = vi.fn();
+const sendConsoleMock = vi.fn();
 // #3760 Task 10 — say/whisper now dispatch via executeAction instead of send().
 const executeActionMock = vi.fn();
 // Loosely typed: submitPose resolves with the created interaction payload
@@ -44,7 +45,11 @@ const toastErrorMock = vi.fn();
 const fetchPoseSubmissionMock = vi.fn();
 
 vi.mock('@/hooks/useGameSocket', () => ({
-  useGameSocket: () => ({ send: sendMock, executeAction: executeActionMock }),
+  useGameSocket: () => ({
+    send: sendMock,
+    sendConsole: sendConsoleMock,
+    executeAction: executeActionMock,
+  }),
 }));
 
 vi.mock('sonner', () => ({
@@ -175,6 +180,7 @@ vi.mock('@/companions/api', () => ({
 describe('CommandInput', () => {
   beforeEach(() => {
     sendMock.mockClear();
+    sendConsoleMock.mockClear();
     executeActionMock.mockClear();
     submitPoseMock.mockClear();
     submitPoseMock.mockImplementation(() => Promise.resolve());
@@ -195,6 +201,73 @@ describe('CommandInput', () => {
     // share the same derived key (no draftScope passed), so a leftover draft
     // from one test would otherwise leak into the next test's hydration.
     sessionStorage.clear();
+  });
+
+  describe('the slash escape and the staff Commands mode (#3857)', () => {
+    const pose: ComposerMode = { command: 'pose', targets: [], label: 'Pose \u2192 Room' };
+
+    it('a line starting with / is sent as the command after the slash, never wrapped', () => {
+      render(<CommandInput character="Alice" composerMode={pose} />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: '/look' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'look');
+      expect(executeActionMock).not.toHaveBeenCalled();
+    });
+
+    it('a / line in say mode is still a command, not speech', () => {
+      const say: ComposerMode = { command: 'say', targets: [], label: 'Say' };
+      render(<CommandInput character="Alice" composerMode={say} />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: '/get lantern' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'get lantern');
+      expect(executeActionMock).not.toHaveBeenCalled();
+    });
+
+    it('a line starting with // poses a literal slash', () => {
+      render(<CommandInput character="Alice" composerMode={pose} />);
+      const textarea = screen.getByRole('textbox');
+      fireEvent.change(textarea, { target: { value: '//shrugs' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendMock).toHaveBeenCalledWith('Alice', 'pose /shrugs');
+    });
+
+    it('offers Commands in the selector for staff only', async () => {
+      const user = userEvent.setup();
+      const { unmount } = render(<CommandInput character="Alice" composerMode={pose} isStaff />);
+      await user.click(screen.getByRole('button', { name: /pose/i }));
+      expect(screen.getByRole('menuitem', { name: 'Commands' })).toBeInTheDocument();
+      await user.keyboard('{Escape}');
+      unmount();
+
+      render(<CommandInput character="Alice" composerMode={pose} />);
+      await user.click(screen.getByRole('button', { name: /pose/i }));
+      expect(screen.queryByRole('menuitem', { name: 'Commands' })).not.toBeInTheDocument();
+    });
+
+    it('in Commands mode every line goes through sendConsole as typed, with the formatting hidden', () => {
+      const commands: ComposerMode = { command: 'commands', targets: [], label: 'Commands' };
+      render(<CommandInput character="Alice" composerMode={commands} isStaff />);
+      expect(screen.queryByRole('button', { name: 'Bold' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Console/ })).toBeInTheDocument();
+      const textarea = screen.getByRole('textbox');
+      expect(textarea).toHaveClass('font-mono');
+      fireEvent.change(textarea, { target: { value: '@dig East = east;e, west;w' } });
+      fireEvent.keyDown(textarea, { key: 'Enter' });
+      expect(sendConsoleMock).toHaveBeenCalledWith('Alice', '@dig East = east;e, west;w');
+      expect(sendMock).not.toHaveBeenCalled();
+      expect(textarea).toHaveValue('');
+    });
+
+    it('picking a mode works before any mode was set', async () => {
+      const user = userEvent.setup();
+      const onModeChange = vi.fn();
+      render(<CommandInput character="Alice" onModeChange={onModeChange} />);
+      await user.click(screen.getByRole('button', { name: /pose/i }));
+      await user.click(screen.getByRole('menuitem', { name: /say/i }));
+      expect(onModeChange).toHaveBeenCalledWith({ command: 'say', targets: [], label: 'Say' });
+    });
   });
 
   it('keeps drafts editable while entry is unconfirmed and blocks button and keyboard sends', () => {

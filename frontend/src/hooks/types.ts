@@ -64,6 +64,13 @@ export interface FeedNote {
   timestamp: string;
 }
 
+/** One line of the staff console (#3857): what the server said back to a Commands-mode line. */
+export interface ConsoleLine {
+  id: string;
+  content: string;
+  timestamp: string;
+}
+
 export type IncomingMessage = [SocketMessageType, unknown[], Record<string, unknown>?];
 
 export type OutgoingMessage =

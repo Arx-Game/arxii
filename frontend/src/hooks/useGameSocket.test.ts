@@ -487,3 +487,55 @@ describe('useGameSocket text frames become feed notes (#3856)', () => {
     expect(dispatchedTypes()).toContain('game/addSessionMessage');
   });
 });
+
+describe('useGameSocket staff console (#3857)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+    MockWebSocket.instances = [];
+    vi.stubGlobal('WebSocket', MockWebSocket);
+    __resetGameSocketModuleStateForTests();
+    sessionStorage.clear();
+    mockFetchPoseSubmission.mockReset();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('sendConsole flags the text frame so the server tags its answer', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    // The mock never opens on its own; `send` refuses a socket that is not OPEN.
+    const socket = MockWebSocket.instances[0];
+    socket.readyState = 1;
+    vi.stubGlobal('WebSocket', Object.assign(MockWebSocket, { OPEN: 1 }));
+    act(() => {
+      result.current.sendConsole('Aria', '@dig East');
+    });
+    const frames = MockWebSocket.instances[0].sent.map((raw) => JSON.parse(raw));
+    expect(frames).toContainEqual(['text', ['@dig East'], { console: true }]);
+  });
+
+  it('a text frame tagged console becomes a console line, never a note', async () => {
+    const { result } = renderHook(() => useGameSocket());
+    await act(async () => {
+      await result.current.connect('Aria');
+    });
+    act(() => {
+      MockWebSocket.instances[0].dispatch('message', {
+        data: JSON.stringify([
+          'text',
+          ['Created room East(#412).'],
+          { console: true, type: 'error' },
+        ]),
+      });
+    });
+    const types = mockDispatch.mock.calls.map(([action]) => (action as { type: string }).type);
+    expect(types).toContain('game/addConsoleLine');
+    expect(types).not.toContain('game/addFeedNote');
+  });
+});

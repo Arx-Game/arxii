@@ -15,6 +15,8 @@ import {
   clearSessionMessages,
   addFeedNote,
   clearFeedNotes,
+  addConsoleLine,
+  clearConsoleLines,
   setSessionCommands,
   setSessionRoom,
   setSessionScene,
@@ -27,6 +29,7 @@ import {
   hydrateActiveCharacter,
 } from '../gameSlice';
 import type {
+  ConsoleLine,
   FeedNote,
   GameMessage,
   HubTidings,
@@ -59,6 +62,7 @@ interface Session {
   isConnected: boolean;
   messages: Array<GameMessage & { id: string }>;
   notes: FeedNote[];
+  consoleLines: ConsoleLine[];
   unread: number;
   commands: CommandSpec[];
   room: RoomData | null;
@@ -80,6 +84,7 @@ const createDefaultSession = (overrides: Partial<Session> = {}): Session => ({
   isConnected: false,
   messages: [],
   notes: [],
+  consoleLines: [],
   unread: 0,
   commands: [],
   room: null,
@@ -235,6 +240,7 @@ describe('gameSlice', () => {
           isConnected: false,
           messages: [],
           notes: [],
+          consoleLines: [],
           unread: 0,
           commands: [],
           room: null,
@@ -803,6 +809,34 @@ describe('gameSlice', () => {
     });
   });
 
+  describe('console lines (#3857)', () => {
+    it('appends a console line with an id and keeps the newest five hundred', () => {
+      let state = createStateWithSession('TestCharacter', {}, 'TestCharacter');
+      for (let index = 0; index < 505; index += 1) {
+        state = reducer(
+          state,
+          addConsoleLine({ character: 'TestCharacter', content: `line ${index}` })
+        );
+      }
+      const lines = state.sessions['TestCharacter'].consoleLines;
+      expect(lines).toHaveLength(500);
+      expect(lines[0].content).toBe('line 5');
+      expect(lines[499].id).toMatch(/^c\d+$/);
+      // Console output is not feed activity: nothing badges for it.
+      expect(state.sessions['TestCharacter'].unread).toBe(0);
+    });
+
+    it('clears the console lines and nothing else', () => {
+      let state = createStateWithSession('TestCharacter', {
+        messages: [{ ...createGameMessage('kept'), id: 'm1' }],
+      });
+      state = reducer(state, addConsoleLine({ character: 'TestCharacter', content: 'x' }));
+      state = reducer(state, clearConsoleLines('TestCharacter'));
+      expect(state.sessions['TestCharacter'].consoleLines).toEqual([]);
+      expect(state.sessions['TestCharacter'].messages).toHaveLength(1);
+    });
+  });
+
   describe('clearFeedNotes (#3856)', () => {
     it('empties the notes and leaves the messages alone', () => {
       const initialState = createStateWithSession('TestCharacter', {
@@ -1274,6 +1308,7 @@ describe('gameSlice', () => {
               { ...createGameMessage('Msg 2'), id: '2' },
             ],
             notes: [],
+            consoleLines: [],
             unread: 10,
             commands: [createCommandSpec('attack', 'Attack')],
             room: createRoomData(
