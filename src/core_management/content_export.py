@@ -400,6 +400,10 @@ EXPORT_FIELD_EXCLUSIONS: dict[str, frozenset[str]] = {
     # #3056: live story/installation state, not content — same rationale as
     # npcrole.faction_affiliation above.
     "npc_services.missionofferdetails": frozenset({"source_beat", "target_project"}),
+    # #2987: CrimeKind is seeder-owned (no natural key), so this M2M would
+    # serialize as installation-local pks and mis-tag crimes on any other
+    # database. Crime tags on authored effects are re-applied in admin.
+    "checks.consequenceeffect": frozenset({"crime_kinds"}),
 }
 
 

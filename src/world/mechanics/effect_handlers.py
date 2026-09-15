@@ -695,6 +695,10 @@ def _legend_award(
         story=context.story,
         concealed=concealed,
         interaction=context.interaction,
+        # #2987 — the authored crime tag rides the effect row: a tagged award
+        # mints a crime-tagged deed (heat as word spreads, WITNESS window when
+        # public and interaction-anchored).
+        crime_kinds=list(effect.crime_kinds.all()) or None,
     )
     return AppliedEffect(
         effect_type=EffectType.LEGEND_AWARD,
