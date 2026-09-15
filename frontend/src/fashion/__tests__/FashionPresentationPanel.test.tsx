@@ -22,8 +22,11 @@ vi.mock('../queries', () => ({
   useJudgePresentationMutation: (...a: unknown[]) => useJudgePresentationMutationMock(...a),
 }));
 
+// #3479: useBrowsingIdentity() reads `browsingEntryId` (id 1, matching the
+// mocked roster entry below) through the real selector, not a hardcoded name.
 vi.mock('@/store/hooks', () => ({
-  useAppSelector: () => 'Alice', // active character name
+  useAppSelector: (selector: (state: unknown) => unknown) =>
+    selector({ game: { browsingEntryId: 1 }, auth: {} }),
 }));
 
 vi.mock('@/roster/queries', () => ({

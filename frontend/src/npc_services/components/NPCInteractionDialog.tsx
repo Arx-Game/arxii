@@ -11,6 +11,8 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
+
 import {
   endInteraction,
   resolveOffer,
@@ -42,6 +44,9 @@ export function NPCInteractionDialog({
 }: NPCInteractionDialogProps) {
   const [state, setState] = useState<InteractionState | null>(null);
   const [busy, setBusy] = useState(false);
+  // The tab's browsing identity (#3479) names the acting character on every
+  // start/resolve/end call; null omits it (durable-selection fallback).
+  const { entryId } = useBrowsingIdentity();
 
   useEffect(() => {
     if (!open) {
@@ -50,7 +55,7 @@ export function NPCInteractionDialog({
     }
     let cancelled = false;
     setBusy(true);
-    startInteraction(roleId)
+    startInteraction(roleId, entryId)
       .then((fresh) => {
         if (!cancelled) setState(fresh);
       })
@@ -69,14 +74,14 @@ export function NPCInteractionDialog({
 
   const close = (dialogOpen: boolean) => {
     if (!dialogOpen && state && !state.closed) {
-      void endInteraction().catch(() => undefined);
+      void endInteraction(entryId).catch(() => undefined);
     }
     onOpenChange(dialogOpen);
   };
 
   const pick = (offerId: number) => {
     setBusy(true);
-    resolveOffer(offerId)
+    resolveOffer(offerId, entryId)
       .then((fresh) => {
         setState(fresh);
         if (fresh.last_result_message) {

@@ -14,10 +14,9 @@
  * show a real name; see the PR notes.
  */
 import { useMemo, useState } from 'react';
-import { useAppSelector } from '@/store/hooks';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useOutfits } from '@/inventory/hooks/useOutfits';
 import {
   useEventPresentationsQuery,
@@ -30,12 +29,7 @@ interface FashionPresentationPanelProps {
 }
 
 export function FashionPresentationPanel({ eventId }: FashionPresentationPanelProps) {
-  const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const activeEntry = useMemo(
-    () => myRosterEntries.find((e) => e.name === activeCharacter) ?? null,
-    [myRosterEntries, activeCharacter]
-  );
+  const { entry: activeEntry } = useBrowsingIdentity();
   // CharacterSheet pk == roster character_id (CharacterSheet uses primary_key=True).
   const mySheetId = activeEntry?.character_id ?? null;
 

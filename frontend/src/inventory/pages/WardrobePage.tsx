@@ -44,6 +44,7 @@ import { useGameSocket } from '@/hooks/useGameSocket';
 import { useActionResult } from '@/hooks/actionResultBus';
 import type { ActionResultPayload, RoomStateObject } from '@/hooks/types';
 import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useAuthStatus } from '@/evennia_replacements/queries';
 import { ItemCard } from '../components/ItemCard';
 import { ItemDetailPanel } from '../components/ItemDetailPanel';
@@ -61,23 +62,31 @@ import { useOutfits } from '../hooks/useOutfits';
 import type { ContainerAccessPolicy, ItemInstance } from '../types';
 
 export function WardrobePage() {
+  // This tab's browsing identity (#3479) drives WHAT'S DISPLAYED (whose
+  // outfits/inventory), but NOT which character WS actions dispatch to.
+  // `useGameSocket().executeAction` looks up `sockets[characterName]`, a
+  // live-session socket that exists only for a character THIS TAB has
+  // puppeted (`startSession`) - it silently no-ops for any other name. So
+  // the browsing identity and this tab's live-session character
+  // (`state.game.active`) are read separately: the browsing identity drives
+  // display, `activeCharacter` (the live session name) stays the target for
+  // every `executeAction` call and the room-characters lookup below, exactly
+  // as ADR-0247 requires for live-session concerns.
+  const { entryId: browsingEntryId, entry: activeEntry } = useBrowsingIdentity();
   const activeCharacter = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [], isLoading: entriesLoading } = useMyRosterEntriesQuery();
-  // #3412 review fix: this page is behind ProtectedRoute, so the exposure window is
-  // narrow (a render or two before `useAccountQuery`'s hydration effect mirrors the
-  // durable selection into `gameSlice.active`, plus the shorter gap until the roster
-  // query resolves the id for an already-hydrated selection) — but it's real, and the
-  // fix is the same skeleton-not-empty-state pattern as TidingsFeed/TidingsPage.
+  const { isLoading: entriesLoading } = useMyRosterEntriesQuery();
+  // #3412 review fix (#3479 update): this page is behind ProtectedRoute, so the
+  // exposure window is narrow (a render or two before `useAccountQuery`'s
+  // hydration effect mirrors the durable selection into this tab's browsing
+  // identity, plus the shorter gap until the roster query resolves the full
+  // entry), but it's real, and the fix is the same skeleton-not-empty-state
+  // pattern as TidingsFeed/TidingsPage.
   const { isLoading: authLoading } = useAuthStatus();
-  const isResolvingActiveCharacter = authLoading || (activeCharacter != null && entriesLoading);
+  const isResolvingActiveCharacter = authLoading || (browsingEntryId != null && entriesLoading);
 
-  // Resolve the active character name to its underlying ObjectDB pk. The pk
+  // Resolve the browsing character to its underlying ObjectDB pk. The pk
   // doubles as the CharacterSheet pk because CharacterSheet is OneToOne with
   // ObjectDB via primary_key=True.
-  const activeEntry = useMemo(
-    () => myEntries.find((entry) => entry.name === activeCharacter) ?? null,
-    [myEntries, activeCharacter]
-  );
   const characterId = activeEntry?.character_id ?? undefined;
   const characterSheetId = characterId; // Same pk by design.
 
@@ -312,11 +321,11 @@ export function WardrobePage() {
   // Render
   // -------------------------------------------------------------------------
 
-  if (!activeCharacter || !characterId || !characterSheetId) {
+  if (!browsingEntryId || !characterId || !characterSheetId) {
     return (
       <div className="container mx-auto px-4 py-12">
         <h1 className="mb-4 text-3xl font-bold">Wardrobe</h1>
-        {/* `!activeCharacter` is ambiguous on its own during the hydration window
+        {/* `!browsingEntryId` is ambiguous on its own during the hydration window
             (#3412 review fix) — show a skeleton there, and only the "no character"
             empty-state once resolution genuinely lands on no selection. */}
         {isResolvingActiveCharacter ? <WardrobeLoadingSkeleton /> : <NoActiveCharacterState />}

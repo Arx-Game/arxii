@@ -31632,6 +31632,11 @@ export interface components {
       readonly entry_endorsed_by_me: boolean;
       readonly receivers: components['schemas']['InteractionReceiver'][];
     };
+    /** @description POST /api/npc-services/interactions/end/ body (#3479). */
+    InteractionEndRequestRequest: {
+      /** @description Optional (#3479): RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection. 403 for an id that is not the caller's own. */
+      entry_id?: number | null;
+    };
     InteractionFavorite: {
       readonly id: number;
       /** @description The bookmarked interaction */
@@ -31911,10 +31916,14 @@ export interface components {
       offer_id: number;
       /** @default false */
       acknowledge_risk: boolean;
+      /** @description Optional (#3479): RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection. 403 for an id that is not the caller's own. */
+      entry_id?: number | null;
     };
     /** @description POST /api/npc-services/interactions/start/ body. */
     InteractionStartRequestRequest: {
       role_id: number;
+      /** @description Optional (#3479): RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection. 403 for an id that is not the caller's own. */
+      entry_id?: number | null;
       /** @description Optional — pass for class-2+ named NPCs whose standing should be loaded and persisted. Omit / null for class-1 nameless functionaries. */
       npc_persona_id?: number | null;
     };
@@ -66144,7 +66153,10 @@ export interface operations {
   };
   missions_boards_postings_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66172,7 +66184,10 @@ export interface operations {
   };
   missions_boards_take_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66470,7 +66485,10 @@ export interface operations {
   };
   missions_journal_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -66489,7 +66507,10 @@ export interface operations {
   };
   missions_journal_abandon_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66524,7 +66545,10 @@ export interface operations {
   };
   missions_journal_beat_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66552,7 +66576,10 @@ export interface operations {
   };
   missions_journal_group_beat_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66587,7 +66614,10 @@ export interface operations {
   };
   missions_journal_group_pick_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66626,7 +66656,10 @@ export interface operations {
   };
   missions_journal_group_vote_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66665,7 +66698,10 @@ export interface operations {
   };
   missions_journal_invite_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66704,7 +66740,10 @@ export interface operations {
   };
   missions_journal_report_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66743,7 +66782,10 @@ export interface operations {
   };
   missions_journal_resolve_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66782,7 +66824,10 @@ export interface operations {
   };
   missions_journal_support_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66821,7 +66866,10 @@ export interface operations {
   };
   missions_journal_tale_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path: {
         id: string;
@@ -66859,7 +66907,10 @@ export interface operations {
   };
   missions_journal_opportunities_retrieve: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -66878,7 +66929,10 @@ export interface operations {
   };
   missions_journal_pending_invites_list: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -66897,7 +66951,10 @@ export interface operations {
   };
   missions_journal_respond_create: {
     parameters: {
-      query?: never;
+      query?: {
+        /** @description RosterEntry id of one of the caller's own characters to act as, instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
+      };
       header?: never;
       path?: never;
       cookie?: never;
@@ -68539,7 +68596,11 @@ export interface operations {
       path?: never;
       cookie?: never;
     };
-    requestBody?: never;
+    requestBody?: {
+      content: {
+        'application/json': components['schemas']['InteractionEndRequestRequest'];
+      };
+    };
     responses: {
       200: {
         headers: {
@@ -80201,6 +80262,8 @@ export interface operations {
   weather_conditions_retrieve: {
     parameters: {
       query?: {
+        /** @description RosterEntry id of one of the caller's own characters to read for instead of the account's durable selection (per-tab browsing identity, #3479). 403 for an id that is not the caller's own. */
+        entry_id?: number;
         /** @description ObjectDB id of the room to read conditions for. Omitted, the caller's selected character's current room is used (404 when there is no selection or the character is nowhere). */
         room_id?: number;
       };

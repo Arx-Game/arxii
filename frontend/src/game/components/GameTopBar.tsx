@@ -5,7 +5,8 @@ import { Menu, ScrollText, Swords, X } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { useAppDispatch, useAppSelector } from '@/store/hooks';
-import { setActiveSession, startSession } from '@/store/gameSlice';
+import { setActiveSession, setBrowsingIdentity, startSession } from '@/store/gameSlice';
+import { writeTabIdentity } from '@/store/browsingIdentity';
 import { useSelectCharacterMutation } from '@/roster/queries';
 import { useLogout } from '@/evennia_replacements/queries';
 import { useGameSocket } from '@/hooks/useGameSocket';
@@ -177,29 +178,42 @@ export function GameTopBar({
   }
 
   const handleSelectCharacter = async (name: MyRosterEntry['name']) => {
-    // #3412 — persist the selection server-side ALONGSIDE the puppeting
-    // below. #3812 — and BEFORE it: login now puppets the server's durable
-    // selection the moment the socket authenticates, so the select has to
-    // land first or the new socket briefly puppets the previous character
-    // before its own `@ic` corrects it. The local session switch stays
-    // immediate; only the connect waits. A failed select is not blocking:
-    // the socket still opens and its `@ic <name>` still names the character
-    // (see useSelectCharacterMutation's doc comment on the degraded case).
+    // #3479 decision 4: an in-game switch is tab-local. It writes THIS tab's
+    // browsing identity (sessionStorage + the gameSlice mirror) so the
+    // ambient pages this tab opens follow the character it now plays, and
+    // no other tab is touched: every tab seeds its identity from its own
+    // sessionStorage, never from the account refetch (store/browsingIdentity.ts).
+    //
+    // The durable account selection is still written, but only when this
+    // switch takes a character UP (opens a socket), and BEFORE the connect:
+    // login puppets the server's durable selection the moment the socket
+    // authenticates (#3812, ADR-0294), so the select has to land first or the
+    // new socket briefly puppets the previous character before its own `@ic`
+    // corrects it. Puppeting records the selection server-side anyway
+    // (ADR-0294), so this is the same fact landed a moment earlier, not a
+    // second writer; moving focus between two already-open sessions writes
+    // nothing durable. A failed select is not blocking: the socket still
+    // opens and its `@ic <name>` still names the character (see
+    // useSelectCharacterMutation's doc comment on the degraded case).
     const entryId = characters.find((c) => c.name === name)?.id;
     const alreadyConnected = Boolean(sessions[name]?.isConnected);
+    if (entryId !== undefined) {
+      writeTabIdentity(entryId);
+      dispatch(setBrowsingIdentity(entryId));
+    }
     if (sessions[name]) {
       dispatch(setActiveSession(name));
     } else {
       dispatch(startSession(name));
     }
-    if (entryId !== undefined) {
-      try {
-        await selectCharacter.mutateAsync(entryId);
-      } catch {
-        // onError already toasted; the connect below still carries the intent.
-      }
-    }
     if (!alreadyConnected) {
+      if (entryId !== undefined) {
+        try {
+          await selectCharacter.mutateAsync(entryId);
+        } catch {
+          // onError already toasted; the connect below still carries the intent.
+        }
+      }
       connect(name);
     }
     // #3774 -- switching is the moment the player expects the badge they just

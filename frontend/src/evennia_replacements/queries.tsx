@@ -8,15 +8,33 @@ import {
   postRegister,
 } from './api';
 import { AccountData, LoginResult } from './types';
+import { useStore } from 'react-redux';
+import type { RootState } from '@/store/store';
 import { useAppDispatch } from '@/store/hooks';
 import { setAccount } from '@/store/authSlice';
-import { resetGame, hydrateActiveCharacter } from '@/store/gameSlice';
+import {
+  resetGame,
+  hydrateActiveCharacter,
+  setBrowsingIdentity,
+  clearBrowsingIdentity,
+} from '@/store/gameSlice';
+import { readTabIdentity, writeTabIdentity, clearTabIdentity } from '@/store/browsingIdentity';
 import { useGameSocket } from '@/hooks/useGameSocket';
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 export function useAccountQuery() {
   const dispatch = useAppDispatch();
+  // The store handle, NOT a selector: the effect below reads Redux's own idea
+  // of this tab's browsing identity at run time (so a cold-Redux/warm-storage
+  // mismatch after a reload is detected and repaired, #3479 review round 1),
+  // but a Redux-only change must never re-run the effect. With the value in
+  // the deps, the Hall's "Clear Active Character" (clearBrowsingIdentity)
+  // re-ran it against the CACHED account, whose selected_entry still named
+  // the old character, and the seed branch wrote that character straight
+  // back before the clearing mutation's refetch could land (whole-branch
+  // review, Critical). The effect keys on `result.data` alone.
+  const store = useStore<RootState>();
   const result = useQuery({
     queryKey: ['account'],
     queryFn: fetchAccount,
@@ -36,22 +54,65 @@ export function useAccountQuery() {
     }
     const account = result.data;
     dispatch(setAccount(account));
-    // Reload survival (#3412): mirror the durable server-side selection into
-    // gameSlice on every successful account fetch — hard reload -> this
-    // fetch -> hydration -> IC-scoped pages (tidings, own-sheet) that read
-    // `gameSlice.active` stop degrading. #3412 review fix: this now mirrors
-    // BOTH directions — a `selected_entry` SETS active/activeEntryId, and its
-    // absence (including `account === null`, the logged-out/no-account case)
-    // CLEARS them (e.g. after `useSelectCharacterMutation.mutate(null)` + the
-    // account refetch it triggers) — see `hydrateActiveCharacter`'s own doc
-    // comment for why clearing the mirror is safe (never tears down a live
-    // session; selection isn't presence in either direction). `entry` is
+    // Reload survival (#3412) + per-tab browsing identity (#3479): mirror the
+    // durable server-side selection into gameSlice, but only SEED this tab's
+    // identity -- never overwrite it once this tab has one. Before #3479
+    // this ran unconditionally on every account refetch, which is exactly
+    // the cross-tab stomp bug: Tab A puppeting character X would have its
+    // `active` silently rewritten the moment Tab B's (or the Hall's)
+    // selection change invalidated the shared `['account']` query and Tab
+    // A's own refetch (e.g. on window focus) mirrored it in. `entry` is
     // hoisted out (rather than narrowing `account.selected_entry` inline) so
-    // the `account === null` case falls through the same `?? null` path
-    // instead of needing its own branch.
+    // the `account === null` case (logged out/no account) falls through the
+    // same `?? null` path instead of needing its own branch.
     const entry = account?.selected_entry ?? null;
+    const stored = readTabIdentity();
+
+    if (stored !== null) {
+      // "Owned" here means "appears in the account's ACTIVE roster today"
+      // (`available_characters` -- same list the Hall picker docks avatars
+      // from), not literal FK ownership: a retired/archived entry drops out
+      // of this list even though the account row still technically exists.
+      // That is exactly the case this branch's fallthrough (clear + reseed)
+      // is for.
+      const ownedIds = account?.available_characters.map((c) => c.id) ?? [];
+      if (ownedIds.includes(stored.entryId)) {
+        // This tab already has a browsing identity it still owns. Gate the
+        // dispatch on REDUX's own state, not on storage presence alone
+        // (#3479 review round 1): after a hard reload, sessionStorage
+        // survives but Redux starts cold (`browsingEntryId`/`active` both
+        // null), so a bare early return here would leave the tab showing no
+        // selection at all despite a perfectly valid stored identity. Only
+        // when Redux is already in sync do we truly no-op -- that's what
+        // keeps a later refetch carrying a DIFFERENT account default from
+        // overwriting an already-hydrated tab (never tears down a live
+        // session either way; selection isn't presence).
+        if (store.getState().game.browsingEntryId !== stored.entryId) {
+          const ownedEntry = account?.available_characters.find((c) => c.id === stored.entryId);
+          dispatch(setBrowsingIdentity(stored.entryId));
+          if (ownedEntry) {
+            dispatch(hydrateActiveCharacter({ name: ownedEntry.name, entryId: stored.entryId }));
+          }
+        }
+        return;
+      }
+      // The stored entry is no longer among this account's entries (e.g. the
+      // character was retired) -- treat this tab as fresh and reseed below.
+      clearTabIdentity();
+    }
+
+    // First hydration of this tab (or a stale identity just cleared above):
+    // seed from the account's durable default, same full-overwrite hydration
+    // this always did before #3479, plus writing this tab's own store so a
+    // later refetch in THIS tab hits the early return above instead.
+    if (entry) {
+      writeTabIdentity(entry.id);
+      dispatch(setBrowsingIdentity(entry.id));
+    } else {
+      dispatch(clearBrowsingIdentity());
+    }
     dispatch(hydrateActiveCharacter(entry ? { name: entry.name, entryId: entry.id } : null));
-  }, [result.data, dispatch]);
+  }, [result.data, dispatch, store]);
 
   return result;
 }

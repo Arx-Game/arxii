@@ -23,14 +23,30 @@ async function post<T>(url: string, body: Record<string, unknown>): Promise<T> {
   return (await res.json()) as T;
 }
 
-export function startInteraction(roleId: number): Promise<InteractionState> {
-  return post(`${BASE}/start/`, { role_id: roleId });
+/**
+ * Fold the tab's browsing identity (#3479) into a request body. These
+ * endpoints take `entry_id` in the BODY (unlike missions' query param).
+ * Null/undefined omits the field entirely, so the server falls back to the
+ * account's durable selection.
+ */
+function withEntryId(
+  body: Record<string, unknown>,
+  entryId: number | null | undefined
+): Record<string, unknown> {
+  return entryId != null ? { ...body, entry_id: entryId } : body;
 }
 
-export function resolveOffer(offerId: number): Promise<InteractionState> {
-  return post(`${BASE}/resolve/`, { offer_id: offerId });
+export function startInteraction(
+  roleId: number,
+  entryId?: number | null
+): Promise<InteractionState> {
+  return post(`${BASE}/start/`, withEntryId({ role_id: roleId }, entryId));
 }
 
-export function endInteraction(): Promise<InteractionState> {
-  return post(`${BASE}/end/`, {});
+export function resolveOffer(offerId: number, entryId?: number | null): Promise<InteractionState> {
+  return post(`${BASE}/resolve/`, withEntryId({ offer_id: offerId }, entryId));
+}
+
+export function endInteraction(entryId?: number | null): Promise<InteractionState> {
+  return post(`${BASE}/end/`, withEntryId({}, entryId));
 }

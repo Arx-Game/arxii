@@ -32,8 +32,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import type { GhostCell } from '@/map-canvas/ghosts';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
-import { useAppSelector } from '@/store/hooks';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { DigRoomDialog } from '@/world-builder/components/DigRoomDialog';
 import { LinkRoomsDialog } from '@/world-builder/components/LinkRoomsDialog';
 import { RoomDetailPanel } from '@/world-builder/components/RoomDetailPanel';
@@ -47,12 +46,8 @@ import { useStoryAreaManagerQuery, useStoryBuilderAction } from '../queries';
 import type { StoryBuilderActionKey } from '../types';
 
 export function StoryBuilderPage() {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myRosterEntries = [] } = useMyRosterEntriesQuery();
-  const characterId = useMemo(
-    () => myRosterEntries.find((entry) => entry.name === activeCharacterName)?.character_id ?? null,
-    [myRosterEntries, activeCharacterName]
-  );
+  const { entry } = useBrowsingIdentity();
+  const characterId = entry?.character_id ?? null;
 
   const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const [selectedRoomId, setSelectedRoomId] = useState<number | null>(null);

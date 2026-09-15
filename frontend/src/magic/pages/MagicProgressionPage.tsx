@@ -2,30 +2,22 @@
  * MagicProgressionPage — landing page for the player's magic progression surface.
  *
  * Shows every progression stage the active persona has access to, rendered
- * as StageSection cards. The active character is the one currently selected
- * in the game UI (state.game.active from Redux) resolved against the user's
- * roster entries — never inferred from "the first row of some unordered list."
+ * as StageSection cards. The active character is this tab's browsing identity
+ * (#3479), never inferred from "the first row of some unordered list."
  */
 
-import { useMemo } from 'react';
 import { Skeleton } from '@/components/ui/skeleton';
-import { useAppSelector } from '@/store/hooks';
-import { useMyRosterEntriesQuery } from '@/roster/queries';
+import { useBrowsingIdentity } from '@/roster/useBrowsingIdentity';
 import { useMagicProgression } from '../magicProgressionQueries';
 import { PathIntentCard } from '../components/PathIntentCard';
 import { StageSection } from '../components/progression/StageSection';
 
 export function MagicProgressionPage() {
-  const activeCharacterName = useAppSelector((state) => state.game.active);
-  const { data: myEntries = [] } = useMyRosterEntriesQuery();
-
-  // Resolve active character to a character_sheet pk. CharacterSheet
+  // Resolve the browsing character to a character_sheet pk. CharacterSheet
   // shares its pk with the underlying ObjectDB (character_id) via the
   // OneToOneField(primary_key=True).
-  const characterSheetId = useMemo(() => {
-    const entry = myEntries.find((e) => e.name === activeCharacterName);
-    return entry?.character_id ?? undefined;
-  }, [myEntries, activeCharacterName]);
+  const { entry } = useBrowsingIdentity();
+  const characterSheetId = entry?.character_id ?? undefined;
 
   const { data, isLoading, isError, error } = useMagicProgression(characterSheetId);
 
