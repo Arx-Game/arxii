@@ -135,6 +135,33 @@ in-character presence. Being able to react to a scene your character wasn't pres
 is intentional product behavior. Only `react_to_window` (the IC reaction-window system,
 `world/scenes/reaction_services.py`) is perception-gated.
 
+### The actor in the line (#3858, ADR-0299)
+
+A pose or a say reads as a whole sentence with its actor in it on every protocol:
+`Apostate is testing`, `Apostate says, "Test"`. The card above a web bubble is
+metadata and never stands in for the actor. `world/scenes/line_rendering.render_line`
+is the one formatter: a pose opens with the name (semipose glue for `'s`/`,`; a pose
+that already opens with the name is left alone), say/whisper/mutter/shout quote the
+text after their verb and name the language, emit/action/outcome pass through. It
+runs at display time only; `Interaction.content` stays what was typed, and
+threading, muting, comprehension and search keep reading it.
+
+- **Web, live:** `InteractionPayload.line`, built by `_build_interaction_payload`
+  from the display name (the attributed companion's, else the persona's) and rebuilt
+  per object by `_send_to_objects` when a comprehension renderer rewrites the content,
+  so a garbled listener reads a garbled sentence.
+- **Web, REST:** `InteractionListSerializer.line` (`get_line`), from the per-viewer
+  name `get_persona` resolves (#1109) and the per-viewer content `get_content`
+  produces (a muted row stays blank).
+- **Telnet:** `PoseAction` broadcasts `render_line("{caller}", POSE, text)` through
+  `message_location`, whose mapping resolves `{caller}` per looker; whisper, mutter
+  and the companion emote use the formatter too. Say keeps `$You() $conj(say)`
+  (the speaker's second-person echo, #2993 M2).
+- **Readers:** `ActorLine` (`frontend/src/scenes/components/ActorLine.tsx`) renders
+  `line ?? content` as the body in `PoseUnit` and `ExplorationReader`, setting the
+  leading name semibold when the line opens with the card's own name;
+  `ThreadedNarrativeReader`'s collapsed and thread excerpts read the line.
+
 ### Companion pose attribution (#3294)
 
 `Interaction.attributed_companion` — nullable FK -> `companions.Companion`
@@ -631,7 +658,8 @@ PRIMARY persona is effectively immutable once created, so no write site needs to
   `firstVisible` already means. Consumed by `ConversationThreadList` in the History
   navigator's conversation drill-down.
 - `GET /api/play/poses/` - Raw authorized poses using the existing enriched interaction DTO
-  (`InteractionListSerializer`), cursor-paginated 100/page.
+  (`InteractionListSerializer`, whose `line` field carries the rendered sentence, #3858),
+  cursor-paginated 100/page.
 - `GET /api/play/context/` (#3759) - A ±25-pose context window around one `id`+`timestamp` pose
   reference (optionally narrowed by `conversation`), plus `before`/`after` cursors so a client can
   page further in either direction without re-deriving the boundary. A missing or unauthorized
@@ -681,6 +709,39 @@ top of that server baseline.
 
 ---
 
+## Scene participation and the threshold (#3867, ADR-0300)
+
+Where a character stands is presence: the room's contents, the Here panel, the exits.
+Whether they are in the scene is participation, and participation begins with the first
+pose. It is read off the log, never stored: `world/scenes/participation.py`'s
+`has_entered(scene, character_sheet_id)` and `entered_sheet_ids(scene)` answer from the
+scene's own rows in `ENTRANCE_MODES` (pose, say, emit; whispers and mutters are directed
+and enter nothing). A character present in the room without such a line stands at the
+**threshold**: listed in the Here panel with a mark (`in_scene: false` on their
+`room_state` entry; the viewer's own `viewer_entered: false` on the scene block), able to
+see everything, and not addressable room-heard: `persona_can_receive`'s room-heard branch
+requires presence and entry, and the tag refusal names it ("<name> has not joined the
+scene yet."). A whisper, directed by construction, still reaches them. Leaving without
+posing records nothing.
+
+`SceneParticipation` answers a different question (admin co-ownership and read
+membership) and is not consulted here. A scene that formalises around people already
+posing takes their recent room lines in through `capture_prescene_interactions`, so they
+are in at once and nobody silent is. An ephemeral scene keeps no log and has no threshold.
+
+## The entrance (#904, #2183, #3867)
+
+The entrance is the first pose, not a toggle. `record_interaction` marks a writer's first
+room-heard line in a scene `pose_kind=ENTRY` whatever the client sent, demotes any later
+"entry" to standard, opens the ENTRANCE reaction window on it (#904; telnet entrances
+included) and refreshes every occupant's `room_state` so the mark leaves the entrant's
+row. `submit_pose` refuses a second client-sent entry (400). One entrance per character
+per scene makes the acclaim grant's earliest-`ENTRY` lookup correct by construction and
+its per-scene dedupe a real rule (`world/magic/services/gain.py`). The composer shows the
+entrance as a state before the first pose (`CommandInput.tsx`, `isEntrance` derived from
+`viewer_entered`), with the technique attachment (#2183) beside it; the entry flourish
+(`docs/systems/magic.md`) stays the entrant's own follow-up.
+
 ## Scene Administration (#1445)
 
 **Source:** `src/world/scenes/scene_admin_services.py`, `src/actions/definitions/scenes.py`,
@@ -692,7 +753,9 @@ All characters **present in the room at scene creation** become co-owners (`is_o
 their `SceneParticipation`). Latecomers who join after the scene has started are non-owner
 participants — they cannot inadvertently acquire admin rights by entering a room mid-scene
 (anti-grab rule). A GM or staff character bypasses the ownership check entirely; they can
-administer any scene regardless of participation.
+administer any scene regardless of participation. Co-ownership is the admin question only:
+whether someone is *in* the scene is read off the log (see "Scene participation and the
+threshold", #3867).
 
 ### Permission helper
 
@@ -1209,7 +1272,7 @@ no child re-fetches the same scene/roster data.
 
 **Feed presentation:** `PoseUnit` (`frontend/src/scenes/components/PoseUnit.tsx`)
 renders each interaction as a chat bubble — avatar thumbnail, author, timestamp,
-`FormattedContent`-rendered prose, and reactions — never monospace/terminal
+the body, and reactions — never monospace/terminal
 styling (ratified presentation bar; terminal-style rendering on the primary feed is
 a defect, not a variant). `GameWindow` renders this structured bubble feed whenever
 the active session has a scene; with no active scene it renders `ExplorationReader`

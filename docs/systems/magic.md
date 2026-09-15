@@ -1946,6 +1946,9 @@ This closes the same "built but unreachable" gap the acquisition surface above
 closed for `spend_xp_on_gift_unlock`/`accept_technique_offer` — `resolve_training_check`
 now has exactly one production caller, shared by both client surfaces.
 
+The entrance itself (which pose is the entry pose, the threshold before it, the acclaim
+window opened on it) is described in `docs/systems/scenes.md`'s "The entrance" (#3867).
+
 ### Entry-Flourish Declaration (entry_flourish.py, models/endorsement.py — #1140)
 
 Poll-able offer created on a successful Entrance social action; the entrant picks one

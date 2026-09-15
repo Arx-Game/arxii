@@ -71,6 +71,45 @@ vi.mock('./EndorsementControl', () => ({
   ),
 }));
 
+describe('the actor in the line (#3858)', () => {
+  it('renders the line as the body, with the leading name set heavier', () => {
+    render(
+      <Wrapper>
+        <PoseUnit interaction={makeInteraction({ line: 'Alice waves.' })} sceneId="1" />
+      </Wrapper>
+    );
+    const line = screen.getByTestId('actor-line');
+    expect(line).toHaveTextContent('Alice waves.');
+    expect(line).toHaveAttribute('data-actor', 'Alice');
+    expect(screen.queryByText('Hello world')).not.toBeInTheDocument();
+  });
+
+  it('falls back to the recorded content on a row without a line', () => {
+    render(
+      <Wrapper>
+        <PoseUnit interaction={makeInteraction()} sceneId="1" />
+      </Wrapper>
+    );
+    expect(screen.getByText('Hello world')).toBeInTheDocument();
+    expect(screen.queryByTestId('actor-line')).not.toBeInTheDocument();
+  });
+
+  it('reads a companion pose as the companion', () => {
+    render(
+      <Wrapper>
+        <PoseUnit
+          interaction={makeInteraction({
+            line: 'Fang lifts his head.',
+            attributed_companion: { id: 3, name: 'Fang' },
+          })}
+          sceneId="1"
+        />
+      </Wrapper>
+    );
+    expect(screen.getByTestId('actor-line')).toHaveAttribute('data-actor', 'Fang');
+  });
+});
+
 function makeInteraction(overrides: Partial<Interaction> = {}): Interaction {
   return {
     id: 1,

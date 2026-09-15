@@ -1396,7 +1396,7 @@ export function ThreadedNarrativeReader({
                           >
                             <strong>{item.persona.name}</strong>
                             <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                              {item.content}
+                              {item.line ?? item.content}
                             </p>
                             <button
                               type="button"
@@ -1502,7 +1502,7 @@ export function ThreadedNarrativeReader({
                         >
                           <strong>{item.persona.name}</strong>
                           <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                            {item.content}
+                            {item.line ?? item.content}
                           </p>
                           <button
                             type="button"
@@ -1623,7 +1623,8 @@ export function ThreadedNarrativeReader({
                           timestamp elsewhere in the reader). */}
                       {root && (
                         <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                          {excerptOf(root.content)} · {new Date(root.timestamp).toLocaleString()}
+                          {excerptOf(root.line ?? root.content)} ·{' '}
+                          {new Date(root.timestamp).toLocaleString()}
                         </p>
                       )}
                     </div>
@@ -1672,7 +1673,7 @@ export function ThreadedNarrativeReader({
                               >
                                 <strong>{item.persona.name}</strong>
                                 <p className="mt-1 line-clamp-3 whitespace-pre-wrap text-muted-foreground">
-                                  {item.content}
+                                  {item.line ?? item.content}
                                 </p>
                                 <button
                                   type="button"

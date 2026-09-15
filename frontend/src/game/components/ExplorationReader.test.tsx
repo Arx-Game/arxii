@@ -31,6 +31,7 @@ describe('ExplorationReader', () => {
             id: 9,
             persona: { id: 4, name: 'Mara', thumbnail_url: '' },
             content: 'A bell sounds beyond the wall.',
+            line: 'Mara says, "A bell sounds beyond the wall."',
             mode: 'say',
             timestamp: '2026-01-01T00:00:00Z',
             scene_id: null,
@@ -44,8 +45,12 @@ describe('ExplorationReader', () => {
     );
     expect(screen.getByRole('heading', { name: 'Quiet courtyard' })).toBeInTheDocument();
     expect(screen.getByText('Rain rests on the stones.')).toBeInTheDocument();
-    expect(screen.getByText('A bell sounds beyond the wall.')).toBeInTheDocument();
-    expect(screen.getByText('Mara')).toBeInTheDocument();
+    // The body is the whole line (#3858); the header still names the writer.
+    expect(screen.getByTestId('actor-line')).toHaveTextContent(
+      'Mara says, "A bell sounds beyond the wall."'
+    );
+    // Once on the card, once at the head of the line.
+    expect(screen.getAllByText('Mara')).toHaveLength(2);
   });
 
   it('renders notes among the ambient poses at their time, not in a section of their own (#3856)', () => {

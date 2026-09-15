@@ -23,7 +23,6 @@ from world.scenes.constants import (
     InteractionMode,
     PersonaType,
     PoseKind,
-    ReactionWindowKind,
 )
 from world.scenes.interaction_filters import (
     InteractionFavoriteFilter,
@@ -65,7 +64,6 @@ from world.scenes.models import (
 from world.scenes.place_models import InteractionReceiver
 from world.scenes.reachability import UnreachableError
 from world.scenes.reaction_models import ReactionWindow, WindowReaction
-from world.scenes.reaction_services import open_reaction_window
 from world.scenes.reaction_toggle_services import (
     toggle_interaction_favorite,
     toggle_interaction_reaction,
@@ -221,9 +219,11 @@ def _record_submitted_pose(  # noqa: PLR0913
         result = idempotent_record_interaction(
             persona=persona,
             client_request_id=client_request_id,
+            # `pose_kind` is deliberately not compared (#3867): the server owns ENTRY
+            # (a first line is one whatever the client sent), so a retry of a
+            # standard-marked first pose must replay against its ENTRY row, not conflict.
             comparison_fields={
                 "content": content,
-                "pose_kind": pose_kind,
                 "scene_id": scene.pk if scene is not None else None,
                 "target": lambda stored: frozenset(p.pk for p in stored.target_personas.all())
                 == target_pks,
@@ -590,12 +590,18 @@ class InteractionViewSet(
 
         action_link_ids: list[int] | None = data.get("action_link_ids")
 
-        def _on_created(created: Interaction) -> None:
-            if pose_kind == PoseKind.ENTRY and created.scene_id is not None:
-                # #904 — an entrance is a reactable moment; the window stays
-                # open (and reactable) until the scene closes.
-                open_reaction_window(interaction=created, kind=ReactionWindowKind.ENTRANCE)
+        # The entrance is the first line (#3867): the service marks it and opens its
+        # window; a client asking for a second one is refused.
+        if pose_kind == PoseKind.ENTRY and scene is not None:
+            from world.scenes.participation import has_entered  # noqa: PLC0415
 
+            if has_entered(scene, persona.character_sheet_id):
+                return Response(
+                    {"detail": "You have already made your entrance in this scene."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        def _on_created(created: Interaction) -> None:
             if action_link_ids is not None:
                 _link_explicit_action_ids(created, action_link_ids)
             else:

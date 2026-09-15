@@ -426,6 +426,13 @@ export interface Interaction {
   is_unread?: boolean;
   persona: InteractionPersona;
   content: string;
+  /**
+   * The whole sentence this viewer reads (#3858): the actor in the line, rendered
+   * by the server at display time from `content`, the card's name and `mode`.
+   * Readers show this; threading, muting and targets keep reading `content`.
+   * Absent on rows serialized before it existed.
+   */
+  line?: string;
   mode: string;
   visibility: string;
   timestamp: string;
