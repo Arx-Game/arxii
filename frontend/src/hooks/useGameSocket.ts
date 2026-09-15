@@ -497,13 +497,18 @@ export function useGameSocket() {
    * Send a staff Commands-mode line (#3857): the same text frame, flagged so
    * the server tags everything it says back for the console.
    */
-  const sendConsole = useCallback((character: MyRosterEntry['name'], command: string) => {
-    const socket = sockets[character];
-    if (socket && socket.readyState === WebSocket.OPEN) {
-      const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], { console: true }];
-      socket.send(JSON.stringify(message));
-    }
-  }, []);
+  const sendConsole = useCallback(
+    (character: MyRosterEntry['name'], command: string) => {
+      const socket = sockets[character];
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        // The console shows the line above what the server says back to it.
+        dispatch(addConsoleLine({ character, content: command, sent: true }));
+        const message: OutgoingMessage = [WS_MESSAGE_TYPE.TEXT, [command], { console: true }];
+        socket.send(JSON.stringify(message));
+      }
+    },
+    [dispatch]
+  );
 
   /**
    * Invoke a registered backend action over the websocket.

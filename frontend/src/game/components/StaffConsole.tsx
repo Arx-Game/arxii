@@ -45,17 +45,20 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
     } else if (lines.length === 0) {
       announcedRef.current = 0;
     }
-    if (open) setSeenCount(lines.length);
-  }, [lines.length, active, open]);
+    if (open) setSeenCount(lines.filter((line) => !line.sent).length);
+  }, [lines, active, open]);
 
   useEffect(() => {
     if (open) {
-      setSeenCount(lines.length);
+      setSeenCount(lines.filter((line) => !line.sent).length);
       endRef.current?.scrollIntoView({ block: 'end' });
     }
-  }, [open, lines.length]);
+  }, [open, lines]);
 
-  const unseen = Math.max(0, lines.length - seenCount);
+  // Only the server's answers count as new; the staff member's own echoed
+  // lines are theirs already.
+  const answers = lines.filter((line) => !line.sent).length;
+  const unseen = Math.max(0, answers - seenCount);
 
   return (
     <>
@@ -73,17 +76,33 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
           </span>
         )}
       </button>
-      <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-xl">
+      {/* Beside the play surface, not over it (demo ruling): no dimming
+          overlay, no focus trap, and a click into the composer keeps it open;
+          Close, Clear and Escape are its controls. */}
+      <Sheet open={open} onOpenChange={setOpen} modal={false}>
+        <SheetContent
+          side="right"
+          hideOverlay
+          hideClose
+          onInteractOutside={(event) => event.preventDefault()}
+          className="flex w-full flex-col gap-0 p-0 sm:max-w-xl"
+        >
           <SheetHeader className="border-b px-4 py-3 text-left">
             <div className="flex items-center gap-3">
               <SheetTitle className="font-serif text-lg font-medium">Console</SheetTitle>
               <button
                 type="button"
                 onClick={() => dispatch(clearConsoleLines(character))}
-                className="ml-auto mr-6 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                className="ml-auto rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               >
                 Clear
+              </button>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                className="rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+              >
+                Close
               </button>
             </div>
             <SheetDescription className="text-xs">
@@ -99,13 +118,24 @@ export function StaffConsole({ character, active }: StaffConsoleProps) {
                 Nothing yet. Pick Commands and type one.
               </p>
             ) : (
-              lines.map((line) => (
-                <EvenniaMessage
-                  key={line.id}
-                  content={line.content}
-                  className="text-[0.82rem] leading-relaxed"
-                />
-              ))
+              lines.map((line) =>
+                line.sent ? (
+                  <p
+                    key={line.id}
+                    data-sent
+                    className="whitespace-pre-wrap break-words font-mono text-[0.82rem] leading-relaxed text-muted-foreground"
+                  >
+                    {'\u203a '}
+                    {line.content}
+                  </p>
+                ) : (
+                  <EvenniaMessage
+                    key={line.id}
+                    content={line.content}
+                    className="text-[0.82rem] leading-relaxed"
+                  />
+                )
+              )
             )}
             <div ref={endRef} />
           </div>

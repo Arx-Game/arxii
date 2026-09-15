@@ -64,10 +64,15 @@ export interface FeedNote {
   timestamp: string;
 }
 
-/** One line of the staff console (#3857): what the server said back to a Commands-mode line. */
+/**
+ * One line of the staff console (#3857): the Commands-mode line as sent
+ * (`sent`), or what the server said back to it.
+ */
 export interface ConsoleLine {
   id: string;
   content: string;
+  /** The staff member's own line, echoed above its answers. */
+  sent?: boolean;
   timestamp: string;
 }
 

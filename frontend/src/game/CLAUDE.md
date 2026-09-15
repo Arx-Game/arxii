@@ -265,10 +265,11 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
   `speakingAs`).
 - **`StaffConsole.tsx`**: The staff console (#3857): a Console control in the
   composer's toolbar (staff only) and the `Sheet` it opens over the play surface,
-  holding `session.consoleLines`, everything the server said back to a
-  Commands-mode line, in the terminal face inside the app's own sheet (title,
-  Clear, Close). It opens itself when a line arrives while Commands mode is active;
-  the control counts lines that arrived while it was closed.
+  holding `session.consoleLines`: each Commands-mode line echoed (`sent`, muted,
+  after a `›`) above everything the server said back to it, in the terminal face
+  inside the app's own sheet (title, Clear, Close). It opens itself when a line
+  arrives while Commands mode is active and stays closed once closed until the
+  next; the control counts the answers that arrived while it was closed.
 - **`EvenniaMessage.tsx`**: Game message display and formatting for the plain-text
   frames (look results, command replies, Evennia's own errors). Renders sanitized
   HTML rather than going through `FormattedContent`, so it carries the feed's

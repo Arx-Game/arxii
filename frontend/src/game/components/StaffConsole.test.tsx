@@ -47,6 +47,34 @@ describe('StaffConsole (#3857)', () => {
     expect(screen.getByText('Nothing yet. Pick Commands and type one.')).toBeInTheDocument();
   });
 
+  it('echoes the sent line above its answers, muted, and never counts it as new', () => {
+    store.dispatch(addConsoleLine({ character: 'Aria', content: '@dig East', sent: true }));
+    renderConsole();
+    expect(screen.getByRole('button', { name: 'Console' })).toBeInTheDocument();
+    act(() => {
+      store.dispatch(addConsoleLine({ character: 'Aria', content: 'Created room East(#412).' }));
+    });
+    expect(screen.getByRole('button', { name: 'Console, 1 new' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Console, 1 new' }));
+    const lines = screen.getByTestId('staff-console-lines');
+    const echoed = lines.querySelector('[data-sent]');
+    expect(echoed).toHaveTextContent('\u203a @dig East');
+    expect(echoed?.nextElementSibling).toHaveTextContent('Created room East(#412).');
+  });
+
+  it('sits beside the play surface: no dimming overlay, and the page stays reachable', () => {
+    store.dispatch(addConsoleLine({ character: 'Aria', content: 'Teleported.' }));
+    renderConsole();
+    fireEvent.click(screen.getByRole('button', { name: 'Console, 1 new' }));
+    expect(screen.getByRole('dialog', { name: 'Console' })).toBeInTheDocument();
+    // The sheet's overlay rule (`bg-background/80 backdrop-blur-sm`) must not
+    // reach the page, and the control outside the sheet is not aria-hidden.
+    expect(document.querySelector('.backdrop-blur-sm')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Console' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
   it('stays closed once closed, until the next line arrives', () => {
     renderConsole(true);
     act(() => {

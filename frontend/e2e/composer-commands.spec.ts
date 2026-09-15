@@ -105,6 +105,9 @@ test.describe('the composer poses by default, and staff have a console (#3857)',
     );
     const sheet = page.getByRole('dialog', { name: 'Console' });
     await expect(sheet).toBeVisible();
+    await expect(sheet.getByTestId('staff-console-lines')).toContainText(
+      '\u203a @dig The Eastern Colonnade = east;e, west;w'
+    );
     await expect(sheet.getByTestId('staff-console-lines')).toContainText('Created room');
     await expect(page.locator('[data-testid="feed-note"]')).toHaveCount(0);
     await page.waitForTimeout(400);

@@ -296,7 +296,11 @@ export const gameSlice = createSlice({
     /** A line the server tagged `console` (#3857): the staff console's, never the column's. */
     addConsoleLine: (
       state,
-      action: PayloadAction<{ character: MyRosterEntry['name']; content: string }>
+      action: PayloadAction<{
+        character: MyRosterEntry['name'];
+        content: string;
+        sent?: boolean;
+      }>
     ) => {
       const session = state.sessions[action.payload.character];
       if (!session) return;
@@ -304,6 +308,7 @@ export const gameSlice = createSlice({
       session.consoleLines.push({
         id: `c${nextConsoleLineId}`,
         content: action.payload.content,
+        ...(action.payload.sent ? { sent: true } : {}),
         timestamp: new Date().toISOString(),
       });
       if (session.consoleLines.length > MAX_CONSOLE_LINES) {

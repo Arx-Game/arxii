@@ -518,6 +518,13 @@ describe('useGameSocket staff console (#3857)', () => {
     });
     const frames = MockWebSocket.instances[0].sent.map((raw) => JSON.parse(raw));
     expect(frames).toContainEqual(['text', ['@dig East'], { console: true }]);
+    // The line is echoed into the console above whatever the server says back.
+    expect(mockDispatch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: 'game/addConsoleLine',
+        payload: { character: 'Aria', content: '@dig East', sent: true },
+      })
+    );
   });
 
   it('a text frame tagged console becomes a console line, never a note', async () => {

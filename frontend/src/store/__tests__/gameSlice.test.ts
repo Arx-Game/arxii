@@ -822,6 +822,15 @@ describe('gameSlice', () => {
       expect(lines).toHaveLength(500);
       expect(lines[0].content).toBe('line 5');
       expect(lines[499].id).toMatch(/^c\d+$/);
+      expect(lines[499].sent).toBeUndefined();
+      state = reducer(
+        state,
+        addConsoleLine({ character: 'TestCharacter', content: '@dig', sent: true })
+      );
+      expect(state.sessions['TestCharacter'].consoleLines[499]).toMatchObject({
+        content: '@dig',
+        sent: true,
+      });
       // Console output is not feed activity: nothing badges for it.
       expect(state.sessions['TestCharacter'].unread).toBe(0);
     });

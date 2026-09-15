@@ -18,8 +18,9 @@ Custom React hooks for game logic, WebSocket management, and utility functions.
   one. The type rides Evennia's tuple form on the server (`msg((text, {"type":
 kind}))`), whose dict becomes the frame's kwargs; a sibling keyword would leave as
   a separate frame the client cannot attach to the line.
-- **The staff console's frames** (#3857): `sendConsole(character, line)` sends the
-  same `text` frame with `{console: true}` in its kwargs; the server tags every
+- **The staff console's frames** (#3857): `sendConsole(character, line)` echoes the
+  line into `consoleLines` (`sent: true`) and sends the same `text` frame with
+  `{console: true}` in its kwargs; the server tags every
   `text` frame it sends back while that line runs with `console: true`, and
   `dispatchLegacyText` routes such a frame to `addConsoleLine`, never to a note.
 - **`handleCommandPayload.ts`**: Processes command-related message payloads
