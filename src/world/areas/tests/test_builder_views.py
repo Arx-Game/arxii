@@ -236,10 +236,22 @@ class WorldBuilderAreaManagerTests(WorldBuilderApiBase):
         self.assertEqual(intra_row["to_area_id"], self.area.pk)
 
     def test_exit_rows_say_whether_anything_leads_back(self) -> None:
-        """#3860: a lone exit is one-way; a paired one is not."""
+        """#3860: a lone exit is one-way; a paired one is not.
+
+        The fixture's portal is answered by the foreign area's return portal, so
+        it counts as paired; the lone exit here drops into a room nothing leaves.
+        """
+        oubliette = _room_in(self.area, name="Oubliette")
+        lone = ObjectDBFactory(
+            db_key="hatch",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=self.public_room,
+            destination=oubliette,
+        )
         response = self._get(self._url(), self.staff_account)
         exits_by_id = {row["id"]: row for row in response.data["exits"]}
-        self.assertTrue(exits_by_id[self.cross_exit.pk]["one_way"])
+        self.assertTrue(exits_by_id[lone.pk]["one_way"])
+        self.assertFalse(exits_by_id[self.cross_exit.pk]["one_way"])
         self.assertFalse(exits_by_id[self.exit_out.pk]["one_way"])
 
     def test_foreign_area_exit_not_included(self) -> None:
@@ -453,7 +465,14 @@ class WorldBuilderGrantScopedReadTests(WorldBuilderApiBase):
         assert "Ashen Gate" not in names
 
     def test_room_detail_exits_say_whether_anything_leads_back(self) -> None:
-        """#3860: the document's chips can tag a one-way exit."""
+        """#3860: the document's chips can tag a one-way exit (the portal is paired)."""
+        oubliette = _room_in(self.area, name="Oubliette")
+        lone = ObjectDBFactory(
+            db_key="hatch",
+            db_typeclass_path="typeclasses.exits.Exit",
+            location=self.public_room,
+            destination=oubliette,
+        )
         response = self._get(
             "/api/world-builder/areas/room-detail/",
             self.staff_account,
@@ -461,7 +480,8 @@ class WorldBuilderGrantScopedReadTests(WorldBuilderApiBase):
         )
         assert response.status_code == 200
         flags = {row["id"]: row["one_way"] for row in response.data["exits"]}
-        assert flags[self.cross_exit.pk] is True
+        assert flags[lone.pk] is True
+        assert flags[self.cross_exit.pk] is False
         assert flags[self.exit_out.pk] is False
 
     def test_grant_holder_room_detail_outside_subtree_reads_absent(self) -> None:
