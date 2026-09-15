@@ -13,6 +13,12 @@ root `AGENT_GLOSSARY_MAP.md`.
 - **Dispatch check** — the handler's roll at assignment time; models briefing
   quality. Its success level becomes the **handler margin**
   (`DISPATCH_MARGIN_STEP` points per level) applied to the resolution check.
+- **Issue-time difficulty** — `OrgTask.derived_difficulty`: the target a PC run
+  of the task rolls against, set once when the steward issues it (local order
+  at the target's area shifted by the steward's own check, #696 gap 8). Only the
+  number is stored, never the roll. NPC agents still roll against the template's
+  static `check_difficulty`. _Avoid_: "task difficulty" without saying which of
+  the two, "briefing roll" (that is the Dispatch check).
 - **Resolution check** — the agent's own offscreen roll at deadline; the
   tradecraft. Its outcome tier selects the payout route and grades the risk
   pool.

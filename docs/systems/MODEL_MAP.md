@@ -5046,6 +5046,7 @@
 
 ### Service Functions
 - `ap_regen_multiplier_pct(level: 'int') -> 'int' - The AP-regen percentage adjustment for a comfort level (#1514) — 0 at neutral (5).`
+- `area_order_difficulty(area: 'Area | None') -> 'int' - Check difficulty implied by an area's order versus crime (#696 items 1 and 8).`
 - `area_stat_total(area: 'Area | None', stat_key: 'str') -> 'int' - Summed area-level modifier rows for *stat_key* on *area* + ancestors (#2862).`
 - `assign_room_tenant(*, persona: 'Persona', room: 'DefaultObject', tenant_persona: 'Persona', ends_at: 'datetime | None' = None, notes: 'str' = '') -> 'LocationTenancy' - Owner-gated grant of a room tenancy (#670) — the player seam over grant_tenancy.`
 - `cleanup_decayed_modifiers(now: 'datetime | None' = None) -> 'int' - Delete LocationValueModifier rows whose current_value() has`

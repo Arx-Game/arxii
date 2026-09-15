@@ -194,6 +194,9 @@ keyed on `next_level(area)`:
   threshold only bites at NEIGHBORHOOD+ areas elevating into WARD+.
 - **Area order** - `locations.services.area_stat_total(area, StatKey.ORDER)`, summed
   across the area's own + ancestor `LocationValueModifier` rows.
+  `locations.services.area_order_difficulty(area)` turns order versus crime into a
+  check difficulty (NORMAL shifted by CRIME minus ORDER, clamped to the authored
+  bands): the collection run and a task's issue-time check both read it (#696).
 
 `DeclareElevationAction` (`actions/definitions/areas.py`, REGISTRY key
 `declare_elevation`) is the in-play entry point: it gates on the declarer's active

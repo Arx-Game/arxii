@@ -4001,11 +4001,15 @@ consumers, not systems.
   nullable `collection_success_level` — set = this route lands the issuing org's
   `currency.collect_org_income` graded at that level via `success_level_override`,
   with the handler as collector; null = no collection, #696 item 2), `OrgTask`
-  (status lifecycle, `DiscriminatorMixin` target), `TaskFulfillment`
+  (status lifecycle, `DiscriminatorMixin` target, nullable `derived_difficulty`:
+  the steward-set target a PC run rolls against, #696 gap 8), `TaskFulfillment`
   (`npc_asset` XOR `mission_instance`, stored dispatch check, report),
   `ListenerPost` (buzz meter on a LISTENER `NPCAssignment` + hidden counterplay
   state), `ListenerHarvest` (caught Secret XOR planted red herring)
-- **Services:** `create_task`, `assign_agent` (own or issuing-org agents),
+- **Services:** `create_task` (derives `derived_difficulty` at issue: local order via
+  `locations.services.area_order_difficulty` shifted by the steward's own check,
+  `DIFFICULTY_STEP_PER_LEVEL` per success level; the roll is never stored), `assign_agent`
+  (own or issuing-org agents),
   `resolve_task` (risk via consequence pool with `ResolutionContext.npc_asset`
   scoping per ADR-0092), `resolve_due_tasks` (hourly cron), `accept_task` +
   `resolve_task_for_mission` (PC path, `_finish_terminal` seam),
@@ -4865,9 +4869,11 @@ an idle org reaches stasis in both directions (loan interest still accrues — o
   Investment (intellect + Scholarship + Economics), seeded by the `governance` cluster
 - **Collection difficulty (#696 item 1):** `_collection_target_difficulty` derives the Tax
   Collection check's target difficulty from local order/crime — worst-stop wins: for each
-  stream with an authored `area`, net pressure = area CRIME total − area ORDER total
-  (`world.locations.services.area_stat_total`), and the MAX pressure across an org's streams
-  shifts the base NORMAL difficulty point-for-point (clamped to TRIVIAL..HARROWING).
+  stream with an authored `area`, `world.locations.services.area_order_difficulty(area)`
+  (net pressure = area CRIME total − area ORDER total via `area_stat_total`, shifting the
+  base NORMAL difficulty point-for-point, clamped to TRIVIAL..HARROWING; the derivation
+  the steward's issue-time check shares, #696 gap 8), and the MAX across an org's streams
+  is the run's difficulty.
   PLACEHOLDER tuning — point-for-point shift and worst-stop-wins are first guesses pending
   real turf-war stat magnitudes. `collect_org_income`'s `success_level_override` lets a
   caller that already resolved the run's outcome elsewhere (a mission's terminal grade, via
