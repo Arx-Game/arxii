@@ -272,6 +272,14 @@ test.describe('one-way exits and the unfiled rooms (#3860)', () => {
     await mockAtlasRoutes(page);
     await openLimbo(page);
     await nameCityCenter(page);
+    const bothWays = page.getByTestId('add-dialog-both-ways');
+    const oneWay = page.getByTestId('add-dialog-one-way');
+    // The pair is told apart by fill: the pressed choice carries the primary
+    // fill, the other the outline's ground. Read both off the page so the
+    // swap below is asserted against rules that reach it, not class names.
+    const pressedFill = await bothWays.evaluate((el) => getComputedStyle(el).backgroundColor);
+    const restingFill = await oneWay.evaluate((el) => getComputedStyle(el).backgroundColor);
+    expect(pressedFill).not.toBe(restingFill);
 
     // Screen 2: the direction pair sits after Leads to, Both ways pressed.
     await expect(page.getByTestId('add-dialog-both-ways')).toHaveAttribute('aria-pressed', 'true');
@@ -283,8 +291,12 @@ test.describe('one-way exits and the unfiled rooms (#3860)', () => {
     await page.screenshot({ path: '../docs/reviews/3860/screen-2-both-ways-1280.png' });
 
     // Screen 3: One way drops Exit back and the note says nothing leads back.
-    await page.getByTestId('add-dialog-one-way').click();
-    await expect(page.getByTestId('add-dialog-one-way')).toHaveAttribute('aria-pressed', 'true');
+    await oneWay.click();
+    await page.mouse.move(0, 0); // off the pair, so no hover tint is in the frame
+    await expect(oneWay).toHaveAttribute('aria-pressed', 'true');
+    // The colour transition finishes before the frame is taken.
+    await expect(oneWay).toHaveCSS('background-color', pressedFill);
+    await expect(bothWays).toHaveCSS('background-color', restingFill);
     await expect(page.getByTestId('add-dialog-exit-back')).toHaveCount(0);
     await expect(page.getByTestId('add-dialog-exit-note')).toHaveText(
       'links to City Center; nothing leads back to here'
@@ -292,8 +304,11 @@ test.describe('one-way exits and the unfiled rooms (#3860)', () => {
     await page.screenshot({ path: '../docs/reviews/3860/screen-3-one-way-1280.png' });
 
     // Both ways brings Exit back straight back.
-    await page.getByTestId('add-dialog-both-ways').click();
+    await bothWays.click();
+    await page.mouse.move(0, 0);
     await expect(page.getByTestId('add-dialog-exit-back')).toBeVisible();
+    await expect(bothWays).toHaveCSS('background-color', pressedFill);
+    await expect(oneWay).toHaveCSS('background-color', restingFill);
   });
 
   test('screen 4: a one-way link sends no return name and the chip says so', async ({ page }) => {
