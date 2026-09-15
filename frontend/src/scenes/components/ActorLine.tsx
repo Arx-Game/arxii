@@ -11,7 +11,7 @@ interface ActorLineProps {
 
 /**
  * The body of a pose or a say (#3858): the server's `line`, the actor in the
- * sentence, with the leading name set a shade heavier so the eye finds the
+ * sentence, with the leading name set semibold so the eye finds the
  * actor. Presentation only: the name is the one the card already shows, and
  * the split happens only when the line opens with it (an emit, or a pose that
  * placed the name elsewhere, renders as sent). Without a line, the recorded
@@ -29,7 +29,7 @@ export function ActorLine({ line, content, actorName }: ActorLineProps) {
   }
   return (
     <span data-testid="actor-line" data-actor={actorName}>
-      <span className="font-medium">{actorName}</span>
+      <span className="font-semibold">{actorName}</span>
       <FormattedContent content={line.slice(actorName.length)} />
     </span>
   );

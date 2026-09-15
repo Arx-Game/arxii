@@ -238,6 +238,13 @@ the unified Persona identity system, and non-combat scene rounds.
   before. A caller passes it explicitly for a Narrator-authored row, since the Narrator's
   character is never physically placed anywhere.
 
+### `line_rendering.py` (#3858, ADR-0299)
+- **`render_line(name, mode, content, *, language_name=None)`**: the one formatter that puts
+  the actor into a pose or say line, at display time, for the WebSocket payload
+  (`InteractionPayload.line`), the REST row (`InteractionListSerializer.line`) and telnet
+  (`PoseAction` with `{caller}`, whisper, mutter, the companion emote). Pure; `content` is
+  never changed. Tests: `tests/test_line_rendering.py`.
+
 ### `constants.py`
 - **`BoonKind`** (`TextChoices`, `action_constants.py`): what a Boon asks for (MONEY / HELD_ITEM /
   VAULT_ITEM / DEED / MATERIAL).

@@ -220,6 +220,8 @@ scrollTop>`), restoring it on tab switch and re-pinning to the bottom only
 - **`ExplorationReader.tsx`**: The no-scene reader. Room facts stay structured
   (name, description); below them one `Activity` list of the room's ambient
   interactions and the session's notes, ordered by time through `feedRows.ts`.
+  An ambient row's body is the server's `line` (#3858) through
+  `scenes/components/ActorLine.tsx`, the actor in the sentence, as in `PoseUnit`.
 - **`FeedNoteBlock.tsx`**: One typed text line in either reader (#3856), styled
   by `FeedKind` after the approved demo: a boxed note for `look` (subject title +
   prose body), `item` and `system`; the destructive tokens and `role="alert"` for

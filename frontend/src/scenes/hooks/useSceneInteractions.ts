@@ -13,6 +13,9 @@ export function wsPayloadToInteraction(payload: InteractionWsPayload): Interacti
     id: payload.id,
     persona: payload.persona,
     content: payload.content,
+    // The rendered sentence (#3858) travels with the row; a payload from a
+    // server without it leaves the readers on `content`.
+    line: payload.line,
     mode: payload.mode,
     visibility: 'default',
     timestamp: payload.timestamp,

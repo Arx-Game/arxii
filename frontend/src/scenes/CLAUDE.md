@@ -14,6 +14,11 @@ Scene management interface for RP (roleplay) scenes with filtering, viewing, and
   `scene.art_url` as its `artUrl` prop for the same room-art backdrop behind the node graph
   (#3556). `CombatTacticalMap.tsx` shares the same `TacticalMap` but never passes `artUrl`.
 - **`SceneMessages.tsx`**: Scene interaction/dialogue display using the Interaction system
+- **`ActorLine.tsx`** (#3858, ADR-0299): the body of a pose or say, the server's `line` (the
+  actor in the sentence) through `FormattedContent`, with the leading name set semibold
+  when the line opens with the card's own name (the companion's for a companion pose); a row
+  without a line renders its `content`. Used by `PoseUnit` and the game's `ExplorationReader`.
+  Presentation only: the name is the one the server sent, never a second formatter.
 - **`ActionPanel.tsx`**: Scene action request panel
 - **`ActionResult.tsx`**: Action result display
 - **`ConsentPrompt.tsx`**: Consent prompt for scene actions
